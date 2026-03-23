@@ -17,10 +17,16 @@ pub struct Token {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Trivia {
-    Whitespace(String),
-    LineComment { text: String, doc: bool },
-    BlockComment { text: String, doc: bool },
+pub struct Trivia {
+    pub kind: TriviaKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TriviaKind {
+    Whitespace,
+    LineComment { doc: bool },
+    BlockComment { doc: bool },
     Newline,
 }
 
@@ -34,8 +40,8 @@ pub enum TokenKind {
     Rune(char),
 
     // Identifiers
-    Ident(String),
-    EscapedIdent(String),
+    Ident,
+    EscapedIdent,
 
     // Keywords
     KwAnd,

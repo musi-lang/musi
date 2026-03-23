@@ -1,4 +1,3 @@
-use std::fmt;
 use std::iter::{Enumerate, Map};
 use std::slice;
 
@@ -9,6 +8,7 @@ use crate::Idx;
 /// Values are stored contiguously in a `Vec<T>` and addressed via lightweight
 /// `Idx<T>` handles. The arena never frees individual entries; all memory is
 /// released when the arena is dropped.
+#[derive(Debug)]
 pub struct Arena<T> {
     data: Vec<T>,
 }
@@ -116,12 +116,6 @@ impl<T> Arena<T> {
 impl<T> Default for Arena<T> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for Arena<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Arena").field("data", &self.data).finish()
     }
 }
 

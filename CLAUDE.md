@@ -93,6 +93,41 @@ graph TD
     style N fill:#fff3e0
 ```
 
+## Error Testing Convention
+
+- Tests in `errors/tests.rs` or `diag/tests.rs` MAY check Display output strings -- they test the Display impl itself
+- Tests OUTSIDE error/diag modules MUST check error variants via `matches!`, never message strings
+- Error messages are implementation details; the variant is the contract
+
+```rust
+// CORRECT (lexer test):
+assert!(matches!(errors[0], LexError::InvalidHexEscape { .. }));
+
+// WRONG (lexer test):
+assert_eq!(errors[0].to_string(), "invalid hex escape...");
+```
+
+## API Stability Convention
+
+Stabilise the public API early, even during initial development. Breaking changes are cheaper now than later, but that means getting the API right NOW:
+
+- Drop owned `String` from token types when a `Span` index into source suffices
+- Use `Span`-carrying structs (like `Trivia { kind, span }`) instead of `String`-carrying enums
+- Store positions as native `usize` internally, convert to `u32` only at the `Span` boundary
+- Use `PhantomData<fn() -> T>` to avoid trait bounds on generic wrappers (enables derives)
+- Collapse redundant enum variants using flags and mode enums (`AccessMode`, `PostfixOp`, etc.)
+- Suffix convention: `Lit` for value construction, `Def` for type definition, no suffix for operations
+
+## Micro-Optimisation Conventions
+
+Apply these during initial implementation, not as afterthoughts:
+
+- Avoid allocating `String` when borrowing from source via `Span` is sufficient
+- Check conditions before allocating (e.g., only filter number strings when they contain `_`)
+- Use table-driven dispatch (const arrays of `(&[u8], TokenKind)`) over nested match arms
+- Prefer `usize` for internal indices, convert to `u32` at boundaries only
+- Use `derive` over manual trait impls wherever possible (saves LOC, reduces bugs)
+
 ## Collaboration Protocol
 
 ### Adaptive Depth

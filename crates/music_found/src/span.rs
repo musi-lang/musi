@@ -43,17 +43,18 @@ impl Span {
     /// Smallest span covering both `self` and `other`.
     #[must_use]
     pub const fn merge(self, other: Self) -> Self {
-        let start = if self.start < other.start {
-            self.start
-        } else {
-            other.start
-        };
-        let end = if self.end > other.end {
-            self.end
-        } else {
-            other.end
-        };
-        Self { start, end }
+        Self {
+            start: if self.start < other.start {
+                self.start
+            } else {
+                other.start
+            },
+            end: if self.end > other.end {
+                self.end
+            } else {
+                other.end
+            },
+        }
     }
 
     /// Span from `self.start` to `end.end`.

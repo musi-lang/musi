@@ -155,30 +155,28 @@ pub fn emit<W: Write>(
     sources: &SourceMap,
     use_color: bool,
 ) -> io::Result<()> {
+    let paint = |color: Color, text: &str| -> String {
+        if use_color {
+            format!("{}{text}{}", color.ansi_code(), Color::Reset.ansi_code())
+        } else {
+            String::from(text)
+        }
+    };
+
     for label in &diag.labels {
         if let Some(source) = sources.get(label.source_id) {
             let (line, col) = source.line_col(label.span.start);
             let path_display = source.path().display();
 
             // Header: path:line:col: level: message
-            if use_color {
-                let color_code = diag.level.color().ansi_code();
-                let reset = Color::Reset.ansi_code();
-                let bold = Color::Bold.ansi_code();
-                writeln!(
-                    writer,
-                    "{bold}{path_display}:{line}:{col}:{reset} {color_code}{level}{reset}: {bold}{msg}{reset}",
-                    level = diag.level.label(),
-                    msg = diag.message,
-                )?;
-            } else {
-                writeln!(
-                    writer,
-                    "{path_display}:{line}:{col}: {level}: {msg}",
-                    level = diag.level.label(),
-                    msg = diag.message,
-                )?;
-            }
+            let loc = format!("{path_display}:{line}:{col}:");
+            writeln!(
+                writer,
+                "{} {}: {}",
+                paint(Color::Bold, &loc),
+                paint(diag.level.color(), diag.level.label()),
+                paint(Color::Bold, &diag.message),
+            )?;
 
             // Source line
             if let Some(line_text) = source.line_text(line) {
@@ -201,65 +199,37 @@ pub fn emit<W: Write>(
                 let caret_padding = " ".repeat(caret_offset);
                 let carets = "^".repeat(caret_count);
 
-                if use_color {
-                    let color_code = diag.level.color().ansi_code();
-                    let reset = Color::Reset.ansi_code();
-                    if label.message.is_empty() {
-                        writeln!(
-                            writer,
-                            "{padding} | {caret_padding}{color_code}{carets}{reset}"
-                        )?;
-                    } else {
-                        writeln!(
-                            writer,
-                            "{padding} | {caret_padding}{color_code}{carets} {label_msg}{reset}",
-                            label_msg = label.message,
-                        )?;
-                    }
-                } else if label.message.is_empty() {
-                    writeln!(writer, "{padding} | {caret_padding}{carets}")?;
+                let caret_text = if label.message.is_empty() {
+                    carets
                 } else {
-                    writeln!(
-                        writer,
-                        "{padding} | {caret_padding}{carets} {label_msg}",
-                        label_msg = label.message,
-                    )?;
-                }
+                    format!("{carets} {}", label.message)
+                };
+                writeln!(
+                    writer,
+                    "{padding} | {caret_padding}{}",
+                    paint(diag.level.color(), &caret_text),
+                )?;
             }
         }
     }
 
     // If no labels, just print the header without source context.
     if diag.labels.is_empty() {
-        if use_color {
-            let color_code = diag.level.color().ansi_code();
-            let reset = Color::Reset.ansi_code();
-            let bold = Color::Bold.ansi_code();
-            writeln!(
-                writer,
-                "{color_code}{level}{reset}: {bold}{msg}{reset}",
-                level = diag.level.label(),
-                msg = diag.message,
-            )?;
-        } else {
-            writeln!(
-                writer,
-                "{level}: {msg}",
-                level = diag.level.label(),
-                msg = diag.message,
-            )?;
-        }
+        writeln!(
+            writer,
+            "{}: {}",
+            paint(diag.level.color(), diag.level.label()),
+            paint(Color::Bold, &diag.message),
+        )?;
     }
 
     for note_msg in &diag.notes {
-        if use_color {
-            let cyan = Color::Cyan.ansi_code();
-            let reset = Color::Reset.ansi_code();
-            let bold = Color::Bold.ansi_code();
-            writeln!(writer, "{cyan}note{reset}: {bold}{note_msg}{reset}")?;
-        } else {
-            writeln!(writer, "note: {note_msg}")?;
-        }
+        writeln!(
+            writer,
+            "{}: {}",
+            paint(Color::Cyan, "note"),
+            paint(Color::Bold, note_msg),
+        )?;
     }
 
     Ok(())

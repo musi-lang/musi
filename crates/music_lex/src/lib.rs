@@ -5,4 +5,4 @@ pub mod token;
 
 pub use errors::{LexError, LexResult};
 pub use lexer::Lexer;
-pub use token::{FStrPart, Token, TokenKind, Trivia, TriviaList};
+pub use token::{FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList};

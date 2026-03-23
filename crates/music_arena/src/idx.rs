@@ -1,15 +1,14 @@
-use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 /// Typed index into an `Arena<T>`. 4 bytes, `Copy`, type-safe.
 ///
 /// Two `Idx` values with different type parameters are incompatible at the type
 /// level, preventing accidental cross-arena lookups.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Idx<T> {
     raw: u32,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Idx<T> {
@@ -21,7 +20,7 @@ impl<T> Idx<T> {
     pub const fn from_raw(raw: u32) -> Self {
         Self {
             raw,
-            _phantom: PhantomData,
+            _phantom: PhantomData::<fn() -> T>,
         }
     }
 
@@ -36,7 +35,7 @@ impl<T> Idx<T> {
     pub(crate) const fn new(raw: u32) -> Self {
         Self {
             raw,
-            _phantom: PhantomData,
+            _phantom: PhantomData::<fn() -> T>,
         }
     }
 }
@@ -44,40 +43,6 @@ impl<T> Idx<T> {
 impl<T> fmt::Debug for Idx<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Idx").field("raw", &self.raw).finish()
-    }
-}
-
-impl<T> Clone for Idx<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for Idx<T> {}
-
-impl<T> PartialEq for Idx<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw
-    }
-}
-
-impl<T> Eq for Idx<T> {}
-
-impl<T> Hash for Idx<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.raw.hash(state);
-    }
-}
-
-impl<T> PartialOrd for Idx<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T> Ord for Idx<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.raw.cmp(&other.raw)
     }
 }
 

@@ -1,4 +1,5 @@
 use std::fmt;
+use std::iter;
 use std::path::{Path, PathBuf};
 
 use crate::Span;
@@ -33,15 +34,14 @@ pub struct Source {
 impl Source {
     /// Create a new source, scanning the text for line boundaries.
     fn new(id: SourceId, path: PathBuf, text: String) -> Self {
-        let mut line_starts = vec![0];
-        for (i, byte) in text.bytes().enumerate() {
-            if byte == b'\n' {
-                // The next line starts at the byte after '\n'.
-                if let Ok(next) = u32::try_from(i + 1) {
-                    line_starts.push(next);
-                }
-            }
-        }
+        let line_starts: Vec<u32> = iter::once(0)
+            .chain(
+                text.bytes()
+                    .enumerate()
+                    .filter(|&(_, b)| b == b'\n')
+                    .filter_map(|(i, _)| u32::try_from(i + 1).ok()),
+            )
+            .collect();
         Self {
             id,
             path,

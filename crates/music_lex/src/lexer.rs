@@ -1,9 +1,11 @@
 use core::mem;
 
+use music_found::Span;
+
 use crate::cursor::Cursor;
 use crate::errors::{LexError, LexResult};
 use crate::token::{
-    FStrPart, Token, TokenKind, Trivia, TriviaList, keyword_from_str, single_char_token,
+    FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList, keyword_from_str, single_char_token,
 };
 
 const COMPOUNDS: &[(&[u8], TokenKind)] = &[
@@ -133,29 +135,23 @@ impl<'src> Lexer<'src> {
     fn scan_ident_or_keyword(&mut self, start: u32) -> LexResult<TokenKind> {
         let _ = self.cursor.eat_while(is_ident_cont);
         let text = self.cursor.slice(start);
-        if text == "f" && self.cursor.peek() == Some('"') {
+        if text.len() == 1 && text.starts_with('f') && self.cursor.peek() == Some('"') {
             return self.scan_fstring(start);
         }
-        Ok(keyword_from_str(text).unwrap_or_else(|| TokenKind::Ident(String::from(text))))
+        Ok(keyword_from_str(text).unwrap_or(TokenKind::Ident))
     }
 
     fn scan_number(&mut self, start: u32) -> LexResult<TokenKind> {
         let first_byte = self.cursor.slice(start).as_bytes()[0];
         if first_byte == b'0' {
-            match self.cursor.peek() {
-                Some('x') => {
-                    let _ = self.cursor.advance();
-                    return self.scan_int_digits(start, 16);
-                }
-                Some('o') => {
-                    let _ = self.cursor.advance();
-                    return self.scan_int_digits(start, 8);
-                }
-                Some('b') => {
-                    let _ = self.cursor.advance();
-                    return self.scan_int_digits(start, 2);
-                }
-                _ => {}
+            if let Some(prefix @ ('x' | 'o' | 'b')) = self.cursor.peek() {
+                let _ = self.cursor.advance();
+                let base = match prefix {
+                    'x' => 16,
+                    'o' => 8,
+                    _ => 2,
+                };
+                return self.scan_int_digits(start, base);
             }
         }
         let _ = self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
@@ -186,19 +182,6 @@ impl<'src> Lexer<'src> {
     fn finish_int(&self, start: u32, base: u32) -> LexResult<TokenKind> {
         let raw = self.cursor.slice(start);
         let skip = if base == 10 { 0 } else { 2 };
-        if !raw.contains('_') {
-            let digits = raw.get(skip..).unwrap_or_default();
-            if digits.is_empty() {
-                return Err(LexError::InvalidNumberPrefix {
-                    span: self.cursor.span_from(start),
-                });
-            }
-            return i64::from_str_radix(digits, base)
-                .map(TokenKind::Int)
-                .map_err(|_| LexError::NumberOverflow {
-                    span: self.cursor.span_from(start),
-                });
-        }
         let digits: String = raw.chars().skip(skip).filter(|&c| c != '_').collect();
         if digits.is_empty() {
             return Err(LexError::InvalidNumberPrefix {
@@ -228,13 +211,6 @@ impl<'src> Lexer<'src> {
             }
         }
         let raw = self.cursor.slice(start);
-        if !raw.contains('_') {
-            return raw.parse::<f64>().map(TokenKind::Float).map_err(|_| {
-                LexError::NumberOverflow {
-                    span: self.cursor.span_from(start),
-                }
-            });
-        }
         let cleaned: String = raw.chars().filter(|&c| c != '_').collect();
         cleaned
             .parse::<f64>()
@@ -390,7 +366,6 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_escaped_ident(&mut self, start: u32) -> LexResult<TokenKind> {
-        let mut value = String::new();
         loop {
             match self.cursor.peek() {
                 None => {
@@ -400,11 +375,10 @@ impl<'src> Lexer<'src> {
                 }
                 Some('`') => {
                     let _ = self.cursor.advance();
-                    return Ok(TokenKind::EscapedIdent(value));
+                    return Ok(TokenKind::EscapedIdent);
                 }
-                Some(ch) => {
+                Some(_) => {
                     let _ = self.cursor.advance();
-                    value.push(ch);
                 }
             }
         }
@@ -504,8 +478,12 @@ impl<'src> Lexer<'src> {
             match self.cursor.peek() {
                 Some(' ' | '\t' | '\r') => trivia.push(self.scan_whitespace()),
                 Some('\n') => {
+                    let pos = self.cursor.pos();
                     let _ = self.cursor.advance();
-                    trivia.push(Trivia::Newline);
+                    trivia.push(Trivia {
+                        kind: TriviaKind::Newline,
+                        span: Span::new(pos, pos + 1),
+                    });
                 }
                 Some('/') if self.cursor.peek_next() == Some('/') => {
                     trivia.push(self.scan_line_comment());
@@ -544,23 +522,28 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_whitespace(&mut self) -> Trivia {
-        let text = self
+        let start = self.cursor.pos();
+        let _ = self
             .cursor
             .eat_while(|c| c == ' ' || c == '\t' || c == '\r');
-        Trivia::Whitespace(String::from(text))
+        Trivia {
+            kind: TriviaKind::Whitespace,
+            span: self.cursor.span_from(start),
+        }
     }
 
     fn scan_line_comment(&mut self) -> Trivia {
+        let start = self.cursor.pos();
         let _ = self.cursor.advance(); // first /
         let _ = self.cursor.advance(); // second /
         let doc = self.cursor.peek() == Some('/');
         if doc {
             let _ = self.cursor.advance();
         }
-        let text = self.cursor.eat_while(|c| c != '\n');
-        Trivia::LineComment {
-            text: String::from(text),
-            doc,
+        let _ = self.cursor.eat_while(|c| c != '\n');
+        Trivia {
+            kind: TriviaKind::LineComment { doc },
+            span: self.cursor.span_from(start),
         }
     }
 
@@ -572,7 +555,6 @@ impl<'src> Lexer<'src> {
         if doc {
             let _ = self.cursor.advance();
         }
-        let text_start = self.cursor.pos();
         let mut depth: u32 = 1;
         loop {
             match self.cursor.peek() {
@@ -587,14 +569,13 @@ impl<'src> Lexer<'src> {
                     depth += 1;
                 }
                 Some('*') if self.cursor.peek_next() == Some('/') => {
-                    let text = self.cursor.slice(text_start);
                     let _ = self.cursor.advance();
                     let _ = self.cursor.advance();
                     depth -= 1;
                     if depth == 0 {
-                        return Ok(Trivia::BlockComment {
-                            text: String::from(text),
-                            doc,
+                        return Ok(Trivia {
+                            kind: TriviaKind::BlockComment { doc },
+                            span: self.cursor.span_from(start),
                         });
                     }
                 }
