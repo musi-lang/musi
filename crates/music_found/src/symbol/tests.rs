@@ -58,3 +58,11 @@ fn default_interner_is_empty() {
     assert!(interner.is_empty());
     assert_eq!(interner.len(), 0);
 }
+
+#[test]
+#[should_panic(expected = "symbol not found in interner")]
+fn resolve_invalid_symbol_panics() {
+    let interner = Interner::new();
+    let bad = Symbol(999);
+    let _resolved = interner.resolve(bad);
+}

@@ -143,6 +143,16 @@ fn merge_with_dummy() {
     assert_eq!(merged_rev.end, 10);
 }
 
+#[test]
+fn display_format() {
+    assert_eq!(format!("{}", Span::new(5, 10)), "5..10");
+}
+
+#[test]
+fn default_equals_dummy() {
+    assert_eq!(Span::default(), Span::DUMMY);
+}
+
 #[cfg(not(debug_assertions))]
 #[test]
 fn inverted_span_len_is_zero() {

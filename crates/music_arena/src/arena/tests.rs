@@ -139,3 +139,16 @@ fn debug_format() {
     assert!(debug_output.contains("Arena"));
     assert!(debug_output.contains("42"));
 }
+
+#[test]
+fn into_iter_shared_ref() {
+    let mut arena: Arena<i32> = Arena::new();
+    let a = arena.alloc(10);
+    let b = arena.alloc(20);
+
+    let mut items = Vec::new();
+    for (idx, val) in &arena {
+        items.push((idx, *val));
+    }
+    assert_eq!(items, vec![(a, 10), (b, 20)]);
+}

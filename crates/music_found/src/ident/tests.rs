@@ -36,3 +36,21 @@ fn equality_compares_both_fields() {
     assert_ne!(id1, id3);
     assert_ne!(id1, id4);
 }
+
+#[test]
+fn hash_consistency() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut interner = Interner::new();
+    let sym = interner.intern("test");
+    let a = Ident::new(sym, Span::new(0, 4));
+    let b = Ident::new(sym, Span::new(0, 4));
+
+    let hash_of = |val: &Ident| {
+        let mut h = DefaultHasher::new();
+        val.hash(&mut h);
+        h.finish()
+    };
+    assert_eq!(hash_of(&a), hash_of(&b));
+}

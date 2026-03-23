@@ -2,7 +2,7 @@ use music_found::Span;
 
 use crate::Lexer;
 use crate::errors::LexError;
-use crate::token::{FStrPart, TokenKind, Trivia};
+use crate::token::{FStrPart, TokenKind, TriviaKind};
 
 fn lex_kinds(src: &str) -> Vec<TokenKind> {
     let (tokens, errors) = Lexer::new(src).lex();
@@ -16,15 +16,11 @@ fn lex_first_kind(src: &str) -> TokenKind {
     kinds.into_iter().next().unwrap()
 }
 
-// --- Empty source ---
-
 #[test]
 fn empty_source_produces_eof() {
     let kinds = lex_kinds("");
     assert_eq!(kinds, vec![TokenKind::Eof]);
 }
-
-// --- Delimiters ---
 
 #[test]
 fn delimiters() {
@@ -42,8 +38,6 @@ fn delimiters() {
         ]
     );
 }
-
-// --- Punctuation ---
 
 #[test]
 fn punctuation() {
@@ -72,8 +66,6 @@ fn punctuation() {
         ]
     );
 }
-
-// --- Compound tokens ---
 
 #[test]
 fn compound_tokens() {
@@ -107,8 +99,6 @@ fn compound_tokens() {
     }
 }
 
-// --- Maximal munch ---
-
 #[test]
 fn maximal_munch_colon_question_gt() {
     let kinds = lex_kinds(":?>");
@@ -127,8 +117,6 @@ fn maximal_munch_colon_eq() {
     assert_eq!(kinds, vec![TokenKind::ColonEq, TokenKind::Eof]);
 }
 
-// --- Keywords vs identifiers ---
-
 #[test]
 fn keywords() {
     assert_eq!(lex_first_kind("and"), TokenKind::KwAnd);
@@ -139,21 +127,21 @@ fn keywords() {
 
 #[test]
 fn identifier_not_keyword() {
-    assert_eq!(
-        lex_first_kind("android"),
-        TokenKind::Ident(String::from("android"))
-    );
-    assert_eq!(
-        lex_first_kind("letter"),
-        TokenKind::Ident(String::from("letter"))
-    );
-    assert_eq!(
-        lex_first_kind("_foo"),
-        TokenKind::Ident(String::from("_foo"))
-    );
+    assert_eq!(lex_first_kind("android"), TokenKind::Ident);
+    assert_eq!(lex_first_kind("letter"), TokenKind::Ident);
+    assert_eq!(lex_first_kind("_foo"), TokenKind::Ident);
 }
 
-// --- Number literals ---
+#[test]
+fn identifier_text_via_span() {
+    let source = "android";
+    let (tokens, errors) = Lexer::new(source).lex();
+    assert!(errors.is_empty());
+    assert_eq!(tokens[0].kind, TokenKind::Ident);
+    let start = usize::try_from(tokens[0].span.start).unwrap();
+    let end = usize::try_from(tokens[0].span.end).unwrap();
+    assert_eq!(source.get(start..end).unwrap(), "android");
+}
 
 #[test]
 fn decimal_int() {
@@ -208,8 +196,6 @@ fn invalid_number_prefix() {
     );
 }
 
-// --- String literals ---
-
 #[test]
 fn simple_string() {
     assert_eq!(
@@ -245,8 +231,6 @@ fn unterminated_string() {
     assert!(errors[0].to_string().contains("unterminated string"));
 }
 
-// --- F-string ---
-
 #[test]
 fn fstring_literal_only() {
     let kind = lex_first_kind("f\"hello\"");
@@ -258,7 +242,8 @@ fn fstring_literal_only() {
 
 #[test]
 fn fstring_with_expr() {
-    let kind = lex_first_kind("f\"hello {name}\"");
+    let source = "f\"hello {name}\"";
+    let kind = lex_first_kind(source);
     match kind {
         TokenKind::FStr(parts) => {
             assert_eq!(parts.len(), 2);
@@ -266,7 +251,10 @@ fn fstring_with_expr() {
             match &parts[1] {
                 FStrPart::Expr(tokens) => {
                     assert_eq!(tokens.len(), 1);
-                    assert_eq!(tokens[0].kind, TokenKind::Ident(String::from("name")));
+                    assert_eq!(tokens[0].kind, TokenKind::Ident);
+                    let start = usize::try_from(tokens[0].span.start).unwrap();
+                    let end = usize::try_from(tokens[0].span.end).unwrap();
+                    assert_eq!(source.get(start..end).unwrap(), "name");
                 }
                 other @ FStrPart::Lit(_) => panic!("expected Expr, got {other:?}"),
             }
@@ -274,8 +262,6 @@ fn fstring_with_expr() {
         other => panic!("expected FStr, got {other:?}"),
     }
 }
-
-// --- Rune ---
 
 #[test]
 fn rune_simple() {
@@ -302,14 +288,15 @@ fn rune_multi_char_error() {
     assert!(errors[0].to_string().contains("more than one character"));
 }
 
-// --- Escaped identifier ---
-
 #[test]
 fn escaped_ident() {
-    assert_eq!(
-        lex_first_kind("`hello world`"),
-        TokenKind::EscapedIdent(String::from("hello world"))
-    );
+    let source = "`hello world`";
+    let (tokens, errors) = Lexer::new(source).lex();
+    assert!(errors.is_empty());
+    assert_eq!(tokens[0].kind, TokenKind::EscapedIdent);
+    let start = usize::try_from(tokens[0].span.start).unwrap();
+    let end = usize::try_from(tokens[0].span.end).unwrap();
+    assert_eq!(source.get(start..end).unwrap(), "`hello world`");
 }
 
 #[test]
@@ -323,28 +310,30 @@ fn unterminated_escaped_ident() {
     );
 }
 
-// --- Comments as trivia ---
-
 #[test]
 fn line_comment_trivia() {
     let (tokens, errors) = Lexer::new("// comment\n42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens.len(), 2); // Int + Eof
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0].leading_trivia.contains(&Trivia::LineComment {
-        text: String::from(" comment"),
-        doc: false,
-    }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::LineComment { doc: false })
+    );
 }
 
 #[test]
 fn doc_line_comment_trivia() {
     let (tokens, errors) = Lexer::new("/// doc\n42").lex();
     assert!(errors.is_empty());
-    assert!(tokens[0].leading_trivia.contains(&Trivia::LineComment {
-        text: String::from(" doc"),
-        doc: true,
-    }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::LineComment { doc: true })
+    );
 }
 
 #[test]
@@ -352,20 +341,24 @@ fn block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/* block */42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0].leading_trivia.contains(&Trivia::BlockComment {
-        text: String::from(" block "),
-        doc: false,
-    }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::BlockComment { doc: false })
+    );
 }
 
 #[test]
 fn doc_block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/** doc */42").lex();
     assert!(errors.is_empty());
-    assert!(tokens[0].leading_trivia.contains(&Trivia::BlockComment {
-        text: String::from(" doc "),
-        doc: true,
-    }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::BlockComment { doc: true })
+    );
 }
 
 #[test]
@@ -375,8 +368,6 @@ fn unterminated_block_comment() {
     assert!(errors[0].to_string().contains("unterminated block comment"));
 }
 
-// --- Trivia attachment ---
-
 #[test]
 fn leading_whitespace_trivia() {
     let (tokens, errors) = Lexer::new("  42").lex();
@@ -385,7 +376,8 @@ fn leading_whitespace_trivia() {
     assert!(
         tokens[0]
             .leading_trivia
-            .contains(&Trivia::Whitespace(String::from("  ")))
+            .iter()
+            .any(|t| t.kind == TriviaKind::Whitespace)
     );
 }
 
@@ -398,11 +390,9 @@ fn trailing_comment_trivia() {
         tokens[0]
             .trailing_trivia
             .iter()
-            .any(|t| matches!(t, Trivia::LineComment { doc: false, .. }))
+            .any(|t| matches!(t.kind, TriviaKind::LineComment { doc: false }))
     );
 }
-
-// --- Error recovery ---
 
 #[test]
 fn error_recovery_continues_lexing() {
@@ -413,8 +403,6 @@ fn error_recovery_continues_lexing() {
     assert!(kinds.contains(&&TokenKind::Eof));
 }
 
-// --- Full program snippet ---
-
 #[test]
 fn full_program_snippet() {
     let src = "let x := 42;\nlet y := x + 1";
@@ -423,22 +411,20 @@ fn full_program_snippet() {
         kinds,
         vec![
             TokenKind::KwLet,
-            TokenKind::Ident(String::from("x")),
+            TokenKind::Ident,
             TokenKind::ColonEq,
             TokenKind::Int(42),
             TokenKind::Semi,
             TokenKind::KwLet,
-            TokenKind::Ident(String::from("y")),
+            TokenKind::Ident,
             TokenKind::ColonEq,
-            TokenKind::Ident(String::from("x")),
+            TokenKind::Ident,
             TokenKind::Plus,
             TokenKind::Int(1),
             TokenKind::Eof,
         ]
     );
 }
-
-// --- Bug fix: underscore-only after base prefix ---
 
 #[test]
 fn underscore_only_after_base_prefix() {
@@ -457,8 +443,6 @@ fn underscore_only_after_base_prefix() {
     }
 }
 
-// --- Bug fix: incomplete exponent ---
-
 #[test]
 fn incomplete_exponent() {
     for input in &["1e", "1e+", "1e-"] {
@@ -476,8 +460,6 @@ fn incomplete_exponent() {
     }
 }
 
-// --- Int followed by dot (not float) ---
-
 #[test]
 fn int_then_dot() {
     for (input, int_val) in &[("0.", 0_i64), ("1.", 1_i64)] {
@@ -490,8 +472,6 @@ fn int_then_dot() {
     }
 }
 
-// --- Nested block comments ---
-
 #[test]
 fn nested_block_comments() {
     let (tokens, errors) = Lexer::new("/* /* inner */ outer */").lex();
@@ -502,8 +482,6 @@ fn nested_block_comments() {
     assert_eq!(tokens.len(), 1, "should only have Eof token");
     assert_eq!(tokens[0].kind, TokenKind::Eof);
 }
-
-// --- F-string with nested braces ---
 
 #[test]
 fn fstring_nested_braces() {
@@ -530,11 +508,10 @@ fn fstring_nested_braces() {
     }
 }
 
-// --- F-string with escapes ---
-
 #[test]
 fn fstring_with_escapes() {
-    let kind = lex_first_kind("f\"hello\\n{x}\"");
+    let source = "f\"hello\\n{x}\"";
+    let kind = lex_first_kind(source);
     match kind {
         TokenKind::FStr(parts) => {
             assert_eq!(parts.len(), 2);
@@ -542,7 +519,10 @@ fn fstring_with_escapes() {
             match &parts[1] {
                 FStrPart::Expr(tokens) => {
                     assert_eq!(tokens.len(), 1);
-                    assert_eq!(tokens[0].kind, TokenKind::Ident(String::from("x")));
+                    assert_eq!(tokens[0].kind, TokenKind::Ident);
+                    let start = usize::try_from(tokens[0].span.start).unwrap();
+                    let end = usize::try_from(tokens[0].span.end).unwrap();
+                    assert_eq!(source.get(start..end).unwrap(), "x");
                 }
                 other @ FStrPart::Lit(_) => panic!("expected Expr, got {other:?}"),
             }
@@ -550,8 +530,6 @@ fn fstring_with_escapes() {
         other => panic!("expected FStr, got {other:?}"),
     }
 }
-
-// --- Hex escape in string ---
 
 #[test]
 fn hex_escape_in_string() {
@@ -561,8 +539,6 @@ fn hex_escape_in_string() {
     );
 }
 
-// --- Unicode escape in string ---
-
 #[test]
 fn unicode_escape_in_string() {
     assert_eq!(
@@ -570,8 +546,6 @@ fn unicode_escape_in_string() {
         TokenKind::Str(String::from("\u{1F600}"))
     );
 }
-
-// --- Number overflow ---
 
 #[test]
 fn number_overflow() {
@@ -584,8 +558,6 @@ fn number_overflow() {
     );
 }
 
-// --- Token spans correct ---
-
 #[test]
 fn token_spans_correct() {
     let (tokens, errors) = Lexer::new("let x := 42;").lex();
@@ -594,7 +566,7 @@ fn token_spans_correct() {
     assert_eq!(tokens[0].kind, TokenKind::KwLet);
     assert_eq!(tokens[0].span, Span::new(0, 3));
     // "x" at 4..5
-    assert_eq!(tokens[1].kind, TokenKind::Ident(String::from("x")));
+    assert_eq!(tokens[1].kind, TokenKind::Ident);
     assert_eq!(tokens[1].span, Span::new(4, 5));
     // ":=" at 6..8
     assert_eq!(tokens[2].kind, TokenKind::ColonEq);
@@ -606,8 +578,6 @@ fn token_spans_correct() {
     assert_eq!(tokens[4].kind, TokenKind::Semi);
     assert_eq!(tokens[4].span, Span::new(11, 12));
 }
-
-// --- Multiple errors ---
 
 #[test]
 fn multiple_errors() {
@@ -623,4 +593,142 @@ fn multiple_errors() {
             "expected UnexpectedChar, got: {err:?}"
         );
     }
+}
+
+#[test]
+fn whitespace_trivia_has_correct_span() {
+    let (tokens, errors) = Lexer::new("  42").lex();
+    assert!(errors.is_empty());
+    let ws = &tokens[0].leading_trivia[0];
+    assert_eq!(ws.kind, TriviaKind::Whitespace);
+    assert_eq!(ws.span, Span::new(0, 2));
+}
+
+#[test]
+fn newline_trivia_has_correct_span() {
+    let (tokens, errors) = Lexer::new("\n42").lex();
+    assert!(errors.is_empty());
+    let nl = &tokens[0].leading_trivia[0];
+    assert_eq!(nl.kind, TriviaKind::Newline);
+    assert_eq!(nl.span, Span::new(0, 1));
+}
+
+#[test]
+fn line_comment_trivia_has_correct_span() {
+    let (tokens, errors) = Lexer::new("// comment\n42").lex();
+    assert!(errors.is_empty());
+    let comment = tokens[0]
+        .leading_trivia
+        .iter()
+        .find(|t| matches!(t.kind, TriviaKind::LineComment { .. }))
+        .unwrap();
+    assert_eq!(comment.span, Span::new(0, 10));
+}
+
+#[test]
+fn block_comment_trivia_has_correct_span() {
+    let (tokens, errors) = Lexer::new("/* block */42").lex();
+    assert!(errors.is_empty());
+    let comment = tokens[0]
+        .leading_trivia
+        .iter()
+        .find(|t| matches!(t.kind, TriviaKind::BlockComment { .. }))
+        .unwrap();
+    assert_eq!(comment.span, Span::new(0, 11));
+}
+
+#[test]
+fn invalid_hex_escape_digits() {
+    let (_, errors) = Lexer::new(r#""\xGG""#).lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::InvalidHexEscape { .. }));
+}
+
+#[test]
+fn unicode_escape_no_braces() {
+    let (_, errors) = Lexer::new(r#""\u0041""#).lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+}
+
+#[test]
+fn unicode_escape_empty() {
+    let (_, errors) = Lexer::new(r#""\u{}""#).lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+}
+
+#[test]
+fn unicode_escape_too_many_digits() {
+    let (_, errors) = Lexer::new(r#""\u{1234567}""#).lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+}
+
+#[test]
+fn unicode_escape_surrogate() {
+    let (_, errors) = Lexer::new(r#""\u{D800}""#).lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+}
+
+#[test]
+fn backslash_at_eof_in_string() {
+    let src = "\"\\";
+    let (_, errors) = Lexer::new(src).lex();
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn backslash_rune() {
+    let kinds = lex_kinds("'\\\\'");
+    assert_eq!(kinds[0], TokenKind::Rune('\\'));
+}
+
+#[test]
+fn unterminated_fstring() {
+    let (_, errors) = Lexer::new("f\"hello").lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::UnterminatedFString { .. }));
+}
+
+#[test]
+fn unterminated_fstring_expr() {
+    let (_, errors) = Lexer::new("f\"hello {x").lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(
+        errors[0],
+        LexError::UnterminatedFStringExpr { .. }
+    ));
+}
+
+#[test]
+fn unterminated_rune_no_close() {
+    let (_, errors) = Lexer::new("'a").lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(errors[0], LexError::UnterminatedRune { .. }));
+}
+
+#[test]
+fn float_with_underscores() {
+    let kinds = lex_kinds("1_000.5");
+    assert_eq!(kinds[0], TokenKind::Float(1000.5));
+}
+
+#[test]
+fn keyword_case_sensitivity() {
+    let kinds = lex_kinds("And LET Match");
+    assert_eq!(kinds[0], TokenKind::Ident);
+    assert_eq!(kinds[1], TokenKind::Ident);
+    assert_eq!(kinds[2], TokenKind::Ident);
+}
+
+#[test]
+fn tilde_unexpected_char() {
+    let (_, errors) = Lexer::new("~").lex();
+    assert!(!errors.is_empty());
+    assert!(matches!(
+        errors[0],
+        LexError::UnexpectedChar { ch: '~', .. }
+    ));
 }

@@ -78,3 +78,9 @@ fn type_safety_distinct_types() {
     assert_eq!(int_idx.raw(), 0);
     assert_eq!(str_idx.raw(), 0);
 }
+
+#[test]
+fn debug_format() {
+    let idx: Idx<i32> = Idx::from_raw(42);
+    assert_eq!(format!("{idx:?}"), "Idx { raw: 42 }");
+}

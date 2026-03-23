@@ -171,3 +171,9 @@ fn line_text_strips_cr() {
     assert_eq!(src.line_text(2), Some("second"));
     assert_eq!(src.line_text(3), Some("third"));
 }
+
+#[test]
+fn source_id_display() {
+    let id = SourceId(5);
+    assert_eq!(format!("{id}"), "5");
+}
