@@ -1,6 +1,24 @@
-use music_found::Ident;
+use music_found::{Ident, Symbol};
 
-use crate::{AttrList, ExprId, IdentList, ParamList, TyId};
+use crate::{ExprId, IdentList, ParamList, TyId, TyList};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ModifierSet {
+    pub exported: bool,
+    pub opaque: bool,
+    pub mutable: bool,
+    pub foreign_abi: Option<Symbol>,
+    pub foreign_alias: Option<Symbol>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Signature {
+    pub params: ParamList,
+    pub ty_params: IdentList,
+    pub constraints: Vec<Constraint>,
+    pub effects: Vec<EffectItem>,
+    pub ret_ty: Option<TyId>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Param {
@@ -23,8 +41,9 @@ pub enum AttrArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WhereClause {
-    pub constraints: Vec<Constraint>,
+pub struct TyRef {
+    pub name: Ident,
+    pub args: TyList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,24 +53,13 @@ pub enum Constraint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TyRef {
-    pub name: Ident,
-    pub args: Vec<TyId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EffectSet {
-    pub effects: Vec<EffectItem>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectItem {
     pub name: Ident,
     pub arg: Option<TyId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MemberKind {
+pub enum MemberDecl {
     Fn(FnDecl),
     Law(LawDecl),
 }
@@ -88,16 +96,6 @@ pub struct RecordDefField {
 pub struct VariantDef {
     pub name: Ident,
     pub payload: Option<TyId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForeignBinding {
-    pub attrs: AttrList,
-    pub name: Ident,
-    pub ty_params: Option<IdentList>,
-    pub alias: Option<String>,
-    pub where_clause: Option<WhereClause>,
-    pub ty: Option<TyId>,
 }
 
 #[cfg(test)]

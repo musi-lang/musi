@@ -1,39 +1,43 @@
-use music_found::{Ident, Literal};
+use music_found::{Ident, Literal, Symbol};
 
-use crate::common::{
-    EffectSet, FnDecl, ForeignBinding, MemberKind, RecordDefField, TyRef, VariantDef, WhereClause,
-};
+use crate::common::{Constraint, FnDecl, MemberDecl, RecordDefField, Signature, TyRef, VariantDef};
 use crate::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId, TyId};
+
+use super::common::ModifierSet;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
-    // Lit suffix = creates a value
+    // Lit = creates a value
     Lit(Literal),
     VariantLit(Ident, ExprList),
     TupleLit(ExprList),
     ArrayLit(ExprList),
     MatrixLit(Vec<ExprList>),
     RecordLit(Vec<RecordField>),
+    RecordUpdate {
+        base: ExprId,
+        fields: Vec<RecordField>,
+    },
     FStrLit(Vec<FStrPart>),
 
-    // Def suffix = defines a type
+    // Def = defines a type
     RecordDef(Vec<RecordDefField>),
     ChoiceDef(Vec<VariantDef>),
-    EffectDef(Vec<MemberKind>),
+    EffectDef(Vec<MemberDecl>),
     ClassDef {
-        where_clause: Option<WhereClause>,
-        members: Vec<MemberKind>,
+        constraints: Vec<Constraint>,
+        members: Vec<MemberDecl>,
     },
-    InstanceDef(InstanceExpr),
+    InstanceDef(Box<InstanceDef>),
 
-    // No suffix = operations
+    // Operations
     Var(Ident),
     App(ExprId, ExprList),
     BinOp(BinOp, ExprId, ExprId),
     UnaryOp(UnaryOp, ExprId),
     Access {
         expr: ExprId,
-        field: Ident,
+        field: FieldTarget,
         mode: AccessMode,
     },
     Index {
@@ -57,7 +61,7 @@ pub enum ExprKind {
     },
 
     // Binding
-    Let(LetBinding),
+    Let(Box<LetBinding>),
     Assign(ExprId, ExprId),
     Lambda {
         params: ParamList,
@@ -72,9 +76,10 @@ pub enum ExprKind {
 
     // Module
     Import {
-        path: String,
+        path: Symbol,
         kind: ImportKind,
     },
+    ForeignImport(Symbol),
 
     // Effects
     Need(ExprId),
@@ -83,9 +88,6 @@ pub enum ExprKind {
         handlers: Vec<FnDecl>,
         body: ExprId,
     },
-
-    // FFI
-    Foreign(ForeignKind),
 
     // Metaprogramming
     Quote(QuoteKind),
@@ -134,6 +136,12 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FieldTarget {
+    Name(Ident),
+    Index(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AccessMode {
     Direct,
     Optional,
@@ -146,7 +154,7 @@ pub enum IndexKind {
     Slice,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeOpKind {
     Test(Option<Ident>),
     Cast,
@@ -167,18 +175,11 @@ pub enum ImportKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LetBinding {
-    pub exported: bool,
-    pub opaque: bool,
-    pub foreign_abi: Option<String>,
-    pub mutable: bool,
+    pub modifiers: ModifierSet,
     pub attrs: AttrList,
     pub pat: PatId,
-    pub params: Option<ParamList>,
-    pub ty_params: Option<IdentList>,
-    pub where_clause: Option<WhereClause>,
-    pub with_clause: Option<EffectSet>,
-    pub ret_ty: Option<TyId>,
-    pub value: ExprId,
+    pub sig: Option<Box<Signature>>,
+    pub value: Option<ExprId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,24 +221,18 @@ pub enum FStrPart {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstanceExpr {
-    pub ty_params: Option<IdentList>,
-    pub where_clause: Option<WhereClause>,
+pub struct InstanceDef {
+    pub exported: bool,
+    pub ty_params: IdentList,
+    pub constraints: Vec<Constraint>,
     pub ty: TyRef,
     pub body: InstanceBody,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstanceBody {
-    Methods(Vec<MemberKind>),
+    Methods(Vec<MemberDecl>),
     Via(TyRef),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ForeignKind {
-    Import(String),
-    Binding(ForeignBinding),
-    Group(Vec<ForeignBinding>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

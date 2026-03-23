@@ -76,9 +76,10 @@ fn alloc_get_roundtrip_attr() {
         name: Ident::new(sym, Span::DUMMY),
         args: vec![],
     };
-    let id = data.attrs.alloc(attr);
+    let id = data.attrs.alloc(Spanned::new(attr, Span::new(0, 7)));
     let retrieved = data.attrs.get(id);
-    assert!(retrieved.args.is_empty());
+    assert!(retrieved.kind.args.is_empty());
+    assert_eq!(retrieved.span, Span::new(0, 7));
 }
 
 #[test]

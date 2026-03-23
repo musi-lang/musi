@@ -17,6 +17,49 @@ fn dummy_ty_id() -> TyId {
 }
 
 #[test]
+fn modifier_set_default() {
+    let m = ModifierSet::default();
+    assert!(!m.exported);
+    assert!(!m.opaque);
+    assert!(!m.mutable);
+    assert!(m.foreign_abi.is_none());
+    assert!(m.foreign_alias.is_none());
+}
+
+#[test]
+fn modifier_set_is_copy() {
+    let m = ModifierSet {
+        exported: true,
+        opaque: false,
+        mutable: true,
+        foreign_abi: None,
+        foreign_alias: None,
+    };
+    let copied = m;
+    assert_eq!(m, copied);
+}
+
+#[test]
+fn signature_construction() {
+    let (_i, ident) = test_ident();
+    let sig = Signature {
+        params: vec![Param {
+            mutable: false,
+            name: ident,
+            ty: Some(dummy_ty_id()),
+            default: None,
+        }],
+        ty_params: vec![ident],
+        constraints: vec![],
+        effects: vec![],
+        ret_ty: Some(dummy_ty_id()),
+    };
+    assert_eq!(sig.params.len(), 1);
+    assert_eq!(sig.ty_params.len(), 1);
+    assert!(sig.ret_ty.is_some());
+}
+
+#[test]
 fn param_construction() {
     let (_i, ident) = test_ident();
     let param = Param {
@@ -64,18 +107,16 @@ fn attr_named_arg() {
 }
 
 #[test]
-fn where_clause_construction() {
+fn constraint_implements() {
     let (_i, ident) = test_ident();
-    let wc = WhereClause {
-        constraints: vec![Constraint::Implements {
-            ty: ident,
-            class: TyRef {
-                name: ident,
-                args: vec![],
-            },
-        }],
+    let c = Constraint::Implements {
+        ty: ident,
+        class: TyRef {
+            name: ident,
+            args: vec![],
+        },
     };
-    assert_eq!(wc.constraints.len(), 1);
+    assert!(matches!(c, Constraint::Implements { .. }));
 }
 
 #[test]
@@ -103,38 +144,36 @@ fn ty_ref_clone_eq() {
 }
 
 #[test]
-fn effect_set_construction() {
+fn effect_item_construction() {
     let (_i, ident) = test_ident();
-    let es = EffectSet {
-        effects: vec![EffectItem {
-            name: ident,
-            arg: Some(dummy_ty_id()),
-        }],
+    let ei = EffectItem {
+        name: ident,
+        arg: Some(dummy_ty_id()),
     };
-    assert_eq!(es.effects.len(), 1);
+    assert!(ei.arg.is_some());
 }
 
 #[test]
-fn member_kind_fn() {
+fn member_decl_fn() {
     let (_i, ident) = test_ident();
-    let mk = MemberKind::Fn(FnDecl {
+    let md = MemberDecl::Fn(FnDecl {
         name: MemberName::Ident(ident),
         params: None,
         ret_ty: None,
         body: None,
     });
-    assert!(matches!(mk, MemberKind::Fn(_)));
+    assert!(matches!(md, MemberDecl::Fn(_)));
 }
 
 #[test]
-fn member_kind_law() {
+fn member_decl_law() {
     let (_i, ident) = test_ident();
-    let mk = MemberKind::Law(LawDecl {
+    let md = MemberDecl::Law(LawDecl {
         name: ident,
         params: None,
         body: dummy_expr_id(),
     });
-    assert!(matches!(mk, MemberKind::Law(_)));
+    assert!(matches!(md, MemberDecl::Law(_)));
 }
 
 #[test]
@@ -165,18 +204,4 @@ fn variant_def() {
     };
     let cloned = v.clone();
     assert_eq!(v, cloned);
-}
-
-#[test]
-fn foreign_binding_construction() {
-    let (_i, ident) = test_ident();
-    let fb = ForeignBinding {
-        attrs: vec![],
-        name: ident,
-        ty_params: None,
-        alias: Some(String::from("c_func")),
-        where_clause: None,
-        ty: Some(dummy_ty_id()),
-    };
-    assert_eq!(fb.alias.as_deref(), Some("c_func"));
 }

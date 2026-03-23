@@ -1,11 +1,18 @@
-use music_found::{Ident, Interner, Literal, Span};
+use music_found::{Ident, Interner, Literal, Span, Symbol};
 
 use super::*;
+use crate::common::{Param, Signature};
 
 fn test_ident() -> (Interner, Ident) {
     let mut interner = Interner::new();
     let sym = interner.intern("x");
     (interner, Ident::new(sym, Span::DUMMY))
+}
+
+fn test_symbol() -> (Interner, Symbol) {
+    let mut interner = Interner::new();
+    let sym = interner.intern("std/io");
+    (interner, sym)
 }
 
 fn dummy_expr_id() -> ExprId {
@@ -108,7 +115,7 @@ fn access_direct() {
     let (_i, ident) = test_ident();
     let e = ExprKind::Access {
         expr: dummy_expr_id(),
-        field: ident,
+        field: FieldTarget::Name(ident),
         mode: AccessMode::Direct,
     };
     assert!(matches!(
@@ -186,23 +193,63 @@ fn comp_clause_generator() {
 }
 
 #[test]
-fn let_binding() {
+fn let_binding_with_sig() {
+    let (_i, ident) = test_ident();
+    let sig = Signature {
+        params: vec![Param {
+            mutable: false,
+            name: ident,
+            ty: Some(dummy_ty_id()),
+            default: None,
+        }],
+        ty_params: vec![],
+        constraints: vec![],
+        effects: vec![],
+        ret_ty: Some(dummy_ty_id()),
+    };
     let lb = LetBinding {
-        exported: false,
-        opaque: false,
-        foreign_abi: None,
-        mutable: true,
+        modifiers: ModifierSet::default(),
         attrs: vec![],
         pat: dummy_pat_id(),
-        params: None,
-        ty_params: None,
-        where_clause: None,
-        with_clause: None,
-        ret_ty: None,
-        value: dummy_expr_id(),
+        sig: Some(Box::new(sig)),
+        value: Some(dummy_expr_id()),
     };
-    let e = ExprKind::Let(lb);
+    let e = ExprKind::Let(Box::new(lb));
     assert!(matches!(e, ExprKind::Let(_)));
+}
+
+#[test]
+fn let_binding_minimal() {
+    let lb = LetBinding {
+        modifiers: ModifierSet::default(),
+        attrs: vec![],
+        pat: dummy_pat_id(),
+        sig: None,
+        value: Some(dummy_expr_id()),
+    };
+    assert!(lb.sig.is_none());
+    assert!(lb.value.is_some());
+}
+
+#[test]
+fn let_binding_with_modifiers() {
+    let (_int, sym) = test_symbol();
+    let lb = LetBinding {
+        modifiers: ModifierSet {
+            exported: true,
+            opaque: false,
+            mutable: false,
+            foreign_abi: Some(sym),
+            foreign_alias: Some(sym),
+        },
+        attrs: vec![],
+        pat: dummy_pat_id(),
+        sig: None,
+        value: None,
+    };
+    assert!(lb.modifiers.exported);
+    assert!(lb.modifiers.foreign_abi.is_some());
+    assert!(lb.value.is_none());
 }
 
 #[test]
@@ -254,8 +301,9 @@ fn resume() {
 #[test]
 fn import_qualified() {
     let (_i, ident) = test_ident();
+    let (_si, sym) = test_symbol();
     let e = ExprKind::Import {
-        path: String::from("std/io"),
+        path: sym,
         kind: ImportKind::Qualified(ident),
     };
     assert!(matches!(e, ExprKind::Import { .. }));
@@ -263,8 +311,9 @@ fn import_qualified() {
 
 #[test]
 fn import_wildcard() {
+    let (_i, sym) = test_symbol();
     let e = ExprKind::Import {
-        path: String::from("std/io"),
+        path: sym,
         kind: ImportKind::Wildcard,
     };
     assert!(matches!(
@@ -348,22 +397,18 @@ fn splice_array() {
 
 #[test]
 fn foreign_import() {
-    let e = ExprKind::Foreign(ForeignKind::Import(String::from("libc")));
-    assert!(matches!(e, ExprKind::Foreign(ForeignKind::Import(_))));
-}
-
-#[test]
-fn foreign_group() {
-    let e = ExprKind::Foreign(ForeignKind::Group(vec![]));
-    assert!(matches!(e, ExprKind::Foreign(ForeignKind::Group(_))));
+    let (_i, sym) = test_symbol();
+    let kind = ExprKind::ForeignImport(sym);
+    assert!(matches!(kind, ExprKind::ForeignImport(_)));
 }
 
 #[test]
 fn instance_def_via() {
     let (_i, ident) = test_ident();
-    let e = ExprKind::InstanceDef(InstanceExpr {
-        ty_params: None,
-        where_clause: None,
+    let e = ExprKind::InstanceDef(Box::new(InstanceDef {
+        exported: false,
+        ty_params: vec![],
+        constraints: vec![],
         ty: TyRef {
             name: ident,
             args: vec![],
@@ -372,14 +417,32 @@ fn instance_def_via() {
             name: ident,
             args: vec![],
         }),
-    });
+    }));
+    assert!(matches!(e, ExprKind::InstanceDef(_)));
+}
+
+#[test]
+fn instance_def_methods() {
+    let (_i, ident) = test_ident();
+    let inst = InstanceDef {
+        exported: true,
+        ty_params: vec![ident],
+        constraints: vec![],
+        ty: TyRef {
+            name: ident,
+            args: vec![],
+        },
+        body: InstanceBody::Methods(vec![]),
+    };
+    assert!(inst.exported);
+    let e = ExprKind::InstanceDef(Box::new(inst));
     assert!(matches!(e, ExprKind::InstanceDef(_)));
 }
 
 #[test]
 fn class_def() {
     let e = ExprKind::ClassDef {
-        where_clause: None,
+        constraints: vec![],
         members: vec![],
     };
     assert!(matches!(e, ExprKind::ClassDef { .. }));
@@ -474,8 +537,8 @@ fn all_bin_ops() {
 #[test]
 fn type_op_kind_cast() {
     let k = TypeOpKind::Cast;
-    let cloned = k.clone();
-    assert_eq!(k, cloned);
+    let copied = k;
+    assert_eq!(k, copied);
 }
 
 #[test]
@@ -510,4 +573,21 @@ fn handle_expr() {
         body: dummy_expr_id(),
     };
     assert!(matches!(e, ExprKind::Handle { .. }));
+}
+
+#[test]
+fn record_update() {
+    let base = ExprId::from_raw(0);
+    let kind = ExprKind::RecordUpdate {
+        base,
+        fields: vec![],
+    };
+    assert!(matches!(kind, ExprKind::RecordUpdate { .. }));
+}
+
+#[test]
+fn expr_kind_size_is_reasonable() {
+    use core::mem::size_of;
+    let size = size_of::<ExprKind>();
+    assert!(size <= 80, "ExprKind is {size} bytes, expected <= 80");
 }

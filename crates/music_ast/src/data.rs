@@ -12,7 +12,7 @@ pub struct AstData {
     pub exprs: Arena<Spanned<ExprKind>>,
     pub pats: Arena<Spanned<PatKind>>,
     pub types: Arena<Spanned<TyKind>>,
-    pub attrs: Arena<Attr>,
+    pub attrs: Arena<Spanned<Attr>>,
     pub root: ExprList,
 }
 
