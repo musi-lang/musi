@@ -3,7 +3,7 @@ use std::mem;
 use music_ast::common::{FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
     BinOp, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef, LetBinding,
-    MatchArm, PostfixOp, RecordField, TypeOpKind, UnaryOp,
+    MatchArm, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
@@ -192,6 +192,8 @@ impl Emitter<'_> {
                 expr: body,
                 ref clauses,
             } => self.emit_comprehension(body, clauses),
+            ExprKind::Quote(ref qk) => self.emit_quote(qk),
+            ExprKind::Splice(ref sk) => self.emit_splice(sk),
             _ => self.push(Instruction::simple(Opcode::Nop)),
         }
     }
@@ -1131,6 +1133,29 @@ impl Emitter<'_> {
             .iter()
             .position(|g| g.name == name)
             .and_then(|p| u16::try_from(p).ok())
+    }
+
+    fn emit_quote(&mut self, qk: &QuoteKind) {
+        match qk {
+            QuoteKind::Expr(e) => self.emit_expr(*e),
+            QuoteKind::Block(stmts) => self.emit_seq(stmts),
+        }
+    }
+
+    fn emit_splice(&mut self, sk: &SpliceKind) {
+        match sk {
+            SpliceKind::Ident(_) => self.push(Instruction::simple(Opcode::Nop)),
+            SpliceKind::Expr(e) => self.emit_expr(*e),
+            SpliceKind::Array(es) => {
+                let len = u16::try_from(es.len()).expect("too many splice elements (>65535)");
+                self.push(Instruction::with_u16(Opcode::ArrNew, len));
+                for (i, &e) in es.iter().enumerate() {
+                    self.emit_expr(e);
+                    let idx = u8::try_from(i).expect("too many splice elements (>255)");
+                    self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+                }
+            }
+        }
     }
 }
 
