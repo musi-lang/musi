@@ -1,0 +1,16 @@
+[package]
+name = "music_db"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Central compiler database for query-based analysis"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_found = { path = "../music_found" }
+music_arena = { path = "../music_arena" }
+music_ast = { path = "../music_ast" }
+
+[lints]
+workspace = true

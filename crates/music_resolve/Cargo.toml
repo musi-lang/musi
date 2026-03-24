@@ -1,0 +1,22 @@
+[package]
+name = "music_resolve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Name resolution for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_found = { path = "../music_found" }
+music_arena = { path = "../music_arena" }
+music_ast = { path = "../music_ast" }
+music_builtins = { path = "../music_builtins" }
+music_db = { path = "../music_db" }
+
+[dev-dependencies]
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+
+[lints]
+workspace = true

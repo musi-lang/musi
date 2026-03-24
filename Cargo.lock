@@ -42,6 +42,16 @@ version = "0.1.0-rc1"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "music_db"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_arena",
+ "music_ast",
+ "music_found",
 ]
 
 [[package]]
@@ -68,6 +78,19 @@ dependencies = [
  "music_ast",
  "music_found",
  "music_lex",
+]
+
+[[package]]
+name = "music_resolve"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_arena",
+ "music_ast",
+ "music_builtins",
+ "music_db",
+ "music_found",
+ "music_lex",
+ "music_parse",
 ]
 
 [[package]]
