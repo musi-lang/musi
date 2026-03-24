@@ -1,4 +1,6 @@
-/// @std/math -- Basic math utilities.
+/**
+ ** @std/math -- Basic math utilities.
+ */
 
 import "./abs" as _;
 import "./max" as _;

@@ -1,4 +1,6 @@
-/// @std/test -- Effect-based test runner API.
+/**
+ ** @std/test -- Effect-based test runner API.
+ */
 
 /// Effect providing the test runner operations.
 let TestRunner := effect {

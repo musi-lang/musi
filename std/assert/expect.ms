@@ -1,4 +1,6 @@
-/// Expectation record wrapping a value under test.
+/**
+ ** Expectation record wrapping a value under test.
+ */
 
 /// An expectation captures a value and whether the assertion is negated.
 export let Expectation [T] := record {

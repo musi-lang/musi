@@ -1,4 +1,6 @@
-/// Matchers for the Expectation API.
+/**
+ ** Matchers for the Expectation API.
+ */
 
 import "./expect" as _;
 

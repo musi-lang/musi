@@ -1,4 +1,6 @@
-/// @std/bytes -- Byte array utilities.
+/**
+ ** @std/bytes -- Byte array utilities.
+ */
 
 import "./concat" as _;
 import "./copy" as _;
