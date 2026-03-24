@@ -815,7 +815,7 @@ impl Parser<'_> {
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
-        let mut params = Vec::new();
+        let mut params = Vec::with_capacity(4);
         while !self.at(&TokenKind::RParen) && !self.at_eof() {
             params.push(self.parse_param()?);
             if !self.eat(&TokenKind::Comma) {
@@ -1474,7 +1474,7 @@ impl Parser<'_> {
     }
 
     fn parse_expr_list(&mut self, terminator: &TokenKind) -> ParseResult<ExprList> {
-        let mut exprs = Vec::new();
+        let mut exprs = Vec::with_capacity(4);
         while !self.at(terminator) && !self.at_eof() {
             exprs.push(self.parse_expr(0)?);
             if !self.eat(&TokenKind::Comma) {

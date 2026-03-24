@@ -22,16 +22,12 @@ pub struct Parser<'tok> {
 }
 
 impl<'tok> Parser<'tok> {
-    pub const fn new(
-        tokens: &'tok [Token],
-        source: &'tok str,
-        interner: &'tok mut Interner,
-    ) -> Self {
+    pub fn new(tokens: &'tok [Token], source: &'tok str, interner: &'tok mut Interner) -> Self {
         Self {
             tokens,
             source,
             pos: 0,
-            ast: AstData::new(),
+            ast: AstData::with_capacity(tokens.len() / 2),
             interner,
             errors: Vec::new(),
         }
@@ -43,16 +39,19 @@ impl<'tok> Parser<'tok> {
 
     // ── Token navigation ──────────────────────────────────────────
 
+    #[inline]
     pub fn peek(&self) -> &Token {
         self.tokens
             .get(self.pos)
             .unwrap_or_else(|| self.tokens.last().expect("token stream has Eof"))
     }
 
+    #[inline]
     pub fn peek_kind(&self) -> &TokenKind {
         &self.peek().kind
     }
 
+    #[inline]
     pub fn advance(&mut self) -> &Token {
         let idx = self.pos;
         if !self.at_eof() {
@@ -109,18 +108,22 @@ impl<'tok> Parser<'tok> {
         }
     }
 
+    #[inline]
     pub fn at(&self, kind: &TokenKind) -> bool {
         mem::discriminant(self.peek_kind()) == mem::discriminant(kind)
     }
 
+    #[inline]
     pub fn at_eof(&self) -> bool {
         matches!(self.peek_kind(), TokenKind::Eof)
     }
 
+    #[inline]
     pub fn span(&self) -> Span {
         self.peek().span
     }
 
+    #[inline]
     pub fn prev_span(&self) -> Span {
         if self.pos == 0 {
             return Span::DUMMY;

@@ -27,6 +27,17 @@ impl AstData {
             root: Vec::new(),
         }
     }
+
+    #[must_use]
+    pub fn with_capacity(hint: usize) -> Self {
+        Self {
+            exprs: Arena::with_capacity(hint),
+            pats: Arena::with_capacity(hint / 4),
+            types: Arena::with_capacity(hint / 4),
+            attrs: Arena::with_capacity(hint / 8),
+            root: Vec::with_capacity(hint / 8),
+        }
+    }
 }
 
 impl Default for AstData {
