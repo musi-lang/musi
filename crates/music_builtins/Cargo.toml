@@ -1,0 +1,11 @@
+[package]
+name = "music_builtins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Built-in types and prelude for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
