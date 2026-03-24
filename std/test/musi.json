@@ -1,0 +1,9 @@
+{
+    "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json",
+    "name": "@std/test",
+    "version": "0.1.0",
+    "description": "Test runner.",
+    "exports": {
+        ".": "./mod.ms"
+    }
+}

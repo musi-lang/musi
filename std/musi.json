@@ -1,0 +1,9 @@
+{
+    "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json",
+    "workspace": [
+        "./bytes",
+        "./math",
+        "./test",
+        "./assert"
+    ]
+}
