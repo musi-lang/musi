@@ -104,6 +104,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_sema"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_arena",
+ "music_ast",
+ "music_builtins",
+ "music_config",
+ "music_db",
+ "music_found",
+ "music_hir",
+ "music_lex",
+ "music_parse",
+ "music_resolve",
+ "thiserror",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
