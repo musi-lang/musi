@@ -1,0 +1,33 @@
+[package]
+name = "musi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Musi language compiler CLI"
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "musi"
+path = "src/lib.rs"
+
+[[bin]]
+name = "musi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_hir = { path = "../music_hir" }
+music_resolve = { path = "../music_resolve" }
+music_sema = { path = "../music_sema" }
+music_emit = { path = "../music_emit" }
+music_db = { path = "../music_db" }
+music_found = { path = "../music_found" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
