@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -8,40 +6,12 @@ use std::path::Path;
 use serde::Deserialize;
 
 /// Error returned when loading or parsing a `musi.json` configuration file.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    Io(io::Error),
-    Parse(serde_json::Error),
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(err) => write!(f, "failed to read config: {err}"),
-            Self::Parse(err) => write!(f, "failed to parse config: {err}"),
-        }
-    }
-}
-
-impl Error for ConfigError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(err) => Some(err),
-            Self::Parse(err) => Some(err),
-        }
-    }
-}
-
-impl From<io::Error> for ConfigError {
-    fn from(err: io::Error) -> Self {
-        Self::Io(err)
-    }
-}
-
-impl From<serde_json::Error> for ConfigError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::Parse(err)
-    }
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+    #[error("JSON parse error: {0}")]
+    Parse(#[from] serde_json::Error),
 }
 
 /// Load a `MusiConfig` from a file path.
@@ -189,12 +159,19 @@ pub struct TaskObject {
     pub dependencies: Option<Vec<String>>,
 }
 
+/// Shared include/exclude file filter used by multiple config sections.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct IncludeExclude {
+    pub include: Option<Vec<String>>,
+    pub exclude: Option<Vec<String>>,
+}
+
 /// Formatter configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FmtConfig {
-    pub include: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub filter: IncludeExclude,
     pub use_tabs: Option<bool>,
     pub line_width: Option<u32>,
     pub indent_width: Option<u32>,
@@ -223,8 +200,8 @@ pub enum BracePosition {
 /// Linter configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct LintConfig {
-    pub include: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub filter: IncludeExclude,
     pub rules: Option<LintRules>,
     pub report: Option<LintReport>,
 }
@@ -249,15 +226,15 @@ pub enum LintReport {
 /// Test runner configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct TestConfig {
-    pub include: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub filter: IncludeExclude,
 }
 
 /// Benchmark runner configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct BenchConfig {
-    pub include: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub filter: IncludeExclude,
 }
 
 /// AOT compilation configuration.
@@ -278,8 +255,8 @@ pub enum PublishConfig {
 /// Structured publish options.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PublishOptions {
-    pub include: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub filter: IncludeExclude,
 }
 
 /// Lock file configuration: a path string, a boolean, or a structured object.
