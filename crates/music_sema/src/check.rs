@@ -1,7 +1,8 @@
-use music_ast::ExprId;
 use music_ast::common::Param;
 use music_ast::expr::{BinOp, ExprKind, FieldTarget, LetBinding, MatchArm, RecordField, UnaryOp};
 use music_ast::pat::PatKind;
+use music_ast::ty::TyKind;
+use music_ast::{ExprId, TyId};
 use music_builtins::types::BuiltinType;
 use music_db::Db;
 use music_found::{Ident, Literal, Span, Symbol};
@@ -9,6 +10,7 @@ use music_resolve::def::{DefId, DefKind};
 use music_resolve::queries::ResolutionMap;
 
 use crate::dispatch::{method_index_for_op, resolve_binop};
+use crate::effects;
 use crate::env::{DispatchInfo, TypeEnv};
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::types::{SemaTypeId, Ty};
@@ -76,9 +78,9 @@ impl SemaDb {
             ExprKind::Let(ref binding) => self.synth_let(binding),
             ExprKind::Lambda {
                 ref params,
-                ret_ty: _,
+                ret_ty,
                 body,
-            } => self.synth_lambda(params, body),
+            } => self.synth_lambda(params, ret_ty, body),
             ExprKind::Match(scrutinee, ref arms) => self.synth_match(scrutinee, arms, span),
             ExprKind::Seq(ref stmts) => self.synth_seq(stmts),
             ExprKind::TupleLit(ref elems) => self.synth_tuple(elems),
@@ -195,11 +197,43 @@ impl SemaDb {
 
         match ty {
             Ty::Arrow { param, ret } => {
-                if args.len() == 1 {
+                if args.is_empty() {
+                    let param_resolved = self.env.resolve_var(param);
+                    let param_ty = self.env.types.get(param_resolved).clone();
+                    if !matches!(param_ty, Ty::Unit) {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::ArityMismatch {
+                                expected: 1,
+                                found: 0,
+                            },
+                            span,
+                            context: None,
+                        });
+                    }
+                } else if args.len() == 1 {
                     let _ = self.check(args[0], param);
                 } else {
-                    for &arg in args {
-                        let _ = self.synth(arg);
+                    let param_resolved = self.env.resolve_var(param);
+                    let param_ty = self.env.types.get(param_resolved).clone();
+                    match param_ty {
+                        Ty::Tuple(ref elems) if elems.len() == args.len() => {
+                            for (i, &arg) in args.iter().enumerate() {
+                                let _ = self.check(arg, elems[i]);
+                            }
+                        }
+                        _ => {
+                            self.errors.push(SemaError {
+                                kind: SemaErrorKind::ArityMismatch {
+                                    expected: 1,
+                                    found: args.len(),
+                                },
+                                span,
+                                context: None,
+                            });
+                            for &arg in args {
+                                let _ = self.synth(arg);
+                            }
+                        }
                     }
                 }
                 ret
@@ -304,13 +338,115 @@ impl SemaDb {
     }
 
     fn synth_let(&mut self, binding: &LetBinding) -> SemaTypeId {
-        if let Some(value) = binding.value {
-            let _ = self.synth(value);
+        let val_ty = binding.value.map(|value| self.synth(value));
+
+        if let Some(ref sig) = binding.sig {
+            // Unify body type against declared return type
+            if let Some(ret_ty_id) = sig.ret_ty {
+                let expected = self.lower_ty(ret_ty_id);
+                if let Some(vt) = val_ty {
+                    if let Some(value_id) = binding.value {
+                        let span = self.db.ast.exprs.get(value_id).span;
+                        if let Err(e) = unify(&mut self.env, vt, expected, span) {
+                            self.errors.push(e);
+                        }
+                    }
+                }
+            }
+
+            // For function bindings with params, register an Arrow type
+            if !sig.params.is_empty() {
+                let param_ty = if sig.params.len() == 1 {
+                    match sig.params[0].ty {
+                        Some(t) => self.lower_ty(t),
+                        None => self.env.fresh_var(),
+                    }
+                } else {
+                    let pts: Vec<SemaTypeId> = sig
+                        .params
+                        .iter()
+                        .map(|p| match p.ty {
+                            Some(t) => self.lower_ty(t),
+                            None => self.env.fresh_var(),
+                        })
+                        .collect();
+                    self.env.intern(Ty::Tuple(pts))
+                };
+                let ret_ty = match sig.ret_ty {
+                    Some(t) => self.lower_ty(t),
+                    None => val_ty.unwrap_or_else(|| self.env.fresh_var()),
+                };
+                let arrow = self.env.intern(Ty::Arrow {
+                    param: param_ty,
+                    ret: ret_ty,
+                });
+                if let Some(value_id) = binding.value {
+                    let _ = self.env.type_map.insert(value_id, arrow);
+                }
+            }
         }
+
         self.env.intern(Ty::Unit)
     }
 
-    fn synth_lambda(&mut self, params: &[Param], body: ExprId) -> SemaTypeId {
+    /// Converts an AST `TyId` to a semantic `SemaTypeId`.
+    fn lower_ty(&mut self, ty_id: TyId) -> SemaTypeId {
+        let ty_kind = self.db.ast.types.get(ty_id).kind.clone();
+        match ty_kind {
+            TyKind::Named { name, .. } => {
+                if let Some(&def_id) = self.resolution.ty_res.get(&ty_id) {
+                    let def = self.resolution.defs.get(def_id);
+                    match def.kind {
+                        DefKind::Builtin(bt) => self.env.builtin(bt),
+                        _ => self.env.intern(Ty::Param(name.name)),
+                    }
+                } else {
+                    self.env.intern(Ty::Any)
+                }
+            }
+            TyKind::Arrow { from, to } => {
+                let from_ty = self.lower_ty(from);
+                let to_ty = self.lower_ty(to);
+                self.env.intern(Ty::Arrow {
+                    param: from_ty,
+                    ret: to_ty,
+                })
+            }
+            TyKind::EffectArrow { from, to } => {
+                let from_ty = self.lower_ty(from);
+                let to_ty = self.lower_ty(to);
+                self.env.intern(Ty::EffectArrow {
+                    param: from_ty,
+                    ret: to_ty,
+                    effects: Vec::new(),
+                })
+            }
+            TyKind::Tuple(elems) => {
+                let elem_tys: Vec<_> = elems.iter().map(|&t| self.lower_ty(t)).collect();
+                self.env.intern(Ty::Tuple(elem_tys))
+            }
+            TyKind::Union(members) => {
+                let member_tys: Vec<_> = members.iter().map(|&t| self.lower_ty(t)).collect();
+                self.env.intern(Ty::Union(member_tys))
+            }
+            TyKind::Mut(inner) => {
+                let inner_ty = self.lower_ty(inner);
+                self.env.intern(Ty::Mut(inner_ty))
+            }
+            TyKind::Option(inner) => {
+                let inner_ty = self.lower_ty(inner);
+                let unit_ty = self.env.intern(Ty::Unit);
+                self.env.intern(Ty::Union(vec![inner_ty, unit_ty]))
+            }
+            TyKind::Array { elem, .. } => {
+                let elem_ty = self.lower_ty(elem);
+                self.env.intern(Ty::Array(elem_ty))
+            }
+            TyKind::Pi { ret_ty, .. } => self.lower_ty(ret_ty),
+        }
+    }
+
+    fn synth_lambda(&mut self, params: &[Param], ret_ty: Option<TyId>, body: ExprId) -> SemaTypeId {
         let param_ty = if params.len() == 1 {
             self.env.fresh_var()
         } else {
@@ -319,10 +455,111 @@ impl SemaDb {
         };
 
         let body_ty = self.synth(body);
-        self.env.intern(Ty::Arrow {
+
+        // Determine if the lambda's declared return type uses a pure arrow
+        let is_declared_pure = ret_ty.is_none_or(|ty_id| !self.is_effect_arrow_context(ty_id));
+
+        let arrow_ty = self.env.intern(Ty::Arrow {
             param: param_ty,
             ret: body_ty,
-        })
+        });
+
+        if is_declared_pure {
+            let body_effects = self.collect_need_exprs(body);
+            if let Some(effect_ty) = effects::check_purity(&self.env, arrow_ty, &body_effects) {
+                let effect_sym = self.effect_symbol(effect_ty);
+                let span = self.db.ast.exprs.get(body).span;
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::PurityViolation { effect: effect_sym },
+                    span,
+                    context: None,
+                });
+            }
+        }
+
+        arrow_ty
+    }
+
+    /// Checks whether a `TyId` is part of an effect arrow context.
+    fn is_effect_arrow_context(&self, ty_id: TyId) -> bool {
+        // Walk up from the ret_ty to see if this lambda was declared with `~>`
+        // For now, check if the type itself is an EffectArrow
+        let kind = &self.db.ast.types.get(ty_id).kind;
+        matches!(kind, TyKind::EffectArrow { .. })
+    }
+
+    /// Collects `SemaTypeId`s of `Need` expressions found directly in a body.
+    fn collect_need_exprs(&self, expr_id: ExprId) -> Vec<SemaTypeId> {
+        let mut effects = Vec::new();
+        self.walk_for_needs(expr_id, &mut effects);
+        effects
+    }
+
+    fn walk_for_needs(&self, expr_id: ExprId, out: &mut Vec<SemaTypeId>) {
+        let kind = &self.db.ast.exprs.get(expr_id).kind;
+        match kind {
+            ExprKind::Need(inner) => {
+                if let Some(&ty) = self.env.type_map.get(inner) {
+                    out.push(ty);
+                } else {
+                    out.push(self.env.builtin(BuiltinType::Type));
+                }
+            }
+            ExprKind::Seq(stmts) => {
+                for &s in stmts {
+                    self.walk_for_needs(s, out);
+                }
+            }
+            ExprKind::Let(binding) => {
+                if let Some(v) = binding.value {
+                    self.walk_for_needs(v, out);
+                }
+            }
+            ExprKind::Branch {
+                cond,
+                then_br,
+                else_br,
+            } => {
+                self.walk_for_needs(*cond, out);
+                self.walk_for_needs(*then_br, out);
+                self.walk_for_needs(*else_br, out);
+            }
+            ExprKind::App(callee, args) => {
+                self.walk_for_needs(*callee, out);
+                for &a in args {
+                    self.walk_for_needs(a, out);
+                }
+            }
+            ExprKind::BinOp(_, lhs, rhs) | ExprKind::Assign(lhs, rhs) => {
+                self.walk_for_needs(*lhs, out);
+                self.walk_for_needs(*rhs, out);
+            }
+            ExprKind::UnaryOp(_, operand)
+            | ExprKind::Postfix { expr: operand, .. }
+            | ExprKind::Access { expr: operand, .. }
+            | ExprKind::Return(Some(operand))
+            | ExprKind::Resume(Some(operand)) => {
+                self.walk_for_needs(*operand, out);
+            }
+            ExprKind::Match(scrutinee, arms) => {
+                self.walk_for_needs(*scrutinee, out);
+                for arm in arms {
+                    self.walk_for_needs(arm.body, out);
+                }
+            }
+            // Nested lambdas and other nodes: don't recurse (own purity scope)
+            _ => {}
+        }
+    }
+
+    /// Extracts a symbol from an effect type for error reporting.
+    fn effect_symbol(&mut self, ty_id: SemaTypeId) -> Symbol {
+        let resolved = self.env.resolve_var(ty_id);
+        let ty = self.env.types.get(resolved);
+        match ty {
+            Ty::Effect(sym) | Ty::Class(sym) | Ty::Param(sym) => *sym,
+            _ => self.db.interner.intern("_"),
+        }
     }
 
     fn synth_match(&mut self, scrutinee: ExprId, arms: &[MatchArm], span: Span) -> SemaTypeId {
@@ -444,7 +681,24 @@ impl SemaDb {
                     self.env.intern(Ty::Any)
                 }
             }
-            _ => self.env.intern(Ty::Any),
+            (Ty::Any | Ty::Unknown, _) => self.env.intern(Ty::Any),
+            (Ty::Var(_), _) => self.env.fresh_var(),
+            (_, FieldTarget::Name(ident)) => {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::UndefinedField { field: ident.name },
+                    span,
+                    context: None,
+                });
+                self.env.intern(Ty::Any)
+            }
+            (_, FieldTarget::Index(_)) => {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::NotIndexable,
+                    span,
+                    context: None,
+                });
+                self.env.intern(Ty::Any)
+            }
         }
     }
 

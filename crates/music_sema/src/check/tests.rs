@@ -7,7 +7,7 @@ use music_parse::parse;
 use music_resolve::queries::ResolveDb;
 
 use crate::env::TypeEnv;
-use crate::errors::SemaError;
+use crate::errors::{SemaError, SemaErrorKind};
 use crate::type_check;
 use crate::types::Ty;
 
@@ -179,4 +179,46 @@ fn return_produces_never() {
 fn dispatch_recorded_for_binop() {
     let (env, _errors) = check_source("1 + 2");
     assert!(!env.dispatch.is_empty(), "expected dispatch info for binop");
+}
+
+// --- Fix 1: type annotation checking ---
+
+#[test]
+fn type_annotation_mismatch() {
+    let (_, errors) = check_source("let x : Int := \"hello\";");
+    assert!(!errors.is_empty());
+    assert!(matches!(
+        errors[0].kind,
+        SemaErrorKind::TypeMismatch { .. } | SemaErrorKind::CannotUnify { .. }
+    ));
+}
+
+#[test]
+fn type_annotation_match() {
+    let (_, errors) = check_source("let x : Int := 42;");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+}
+
+// --- Fix 2: arity mismatch ---
+
+#[test]
+fn arity_mismatch_too_many_args() {
+    let (_, errors) = check_source("let f (x : Int) : Int := x; f(1, 2);");
+    assert!(!errors.is_empty());
+    assert!(matches!(
+        errors[0].kind,
+        SemaErrorKind::ArityMismatch { .. }
+    ));
+}
+
+// --- Fix 3: field access on non-record ---
+
+#[test]
+fn field_access_on_non_record() {
+    let (_, errors) = check_source("let x := 42; x.foo;");
+    assert!(!errors.is_empty());
+    assert!(matches!(
+        errors[0].kind,
+        SemaErrorKind::UndefinedField { .. }
+    ));
 }
