@@ -225,10 +225,10 @@ dependencies = [
  "music_builtins",
  "music_db",
  "music_found",
+ "music_hir",
  "music_il",
  "music_resolve",
  "music_sema",
- "music_thir",
 ]
 
 [[package]]
@@ -244,9 +244,12 @@ name = "music_hir"
 version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
+ "music_db",
  "music_found",
  "music_lex",
  "music_parse",
+ "music_resolve",
+ "music_sema",
 ]
 
 [[package]]
@@ -302,17 +305,6 @@ dependencies = [
  "music_parse",
  "music_resolve",
  "thiserror",
-]
-
-[[package]]
-name = "music_thir"
-version = "0.1.0-rc1"
-dependencies = [
- "music_ast",
- "music_db",
- "music_found",
- "music_resolve",
- "music_sema",
 ]
 
 [[package]]

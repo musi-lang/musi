@@ -4,15 +4,15 @@ use music_ast::expr::{BinOp, ExprKind, LetBinding, RecordField};
 use music_ast::pat::PatKind;
 use music_db::Db;
 use music_found::{Ident, Interner, Literal, SourceMap, Span, Spanned};
+use music_hir::HirBundle;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::queries::ResolutionMap;
 use music_sema::env::TypeEnv;
-use music_thir::Thir;
 
 use crate::emitter::emit;
 
-fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> Thir {
+fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> HirBundle {
     let mut interner = Interner::new();
     let mut ast = AstData::new();
 
@@ -25,10 +25,10 @@ fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> Thir 
     let db = Db::new(ast, interner, SourceMap::default());
     let resolution = ResolutionMap::new();
     let type_env = TypeEnv::new();
-    Thir::new(db, resolution, type_env)
+    HirBundle::new(db, resolution, type_env)
 }
 
-fn build_thir_single(builder: fn(&mut AstData, &mut Interner) -> ExprKind) -> Thir {
+fn build_thir_single(builder: fn(&mut AstData, &mut Interner) -> ExprKind) -> HirBundle {
     build_thir(&[builder])
 }
 

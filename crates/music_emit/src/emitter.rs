@@ -5,11 +5,11 @@ use music_ast::expr::{BinOp, ExprKind, FieldTarget, LetBinding, MatchArm, Record
 use music_ast::pat::PatKind;
 use music_ast::{ExprId, ExprList};
 use music_found::{Ident, Literal, Symbol};
+use music_hir::HirBundle;
 use music_il::instruction::Instruction;
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
 use music_sema::env::DispatchInfo;
-use music_thir::Thir;
 
 use crate::pool::{ConstantEntry, ConstantPool};
 
@@ -38,7 +38,7 @@ pub struct SeamModule {
 
 /// Lowers THIR expressions to SEAM bytecode instructions.
 struct Emitter<'thir> {
-    thir: &'thir Thir,
+    thir: &'thir HirBundle,
     pool: ConstantPool,
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
@@ -48,7 +48,7 @@ struct Emitter<'thir> {
 
 /// Entry point: lower a typed IR bundle into a [`SeamModule`].
 #[must_use]
-pub fn emit(thir: &Thir) -> SeamModule {
+pub fn emit(thir: &HirBundle) -> SeamModule {
     let mut emitter = Emitter {
         thir,
         pool: ConstantPool::new(),

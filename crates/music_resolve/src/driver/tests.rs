@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::ResolveErrorKind;
 use crate::driver::resolve_project;
 use crate::loader::ModuleLoader;
-use crate::ResolveErrorKind;
 
 fn setup_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();

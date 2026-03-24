@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 music_found = { path = "../music_found" }
 music_ast = { path = "../music_ast" }
+music_db = { path = "../music_db" }
+music_resolve = { path = "../music_resolve" }
+music_sema = { path = "../music_sema" }
 
 [dev-dependencies]
 music_lex = { path = "../music_lex" }

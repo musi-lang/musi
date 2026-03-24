@@ -9,13 +9,13 @@ use music_sema::types::SemaTypeId;
 /// name resolution results, and type-checking environment.
 ///
 /// Consumed by `music_emit` to lower to SEAM bytecode.
-pub struct Thir {
+pub struct HirBundle {
     pub db: Db,
     pub resolution: ResolutionMap,
     pub type_env: TypeEnv,
 }
 
-impl Thir {
+impl HirBundle {
     #[must_use]
     pub const fn new(db: Db, resolution: ResolutionMap, type_env: TypeEnv) -> Self {
         Self {
@@ -25,20 +25,16 @@ impl Thir {
         }
     }
 
-    /// Look up the inferred type of an expression node.
     #[must_use]
     pub fn expr_type(&self, expr_id: ExprId) -> Option<SemaTypeId> {
         self.type_env.type_map.get(&expr_id).copied()
     }
 
-    /// Look up the dispatch decision for a call-site expression.
     #[must_use]
     pub fn dispatch(&self, expr_id: ExprId) -> Option<&DispatchInfo> {
         self.type_env.dispatch.get(&expr_id)
     }
 
-    /// Retrieve the definition metadata for a resolved `DefId`.
-    ///
     /// # Panics
     ///
     /// Panics if `def_id` is not present in the resolution arena.
