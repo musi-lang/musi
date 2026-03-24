@@ -105,6 +105,10 @@ pub const PRELUDE_CLASSES: &[PreludeClass] = &[
             },
         ],
     },
+    PreludeClass {
+        name: "Show",
+        methods: &[],
+    },
 ];
 
 #[cfg(test)]

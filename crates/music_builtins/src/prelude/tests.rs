@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn prelude_classes_count() {
-    assert_eq!(PRELUDE_CLASSES.len(), 4);
+    assert_eq!(PRELUDE_CLASSES.len(), 5);
 }
 
 #[test]
@@ -39,6 +39,15 @@ fn bits_class_has_two_methods() {
         .find(|c| c.name == "Bits")
         .expect("Bits class missing");
     assert_eq!(bits.methods.len(), 2);
+}
+
+#[test]
+fn show_class_has_no_intrinsic_methods() {
+    let show = PRELUDE_CLASSES
+        .iter()
+        .find(|c| c.name == "Show")
+        .expect("Show class missing");
+    assert_eq!(show.methods.len(), 0);
 }
 
 #[test]
