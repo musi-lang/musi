@@ -494,3 +494,94 @@ fn type_cast_named() {
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(matches!(root_kind(&ast), ExprKind::TypeOp { .. }));
 }
+
+// ── Trailing separators ───────────────────────────────────────
+
+#[test]
+fn choice_trailing_pipe() {
+    let (ast, errors) = parse_expr("choice { A | B | }");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::ChoiceDef(variants) if variants.len() == 2));
+}
+
+#[test]
+fn bracket_params_trailing_comma() {
+    let (ast, errors) = parse_expr("let f [T, U,] := 42");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Let(_)));
+}
+
+#[test]
+fn where_trailing_comma() {
+    let (_, errors) = parse_expr("let f [T] where T : Eq, := 42");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+}
+
+#[test]
+fn import_selective_trailing_comma() {
+    let (ast, errors) = parse_expr("import \"path\" as m.{a, b,}");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(
+        root_kind(&ast),
+        ExprKind::Import {
+            kind: ImportKind::Selective(_, members),
+            ..
+        } if members.len() == 2
+    ));
+}
+
+#[test]
+fn comprehension_trailing_comma() {
+    let (ast, errors) = parse_expr("[x | x in xs, x > 0,]");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    match root_kind(&ast) {
+        ExprKind::Comprehension { clauses, .. } => {
+            assert_eq!(clauses.len(), 2);
+        }
+        other => panic!("expected Comprehension, got {other:?}"),
+    }
+}
+
+// ── Leading pipe ──────────────────────────────────────────────
+
+#[test]
+fn match_leading_pipe() {
+    let (ast, errors) = parse_expr("match x (| .A => 1 | .B => 2)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+}
+
+#[test]
+fn match_trailing_pipe() {
+    let (ast, errors) = parse_expr("match x (.A => 1 | .B => 2 |)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+}
+
+#[test]
+fn match_leading_and_trailing_pipe() {
+    let (ast, errors) = parse_expr("match x (| .A => 1 | .B => 2 |)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+}
+
+#[test]
+fn piecewise_leading_pipe() {
+    let (ast, errors) = parse_expr("(| x if .True | y if _)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Piecewise(arms) if arms.len() == 2));
+}
+
+#[test]
+fn piecewise_trailing_pipe() {
+    let (ast, errors) = parse_expr("(x if .True | y if _ |)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Piecewise(arms) if arms.len() == 2));
+}
+
+#[test]
+fn piecewise_leading_and_trailing_pipe() {
+    let (ast, errors) = parse_expr("(| x if .True | y if _ |)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Piecewise(arms) if arms.len() == 2));
+}

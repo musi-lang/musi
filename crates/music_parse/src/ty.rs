@@ -120,6 +120,17 @@ impl Parser<'_> {
     fn parse_ty_of_args(&mut self) -> ParseResult<Vec<TyId>> {
         let mut args = vec![self.parse_ty()?];
         while self.eat(&TokenKind::Comma) {
+            if !matches!(
+                self.peek_kind(),
+                TokenKind::KwMut
+                    | TokenKind::Question
+                    | TokenKind::LParen
+                    | TokenKind::LBracket
+                    | TokenKind::Ident
+                    | TokenKind::EscapedIdent
+            ) {
+                break;
+            }
             args.push(self.parse_ty()?);
         }
         Ok(args)

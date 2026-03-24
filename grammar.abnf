@@ -241,12 +241,13 @@ fn-tail    = [":" ast-ty] "=>" ast-expr
 paren-body = <empty>  ; unit: ()
              / ","  ; empty tuple: (,)
              / ";"  ; empty sequence: (;)
+             / "|" pw-arm *("|" pw-arm) ["|"]  ; piecewise with leading |
              / ast-expr paren-cont
 
 paren-cont = <empty>  ; parenthesised expr
              / "," [expr-list] [","]  ; tuple
              / ";" [seq-tail]  ; sequence
-             / "if" pw-guard *("|" pw-arm)  ; piecewise
+             / "if" pw-guard *("|" pw-arm) ["|"]  ; piecewise (trailing | allowed)
 
 seq-tail   = <empty>  ; trailing ;, returns ()
              / ast-expr seq-cont
@@ -259,7 +260,7 @@ pw-arm   = ast-expr "if" pw-guard
 pw-guard = "_"
            / ast-expr
 ; §4.3  Match
-ast-match = "match" ast-expr "(" match-arm *("|" match-arm) ")"
+ast-match = "match" ast-expr "(" ["|"] match-arm *("|" match-arm) ["|"] ")"  ; leading/trailing | allowed
 
 match-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
 ; §4.4  Arrays, matrices, comprehensions
@@ -274,7 +275,7 @@ array-body     = ast-expr array-dispatch
 array-dispatch = <empty>  ; single-element array
                  / "," [array-items]  ; array continuation
                  / ";" array-row *(";" array-row)  ; matrix
-                 / "|" comp-clause *("," comp-clause)  ; comprehension
+                 / "|" comp-clause *("," comp-clause) [","]  ; comprehension (trailing , allowed)
 
 array-items    = array-item *("," array-item)
 
@@ -301,7 +302,7 @@ rec-lit-field  = ident [":=" ast-expr]
 ;   let f [T] (params) := body        generic function
 ast-let        = "let" ["mut"] ast-pat [params] [bracket-params] [where-clause] [with-clause] [ty-annot] ":=" ast-expr
 
-bracket-params = "[" ident *("," ident) "]"
+bracket-params = "[" ident *("," ident) [","] "]"  ; trailing , allowed
 
 with-clause    = "with" effect-set
 ; §4.7  Type definitions (anonymous — always bound via let)
@@ -309,7 +310,7 @@ ast-choice     = "choice" "{" variant-list "}"
 
 ast-record     = "record" "{" rec-def-fields "}"
 
-variant-list   = variant *("|" variant)
+variant-list   = variant *("|" variant) ["|"]  ; trailing | allowed
 
 variant        = ident [":" ast-ty]
 
@@ -332,7 +333,7 @@ ast-return       = "return" [ast-expr]
 
 ast-resume       = "resume" [ast-expr]
 
-ast-import       = "import" lit-string ["as" (ident / "_" / ident ".{" ident-list "}")]
+ast-import       = "import" lit-string ["as" (ident / "_" / ident ".{" ident-list [","] "}")]  ; trailing , in selective
 
 ast-foreign-expr = "foreign" [lit-string] ("import" lit-string / "let" foreign-binding / "(" *(foreign-binding ";") ")")
 
@@ -361,7 +362,7 @@ ast-ty-base = "mut" ast-ty-base  ; mut T — mutable type (mut T <: T)
               / "(" [ast-ty *("," ast-ty)] ")"  ; grouped or tuple type
               / "[" [dim-list] "]" ast-ty  ; array type
 ; §5.3  Named types, arguments, dimensions
-ty-arg-list  = ast-ty *("," ast-ty)
+ty-arg-list  = ast-ty *("," ast-ty) [","]  ; trailing , allowed
 
 ty-annot     = ":" ast-ty
 
@@ -380,7 +381,7 @@ effect-list  = effect-item *("," effect-item)
 effect-item  = ident ["of" ast-ty]
                / ident
 
-where-clause = "where" constraint *("," constraint)
+where-clause = "where" constraint *("," constraint) [","]  ; trailing , allowed
 
 constraint   = ident "<:" ast-ty-named  ; subtype
                / ident ":" ast-ty-named  ; implements class

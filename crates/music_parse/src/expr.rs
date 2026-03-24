@@ -447,6 +447,7 @@ impl Parser<'_> {
             TokenKind::RParen => self.parse_unit(start),
             TokenKind::Comma => self.parse_empty_tuple(start),
             TokenKind::Semi => self.parse_empty_seq(start),
+            TokenKind::Pipe => self.parse_piecewise_leading_pipe(start),
             _ => self.parse_paren_expr(start),
         }
     }
@@ -533,15 +534,35 @@ impl Parser<'_> {
             value: first_val,
             guard: first_guard,
         }];
+        self.parse_piecewise_rest(&mut arms)?;
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
+    }
+
+    fn parse_piecewise_leading_pipe(&mut self, start: Span) -> ParseResult<ExprId> {
+        let _ = self.advance(); // eat leading |
+        let val = self.parse_expr(0)?;
+        let _ = self.expect(&TokenKind::KwIf, "'if'")?;
+        let guard = self.parse_pw_guard()?;
+        let mut arms = vec![PiecewiseArm { value: val, guard }];
+        self.parse_piecewise_rest(&mut arms)?;
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
+    }
+
+    fn parse_piecewise_rest(&mut self, arms: &mut Vec<PiecewiseArm>) -> ParseResult<()> {
         while self.eat(&TokenKind::Pipe) {
+            if self.at(&TokenKind::RParen) {
+                break;
+            }
             let val = self.parse_expr(0)?;
             let _ = self.expect(&TokenKind::KwIf, "'if'")?;
             let guard = self.parse_pw_guard()?;
             arms.push(PiecewiseArm { value: val, guard });
         }
-        let end = self.expect(&TokenKind::RParen, "')'")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
+        Ok(())
     }
 
     fn parse_pw_guard(&mut self) -> ParseResult<PwGuard> {
@@ -713,6 +734,9 @@ impl Parser<'_> {
         let mut clauses = Vec::new();
         clauses.push(self.parse_comp_clause()?);
         while self.eat(&TokenKind::Comma) {
+            if self.at(&TokenKind::RBracket) {
+                break;
+            }
             clauses.push(self.parse_comp_clause()?);
         }
         let end = self.expect(&TokenKind::RBracket, "']'")?;
@@ -901,6 +925,9 @@ impl Parser<'_> {
         }
         let mut params = vec![self.expect_ident()?];
         while self.eat(&TokenKind::Comma) {
+            if self.at(&TokenKind::RBracket) {
+                break;
+            }
             params.push(self.expect_ident()?);
         }
         let _ = self.expect(&TokenKind::RBracket, "']'")?;
@@ -913,6 +940,9 @@ impl Parser<'_> {
         }
         let mut constraints = vec![self.parse_constraint()?];
         while self.eat(&TokenKind::Comma) {
+            if !matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+                break;
+            }
             constraints.push(self.parse_constraint()?);
         }
         Ok(constraints)
@@ -989,8 +1019,12 @@ impl Parser<'_> {
         let start = self.expect(&TokenKind::KwMatch, "'match'")?;
         let scrutinee = self.parse_expr_no_call(0)?;
         let open_span = self.expect(&TokenKind::LParen, "'('")?;
+        let _ = self.eat(&TokenKind::Pipe); // optional leading |
         let mut arms = vec![self.parse_match_arm()?];
         while self.eat(&TokenKind::Pipe) {
+            if self.at(&TokenKind::RParen) {
+                break;
+            }
             arms.push(self.parse_match_arm()?);
         }
         let end =
@@ -1080,6 +1114,9 @@ impl Parser<'_> {
         if self.eat(&TokenKind::DotLBrace) {
             let mut members = vec![self.expect_ident()?];
             while self.eat(&TokenKind::Comma) {
+                if self.at(&TokenKind::RBrace) {
+                    break;
+                }
                 members.push(self.expect_ident()?);
             }
             let _ = self.expect(&TokenKind::RBrace, "'}'")?;
@@ -1206,6 +1243,9 @@ impl Parser<'_> {
         if !self.at(&TokenKind::RBrace) {
             variants.push(self.parse_variant_def()?);
             while self.eat(&TokenKind::Pipe) {
+                if self.at(&TokenKind::RBrace) {
+                    break;
+                }
                 variants.push(self.parse_variant_def()?);
             }
         }

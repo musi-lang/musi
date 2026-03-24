@@ -91,3 +91,10 @@ fn array_type() {
     assert!(errors.is_empty());
     assert!(matches!(extract_ty_kind(&ast), TyKind::Array { dims, .. } if dims.len() == 1));
 }
+
+#[test]
+fn ty_args_trailing_comma() {
+    let (ast, errors) = parse_ty_from("Map of (Int, String,)");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(extract_ty_kind(&ast), TyKind::Named { args, .. } if args.len() == 1));
+}
