@@ -13,10 +13,12 @@ music_arena = { path = "../music_arena" }
 music_ast = { path = "../music_ast" }
 music_builtins = { path = "../music_builtins" }
 music_db = { path = "../music_db" }
-
-[dev-dependencies]
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
+dirs = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
 tempfile = { workspace = true }
 
 [lints]
