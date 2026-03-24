@@ -12,7 +12,7 @@ pub enum PatKind {
     Record(Vec<RecordPatField>),
     Tuple(PatList),
     Array(PatList),
-    Or(Vec<PatId>),
+    Or(PatList),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

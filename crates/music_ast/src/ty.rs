@@ -1,12 +1,12 @@
 use music_found::Ident;
 
-use crate::TyId;
+use crate::{TyId, TyList};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyKind {
     Named {
         name: Ident,
-        args: Vec<TyId>,
+        args: TyList,
     },
     Arrow {
         from: TyId,
@@ -16,7 +16,7 @@ pub enum TyKind {
         from: TyId,
         to: TyId,
     },
-    Union(Vec<TyId>),
+    Union(TyList),
     Mut(TyId),
     Option(TyId),
     Pi {
@@ -24,7 +24,7 @@ pub enum TyKind {
         param_ty: TyId,
         ret_ty: TyId,
     },
-    Tuple(Vec<TyId>),
+    Tuple(TyList),
     Array {
         dims: Vec<Dim>,
         elem: TyId,
