@@ -114,7 +114,43 @@ fn float_mul_resolves_to_static() {
     assert_eq!(res.result_ty, float);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "i.mul" })
+        Some(DispatchInfo::Static { intrinsic: "f.mul" })
+    ));
+}
+
+#[test]
+fn float_add_resolves_to_static() {
+    let mut env = seeded_env();
+    let float = env.builtin(BuiltinType::Float);
+    let res = resolve_binop(&mut env, BinOp::Add, float, float);
+    assert_eq!(res.result_ty, float);
+    assert!(matches!(
+        res.dispatch,
+        Some(DispatchInfo::Static { intrinsic: "f.add" })
+    ));
+}
+
+#[test]
+fn float_sub_resolves_to_static() {
+    let mut env = seeded_env();
+    let float = env.builtin(BuiltinType::Float);
+    let res = resolve_binop(&mut env, BinOp::Sub, float, float);
+    assert_eq!(res.result_ty, float);
+    assert!(matches!(
+        res.dispatch,
+        Some(DispatchInfo::Static { intrinsic: "f.sub" })
+    ));
+}
+
+#[test]
+fn float_div_resolves_to_static() {
+    let mut env = seeded_env();
+    let float = env.builtin(BuiltinType::Float);
+    let res = resolve_binop(&mut env, BinOp::Div, float, float);
+    assert_eq!(res.result_ty, float);
+    assert!(matches!(
+        res.dispatch,
+        Some(DispatchInfo::Static { intrinsic: "f.div" })
     ));
 }
 

@@ -2,6 +2,8 @@ use music_arena::Idx;
 use music_builtins::types::BuiltinType;
 use music_found::{Span, Symbol};
 
+use crate::scope::ScopeId;
+
 /// Typed index into the definition arena.
 pub type DefId = Idx<DefInfo>;
 
@@ -12,6 +14,7 @@ pub struct DefInfo {
     pub span: Span,
     pub kind: DefKind,
     pub vis: Visibility,
+    pub scope: ScopeId,
 }
 
 /// What kind of entity a definition represents.

@@ -1,6 +1,6 @@
 use music_found::{Span, Spanned};
 
-use crate::common::{FnDecl, LawDecl, MemberDecl, RecordDefField, TyRef};
+use crate::common::{FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef};
 use crate::data::AstData;
 use crate::expr::{
     CompClause, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef, LetBinding, MatchArm,
@@ -174,7 +174,7 @@ fn map_structure(
             ref params,
             ret_ty,
             body,
-        } => map_lambda(ast, expr_id, params.clone(), ret_ty, body, span, f),
+        } => map_lambda(ast, expr_id, params, ret_ty, body, span, f),
         ExprKind::Let(ref binding) => map_let(ast, expr_id, binding, span, f),
         ExprKind::Index {
             expr,
@@ -273,6 +273,36 @@ fn map_ids(
     (new_ids, changed)
 }
 
+fn map_params(
+    ast: &mut AstData,
+    params: &[Param],
+    f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
+) -> (Vec<Param>, bool) {
+    let mut changed = false;
+    let new_params: Vec<Param> = params
+        .iter()
+        .map(|param| {
+            let new_default = param.default.map(|d| {
+                let new_d = f(ast, d);
+                if new_d != d {
+                    changed = true;
+                }
+                new_d
+            });
+            if new_default != param.default {
+                changed = true;
+            }
+            Param {
+                mutable: param.mutable,
+                name: param.name,
+                ty: param.ty,
+                default: new_default,
+            }
+        })
+        .collect();
+    (new_params, changed)
+}
+
 fn map_list(
     ast: &mut AstData,
     expr_id: ExprId,
@@ -335,19 +365,20 @@ fn map_branch(
 fn map_lambda(
     ast: &mut AstData,
     expr_id: ExprId,
-    params: ParamList,
+    params: &ParamList,
     ret_ty: Option<TyId>,
     body: ExprId,
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
     let new_body = f(ast, body);
-    if new_body == body {
+    let (new_params, params_changed) = map_params(ast, params, f);
+    if new_body == body && !params_changed {
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
         ExprKind::Lambda {
-            params,
+            params: new_params,
             ret_ty,
             body: new_body,
         },
@@ -362,18 +393,30 @@ fn map_let(
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
-    binding.value.map_or(expr_id, |value| {
-        let new_value = f(ast, value);
-        if new_value == value {
-            return expr_id;
+    let new_value = binding.value.map(|v| f(ast, v));
+    let (new_sig, sig_changed) = binding.sig.as_ref().map_or((None, false), |sig| {
+        let (new_params, params_changed) = map_params(ast, &sig.params, f);
+        if params_changed {
+            let new_sig = Signature {
+                params: new_params,
+                ..(**sig).clone()
+            };
+            (Some(Box::new(new_sig)), true)
+        } else {
+            (Some(sig.clone()), false)
         }
-        let new_binding = LetBinding {
-            value: Some(new_value),
-            ..binding.clone()
-        };
-        ast.exprs
-            .alloc(Spanned::new(ExprKind::Let(Box::new(new_binding)), span))
-    })
+    });
+    let value_changed = new_value != binding.value;
+    if !value_changed && !sig_changed {
+        return expr_id;
+    }
+    let new_binding = LetBinding {
+        value: new_value,
+        sig: new_sig,
+        ..binding.clone()
+    };
+    ast.exprs
+        .alloc(Spanned::new(ExprKind::Let(Box::new(new_binding)), span))
 }
 
 fn map_index(
@@ -713,9 +756,16 @@ fn map_fn_decls(
                 }
                 new_b
             });
+            let new_params = decl.params.as_ref().map(|params| {
+                let (new_p, p_changed) = map_params(ast, params, f);
+                if p_changed {
+                    changed = true;
+                }
+                new_p
+            });
             FnDecl {
                 name: decl.name.clone(),
-                params: decl.params.clone(),
+                params: new_params,
                 ret_ty: decl.ret_ty,
                 body: new_body,
             }
@@ -741,9 +791,16 @@ fn map_member_decls(
                     }
                     new_b
                 });
+                let new_params = decl.params.as_ref().map(|params| {
+                    let (new_p, p_changed) = map_params(ast, params, f);
+                    if p_changed {
+                        changed = true;
+                    }
+                    new_p
+                });
                 MemberDecl::Fn(FnDecl {
                     name: decl.name.clone(),
-                    params: decl.params.clone(),
+                    params: new_params,
                     ret_ty: decl.ret_ty,
                     body: new_body,
                 })
@@ -753,9 +810,16 @@ fn map_member_decls(
                 if new_body != law.body {
                     changed = true;
                 }
+                let new_params = law.params.as_ref().map(|params| {
+                    let (new_p, p_changed) = map_params(ast, params, f);
+                    if p_changed {
+                        changed = true;
+                    }
+                    new_p
+                });
                 MemberDecl::Law(LawDecl {
                     name: law.name,
-                    params: law.params.clone(),
+                    params: new_params,
                     body: new_body,
                 })
             }

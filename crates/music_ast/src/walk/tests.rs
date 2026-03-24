@@ -39,7 +39,11 @@ fn transforms_binop_child() {
         .alloc(dummy(ExprKind::BinOp(BinOp::Add, old_lhs, rhs)));
 
     let result = map_expr_children(&mut ast, binop, &mut |_, id| {
-        if id == old_lhs { replacement } else { id }
+        if id == old_lhs {
+            replacement
+        } else {
+            id
+        }
     });
 
     assert_ne!(result, binop, "changed child must produce new node");
@@ -71,7 +75,11 @@ fn transforms_seq_child() {
     let seq = ast.exprs.alloc(dummy(ExprKind::Seq(vec![a, b])));
 
     let result = map_expr_children(&mut ast, seq, &mut |_, id| {
-        if id == a { replacement } else { id }
+        if id == a {
+            replacement
+        } else {
+            id
+        }
     });
 
     assert_ne!(result, seq);
@@ -114,7 +122,11 @@ fn transforms_branch_child() {
     }));
 
     let result = map_expr_children(&mut ast, branch, &mut |_, id| {
-        if id == else_br { replacement } else { id }
+        if id == else_br {
+            replacement
+        } else {
+            id
+        }
     });
 
     assert_ne!(result, branch);

@@ -29,6 +29,7 @@ pub struct ResolutionMap {
     pub ty_res: HashMap<TyId, DefId>,
     pub pat_variant_res: HashMap<PatId, DefId>,
     pub scopes: ScopeArena,
+    pub captures: HashMap<ExprId, Vec<Symbol>>,
 }
 
 impl ResolutionMap {
@@ -40,6 +41,7 @@ impl ResolutionMap {
             ty_res: HashMap::new(),
             pat_variant_res: HashMap::new(),
             scopes: ScopeArena::new(),
+            captures: HashMap::new(),
         }
     }
 }
@@ -60,6 +62,7 @@ pub struct ResolveDb {
     loader: ModuleLoader,
     graph: ModuleGraph,
     current_file: PathBuf,
+    current_lambda: Option<ExprId>,
 }
 
 impl ResolveDb {
@@ -76,6 +79,7 @@ impl ResolveDb {
             loader,
             graph: ModuleGraph::new(),
             current_file: PathBuf::new(),
+            current_lambda: None,
         }
     }
 
@@ -97,6 +101,7 @@ impl ResolveDb {
             loader,
             graph,
             current_file,
+            current_lambda: None,
         }
     }
 
@@ -187,6 +192,7 @@ impl ResolveDb {
             span,
             kind,
             vis,
+            scope,
         });
         let _ = self.resolution.scopes.get_mut(scope).bind(name, def_id);
         def_id
@@ -359,6 +365,19 @@ impl ResolveDb {
             ExprKind::Var(ident) => match self.resolution.scopes.resolve(scope, ident.name) {
                 Some(def_id) => {
                     let _prev = self.resolution.expr_res.insert(expr_id, def_id);
+                    let def_scope = self.resolution.defs.get(def_id).scope;
+                    if self
+                        .resolution
+                        .scopes
+                        .crosses_lambda_boundary(def_scope, scope)
+                    {
+                        if let Some(lambda_id) = self.current_lambda {
+                            let captures = self.resolution.captures.entry(lambda_id).or_default();
+                            if !captures.contains(&ident.name) {
+                                captures.push(ident.name);
+                            }
+                        }
+                    }
                 }
                 None => {
                     self.errors.push(ResolveError {
@@ -382,7 +401,7 @@ impl ResolveDb {
                 body,
                 ret_ty,
             } => {
-                self.resolve_lambda(params, ret_ty, body, scope);
+                self.resolve_lambda(expr_id, params, ret_ty, body, scope);
             }
             ExprKind::Match(scrutinee, arms) => self.resolve_match(scrutinee, arms, scope),
             ExprKind::Comprehension { expr, clauses } => {
@@ -527,6 +546,7 @@ impl ResolveDb {
 
     fn resolve_lambda(
         &mut self,
+        expr_id: ExprId,
         params: Vec<Param>,
         ret_ty: Option<TyId>,
         body: ExprId,
@@ -542,7 +562,10 @@ impl ResolveDb {
         if let Some(rt) = ret_ty {
             self.resolve_ty(rt, scope);
         }
+        let saved_lambda = self.current_lambda;
+        self.current_lambda = Some(expr_id);
         self.resolve_expr(body, lambda_scope);
+        self.current_lambda = saved_lambda;
     }
 
     fn resolve_match(&mut self, scrutinee: ExprId, arms: Vec<MatchArm>, scope: ScopeId) {

@@ -119,7 +119,7 @@ impl SemaDb {
             ExprKind::Var(ident) => self.synth_var(&ident),
             ExprKind::App(callee, ref args) => self.synth_app(callee, args, span),
             ExprKind::BinOp(op, lhs, rhs) => self.synth_binop(op, lhs, rhs, span),
-            ExprKind::UnaryOp(op, operand) => self.synth_unary(op, operand),
+            ExprKind::UnaryOp(op, operand) => self.synth_unary(op, operand, expr_id),
             ExprKind::Branch {
                 cond,
                 then_br,
@@ -358,10 +358,26 @@ impl SemaDb {
         resolution.result_ty
     }
 
-    fn synth_unary(&mut self, op: UnaryOp, operand: ExprId) -> SemaTypeId {
+    fn synth_unary(&mut self, op: UnaryOp, operand: ExprId, expr_id: ExprId) -> SemaTypeId {
         let operand_ty = self.synth(operand);
         match op {
-            UnaryOp::Neg | UnaryOp::Spread => operand_ty,
+            UnaryOp::Neg => {
+                let resolved = self.env.resolve_var(operand_ty);
+                let ty = self.env.types.get(resolved).clone();
+                if let Ty::Builtin(bt) = ty {
+                    if matches!(
+                        bt,
+                        BuiltinType::Float | BuiltinType::Float32 | BuiltinType::Float64
+                    ) {
+                        let _ = self
+                            .env
+                            .dispatch
+                            .insert(expr_id, DispatchInfo::Static { intrinsic: "f.neg" });
+                    }
+                }
+                operand_ty
+            }
+            UnaryOp::Spread => operand_ty,
             UnaryOp::Not => {
                 let resolved = self.env.resolve_var(operand_ty);
                 let ty = self.env.types.get(resolved).clone();

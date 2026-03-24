@@ -250,9 +250,16 @@ pub fn resolve_binop(
             } else {
                 resolved
             };
+            let effective = if is_float_type(bt) {
+                float_intrinsic(intrinsic)
+            } else {
+                intrinsic
+            };
             BinOpResolution {
                 result_ty,
-                dispatch: Some(DispatchInfo::Static { intrinsic }),
+                dispatch: Some(DispatchInfo::Static {
+                    intrinsic: effective,
+                }),
                 needs_class: None,
             }
         }
@@ -281,6 +288,23 @@ pub fn resolve_binop(
             dispatch: None,
             needs_class: None,
         },
+    }
+}
+
+const fn is_float_type(bt: BuiltinType) -> bool {
+    matches!(
+        bt,
+        BuiltinType::Float | BuiltinType::Float32 | BuiltinType::Float64
+    )
+}
+
+fn float_intrinsic(intrinsic: &str) -> &str {
+    match intrinsic {
+        "i.add" => "f.add",
+        "i.sub" => "f.sub",
+        "i.mul" => "f.mul",
+        "i.div" => "f.div",
+        _ => intrinsic,
     }
 }
 

@@ -118,3 +118,40 @@ fn prelude_classes_seeded() {
         "expected at least 5 prelude classes, got {class_count}"
     );
 }
+
+#[test]
+fn lambda_captures_outer_variable() {
+    let (db, res, errors) = parse_and_resolve("let x := 1; let f := () => x");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    // The lambda expression should have captured x
+    let has_capture = res
+        .captures
+        .values()
+        .any(|caps| caps.iter().any(|&sym| db.interner.resolve(sym) == "x"));
+    assert!(
+        has_capture,
+        "expected lambda to capture 'x', captures: {:?}",
+        res.captures
+    );
+}
+
+#[test]
+fn lambda_does_not_capture_own_param() {
+    let (_db, res, errors) = parse_and_resolve("let f := (x) => x");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    // x is a param, not a capture
+    let total_captures: usize = res.captures.values().map(|c| c.len()).sum();
+    assert_eq!(total_captures, 0, "params should not be captured");
+}
+
+#[test]
+fn nested_lambda_captures_outer() {
+    let (db, res, errors) = parse_and_resolve("let a := 1; let f := () => (() => a)");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    // The inner lambda should capture 'a'
+    let has_capture = res
+        .captures
+        .values()
+        .any(|caps| caps.iter().any(|&sym| db.interner.resolve(sym) == "a"));
+    assert!(has_capture, "expected nested lambda to capture 'a'");
+}

@@ -88,6 +88,26 @@ impl ScopeArena {
         self.scopes.get_mut(id).expect("invalid ScopeId")
     }
 
+    /// Returns `true` if walking from `use_scope` up to `def_scope` crosses
+    /// a lambda or function boundary (meaning the variable is captured).
+    #[must_use]
+    pub fn crosses_lambda_boundary(&self, def_scope: ScopeId, use_scope: ScopeId) -> bool {
+        let mut current = use_scope;
+        loop {
+            if current == def_scope {
+                return false;
+            }
+            let scope = self.get(current);
+            if matches!(scope.kind, ScopeKind::Lambda | ScopeKind::Function) {
+                return true;
+            }
+            match scope.parent {
+                Some(parent) => current = parent,
+                None => return false,
+            }
+        }
+    }
+
     /// Walk the scope chain from `scope_id` upward, returning the first
     /// `DefId` matching `name`, or `None` if not found.
     #[must_use]

@@ -11,6 +11,7 @@ fn make_def(defs: &mut Arena<DefInfo>, interner: &mut Interner, name: &str) -> s
         span: Span::DUMMY,
         kind: DefKind::Value,
         vis: Visibility::Private,
+        scope: 0,
     })
 }
 
