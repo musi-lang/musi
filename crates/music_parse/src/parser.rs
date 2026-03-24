@@ -82,14 +82,7 @@ impl<'tok> Parser<'tok> {
                 context: None,
             })
         } else {
-            Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected,
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            })
+            Err(self.err_expected_token(expected))
         }
     }
 
@@ -112,14 +105,7 @@ impl<'tok> Parser<'tok> {
                 context: Some(ctx),
             })
         } else {
-            Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: describe_token(close),
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: Some(ctx),
-            })
+            Err(self.err_expected_token_in(describe_token(close), Some(ctx)))
         }
     }
 
@@ -221,6 +207,57 @@ impl<'tok> Parser<'tok> {
             return true;
         }
         false
+    }
+
+    // ── Error construction helpers ────────────────────────────────
+
+    pub fn err_expected_expr(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedExpr {
+                found: describe_token(self.peek_kind()),
+            },
+            span: self.span(),
+            context: None,
+        }
+    }
+
+    pub fn err_expected_pat(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedPat {
+                found: describe_token(self.peek_kind()),
+            },
+            span: self.span(),
+            context: None,
+        }
+    }
+
+    pub fn err_expected_type(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedType {
+                found: describe_token(self.peek_kind()),
+            },
+            span: self.span(),
+            context: None,
+        }
+    }
+
+    pub fn err_expected_token(&self, expected: &'static str) -> ParseError {
+        self.err_expected_token_in(expected, None)
+    }
+
+    pub fn err_expected_token_in(
+        &self,
+        expected: &'static str,
+        context: Option<&'static str>,
+    ) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedToken {
+                expected,
+                found: describe_token(self.peek_kind()),
+            },
+            span: self.span(),
+            context,
+        }
     }
 
     // ── Error recovery ────────────────────────────────────────────

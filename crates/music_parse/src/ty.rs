@@ -3,7 +3,7 @@ use music_ast::ty::{Dim, TyKind};
 use music_found::Span;
 use music_lex::TokenKind;
 
-use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
+use crate::errors::ParseResult;
 use crate::parser::Parser;
 
 impl Parser<'_> {
@@ -24,29 +24,24 @@ impl Parser<'_> {
     }
 
     fn parse_ty_arrow_rest(&mut self, left: TyId) -> ParseResult<TyId> {
-        if self.at(&TokenKind::MinusGt) {
+        let is_pure = self.at(&TokenKind::MinusGt);
+        let is_effect = self.at(&TokenKind::TildeGt);
+        if is_pure || is_effect {
             let _ = self.advance();
             let right = self.parse_ty_arrow()?;
             let span = self.merge_ty_spans(left, right);
-            return Ok(self.alloc_ty(
+            let kind = if is_pure {
                 TyKind::Arrow {
                     from: left,
                     to: right,
-                },
-                span,
-            ));
-        }
-        if self.at(&TokenKind::TildeGt) {
-            let _ = self.advance();
-            let right = self.parse_ty_arrow()?;
-            let span = self.merge_ty_spans(left, right);
-            return Ok(self.alloc_ty(
+                }
+            } else {
                 TyKind::EffectArrow {
                     from: left,
                     to: right,
-                },
-                span,
-            ));
+                }
+            };
+            return Ok(self.alloc_ty(kind, span));
         }
         Ok(left)
     }
@@ -72,33 +67,20 @@ impl Parser<'_> {
 
     fn parse_ty_base(&mut self) -> ParseResult<TyId> {
         match self.peek_kind() {
-            TokenKind::KwMut => self.parse_ty_mut(),
-            TokenKind::Question => self.parse_ty_option(),
+            TokenKind::KwMut => self.parse_ty_prefix(TyKind::Mut),
+            TokenKind::Question => self.parse_ty_prefix(TyKind::Option),
             TokenKind::Ident | TokenKind::EscapedIdent => self.parse_ty_named(),
             TokenKind::LParen => self.parse_ty_paren(),
             TokenKind::LBracket => self.parse_ty_array(),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedType {
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_type()),
         }
     }
 
-    fn parse_ty_mut(&mut self) -> ParseResult<TyId> {
+    fn parse_ty_prefix(&mut self, wrap: fn(TyId) -> TyKind) -> ParseResult<TyId> {
         let start = self.advance().span;
         let inner = self.parse_ty_base()?;
         let span = start.to(self.ast.types.get(inner).span);
-        Ok(self.alloc_ty(TyKind::Mut(inner), span))
-    }
-
-    fn parse_ty_option(&mut self) -> ParseResult<TyId> {
-        let start = self.advance().span;
-        let inner = self.parse_ty_base()?;
-        let span = start.to(self.ast.types.get(inner).span);
-        Ok(self.alloc_ty(TyKind::Option(inner), span))
+        Ok(self.alloc_ty(wrap(inner), span))
     }
 
     pub(crate) fn parse_ty_named_only(&mut self) -> ParseResult<TyId> {
@@ -230,14 +212,7 @@ impl Parser<'_> {
                 let ident = self.expect_ident()?;
                 Ok(Dim::Var(ident))
             }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "dimension (integer, identifier, or '_')",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_token("dimension (integer, identifier, or '_')")),
         }
     }
 

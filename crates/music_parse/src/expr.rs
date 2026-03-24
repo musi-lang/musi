@@ -90,25 +90,18 @@ impl Parser<'_> {
 
     fn parse_prefix(&mut self) -> ParseResult<ExprId> {
         let start = self.span();
-        match self.peek_kind() {
-            TokenKind::Minus => {
-                let _ = self.advance();
-                self.parse_unary(UnaryOp::Neg, start)
-            }
-            TokenKind::KwNot => {
-                let _ = self.advance();
-                self.parse_unary(UnaryOp::Not, start)
-            }
-            TokenKind::KwMut => {
-                let _ = self.advance();
-                self.parse_unary(UnaryOp::Mut, start)
-            }
-            TokenKind::DotDotDot => {
-                let _ = self.advance();
-                self.parse_unary(UnaryOp::Spread, start)
-            }
-            _ => self.parse_atom(),
+        let op = match self.peek_kind() {
+            TokenKind::Minus => Some(UnaryOp::Neg),
+            TokenKind::KwNot => Some(UnaryOp::Not),
+            TokenKind::KwMut => Some(UnaryOp::Mut),
+            TokenKind::DotDotDot => Some(UnaryOp::Spread),
+            _ => None,
+        };
+        if let Some(op) = op {
+            let _ = self.advance();
+            return self.parse_unary(op, start);
         }
+        self.parse_atom()
     }
 
     fn parse_unary(&mut self, op: UnaryOp, start: Span) -> ParseResult<ExprId> {
@@ -149,13 +142,7 @@ impl Parser<'_> {
             }
             TokenKind::At => self.parse_with_attrs(),
             TokenKind::KwExport => self.parse_export(),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedExpr {
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_expr()),
         }
     }
 
@@ -210,8 +197,8 @@ impl Parser<'_> {
             TokenKind::BangDot => Ok(Some(self.parse_access(left, AccessMode::Forced)?)),
             TokenKind::Question => Ok(Some(self.parse_postfix_op(left, PostfixOp::Propagate))),
             TokenKind::Bang => Ok(Some(self.parse_postfix_op(left, PostfixOp::Force))),
-            TokenKind::ColonQuestion => Ok(Some(self.parse_type_test(left)?)),
-            TokenKind::ColonQuestionGt => Ok(Some(self.parse_type_cast(left)?)),
+            TokenKind::ColonQuestion => Ok(Some(self.parse_type_op(left, true)?)),
+            TokenKind::ColonQuestionGt => Ok(Some(self.parse_type_op(left, false)?)),
             _ => Ok(None),
         }
     }
@@ -264,14 +251,8 @@ impl Parser<'_> {
     fn parse_field_target(&mut self) -> ParseResult<FieldTarget> {
         match self.peek_kind() {
             TokenKind::Int(n) => {
-                let val = u32::try_from(*n).map_err(|_| ParseError {
-                    kind: ParseErrorKind::ExpectedToken {
-                        expected: "tuple index (0..2^32)",
-                        found: describe_token(self.peek_kind()),
-                    },
-                    span: self.span(),
-                    context: None,
-                })?;
+                let val = u32::try_from(*n)
+                    .map_err(|_| self.err_expected_token("tuple index (0..2^32)"))?;
                 let _ = self.advance();
                 Ok(FieldTarget::Index(val))
             }
@@ -279,14 +260,7 @@ impl Parser<'_> {
                 let ident = self.expect_ident()?;
                 Ok(FieldTarget::Name(ident))
             }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "field name or index",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_token("field name or index")),
         }
     }
 
@@ -296,34 +270,25 @@ impl Parser<'_> {
         self.alloc_expr(ExprKind::Postfix { expr: base, op }, span)
     }
 
-    fn parse_type_test(&mut self, base: ExprId) -> ParseResult<ExprId> {
-        let _ = self.advance(); // :?
+    fn parse_type_op(&mut self, base: ExprId, is_test: bool) -> ParseResult<ExprId> {
+        let _ = self.advance();
         let ty = self.parse_ty_named_only()?;
-        let as_name = if self.eat(&TokenKind::KwAs) {
-            Some(self.expect_ident()?)
+        let kind = if is_test {
+            let as_name = if self.eat(&TokenKind::KwAs) {
+                Some(self.expect_ident()?)
+            } else {
+                None
+            };
+            TypeOpKind::Test(as_name)
         } else {
-            None
+            TypeOpKind::Cast
         };
         let span = self.ast.exprs.get(base).span.to(self.prev_span());
         Ok(self.alloc_expr(
             ExprKind::TypeOp {
                 expr: base,
                 ty,
-                kind: TypeOpKind::Test(as_name),
-            },
-            span,
-        ))
-    }
-
-    fn parse_type_cast(&mut self, base: ExprId) -> ParseResult<ExprId> {
-        let _ = self.advance(); // :?>
-        let ty = self.parse_ty_named_only()?;
-        let span = self.ast.exprs.get(base).span.to(self.prev_span());
-        Ok(self.alloc_expr(
-            ExprKind::TypeOp {
-                expr: base,
-                ty,
-                kind: TypeOpKind::Cast,
+                kind,
             },
             span,
         ))
@@ -428,14 +393,7 @@ impl Parser<'_> {
                 span: self.span(),
                 context: None,
             }),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "identifier",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_token("identifier")),
         }
     }
 
@@ -445,9 +403,13 @@ impl Parser<'_> {
         let start = self.expect(&TokenKind::LParen, "'('")?;
         match self.peek_kind() {
             TokenKind::RParen => self.parse_unit(start),
-            TokenKind::Comma => self.parse_empty_tuple(start),
-            TokenKind::Semi => self.parse_empty_seq(start),
-            TokenKind::Pipe => self.parse_piecewise_leading_pipe(start),
+            TokenKind::Comma | TokenKind::Semi => {
+                let _ = self.advance();
+                let end = self.expect(&TokenKind::RParen, "')'")?;
+                let span = start.to(end);
+                Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), span))
+            }
+            TokenKind::Pipe => self.parse_piecewise_from(None, start),
             _ => self.parse_paren_expr(start),
         }
     }
@@ -458,27 +420,17 @@ impl Parser<'_> {
         self.try_lambda(Vec::new(), span)
     }
 
-    fn parse_empty_tuple(&mut self, start: Span) -> ParseResult<ExprId> {
-        let _ = self.advance(); // consume ','
-        let end = self.expect(&TokenKind::RParen, "')'")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), span))
-    }
-
-    fn parse_empty_seq(&mut self, start: Span) -> ParseResult<ExprId> {
-        let _ = self.advance(); // consume ';'
-        let end = self.expect(&TokenKind::RParen, "')'")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), span))
-    }
-
     fn parse_paren_expr(&mut self, start: Span) -> ParseResult<ExprId> {
         let first = self.parse_expr(0)?;
         match self.peek_kind() {
             TokenKind::RParen => self.finish_grouped_or_lambda(first, start),
             TokenKind::Comma => self.parse_tuple_rest(first, start),
             TokenKind::Semi => self.parse_seq_rest(first, start),
-            TokenKind::KwIf => self.parse_piecewise(first, start),
+            TokenKind::KwIf => {
+                let _ = self.expect(&TokenKind::KwIf, "'if'")?;
+                let guard = self.parse_pw_guard()?;
+                self.parse_piecewise_from(Some((first, guard)), start)
+            }
             _ => Err(ParseError {
                 kind: ParseErrorKind::InvalidParenForm,
                 span: self.span(),
@@ -527,32 +479,20 @@ impl Parser<'_> {
         Ok(self.alloc_expr(ExprKind::Seq(stmts), span))
     }
 
-    fn parse_piecewise(&mut self, first_val: ExprId, start: Span) -> ParseResult<ExprId> {
-        let _ = self.expect(&TokenKind::KwIf, "'if'")?;
-        let first_guard = self.parse_pw_guard()?;
-        let mut arms = vec![PiecewiseArm {
-            value: first_val,
-            guard: first_guard,
-        }];
-        self.parse_piecewise_rest(&mut arms)?;
-        let end = self.expect(&TokenKind::RParen, "')'")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
-    }
-
-    fn parse_piecewise_leading_pipe(&mut self, start: Span) -> ParseResult<ExprId> {
-        let _ = self.advance(); // eat leading |
-        let val = self.parse_expr(0)?;
-        let _ = self.expect(&TokenKind::KwIf, "'if'")?;
-        let guard = self.parse_pw_guard()?;
-        let mut arms = vec![PiecewiseArm { value: val, guard }];
-        self.parse_piecewise_rest(&mut arms)?;
-        let end = self.expect(&TokenKind::RParen, "')'")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
-    }
-
-    fn parse_piecewise_rest(&mut self, arms: &mut Vec<PiecewiseArm>) -> ParseResult<()> {
+    fn parse_piecewise_from(
+        &mut self,
+        first_arm: Option<(ExprId, PwGuard)>,
+        start: Span,
+    ) -> ParseResult<ExprId> {
+        let mut arms = if let Some((value, guard)) = first_arm {
+            vec![PiecewiseArm { value, guard }]
+        } else {
+            let _ = self.advance(); // eat leading |
+            let val = self.parse_expr(0)?;
+            let _ = self.expect(&TokenKind::KwIf, "'if'")?;
+            let guard = self.parse_pw_guard()?;
+            vec![PiecewiseArm { value: val, guard }]
+        };
         while self.eat(&TokenKind::Pipe) {
             if self.at(&TokenKind::RParen) {
                 break;
@@ -562,7 +502,9 @@ impl Parser<'_> {
             let guard = self.parse_pw_guard()?;
             arms.push(PiecewiseArm { value: val, guard });
         }
-        Ok(())
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
     }
 
     fn parse_pw_guard(&mut self) -> ParseResult<PwGuard> {
@@ -585,14 +527,7 @@ impl Parser<'_> {
             if params.is_empty() && ret_ty.is_none() {
                 return Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), start));
             }
-            return Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "'=>'",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            });
+            return Err(self.err_expected_token("'=>'"));
         }
         let _ = self.advance(); // =>
         let body = self.parse_expr(0)?;
@@ -689,14 +624,10 @@ impl Parser<'_> {
                 let span = start.to(end);
                 Ok(self.alloc_expr(ExprKind::ArrayLit(items), span))
             }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "',' or ';' or '|' or ']'",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: Some("in array literal"),
-            }),
+            _ => {
+                Err(self
+                    .err_expected_token_in("',' or ';' or '|' or ']'", Some("in array literal")))
+            }
         }
     }
 
@@ -793,11 +724,7 @@ impl Parser<'_> {
                 fields.push(RecordField::Spread(expr));
             } else {
                 let name = self.expect_ident()?;
-                let value = if self.eat(&TokenKind::ColonEq) {
-                    Some(self.parse_expr(0)?)
-                } else {
-                    None
-                };
+                let value = self.parse_opt_default()?;
                 fields.push(RecordField::Named { name, value });
             }
             if !self.eat(&TokenKind::Comma) {
@@ -837,11 +764,7 @@ impl Parser<'_> {
         let effects = self.parse_opt_with()?;
         let ret_ty = self.parse_opt_ty_annot()?;
         let sig = Self::build_signature(params, ty_params, constraints, effects, ret_ty);
-        let value = if self.eat(&TokenKind::ColonEq) {
-            Some(self.parse_expr(0)?)
-        } else {
-            None
-        };
+        let value = self.parse_opt_default()?;
         let span = start.to(self.prev_span());
         Ok(self.alloc_expr(
             ExprKind::Let(Box::new(LetBinding {
@@ -906,11 +829,7 @@ impl Parser<'_> {
         let mutable = self.eat(&TokenKind::KwMut);
         let name = self.expect_ident()?;
         let ty = self.parse_opt_ty_annot()?;
-        let default = if self.eat(&TokenKind::ColonEq) {
-            Some(self.parse_expr(0)?)
-        } else {
-            None
-        };
+        let default = self.parse_opt_default()?;
         Ok(Param {
             mutable,
             name,
@@ -1054,25 +973,27 @@ impl Parser<'_> {
     // ── Return / Resume / Need ────────────────────────────────────
 
     fn parse_return(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwReturn, "'return'")?;
-        let value = if self.can_start_expr() {
-            Some(self.parse_expr(0)?)
-        } else {
-            None
-        };
-        let span = start.to(self.prev_span());
-        Ok(self.alloc_expr(ExprKind::Return(value), span))
+        self.parse_keyword_expr(&TokenKind::KwReturn, "'return'", ExprKind::Return)
     }
 
     fn parse_resume(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwResume, "'resume'")?;
+        self.parse_keyword_expr(&TokenKind::KwResume, "'resume'", ExprKind::Resume)
+    }
+
+    fn parse_keyword_expr(
+        &mut self,
+        kw: &TokenKind,
+        kw_str: &'static str,
+        make: fn(Option<ExprId>) -> ExprKind,
+    ) -> ParseResult<ExprId> {
+        let start = self.expect(kw, kw_str)?;
         let value = if self.can_start_expr() {
             Some(self.parse_expr(0)?)
         } else {
             None
         };
         let span = start.to(self.prev_span());
-        Ok(self.alloc_expr(ExprKind::Resume(value), span))
+        Ok(self.alloc_expr(make(value), span))
     }
 
     fn parse_need(&mut self) -> ParseResult<ExprId> {
@@ -1126,30 +1047,12 @@ impl Parser<'_> {
     }
 
     fn expect_string(&mut self) -> ParseResult<String> {
-        match self.peek_kind() {
-            TokenKind::Str(_) => {
-                let token = self.advance();
-                match &token.kind {
-                    TokenKind::Str(s) => Ok(s.clone()),
-                    _ => Err(ParseError {
-                        kind: ParseErrorKind::ExpectedToken {
-                            expected: "string literal",
-                            found: describe_token(&token.kind),
-                        },
-                        span: token.span,
-                        context: None,
-                    }),
-                }
-            }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "string literal",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+        if let TokenKind::Str(s) = self.peek_kind() {
+            let s = s.clone();
+            let _ = self.advance();
+            return Ok(s);
         }
+        Err(self.err_expected_token("string literal"))
     }
 
     // ── Foreign ───────────────────────────────────────────────────
@@ -1172,14 +1075,7 @@ impl Parser<'_> {
         if self.at(&TokenKind::LParen) {
             return self.parse_foreign_block(start, modifiers);
         }
-        Err(ParseError {
-            kind: ParseErrorKind::ExpectedToken {
-                expected: "'import', 'let', or '('",
-                found: describe_token(self.peek_kind()),
-            },
-            span: self.span(),
-            context: Some("in foreign declaration"),
-        })
+        Err(self.err_expected_token_in("'import', 'let', or '('", Some("in foreign declaration")))
     }
 
     fn parse_foreign_import(&mut self, start: Span) -> ParseResult<ExprId> {
@@ -1285,20 +1181,13 @@ impl Parser<'_> {
         let name = self.expect_ident()?;
         let _ = self.expect(&TokenKind::Colon, "':'")?;
         let ty = self.parse_ty()?;
-        let default = if self.eat(&TokenKind::ColonEq) {
-            Some(self.parse_expr(0)?)
-        } else {
-            None
-        };
+        let default = self.parse_opt_default()?;
         Ok(RecordDefField { name, ty, default })
     }
 
     fn parse_effect_def(&mut self) -> ParseResult<ExprId> {
         let start = self.expect(&TokenKind::KwEffect, "'effect'")?;
-        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
-        let members = self.parse_member_decls()?;
-        let end =
-            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in effect definition")?;
+        let (members, end) = self.parse_braced_members("in effect definition")?;
         let span = start.to(end);
         Ok(self.alloc_expr(ExprKind::EffectDef(members), span))
     }
@@ -1306,10 +1195,7 @@ impl Parser<'_> {
     fn parse_class_def(&mut self) -> ParseResult<ExprId> {
         let start = self.expect(&TokenKind::KwClass, "'class'")?;
         let constraints = self.parse_opt_where()?;
-        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
-        let members = self.parse_member_decls()?;
-        let end =
-            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in class definition")?;
+        let (members, end) = self.parse_braced_members("in class definition")?;
         let span = start.to(end);
         Ok(self.alloc_expr(
             ExprKind::ClassDef {
@@ -1318,6 +1204,13 @@ impl Parser<'_> {
             },
             span,
         ))
+    }
+
+    fn parse_braced_members(&mut self, ctx: &'static str) -> ParseResult<(Vec<MemberDecl>, Span)> {
+        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
+        let members = self.parse_member_decls()?;
+        let end = self.expect_closing(&TokenKind::RBrace, "'{'", open_span, ctx)?;
+        Ok((members, end))
     }
 
     fn parse_member_decls(&mut self) -> ParseResult<Vec<MemberDecl>> {
@@ -1341,11 +1234,7 @@ impl Parser<'_> {
         let name = self.parse_member_name()?;
         let params = self.parse_opt_params()?;
         let ret_ty = self.parse_opt_ty_annot()?;
-        let body = if self.eat(&TokenKind::ColonEq) {
-            Some(self.parse_expr(0)?)
-        } else {
-            None
-        };
+        let body = self.parse_opt_default()?;
         Ok(FnDecl {
             name,
             params,
@@ -1484,13 +1373,7 @@ impl Parser<'_> {
                 let span = start.to(end);
                 Ok(self.alloc_expr(ExprKind::Splice(SpliceKind::Array(exprs)), span))
             }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedExpr {
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            _ => Err(self.err_expected_expr()),
         }
     }
 
@@ -1502,14 +1385,8 @@ impl Parser<'_> {
             TokenKind::KwExport => self.parse_export_with_attrs(attrs),
             TokenKind::KwLet => self.parse_let(ModifierSet::default(), attrs),
             TokenKind::KwInstance => self.parse_instance_def(false, attrs),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedToken {
-                    expected: "'export', 'let', or 'instance'",
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: Some("after attribute"),
-            }),
+            _ => Err(self
+                .err_expected_token_in("'export', 'let', or 'instance'", Some("after attribute"))),
         }
     }
 
@@ -1587,6 +1464,14 @@ impl Parser<'_> {
     }
 
     // ── Helpers ───────────────────────────────────────────────────
+
+    fn parse_opt_default(&mut self) -> ParseResult<Option<ExprId>> {
+        if self.eat(&TokenKind::ColonEq) {
+            Ok(Some(self.parse_expr(0)?))
+        } else {
+            Ok(None)
+        }
+    }
 
     fn parse_expr_list(&mut self, terminator: &TokenKind) -> ParseResult<ExprList> {
         let mut exprs = Vec::new();

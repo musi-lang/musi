@@ -34,15 +34,21 @@ impl Parser<'_> {
             TokenKind::Ident | TokenKind::EscapedIdent => self.parse_pat_ident(),
             TokenKind::Dot => self.parse_pat_variant(),
             TokenKind::DotLBrace => self.parse_pat_record(),
-            TokenKind::LParen => self.parse_pat_tuple(),
-            TokenKind::LBracket => self.parse_pat_array(),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedPat {
-                    found: describe_token(self.peek_kind()),
-                },
-                span: self.span(),
-                context: None,
-            }),
+            TokenKind::LParen => self.parse_pat_delimited(
+                &TokenKind::LParen,
+                "'('",
+                &TokenKind::RParen,
+                "')'",
+                PatKind::Tuple,
+            ),
+            TokenKind::LBracket => self.parse_pat_delimited(
+                &TokenKind::LBracket,
+                "'['",
+                &TokenKind::RBracket,
+                "']'",
+                PatKind::Array,
+            ),
+            _ => Err(self.err_expected_pat()),
         }
     }
 
@@ -128,20 +134,19 @@ impl Parser<'_> {
         Ok(RecordPatField { mutable, name, pat })
     }
 
-    fn parse_pat_tuple(&mut self) -> ParseResult<PatId> {
-        let start = self.expect(&TokenKind::LParen, "'('")?;
-        let pats = self.parse_pat_list(&TokenKind::RParen)?;
-        let end = self.expect(&TokenKind::RParen, "')'")?;
+    fn parse_pat_delimited(
+        &mut self,
+        open: &TokenKind,
+        open_str: &'static str,
+        close: &TokenKind,
+        close_str: &'static str,
+        make: fn(Vec<PatId>) -> PatKind,
+    ) -> ParseResult<PatId> {
+        let start = self.expect(open, open_str)?;
+        let pats = self.parse_pat_list(close)?;
+        let end = self.expect(close, close_str)?;
         let span = start.to(end);
-        Ok(self.alloc_pat(PatKind::Tuple(pats), span))
-    }
-
-    fn parse_pat_array(&mut self) -> ParseResult<PatId> {
-        let start = self.expect(&TokenKind::LBracket, "'['")?;
-        let pats = self.parse_pat_list(&TokenKind::RBracket)?;
-        let end = self.expect(&TokenKind::RBracket, "']'")?;
-        let span = start.to(end);
-        Ok(self.alloc_pat(PatKind::Array(pats), span))
+        Ok(self.alloc_pat(make(pats), span))
     }
 
     fn parse_pat_list(&mut self, terminator: &TokenKind) -> ParseResult<Vec<PatId>> {
