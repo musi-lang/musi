@@ -179,4 +179,4 @@ All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## License
 
-MIT OR Apache-2.0 - see [LICENSE](LICENSE) for details.
+[MIT OR Apache-2.0](LICENSE)
