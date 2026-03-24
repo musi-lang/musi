@@ -26,6 +26,12 @@ pub enum ResolveErrorKind {
     ImportNotFound(Symbol),
     /// An import forms a cycle (module A imports B which imports A).
     CyclicImport(Symbol),
+    /// A cyclic import with the full chain of module paths.
+    CyclicImportChain { path: Symbol, chain: Vec<Symbol> },
+    /// The `msr:` registry prefix was used but is not yet available.
+    RegistryNotAvailable(Symbol),
+    /// A `git:` import failed to resolve.
+    GitResolutionFailed { path: Symbol, reason: String },
 }
 
 impl ResolveError {
@@ -61,6 +67,25 @@ impl fmt::Display for ResolveError {
             }
             ResolveErrorKind::CyclicImport(sym) => {
                 write!(f, "cyclic import detected for `{sym}`")
+            }
+            ResolveErrorKind::CyclicImportChain { path, chain } => {
+                write!(f, "cyclic import for `{path}`: ")?;
+                for (i, module) in chain.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " -> ")?;
+                    }
+                    write!(f, "{module}")?;
+                }
+                Ok(())
+            }
+            ResolveErrorKind::RegistryNotAvailable(sym) => {
+                write!(
+                    f,
+                    "`msr:` registry imports are not yet available (used in `{sym}`)"
+                )
+            }
+            ResolveErrorKind::GitResolutionFailed { path, reason } => {
+                write!(f, "failed to resolve git import `{path}`: {reason}")
             }
         }
     }

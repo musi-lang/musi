@@ -2,15 +2,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use music_found::Interner;
-
-use crate::def::DefId;
-use crate::loader::{ModuleExports, ModuleLoader};
+use crate::loader::{ModuleLoader, ResolvedImport};
 
 fn setup_test_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    fs::create_dir_all(dir.path().join("std/math")).unwrap();
-    fs::write(dir.path().join("std/math/mod.ms"), "// math").unwrap();
     fs::write(dir.path().join("foo.ms"), "// foo").unwrap();
     fs::create_dir_all(dir.path().join("sub")).unwrap();
     fs::write(dir.path().join("sub/bar.ms"), "// bar").unwrap();
@@ -23,43 +18,33 @@ fn canon(p: &Path) -> PathBuf {
 }
 
 #[test]
-fn resolve_path_relative() {
+fn resolve_relative() {
     let dir = setup_test_dir();
     let loader = ModuleLoader::new(dir.path().to_path_buf());
     let current_file = dir.path().join("sub/bar.ms");
 
-    let resolved = loader.resolve_path("./bar", &current_file);
-    assert!(resolved.is_some(), "expected ./bar to resolve");
-    assert_eq!(resolved.unwrap(), canon(&dir.path().join("sub/bar.ms")));
-}
-
-#[test]
-fn resolve_path_relative_parent() {
-    let dir = setup_test_dir();
-    let loader = ModuleLoader::new(dir.path().to_path_buf());
-    let current_file = dir.path().join("sub/bar.ms");
-
-    let resolved = loader.resolve_path("../foo", &current_file);
-    assert!(resolved.is_some(), "expected ../foo to resolve");
-    assert_eq!(resolved.unwrap(), canon(&dir.path().join("foo.ms")));
-}
-
-#[test]
-fn resolve_path_std() {
-    let dir = setup_test_dir();
-    let loader = ModuleLoader::new(dir.path().to_path_buf());
-    let current_file = dir.path().join("main.ms");
-
-    let resolved = loader.resolve_path("@std/math", &current_file);
-    assert!(resolved.is_some(), "expected @std/math to resolve");
+    let resolved = loader.resolve("./bar", &current_file);
     assert_eq!(
-        resolved.unwrap(),
-        canon(&dir.path().join("std/math/mod.ms"))
+        resolved,
+        Some(ResolvedImport::File(canon(&dir.path().join("sub/bar.ms"))))
     );
 }
 
 #[test]
-fn resolve_path_config_mapped() {
+fn resolve_relative_parent() {
+    let dir = setup_test_dir();
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let current_file = dir.path().join("sub/bar.ms");
+
+    let resolved = loader.resolve("../foo", &current_file);
+    assert_eq!(
+        resolved,
+        Some(ResolvedImport::File(canon(&dir.path().join("foo.ms"))))
+    );
+}
+
+#[test]
+fn resolve_config_mapped() {
     let dir = setup_test_dir();
     let mut mappings = HashMap::new();
     let _prev = mappings.insert("mylib".into(), "./foo".into());
@@ -67,84 +52,92 @@ fn resolve_path_config_mapped() {
     let loader = ModuleLoader::new(dir.path().to_path_buf()).with_config_imports(mappings);
     let current_file = dir.path().join("main.ms");
 
-    let resolved = loader.resolve_path("mylib", &current_file);
+    let resolved = loader.resolve("mylib", &current_file);
+    assert_eq!(
+        resolved,
+        Some(ResolvedImport::File(canon(&dir.path().join("foo.ms"))))
+    );
+}
+
+#[test]
+fn resolve_not_found() {
+    let dir = setup_test_dir();
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let current_file = dir.path().join("main.ms");
+
+    let resolved = loader.resolve("./nonexistent", &current_file);
+    assert!(resolved.is_none());
+}
+
+#[test]
+fn resolve_from_root() {
+    let dir = setup_test_dir();
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let current_file = dir.path().join("main.ms");
+
+    let resolved = loader.resolve("foo", &current_file);
+    assert_eq!(
+        resolved,
+        Some(ResolvedImport::File(canon(&dir.path().join("foo.ms"))))
+    );
+}
+
+#[test]
+fn resolve_musi_builtin() {
+    let loader = ModuleLoader::new(PathBuf::from("/project"));
+    let current_file = PathBuf::from("/project/main.ms");
+
+    assert_eq!(
+        loader.resolve("musi:core", &current_file),
+        Some(ResolvedImport::Builtin)
+    );
+    assert_eq!(
+        loader.resolve("musi:prelude", &current_file),
+        Some(ResolvedImport::Builtin)
+    );
+}
+
+#[test]
+fn resolve_msr_reserved() {
+    let loader = ModuleLoader::new(PathBuf::from("/project"));
+    let current_file = PathBuf::from("/project/main.ms");
+
+    assert_eq!(
+        loader.resolve("msr:some/pkg", &current_file),
+        Some(ResolvedImport::ReservedRegistry)
+    );
+}
+
+#[test]
+fn resolve_config_mapped_to_git() {
+    let dir = setup_test_dir();
+    // Create a fake cached git checkout
+    let cache_dir = dir.path().join("cache/git");
+    let cached_pkg = cache_dir.join("github.com/musi-lang/std/latest");
+    fs::create_dir_all(&cached_pkg).unwrap();
+    fs::write(cached_pkg.join("mod.ms"), "// std").unwrap();
+
+    let mut mappings = HashMap::new();
+    let _prev = mappings.insert("@std".into(), "git:github.com/musi-lang/std".into());
+
+    let loader = ModuleLoader::new(dir.path().to_path_buf())
+        .with_config_imports(mappings)
+        .with_git_cache_dir(cache_dir);
+    let current_file = dir.path().join("main.ms");
+
+    let resolved = loader.resolve("@std", &current_file);
     assert!(
-        resolved.is_some(),
-        "expected config-mapped 'mylib' to resolve"
+        matches!(resolved, Some(ResolvedImport::Git(_))),
+        "expected Git variant, got {resolved:?}"
     );
-    assert_eq!(resolved.unwrap(), canon(&dir.path().join("foo.ms")));
 }
 
 #[test]
-fn resolve_path_not_found() {
+fn std_prefix_not_special() {
     let dir = setup_test_dir();
     let loader = ModuleLoader::new(dir.path().to_path_buf());
     let current_file = dir.path().join("main.ms");
 
-    let resolved = loader.resolve_path("./nonexistent", &current_file);
-    assert!(resolved.is_none(), "expected missing file to return None");
-}
-
-#[test]
-fn cache_loading_state() {
-    let dir = setup_test_dir();
-    let mut loader = ModuleLoader::new(dir.path().to_path_buf());
-    let path = dir.path().join("foo.ms");
-
-    assert!(!loader.is_loading(&path));
-    loader.mark_loading(path.clone());
-    assert!(loader.is_loading(&path));
-    assert!(loader.get_cached(&path).is_none());
-}
-
-#[test]
-fn cache_loaded_state() {
-    let dir = setup_test_dir();
-    let mut loader = ModuleLoader::new(dir.path().to_path_buf());
-    let path = dir.path().join("foo.ms");
-
-    let mut interner = Interner::new();
-    let sym = interner.intern("x");
-
-    let mut exports_map = HashMap::new();
-    let def_id = DefId::from_raw(0);
-    let _prev = exports_map.insert(sym, def_id);
-
-    loader.mark_loaded(
-        path.clone(),
-        ModuleExports {
-            exports: exports_map,
-        },
-    );
-    assert!(!loader.is_loading(&path));
-
-    let cached = loader.get_cached(&path);
-    assert!(cached.is_some());
-    assert!(cached.unwrap().exports.contains_key(&sym));
-}
-
-#[test]
-fn resolve_path_from_root() {
-    let dir = setup_test_dir();
-    let loader = ModuleLoader::new(dir.path().to_path_buf());
-    let current_file = dir.path().join("main.ms");
-
-    let resolved = loader.resolve_path("foo", &current_file);
-    assert!(resolved.is_some(), "expected 'foo' to resolve from root");
-    assert_eq!(resolved.unwrap(), canon(&dir.path().join("foo.ms")));
-}
-
-#[test]
-fn with_std_path_override() {
-    let dir = setup_test_dir();
-    let alt_std = dir.path().join("alt_std");
-    fs::create_dir_all(alt_std.join("io")).unwrap();
-    fs::write(alt_std.join("io/mod.ms"), "// io").unwrap();
-
-    let loader = ModuleLoader::new(dir.path().to_path_buf()).with_std_path(alt_std.clone());
-    let current_file = dir.path().join("main.ms");
-
-    let resolved = loader.resolve_path("@std/io", &current_file);
-    assert!(resolved.is_some(), "expected @std/io from alt path");
-    assert_eq!(resolved.unwrap(), canon(&alt_std.join("io/mod.ms")));
+    let resolved = loader.resolve("@std/math", &current_file);
+    assert!(resolved.is_none());
 }

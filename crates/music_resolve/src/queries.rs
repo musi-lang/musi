@@ -17,7 +17,8 @@ use music_found::{Ident, Span, Symbol};
 
 use crate::def::{DefId, DefInfo, DefKind, Visibility};
 use crate::errors::{ResolveError, ResolveErrorKind};
-use crate::loader::{ModuleExports, ModuleLoader};
+use crate::graph::{ModuleExports, ModuleGraph};
+use crate::loader::{ModuleLoader, ResolvedImport};
 use crate::scope::{ScopeArena, ScopeId, ScopeKind};
 
 /// Stores all resolution results: definitions, scope chains, and
@@ -57,6 +58,7 @@ pub struct ResolveDb {
     pub errors: Vec<ResolveError>,
     module_scope: ScopeId,
     loader: ModuleLoader,
+    graph: ModuleGraph,
     current_file: PathBuf,
 }
 
@@ -72,7 +74,29 @@ impl ResolveDb {
             errors: Vec::new(),
             module_scope,
             loader,
+            graph: ModuleGraph::new(),
             current_file: PathBuf::new(),
+        }
+    }
+
+    /// Create a resolver with a shared module graph (for multi-module resolution).
+    #[must_use]
+    pub fn with_graph(
+        db: Db,
+        loader: ModuleLoader,
+        graph: ModuleGraph,
+        current_file: PathBuf,
+    ) -> Self {
+        let mut resolution = ResolutionMap::new();
+        let module_scope = resolution.scopes.push(ScopeKind::Module, None);
+        Self {
+            db,
+            resolution,
+            errors: Vec::new(),
+            module_scope,
+            loader,
+            graph,
+            current_file,
         }
     }
 
@@ -81,10 +105,16 @@ impl ResolveDb {
         self.current_file = path;
     }
 
-    /// Access the module loader (e.g. to configure imports or std path).
+    /// Access the module loader (e.g. to configure imports).
     #[must_use]
     pub const fn loader_mut(&mut self) -> &mut ModuleLoader {
         &mut self.loader
+    }
+
+    /// Take ownership of the module graph out of the resolver.
+    #[must_use]
+    pub fn take_graph(self) -> ModuleGraph {
+        self.graph
     }
 
     /// Populate the module scope with builtin types and prelude classes.
@@ -138,6 +168,12 @@ impl ResolveDb {
         (self.db, self.resolution, self.errors)
     }
 
+    /// Consume the resolver, also returning the module graph.
+    #[must_use]
+    pub fn finish_with_graph(self) -> (Db, ResolutionMap, Vec<ResolveError>, ModuleGraph) {
+        (self.db, self.resolution, self.errors, self.graph)
+    }
+
     fn define_and_bind(
         &mut self,
         name: Symbol,
@@ -185,7 +221,8 @@ impl ResolveDb {
 
     fn resolve_import(&mut self, expr_id: ExprId, path: Symbol, kind: &ImportKind) {
         let path_str = self.db.interner.resolve(path);
-        let resolved = self.loader.resolve_path(path_str, &self.current_file);
+        let current_file = self.current_file.clone();
+        let resolved = self.loader.resolve(path_str, &current_file);
 
         match resolved {
             None => {
@@ -195,8 +232,30 @@ impl ResolveDb {
                     span,
                 });
             }
-            Some(file_path) => {
-                if self.loader.is_loading(&file_path) {
+            Some(ResolvedImport::Builtin) => {
+                // musi: prefix -- builtins already seeded in scope.
+                // For qualified imports, bind the alias name.
+                if let ImportKind::Qualified(name) = kind {
+                    let _def = self.define_and_bind(
+                        name.name,
+                        name.span,
+                        DefKind::Import,
+                        Visibility::Private,
+                        self.module_scope,
+                    );
+                }
+            }
+            Some(ResolvedImport::ReservedRegistry) => {
+                let span = self.db.ast.exprs.get(expr_id).span;
+                self.errors.push(ResolveError {
+                    kind: ResolveErrorKind::RegistryNotAvailable(path),
+                    span,
+                });
+            }
+            Some(ResolvedImport::File(file_path) | ResolvedImport::Git(file_path)) => {
+                let mod_id = self.graph.add_module(file_path);
+
+                if self.graph.is_loading(mod_id) {
                     let span = self.db.ast.exprs.get(expr_id).span;
                     self.errors.push(ResolveError {
                         kind: ResolveErrorKind::CyclicImport(path),
@@ -205,22 +264,16 @@ impl ResolveDb {
                     return;
                 }
 
-                if let Some(exports) = self.loader.get_cached(&file_path) {
+                if let Some(exports) = self.graph.get_exports(mod_id) {
                     let exports_clone = exports.clone();
                     self.add_imports_to_scope(&exports_clone, kind);
                     return;
                 }
 
-                // Mark as loading for cycle detection, then record as loaded
-                // with empty exports. Full recursive load (lex -> parse ->
-                // resolve) will be wired when the pipeline is integrated.
-                self.loader.mark_loading(file_path.clone());
-                self.loader.mark_loaded(
-                    file_path,
-                    ModuleExports {
-                        exports: HashMap::new(),
-                    },
-                );
+                // Module not yet loaded. In single-module mode, mark as loaded
+                // with empty exports. The resolve_project() driver handles
+                // recursive loading for multi-module builds.
+                self.graph.mark_loaded(mod_id, ModuleExports::new());
             }
         }
     }
@@ -287,7 +340,6 @@ impl ResolveDb {
         }
 
         if let Some(value) = binding.value {
-            // If this is a function with params, create a child scope for them
             if let Some(sig) = &binding.sig {
                 let fn_scope = self
                     .resolution

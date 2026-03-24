@@ -1,127 +1,120 @@
+pub mod git;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use music_found::Symbol;
-
-use crate::def::DefId;
-
-/// Tracks whether a module is currently being loaded (cycle detection)
-/// or has already been fully resolved.
+/// Result of resolving an import specifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModuleState {
-    /// The module file has been entered but not yet finished resolving.
-    Loading,
-    /// The module has been fully resolved and its exports are available.
-    Loaded(ModuleExports),
+pub enum ResolvedImport {
+    /// Local filesystem module.
+    File(PathBuf),
+    /// `musi:` prefix --compiler builtins, no file to load.
+    Builtin,
+    /// `git:` prefix --resolved to a cached local checkout.
+    Git(PathBuf),
+    /// `msr:` prefix --recognized but not yet available.
+    ReservedRegistry,
 }
 
-/// The public names exported by a resolved module.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModuleExports {
-    pub exports: HashMap<Symbol, DefId>,
-}
-
-/// Resolves import paths to filesystem paths and caches module state.
+/// Resolves import path strings to filesystem paths or scheme markers.
+///
+/// Handles URI scheme routing (`musi:`, `git:`, `msr:`) and local path
+/// resolution (relative, config-mapped, root-relative). Module state
+/// tracking is handled by `ModuleGraph`, not the loader.
 pub struct ModuleLoader {
     root: PathBuf,
-    std_path: Option<PathBuf>,
-    cache: HashMap<PathBuf, ModuleState>,
     config_imports: HashMap<String, String>,
+    git_cache_dir: PathBuf,
 }
 
 impl ModuleLoader {
     /// Create a new loader rooted at the given project directory.
-    /// If a `std/` subdirectory exists under `root`, it is used as the
-    /// standard library path.
     #[must_use]
     pub fn new(root: PathBuf) -> Self {
-        let std_candidate = root.join("std");
-        let std_path = if std_candidate.exists() {
-            Some(std_candidate)
-        } else {
-            None
-        };
+        let git_cache_dir = musi_home().join("cache/git");
         Self {
             root,
-            std_path,
-            cache: HashMap::new(),
             config_imports: HashMap::new(),
+            git_cache_dir,
         }
     }
 
-    /// Set custom import mappings (e.g. from `musi.json`).
+    /// Set custom import mappings (e.g. from `musi.json` `imports` field).
     #[must_use]
     pub fn with_config_imports(mut self, imports: HashMap<String, String>) -> Self {
         self.config_imports = imports;
         self
     }
 
-    /// Override the standard library search path.
+    /// Override the git cache directory (for testing).
     #[must_use]
-    pub fn with_std_path(mut self, path: PathBuf) -> Self {
-        self.std_path = Some(path);
+    pub fn with_git_cache_dir(mut self, dir: PathBuf) -> Self {
+        self.git_cache_dir = dir;
         self
     }
 
-    /// Resolve an import path string to an absolute filesystem path.
+    /// Resolve an import specifier to a `ResolvedImport`.
     ///
     /// Resolution order:
-    /// 1. `./` or `../` -- relative to the directory of `current_file`
-    /// 2. `@std/` -- standard library lookup
-    /// 3. Config-mapped imports
-    /// 4. Relative to project root
-    ///
-    /// For each candidate, tries `.ms` extension, then `mod.ms` and
-    /// `index.ms` inside a directory of that name.
+    /// 1. `musi:` prefix → `Builtin`
+    /// 2. `git:` prefix → `Git(cached_path)` via git clone/cache
+    /// 3. `msr:` prefix → `ReservedRegistry`
+    /// 4. `./` or `../` → relative to `current_file`
+    /// 5. Config-mapped imports (from `musi.json`)
+    /// 6. Relative to project root
     #[must_use]
-    pub fn resolve_path(&self, import_path: &str, current_file: &Path) -> Option<PathBuf> {
-        if import_path.starts_with("./") || import_path.starts_with("../") {
-            Self::resolve_relative(import_path, current_file)
-        } else if import_path.starts_with("@std/") {
-            Self::resolve_std(import_path, self.std_path.as_deref())
-        } else if let Some(mapped) = self.config_imports.get(import_path) {
+    pub fn resolve(&self, import_path: &str, current_file: &Path) -> Option<ResolvedImport> {
+        if let Some(_rest) = import_path.strip_prefix("musi:") {
+            return Some(ResolvedImport::Builtin);
+        }
+        if let Some(specifier) = import_path.strip_prefix("git:") {
+            return self.resolve_git(specifier);
+        }
+        if import_path.starts_with("msr:") {
+            return Some(ResolvedImport::ReservedRegistry);
+        }
+
+        // Config-mapped imports: the mapped value may itself be a scheme URI
+        if let Some(mapped) = self.config_imports.get(import_path) {
             let mapped_owned = mapped.clone();
-            self.resolve_path(&mapped_owned, current_file)
+            return self.resolve(&mapped_owned, current_file);
+        }
+
+        if import_path.starts_with("./") || import_path.starts_with("../") {
+            Self::resolve_relative(import_path, current_file).map(ResolvedImport::File)
         } else {
-            Self::resolve_from_root(import_path, &self.root)
+            Self::resolve_from_root(import_path, &self.root).map(ResolvedImport::File)
         }
     }
 
-    /// Check whether a module is currently in the `Loading` state (cycle).
-    #[must_use]
-    pub fn is_loading(&self, path: &Path) -> bool {
-        matches!(self.cache.get(path), Some(ModuleState::Loading))
-    }
+    /// Resolve a `git:` specifier to a cached local checkout.
+    fn resolve_git(&self, specifier: &str) -> Option<ResolvedImport> {
+        let parsed = git::GitSpecifier::parse(specifier)?;
+        let cached = parsed.cache_path(&self.git_cache_dir);
 
-    /// Return cached exports for a fully loaded module, if available.
-    #[must_use]
-    pub fn get_cached(&self, path: &Path) -> Option<&ModuleExports> {
-        match self.cache.get(path) {
-            Some(ModuleState::Loaded(exports)) => Some(exports),
-            _ => None,
+        if !cached.exists() {
+            git::clone_repo(&parsed, &cached).ok()?;
         }
+
+        let entry = git::find_entry_point(&cached)?;
+        Some(ResolvedImport::Git(entry))
     }
 
-    /// Mark a module as currently being loaded (for cycle detection).
-    pub fn mark_loading(&mut self, path: PathBuf) {
-        let _prev = self.cache.insert(path, ModuleState::Loading);
+    /// The project root this loader is anchored to.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
-    /// Mark a module as fully loaded with its resolved exports.
-    pub fn mark_loaded(&mut self, path: PathBuf, exports: ModuleExports) {
-        let _prev = self.cache.insert(path, ModuleState::Loaded(exports));
+    /// The git cache directory.
+    #[must_use]
+    pub fn git_cache_dir(&self) -> &Path {
+        &self.git_cache_dir
     }
 
     fn resolve_relative(import_path: &str, current_file: &Path) -> Option<PathBuf> {
         let dir = current_file.parent()?;
         let candidate = dir.join(import_path);
-        Self::try_file_candidates(&candidate)
-    }
-
-    fn resolve_std(import_path: &str, std_path: Option<&Path>) -> Option<PathBuf> {
-        let std_path = std_path?;
-        let lib_name = import_path.strip_prefix("@std/")?;
-        let candidate = std_path.join(lib_name);
         Self::try_file_candidates(&candidate)
     }
 
@@ -134,24 +127,20 @@ impl ModuleLoader {
     /// containing `mod.ms` or `index.ms`. Returns a canonicalized path
     /// so that `../` segments are resolved.
     fn try_file_candidates(candidate: &Path) -> Option<PathBuf> {
-        // If candidate already has an extension and exists, use it directly
         if candidate.extension().is_some() && candidate.exists() {
             return candidate.canonicalize().ok();
         }
 
-        // Try adding .ms extension
         let with_ext = candidate.with_extension("ms");
         if with_ext.exists() {
             return with_ext.canonicalize().ok();
         }
 
-        // Try as directory with mod.ms
         let mod_file = candidate.join("mod.ms");
         if mod_file.exists() {
             return mod_file.canonicalize().ok();
         }
 
-        // Try as directory with index.ms
         let index_file = candidate.join("index.ms");
         if index_file.exists() {
             return index_file.canonicalize().ok();
@@ -165,6 +154,12 @@ impl Default for ModuleLoader {
     fn default() -> Self {
         Self::new(PathBuf::from("."))
     }
+}
+
+fn musi_home() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".musi")
 }
 
 #[cfg(test)]
