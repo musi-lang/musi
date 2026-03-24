@@ -1,9 +1,0 @@
-{
-    "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json",
-    "name": "@std/prelude",
-    "version": "0.1.0",
-    "description": "Built-in types and core type classes.",
-    "exports": {
-        ".": "./mod.ms"
-    }
-}

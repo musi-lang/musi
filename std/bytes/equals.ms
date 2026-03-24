@@ -1,2 +1,2 @@
 /// Check whether two byte arrays have equal contents.
-export let equals (a : []U8, b : []U8) : Bool := a = b;
+export let equals (a : []Nat8, b : []Nat8) : Bool := a = b;

@@ -1,2 +1,2 @@
 /// Concatenate two byte arrays into a new one.
-export let concat (a : []U8, b : []U8) : []U8 := [...a, ...b];
+export let concat (a : []Nat8, b : []Nat8) : []Nat8 := [...a, ...b];
