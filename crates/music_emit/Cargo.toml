@@ -1,0 +1,23 @@
+[package]
+name = "music_emit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "SEAM bytecode emitter for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_found = { path = "../music_found" }
+music_ast = { path = "../music_ast" }
+music_il = { path = "../music_il" }
+music_thir = { path = "../music_thir" }
+music_sema = { path = "../music_sema" }
+music_resolve = { path = "../music_resolve" }
+music_builtins = { path = "../music_builtins" }
+
+[dev-dependencies]
+music_db = { path = "../music_db" }
+
+[lints]
+workspace = true

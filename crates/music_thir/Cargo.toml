@@ -1,0 +1,18 @@
+[package]
+name = "music_thir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Typed HIR bundle for the Musi compiler backend"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_found = { path = "../music_found" }
+music_ast = { path = "../music_ast" }
+music_db = { path = "../music_db" }
+music_resolve = { path = "../music_resolve" }
+music_sema = { path = "../music_sema" }
+
+[lints]
+workspace = true
