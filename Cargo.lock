@@ -63,6 +63,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_hir"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_ast",
+ "music_found",
+ "music_lex",
+ "music_parse",
+]
+
+[[package]]
 name = "music_lex"
 version = "0.1.0-rc1"
 dependencies = [
