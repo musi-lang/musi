@@ -10,6 +10,15 @@ impl Symbol {
     pub const fn raw(self) -> u32 {
         self.0
     }
+
+    /// Create a synthetic symbol from a raw index.
+    ///
+    /// Use sentinel values (e.g. `u32::MAX - n`) to avoid collisions with
+    /// symbols produced by the interner.
+    #[must_use]
+    pub const fn synthetic(id: u32) -> Self {
+        Self(id)
+    }
 }
 
 impl fmt::Display for Symbol {

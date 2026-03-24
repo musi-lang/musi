@@ -1,8 +1,9 @@
 use std::mem;
 
-use music_ast::common::{FnDecl, Param};
+use music_ast::common::{FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
-    BinOp, ExprKind, FStrPart, FieldTarget, LetBinding, MatchArm, RecordField, UnaryOp,
+    BinOp, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef, LetBinding,
+    MatchArm, PostfixOp, RecordField, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
@@ -47,6 +48,7 @@ struct Emitter<'thir> {
     current_instructions: Vec<Instruction>,
     current_locals: Vec<Symbol>,
     current_upvalues: Vec<Symbol>,
+    next_anon: u32,
 }
 
 /// Entry point: lower a typed IR bundle into a [`SeamModule`].
@@ -60,6 +62,7 @@ pub fn emit(thir: &HirBundle) -> SeamModule {
         current_instructions: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
+        next_anon: u32::MAX,
     };
     emitter.emit_module();
     SeamModule {
@@ -179,6 +182,16 @@ impl Emitter<'_> {
                 ref handlers, body, ..
             } => self.emit_handle(handlers, body),
             ExprKind::Resume(opt) => self.emit_resume(opt),
+            ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows),
+            ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields),
+            ExprKind::Postfix { expr, op } => self.emit_postfix(expr, op),
+            ExprKind::TypeOp { expr, kind, .. } => self.emit_type_op(expr, kind),
+            ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst),
+            ExprKind::ForeignImport(sym) => self.emit_foreign_import(sym),
+            ExprKind::Comprehension {
+                expr: body,
+                ref clauses,
+            } => self.emit_comprehension(body, clauses),
             _ => self.push(Instruction::simple(Opcode::Nop)),
         }
     }
@@ -239,6 +252,9 @@ impl Emitter<'_> {
     fn emit_binop(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, expr_id: ExprId) {
         if matches!(op, BinOp::Range | BinOp::RangeExcl) {
             return self.emit_range(op, lhs, rhs);
+        }
+        if op == BinOp::NilCoalesce {
+            return self.emit_nil_coalesce(lhs, rhs);
         }
 
         self.emit_expr(lhs);
@@ -424,7 +440,16 @@ impl Emitter<'_> {
                     let fields = fields.clone();
                     self.emit_match_record(&fields, arm, is_last, &mut end_jumps);
                 }
-                PatKind::Wildcard | PatKind::As { .. } | PatKind::Or(_) => {
+                PatKind::Or(pats) => {
+                    let pats = pats.clone();
+                    self.emit_match_or(&pats, arm, is_last, &mut end_jumps);
+                }
+                PatKind::As { name, pat } => {
+                    let name = *name;
+                    let inner_pat = *pat;
+                    self.emit_match_as(name, inner_pat, arm, is_last, &mut end_jumps);
+                }
+                PatKind::Wildcard => {
                     self.push(Instruction::simple(Opcode::Pop));
                     self.emit_guard_and_body(arm, is_last, &mut end_jumps);
                 }
@@ -738,6 +763,328 @@ impl Emitter<'_> {
         self.push(Instruction::simple(Opcode::EffResume));
     }
 
+    fn emit_matrix_lit(&mut self, rows: &[ExprList]) {
+        let row_count = u16::try_from(rows.len()).expect("too many matrix rows (>65535)");
+        self.push(Instruction::with_u16(Opcode::ArrNew, row_count));
+
+        for (ri, row) in rows.iter().enumerate() {
+            let col_count = u16::try_from(row.len()).expect("too many matrix columns (>65535)");
+            self.push(Instruction::with_u16(Opcode::ArrNew, col_count));
+
+            for (ci, &elem) in row.iter().enumerate() {
+                self.emit_expr(elem);
+                let col_idx = u8::try_from(ci).expect("too many matrix columns (>255)");
+                self.push(Instruction::with_u8(Opcode::ArrSeti, col_idx));
+            }
+
+            let row_idx = u8::try_from(ri).expect("too many matrix rows (>255)");
+            self.push(Instruction::with_u8(Opcode::ArrSeti, row_idx));
+        }
+    }
+
+    fn emit_record_update(&mut self, base: ExprId, fields: &[RecordField]) {
+        self.emit_expr(base);
+        self.push(Instruction::simple(Opcode::ArrCopy));
+
+        for (i, field) in fields.iter().enumerate() {
+            match field {
+                RecordField::Named { value, .. } => {
+                    if let Some(val_id) = value {
+                        let idx = u8::try_from(i).expect("too many fields (>255)");
+                        self.emit_expr(*val_id);
+                        self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+                    }
+                }
+                RecordField::Spread(expr_id) => {
+                    self.emit_expr(*expr_id);
+                    self.push(Instruction::simple(Opcode::ArrConcat));
+                }
+            }
+        }
+    }
+
+    fn emit_postfix(&mut self, expr: ExprId, op: PostfixOp) {
+        self.emit_expr(expr);
+        self.push(Instruction::simple(Opcode::Dup));
+        self.push(Instruction::simple(Opcode::ArrTag));
+
+        let none_idx = self.pool.add(ConstantEntry::Str("None".into()));
+        self.push(Instruction::with_u16(Opcode::LdCst, none_idx));
+        self.push(Instruction::simple(Opcode::CmpEq));
+
+        let skip_jump = self.placeholder_jump(Opcode::BrFalse);
+
+        match op {
+            PostfixOp::Force => self.push(Instruction::simple(Opcode::Panic)),
+            PostfixOp::Propagate => self.push(Instruction::simple(Opcode::Ret)),
+        }
+
+        self.patch_jump(skip_jump);
+        self.push(Instruction::with_u8(Opcode::ArrGeti, 0));
+    }
+
+    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) {
+        self.emit_expr(expr);
+        match kind {
+            TypeOpKind::Test(opt_ident) => {
+                self.push(Instruction::simple(Opcode::TyChk));
+                if let Some(ident) = opt_ident {
+                    self.push(Instruction::simple(Opcode::Dup));
+                    let slot = self.local_slot(ident.name);
+                    self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                }
+            }
+            TypeOpKind::Cast => {
+                self.push(Instruction::simple(Opcode::TyCast));
+            }
+        }
+    }
+
+    fn emit_nil_coalesce(&mut self, lhs: ExprId, rhs: ExprId) {
+        self.emit_expr(lhs);
+        self.push(Instruction::simple(Opcode::Dup));
+        self.push(Instruction::simple(Opcode::ArrTag));
+
+        let none_idx = self.pool.add(ConstantEntry::Str("None".into()));
+        self.push(Instruction::with_u16(Opcode::LdCst, none_idx));
+        self.push(Instruction::simple(Opcode::CmpEq));
+
+        let end_jump = self.placeholder_jump(Opcode::BrFalse);
+
+        self.push(Instruction::simple(Opcode::Pop));
+        self.emit_expr(rhs);
+
+        self.patch_jump(end_jump);
+    }
+
+    fn emit_instance_def(&mut self, inst: &InstanceDef) {
+        match &inst.body {
+            InstanceBody::Methods(members) => {
+                for member in members {
+                    if let MemberDecl::Fn(decl) = member {
+                        if let Some(body) = decl.body {
+                            let name = match decl.name {
+                                MemberName::Ident(ident) | MemberName::Op(ident) => ident.name,
+                            };
+                            let params = decl.params.as_deref().unwrap_or(&[]);
+                            self.emit_function(name, params, body);
+                        }
+                    }
+                }
+            }
+            InstanceBody::Via(_) => {
+                self.push(Instruction::simple(Opcode::Nop));
+            }
+        }
+    }
+
+    fn emit_foreign_import(&mut self, sym: Symbol) {
+        let name = self.thir.db.interner.resolve(sym);
+        let idx = self.pool.add(ConstantEntry::Str(name.into()));
+        self.push(Instruction::with_u16(Opcode::LdCst, idx));
+        self.push(Instruction::simple(Opcode::FfiCall));
+    }
+
+    fn alloc_anon_slot(&mut self) -> u8 {
+        let sym = Symbol::synthetic(self.next_anon);
+        self.next_anon = self.next_anon.wrapping_sub(1);
+        let slot = u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+        self.current_locals.push(sym);
+        slot
+    }
+
+    fn emit_comprehension(&mut self, body: ExprId, clauses: &[CompClause]) {
+        self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+
+        for (clause_idx, clause) in clauses.iter().enumerate() {
+            match clause {
+                CompClause::Generator { pat, iter } => {
+                    let iter_expr = *iter;
+                    let pat_id = *pat;
+
+                    self.emit_expr(iter_expr);
+                    let iter_slot = self.alloc_anon_slot();
+                    self.push(Instruction::with_u8(Opcode::StLoc, iter_slot));
+
+                    self.push(Instruction::simple(Opcode::LdZero));
+                    let counter_slot = self.alloc_anon_slot();
+                    self.push(Instruction::with_u8(Opcode::StLoc, counter_slot));
+
+                    let loop_start = self.current_instructions.len();
+
+                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
+                    self.push(Instruction::with_u8(Opcode::LdLoc, iter_slot));
+                    self.push(Instruction::simple(Opcode::ArrLen));
+                    self.push(Instruction::simple(Opcode::CmpGeq));
+                    let end_jump = self.placeholder_jump(Opcode::BrTrue);
+
+                    self.push(Instruction::with_u8(Opcode::LdLoc, iter_slot));
+                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
+                    self.push(Instruction::simple(Opcode::ArrGet));
+
+                    let pat_node = self.thir.db.ast.pats.get(pat_id);
+                    if let PatKind::Bind(ident) = &pat_node.kind {
+                        let slot = self.local_slot(ident.name);
+                        self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                    } else {
+                        self.push(Instruction::simple(Opcode::Pop));
+                    }
+
+                    let mut filter_jumps = Vec::new();
+                    for subsequent in &clauses[clause_idx + 1..] {
+                        match subsequent {
+                            CompClause::Filter(guard) => {
+                                self.emit_expr(*guard);
+                                filter_jumps.push(self.placeholder_jump(Opcode::BrFalse));
+                            }
+                            CompClause::Generator { .. } => break,
+                        }
+                    }
+
+                    self.emit_expr(body);
+                    self.push(Instruction::simple(Opcode::ArrConcat));
+
+                    for fj in filter_jumps {
+                        self.patch_jump(fj);
+                    }
+
+                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
+                    self.push(Instruction::simple(Opcode::LdOne));
+                    self.push(Instruction::simple(Opcode::IAdd));
+                    self.push(Instruction::with_u8(Opcode::StLoc, counter_slot));
+
+                    let back_pos = self.current_instructions.len();
+                    let back_offset = isize::try_from(loop_start).expect("loop_start overflow")
+                        - isize::try_from(back_pos).expect("back_pos overflow")
+                        - 1;
+                    let back_i16 = i16::try_from(back_offset).expect("backward jump too far");
+                    self.push(Instruction::with_i16(Opcode::BrJmp, back_i16));
+
+                    self.patch_jump(end_jump);
+                }
+                CompClause::Filter(_) => {
+                    // Handled inline within the Generator arm
+                }
+            }
+        }
+    }
+
+    fn emit_match_or(
+        &mut self,
+        pats: &[music_ast::PatId],
+        arm: &MatchArm,
+        is_last: bool,
+        end_jumps: &mut Vec<usize>,
+    ) {
+        let mut body_jumps = Vec::new();
+
+        for (si, &sub_pat) in pats.iter().enumerate() {
+            let sub_pat_node = self.thir.db.ast.pats.get(sub_pat);
+            let is_last_sub = si + 1 == pats.len();
+
+            match &sub_pat_node.kind {
+                PatKind::Lit(literal) => {
+                    let literal = literal.clone();
+                    self.push(Instruction::simple(Opcode::Dup));
+                    self.emit_literal(&literal);
+                    self.push(Instruction::simple(Opcode::CmpEq));
+                    if is_last_sub {
+                        if is_last {
+                            self.push(Instruction::simple(Opcode::Pop));
+                            for bj in &body_jumps {
+                                self.patch_jump(*bj);
+                            }
+                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                        } else {
+                            let next_arm_jump = self.placeholder_jump(Opcode::BrFalse);
+                            self.push(Instruction::simple(Opcode::Pop));
+                            for bj in &body_jumps {
+                                self.patch_jump(*bj);
+                            }
+                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.patch_jump(next_arm_jump);
+                        }
+                    } else {
+                        body_jumps.push(self.placeholder_jump(Opcode::BrTrue));
+                    }
+                }
+                PatKind::Variant { tag, .. } => {
+                    let tag = *tag;
+                    self.push(Instruction::simple(Opcode::Dup));
+                    self.push(Instruction::simple(Opcode::ArrTag));
+                    let tag_idx = self.pool.add(ConstantEntry::Str(
+                        self.thir.db.interner.resolve(tag.name).into(),
+                    ));
+                    self.push(Instruction::with_u16(Opcode::LdCst, tag_idx));
+                    self.push(Instruction::simple(Opcode::CmpEq));
+                    if is_last_sub {
+                        if is_last {
+                            self.push(Instruction::simple(Opcode::Pop));
+                            for bj in &body_jumps {
+                                self.patch_jump(*bj);
+                            }
+                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                        } else {
+                            let next_arm_jump = self.placeholder_jump(Opcode::BrFalse);
+                            self.push(Instruction::simple(Opcode::Pop));
+                            for bj in &body_jumps {
+                                self.patch_jump(*bj);
+                            }
+                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.patch_jump(next_arm_jump);
+                        }
+                    } else {
+                        body_jumps.push(self.placeholder_jump(Opcode::BrTrue));
+                    }
+                }
+                _ => {
+                    if is_last_sub {
+                        self.push(Instruction::simple(Opcode::Pop));
+                        for bj in &body_jumps {
+                            self.patch_jump(*bj);
+                        }
+                        self.emit_guard_and_body(arm, is_last, end_jumps);
+                    }
+                }
+            }
+        }
+    }
+
+    fn emit_match_as(
+        &mut self,
+        name: Ident,
+        inner_pat: music_ast::PatId,
+        arm: &MatchArm,
+        is_last: bool,
+        end_jumps: &mut Vec<usize>,
+    ) {
+        self.push(Instruction::simple(Opcode::Dup));
+        let name_slot = self.local_slot(name.name);
+        self.push(Instruction::with_u8(Opcode::StLoc, name_slot));
+
+        let inner_node = self.thir.db.ast.pats.get(inner_pat);
+        match &inner_node.kind {
+            PatKind::Variant { tag, fields } => {
+                let tag = *tag;
+                let fields = fields.clone();
+                self.emit_match_variant(&tag, &fields, arm, is_last, end_jumps);
+            }
+            PatKind::Lit(literal) => {
+                let literal = literal.clone();
+                self.emit_match_lit(&literal, arm, is_last, end_jumps);
+            }
+            PatKind::Bind(ident) => {
+                let slot = self.local_slot(ident.name);
+                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_guard_and_body(arm, is_last, end_jumps);
+            }
+            _ => {
+                self.push(Instruction::simple(Opcode::Pop));
+                self.emit_guard_and_body(arm, is_last, end_jumps);
+            }
+        }
+    }
+
     fn emit_assign(&mut self, target: ExprId, value: ExprId) {
         let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
         self.emit_expr(value);
@@ -814,7 +1161,12 @@ const fn binop_to_opcode(op: BinOp) -> Opcode {
         BinOp::Or => Opcode::Or,
         BinOp::Xor => Opcode::Xor,
         BinOp::Cons => Opcode::ArrConcat,
-        BinOp::NilCoalesce | BinOp::PipeRight | BinOp::Range | BinOp::RangeExcl => Opcode::Nop,
+        BinOp::NilCoalesce | BinOp::PipeRight | BinOp::Range | BinOp::RangeExcl => {
+            // NilCoalesce, Range, and RangeExcl are intercepted before reaching
+            // this function; PipeRight is desugared. This arm is unreachable in
+            // practice but needed for exhaustiveness.
+            Opcode::Nop
+        }
     }
 }
 

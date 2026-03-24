@@ -1,6 +1,9 @@
-use music_ast::common::{FnDecl, MemberName, ModifierSet, TyRef};
+use music_ast::common::{FnDecl, MemberDecl, MemberName, ModifierSet, Param, TyRef};
 use music_ast::data::AstData;
-use music_ast::expr::{BinOp, ExprKind, FStrPart, IndexKind, LetBinding, MatchArm, RecordField};
+use music_ast::expr::{
+    BinOp, CompClause, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef, LetBinding,
+    MatchArm, PostfixOp, RecordField, TypeOpKind,
+};
 use music_ast::pat::PatKind;
 use music_db::Db;
 use music_found::{Ident, Interner, Literal, SourceMap, Span, Spanned};
@@ -677,4 +680,577 @@ fn emit_lambda_with_upvalue_capture() {
     let lambda_instrs = &lambda_method.instructions;
     assert_eq!(lambda_instrs[0], Instruction::with_u8(Opcode::LdUpv, 0));
     assert_eq!(lambda_instrs[1], Instruction::simple(Opcode::Ret));
+}
+
+#[test]
+fn emit_matrix_lit() {
+    let thir = build_thir_single(|ast, _int| {
+        let a = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let b = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        let c = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(3))));
+        let d = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(4))));
+        ExprKind::MatrixLit(vec![vec![a, b], vec![c, d]])
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // ArrNew(2) -- outer
+    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 2));
+    // ArrNew(2) -- row 0
+    assert_eq!(instrs[1], Instruction::with_u16(Opcode::ArrNew, 2));
+    // elem 1, ArrSeti(0), elem 2, ArrSeti(1)
+    assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[3], Instruction::with_u8(Opcode::ArrSeti, 0));
+    assert_eq!(instrs[4], Instruction::with_i16(Opcode::LdSmi, 2));
+    assert_eq!(instrs[5], Instruction::with_u8(Opcode::ArrSeti, 1));
+    // ArrSeti(0) -- store row 0 into outer
+    assert_eq!(instrs[6], Instruction::with_u8(Opcode::ArrSeti, 0));
+    // ArrNew(2) -- row 1
+    assert_eq!(instrs[7], Instruction::with_u16(Opcode::ArrNew, 2));
+    assert_eq!(instrs[8], Instruction::with_i16(Opcode::LdSmi, 3));
+    assert_eq!(instrs[9], Instruction::with_u8(Opcode::ArrSeti, 0));
+    assert_eq!(instrs[10], Instruction::with_i16(Opcode::LdSmi, 4));
+    assert_eq!(instrs[11], Instruction::with_u8(Opcode::ArrSeti, 1));
+    // ArrSeti(1) -- store row 1 into outer
+    assert_eq!(instrs[12], Instruction::with_u8(Opcode::ArrSeti, 1));
+}
+
+#[test]
+fn emit_record_update() {
+    let thir = build_thir_single(|ast, interner| {
+        let base = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let x_sym = interner.intern("x");
+        let val = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(42))));
+        let field = RecordField::Named {
+            name: Ident::new(x_sym, Span::DUMMY),
+            value: Some(val),
+        };
+        ExprKind::RecordUpdate {
+            base,
+            fields: vec![field],
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // emit base, ArrCopy, emit value, ArrSeti(0)
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::ArrCopy));
+    assert_eq!(instrs[2], Instruction::with_i16(Opcode::LdSmi, 42));
+    assert_eq!(instrs[3], Instruction::with_u8(Opcode::ArrSeti, 0));
+}
+
+#[test]
+fn emit_postfix_force() {
+    let thir = build_thir_single(|ast, _int| {
+        let inner = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
+        ExprKind::Postfix {
+            expr: inner,
+            op: PostfixOp::Force,
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdSmi(5), Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Panic, ArrGeti(0)
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::ArrTag));
+    assert_eq!(instrs[3].opcode, Opcode::LdCst);
+    assert_eq!(instrs[4], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[5].opcode, Opcode::BrFalse);
+    assert_eq!(instrs[6], Instruction::simple(Opcode::Panic));
+    assert_eq!(instrs[7], Instruction::with_u8(Opcode::ArrGeti, 0));
+}
+
+#[test]
+fn emit_postfix_propagate() {
+    let thir = build_thir_single(|ast, _int| {
+        let inner = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
+        ExprKind::Postfix {
+            expr: inner,
+            op: PostfixOp::Propagate,
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdSmi(5), Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Ret, ArrGeti(0)
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::ArrTag));
+    assert_eq!(instrs[3].opcode, Opcode::LdCst);
+    assert_eq!(instrs[4], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[5].opcode, Opcode::BrFalse);
+    assert_eq!(instrs[6], Instruction::simple(Opcode::Ret));
+    assert_eq!(instrs[7], Instruction::with_u8(Opcode::ArrGeti, 0));
+}
+
+#[test]
+fn emit_type_op_cast() {
+    let thir = build_thir_single(|ast, _int| {
+        let inner = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let ty_id = ast
+            .types
+            .alloc(Spanned::dummy(music_ast::ty::TyKind::Tuple(vec![])));
+        ExprKind::TypeOp {
+            expr: inner,
+            ty: ty_id,
+            kind: TypeOpKind::Cast,
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdOne, TyCast
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::TyCast));
+}
+
+#[test]
+fn emit_type_op_test() {
+    let thir = build_thir_single(|ast, _int| {
+        let inner = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let ty_id = ast
+            .types
+            .alloc(Spanned::dummy(music_ast::ty::TyKind::Tuple(vec![])));
+        ExprKind::TypeOp {
+            expr: inner,
+            ty: ty_id,
+            kind: TypeOpKind::Test(None),
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdOne, TyChk
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::TyChk));
+}
+
+#[test]
+fn emit_nil_coalesce() {
+    let thir = build_thir_single(|ast, _int| {
+        let lhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let rhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        ExprKind::BinOp(BinOp::NilCoalesce, lhs, rhs)
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdOne, Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Pop, LdSmi(2)
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::ArrTag));
+    assert_eq!(instrs[3].opcode, Opcode::LdCst);
+    assert_eq!(instrs[4], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[5].opcode, Opcode::BrFalse);
+    assert_eq!(instrs[6], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[7], Instruction::with_i16(Opcode::LdSmi, 2));
+}
+
+#[test]
+fn emit_instance_def_via() {
+    let thir = build_thir_single(|_ast, interner| {
+        let cls_sym = interner.intern("Show");
+        ExprKind::InstanceDef(Box::new(InstanceDef {
+            attrs: Vec::new(),
+            exported: false,
+            ty_params: Vec::new(),
+            constraints: Vec::new(),
+            ty: TyRef {
+                name: Ident::dummy(cls_sym),
+                args: Vec::new(),
+            },
+            body: InstanceBody::Via(TyRef {
+                name: Ident::dummy(cls_sym),
+                args: Vec::new(),
+            }),
+        }))
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::simple(Opcode::Nop));
+}
+
+#[test]
+fn emit_instance_def_methods() {
+    let thir = build_thir_single(|ast, interner| {
+        let cls_sym = interner.intern("Show");
+        let show_sym = interner.intern("show");
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let self_sym = interner.intern("self");
+        let param = Param {
+            mutable: false,
+            name: Ident::dummy(self_sym),
+            ty: None,
+            default: None,
+        };
+        let decl = FnDecl {
+            name: MemberName::Ident(Ident::dummy(show_sym)),
+            params: Some(vec![param]),
+            ret_ty: None,
+            body: Some(body),
+        };
+        ExprKind::InstanceDef(Box::new(InstanceDef {
+            attrs: Vec::new(),
+            exported: false,
+            ty_params: Vec::new(),
+            constraints: Vec::new(),
+            ty: TyRef {
+                name: Ident::dummy(cls_sym),
+                args: Vec::new(),
+            },
+            body: InstanceBody::Methods(vec![MemberDecl::Fn(decl)]),
+        }))
+    });
+    let module = emit(&thir);
+    // The instance method should have been emitted
+    assert_eq!(module.methods.len(), 1);
+    let method = &module.methods[0];
+    assert!(method.name.is_some());
+    let method_instrs = &method.instructions;
+    // body: LdOne, Ret
+    assert_eq!(method_instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(method_instrs[1], Instruction::simple(Opcode::Ret));
+}
+
+#[test]
+fn emit_foreign_import() {
+    let thir = build_thir_single(|_ast, interner| {
+        let sym = interner.intern("libc.so");
+        ExprKind::ForeignImport(sym)
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // LdCst("libc.so"), FfiCall
+    assert_eq!(instrs[0].opcode, Opcode::LdCst);
+    assert_eq!(instrs[1], Instruction::simple(Opcode::FfiCall));
+    assert_eq!(module.constants.len(), 1);
+}
+
+#[test]
+fn emit_comprehension_single_generator() {
+    let thir = build_thir_single(|ast, interner| {
+        let x_sym = interner.intern("x");
+
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(x_sym))));
+
+        let e1 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let e2 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        let e3 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(3))));
+        let iter_arr = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::ArrayLit(vec![e1, e2, e3])));
+
+        let pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
+
+        ExprKind::Comprehension {
+            expr: body,
+            clauses: vec![CompClause::Generator {
+                pat,
+                iter: iter_arr,
+            }],
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    // ArrNew(0) -- result
+    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 0));
+
+    // emit iter: ArrNew(3), LdOne, ArrSeti(0), LdSmi(2), ArrSeti(1), LdSmi(3), ArrSeti(2)
+    assert_eq!(instrs[1], Instruction::with_u16(Opcode::ArrNew, 3));
+
+    // StLoc(iter_slot)
+    let iter_store = 8; // after array lit (7 instructions) + StLoc
+    assert_eq!(instrs[iter_store].opcode, Opcode::StLoc);
+
+    // LdZero, StLoc(counter_slot)
+    assert_eq!(instrs[iter_store + 1], Instruction::simple(Opcode::LdZero));
+    assert_eq!(instrs[iter_store + 2].opcode, Opcode::StLoc);
+
+    // loop: LdLoc(counter), LdLoc(iter), ArrLen, CmpGeq, BrTrue(end)
+    let lp = iter_store + 3;
+    assert_eq!(instrs[lp].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 1].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 2], Instruction::simple(Opcode::ArrLen));
+    assert_eq!(instrs[lp + 3], Instruction::simple(Opcode::CmpGeq));
+    assert_eq!(instrs[lp + 4].opcode, Opcode::BrTrue);
+
+    // iter[counter]: LdLoc(iter), LdLoc(counter), ArrGet
+    assert_eq!(instrs[lp + 5].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 6].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 7], Instruction::simple(Opcode::ArrGet));
+
+    // StLoc(x_slot)
+    assert_eq!(instrs[lp + 8].opcode, Opcode::StLoc);
+
+    // body (LdLoc x), ArrConcat
+    assert_eq!(instrs[lp + 9].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 10], Instruction::simple(Opcode::ArrConcat));
+
+    // counter++: LdLoc(counter), LdOne, IAdd, StLoc(counter)
+    assert_eq!(instrs[lp + 11].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[lp + 12], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[lp + 13], Instruction::simple(Opcode::IAdd));
+    assert_eq!(instrs[lp + 14].opcode, Opcode::StLoc);
+
+    // BrJmp back (negative offset)
+    assert_eq!(instrs[lp + 15].opcode, Opcode::BrJmp);
+    assert!(
+        matches!(instrs[lp + 15].operand, Operand::I16(off) if off < 0),
+        "backward jump should have negative offset"
+    );
+}
+
+#[test]
+fn emit_comprehension_with_filter() {
+    let thir = build_thir_single(|ast, interner| {
+        let x_sym = interner.intern("x");
+
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(x_sym))));
+
+        let e1 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let iter_arr = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::ArrayLit(vec![e1])));
+
+        let pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
+
+        let guard = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+
+        ExprKind::Comprehension {
+            expr: body,
+            clauses: vec![
+                CompClause::Generator {
+                    pat,
+                    iter: iter_arr,
+                },
+                CompClause::Filter(guard),
+            ],
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 0));
+
+    let has_filter_branch = instrs.iter().any(|i| i.opcode == Opcode::BrFalse);
+    assert!(
+        has_filter_branch,
+        "comprehension with filter should emit BrFalse"
+    );
+
+    let has_concat = instrs.iter().any(|i| i.opcode == Opcode::ArrConcat);
+    assert!(has_concat, "comprehension should emit ArrConcat");
+
+    let has_backward_jump = instrs
+        .iter()
+        .any(|i| i.opcode == Opcode::BrJmp && matches!(i.operand, Operand::I16(off) if off < 0));
+    assert!(
+        has_backward_jump,
+        "comprehension should have backward BrJmp"
+    );
+}
+
+#[test]
+fn emit_match_or_pattern_literals() {
+    let thir = build_thir_single(|ast, _int| {
+        let scrutinee = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
+
+        let pat1 = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Lit(Literal::Int(1))));
+        let pat2 = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Lit(Literal::Int(2))));
+        let pat3 = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Lit(Literal::Int(3))));
+        let or_pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Or(vec![pat1, pat2, pat3])));
+
+        let body1 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(10))));
+
+        let pat_wild = ast.pats.alloc(Spanned::dummy(PatKind::Wildcard));
+        let body2 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(20))));
+
+        ExprKind::Match(
+            scrutinee,
+            vec![
+                MatchArm {
+                    attrs: Vec::new(),
+                    pat: or_pat,
+                    guard: None,
+                    body: body1,
+                },
+                MatchArm {
+                    attrs: Vec::new(),
+                    pat: pat_wild,
+                    guard: None,
+                    body: body2,
+                },
+            ],
+        )
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    // scrutinee: LdSmi(5)
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
+
+    // Sub-pattern 1: Dup, LdOne(1), CmpEq, BrTrue(body)
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[3], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[4].opcode, Opcode::BrTrue);
+
+    // Sub-pattern 2: Dup, LdSmi(2), CmpEq, BrTrue(body)
+    assert_eq!(instrs[5], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[6], Instruction::with_i16(Opcode::LdSmi, 2));
+    assert_eq!(instrs[7], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[8].opcode, Opcode::BrTrue);
+
+    // Sub-pattern 3 (last): Dup, LdSmi(3), CmpEq, BrFalse(next_arm)
+    assert_eq!(instrs[9], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[10], Instruction::with_i16(Opcode::LdSmi, 3));
+    assert_eq!(instrs[11], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[12].opcode, Opcode::BrFalse);
+
+    // Pop scrutinee, body: LdSmi(10), BrJmp(end)
+    assert_eq!(instrs[13], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[14], Instruction::with_i16(Opcode::LdSmi, 10));
+    assert_eq!(instrs[15].opcode, Opcode::BrJmp);
+
+    // Wildcard arm: Pop, LdSmi(20)
+    assert_eq!(instrs[16], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[17], Instruction::with_i16(Opcode::LdSmi, 20));
+}
+
+#[test]
+fn emit_match_as_pattern() {
+    let thir = build_thir_single(|ast, interner| {
+        let val_sym = interner.intern("val");
+        let inner_sym = interner.intern("inner");
+        let some_sym = interner.intern("Some");
+
+        let scrutinee = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
+
+        let inner_bind = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(inner_sym))));
+        let variant_pat = ast.pats.alloc(Spanned::dummy(PatKind::Variant {
+            tag: Ident::dummy(some_sym),
+            fields: vec![inner_bind],
+        }));
+
+        let as_pat = ast.pats.alloc(Spanned::dummy(PatKind::As {
+            name: Ident::dummy(val_sym),
+            pat: variant_pat,
+        }));
+
+        let body1 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(val_sym))));
+
+        let pat_wild = ast.pats.alloc(Spanned::dummy(PatKind::Wildcard));
+        let body2 = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+
+        ExprKind::Match(
+            scrutinee,
+            vec![
+                MatchArm {
+                    attrs: Vec::new(),
+                    pat: as_pat,
+                    guard: None,
+                    body: body1,
+                },
+                MatchArm {
+                    attrs: Vec::new(),
+                    pat: pat_wild,
+                    guard: None,
+                    body: body2,
+                },
+            ],
+        )
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    // scrutinee: LdSmi(5)
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
+
+    // As pattern: Dup, StLoc(val_slot=0)
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[2], Instruction::with_u8(Opcode::StLoc, 0));
+
+    // Inner variant match: Dup, ArrTag, LdCst("Some"), CmpEq, BrFalse(next)
+    assert_eq!(instrs[3], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[4], Instruction::simple(Opcode::ArrTag));
+    assert_eq!(instrs[5].opcode, Opcode::LdCst);
+    assert_eq!(instrs[6], Instruction::simple(Opcode::CmpEq));
+    assert_eq!(instrs[7].opcode, Opcode::BrFalse);
+
+    // Bind inner field: Dup, ArrGeti(0), StLoc(inner_slot=1)
+    assert_eq!(instrs[8], Instruction::simple(Opcode::Dup));
+    assert_eq!(instrs[9], Instruction::with_u8(Opcode::ArrGeti, 0));
+    assert_eq!(instrs[10], Instruction::with_u8(Opcode::StLoc, 1));
+
+    // Pop scrutinee, body: LdLoc(val_slot=0), BrJmp(end)
+    assert_eq!(instrs[11], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[12], Instruction::with_u8(Opcode::LdLoc, 0));
+    assert_eq!(instrs[13].opcode, Opcode::BrJmp);
+
+    // Wildcard: Pop, LdZero
+    assert_eq!(instrs[14], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[15], Instruction::simple(Opcode::LdZero));
 }
