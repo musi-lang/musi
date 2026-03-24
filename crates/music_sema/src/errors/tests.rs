@@ -230,3 +230,23 @@ fn display_or_pattern_mismatch() {
             .contains("or-pattern alternatives bind different names")
     );
 }
+
+#[test]
+fn display_duplicate_instance() {
+    let mut interner = Interner::new();
+    let class = interner.intern("Eq");
+    let ty = interner.intern("MyType");
+    let err = make_error(SemaErrorKind::DuplicateInstance { class, ty });
+    let msg = err.to_string();
+    assert!(msg.contains("duplicate instance"));
+}
+
+#[test]
+fn display_resume_on_never() {
+    let mut interner = Interner::new();
+    let op = interner.intern("abort");
+    let err = make_error(SemaErrorKind::ResumeOnNever { op });
+    let msg = err.to_string();
+    assert!(msg.contains("resume"));
+    assert!(msg.contains("Never"));
+}

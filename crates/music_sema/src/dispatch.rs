@@ -39,7 +39,7 @@ const fn binop_class_method(op: BinOp) -> Option<(&'static str, &'static str, us
 }
 
 /// Returns `true` if the builtin type has an instance for the given class name.
-fn builtin_has_instance(bt: BuiltinType, class: &str) -> bool {
+pub(crate) fn builtin_has_instance(bt: BuiltinType, class: &str) -> bool {
     match class {
         "Num" => matches!(
             bt,

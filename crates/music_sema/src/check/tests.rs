@@ -363,3 +363,55 @@ fn index_on_non_indexable() {
         "expected NotIndexable, got: {errors:?}"
     );
 }
+
+// --- Semantic check: non-exhaustive match (#1) ---
+
+#[test]
+fn non_exhaustive_match() {
+    let (_, errors) = check_source("match 42 (| 1 => .True)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::NonExhaustiveMatch)),
+        "expected NonExhaustiveMatch, got: {errors:?}"
+    );
+}
+
+#[test]
+fn exhaustive_match_with_wildcard() {
+    let (_, errors) = check_source("match 42 (| 1 => .True | _ => .False)");
+    let has_non_exhaustive = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::NonExhaustiveMatch));
+    assert!(
+        !has_non_exhaustive,
+        "wildcard arm should make match exhaustive: {errors:?}"
+    );
+}
+
+#[test]
+fn exhaustive_match_with_bind() {
+    let (_, errors) = check_source("match 42 (| 1 => .True | _x => .False)");
+    let has_non_exhaustive = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::NonExhaustiveMatch));
+    assert!(
+        !has_non_exhaustive,
+        "bind pattern should make match exhaustive: {errors:?}"
+    );
+}
+
+// --- Semantic check: instance coherence (#4) ---
+
+#[test]
+fn duplicate_instance_detected() {
+    let (_, errors) = check_source(
+        "let Eq := class { let eq (a : Int, b : Int) : Bool }; \
+         let _i1 := instance Eq of Int { let eq (a, b) := .True }; \
+         let _i2 := instance Eq of Int { let eq (a, b) := .False }",
+    );
+    let has_dup = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::DuplicateInstance { .. }));
+    assert!(has_dup, "expected DuplicateInstance, got: {errors:?}");
+}

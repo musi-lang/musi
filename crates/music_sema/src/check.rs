@@ -1,8 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use music_ast::common::Param;
+use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, TyRef};
 use music_ast::expr::{
-    BinOp, ExprKind, FieldTarget, IndexKind, LetBinding, MatchArm, RecordField, SpliceKind, UnaryOp,
+    BinOp, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef, LetBinding, MatchArm,
+    RecordField, SpliceKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
@@ -13,9 +15,9 @@ use music_found::{Ident, Literal, Span, Symbol};
 use music_resolve::def::{DefId, DefKind};
 use music_resolve::queries::ResolutionMap;
 
-use crate::dispatch::{method_index_for_op, resolve_binop};
+use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
-use crate::env::{DispatchInfo, TypeEnv};
+use crate::env::{DispatchInfo, InstanceEntry, TypeEnv};
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::types::{SemaTypeId, Ty};
 use crate::unify::unify;
@@ -32,6 +34,8 @@ pub struct SemaDb {
     in_effectful: bool,
     mutable_defs: HashSet<DefId>,
     used_defs: HashSet<DefId>,
+    current_handler_ret: Option<SemaTypeId>,
+    def_constraints: HashMap<DefId, Vec<(Symbol, Symbol)>>,
 }
 
 impl SemaDb {
@@ -50,6 +54,8 @@ impl SemaDb {
             in_effectful: false,
             mutable_defs: HashSet::new(),
             used_defs: HashSet::new(),
+            current_handler_ret: None,
+            def_constraints: HashMap::new(),
         }
     }
 
@@ -135,12 +141,13 @@ impl SemaDb {
                 expr, ref field, ..
             } => self.synth_access(expr, field, span),
             ExprKind::Assign(lhs, rhs) => self.synth_assign(lhs, rhs, span),
-            ExprKind::Return(val) | ExprKind::Resume(val) => {
+            ExprKind::Return(val) => {
                 if let Some(v) = val {
                     let _ = self.synth(v);
                 }
                 self.env.intern(Ty::Never)
             }
+            ExprKind::Resume(val) => self.synth_resume(val, span),
             ExprKind::Need(e) => self.synth_need(e, span),
             ExprKind::Postfix { expr, .. } | ExprKind::TypeOp { expr, .. } => self.synth(expr),
             ExprKind::Index {
@@ -148,12 +155,16 @@ impl SemaDb {
                 ref indices,
                 kind,
             } => self.synth_index(expr, indices, kind, span),
-            ExprKind::RecordDef(_)
-            | ExprKind::ChoiceDef(_)
-            | ExprKind::EffectDef(_)
-            | ExprKind::ClassDef { .. }
-            | ExprKind::InstanceDef(_) => self.env.intern(Ty::Builtin(BuiltinType::Type)),
-            ExprKind::Handle { body, .. } => self.synth(body),
+            ExprKind::RecordDef(_) | ExprKind::ChoiceDef(_) | ExprKind::ClassDef { .. } => {
+                self.env.intern(Ty::Builtin(BuiltinType::Type))
+            }
+            ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
+            ExprKind::InstanceDef(ref inst) => self.synth_instance_def(inst, span),
+            ExprKind::Handle {
+                ref effect,
+                ref handlers,
+                body,
+            } => self.synth_handle(effect, handlers, body, span),
             ExprKind::FStrLit(_) => self.env.builtin(BuiltinType::String),
             ExprKind::RecordUpdate { base, .. } => self.synth(base),
             ExprKind::Comprehension { expr, .. } => {
@@ -243,7 +254,7 @@ impl SemaDb {
         let resolved = self.env.resolve_var(callee_ty);
         let ty = self.env.types.get(resolved).clone();
 
-        match ty {
+        let result_ty = match ty {
             Ty::Arrow { param, ret } => {
                 if args.is_empty() {
                     let param_resolved = self.env.resolve_var(param);
@@ -303,7 +314,13 @@ impl SemaDb {
                 }
                 self.env.intern(Ty::Any)
             }
-        }
+        };
+
+        // #2: Constraint satisfaction — check that concrete type args
+        // have instances for the callee's declared constraints.
+        self.check_constraints_at_call(callee, args, span);
+
+        result_ty
     }
 
     fn synth_binop(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, span: Span) -> SemaTypeId {
@@ -430,6 +447,28 @@ impl SemaDb {
         let val_ty = binding.value.map(|value| self.synth(value));
 
         if let Some(ref sig) = binding.sig {
+            // #2: Store constraints for later checking at call sites
+            if !sig.constraints.is_empty() {
+                let pat = self.db.ast.pats.get(binding.pat);
+                if let PatKind::Bind(bind_ident) = &pat.kind {
+                    if let Some(def_id) = self.find_def_for_name(bind_ident.name) {
+                        let constraints: Vec<(Symbol, Symbol)> = sig
+                            .constraints
+                            .iter()
+                            .filter_map(|c| match c {
+                                Constraint::Implements { ty, class } => {
+                                    Some((ty.name, class.name.name))
+                                }
+                                Constraint::Subtype { .. } => None,
+                            })
+                            .collect();
+                        if !constraints.is_empty() {
+                            let _prev = self.def_constraints.insert(def_id, constraints);
+                        }
+                    }
+                }
+            }
+
             // Unify body type against declared return type
             if let Some(ret_ty_id) = sig.ret_ty {
                 let expected = self.lower_ty(ret_ty_id);
@@ -698,6 +737,15 @@ impl SemaDb {
                     Err(e) => self.errors.push(e),
                 }
             }
+        }
+
+        // #1: Non-exhaustive match
+        if !wildcard_seen {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::NonExhaustiveMatch,
+                span,
+                context: None,
+            });
         }
 
         result_ty
@@ -1015,6 +1063,246 @@ impl SemaDb {
         }
 
         self.env.intern(Ty::Unit)
+    }
+
+    /// #2: Checks that the callee's declared constraints are satisfied by
+    /// the concrete argument types at a call site.
+    fn check_constraints_at_call(&mut self, callee: ExprId, args: &[ExprId], span: Span) {
+        let callee_kind = self.db.ast.exprs.get(callee).kind.clone();
+        let callee_name = match callee_kind {
+            ExprKind::Var(ident) => ident.name,
+            _ => return,
+        };
+        let Some(def_id) = self.find_def_for_name(callee_name) else {
+            return;
+        };
+        let Some(constraints) = self.def_constraints.get(&def_id).cloned() else {
+            return;
+        };
+        if constraints.is_empty() || args.is_empty() {
+            return;
+        }
+
+        // Collect argument types
+        let arg_tys: Vec<SemaTypeId> = args
+            .iter()
+            .map(|&a| {
+                let ty = self
+                    .env
+                    .type_map
+                    .get(&a)
+                    .copied()
+                    .unwrap_or_else(|| self.env.intern(Ty::Any));
+                self.env.resolve_var(ty)
+            })
+            .collect();
+
+        for &(_ty_param, class_name) in &constraints {
+            // Check the first arg type as the constrained type
+            if let Some(&arg_ty_id) = arg_tys.first() {
+                let arg_ty = self.env.types.get(arg_ty_id).clone();
+                let class_str = self.db.interner.resolve(class_name);
+                let satisfied = match arg_ty {
+                    Ty::Builtin(bt) => builtin_has_instance(bt, class_str),
+                    Ty::Any | Ty::Var(_) | Ty::Param(_) => true,
+                    _ => {
+                        // Check the instance registry
+                        self.find_instance_for_type(arg_ty_id, class_name)
+                    }
+                };
+                if !satisfied {
+                    self.errors.push(SemaError {
+                        kind: SemaErrorKind::ConstraintNotSatisfied {
+                            constraint: class_name,
+                        },
+                        span,
+                        context: None,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Checks whether a type has an instance for a given class in the registry.
+    fn find_instance_for_type(&self, ty_id: SemaTypeId, class: Symbol) -> bool {
+        let ty = self.env.types.get(ty_id);
+        // Extract the type's "name" symbol for registry lookup
+        let ty_sym = match ty {
+            Ty::Builtin(_) => return true, // already handled by builtin_has_instance
+            Ty::Class(s) | Ty::Effect(s) | Ty::Param(s) => *s,
+            _ => return false,
+        };
+        self.env.instances.contains_key(&(class, ty_sym))
+    }
+
+    /// #3 + #4: Registers an instance in the environment, checking coherence.
+    fn synth_instance_def(&mut self, inst: &InstanceDef, span: Span) -> SemaTypeId {
+        let class_name = inst.ty.name.name;
+
+        // Extract the type name from the first type arg, or fall back to
+        // the class name itself if there are no args.
+        let type_name = if let Some(&first_arg) = inst.ty.args.first() {
+            let ty_kind = &self.db.ast.types.get(first_arg).kind;
+            match ty_kind {
+                TyKind::Named { name, .. } => name.name,
+                _ => class_name,
+            }
+        } else {
+            class_name
+        };
+
+        // Collect method names
+        let methods: Vec<Symbol> = match &inst.body {
+            InstanceBody::Methods(members) => members
+                .iter()
+                .filter_map(|m| match m {
+                    MemberDecl::Fn(fn_decl) => Some(member_name_symbol(&fn_decl.name)),
+                    MemberDecl::Law(_) => None,
+                })
+                .collect(),
+            InstanceBody::Via(_) => Vec::new(),
+        };
+
+        let key = (class_name, type_name);
+
+        // #4: Coherence — check for duplicate instance
+        if self.env.instances.contains_key(&key) {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::DuplicateInstance {
+                    class: class_name,
+                    ty: type_name,
+                },
+                span,
+                context: None,
+            });
+        }
+
+        let _prev = self
+            .env
+            .instances
+            .insert(key, InstanceEntry { span, methods });
+
+        self.env.intern(Ty::Builtin(BuiltinType::Type))
+    }
+
+    /// Registers effect operation names in `env.effect_ops`.
+    fn synth_effect_def(&mut self, members: &[MemberDecl]) -> SemaTypeId {
+        // The effect name is found by looking at the let binding that
+        // contains this EffectDef. We search the current type_map for
+        // the expression being processed. Since we can't easily get the
+        // binding name here, we rely on the caller's context.
+        // For now, collect op names and try to find the let binding.
+        let op_names: Vec<Symbol> = members
+            .iter()
+            .filter_map(|m| match m {
+                MemberDecl::Fn(fn_decl) => Some(member_name_symbol(&fn_decl.name)),
+                MemberDecl::Law(_) => None,
+            })
+            .collect();
+
+        // Walk root expressions to find which let binding this EffectDef belongs to
+        let root = self.db.ast.root.clone();
+        for &expr_id in &root {
+            let spanned = self.db.ast.exprs.get(expr_id);
+            if let ExprKind::Let(ref binding) = spanned.kind {
+                if let Some(value_id) = binding.value {
+                    let val = self.db.ast.exprs.get(value_id);
+                    if matches!(val.kind, ExprKind::EffectDef(_)) {
+                        let pat = self.db.ast.pats.get(binding.pat);
+                        if let PatKind::Bind(bind_ident) = &pat.kind {
+                            let _prev = self
+                                .env
+                                .effect_ops
+                                .insert(bind_ident.name, op_names.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        self.env.intern(Ty::Builtin(BuiltinType::Type))
+    }
+
+    /// #5 + #6: Validates handler completeness and checks for Resume on Never.
+    fn synth_handle(
+        &mut self,
+        effect: &TyRef,
+        handlers: &[FnDecl],
+        body: ExprId,
+        span: Span,
+    ) -> SemaTypeId {
+        let effect_name = effect.name.name;
+
+        // Check handler completeness against registered effect ops
+        if let Some(required_ops) = self.env.effect_ops.get(&effect_name).cloned() {
+            let handler_names: HashSet<Symbol> = handlers
+                .iter()
+                .map(|h| member_name_symbol(&h.name))
+                .collect();
+
+            for &required_op in &required_ops {
+                if !handler_names.contains(&required_op) {
+                    self.errors.push(SemaError {
+                        kind: SemaErrorKind::MissingHandler { op: required_op },
+                        span,
+                        context: None,
+                    });
+                }
+            }
+        }
+
+        // #6: Check Resume on Never — synth each handler body with
+        // current_handler_ret set if the op returns Never
+        let prev_handler_ret = self.current_handler_ret;
+        for handler in handlers {
+            if let Some(ret_ty_id) = handler.ret_ty {
+                let lowered = self.lower_ty(ret_ty_id);
+                let resolved = self.env.resolve_var(lowered);
+                if matches!(self.env.types.get(resolved), Ty::Never) {
+                    self.current_handler_ret = Some(resolved);
+                } else {
+                    self.current_handler_ret = None;
+                }
+            } else {
+                self.current_handler_ret = None;
+            }
+
+            if let Some(handler_body) = handler.body {
+                let _ = self.synth(handler_body);
+            }
+        }
+        self.current_handler_ret = prev_handler_ret;
+
+        self.synth(body)
+    }
+
+    /// #6: Checks Resume usage — emits `ResumeOnNever` if we're in a handler
+    /// for an operation that returns Never.
+    fn synth_resume(&mut self, val: Option<ExprId>, span: Span) -> SemaTypeId {
+        if let Some(v) = val {
+            let _ = self.synth(v);
+        }
+
+        if let Some(ret_ty) = self.current_handler_ret {
+            let resolved = self.env.resolve_var(ret_ty);
+            if matches!(self.env.types.get(resolved), Ty::Never) {
+                let op_sym = self.db.interner.intern("_");
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::ResumeOnNever { op: op_sym },
+                    span,
+                    context: None,
+                });
+            }
+        }
+
+        self.env.intern(Ty::Never)
+    }
+}
+
+/// Extracts the `Symbol` from a `MemberName`.
+const fn member_name_symbol(name: &MemberName) -> Symbol {
+    match name {
+        MemberName::Ident(ident) | MemberName::Op(ident) => ident.name,
     }
 }
 

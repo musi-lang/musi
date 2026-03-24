@@ -94,6 +94,12 @@ pub enum SemaErrorKind {
 
     #[error("or-pattern alternatives bind different names")]
     OrPatternMismatch,
+
+    #[error("duplicate instance of {class} for {ty}")]
+    DuplicateInstance { class: Symbol, ty: Symbol },
+
+    #[error("resume in handler for operation {op} which returns Never")]
+    ResumeOnNever { op: Symbol },
 }
 
 impl SemaError {
