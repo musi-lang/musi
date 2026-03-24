@@ -406,6 +406,7 @@ fn foreign_import() {
 fn instance_def_via() {
     let (_i, ident) = test_ident();
     let e = ExprKind::InstanceDef(Box::new(InstanceDef {
+        attrs: Vec::new(),
         exported: false,
         ty_params: vec![],
         constraints: vec![],
@@ -425,6 +426,7 @@ fn instance_def_via() {
 fn instance_def_methods() {
     let (_i, ident) = test_ident();
     let inst = InstanceDef {
+        attrs: Vec::new(),
         exported: true,
         ty_params: vec![ident],
         constraints: vec![],

@@ -37,6 +37,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_parse"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_arena",
+ "music_ast",
+ "music_found",
+ "music_lex",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,1565 @@
+use core::mem;
+
+use music_ast::common::{
+    Attr, AttrArg, Constraint, EffectItem, FnDecl, LawDecl, MemberDecl, MemberName, ModifierSet,
+    Param, RecordDefField, Signature, TyRef, VariantDef,
+};
+use music_ast::expr::{
+    AccessMode, BinOp, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind, IndexKind,
+    InstanceBody, InstanceDef, LetBinding, MatchArm, PiecewiseArm, PostfixOp, PwGuard, QuoteKind,
+    RecordField, SpliceKind, TypeOpKind, UnaryOp,
+};
+use music_ast::pat::PatKind;
+use music_ast::{AttrList, ExprId, ExprList, PatId};
+use music_found::{Ident, Literal, Span};
+use music_lex::TokenKind;
+
+use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
+use crate::parser::Parser;
+
+// Prefix binding power for unary operators.
+const PREFIX_BP: u8 = 22;
+
+// Assignment binding power (lowest, right-associative).
+const ASSIGN_BP: u8 = 2;
+
+// Postfix binding power (higher than any infix).
+const POSTFIX_BP: u8 = 24;
+
+const fn is_comparison(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq
+    )
+}
+
+const fn is_range(op: BinOp) -> bool {
+    matches!(op, BinOp::Range | BinOp::RangeExcl)
+}
+
+impl Parser<'_> {
+    // ── Pratt core ────────────────────────────────────────────────
+
+    pub(crate) fn parse_expr(&mut self, min_bp: u8) -> ParseResult<ExprId> {
+        self.parse_expr_inner(min_bp, true)
+    }
+
+    /// Parse an expression but do not treat `(` as a postfix call.
+    /// Used for match scrutinees where `(` starts the arm list.
+    fn parse_expr_no_call(&mut self, min_bp: u8) -> ParseResult<ExprId> {
+        self.parse_expr_inner(min_bp, false)
+    }
+
+    fn parse_expr_inner(&mut self, min_bp: u8, allow_call: bool) -> ParseResult<ExprId> {
+        let mut left = self.parse_prefix()?;
+        loop {
+            if let Some(new_left) = self.try_postfix(left, allow_call)? {
+                left = new_left;
+                continue;
+            }
+            if let Some(new_left) = self.try_assign(left)? {
+                left = new_left;
+                continue;
+            }
+            let Some((op, l_bp, r_bp)) = self.peek_infix_bp() else {
+                break;
+            };
+            if l_bp < min_bp {
+                break;
+            }
+            let _ = self.advance();
+            let right = self.parse_expr(r_bp)?;
+            let left_span = self.ast.exprs.get(left).span;
+            let right_span = self.ast.exprs.get(right).span;
+            let span = left_span.to(right_span);
+            if let ExprKind::BinOp(left_op, _, _) = self.ast.exprs.get(left).kind {
+                if (is_comparison(op) && is_comparison(left_op))
+                    || (is_range(op) && is_range(left_op))
+                {
+                    self.error(ParseError {
+                        kind: ParseErrorKind::NonAssociativeChain,
+                        span,
+                        context: None,
+                    });
+                }
+            }
+            left = self.alloc_expr(ExprKind::BinOp(op, left, right), span);
+        }
+        Ok(left)
+    }
+
+    fn parse_prefix(&mut self) -> ParseResult<ExprId> {
+        let start = self.span();
+        match self.peek_kind() {
+            TokenKind::Minus => {
+                let _ = self.advance();
+                self.parse_unary(UnaryOp::Neg, start)
+            }
+            TokenKind::KwNot => {
+                let _ = self.advance();
+                self.parse_unary(UnaryOp::Not, start)
+            }
+            TokenKind::KwMut => {
+                let _ = self.advance();
+                self.parse_unary(UnaryOp::Mut, start)
+            }
+            TokenKind::DotDotDot => {
+                let _ = self.advance();
+                self.parse_unary(UnaryOp::Spread, start)
+            }
+            _ => self.parse_atom(),
+        }
+    }
+
+    fn parse_unary(&mut self, op: UnaryOp, start: Span) -> ParseResult<ExprId> {
+        let operand = self.parse_expr(PREFIX_BP)?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::UnaryOp(op, operand), span))
+    }
+
+    // ── Atom dispatch ─────────────────────────────────────────────
+
+    fn parse_atom(&mut self) -> ParseResult<ExprId> {
+        match self.peek_kind() {
+            TokenKind::Int(_) | TokenKind::Float(_) | TokenKind::Str(_) | TokenKind::Rune(_) => {
+                self.parse_literal()
+            }
+            TokenKind::FStr(_) => self.parse_fstring_lit(),
+            TokenKind::Ident | TokenKind::EscapedIdent => self.parse_ident_expr(),
+            TokenKind::LParen => self.parse_paren(),
+            TokenKind::LBracket => self.parse_array(),
+            TokenKind::DotLBrace => self.parse_rec_lit(),
+            TokenKind::Dot => self.parse_dot_pfx(),
+            TokenKind::KwMatch => self.parse_match(),
+            TokenKind::KwLet => self.parse_let(ModifierSet::default(), Vec::new()),
+            TokenKind::KwReturn => self.parse_return(),
+            TokenKind::KwResume => self.parse_resume(),
+            TokenKind::KwImport => self.parse_import(),
+            TokenKind::KwForeign => self.parse_foreign(ModifierSet::default()),
+            TokenKind::KwChoice => self.parse_choice_def(),
+            TokenKind::KwRecord => self.parse_record_def(),
+            TokenKind::KwEffect => self.parse_effect_def(),
+            TokenKind::KwClass => self.parse_class_def(),
+            TokenKind::KwInstance => self.parse_instance_def(false, Vec::new()),
+            TokenKind::KwNeed => self.parse_need(),
+            TokenKind::KwWith => self.parse_handle(),
+            TokenKind::KwQuote => self.parse_quote(),
+            TokenKind::Hash | TokenKind::HashLParen | TokenKind::HashLBracket => {
+                self.parse_splice()
+            }
+            TokenKind::At => self.parse_with_attrs(),
+            TokenKind::KwExport => self.parse_export(),
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedExpr {
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            }),
+        }
+    }
+
+    // ── Infix binding power ───────────────────────────────────────
+
+    fn peek_infix_bp(&self) -> Option<(BinOp, u8, u8)> {
+        match self.peek_kind() {
+            TokenKind::QuestionQuestion => Some((BinOp::NilCoalesce, 4, 3)),
+            TokenKind::PipeGt => Some((BinOp::PipeRight, 6, 7)),
+            TokenKind::KwOr => Some((BinOp::Or, 8, 9)),
+            TokenKind::KwXor => Some((BinOp::Xor, 10, 11)),
+            TokenKind::KwAnd => Some((BinOp::And, 12, 13)),
+            TokenKind::Eq => Some((BinOp::Eq, 14, 15)),
+            TokenKind::SlashEq => Some((BinOp::NotEq, 14, 15)),
+            TokenKind::Lt => Some((BinOp::Lt, 14, 15)),
+            TokenKind::Gt => Some((BinOp::Gt, 14, 15)),
+            TokenKind::LtEq => Some((BinOp::LtEq, 14, 15)),
+            TokenKind::GtEq => Some((BinOp::GtEq, 14, 15)),
+            TokenKind::DotDot => Some((BinOp::Range, 16, 17)),
+            TokenKind::DotDotLt => Some((BinOp::RangeExcl, 16, 17)),
+            TokenKind::ColonColon => Some((BinOp::Cons, 17, 16)),
+            TokenKind::Plus => Some((BinOp::Add, 18, 19)),
+            TokenKind::Minus => Some((BinOp::Sub, 18, 19)),
+            TokenKind::Star => Some((BinOp::Mul, 20, 21)),
+            TokenKind::Slash => Some((BinOp::Div, 20, 21)),
+            TokenKind::Percent => Some((BinOp::Rem, 20, 21)),
+            _ => None,
+        }
+    }
+
+    fn try_assign(&mut self, left: ExprId) -> ParseResult<Option<ExprId>> {
+        if !self.at(&TokenKind::LtMinus) {
+            return Ok(None);
+        }
+        let _ = self.advance();
+        let right = self.parse_expr(ASSIGN_BP)?;
+        let left_span = self.ast.exprs.get(left).span;
+        let right_span = self.ast.exprs.get(right).span;
+        let span = left_span.to(right_span);
+        Ok(Some(self.alloc_expr(ExprKind::Assign(left, right), span)))
+    }
+
+    // ── Postfix ───────────────────────────────────────────────────
+
+    fn try_postfix(&mut self, left: ExprId, allow_call: bool) -> ParseResult<Option<ExprId>> {
+        match self.peek_kind() {
+            TokenKind::LParen if allow_call => Ok(Some(self.parse_call(left)?)),
+            TokenKind::DotLBracket => Ok(Some(self.parse_index(left)?)),
+            TokenKind::DotLBrace => Ok(Some(self.parse_record_update(left)?)),
+            TokenKind::Dot => Ok(Some(self.parse_access(left, AccessMode::Direct)?)),
+            TokenKind::QuestionDot => Ok(Some(self.parse_access(left, AccessMode::Optional)?)),
+            TokenKind::BangDot => Ok(Some(self.parse_access(left, AccessMode::Forced)?)),
+            TokenKind::Question => Ok(Some(self.parse_postfix_op(left, PostfixOp::Propagate))),
+            TokenKind::Bang => Ok(Some(self.parse_postfix_op(left, PostfixOp::Force))),
+            TokenKind::ColonQuestion => Ok(Some(self.parse_type_test(left)?)),
+            TokenKind::ColonQuestionGt => Ok(Some(self.parse_type_cast(left)?)),
+            _ => Ok(None),
+        }
+    }
+
+    fn parse_call(&mut self, callee: ExprId) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::LParen, "'('")?;
+        let args = self.parse_expr_list(&TokenKind::RParen)?;
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = self.ast.exprs.get(callee).span.to(end);
+        Ok(self.alloc_expr(ExprKind::App(callee, args), span))
+    }
+
+    fn parse_index(&mut self, base: ExprId) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::DotLBracket, "'.['")?;
+        let indices = self.parse_expr_list(&TokenKind::RBracket)?;
+        let end = self.expect(&TokenKind::RBracket, "']'")?;
+        let span = self.ast.exprs.get(base).span.to(end);
+        Ok(self.alloc_expr(
+            ExprKind::Index {
+                expr: base,
+                indices,
+                kind: IndexKind::Point,
+            },
+            span,
+        ))
+    }
+
+    fn parse_record_update(&mut self, base: ExprId) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::DotLBrace, "'.{'")?;
+        let fields = self.parse_rec_fields()?;
+        let end = self.expect(&TokenKind::RBrace, "'}'")?;
+        let span = self.ast.exprs.get(base).span.to(end);
+        Ok(self.alloc_expr(ExprKind::RecordUpdate { base, fields }, span))
+    }
+
+    fn parse_access(&mut self, base: ExprId, mode: AccessMode) -> ParseResult<ExprId> {
+        let _ = self.advance(); // consume . or ?. or !.
+        let field = self.parse_field_target()?;
+        let span = self.ast.exprs.get(base).span.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::Access {
+                expr: base,
+                field,
+                mode,
+            },
+            span,
+        ))
+    }
+
+    fn parse_field_target(&mut self) -> ParseResult<FieldTarget> {
+        match self.peek_kind() {
+            TokenKind::Int(n) => {
+                let val = u32::try_from(*n).map_err(|_| ParseError {
+                    kind: ParseErrorKind::ExpectedToken {
+                        expected: "tuple index (0..2^32)",
+                        found: describe_token(self.peek_kind()),
+                    },
+                    span: self.span(),
+                    context: None,
+                })?;
+                let _ = self.advance();
+                Ok(FieldTarget::Index(val))
+            }
+            TokenKind::Ident | TokenKind::EscapedIdent => {
+                let ident = self.expect_ident()?;
+                Ok(FieldTarget::Name(ident))
+            }
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "field name or index",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            }),
+        }
+    }
+
+    fn parse_postfix_op(&mut self, base: ExprId, op: PostfixOp) -> ExprId {
+        let end = self.advance().span;
+        let span = self.ast.exprs.get(base).span.to(end);
+        self.alloc_expr(ExprKind::Postfix { expr: base, op }, span)
+    }
+
+    fn parse_type_test(&mut self, base: ExprId) -> ParseResult<ExprId> {
+        let _ = self.advance(); // :?
+        let ty = self.parse_ty_named_only()?;
+        let as_name = if self.eat(&TokenKind::KwAs) {
+            Some(self.expect_ident()?)
+        } else {
+            None
+        };
+        let span = self.ast.exprs.get(base).span.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::TypeOp {
+                expr: base,
+                ty,
+                kind: TypeOpKind::Test(as_name),
+            },
+            span,
+        ))
+    }
+
+    fn parse_type_cast(&mut self, base: ExprId) -> ParseResult<ExprId> {
+        let _ = self.advance(); // :?>
+        let ty = self.parse_ty_named_only()?;
+        let span = self.ast.exprs.get(base).span.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::TypeOp {
+                expr: base,
+                ty,
+                kind: TypeOpKind::Cast,
+            },
+            span,
+        ))
+    }
+
+    // ── Literals ──────────────────────────────────────────────────
+
+    fn parse_literal(&mut self) -> ParseResult<ExprId> {
+        let token = self.advance();
+        let span = token.span;
+        let lit = match &token.kind {
+            TokenKind::Int(n) => Literal::Int(*n),
+            TokenKind::Float(f) => Literal::Float(*f),
+            TokenKind::Str(s) => Literal::Str(s.clone()),
+            TokenKind::Rune(c) => Literal::Rune(*c),
+            _ => {
+                return Err(ParseError {
+                    kind: ParseErrorKind::ExpectedExpr {
+                        found: describe_token(&token.kind),
+                    },
+                    span,
+                    context: None,
+                });
+            }
+        };
+        Ok(self.alloc_expr(ExprKind::Lit(lit), span))
+    }
+
+    fn parse_fstring_lit(&mut self) -> ParseResult<ExprId> {
+        let token = self.advance();
+        let span = token.span;
+        let lex_parts = match &token.kind {
+            // Clone required: advance() returns &Token, so we cannot take ownership.
+            TokenKind::FStr(parts) => parts.clone(),
+            _ => {
+                return Err(ParseError {
+                    kind: ParseErrorKind::ExpectedExpr {
+                        found: describe_token(&token.kind),
+                    },
+                    span,
+                    context: None,
+                });
+            }
+        };
+        let ast_parts = self.convert_fstr_parts(lex_parts)?;
+        Ok(self.alloc_expr(ExprKind::FStrLit(ast_parts), span))
+    }
+
+    fn convert_fstr_parts(
+        &mut self,
+        lex_parts: Vec<music_lex::FStrPart>,
+    ) -> ParseResult<Vec<FStrPart>> {
+        let mut out = Vec::with_capacity(lex_parts.len());
+        for part in lex_parts {
+            match part {
+                music_lex::FStrPart::Lit(s) => out.push(FStrPart::Lit(s)),
+                music_lex::FStrPart::Expr(tokens) => {
+                    let expr_id = self.parse_owned_sub_tokens(tokens)?;
+                    out.push(FStrPart::Expr(expr_id));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    fn parse_owned_sub_tokens(&mut self, tokens: Vec<music_lex::Token>) -> ParseResult<ExprId> {
+        let mut sub_tokens = Vec::with_capacity(tokens.len() + 1);
+        sub_tokens.extend(tokens);
+        let eof_span = sub_tokens
+            .last()
+            .map_or(Span::DUMMY, |t| Span::new(t.span.end, t.span.end));
+        sub_tokens.push(music_lex::Token {
+            kind: TokenKind::Eof,
+            span: eof_span,
+            leading_trivia: Vec::new(),
+            trailing_trivia: Vec::new(),
+        });
+        let mut sub = Parser::new(&sub_tokens, self.source, self.interner);
+        sub.ast = mem::take(&mut self.ast);
+        let result = sub.parse_expr(0);
+        self.ast = sub.ast;
+        self.errors.extend(sub.errors);
+        result
+    }
+
+    // ── Identifiers ───────────────────────────────────────────────
+
+    fn parse_ident_expr(&mut self) -> ParseResult<ExprId> {
+        let ident = self.expect_ident()?;
+        let span = ident.span;
+        Ok(self.alloc_expr(ExprKind::Var(ident), span))
+    }
+
+    pub(crate) fn expect_ident(&mut self) -> ParseResult<Ident> {
+        match self.peek_kind() {
+            TokenKind::Ident => Ok(self.advance_ident()),
+            TokenKind::EscapedIdent => Ok(self.advance_ident_trimmed()),
+            TokenKind::Eof => Err(ParseError {
+                kind: ParseErrorKind::UnexpectedEof {
+                    expected: "identifier",
+                },
+                span: self.span(),
+                context: None,
+            }),
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "identifier",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            }),
+        }
+    }
+
+    // ── Paren forms ───────────────────────────────────────────────
+
+    fn parse_paren(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::LParen, "'('")?;
+        match self.peek_kind() {
+            TokenKind::RParen => self.parse_unit(start),
+            TokenKind::Comma => self.parse_empty_tuple(start),
+            TokenKind::Semi => self.parse_empty_seq(start),
+            _ => self.parse_paren_expr(start),
+        }
+    }
+
+    fn parse_unit(&mut self, start: Span) -> ParseResult<ExprId> {
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        self.try_lambda(Vec::new(), span)
+    }
+
+    fn parse_empty_tuple(&mut self, start: Span) -> ParseResult<ExprId> {
+        let _ = self.advance(); // consume ','
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), span))
+    }
+
+    fn parse_empty_seq(&mut self, start: Span) -> ParseResult<ExprId> {
+        let _ = self.advance(); // consume ';'
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), span))
+    }
+
+    fn parse_paren_expr(&mut self, start: Span) -> ParseResult<ExprId> {
+        let first = self.parse_expr(0)?;
+        match self.peek_kind() {
+            TokenKind::RParen => self.finish_grouped_or_lambda(first, start),
+            TokenKind::Comma => self.parse_tuple_rest(first, start),
+            TokenKind::Semi => self.parse_seq_rest(first, start),
+            TokenKind::KwIf => self.parse_piecewise(first, start),
+            _ => Err(ParseError {
+                kind: ParseErrorKind::InvalidParenForm,
+                span: self.span(),
+                context: Some("in parenthesized expression"),
+            }),
+        }
+    }
+
+    fn finish_grouped_or_lambda(&mut self, inner: ExprId, start: Span) -> ParseResult<ExprId> {
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        if self.at(&TokenKind::EqGt) || self.at(&TokenKind::Colon) {
+            let params = self.reinterpret_as_params(inner)?;
+            return self.try_lambda(params, span);
+        }
+        Ok(inner)
+    }
+
+    fn parse_tuple_rest(&mut self, first: ExprId, start: Span) -> ParseResult<ExprId> {
+        let mut items = vec![first];
+        while self.eat(&TokenKind::Comma) {
+            if self.at(&TokenKind::RParen) {
+                break;
+            }
+            items.push(self.parse_expr(0)?);
+        }
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        if self.at(&TokenKind::EqGt) || self.at(&TokenKind::Colon) {
+            let params = self.reinterpret_exprs_as_params(&items)?;
+            return self.try_lambda(params, span);
+        }
+        Ok(self.alloc_expr(ExprKind::TupleLit(items), span))
+    }
+
+    fn parse_seq_rest(&mut self, first: ExprId, start: Span) -> ParseResult<ExprId> {
+        let mut stmts = vec![first];
+        while self.eat(&TokenKind::Semi) {
+            if self.at(&TokenKind::RParen) {
+                break;
+            }
+            stmts.push(self.parse_expr(0)?);
+        }
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Seq(stmts), span))
+    }
+
+    fn parse_piecewise(&mut self, first_val: ExprId, start: Span) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::KwIf, "'if'")?;
+        let first_guard = self.parse_pw_guard()?;
+        let mut arms = vec![PiecewiseArm {
+            value: first_val,
+            guard: first_guard,
+        }];
+        while self.eat(&TokenKind::Pipe) {
+            let val = self.parse_expr(0)?;
+            let _ = self.expect(&TokenKind::KwIf, "'if'")?;
+            let guard = self.parse_pw_guard()?;
+            arms.push(PiecewiseArm { value: val, guard });
+        }
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Piecewise(arms), span))
+    }
+
+    fn parse_pw_guard(&mut self) -> ParseResult<PwGuard> {
+        if self.eat_wildcard() {
+            return Ok(PwGuard::Wildcard);
+        }
+        let expr = self.parse_expr(0)?;
+        Ok(PwGuard::Expr(expr))
+    }
+
+    // ── Lambda ────────────────────────────────────────────────────
+
+    fn try_lambda(&mut self, params: Vec<Param>, start: Span) -> ParseResult<ExprId> {
+        let ret_ty = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_ty()?)
+        } else {
+            None
+        };
+        if !self.at(&TokenKind::EqGt) {
+            if params.is_empty() && ret_ty.is_none() {
+                return Ok(self.alloc_expr(ExprKind::TupleLit(Vec::new()), start));
+            }
+            return Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "'=>'",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            });
+        }
+        let _ = self.advance(); // =>
+        let body = self.parse_expr(0)?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::Lambda {
+                params,
+                ret_ty,
+                body,
+            },
+            span,
+        ))
+    }
+
+    fn reinterpret_as_params(&self, expr: ExprId) -> ParseResult<Vec<Param>> {
+        let spanned = self.ast.exprs.get(expr);
+        match &spanned.kind {
+            ExprKind::Var(ident) => Ok(vec![Param {
+                mutable: false,
+                name: *ident,
+                ty: None,
+                default: None,
+            }]),
+            ExprKind::TupleLit(items) => self.reinterpret_exprs_as_params(items),
+            _ => Err(ParseError {
+                kind: ParseErrorKind::InvalidParenForm,
+                span: spanned.span,
+                context: None,
+            }),
+        }
+    }
+
+    fn reinterpret_exprs_as_params(&self, exprs: &[ExprId]) -> ParseResult<Vec<Param>> {
+        let mut params = Vec::with_capacity(exprs.len());
+        for &expr_id in exprs {
+            let spanned = self.ast.exprs.get(expr_id);
+            match &spanned.kind {
+                ExprKind::Var(ident) => params.push(Param {
+                    mutable: false,
+                    name: *ident,
+                    ty: None,
+                    default: None,
+                }),
+                _ => {
+                    return Err(ParseError {
+                        kind: ParseErrorKind::InvalidParenForm,
+                        span: spanned.span,
+                        context: None,
+                    });
+                }
+            }
+        }
+        Ok(params)
+    }
+
+    // ── Arrays ────────────────────────────────────────────────────
+
+    fn parse_array(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::LBracket, "'['")?;
+        if self.at(&TokenKind::RBracket) {
+            let end = self.expect(&TokenKind::RBracket, "']'")?;
+            let span = start.to(end);
+            return Ok(self.alloc_expr(ExprKind::ArrayLit(Vec::new()), span));
+        }
+        let first = self.parse_expr(0)?;
+        self.parse_array_rest(first, start)
+    }
+
+    fn parse_array_rest(&mut self, first: ExprId, start: Span) -> ParseResult<ExprId> {
+        match self.peek_kind() {
+            TokenKind::RBracket => {
+                let end = self.expect(&TokenKind::RBracket, "']'")?;
+                let span = start.to(end);
+                Ok(self.alloc_expr(ExprKind::ArrayLit(vec![first]), span))
+            }
+            TokenKind::Pipe => self.parse_comprehension(first, start),
+            TokenKind::Semi => self.parse_matrix_rest(vec![first], start),
+            TokenKind::Comma => {
+                let _ = self.advance();
+                let mut items = vec![first];
+                loop {
+                    if self.at(&TokenKind::RBracket) {
+                        break;
+                    }
+                    items.push(self.parse_array_item()?);
+                    if self.at(&TokenKind::Semi) {
+                        return self.parse_matrix_rest(items, start);
+                    }
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                let end = self.expect(&TokenKind::RBracket, "']'")?;
+                let span = start.to(end);
+                Ok(self.alloc_expr(ExprKind::ArrayLit(items), span))
+            }
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "',' or ';' or '|' or ']'",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: Some("in array literal"),
+            }),
+        }
+    }
+
+    fn parse_array_item(&mut self) -> ParseResult<ExprId> {
+        if self.at(&TokenKind::DotDotDot) {
+            let spread_start = self.span();
+            let _ = self.advance();
+            let target = self.parse_expr(PREFIX_BP)?;
+            let spread_span = spread_start.to(self.prev_span());
+            Ok(self.alloc_expr(ExprKind::UnaryOp(UnaryOp::Spread, target), spread_span))
+        } else {
+            self.parse_expr(0)
+        }
+    }
+
+    fn parse_matrix_rest(&mut self, first_row: Vec<ExprId>, start: Span) -> ParseResult<ExprId> {
+        let mut rows = vec![first_row];
+        while self.eat(&TokenKind::Semi) {
+            if self.at(&TokenKind::RBracket) {
+                break;
+            }
+            let mut row = vec![self.parse_expr(0)?];
+            while self.eat(&TokenKind::Comma) {
+                row.push(self.parse_expr(0)?);
+            }
+            rows.push(row);
+        }
+        let end = self.expect(&TokenKind::RBracket, "']'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::MatrixLit(rows), span))
+    }
+
+    fn parse_comprehension(&mut self, expr: ExprId, start: Span) -> ParseResult<ExprId> {
+        let _ = self.advance(); // consume '|'
+        let mut clauses = Vec::new();
+        clauses.push(self.parse_comp_clause()?);
+        while self.eat(&TokenKind::Comma) {
+            clauses.push(self.parse_comp_clause()?);
+        }
+        let end = self.expect(&TokenKind::RBracket, "']'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Comprehension { expr, clauses }, span))
+    }
+
+    fn parse_comp_clause(&mut self) -> ParseResult<CompClause> {
+        let expr = self.parse_expr(0)?;
+        if self.eat(&TokenKind::KwIn) {
+            let pat = self.expr_to_pat(expr)?;
+            let iter = self.parse_expr(0)?;
+            Ok(CompClause::Generator { pat, iter })
+        } else {
+            Ok(CompClause::Filter(expr))
+        }
+    }
+
+    fn expr_to_pat(&mut self, expr_id: ExprId) -> ParseResult<PatId> {
+        let spanned = self.ast.exprs.get(expr_id);
+        let span = spanned.span;
+        match &spanned.kind {
+            ExprKind::Var(ident) => {
+                let ident = *ident;
+                Ok(self.alloc_pat(PatKind::Bind(ident), span))
+            }
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedPat {
+                    found: "expression",
+                },
+                span,
+                context: None,
+            }),
+        }
+    }
+
+    // ── Record literals ───────────────────────────────────────────
+
+    fn parse_rec_lit(&mut self) -> ParseResult<ExprId> {
+        let open_span = self.expect(&TokenKind::DotLBrace, "'.{'")?;
+        let fields = self.parse_rec_fields()?;
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'.{'", open_span, "in record literal")?;
+        let span = open_span.to(end);
+        Ok(self.alloc_expr(ExprKind::RecordLit(fields), span))
+    }
+
+    fn parse_rec_fields(&mut self) -> ParseResult<Vec<RecordField>> {
+        let mut fields = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            if self.at(&TokenKind::DotDotDot) {
+                let _ = self.advance();
+                let expr = self.parse_expr(PREFIX_BP)?;
+                fields.push(RecordField::Spread(expr));
+            } else {
+                let name = self.expect_ident()?;
+                let value = if self.eat(&TokenKind::ColonEq) {
+                    Some(self.parse_expr(0)?)
+                } else {
+                    None
+                };
+                fields.push(RecordField::Named { name, value });
+            }
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(fields)
+    }
+
+    // ── Dot-prefixed (variant) ────────────────────────────────────
+
+    fn parse_dot_pfx(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::Dot, "'.'")?;
+        let name = self.expect_ident()?;
+        let args = if self.eat(&TokenKind::LParen) {
+            let exprs = self.parse_expr_list(&TokenKind::RParen)?;
+            let _ = self.expect(&TokenKind::RParen, "')'")?;
+            exprs
+        } else {
+            Vec::new()
+        };
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::VariantLit(name, args), span))
+    }
+
+    // ── Let binding ───────────────────────────────────────────────
+
+    fn parse_let(&mut self, mut modifiers: ModifierSet, attrs: AttrList) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwLet, "'let'")?;
+        if self.eat(&TokenKind::KwMut) {
+            modifiers.mutable = true;
+        }
+        let pat = self.parse_pat()?;
+        let params = self.parse_opt_params()?;
+        let ty_params = self.parse_opt_bracket_params()?;
+        let constraints = self.parse_opt_where()?;
+        let effects = self.parse_opt_with()?;
+        let ret_ty = self.parse_opt_ty_annot()?;
+        let sig = Self::build_signature(params, ty_params, constraints, effects, ret_ty);
+        let value = if self.eat(&TokenKind::ColonEq) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::Let(Box::new(LetBinding {
+                modifiers,
+                attrs,
+                pat,
+                sig,
+                value,
+            })),
+            span,
+        ))
+    }
+
+    fn build_signature(
+        params: Option<Vec<Param>>,
+        ty_params: Vec<Ident>,
+        constraints: Vec<Constraint>,
+        effects: Vec<EffectItem>,
+        ret_ty: Option<music_ast::TyId>,
+    ) -> Option<Box<Signature>> {
+        let has_sig = params.is_some()
+            || !ty_params.is_empty()
+            || !constraints.is_empty()
+            || !effects.is_empty()
+            || ret_ty.is_some();
+        if !has_sig {
+            return None;
+        }
+        Some(Box::new(Signature {
+            params: params.unwrap_or_default(),
+            ty_params,
+            constraints,
+            effects,
+            ret_ty,
+        }))
+    }
+
+    fn parse_opt_params(&mut self) -> ParseResult<Option<Vec<Param>>> {
+        if !self.at(&TokenKind::LParen) {
+            return Ok(None);
+        }
+        // Distinguish param list from call: if next-next is ':' or 'mut' it's params.
+        // Actually in let context, parens after pattern are always params.
+        let _ = self.advance(); // '('
+        let params = self.parse_param_list()?;
+        let _ = self.expect(&TokenKind::RParen, "')'")?;
+        Ok(Some(params))
+    }
+
+    fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            params.push(self.parse_param()?);
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(params)
+    }
+
+    fn parse_param(&mut self) -> ParseResult<Param> {
+        let mutable = self.eat(&TokenKind::KwMut);
+        let name = self.expect_ident()?;
+        let ty = self.parse_opt_ty_annot()?;
+        let default = if self.eat(&TokenKind::ColonEq) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        Ok(Param {
+            mutable,
+            name,
+            ty,
+            default,
+        })
+    }
+
+    fn parse_opt_bracket_params(&mut self) -> ParseResult<Vec<Ident>> {
+        if !self.eat(&TokenKind::LBracket) {
+            return Ok(Vec::new());
+        }
+        let mut params = vec![self.expect_ident()?];
+        while self.eat(&TokenKind::Comma) {
+            params.push(self.expect_ident()?);
+        }
+        let _ = self.expect(&TokenKind::RBracket, "']'")?;
+        Ok(params)
+    }
+
+    fn parse_opt_where(&mut self) -> ParseResult<Vec<Constraint>> {
+        if !self.eat(&TokenKind::KwWhere) {
+            return Ok(Vec::new());
+        }
+        let mut constraints = vec![self.parse_constraint()?];
+        while self.eat(&TokenKind::Comma) {
+            constraints.push(self.parse_constraint()?);
+        }
+        Ok(constraints)
+    }
+
+    fn parse_constraint(&mut self) -> ParseResult<Constraint> {
+        let ty = self.expect_ident()?;
+        if self.eat(&TokenKind::LtColon) {
+            let bound = self.parse_ty_ref()?;
+            return Ok(Constraint::Subtype { ty, bound });
+        }
+        let _ = self.expect(&TokenKind::Colon, "':' or '<:'")?;
+        let class = self.parse_ty_ref()?;
+        Ok(Constraint::Implements { ty, class })
+    }
+
+    fn parse_opt_with(&mut self) -> ParseResult<Vec<EffectItem>> {
+        if !self.eat(&TokenKind::KwWith) {
+            return Ok(Vec::new());
+        }
+        let _ = self.expect(&TokenKind::LBrace, "'{'")?;
+        let items = self.parse_effect_list()?;
+        let _ = self.expect(&TokenKind::RBrace, "'}'")?;
+        Ok(items)
+    }
+
+    fn parse_effect_list(&mut self) -> ParseResult<Vec<EffectItem>> {
+        let mut items = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            let name = self.expect_ident()?;
+            let arg = if self.eat(&TokenKind::KwOf) {
+                Some(self.parse_ty()?)
+            } else {
+                None
+            };
+            items.push(EffectItem { name, arg });
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(items)
+    }
+
+    pub(crate) fn parse_opt_ty_annot(&mut self) -> ParseResult<Option<music_ast::TyId>> {
+        if !self.eat(&TokenKind::Colon) {
+            return Ok(None);
+        }
+        Ok(Some(self.parse_ty()?))
+    }
+
+    // ── TyRef helper ──────────────────────────────────────────────
+
+    pub(crate) fn parse_ty_ref(&mut self) -> ParseResult<TyRef> {
+        let name = self.expect_ident()?;
+        let args = if self.eat(&TokenKind::KwOf) {
+            self.parse_ty_arg_list()?
+        } else {
+            Vec::new()
+        };
+        Ok(TyRef { name, args })
+    }
+
+    fn parse_ty_arg_list(&mut self) -> ParseResult<Vec<music_ast::TyId>> {
+        let mut args = vec![self.parse_ty()?];
+        while self.eat(&TokenKind::Comma) {
+            args.push(self.parse_ty()?);
+        }
+        Ok(args)
+    }
+
+    // ── Match ─────────────────────────────────────────────────────
+
+    fn parse_match(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwMatch, "'match'")?;
+        let scrutinee = self.parse_expr_no_call(0)?;
+        let open_span = self.expect(&TokenKind::LParen, "'('")?;
+        let mut arms = vec![self.parse_match_arm()?];
+        while self.eat(&TokenKind::Pipe) {
+            arms.push(self.parse_match_arm()?);
+        }
+        let end =
+            self.expect_closing(&TokenKind::RParen, "'('", open_span, "in match expression")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Match(scrutinee, arms), span))
+    }
+
+    fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {
+        let attrs = self.parse_attrs()?;
+        let pat = self.parse_pat()?;
+        let guard = if self.eat(&TokenKind::KwIf) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        let _ = self.expect(&TokenKind::EqGt, "'=>'")?;
+        let body = self.parse_expr(0)?;
+        Ok(MatchArm {
+            attrs,
+            pat,
+            guard,
+            body,
+        })
+    }
+
+    // ── Return / Resume / Need ────────────────────────────────────
+
+    fn parse_return(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwReturn, "'return'")?;
+        let value = if self.can_start_expr() {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::Return(value), span))
+    }
+
+    fn parse_resume(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwResume, "'resume'")?;
+        let value = if self.can_start_expr() {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::Resume(value), span))
+    }
+
+    fn parse_need(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwNeed, "'need'")?;
+        let expr = self.parse_expr(POSTFIX_BP)?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::Need(expr), span))
+    }
+
+    fn can_start_expr(&self) -> bool {
+        !matches!(
+            self.peek_kind(),
+            TokenKind::Semi
+                | TokenKind::RParen
+                | TokenKind::RBracket
+                | TokenKind::RBrace
+                | TokenKind::Pipe
+                | TokenKind::Eof
+        )
+    }
+
+    // ── Import ────────────────────────────────────────────────────
+
+    fn parse_import(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwImport, "'import'")?;
+        let path_str = self.expect_string()?;
+        let path = self.intern(&path_str);
+        let _ = self.expect(&TokenKind::KwAs, "'as'")?;
+        let kind = self.parse_import_kind()?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::Import { path, kind }, span))
+    }
+
+    fn parse_import_kind(&mut self) -> ParseResult<ImportKind> {
+        if self.eat_wildcard() {
+            return Ok(ImportKind::Wildcard);
+        }
+        let name = self.expect_ident()?;
+        if self.eat(&TokenKind::DotLBrace) {
+            let mut members = vec![self.expect_ident()?];
+            while self.eat(&TokenKind::Comma) {
+                members.push(self.expect_ident()?);
+            }
+            let _ = self.expect(&TokenKind::RBrace, "'}'")?;
+            return Ok(ImportKind::Selective(name, members));
+        }
+        Ok(ImportKind::Qualified(name))
+    }
+
+    fn expect_string(&mut self) -> ParseResult<String> {
+        match self.peek_kind() {
+            TokenKind::Str(_) => {
+                let token = self.advance();
+                match &token.kind {
+                    TokenKind::Str(s) => Ok(s.clone()),
+                    _ => Err(ParseError {
+                        kind: ParseErrorKind::ExpectedToken {
+                            expected: "string literal",
+                            found: describe_token(&token.kind),
+                        },
+                        span: token.span,
+                        context: None,
+                    }),
+                }
+            }
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "string literal",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            }),
+        }
+    }
+
+    // ── Foreign ───────────────────────────────────────────────────
+
+    fn parse_foreign(&mut self, mut modifiers: ModifierSet) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwForeign, "'foreign'")?;
+        let abi = if matches!(self.peek_kind(), TokenKind::Str(_)) {
+            let s = self.expect_string()?;
+            Some(self.intern(&s))
+        } else {
+            None
+        };
+        modifiers.foreign_abi = abi;
+        if self.at(&TokenKind::KwImport) {
+            return self.parse_foreign_import(start);
+        }
+        if self.at(&TokenKind::KwLet) {
+            return self.parse_let(modifiers, Vec::new());
+        }
+        if self.at(&TokenKind::LParen) {
+            return self.parse_foreign_block(start, modifiers);
+        }
+        Err(ParseError {
+            kind: ParseErrorKind::ExpectedToken {
+                expected: "'import', 'let', or '('",
+                found: describe_token(self.peek_kind()),
+            },
+            span: self.span(),
+            context: Some("in foreign declaration"),
+        })
+    }
+
+    fn parse_foreign_import(&mut self, start: Span) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::KwImport, "'import'")?;
+        let path_str = self.expect_string()?;
+        let path = self.intern(&path_str);
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(ExprKind::ForeignImport(path), span))
+    }
+
+    fn parse_foreign_block(&mut self, start: Span, modifiers: ModifierSet) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::LParen, "'('")?;
+        let mut stmts = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            let attrs = self.parse_attrs()?;
+            let binding = self.parse_foreign_binding(modifiers, attrs)?;
+            stmts.push(binding);
+            let _ = self.eat(&TokenKind::Semi);
+        }
+        let end = self.expect(&TokenKind::RParen, "')'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Seq(stmts), span))
+    }
+
+    fn parse_foreign_binding(
+        &mut self,
+        modifiers: ModifierSet,
+        attrs: AttrList,
+    ) -> ParseResult<ExprId> {
+        let start = self.span();
+        let name = self.expect_ident()?;
+        let ty_params = self.parse_opt_bracket_params()?;
+        let mut mods = modifiers;
+        if self.eat(&TokenKind::KwAs) {
+            let alias = self.expect_string()?;
+            mods.foreign_alias = Some(self.intern(&alias));
+        }
+        let constraints = self.parse_opt_where()?;
+        let ret_ty = self.parse_opt_ty_annot()?;
+        let pat = self.alloc_pat(PatKind::Bind(name), name.span);
+        let sig = Self::build_signature(None, ty_params, constraints, Vec::new(), ret_ty);
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::Let(Box::new(LetBinding {
+                modifiers: mods,
+                attrs,
+                pat,
+                sig,
+                value: None,
+            })),
+            span,
+        ))
+    }
+
+    // ── Type definitions ──────────────────────────────────────────
+
+    fn parse_choice_def(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwChoice, "'choice'")?;
+        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut variants = Vec::new();
+        if !self.at(&TokenKind::RBrace) {
+            variants.push(self.parse_variant_def()?);
+            while self.eat(&TokenKind::Pipe) {
+                variants.push(self.parse_variant_def()?);
+            }
+        }
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in choice definition")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::ChoiceDef(variants), span))
+    }
+
+    fn parse_variant_def(&mut self) -> ParseResult<VariantDef> {
+        let name = self.expect_ident()?;
+        let payload = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_ty_no_union()?)
+        } else {
+            None
+        };
+        Ok(VariantDef { name, payload })
+    }
+
+    fn parse_record_def(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwRecord, "'record'")?;
+        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut fields = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            fields.push(self.parse_rec_def_field()?);
+            if !self.eat(&TokenKind::Semi) {
+                break;
+            }
+        }
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in record definition")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::RecordDef(fields), span))
+    }
+
+    fn parse_rec_def_field(&mut self) -> ParseResult<RecordDefField> {
+        let name = self.expect_ident()?;
+        let _ = self.expect(&TokenKind::Colon, "':'")?;
+        let ty = self.parse_ty()?;
+        let default = if self.eat(&TokenKind::ColonEq) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        Ok(RecordDefField { name, ty, default })
+    }
+
+    fn parse_effect_def(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwEffect, "'effect'")?;
+        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
+        let members = self.parse_member_decls()?;
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in effect definition")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::EffectDef(members), span))
+    }
+
+    fn parse_class_def(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwClass, "'class'")?;
+        let constraints = self.parse_opt_where()?;
+        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
+        let members = self.parse_member_decls()?;
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in class definition")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(
+            ExprKind::ClassDef {
+                constraints,
+                members,
+            },
+            span,
+        ))
+    }
+
+    fn parse_member_decls(&mut self) -> ParseResult<Vec<MemberDecl>> {
+        let mut members = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            members.push(self.parse_member_decl()?);
+            let _ = self.eat(&TokenKind::Semi);
+        }
+        Ok(members)
+    }
+
+    fn parse_member_decl(&mut self) -> ParseResult<MemberDecl> {
+        if self.at(&TokenKind::KwLaw) {
+            return Ok(MemberDecl::Law(self.parse_law_decl()?));
+        }
+        Ok(MemberDecl::Fn(self.parse_fn_decl()?))
+    }
+
+    fn parse_fn_decl(&mut self) -> ParseResult<FnDecl> {
+        let _ = self.expect(&TokenKind::KwLet, "'let'")?;
+        let name = self.parse_member_name()?;
+        let params = self.parse_opt_params()?;
+        let ret_ty = self.parse_opt_ty_annot()?;
+        let body = if self.eat(&TokenKind::ColonEq) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        Ok(FnDecl {
+            name,
+            params,
+            ret_ty,
+            body,
+        })
+    }
+
+    fn parse_member_name(&mut self) -> ParseResult<MemberName> {
+        if self.at(&TokenKind::LParen) {
+            let _ = self.advance();
+            let ident = self.parse_op_ident();
+            let _ = self.expect(&TokenKind::RParen, "')'")?;
+            return Ok(MemberName::Op(ident));
+        }
+        let ident = self.expect_ident()?;
+        Ok(MemberName::Ident(ident))
+    }
+
+    fn parse_op_ident(&mut self) -> Ident {
+        let span = self.span();
+        let _ = self.advance();
+        self.make_ident_from_span(span)
+    }
+
+    fn parse_law_decl(&mut self) -> ParseResult<LawDecl> {
+        let _ = self.expect(&TokenKind::KwLaw, "'law'")?;
+        let name = self.expect_ident()?;
+        let params = self.parse_opt_params()?;
+        let _ = self.expect(&TokenKind::ColonEq, "':='")?;
+        let body = self.parse_expr(0)?;
+        Ok(LawDecl { name, params, body })
+    }
+
+    // ── Instance ──────────────────────────────────────────────────
+
+    fn parse_instance_def(&mut self, exported: bool, attrs: AttrList) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwInstance, "'instance'")?;
+        let ty_params = self.parse_opt_bracket_params()?;
+        let constraints = self.parse_opt_where()?;
+        let ty = self.parse_ty_ref()?;
+        let body = self.parse_instance_body()?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::InstanceDef(Box::new(InstanceDef {
+                attrs,
+                exported,
+                ty_params,
+                constraints,
+                ty,
+                body,
+            })),
+            span,
+        ))
+    }
+
+    fn parse_instance_body(&mut self) -> ParseResult<InstanceBody> {
+        if self.eat(&TokenKind::KwVia) {
+            let via = self.parse_ty_ref()?;
+            return Ok(InstanceBody::Via(via));
+        }
+        let _ = self.expect(&TokenKind::LBrace, "'{'")?;
+        let members = self.parse_member_decls()?;
+        let _ = self.expect(&TokenKind::RBrace, "'}'")?;
+        Ok(InstanceBody::Methods(members))
+    }
+
+    // ── Handle ────────────────────────────────────────────────────
+
+    fn parse_handle(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwWith, "'with'")?;
+        let effect = self.parse_ty_ref()?;
+        let _ = self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut handlers = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            handlers.push(self.parse_fn_decl()?);
+            let _ = self.eat(&TokenKind::Semi);
+        }
+        let _ = self.expect(&TokenKind::RBrace, "'}'")?;
+        let _ = self.expect(&TokenKind::KwHandle, "'handle'")?;
+        let body = self.parse_expr(0)?;
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_expr(
+            ExprKind::Handle {
+                effect,
+                handlers,
+                body,
+            },
+            span,
+        ))
+    }
+
+    // ── Quote / Splice ────────────────────────────────────────────
+
+    fn parse_quote(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwQuote, "'quote'")?;
+        if self.at(&TokenKind::LParen) {
+            let _ = self.advance();
+            let expr = self.parse_expr(0)?;
+            let end = self.expect(&TokenKind::RParen, "')'")?;
+            let span = start.to(end);
+            return Ok(self.alloc_expr(ExprKind::Quote(QuoteKind::Expr(expr)), span));
+        }
+        let _ = self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut stmts = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            let expr = self.parse_expr(0)?;
+            let _ = self.expect(&TokenKind::Semi, "';'")?;
+            stmts.push(expr);
+        }
+        let end = self.expect(&TokenKind::RBrace, "'}'")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::Quote(QuoteKind::Block(stmts)), span))
+    }
+
+    fn parse_splice(&mut self) -> ParseResult<ExprId> {
+        let start = self.span();
+        match self.peek_kind().clone() {
+            TokenKind::Hash => {
+                let _ = self.advance();
+                let ident = self.expect_ident()?;
+                let span = start.to(ident.span);
+                Ok(self.alloc_expr(ExprKind::Splice(SpliceKind::Ident(ident)), span))
+            }
+            TokenKind::HashLParen => {
+                let _ = self.advance();
+                let expr = self.parse_expr(0)?;
+                let end = self.expect(&TokenKind::RParen, "')'")?;
+                let span = start.to(end);
+                Ok(self.alloc_expr(ExprKind::Splice(SpliceKind::Expr(expr)), span))
+            }
+            TokenKind::HashLBracket => {
+                let _ = self.advance();
+                let exprs = self.parse_expr_list(&TokenKind::RBracket)?;
+                let end = self.expect(&TokenKind::RBracket, "']'")?;
+                let span = start.to(end);
+                Ok(self.alloc_expr(ExprKind::Splice(SpliceKind::Array(exprs)), span))
+            }
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedExpr {
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: None,
+            }),
+        }
+    }
+
+    // ── Attrs ─────────────────────────────────────────────────────
+
+    fn parse_with_attrs(&mut self) -> ParseResult<ExprId> {
+        let attrs = self.parse_attrs()?;
+        match self.peek_kind() {
+            TokenKind::KwExport => self.parse_export_with_attrs(attrs),
+            TokenKind::KwLet => self.parse_let(ModifierSet::default(), attrs),
+            TokenKind::KwInstance => self.parse_instance_def(false, attrs),
+            _ => Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "'export', 'let', or 'instance'",
+                    found: describe_token(self.peek_kind()),
+                },
+                span: self.span(),
+                context: Some("after attribute"),
+            }),
+        }
+    }
+
+    fn parse_attrs(&mut self) -> ParseResult<AttrList> {
+        let mut attrs = Vec::new();
+        while self.at(&TokenKind::At) {
+            attrs.push(self.parse_attr()?);
+        }
+        Ok(attrs)
+    }
+
+    fn parse_attr(&mut self) -> ParseResult<music_ast::AttrId> {
+        let start = self.expect(&TokenKind::At, "'@'")?;
+        let name = self.expect_ident()?;
+        let args = if self.eat(&TokenKind::LParen) {
+            let a = self.parse_attr_args()?;
+            let _ = self.expect(&TokenKind::RParen, "')'")?;
+            a
+        } else {
+            Vec::new()
+        };
+        let span = start.to(self.prev_span());
+        Ok(self.alloc_attr(Attr { name, args }, span))
+    }
+
+    fn parse_attr_args(&mut self) -> ParseResult<Vec<AttrArg>> {
+        let mut args = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            args.push(self.parse_attr_arg()?);
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(args)
+    }
+
+    fn parse_attr_arg(&mut self) -> ParseResult<AttrArg> {
+        // Look ahead: if ident followed by :=, it's named
+        if matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+            let saved_pos = self.pos;
+            let name = self.expect_ident()?;
+            if self.eat(&TokenKind::ColonEq) {
+                let value = self.parse_expr(0)?;
+                return Ok(AttrArg::Named { name, value });
+            }
+            // Not named, backtrack
+            self.pos = saved_pos;
+        }
+        let value = self.parse_expr(0)?;
+        Ok(AttrArg::Positional(value))
+    }
+
+    // ── Export ─────────────────────────────────────────────────────
+
+    fn parse_export(&mut self) -> ParseResult<ExprId> {
+        self.parse_export_with_attrs(Vec::new())
+    }
+
+    fn parse_export_with_attrs(&mut self, attrs: AttrList) -> ParseResult<ExprId> {
+        let _ = self.expect(&TokenKind::KwExport, "'export'")?;
+        if self.at(&TokenKind::KwInstance) {
+            return self.parse_instance_def(true, attrs);
+        }
+        let mut modifiers = ModifierSet {
+            exported: true,
+            ..ModifierSet::default()
+        };
+        if self.eat(&TokenKind::KwOpaque) {
+            modifiers.opaque = true;
+        }
+        if self.at(&TokenKind::KwForeign) {
+            return self.parse_foreign(modifiers);
+        }
+        self.parse_let(modifiers, attrs)
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
+
+    fn parse_expr_list(&mut self, terminator: &TokenKind) -> ParseResult<ExprList> {
+        let mut exprs = Vec::new();
+        while !self.at(terminator) && !self.at_eof() {
+            exprs.push(self.parse_expr(0)?);
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(exprs)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests;

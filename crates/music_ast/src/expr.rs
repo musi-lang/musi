@@ -222,6 +222,7 @@ pub enum FStrPart {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceDef {
+    pub attrs: AttrList,
     pub exported: bool,
     pub ty_params: IdentList,
     pub constraints: Vec<Constraint>,
