@@ -14,22 +14,19 @@ use crate::errors::{SemaError, SemaErrorKind};
 use crate::types::{SemaTypeId, Ty};
 use crate::unify::unify;
 
-/// Bidirectional type checker.
-///
-/// Walks the resolved AST, synthesizing types bottom-up and checking
-/// against expected types top-down. Records inferred types, dispatch
-/// decisions, and errors.
-pub struct Checker<'a> {
-    db: &'a Db,
-    resolution: &'a ResolutionMap,
-    env: TypeEnv,
-    errors: Vec<SemaError>,
+/// Wraps `Db` with type-checking state. Owns the `Db` during semantic
+/// analysis and returns it via `finish()`.
+pub struct SemaDb {
+    pub db: Db,
+    pub resolution: ResolutionMap,
+    pub env: TypeEnv,
+    pub errors: Vec<SemaError>,
 }
 
-impl<'a> Checker<'a> {
-    /// Creates a new checker with a seeded type environment.
+impl SemaDb {
+    /// Creates a new `SemaDb` with a seeded type environment.
     #[must_use]
-    pub fn new(db: &'a Db, resolution: &'a ResolutionMap) -> Self {
+    pub fn new(db: Db, resolution: ResolutionMap) -> Self {
         let mut env = TypeEnv::new();
         env.seed_builtins();
         Self {
@@ -48,10 +45,11 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Consumes the checker, returning the type environment and errors.
+    /// Consumes the checker, returning the database, resolution map,
+    /// type environment, and errors.
     #[must_use]
-    pub fn finish(self) -> (TypeEnv, Vec<SemaError>) {
-        (self.env, self.errors)
+    pub fn finish(self) -> (Db, ResolutionMap, TypeEnv, Vec<SemaError>) {
+        (self.db, self.resolution, self.env, self.errors)
     }
 
     /// Synthesizes a type for `expr_id` bottom-up, caching the result.

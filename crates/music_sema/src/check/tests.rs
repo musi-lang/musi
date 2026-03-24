@@ -21,7 +21,8 @@ fn check_source(source: &str) -> (TypeEnv, Vec<SemaError>) {
     rdb.seed_builtins();
     rdb.resolve_module();
     let (db, resolution, _) = rdb.finish();
-    type_check(&db, &resolution, None)
+    let (_, _, env, errors) = type_check(db, resolution, None);
+    (env, errors)
 }
 
 /// Returns the type of the last top-level expression.

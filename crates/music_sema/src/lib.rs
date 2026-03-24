@@ -6,6 +6,7 @@ pub mod errors;
 pub mod types;
 pub mod unify;
 
+pub use check::SemaDb;
 pub use env::TypeEnv;
 pub use errors::{SemaError, SemaErrorKind};
 pub use types::{SemaTypeId, Ty, TyVarId};
@@ -16,14 +17,15 @@ use music_resolve::queries::ResolutionMap;
 
 /// Runs bidirectional type checking on a resolved module.
 ///
-/// Returns the populated type environment and any errors found.
+/// Takes ownership of `Db` and `ResolutionMap`, returning them alongside
+/// the type environment and errors.
 #[must_use]
 pub fn type_check(
-    db: &Db,
-    resolution: &ResolutionMap,
+    db: Db,
+    resolution: ResolutionMap,
     _config: Option<&CompilerOptions>,
-) -> (TypeEnv, Vec<SemaError>) {
-    let mut checker = check::Checker::new(db, resolution);
-    checker.check_module();
-    checker.finish()
+) -> (Db, ResolutionMap, TypeEnv, Vec<SemaError>) {
+    let mut sdb = SemaDb::new(db, resolution);
+    sdb.check_module();
+    sdb.finish()
 }
