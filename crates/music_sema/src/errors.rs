@@ -67,6 +67,33 @@ pub enum SemaErrorKind {
 
     #[error("occurs check: variable {var} occurs in its own binding")]
     OccursCheck { var: TyVarId },
+
+    #[error("export is only allowed at the top level")]
+    ExportNotTopLevel,
+
+    #[error("opaque requires export")]
+    OpaqueWithoutExport,
+
+    #[error("foreign declaration is only allowed at the top level")]
+    ForeignNotTopLevel,
+
+    #[error("splice outside quote")]
+    SpliceOutsideQuote,
+
+    #[error("unreachable pattern after wildcard")]
+    UnreachablePattern,
+
+    #[error("unreachable code after diverging expression")]
+    UnreachableCode,
+
+    #[error("unused binding: {name}")]
+    UnusedBinding { name: Symbol },
+
+    #[error("unused parameter: {name}")]
+    UnusedParameter { name: Symbol },
+
+    #[error("or-pattern alternatives bind different names")]
+    OrPatternMismatch,
 }
 
 impl SemaError {

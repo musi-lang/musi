@@ -163,3 +163,70 @@ fn error_equality() {
     let e3 = make_error(SemaErrorKind::InfiniteType);
     assert_ne!(e1, e3);
 }
+
+#[test]
+fn display_export_not_top_level() {
+    let err = make_error(SemaErrorKind::ExportNotTopLevel);
+    assert_eq!(err.to_string(), "export is only allowed at the top level");
+}
+
+#[test]
+fn display_opaque_without_export() {
+    let err = make_error(SemaErrorKind::OpaqueWithoutExport);
+    assert_eq!(err.to_string(), "opaque requires export");
+}
+
+#[test]
+fn display_foreign_not_top_level() {
+    let err = make_error(SemaErrorKind::ForeignNotTopLevel);
+    assert_eq!(
+        err.to_string(),
+        "foreign declaration is only allowed at the top level"
+    );
+}
+
+#[test]
+fn display_splice_outside_quote() {
+    let err = make_error(SemaErrorKind::SpliceOutsideQuote);
+    assert_eq!(err.to_string(), "splice outside quote");
+}
+
+#[test]
+fn display_unreachable_pattern() {
+    let err = make_error(SemaErrorKind::UnreachablePattern);
+    assert_eq!(err.to_string(), "unreachable pattern after wildcard");
+}
+
+#[test]
+fn display_unreachable_code() {
+    let err = make_error(SemaErrorKind::UnreachableCode);
+    assert_eq!(
+        err.to_string(),
+        "unreachable code after diverging expression"
+    );
+}
+
+#[test]
+fn display_unused_binding() {
+    let mut interner = Interner::new();
+    let name = interner.intern("x");
+    let err = make_error(SemaErrorKind::UnusedBinding { name });
+    assert!(err.to_string().contains("unused binding"));
+}
+
+#[test]
+fn display_unused_parameter() {
+    let mut interner = Interner::new();
+    let name = interner.intern("y");
+    let err = make_error(SemaErrorKind::UnusedParameter { name });
+    assert!(err.to_string().contains("unused parameter"));
+}
+
+#[test]
+fn display_or_pattern_mismatch() {
+    let err = make_error(SemaErrorKind::OrPatternMismatch);
+    assert!(
+        err.to_string()
+            .contains("or-pattern alternatives bind different names")
+    );
+}

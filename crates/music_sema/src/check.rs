@@ -1,8 +1,12 @@
+use std::collections::HashSet;
+
 use music_ast::common::Param;
-use music_ast::expr::{BinOp, ExprKind, FieldTarget, LetBinding, MatchArm, RecordField, UnaryOp};
+use music_ast::expr::{
+    BinOp, ExprKind, FieldTarget, IndexKind, LetBinding, MatchArm, RecordField, SpliceKind, UnaryOp,
+};
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
-use music_ast::{ExprId, TyId};
+use music_ast::{ExprId, PatId, TyId};
 use music_builtins::types::BuiltinType;
 use music_db::Db;
 use music_found::{Ident, Literal, Span, Symbol};
@@ -23,6 +27,11 @@ pub struct SemaDb {
     pub resolution: ResolutionMap,
     pub env: TypeEnv,
     pub errors: Vec<SemaError>,
+    depth: u32,
+    in_quote: bool,
+    in_effectful: bool,
+    mutable_defs: HashSet<DefId>,
+    used_defs: HashSet<DefId>,
 }
 
 impl SemaDb {
@@ -36,6 +45,11 @@ impl SemaDb {
             resolution,
             env,
             errors: Vec::new(),
+            depth: 0,
+            in_quote: false,
+            in_effectful: false,
+            mutable_defs: HashSet::new(),
+            used_defs: HashSet::new(),
         }
     }
 
@@ -44,6 +58,36 @@ impl SemaDb {
         let root = self.db.ast.root.clone();
         for &expr_id in &root {
             let _ = self.synth(expr_id);
+        }
+        self.check_unused();
+    }
+
+    /// Emits errors for bindings/params that were never referenced.
+    fn check_unused(&mut self) {
+        let defs: Vec<_> = self
+            .resolution
+            .defs
+            .iter()
+            .map(|(id, info)| (id, info.name, info.kind, info.span))
+            .collect();
+        for (def_id, name, kind, span) in defs {
+            if self.used_defs.contains(&def_id) {
+                continue;
+            }
+            let name_str = self.db.interner.resolve(name);
+            if name_str.starts_with('_') {
+                continue;
+            }
+            match kind {
+                DefKind::Value | DefKind::Function => {
+                    self.errors.push(SemaError {
+                        kind: SemaErrorKind::UnusedBinding { name },
+                        span,
+                        context: None,
+                    });
+                }
+                _ => {}
+            }
         }
     }
 
@@ -97,10 +141,13 @@ impl SemaDb {
                 }
                 self.env.intern(Ty::Never)
             }
-            ExprKind::Need(e) => self.synth(e),
-            ExprKind::Postfix { expr, .. }
-            | ExprKind::Index { expr, .. }
-            | ExprKind::TypeOp { expr, .. } => self.synth(expr),
+            ExprKind::Need(e) => self.synth_need(e, span),
+            ExprKind::Postfix { expr, .. } | ExprKind::TypeOp { expr, .. } => self.synth(expr),
+            ExprKind::Index {
+                expr,
+                ref indices,
+                kind,
+            } => self.synth_index(expr, indices, kind, span),
             ExprKind::RecordDef(_)
             | ExprKind::ChoiceDef(_)
             | ExprKind::EffectDef(_)
@@ -113,10 +160,10 @@ impl SemaDb {
                 let elem_ty = self.synth(expr);
                 self.env.intern(Ty::Array(elem_ty))
             }
+            ExprKind::Quote(_) => self.synth_quote(),
+            ExprKind::Splice(ref sk) => self.synth_splice(sk, span),
             ExprKind::Import { .. }
             | ExprKind::ForeignImport(_)
-            | ExprKind::Quote(_)
-            | ExprKind::Splice(_)
             | ExprKind::MatrixLit(_)
             | ExprKind::Piecewise(_) => self.env.intern(Ty::Any),
         };
@@ -149,6 +196,7 @@ impl SemaDb {
 
     fn synth_var(&mut self, ident: &Ident) -> SemaTypeId {
         if let Some(def_id) = self.find_def_for_name(ident.name) {
+            let _inserted = self.used_defs.insert(def_id);
             let def_info = self.resolution.defs.get(def_id);
             match def_info.kind {
                 DefKind::Builtin(bt) => return self.env.intern(Ty::Builtin(bt)),
@@ -338,6 +386,47 @@ impl SemaDb {
     }
 
     fn synth_let(&mut self, binding: &LetBinding) -> SemaTypeId {
+        let span = binding
+            .value
+            .map_or_else(|| Span::new(0, 0), |v| self.db.ast.exprs.get(v).span);
+
+        // #1: export only at top level
+        if binding.modifiers.exported && self.depth > 0 {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::ExportNotTopLevel,
+                span,
+                context: None,
+            });
+        }
+
+        // #2: opaque requires export
+        if binding.modifiers.opaque && !binding.modifiers.exported {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::OpaqueWithoutExport,
+                span,
+                context: None,
+            });
+        }
+
+        // #3: foreign only at top level
+        if binding.modifiers.foreign_abi.is_some() && self.depth > 0 {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::ForeignNotTopLevel,
+                span,
+                context: None,
+            });
+        }
+
+        // #6: track mutable bindings
+        if binding.modifiers.mutable {
+            let pat = self.db.ast.pats.get(binding.pat);
+            if let PatKind::Bind(bind_ident) = &pat.kind {
+                if let Some(def_id) = self.find_def_for_name(bind_ident.name) {
+                    let _inserted = self.mutable_defs.insert(def_id);
+                }
+            }
+        }
+
         let val_ty = binding.value.map(|value| self.synth(value));
 
         if let Some(ref sig) = binding.sig {
@@ -454,7 +543,18 @@ impl SemaDb {
             self.env.intern(Ty::Tuple(param_tys))
         };
 
+        self.depth = self.depth.saturating_add(1);
+        let prev_effectful = self.in_effectful;
+        if let Some(ty_id) = ret_ty {
+            if self.is_effect_arrow_context(ty_id) {
+                self.in_effectful = true;
+            }
+        }
+
         let body_ty = self.synth(body);
+
+        self.in_effectful = prev_effectful;
+        self.depth = self.depth.saturating_sub(1);
 
         // Determine if the lambda's declared return type uses a pure arrow
         let is_declared_pure = ret_ty.is_none_or(|ty_id| !self.is_effect_arrow_context(ty_id));
@@ -569,17 +669,96 @@ impl SemaDb {
             return self.env.intern(Ty::Never);
         }
 
-        let mut result_ty = self.synth(arms[0].body);
+        let mut wildcard_seen = false;
+        let mut result_ty = self.env.intern(Ty::Never);
 
-        for arm in &arms[1..] {
+        for (i, arm) in arms.iter().enumerate() {
+            if wildcard_seen {
+                let arm_span = self.db.ast.exprs.get(arm.body).span;
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::UnreachablePattern,
+                    span: arm_span,
+                    context: None,
+                });
+            }
+
+            self.check_or_pattern_bindings(arm.pat);
+
+            let pat_kind = &self.db.ast.pats.get(arm.pat).kind;
+            if matches!(pat_kind, PatKind::Wildcard | PatKind::Bind(_)) {
+                wildcard_seen = true;
+            }
+
             let arm_ty = self.synth(arm.body);
-            match unify(&mut self.env, result_ty, arm_ty, span) {
-                Ok(ty) => result_ty = ty,
-                Err(e) => self.errors.push(e),
+            if i == 0 {
+                result_ty = arm_ty;
+            } else {
+                match unify(&mut self.env, result_ty, arm_ty, span) {
+                    Ok(ty) => result_ty = ty,
+                    Err(e) => self.errors.push(e),
+                }
             }
         }
 
         result_ty
+    }
+
+    fn collect_pat_bindings(&self, pat_id: PatId, names: &mut HashSet<Symbol>) {
+        let pat = self.db.ast.pats.get(pat_id);
+        match &pat.kind {
+            PatKind::Bind(ident) => {
+                let _inserted = names.insert(ident.name);
+            }
+            PatKind::As { name, pat } => {
+                let _inserted = names.insert(name.name);
+                self.collect_pat_bindings(*pat, names);
+            }
+            PatKind::Variant { fields, .. } => {
+                for &f in fields {
+                    self.collect_pat_bindings(f, names);
+                }
+            }
+            PatKind::Record(fields) => {
+                for f in fields {
+                    if let Some(p) = f.pat {
+                        self.collect_pat_bindings(p, names);
+                    } else {
+                        let _inserted = names.insert(f.name.name);
+                    }
+                }
+            }
+            PatKind::Tuple(pats) | PatKind::Array(pats) | PatKind::Or(pats) => {
+                for &p in pats {
+                    self.collect_pat_bindings(p, names);
+                }
+            }
+            PatKind::Wildcard | PatKind::Lit(_) => {}
+        }
+    }
+
+    fn check_or_pattern_bindings(&mut self, pat_id: PatId) {
+        let pat = self.db.ast.pats.get(pat_id);
+        if let PatKind::Or(alts) = &pat.kind {
+            let alts = alts.clone();
+            if alts.len() < 2 {
+                return;
+            }
+            let mut first_names = HashSet::new();
+            self.collect_pat_bindings(alts[0], &mut first_names);
+
+            for &alt in &alts[1..] {
+                let mut alt_names = HashSet::new();
+                self.collect_pat_bindings(alt, &mut alt_names);
+                if alt_names != first_names {
+                    let span = self.db.ast.pats.get(alt).span;
+                    self.errors.push(SemaError {
+                        kind: SemaErrorKind::OrPatternMismatch,
+                        span,
+                        context: None,
+                    });
+                }
+            }
+        }
     }
 
     fn synth_seq(&mut self, stmts: &[ExprId]) -> SemaTypeId {
@@ -588,8 +767,21 @@ impl SemaDb {
         }
 
         let mut last_ty = self.env.intern(Ty::Unit);
+        let mut diverged = false;
         for &stmt in stmts {
+            if diverged {
+                let stmt_span = self.db.ast.exprs.get(stmt).span;
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::UnreachableCode,
+                    span: stmt_span,
+                    context: None,
+                });
+            }
             last_ty = self.synth(stmt);
+            let resolved = self.env.resolve_var(last_ty);
+            if matches!(self.env.types.get(resolved), Ty::Never) {
+                diverged = true;
+            }
         }
         last_ty
     }
@@ -702,7 +894,119 @@ impl SemaDb {
         }
     }
 
+    fn synth_need(&mut self, e: ExprId, span: Span) -> SemaTypeId {
+        if !self.in_effectful {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::PurityViolation {
+                    effect: self.db.interner.intern("_"),
+                },
+                span,
+                context: Some("need outside effectful function"),
+            });
+        }
+        self.synth(e)
+    }
+
+    fn synth_quote(&mut self) -> SemaTypeId {
+        let prev = self.in_quote;
+        self.in_quote = true;
+        let ty = self.env.intern(Ty::Any);
+        self.in_quote = prev;
+        ty
+    }
+
+    fn synth_splice(&mut self, sk: &SpliceKind, span: Span) -> SemaTypeId {
+        if !self.in_quote {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::SpliceOutsideQuote,
+                span,
+                context: None,
+            });
+        }
+        match sk {
+            SpliceKind::Expr(e) => {
+                let _ = self.synth(*e);
+            }
+            SpliceKind::Array(es) => {
+                for &e in es {
+                    let _ = self.synth(e);
+                }
+            }
+            SpliceKind::Ident(_) => {}
+        }
+        self.env.intern(Ty::Any)
+    }
+
+    fn synth_index(
+        &mut self,
+        expr: ExprId,
+        indices: &[ExprId],
+        kind: IndexKind,
+        span: Span,
+    ) -> SemaTypeId {
+        let base_ty = self.synth(expr);
+        for &idx in indices {
+            let _ = self.synth(idx);
+        }
+
+        let resolved = self.env.resolve_var(base_ty);
+        let ty = self.env.types.get(resolved).clone();
+
+        match ty {
+            Ty::Array(elem) | Ty::List(elem) => match kind {
+                IndexKind::Point => elem,
+                IndexKind::Slice => self.env.intern(Ty::Array(elem)),
+            },
+            Ty::Tuple(ref elems) => {
+                if indices.len() == 1 {
+                    let idx_ty = self.synth(indices[0]);
+                    let idx_resolved = self.env.resolve_var(idx_ty);
+                    let idx_val = self.env.types.get(idx_resolved).clone();
+                    if idx_val == Ty::Builtin(BuiltinType::Int) {
+                        if let Some(first) = elems.first() {
+                            return *first;
+                        }
+                    }
+                }
+                self.env.intern(Ty::Any)
+            }
+            Ty::Any | Ty::Unknown | Ty::Var(_) => self.env.intern(Ty::Any),
+            _ => {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::NotIndexable,
+                    span,
+                    context: None,
+                });
+                self.env.intern(Ty::Any)
+            }
+        }
+    }
+
     fn synth_assign(&mut self, lhs: ExprId, rhs: ExprId, span: Span) -> SemaTypeId {
+        let lhs_kind = self.db.ast.exprs.get(lhs).kind.clone();
+
+        match &lhs_kind {
+            ExprKind::Var(ident) => {
+                if let Some(def_id) = self.find_def_for_name(ident.name) {
+                    if !self.mutable_defs.contains(&def_id) {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::MutabilityViolation,
+                            span,
+                            context: None,
+                        });
+                    }
+                }
+            }
+            ExprKind::Access { .. } | ExprKind::Index { .. } => {}
+            _ => {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::InvalidAssignTarget,
+                    span,
+                    context: None,
+                });
+            }
+        }
+
         let lhs_ty = self.synth(lhs);
         let rhs_ty = self.synth(rhs);
 

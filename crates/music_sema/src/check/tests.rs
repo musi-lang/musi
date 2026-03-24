@@ -65,7 +65,7 @@ fn literal_string() {
 
 #[test]
 fn let_binding_produces_unit() {
-    let (env, errors) = check_source("let x := 42");
+    let (env, errors) = check_source("let _x := 42");
     assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     // The let expression itself should be Unit
     let has_unit = env
@@ -195,7 +195,7 @@ fn type_annotation_mismatch() {
 
 #[test]
 fn type_annotation_match() {
-    let (_, errors) = check_source("let x : Int := 42;");
+    let (_, errors) = check_source("let _x : Int := 42;");
     assert!(errors.is_empty(), "errors: {errors:?}");
 }
 
@@ -221,4 +221,145 @@ fn field_access_on_non_record() {
         errors[0].kind,
         SemaErrorKind::UndefinedField { .. }
     ));
+}
+
+// --- Semantic check: export only at top level (#1) ---
+
+#[test]
+fn export_inside_function() {
+    let (_, errors) = check_source("let _f := (x) => (export let _y := x;)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::ExportNotTopLevel)),
+        "expected ExportNotTopLevel, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: opaque requires export (#2) ---
+
+#[test]
+fn export_opaque_no_error() {
+    let (_, errors) = check_source("export opaque let _T := record { x : Int }");
+    assert!(
+        !errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::OpaqueWithoutExport)),
+        "export opaque should not produce OpaqueWithoutExport: {errors:?}"
+    );
+}
+
+// --- Semantic check: foreign only at top level (#3) ---
+
+#[test]
+fn foreign_inside_function() {
+    let (_, errors) = check_source("let _f := (x) => (foreign \"C\" let _g := x;)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::ForeignNotTopLevel)),
+        "expected ForeignNotTopLevel, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: assign to non-lvalue (#7) ---
+
+#[test]
+fn assign_to_non_lvalue() {
+    let (_, errors) = check_source("42 <- 1");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::InvalidAssignTarget)),
+        "expected InvalidAssignTarget, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: assign to immutable (#6) ---
+
+#[test]
+fn assign_to_immutable() {
+    let (_, errors) = check_source("let x := 1; x <- 2");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::MutabilityViolation)),
+        "expected MutabilityViolation, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: splice outside quote (#19) ---
+
+#[test]
+fn splice_outside_quote() {
+    let (_, errors) = check_source("#x");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::SpliceOutsideQuote)),
+        "expected SpliceOutsideQuote, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: unreachable code after return (#22) ---
+
+#[test]
+fn unreachable_after_return() {
+    let (_, errors) = check_source("(return 1; 42)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::UnreachableCode)),
+        "expected UnreachableCode, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: unreachable pattern after wildcard (#18) ---
+
+#[test]
+fn unreachable_pattern_after_wildcard() {
+    let (_, errors) = check_source("match 1 (| _ => 0 | _ => 1)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::UnreachablePattern)),
+        "expected UnreachablePattern, got: {errors:?}"
+    );
+}
+
+// --- Semantic check: unused binding (#20) ---
+
+#[test]
+fn unused_binding_reported() {
+    let (_, errors) = check_source("let x := 42;");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::UnusedBinding { .. })),
+        "expected UnusedBinding, got: {errors:?}"
+    );
+}
+
+#[test]
+fn underscore_prefixed_binding_not_reported() {
+    let (_, errors) = check_source("let _x := 42;");
+    assert!(
+        !errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::UnusedBinding { .. })),
+        "underscore-prefixed bindings should not trigger UnusedBinding: {errors:?}"
+    );
+}
+
+// --- Semantic check: index on non-indexable (#5) ---
+
+#[test]
+fn index_on_non_indexable() {
+    let (_, errors) = check_source("let _x := 42; _x.[0];");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e.kind, SemaErrorKind::NotIndexable)),
+        "expected NotIndexable, got: {errors:?}"
+    );
 }
