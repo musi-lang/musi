@@ -3,6 +3,7 @@ pub mod data;
 pub mod expr;
 pub mod pat;
 pub mod ty;
+pub mod walk;
 
 use music_arena::Idx;
 use music_found::{Ident, Spanned};
