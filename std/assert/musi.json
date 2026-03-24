@@ -5,6 +5,7 @@
     "description": "Vitest-style assertions.",
     "exports": {
         ".": "./mod.ms",
-        "./expect": "./expect.ms"
+        "./expect": "./expect.ms",
+        "./matchers": "./matchers.ms"
     }
 }

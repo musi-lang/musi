@@ -4,6 +4,10 @@
     "version": "0.1.0",
     "description": "Math utilities.",
     "exports": {
-        ".": "./mod.ms"
+        ".": "./mod.ms",
+        "./abs": "./abs.ms",
+        "./max": "./max.ms",
+        "./min": "./min.ms",
+        "./clamp": "./clamp.ms"
     }
 }

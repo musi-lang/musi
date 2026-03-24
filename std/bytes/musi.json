@@ -4,6 +4,10 @@
     "version": "0.1.0",
     "description": "Byte array utilities.",
     "exports": {
-        ".": "./mod.ms"
+        ".": "./mod.ms",
+        "./concat": "./concat.ms",
+        "./copy": "./copy.ms",
+        "./equals": "./equals.ms",
+        "./starts_with": "./starts_with.ms"
     }
 }
