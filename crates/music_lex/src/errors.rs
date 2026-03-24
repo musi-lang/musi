@@ -1,70 +1,76 @@
+use core::error;
+use core::fmt;
+
 use music_found::Span;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
-pub enum LexError {
-    #[error("unexpected character '{ch}'")]
-    UnexpectedChar { ch: char, span: Span },
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexError {
+    pub kind: LexErrorKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum LexErrorKind {
+    #[error("unexpected character '{0}'")]
+    UnexpectedChar(char),
 
     #[error("unterminated string literal")]
-    UnterminatedString { span: Span },
+    UnterminatedString,
 
     #[error("unterminated f-string literal")]
-    UnterminatedFString { span: Span },
+    UnterminatedFString,
 
     #[error("unterminated f-string interpolation")]
-    UnterminatedFStringExpr { span: Span },
+    UnterminatedFStringExpr,
 
     #[error("unterminated rune literal")]
-    UnterminatedRune { span: Span },
+    UnterminatedRune,
 
     #[error("unterminated escaped identifier")]
-    UnterminatedEscapedIdent { span: Span },
+    UnterminatedEscapedIdent,
 
     #[error("unterminated block comment")]
-    UnterminatedBlockComment { span: Span },
+    UnterminatedBlockComment,
 
     #[error("empty rune literal")]
-    EmptyRune { span: Span },
+    EmptyRune,
 
     #[error("rune literal contains more than one character")]
-    MultiCharRune { span: Span },
+    MultiCharRune,
 
-    #[error("invalid escape sequence '\\{ch}'")]
-    InvalidEscape { ch: char, span: Span },
+    #[error("invalid escape sequence '\\{0}'")]
+    InvalidEscape(char),
 
     #[error("invalid hex escape: expected {expected} hex digits")]
-    InvalidHexEscape { expected: u8, span: Span },
+    InvalidHexEscape { expected: u8 },
 
     #[error("invalid unicode escape")]
-    InvalidUnicodeEscape { span: Span },
+    InvalidUnicodeEscape,
 
     #[error("invalid number literal: expected digits after base prefix")]
-    InvalidNumberPrefix { span: Span },
+    InvalidNumberPrefix,
 
     #[error("number literal overflow")]
-    NumberOverflow { span: Span },
+    NumberOverflow,
 }
 
 impl LexError {
     #[must_use]
     pub const fn span(&self) -> Span {
-        match *self {
-            Self::UnexpectedChar { span, .. }
-            | Self::UnterminatedString { span }
-            | Self::UnterminatedFString { span }
-            | Self::UnterminatedFStringExpr { span }
-            | Self::UnterminatedRune { span }
-            | Self::UnterminatedEscapedIdent { span }
-            | Self::UnterminatedBlockComment { span }
-            | Self::EmptyRune { span }
-            | Self::MultiCharRune { span }
-            | Self::InvalidEscape { span, .. }
-            | Self::InvalidHexEscape { span, .. }
-            | Self::InvalidUnicodeEscape { span }
-            | Self::InvalidNumberPrefix { span }
-            | Self::NumberOverflow { span } => span,
-        }
+        self.span
+    }
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+
+impl error::Error for LexError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(&self.kind)
     }
 }
 

@@ -1,7 +1,7 @@
 use music_found::Span;
 
 use crate::Lexer;
-use crate::errors::LexError;
+use crate::errors::LexErrorKind;
 use crate::token::{FStrPart, TokenKind, TriviaKind};
 
 fn lex_kinds(src: &str) -> Vec<TokenKind> {
@@ -41,7 +41,7 @@ fn delimiters() {
 
 #[test]
 fn punctuation() {
-    let kinds = lex_kinds("; , . : | ! ? < > = + - * / % @ $");
+    let kinds = lex_kinds("; , . : | ! ? < > = + - * / % @ #");
     assert_eq!(
         kinds,
         vec![
@@ -61,7 +61,7 @@ fn punctuation() {
             TokenKind::Slash,
             TokenKind::Percent,
             TokenKind::At,
-            TokenKind::Dollar,
+            TokenKind::Hash,
             TokenKind::Eof,
         ]
     );
@@ -91,8 +91,8 @@ fn compound_tokens() {
         ("?.", TokenKind::QuestionDot),
         ("!.", TokenKind::BangDot),
         ("|>", TokenKind::PipeGt),
-        ("$(", TokenKind::DollarLParen),
-        ("$[", TokenKind::DollarLBracket),
+        ("#(", TokenKind::HashLParen),
+        ("#[", TokenKind::HashLBracket),
     ];
     for (src, expected) in cases {
         assert_eq!(lex_first_kind(src), expected, "compound {src:?}");
@@ -396,7 +396,7 @@ fn trailing_comment_trivia() {
 
 #[test]
 fn error_recovery_continues_lexing() {
-    let (tokens, errors) = Lexer::new("# 42").lex();
+    let (tokens, errors) = Lexer::new("$ 42").lex();
     assert_eq!(errors.len(), 1);
     let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
     assert!(kinds.contains(&&TokenKind::Int(42)));
@@ -436,7 +436,7 @@ fn underscore_only_after_base_prefix() {
             "{input:?} should produce exactly one error"
         );
         assert!(
-            matches!(errors[0], LexError::InvalidNumberPrefix { .. }),
+            matches!(errors[0].kind, LexErrorKind::InvalidNumberPrefix),
             "{input:?} should produce InvalidNumberPrefix, got: {:?}",
             errors[0]
         );
@@ -453,7 +453,7 @@ fn incomplete_exponent() {
             "{input:?} should produce exactly one error"
         );
         assert!(
-            matches!(errors[0], LexError::InvalidNumberPrefix { .. }),
+            matches!(errors[0].kind, LexErrorKind::InvalidNumberPrefix),
             "{input:?} should produce InvalidNumberPrefix, got: {:?}",
             errors[0]
         );
@@ -552,7 +552,7 @@ fn number_overflow() {
     let (_, errors) = Lexer::new("99999999999999999999").lex();
     assert_eq!(errors.len(), 1);
     assert!(
-        matches!(errors[0], LexError::NumberOverflow { .. }),
+        matches!(errors[0].kind, LexErrorKind::NumberOverflow),
         "expected NumberOverflow, got: {:?}",
         errors[0]
     );
@@ -581,7 +581,7 @@ fn token_spans_correct() {
 
 #[test]
 fn multiple_errors() {
-    let (_, errors) = Lexer::new("# ~ #").lex();
+    let (_, errors) = Lexer::new("$ ~ $").lex();
     assert!(
         errors.len() >= 3,
         "expected at least 3 errors for 3 bad chars, got {}",
@@ -589,7 +589,7 @@ fn multiple_errors() {
     );
     for err in &errors {
         assert!(
-            matches!(err, LexError::UnexpectedChar { .. }),
+            matches!(err.kind, LexErrorKind::UnexpectedChar(_)),
             "expected UnexpectedChar, got: {err:?}"
         );
     }
@@ -641,35 +641,38 @@ fn block_comment_trivia_has_correct_span() {
 fn invalid_hex_escape_digits() {
     let (_, errors) = Lexer::new(r#""\xGG""#).lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::InvalidHexEscape { .. }));
+    assert!(matches!(
+        errors[0].kind,
+        LexErrorKind::InvalidHexEscape { .. }
+    ));
 }
 
 #[test]
 fn unicode_escape_no_braces() {
     let (_, errors) = Lexer::new(r#""\u0041""#).lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::InvalidUnicodeEscape));
 }
 
 #[test]
 fn unicode_escape_empty() {
     let (_, errors) = Lexer::new(r#""\u{}""#).lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::InvalidUnicodeEscape));
 }
 
 #[test]
 fn unicode_escape_too_many_digits() {
     let (_, errors) = Lexer::new(r#""\u{1234567}""#).lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::InvalidUnicodeEscape));
 }
 
 #[test]
 fn unicode_escape_surrogate() {
     let (_, errors) = Lexer::new(r#""\u{D800}""#).lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::InvalidUnicodeEscape { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::InvalidUnicodeEscape));
 }
 
 #[test]
@@ -689,7 +692,7 @@ fn backslash_rune() {
 fn unterminated_fstring() {
     let (_, errors) = Lexer::new("f\"hello").lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::UnterminatedFString { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::UnterminatedFString));
 }
 
 #[test]
@@ -697,8 +700,8 @@ fn unterminated_fstring_expr() {
     let (_, errors) = Lexer::new("f\"hello {x").lex();
     assert!(!errors.is_empty());
     assert!(matches!(
-        errors[0],
-        LexError::UnterminatedFStringExpr { .. }
+        errors[0].kind,
+        LexErrorKind::UnterminatedFStringExpr
     ));
 }
 
@@ -706,7 +709,7 @@ fn unterminated_fstring_expr() {
 fn unterminated_rune_no_close() {
     let (_, errors) = Lexer::new("'a").lex();
     assert!(!errors.is_empty());
-    assert!(matches!(errors[0], LexError::UnterminatedRune { .. }));
+    assert!(matches!(errors[0].kind, LexErrorKind::UnterminatedRune));
 }
 
 #[test]
@@ -727,8 +730,5 @@ fn keyword_case_sensitivity() {
 fn tilde_unexpected_char() {
     let (_, errors) = Lexer::new("~").lex();
     assert!(!errors.is_empty());
-    assert!(matches!(
-        errors[0],
-        LexError::UnexpectedChar { ch: '~', .. }
-    ));
+    assert!(matches!(errors[0].kind, LexErrorKind::UnexpectedChar('~')));
 }

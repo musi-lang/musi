@@ -3,7 +3,7 @@ use core::mem;
 use music_found::Span;
 
 use crate::cursor::Cursor;
-use crate::errors::{LexError, LexResult};
+use crate::errors::{LexError, LexErrorKind, LexResult};
 use crate::token::{
     FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList, keyword_from_str, single_char_token,
 };
@@ -30,8 +30,8 @@ const COMPOUNDS: &[(&[u8], TokenKind)] = &[
     (b"?.", TokenKind::QuestionDot),
     (b"!.", TokenKind::BangDot),
     (b"|>", TokenKind::PipeGt),
-    (b"$(", TokenKind::DollarLParen),
-    (b"$[", TokenKind::DollarLBracket),
+    (b"#(", TokenKind::HashLParen),
+    (b"#[", TokenKind::HashLBracket),
 ];
 
 const fn is_ident_start(c: char) -> bool {
@@ -125,8 +125,8 @@ impl<'src> Lexer<'src> {
             '"' => self.scan_string(start),
             '\'' => self.scan_rune(start),
             '`' => self.scan_escaped_ident(start),
-            _ => single_char_token(ch).ok_or_else(|| LexError::UnexpectedChar {
-                ch,
+            _ => single_char_token(ch).ok_or_else(|| LexError {
+                kind: LexErrorKind::UnexpectedChar(ch),
                 span: self.cursor.span_from(start),
             }),
         }
@@ -172,7 +172,8 @@ impl<'src> Lexer<'src> {
             .cursor
             .eat_while(|c| is_digit_for_base(c, base) || c == '_');
         if self.cursor.pos() == before {
-            return Err(LexError::InvalidNumberPrefix {
+            return Err(LexError {
+                kind: LexErrorKind::InvalidNumberPrefix,
                 span: self.cursor.span_from(start),
             });
         }
@@ -184,13 +185,15 @@ impl<'src> Lexer<'src> {
         let skip = if base == 10 { 0 } else { 2 };
         let digits: String = raw.chars().skip(skip).filter(|&c| c != '_').collect();
         if digits.is_empty() {
-            return Err(LexError::InvalidNumberPrefix {
+            return Err(LexError {
+                kind: LexErrorKind::InvalidNumberPrefix,
                 span: self.cursor.span_from(start),
             });
         }
         i64::from_str_radix(&digits, base)
             .map(TokenKind::Int)
-            .map_err(|_| LexError::NumberOverflow {
+            .map_err(|_| LexError {
+                kind: LexErrorKind::NumberOverflow,
                 span: self.cursor.span_from(start),
             })
     }
@@ -205,7 +208,8 @@ impl<'src> Lexer<'src> {
             let before_exp_digits = self.cursor.pos();
             let _ = self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
             if self.cursor.pos() == before_exp_digits {
-                return Err(LexError::InvalidNumberPrefix {
+                return Err(LexError {
+                    kind: LexErrorKind::InvalidNumberPrefix,
                     span: self.cursor.span_from(start),
                 });
             }
@@ -215,7 +219,8 @@ impl<'src> Lexer<'src> {
         cleaned
             .parse::<f64>()
             .map(TokenKind::Float)
-            .map_err(|_| LexError::NumberOverflow {
+            .map_err(|_| LexError {
+                kind: LexErrorKind::NumberOverflow,
                 span: self.cursor.span_from(start),
             })
     }
@@ -225,7 +230,8 @@ impl<'src> Lexer<'src> {
         loop {
             match self.cursor.peek() {
                 None => {
-                    return Err(LexError::UnterminatedString {
+                    return Err(LexError {
+                        kind: LexErrorKind::UnterminatedString,
                         span: self.cursor.span_from(start),
                     });
                 }
@@ -252,7 +258,8 @@ impl<'src> Lexer<'src> {
         loop {
             match self.cursor.peek() {
                 None => {
-                    return Err(LexError::UnterminatedFString {
+                    return Err(LexError {
+                        kind: LexErrorKind::UnterminatedFString,
                         span: self.cursor.span_from(start),
                     });
                 }
@@ -289,7 +296,8 @@ impl<'src> Lexer<'src> {
         loop {
             let leading = self.collect_trivia();
             if self.cursor.is_eof() {
-                return Err(LexError::UnterminatedFStringExpr {
+                return Err(LexError {
+                    kind: LexErrorKind::UnterminatedFStringExpr,
                     span: self.cursor.span_from(fstr_start),
                 });
             }
@@ -328,7 +336,8 @@ impl<'src> Lexer<'src> {
                 if self.cursor.peek() == Some('\'') {
                     let _ = self.cursor.advance();
                 }
-                return Err(LexError::EmptyRune {
+                return Err(LexError {
+                    kind: LexErrorKind::EmptyRune,
                     span: self.cursor.span_from(start),
                 });
             }
@@ -347,7 +356,8 @@ impl<'src> Lexer<'src> {
         }
         // Multi-char or unterminated
         if self.cursor.is_eof() {
-            return Err(LexError::UnterminatedRune {
+            return Err(LexError {
+                kind: LexErrorKind::UnterminatedRune,
                 span: self.cursor.span_from(start),
             });
         }
@@ -355,12 +365,14 @@ impl<'src> Lexer<'src> {
         while let Some(c) = self.cursor.peek() {
             let _ = self.cursor.advance();
             if c == '\'' {
-                return Err(LexError::MultiCharRune {
+                return Err(LexError {
+                    kind: LexErrorKind::MultiCharRune,
                     span: self.cursor.span_from(start),
                 });
             }
         }
-        Err(LexError::UnterminatedRune {
+        Err(LexError {
+            kind: LexErrorKind::UnterminatedRune,
             span: self.cursor.span_from(start),
         })
     }
@@ -369,7 +381,8 @@ impl<'src> Lexer<'src> {
         loop {
             match self.cursor.peek() {
                 None => {
-                    return Err(LexError::UnterminatedEscapedIdent {
+                    return Err(LexError {
+                        kind: LexErrorKind::UnterminatedEscapedIdent,
                         span: self.cursor.span_from(start),
                     });
                 }
@@ -396,12 +409,12 @@ impl<'src> Lexer<'src> {
             Some('0') => Ok('\0'),
             Some('x') => self.scan_hex_escape(2, literal_start),
             Some('u') => self.scan_unicode_escape(literal_start),
-            Some(ch) => Err(LexError::InvalidEscape {
-                ch,
+            Some(ch) => Err(LexError {
+                kind: LexErrorKind::InvalidEscape(ch),
                 span: self.cursor.span_from(esc_start),
             }),
-            None => Err(LexError::InvalidEscape {
-                ch: ' ',
+            None => Err(LexError {
+                kind: LexErrorKind::InvalidEscape(' '),
                 span: self.cursor.span_from(esc_start),
             }),
         }
@@ -417,15 +430,15 @@ impl<'src> Lexer<'src> {
                     value = value * 16 + c.to_digit(16).expect("validated as hex digit");
                 }
                 _ => {
-                    return Err(LexError::InvalidHexEscape {
-                        expected: count,
+                    return Err(LexError {
+                        kind: LexErrorKind::InvalidHexEscape { expected: count },
                         span: self.cursor.span_from(start),
                     });
                 }
             }
         }
-        char::from_u32(value).ok_or_else(|| LexError::InvalidHexEscape {
-            expected: count,
+        char::from_u32(value).ok_or_else(|| LexError {
+            kind: LexErrorKind::InvalidHexEscape { expected: count },
             span: self.cursor.span_from(start),
         })
     }
@@ -433,7 +446,8 @@ impl<'src> Lexer<'src> {
     fn scan_unicode_escape(&mut self, _literal_start: u32) -> LexResult<char> {
         let start = self.cursor.pos();
         if !self.cursor.eat('{') {
-            return Err(LexError::InvalidUnicodeEscape {
+            return Err(LexError {
+                kind: LexErrorKind::InvalidUnicodeEscape,
                 span: self.cursor.span_from(start),
             });
         }
@@ -450,24 +464,28 @@ impl<'src> Lexer<'src> {
                     value = value * 16 + c.to_digit(16).expect("validated as hex digit");
                     digit_count += 1;
                     if digit_count > 6 {
-                        return Err(LexError::InvalidUnicodeEscape {
+                        return Err(LexError {
+                            kind: LexErrorKind::InvalidUnicodeEscape,
                             span: self.cursor.span_from(start),
                         });
                     }
                 }
                 _ => {
-                    return Err(LexError::InvalidUnicodeEscape {
+                    return Err(LexError {
+                        kind: LexErrorKind::InvalidUnicodeEscape,
                         span: self.cursor.span_from(start),
                     });
                 }
             }
         }
         if digit_count == 0 {
-            return Err(LexError::InvalidUnicodeEscape {
+            return Err(LexError {
+                kind: LexErrorKind::InvalidUnicodeEscape,
                 span: self.cursor.span_from(start),
             });
         }
-        char::from_u32(value).ok_or_else(|| LexError::InvalidUnicodeEscape {
+        char::from_u32(value).ok_or_else(|| LexError {
+            kind: LexErrorKind::InvalidUnicodeEscape,
             span: self.cursor.span_from(start),
         })
     }
@@ -559,7 +577,8 @@ impl<'src> Lexer<'src> {
         loop {
             match self.cursor.peek() {
                 None => {
-                    return Err(LexError::UnterminatedBlockComment {
+                    return Err(LexError {
+                        kind: LexErrorKind::UnterminatedBlockComment,
                         span: self.cursor.span_from(start),
                     });
                 }

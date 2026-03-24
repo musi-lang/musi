@@ -117,9 +117,9 @@ pub enum TokenKind {
     BangDot,
     QuestionQuestion,
     At,
-    Dollar,
-    DollarLParen,
-    DollarLBracket,
+    Hash,
+    HashLParen,
+    HashLBracket,
 
     // Operators
     Plus,
@@ -193,7 +193,7 @@ pub const fn single_char_token(ch: char) -> Option<TokenKind> {
         '/' => Some(TokenKind::Slash),
         '%' => Some(TokenKind::Percent),
         '@' => Some(TokenKind::At),
-        '$' => Some(TokenKind::Dollar),
+        '#' => Some(TokenKind::Hash),
         _ => None,
     }
 }

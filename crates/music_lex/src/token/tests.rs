@@ -95,12 +95,12 @@ fn single_char_operators() {
 #[test]
 fn single_char_special() {
     assert_eq!(single_char_token('@'), Some(TokenKind::At));
-    assert_eq!(single_char_token('$'), Some(TokenKind::Dollar));
+    assert_eq!(single_char_token('#'), Some(TokenKind::Hash));
 }
 
 #[test]
 fn single_char_unknown() {
     assert_eq!(single_char_token('~'), None);
-    assert_eq!(single_char_token('#'), None);
+    assert_eq!(single_char_token('$'), None);
     assert_eq!(single_char_token('\\'), None);
 }

@@ -133,7 +133,7 @@ compound-token = ":="
 ; §1.7  Special prefixes
 attr-prefix   = "@"
 
-splice-prefix = "$"
+splice-prefix = "#"
 ; §2  Program structure
 ast-root = *(ast-stmt)
 
@@ -203,7 +203,6 @@ postfix-op = "(" [arg-list] ")"  ; call
              / "!"  ; force unwrap
              / ":?" ast-ty-named ["as" ident]  ; type test
              / ":?>" ast-ty-named  ; type cast
-             / "..."  ; spread (postfix)
 ; §4  Atom forms — nud dispatch
 ;   Each alternative has a unique FIRST token.
 ;   The parser dispatches on token kind.
@@ -343,9 +342,9 @@ ast-handle       = "with" ast-ty-named "{" *(fn-decl [";"]) "}" "handle" ast-exp
 ; §4.11  Quote and splice — metaprogramming
 ast-quote = "quote" ("(" ast-expr ")" / "{" *(ast-stmt) "}")
 
-splice    = "$" ident  ; splice identifier
-            / "$(" ast-expr ")"  ; splice expression
-            / "$[" expr-list "]"  ; splice array (splat)
+splice    = "#" ident  ; splice identifier
+            / "#(" ast-expr ")"  ; splice expression
+            / "#[" expr-list "]"  ; splice array (splat)
 ; §5  Types
 ; §5.1  Type precedence
 ;   arrow (right) > union/sum (left) > base
