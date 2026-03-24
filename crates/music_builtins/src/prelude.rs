@@ -96,12 +96,12 @@ pub const PRELUDE_CLASSES: &[PreludeClass] = &[
             IntrinsicMethod {
                 name: "shl",
                 op_name: "shl",
-                intrinsic: "i.shl",
+                intrinsic: "shl",
             },
             IntrinsicMethod {
                 name: "shr",
                 op_name: "shr",
-                intrinsic: "i.shr",
+                intrinsic: "shr",
             },
         ],
     },

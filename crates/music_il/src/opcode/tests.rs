@@ -73,8 +73,8 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::Or.mnemonic(), "or");
     assert_eq!(Opcode::Not.mnemonic(), "not");
     assert_eq!(Opcode::Xor.mnemonic(), "xor");
-    assert_eq!(Opcode::IShl.mnemonic(), "i.shl");
-    assert_eq!(Opcode::IShr.mnemonic(), "i.shr");
+    assert_eq!(Opcode::Shl.mnemonic(), "shl");
+    assert_eq!(Opcode::Shr.mnemonic(), "shr");
     assert_eq!(Opcode::CmpEq.mnemonic(), "cmp.eq");
     assert_eq!(Opcode::CmpNeq.mnemonic(), "cmp.neq");
     assert_eq!(Opcode::CmpLt.mnemonic(), "cmp.lt");

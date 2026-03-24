@@ -5,6 +5,7 @@ use music_ast::expr::{
     MatchArm, PostfixOp, RecordField, TypeOpKind,
 };
 use music_ast::pat::PatKind;
+use music_ast::ty::TyKind;
 use music_db::Db;
 use music_found::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 use music_hir::HirBundle;
@@ -416,6 +417,7 @@ fn emit_handle_with_body() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         let eff_sym = interner.intern("MyEff");
         let handler = FnDecl {
+            attrs: vec![],
             name: MemberName::Ident(Ident::dummy(eff_sym)),
             params: None,
             ret_ty: None,
@@ -804,9 +806,7 @@ fn emit_type_op_cast() {
         let inner = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
-        let ty_id = ast
-            .types
-            .alloc(Spanned::dummy(music_ast::ty::TyKind::Tuple(vec![])));
+        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Tuple(vec![])));
         ExprKind::TypeOp {
             expr: inner,
             ty: ty_id,
@@ -826,9 +826,7 @@ fn emit_type_op_test() {
         let inner = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
-        let ty_id = ast
-            .types
-            .alloc(Spanned::dummy(music_ast::ty::TyKind::Tuple(vec![])));
+        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Tuple(vec![])));
         ExprKind::TypeOp {
             expr: inner,
             ty: ty_id,
@@ -906,6 +904,7 @@ fn emit_instance_def_methods() {
             default: None,
         };
         let decl = FnDecl {
+            attrs: vec![],
             name: MemberName::Ident(Ident::dummy(show_sym)),
             params: Some(vec![param]),
             ret_ty: None,
@@ -1025,8 +1024,8 @@ fn emit_comprehension_single_generator() {
     assert_eq!(instrs[lp + 13], Instruction::simple(Opcode::IAdd));
     assert_eq!(instrs[lp + 14].opcode, Opcode::StLoc);
 
-    // BrJmp back (negative offset)
-    assert_eq!(instrs[lp + 15].opcode, Opcode::BrJmp);
+    // BrBack (negative offset) — signals loop back-edge
+    assert_eq!(instrs[lp + 15].opcode, Opcode::BrBack);
     assert!(
         matches!(instrs[lp + 15].operand, Operand::I16(off) if off < 0),
         "backward jump should have negative offset"
@@ -1084,10 +1083,10 @@ fn emit_comprehension_with_filter() {
 
     let has_backward_jump = instrs
         .iter()
-        .any(|i| i.opcode == Opcode::BrJmp && matches!(i.operand, Operand::I16(off) if off < 0));
+        .any(|i| i.opcode == Opcode::BrBack && matches!(i.operand, Operand::I16(off) if off < 0));
     assert!(
         has_backward_jump,
-        "comprehension should have backward BrJmp"
+        "comprehension should have backward BrBack"
     );
 }
 
@@ -1253,4 +1252,212 @@ fn emit_match_as_pattern() {
     // Wildcard: Pop, LdZero
     assert_eq!(instrs[14], Instruction::simple(Opcode::Pop));
     assert_eq!(instrs[15], Instruction::simple(Opcode::LdZero));
+}
+
+#[test]
+fn emit_wide_locals_above_255() {
+    // 257 lets: slots 0-255 narrow, slot 256 wide.
+    // Each let emits 2 instructions (LdZero + StLoc/StLocW), so slot 256 = instrs[512..513].
+    let thir = build_thir_single(|ast, interner| {
+        let mut stmts = Vec::new();
+        let syms: Vec<_> = (0u32..257)
+            .map(|i| interner.intern(&format!("v{i}")))
+            .collect();
+        let val = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        for &sym in &syms {
+            let pat_id = ast
+                .pats
+                .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(sym))));
+            let let_expr = ast
+                .exprs
+                .alloc(Spanned::dummy(ExprKind::Let(Box::new(LetBinding {
+                    modifiers: ModifierSet::default(),
+                    attrs: Vec::new(),
+                    pat: pat_id,
+                    sig: None,
+                    value: Some(val),
+                }))));
+            stmts.push(let_expr);
+        }
+        let last_sym = *syms.last().unwrap();
+        let var_last = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(last_sym))));
+        stmts.push(var_last);
+        ExprKind::Seq(stmts)
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    // emit_seq adds Pop after each non-final stmt:
+    //   slot n → instrs[3n]=LdZero, [3n+1]=StLoc/StLocW(n), [3n+2]=Pop
+    //   slot 256 → [768]=LdZero, [769]=StLocW(256), [770]=Pop
+    //   final var → [771]=LdLocW(256)
+    //   Halt → [772]
+    assert_eq!(instrs[769].opcode, Opcode::StLocW);
+    assert_eq!(instrs[769].operand, Operand::U16(256));
+    assert_eq!(instrs[771].opcode, Opcode::LdLocW);
+    assert_eq!(instrs[771].operand, Operand::U16(256));
+    assert_eq!(instrs[1].opcode, Opcode::StLoc);
+    assert_eq!(instrs[1].operand, Operand::U8(0));
+}
+
+#[test]
+fn emit_index_assign_uses_arr_set() {
+    let thir = build_thir_single(|ast, interner| {
+        let arr_sym = interner.intern("arr");
+        let i_sym = interner.intern("i");
+        let val_sym = interner.intern("v");
+
+        let zero = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let arr_lit = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::ArrayLit(vec![zero])));
+        let arr_pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(arr_sym))));
+        let let_arr = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Let(Box::new(LetBinding {
+                modifiers: ModifierSet::default(),
+                attrs: Vec::new(),
+                pat: arr_pat,
+                sig: None,
+                value: Some(arr_lit),
+            }))));
+
+        let i_val = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let i_pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(i_sym))));
+        let let_i = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Let(Box::new(LetBinding {
+                modifiers: ModifierSet::default(),
+                attrs: Vec::new(),
+                pat: i_pat,
+                sig: None,
+                value: Some(i_val),
+            }))));
+
+        let v_val = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(99))));
+        let v_pat = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(val_sym))));
+        let let_v = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Let(Box::new(LetBinding {
+                modifiers: ModifierSet::default(),
+                attrs: Vec::new(),
+                pat: v_pat,
+                sig: None,
+                value: Some(v_val),
+            }))));
+
+        let arr_var = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(arr_sym))));
+        let idx_ref = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(i_sym))));
+        let val_ref = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(val_sym))));
+        let index_expr = ast.exprs.alloc(Spanned::dummy(ExprKind::Index {
+            expr: arr_var,
+            indices: vec![idx_ref],
+            kind: IndexKind::Point,
+        }));
+        let assign_expr = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Assign(index_expr, val_ref)));
+
+        ExprKind::Seq(vec![let_arr, let_i, let_v, assign_expr])
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+
+    // arr := [0]: ArrNew(1) LdZero ArrSeti(0) StLoc(0) Pop  → 5
+    // i := 0:     LdZero StLoc(1) Pop                       → 3
+    // v := 99:    LdSmi(99) StLoc(2) Pop                    → 3
+    // assign:     LdLoc(0) LdLoc(1) LdLoc(2) ArrSet         → 4
+    // Halt                                                   → 1
+    // total = 16; assign at [11..14], Halt at [15]
+    assert_eq!(instrs[11].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[12].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[13].opcode, Opcode::LdLoc);
+    assert_eq!(instrs[14], Instruction::simple(Opcode::ArrSet));
+}
+
+#[test]
+fn emit_true_variant_emits_ld_true() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|_ast, int| {
+        let true_sym = int.intern("True");
+        ExprKind::VariantLit(Ident::dummy(true_sym), vec![])
+    });
+    let variant_id = thir.db.ast.exprs.iter().next().unwrap().0;
+    let _ = thir.type_env.dispatch.insert(
+        variant_id,
+        DispatchInfo::Static {
+            intrinsic: "ld.true",
+        },
+    );
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdTrue));
+}
+
+#[test]
+fn emit_false_variant_emits_ld_false() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|_ast, int| {
+        let false_sym = int.intern("False");
+        ExprKind::VariantLit(Ident::dummy(false_sym), vec![])
+    });
+    let variant_id = thir.db.ast.exprs.iter().next().unwrap().0;
+    let _ = thir.type_env.dispatch.insert(
+        variant_id,
+        DispatchInfo::Static {
+            intrinsic: "ld.false",
+        },
+    );
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdFalse));
+}
+
+#[test]
+fn emit_intrinsic_call_emits_opcode() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|ast, int| {
+        let shl_sym = int.intern("shl");
+        let callee = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(shl_sym))));
+        let arg = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        ExprKind::App(callee, vec![arg])
+    });
+    // Inject dispatch for the callee expression.
+    // The callee is the first expression allocated; its index is 0.
+    let callee_id = thir.db.ast.exprs.iter().next().unwrap().0;
+    let _ = thir
+        .type_env
+        .dispatch
+        .insert(callee_id, DispatchInfo::Static { intrinsic: "shl" });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    // intrinsic path: emit arg(s) then opcode — no LdVar for callee, no Call
+    let has_ishl = instrs.iter().any(|i| i.opcode == Opcode::Shl);
+    assert!(has_ishl, "expected Shl in {instrs:?}");
 }

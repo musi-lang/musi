@@ -567,6 +567,7 @@ fn handle_expr() {
             args: vec![],
         },
         handlers: vec![FnDecl {
+            attrs: vec![],
             name: MemberName::Ident(ident),
             params: None,
             ret_ty: None,

@@ -22,7 +22,7 @@ use crate::pool::{ConstantEntry, ConstantPool};
 pub struct MethodEntry {
     pub name: Option<Symbol>,
     pub instructions: Vec<Instruction>,
-    pub locals_count: u8,
+    pub locals_count: u16,
 }
 
 /// A module-level global binding.
@@ -125,7 +125,8 @@ impl Emitter<'_> {
         self.emit_expr(body);
         self.push(Instruction::simple(Opcode::Ret));
 
-        let locals_count = u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+        let locals_count =
+            u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         self.methods.push(MethodEntry {
             name: Some(name),
             instructions: mem::replace(&mut self.current_instructions, saved_instructions),
@@ -138,7 +139,7 @@ impl Emitter<'_> {
         if !self.current_instructions.is_empty() {
             self.push(Instruction::simple(Opcode::Halt));
             let locals_count =
-                u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+                u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
             self.methods.push(MethodEntry {
                 name: None,
                 instructions: mem::take(&mut self.current_instructions),
@@ -167,7 +168,7 @@ impl Emitter<'_> {
             ExprKind::Seq(ref stmts) => self.emit_seq(stmts),
             ExprKind::Match(scrutinee, ref arms) => self.emit_match(scrutinee, arms),
             ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields),
-            ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(tag, args),
+            ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args),
             ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field),
             ExprKind::Return(opt) => self.emit_return(opt),
             ExprKind::TupleLit(ref elems) => self.emit_tuple_lit(elems),
@@ -232,7 +233,7 @@ impl Emitter<'_> {
 
     fn emit_var(&mut self, ident: &Ident) {
         if let Some(slot) = self.find_local(ident.name) {
-            self.push(Instruction::with_u8(Opcode::LdLoc, slot));
+            self.emit_ld_loc(slot);
         } else if let Some(slot) = self.find_upvalue(ident.name) {
             self.push(Instruction::with_u8(Opcode::LdUpv, slot));
         } else if let Some(idx) = self.find_global(ident.name) {
@@ -243,6 +244,15 @@ impl Emitter<'_> {
     }
 
     fn emit_app(&mut self, callee: ExprId, args: &ExprList) {
+        if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(callee) {
+            if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
+                for &arg in args {
+                    self.emit_expr(arg);
+                }
+                self.push(Instruction::simple(opcode));
+                return;
+            }
+        }
         self.emit_expr(callee);
         for &arg in args {
             self.emit_expr(arg);
@@ -334,7 +344,7 @@ impl Emitter<'_> {
             if let Some(value) = binding.value {
                 self.emit_expr(value);
                 let slot = self.local_slot(ident.name);
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_st_loc(slot);
             }
         }
     }
@@ -352,7 +362,7 @@ impl Emitter<'_> {
         // in the *outer* frame so ClsNew can close over them.
         for &cap in &captured {
             if let Some(slot) = self.find_local(cap) {
-                self.push(Instruction::with_u8(Opcode::LdLoc, slot));
+                self.emit_ld_loc(slot);
             } else if let Some(slot) = self.find_upvalue(cap) {
                 self.push(Instruction::with_u8(Opcode::LdUpv, slot));
             } else if let Some(idx) = self.find_global(cap) {
@@ -374,7 +384,8 @@ impl Emitter<'_> {
         self.emit_expr(body);
         self.push(Instruction::simple(Opcode::Ret));
 
-        let locals_count = u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+        let locals_count =
+            u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         let method_idx = u16::try_from(self.methods.len()).expect("too many methods (>65535)");
         let upval_count = u8::try_from(captured.len()).expect("too many upvalues (>255)");
 
@@ -427,7 +438,7 @@ impl Emitter<'_> {
                 }
                 PatKind::Bind(ident) => {
                     let slot = self.local_slot(ident.name);
-                    self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                    self.emit_st_loc(slot);
                     self.emit_guard_and_body(arm, is_last, &mut end_jumps);
                 }
                 PatKind::Lit(literal) => {
@@ -522,7 +533,7 @@ impl Emitter<'_> {
                 let idx = u8::try_from(i).expect("too many tuple/array elements (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrGeti, idx));
                 let slot = self.local_slot(ident.name);
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_st_loc(slot);
             }
         }
 
@@ -554,7 +565,7 @@ impl Emitter<'_> {
                 let idx = u8::try_from(i).expect("too many record fields (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrGeti, idx));
                 let slot = self.local_slot(ident.name);
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_st_loc(slot);
             }
         }
 
@@ -592,7 +603,7 @@ impl Emitter<'_> {
                 let field_u8 = u8::try_from(fi).expect("too many fields (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrGeti, field_u8));
                 let slot = self.local_slot(field_ident.name);
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_st_loc(slot);
             }
         }
 
@@ -625,7 +636,13 @@ impl Emitter<'_> {
         }
     }
 
-    fn emit_variant_lit(&mut self, tag: &Ident, args: &ExprList) {
+    fn emit_variant_lit(&mut self, expr_id: ExprId, tag: &Ident, args: &ExprList) {
+        if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(expr_id) {
+            if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
+                self.push(Instruction::simple(opcode));
+                return;
+            }
+        }
         let tag_name = self.thir.db.interner.resolve(tag.name);
         let tag_idx = self.pool.add(ConstantEntry::Str(tag_name.into()));
         let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
@@ -833,7 +850,7 @@ impl Emitter<'_> {
                 if let Some(ident) = opt_ident {
                     self.push(Instruction::simple(Opcode::Dup));
                     let slot = self.local_slot(ident.name);
-                    self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                    self.emit_st_loc(slot);
                 }
             }
             TypeOpKind::Cast => {
@@ -887,10 +904,10 @@ impl Emitter<'_> {
         self.push(Instruction::simple(Opcode::FfiCall));
     }
 
-    fn alloc_anon_slot(&mut self) -> u8 {
+    fn alloc_anon_slot(&mut self) -> u16 {
         let sym = Symbol::synthetic(self.next_anon);
         self.next_anon = self.next_anon.wrapping_sub(1);
-        let slot = u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+        let slot = u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         self.current_locals.push(sym);
         slot
     }
@@ -906,28 +923,28 @@ impl Emitter<'_> {
 
                     self.emit_expr(iter_expr);
                     let iter_slot = self.alloc_anon_slot();
-                    self.push(Instruction::with_u8(Opcode::StLoc, iter_slot));
+                    self.emit_st_loc(iter_slot);
 
                     self.push(Instruction::simple(Opcode::LdZero));
                     let counter_slot = self.alloc_anon_slot();
-                    self.push(Instruction::with_u8(Opcode::StLoc, counter_slot));
+                    self.emit_st_loc(counter_slot);
 
                     let loop_start = self.current_instructions.len();
 
-                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
-                    self.push(Instruction::with_u8(Opcode::LdLoc, iter_slot));
+                    self.emit_ld_loc(counter_slot);
+                    self.emit_ld_loc(iter_slot);
                     self.push(Instruction::simple(Opcode::ArrLen));
                     self.push(Instruction::simple(Opcode::CmpGeq));
                     let end_jump = self.placeholder_jump(Opcode::BrTrue);
 
-                    self.push(Instruction::with_u8(Opcode::LdLoc, iter_slot));
-                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
+                    self.emit_ld_loc(iter_slot);
+                    self.emit_ld_loc(counter_slot);
                     self.push(Instruction::simple(Opcode::ArrGet));
 
                     let pat_node = self.thir.db.ast.pats.get(pat_id);
                     if let PatKind::Bind(ident) = &pat_node.kind {
                         let slot = self.local_slot(ident.name);
-                        self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                        self.emit_st_loc(slot);
                     } else {
                         self.push(Instruction::simple(Opcode::Pop));
                     }
@@ -950,17 +967,17 @@ impl Emitter<'_> {
                         self.patch_jump(fj);
                     }
 
-                    self.push(Instruction::with_u8(Opcode::LdLoc, counter_slot));
+                    self.emit_ld_loc(counter_slot);
                     self.push(Instruction::simple(Opcode::LdOne));
                     self.push(Instruction::simple(Opcode::IAdd));
-                    self.push(Instruction::with_u8(Opcode::StLoc, counter_slot));
+                    self.emit_st_loc(counter_slot);
 
                     let back_pos = self.current_instructions.len();
                     let back_offset = isize::try_from(loop_start).expect("loop_start overflow")
                         - isize::try_from(back_pos).expect("back_pos overflow")
                         - 1;
                     let back_i16 = i16::try_from(back_offset).expect("backward jump too far");
-                    self.push(Instruction::with_i16(Opcode::BrJmp, back_i16));
+                    self.push(Instruction::with_i16(Opcode::BrBack, back_i16));
 
                     self.patch_jump(end_jump);
                 }
@@ -1062,7 +1079,7 @@ impl Emitter<'_> {
     ) {
         self.push(Instruction::simple(Opcode::Dup));
         let name_slot = self.local_slot(name.name);
-        self.push(Instruction::with_u8(Opcode::StLoc, name_slot));
+        self.emit_st_loc(name_slot);
 
         let inner_node = self.thir.db.ast.pats.get(inner_pat);
         match &inner_node.kind {
@@ -1077,7 +1094,7 @@ impl Emitter<'_> {
             }
             PatKind::Bind(ident) => {
                 let slot = self.local_slot(ident.name);
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
+                self.emit_st_loc(slot);
                 self.emit_guard_and_body(arm, is_last, end_jumps);
             }
             _ => {
@@ -1089,15 +1106,53 @@ impl Emitter<'_> {
 
     fn emit_assign(&mut self, target: ExprId, value: ExprId) {
         let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
-        self.emit_expr(value);
-        if let ExprKind::Var(ident) = target_kind {
-            if let Some(slot) = self.find_local(ident.name) {
-                self.push(Instruction::with_u8(Opcode::StLoc, slot));
-            } else if let Some(slot) = self.find_upvalue(ident.name) {
-                self.push(Instruction::with_u8(Opcode::StUpv, slot));
-            } else if let Some(idx) = self.find_global(ident.name) {
-                self.push(Instruction::with_u16(Opcode::StGlb, idx));
+        match target_kind {
+            ExprKind::Var(ident) => {
+                self.emit_expr(value);
+                if let Some(slot) = self.find_local(ident.name) {
+                    self.emit_st_loc(slot);
+                } else if let Some(slot) = self.find_upvalue(ident.name) {
+                    self.push(Instruction::with_u8(Opcode::StUpv, slot));
+                } else if let Some(idx) = self.find_global(ident.name) {
+                    self.push(Instruction::with_u16(Opcode::StGlb, idx));
+                }
             }
+            ExprKind::Index {
+                expr, ref indices, ..
+            } => {
+                // arr.[i] <- val  →  [arr, idx, val] ArrSet
+                // For chained indices like arr.[i].[j] <- val, navigate with ArrGet
+                // to the penultimate array, then ArrSet the last index.
+                let indices = indices.clone();
+                if let Some((last_idx, leading)) = indices.split_last() {
+                    // Navigate to the containing array.
+                    self.emit_expr(expr);
+                    for &idx in leading {
+                        self.emit_expr(idx);
+                        self.push(Instruction::simple(Opcode::ArrGet));
+                    }
+                    self.emit_expr(*last_idx);
+                    self.emit_expr(value);
+                    self.push(Instruction::simple(Opcode::ArrSet));
+                }
+            }
+            ExprKind::Access { expr, field, .. } => {
+                // rec.field <- val  →  [rec, val] ArrSeti(field_idx)
+                self.emit_expr(expr);
+                self.emit_expr(value);
+                match field {
+                    FieldTarget::Index(idx) => {
+                        let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
+                        self.push(Instruction::with_u8(Opcode::ArrSeti, field_u8));
+                    }
+                    FieldTarget::Name(_) => {
+                        // Named fields are resolved to positional indices by sema.
+                        // Until that lowering exists, emit Nop as a placeholder.
+                        self.push(Instruction::simple(Opcode::Nop));
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1105,20 +1160,36 @@ impl Emitter<'_> {
         self.current_instructions.push(instruction);
     }
 
-    fn local_slot(&mut self, name: Symbol) -> u8 {
+    fn local_slot(&mut self, name: Symbol) -> u16 {
         if let Some(slot) = self.find_local(name) {
             return slot;
         }
-        let slot = u8::try_from(self.current_locals.len()).expect("too many locals (>255)");
+        let slot = u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         self.current_locals.push(name);
         slot
     }
 
-    fn find_local(&self, name: Symbol) -> Option<u8> {
+    fn find_local(&self, name: Symbol) -> Option<u16> {
         self.current_locals
             .iter()
             .position(|&s| s == name)
-            .and_then(|p| u8::try_from(p).ok())
+            .and_then(|p| u16::try_from(p).ok())
+    }
+
+    fn emit_ld_loc(&mut self, slot: u16) {
+        if let Ok(s) = u8::try_from(slot) {
+            self.push(Instruction::with_u8(Opcode::LdLoc, s));
+        } else {
+            self.push(Instruction::with_u16(Opcode::LdLocW, slot));
+        }
+    }
+
+    fn emit_st_loc(&mut self, slot: u16) {
+        if let Ok(s) = u8::try_from(slot) {
+            self.push(Instruction::with_u8(Opcode::StLoc, s));
+        } else {
+            self.push(Instruction::with_u16(Opcode::StLocW, slot));
+        }
     }
 
     fn find_upvalue(&self, name: Symbol) -> Option<u8> {

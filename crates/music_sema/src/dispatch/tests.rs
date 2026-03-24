@@ -60,7 +60,7 @@ fn int_and_resolves_to_bitwise() {
     assert_eq!(res.result_ty, int);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "i.and" })
+        Some(DispatchInfo::Static { intrinsic: "and" })
     ));
 }
 

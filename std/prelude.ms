@@ -1,6 +1,11 @@
 // --- Primitive types - compiler erases to NaN-box tags at codegen. ---
 /// Logical boolean with two variants: `False` and `True`.
-export let Bool := choice { False | True };
+export let Bool := choice {
+    @_intrinsic(opcode := "ld.false")
+    False
+  | @_intrinsic(opcode := "ld.true")
+    True
+};
 /// The unit type, representing absence of data.
 export let Unit := record {};
 /// The uninhabited type, used for non-terminating functions.
@@ -101,4 +106,12 @@ export let Num [T] := class where T : Eq {
 export let Show [T] := class {
     /// Converts a value to its string representation.
     let show (a : T) : String;
+};
+
+/// Bitwise shift operations for integer types.
+export let Bits [T] := class {
+    @_intrinsic(opcode := "shl")
+    let shl (a : T, n : Int) : T;
+    @_intrinsic(opcode := "shr")
+    let shr (a : T, n : Int) : T;
 };

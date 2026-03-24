@@ -1,6 +1,6 @@
 use music_found::{Ident, Symbol};
 
-use crate::{ExprId, IdentList, ParamList, TyId, TyList};
+use crate::{AttrList, ExprId, IdentList, ParamList, TyId, TyList};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ModifierSet {
@@ -66,6 +66,7 @@ pub enum MemberDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FnDecl {
+    pub attrs: AttrList,
     pub name: MemberName,
     pub params: Option<ParamList>,
     pub ret_ty: Option<TyId>,
@@ -94,6 +95,7 @@ pub struct RecordDefField {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantDef {
+    pub attrs: AttrList,
     pub name: Ident,
     pub payload: Option<TyId>,
 }

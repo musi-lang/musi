@@ -140,7 +140,7 @@ fn lambda_does_not_capture_own_param() {
     let (_db, res, errors) = parse_and_resolve("let f := (x) => x");
     assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     // x is a param, not a capture
-    let total_captures: usize = res.captures.values().map(|c| c.len()).sum();
+    let total_captures: usize = res.captures.values().map(Vec::len).sum();
     assert_eq!(total_captures, 0, "params should not be captured");
 }
 

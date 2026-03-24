@@ -19,6 +19,7 @@ use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
 use crate::env::{DispatchInfo, InstanceEntry, TypeEnv};
 use crate::errors::{SemaError, SemaErrorKind};
+use crate::intrinsic::{IntrinsicMaps, collect_intrinsic_methods};
 use crate::types::{SemaTypeId, Ty};
 use crate::unify::unify;
 
@@ -36,6 +37,10 @@ pub struct SemaDb {
     used_defs: HashSet<DefId>,
     current_handler_ret: Option<SemaTypeId>,
     def_constraints: HashMap<DefId, Vec<(Symbol, Symbol)>>,
+    /// Class methods with `@_intrinsic(opcode := "...")`: symbol → mnemonic.
+    intrinsic_methods: HashMap<Symbol, &'static str>,
+    /// Choice variant names with `@_intrinsic(opcode := "...")`: symbol → mnemonic.
+    intrinsic_variants: HashMap<Symbol, &'static str>,
 }
 
 impl SemaDb {
@@ -56,11 +61,17 @@ impl SemaDb {
             used_defs: HashSet::new(),
             current_handler_ret: None,
             def_constraints: HashMap::new(),
+            intrinsic_methods: HashMap::new(),
+            intrinsic_variants: HashMap::new(),
         }
     }
 
     /// Type-checks all top-level expressions in the module.
     pub fn check_module(&mut self) {
+        let IntrinsicMaps { methods, variants } =
+            collect_intrinsic_methods(&self.db.ast, &self.db.interner);
+        self.intrinsic_methods = methods;
+        self.intrinsic_variants = variants;
         let root = self.db.ast.root.clone();
         for &expr_id in &root {
             let _ = self.synth(expr_id);
@@ -136,7 +147,7 @@ impl SemaDb {
             ExprKind::TupleLit(ref elems) => self.synth_tuple(elems),
             ExprKind::ArrayLit(ref elems) => self.synth_array(elems, span),
             ExprKind::RecordLit(ref fields) => self.synth_record_lit(fields),
-            ExprKind::VariantLit(ref _tag, ref args) => self.synth_variant_lit(args),
+            ExprKind::VariantLit(ref tag, ref args) => self.synth_variant_lit(tag, args, expr_id),
             ExprKind::Access {
                 expr, ref field, ..
             } => self.synth_access(expr, field, span),
@@ -250,6 +261,16 @@ impl SemaDb {
     }
 
     fn synth_app(&mut self, callee: ExprId, args: &[ExprId], span: Span) -> SemaTypeId {
+        let callee_kind = self.db.ast.exprs.get(callee).kind.clone();
+        if let ExprKind::Var(ref ident) = callee_kind {
+            if let Some(&intrinsic) = self.intrinsic_methods.get(&ident.name) {
+                let _ = self
+                    .env
+                    .dispatch
+                    .insert(callee, DispatchInfo::Static { intrinsic });
+            }
+        }
+
         let callee_ty = self.synth(callee);
         let resolved = self.env.resolve_var(callee_ty);
         let ty = self.env.types.get(resolved).clone();
@@ -895,9 +916,15 @@ impl SemaDb {
         })
     }
 
-    fn synth_variant_lit(&mut self, args: &[ExprId]) -> SemaTypeId {
+    fn synth_variant_lit(&mut self, tag: &Ident, args: &[ExprId], expr_id: ExprId) -> SemaTypeId {
         for &arg in args {
             let _ = self.synth(arg);
+        }
+        if let Some(&opcode) = self.intrinsic_variants.get(&tag.name) {
+            let _ = self
+                .env
+                .dispatch
+                .insert(expr_id, DispatchInfo::Static { intrinsic: opcode });
         }
         self.env.intern(Ty::Any)
     }

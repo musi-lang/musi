@@ -48,8 +48,8 @@ pub enum Opcode {
     Xor = 0x22,
 
     // -- Bit Shifts (0x23-0x24) --
-    IShl = 0x23,
-    IShr = 0x24,
+    Shl = 0x23,
+    Shr = 0x24,
 
     // -- Comparison (0x25-0x2A) --
     CmpEq = 0x25,
@@ -156,8 +156,8 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x20] = Some(Opcode::Or);
     table[0x21] = Some(Opcode::Not);
     table[0x22] = Some(Opcode::Xor);
-    table[0x23] = Some(Opcode::IShl);
-    table[0x24] = Some(Opcode::IShr);
+    table[0x23] = Some(Opcode::Shl);
+    table[0x24] = Some(Opcode::Shr);
     table[0x25] = Some(Opcode::CmpEq);
     table[0x26] = Some(Opcode::CmpNeq);
     table[0x27] = Some(Opcode::CmpLt);
@@ -258,8 +258,8 @@ impl Opcode {
             Self::Not => "not",
             Self::Xor => "xor",
 
-            Self::IShl => "i.shl",
-            Self::IShr => "i.shr",
+            Self::Shl => "shl",
+            Self::Shr => "shr",
 
             Self::CmpEq => "cmp.eq",
             Self::CmpNeq => "cmp.neq",
@@ -366,8 +366,8 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::Not,
     Opcode::Xor,
     // Bit Shifts
-    Opcode::IShl,
-    Opcode::IShr,
+    Opcode::Shl,
+    Opcode::Shr,
     // Comparison
     Opcode::CmpEq,
     Opcode::CmpNeq,

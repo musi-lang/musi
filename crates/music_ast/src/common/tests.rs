@@ -157,6 +157,7 @@ fn effect_item_construction() {
 fn member_decl_fn() {
     let (_i, ident) = test_ident();
     let md = MemberDecl::Fn(FnDecl {
+        attrs: vec![],
         name: MemberName::Ident(ident),
         params: None,
         ret_ty: None,
@@ -199,6 +200,7 @@ fn record_def_field() {
 fn variant_def() {
     let (_i, ident) = test_ident();
     let v = VariantDef {
+        attrs: vec![],
         name: ident,
         payload: None,
     };

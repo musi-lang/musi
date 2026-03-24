@@ -112,27 +112,9 @@ fn resolve_logical(env: &TypeEnv, op: BinOp, lhs_ty: SemaTypeId) -> BinOpResolut
     let resolved = env.resolve_var(lhs_ty);
     let ty = env.types.get(resolved).clone();
     match ty {
-        Ty::Builtin(BuiltinType::Bool) => {
-            let intrinsic = match op {
-                BinOp::And => "and",
-                BinOp::Or => "or",
-                BinOp::Xor => "xor",
-                _ => {
-                    return BinOpResolution {
-                        result_ty: resolved,
-                        dispatch: None,
-                        needs_class: None,
-                    };
-                }
-            };
-            BinOpResolution {
-                result_ty: resolved,
-                dispatch: Some(DispatchInfo::Static { intrinsic }),
-                needs_class: None,
-            }
-        }
         Ty::Builtin(
-            BuiltinType::Int
+            BuiltinType::Bool
+            | BuiltinType::Int
             | BuiltinType::Nat
             | BuiltinType::Int8
             | BuiltinType::Int16
@@ -144,9 +126,9 @@ fn resolve_logical(env: &TypeEnv, op: BinOp, lhs_ty: SemaTypeId) -> BinOpResolut
             | BuiltinType::Nat64,
         ) => {
             let intrinsic = match op {
-                BinOp::And => "i.and",
-                BinOp::Or => "i.or",
-                BinOp::Xor => "i.xor",
+                BinOp::And => "and",
+                BinOp::Or => "or",
+                BinOp::Xor => "xor",
                 _ => {
                     return BinOpResolution {
                         result_ty: resolved,

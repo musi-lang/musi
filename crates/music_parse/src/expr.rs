@@ -1152,13 +1152,18 @@ impl Parser<'_> {
     }
 
     fn parse_variant_def(&mut self) -> ParseResult<VariantDef> {
+        let attrs = self.parse_attrs()?;
         let name = self.expect_ident()?;
         let payload = if self.eat(&TokenKind::Colon) {
             Some(self.parse_ty_no_union()?)
         } else {
             None
         };
-        Ok(VariantDef { name, payload })
+        Ok(VariantDef {
+            attrs,
+            name,
+            payload,
+        })
     }
 
     fn parse_record_def(&mut self) -> ParseResult<ExprId> {
@@ -1223,19 +1228,21 @@ impl Parser<'_> {
     }
 
     fn parse_member_decl(&mut self) -> ParseResult<MemberDecl> {
+        let attrs = self.parse_attrs()?;
         if self.at(&TokenKind::KwLaw) {
             return Ok(MemberDecl::Law(self.parse_law_decl()?));
         }
-        Ok(MemberDecl::Fn(self.parse_fn_decl()?))
+        Ok(MemberDecl::Fn(self.parse_fn_decl(attrs)?))
     }
 
-    fn parse_fn_decl(&mut self) -> ParseResult<FnDecl> {
+    fn parse_fn_decl(&mut self, attrs: AttrList) -> ParseResult<FnDecl> {
         let _ = self.expect(&TokenKind::KwLet, "'let'")?;
         let name = self.parse_member_name()?;
         let params = self.parse_opt_params()?;
         let ret_ty = self.parse_opt_ty_annot()?;
         let body = self.parse_opt_default()?;
         Ok(FnDecl {
+            attrs,
             name,
             params,
             ret_ty,
@@ -1310,7 +1317,8 @@ impl Parser<'_> {
         let _ = self.expect(&TokenKind::LBrace, "'{'")?;
         let mut handlers = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            handlers.push(self.parse_fn_decl()?);
+            let attrs = self.parse_attrs()?;
+            handlers.push(self.parse_fn_decl(attrs)?);
             let _ = self.eat(&TokenKind::Semi);
         }
         let _ = self.expect(&TokenKind::RBrace, "'}'")?;

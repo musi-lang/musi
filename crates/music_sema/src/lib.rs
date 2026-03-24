@@ -3,6 +3,7 @@ pub mod dispatch;
 pub mod effects;
 pub mod env;
 pub mod errors;
+pub mod intrinsic;
 pub mod types;
 pub mod unify;
 

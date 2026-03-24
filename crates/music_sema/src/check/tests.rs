@@ -417,3 +417,45 @@ fn duplicate_instance_detected() {
         .any(|e| matches!(e.kind, SemaErrorKind::DuplicateInstance { .. }));
     assert!(has_dup, "expected DuplicateInstance, got: {errors:?}");
 }
+
+#[test]
+fn intrinsic_method_dispatch_recorded() {
+    use crate::env::DispatchInfo;
+    let (env, _errors) = check_source(
+        "let Bits [T] := class { \
+             @_intrinsic(opcode := \"shl\") \
+             let shl (a : T, n : Int) : T \
+         }; \
+         shl(1, 2)",
+    );
+    let has_static = env
+        .dispatch
+        .values()
+        .any(|d| matches!(d, DispatchInfo::Static { intrinsic } if *intrinsic == "shl"));
+    assert!(
+        has_static,
+        "expected Static dispatch for shl, got: {:?}",
+        env.dispatch
+    );
+}
+
+#[test]
+fn intrinsic_method_positional_opcode() {
+    use crate::env::DispatchInfo;
+    let (env, _errors) = check_source(
+        "let Bits [T] := class { \
+             @_intrinsic(\"shr\") \
+             let shr (a : T, n : Int) : T \
+         }; \
+         shr(1, 1)",
+    );
+    let has_static = env
+        .dispatch
+        .values()
+        .any(|d| matches!(d, DispatchInfo::Static { intrinsic } if *intrinsic == "shr"));
+    assert!(
+        has_static,
+        "expected Static dispatch for shr, got: {:?}",
+        env.dispatch
+    );
+}

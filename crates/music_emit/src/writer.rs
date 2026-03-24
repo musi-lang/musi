@@ -116,7 +116,7 @@ fn build_constant_pool(module: &SeamModule) -> Vec<u8> {
 
 /// Encode method table: `method_count(u16)` + methods.
 ///
-/// Each method: `name_symbol(u32)` + `locals_count(u8)` + `instruction_count(u16)` + encoded instructions.
+/// Each method: `name_symbol(u32)` + `locals_count(u16)` + `instruction_count(u16)` + encoded instructions.
 fn build_methods(module: &SeamModule) -> Vec<u8> {
     if module.methods.is_empty() {
         return Vec::new();
@@ -129,7 +129,7 @@ fn build_methods(module: &SeamModule) -> Vec<u8> {
     for method in &module.methods {
         let name_raw = method.name.map_or(u32::MAX, Symbol::raw);
         out.extend_from_slice(&name_raw.to_le_bytes());
-        out.push(method.locals_count);
+        out.extend_from_slice(&method.locals_count.to_le_bytes());
         let instr_count =
             u16::try_from(method.instructions.len()).expect("too many instructions (>65535)");
         out.extend_from_slice(&instr_count.to_le_bytes());

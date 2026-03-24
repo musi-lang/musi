@@ -764,6 +764,7 @@ fn map_fn_decls(
                 new_p
             });
             FnDecl {
+                attrs: decl.attrs.clone(),
                 name: decl.name.clone(),
                 params: new_params,
                 ret_ty: decl.ret_ty,
@@ -799,6 +800,7 @@ fn map_member_decls(
                     new_p
                 });
                 MemberDecl::Fn(FnDecl {
+                    attrs: decl.attrs.clone(),
                     name: decl.name.clone(),
                     params: new_params,
                     ret_ty: decl.ret_ty,
