@@ -22,6 +22,10 @@ pub enum ResolveErrorKind {
     DuplicateDefinition { name: Symbol, original: Span },
     /// A name was referenced before its definition in sequential scope.
     NotYetDefined(Symbol),
+    /// An import path could not be resolved to a file.
+    ImportNotFound(Symbol),
+    /// An import forms a cycle (module A imports B which imports A).
+    CyclicImport(Symbol),
 }
 
 impl ResolveError {
@@ -51,6 +55,12 @@ impl fmt::Display for ResolveError {
             }
             ResolveErrorKind::NotYetDefined(sym) => {
                 write!(f, "name `{sym}` used before its definition")
+            }
+            ResolveErrorKind::ImportNotFound(sym) => {
+                write!(f, "import `{sym}` not found")
+            }
+            ResolveErrorKind::CyclicImport(sym) => {
+                write!(f, "cyclic import detected for `{sym}`")
             }
         }
     }

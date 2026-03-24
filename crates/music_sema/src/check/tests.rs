@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use music_builtins::types::BuiltinType;
 use music_db::Db;
 use music_found::{Interner, SourceMap};
@@ -17,7 +19,7 @@ fn check_source(source: &str) -> (TypeEnv, Vec<SemaError>) {
     let (mut ast, _) = parse(&tokens, source, &mut interner);
     lower(&mut ast);
     let db = Db::new(ast, interner, SourceMap::default());
-    let mut rdb = ResolveDb::new(db);
+    let mut rdb = ResolveDb::new(db, PathBuf::new());
     rdb.seed_builtins();
     rdb.resolve_module();
     let (db, resolution, _) = rdb.finish();

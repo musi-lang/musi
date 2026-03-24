@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use music_db::Db;
 use music_found::{Interner, SourceMap};
 use music_lex::Lexer;
@@ -12,7 +14,7 @@ fn parse_and_resolve(source: &str) -> (Db, ResolutionMap, Vec<ResolveError>) {
     let (tokens, _lex_errors) = Lexer::new(source).lex();
     let (ast, _parse_errors) = parse(&tokens, source, &mut interner);
     let db = Db::new(ast, interner, SourceMap::default());
-    let mut rdb = ResolveDb::new(db);
+    let mut rdb = ResolveDb::new(db, PathBuf::new());
     rdb.seed_builtins();
     rdb.resolve_module();
     rdb.finish()

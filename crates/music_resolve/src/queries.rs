@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use music_arena::Arena;
 use music_ast::common::{MemberDecl, ModifierSet, Param};
 use music_ast::expr::{
-    CompClause, ExprKind, FStrPart, InstanceBody, LetBinding, MatchArm, PwGuard, QuoteKind,
-    RecordField, SpliceKind,
+    CompClause, ExprKind, FStrPart, ImportKind, InstanceBody, LetBinding, MatchArm, PwGuard,
+    QuoteKind, RecordField, SpliceKind,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
@@ -16,6 +17,7 @@ use music_found::{Ident, Span, Symbol};
 
 use crate::def::{DefId, DefInfo, DefKind, Visibility};
 use crate::errors::{ResolveError, ResolveErrorKind};
+use crate::loader::{ModuleExports, ModuleLoader};
 use crate::scope::{ScopeArena, ScopeId, ScopeKind};
 
 /// Stores all resolution results: definitions, scope chains, and
@@ -54,19 +56,35 @@ pub struct ResolveDb {
     pub resolution: ResolutionMap,
     pub errors: Vec<ResolveError>,
     module_scope: ScopeId,
+    loader: ModuleLoader,
+    current_file: PathBuf,
 }
 
 impl ResolveDb {
     #[must_use]
-    pub fn new(db: Db) -> Self {
+    pub fn new(db: Db, root: PathBuf) -> Self {
         let mut resolution = ResolutionMap::new();
         let module_scope = resolution.scopes.push(ScopeKind::Module, None);
+        let loader = ModuleLoader::new(root);
         Self {
             db,
             resolution,
             errors: Vec::new(),
             module_scope,
+            loader,
+            current_file: PathBuf::new(),
         }
+    }
+
+    /// Set the file path of the module currently being resolved.
+    pub fn set_current_file(&mut self, path: PathBuf) {
+        self.current_file = path;
+    }
+
+    /// Access the module loader (e.g. to configure imports or std path).
+    #[must_use]
+    pub const fn loader_mut(&mut self) -> &mut ModuleLoader {
+        &mut self.loader
     }
 
     /// Populate the module scope with builtin types and prelude classes.
@@ -156,10 +174,87 @@ impl ResolveDb {
 
     fn resolve_top_level(&mut self, expr_id: ExprId) {
         let kind = self.db.ast.exprs.get(expr_id).kind.clone();
-        if let ExprKind::Let(binding) = kind {
-            self.resolve_let(&binding, self.module_scope);
-        } else {
-            self.resolve_expr(expr_id, self.module_scope);
+        match kind {
+            ExprKind::Let(binding) => self.resolve_let(&binding, self.module_scope),
+            ExprKind::Import { path, kind } => {
+                self.resolve_import(expr_id, path, &kind);
+            }
+            _ => self.resolve_expr(expr_id, self.module_scope),
+        }
+    }
+
+    fn resolve_import(&mut self, expr_id: ExprId, path: Symbol, kind: &ImportKind) {
+        let path_str = self.db.interner.resolve(path);
+        let resolved = self.loader.resolve_path(path_str, &self.current_file);
+
+        match resolved {
+            None => {
+                let span = self.db.ast.exprs.get(expr_id).span;
+                self.errors.push(ResolveError {
+                    kind: ResolveErrorKind::ImportNotFound(path),
+                    span,
+                });
+            }
+            Some(file_path) => {
+                if self.loader.is_loading(&file_path) {
+                    let span = self.db.ast.exprs.get(expr_id).span;
+                    self.errors.push(ResolveError {
+                        kind: ResolveErrorKind::CyclicImport(path),
+                        span,
+                    });
+                    return;
+                }
+
+                if let Some(exports) = self.loader.get_cached(&file_path) {
+                    let exports_clone = exports.clone();
+                    self.add_imports_to_scope(&exports_clone, kind);
+                    return;
+                }
+
+                // Mark as loading for cycle detection, then record as loaded
+                // with empty exports. Full recursive load (lex -> parse ->
+                // resolve) will be wired when the pipeline is integrated.
+                self.loader.mark_loading(file_path.clone());
+                self.loader.mark_loaded(
+                    file_path,
+                    ModuleExports {
+                        exports: HashMap::new(),
+                    },
+                );
+            }
+        }
+    }
+
+    fn add_imports_to_scope(&mut self, exports: &ModuleExports, kind: &ImportKind) {
+        let scope = self.module_scope;
+        match kind {
+            ImportKind::Qualified(name) => {
+                // Bind the module name as an Import def; individual member
+                // access is deferred to type-checking.
+                let _def = self.define_and_bind(
+                    name.name,
+                    name.span,
+                    DefKind::Import,
+                    Visibility::Private,
+                    scope,
+                );
+            }
+            ImportKind::Wildcard => {
+                for (&name_sym, &def_id) in &exports.exports {
+                    let _prev = self.resolution.scopes.get_mut(scope).bind(name_sym, def_id);
+                }
+            }
+            ImportKind::Selective(_namespace, names) => {
+                for name in names {
+                    if let Some(&def_id) = exports.exports.get(&name.name) {
+                        let _prev = self
+                            .resolution
+                            .scopes
+                            .get_mut(scope)
+                            .bind(name.name, def_id);
+                    }
+                }
+            }
         }
     }
 

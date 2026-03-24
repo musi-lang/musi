@@ -17,6 +17,7 @@ music_db = { path = "../music_db" }
 [dev-dependencies]
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
