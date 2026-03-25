@@ -36,7 +36,13 @@ pub fn run(args: &BuildArgs) -> ExitCode {
     }
 
     let bundle = HirBundle::new(result.db, result.resolution, result.type_env);
-    let module = emit(&bundle);
+    let module = match emit(&bundle) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     let seam = write_seam(&module);
 
     let out_path = args

@@ -15,6 +15,7 @@ use music_resolve::queries::ResolutionMap;
 use music_sema::env::TypeEnv;
 
 use crate::emitter::emit;
+use crate::error::EmitError;
 
 fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> HirBundle {
     let mut interner = Interner::new();
@@ -39,7 +40,7 @@ fn build_thir_single(builder: fn(&mut AstData, &mut Interner) -> ExprKind) -> Hi
 #[test]
 fn emit_literal_zero() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Int(0)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     assert_eq!(module.methods.len(), 1);
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
@@ -48,7 +49,7 @@ fn emit_literal_zero() {
 #[test]
 fn emit_literal_one() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Int(1)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
 }
@@ -56,7 +57,7 @@ fn emit_literal_one() {
 #[test]
 fn emit_literal_smi() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Int(42)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 42));
 }
@@ -64,7 +65,7 @@ fn emit_literal_smi() {
 #[test]
 fn emit_literal_large_int_uses_constant_pool() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Int(100_000)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
     assert!(matches!(instrs[0].operand, Operand::U16(0)));
@@ -74,7 +75,7 @@ fn emit_literal_large_int_uses_constant_pool() {
 #[test]
 fn emit_literal_float() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Float(1.234_567_89)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
     assert_eq!(module.constants.len(), 1);
@@ -83,7 +84,7 @@ fn emit_literal_float() {
 #[test]
 fn emit_literal_string() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Str(String::from("hi"))));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
     assert_eq!(module.constants.len(), 1);
@@ -92,7 +93,7 @@ fn emit_literal_string() {
 #[test]
 fn emit_literal_rune_small() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Rune('a')));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 97));
 }
@@ -108,7 +109,7 @@ fn emit_addition() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         ExprKind::BinOp(BinOp::Add, lhs, rhs)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
@@ -139,7 +140,7 @@ fn emit_let_binding() {
             .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(x_sym))));
         ExprKind::Seq(vec![let_expr, var_x])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // [ld.smi 42, st.loc 0, pop, ld.loc 0, halt]
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 42));
@@ -164,7 +165,7 @@ fn emit_branch() {
             else_br,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[1].opcode, Opcode::BrFalse);
@@ -197,7 +198,7 @@ fn emit_branch_mixed_width() {
             else_br,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[1].opcode, Opcode::BrFalse);
@@ -219,7 +220,7 @@ fn emit_sequence_pops_intermediates() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         ExprKind::Seq(vec![a, b])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[1], Instruction::simple(Opcode::Pop));
@@ -239,7 +240,7 @@ fn emit_record_lit() {
         };
         ExprKind::RecordLit(vec![field])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 1));
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
@@ -254,7 +255,7 @@ fn emit_return_with_value() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
         ExprKind::Return(Some(val))
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
     assert_eq!(instrs[1], Instruction::simple(Opcode::Ret));
@@ -263,7 +264,7 @@ fn emit_return_with_value() {
 #[test]
 fn emit_return_unit() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Return(None));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdUnit));
     assert_eq!(instrs[1], Instruction::simple(Opcode::Ret));
@@ -272,14 +273,14 @@ fn emit_return_unit() {
 #[test]
 fn emit_empty_module_produces_no_methods() {
     let thir = build_thir(&[]);
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     assert!(module.methods.is_empty());
 }
 
 #[test]
 fn emit_negative_smi() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Lit(Literal::Int(-100)));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, -100));
 }
@@ -295,7 +296,7 @@ fn emit_array_lit() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         ExprKind::ArrayLit(vec![a, b])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 2));
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
@@ -319,7 +320,7 @@ fn emit_index_single() {
             kind: IndexKind::Point,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
@@ -344,7 +345,7 @@ fn emit_index_chained() {
             kind: IndexKind::Point,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // arr, i, ArrGet, j, ArrGet
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
@@ -359,7 +360,7 @@ fn emit_fstr_single_lit() {
     let thir = build_thir_single(|_ast, _int| {
         ExprKind::FStrLit(vec![FStrPart::Lit(String::from("hello"))])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
     assert_eq!(module.constants.len(), 1);
@@ -376,7 +377,7 @@ fn emit_fstr_multiple_parts() {
             FStrPart::Expr(expr),
         ])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdCst "x is ", LdSmi 42, ArrConcat
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
@@ -395,7 +396,7 @@ fn emit_range_inclusive() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(10))));
         ExprKind::BinOp(BinOp::Range, lhs, rhs)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // ArrNewt("Range", 2), LdOne, ArrSeti(0), LdSmi(10), ArrSeti(1)
     assert_eq!(instrs[0].opcode, Opcode::ArrNewt);
@@ -417,7 +418,7 @@ fn emit_range_exclusive() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
         ExprKind::BinOp(BinOp::RangeExcl, lhs, rhs)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::ArrNewt);
     assert!(matches!(instrs[0].operand, Operand::Tagged(_, 2)));
@@ -435,7 +436,7 @@ fn emit_need() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(7))));
         ExprKind::Need(operand)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 7));
     assert_eq!(instrs[1], Instruction::with_u16(Opcode::EffNeed, 0));
@@ -467,7 +468,7 @@ fn emit_handle_with_body() {
             body: body_expr,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // EffPush(skip=3), handler body (LdSmi 2 = 3 bytes), body (LdOne), EffPop
     // patch_jump: byte_offset = bytes([LdSmi 2]) = 3
@@ -485,7 +486,7 @@ fn emit_resume_with_value() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(3))));
         ExprKind::Resume(Some(val))
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 3));
     assert_eq!(instrs[1], Instruction::with_u8(Opcode::EffResume, 1));
@@ -494,7 +495,7 @@ fn emit_resume_with_value() {
 #[test]
 fn emit_resume_unit() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Resume(None));
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_u8(Opcode::EffResume, 0));
 }
@@ -533,7 +534,7 @@ fn emit_match_literal_pattern() {
             ],
         )
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // scrutinee(LdSmi 5), Dup, LdOne(lit 1), CmpEq, BrFalse, Pop, body1(LdSmi 10), BrJmp, Pop, body2(LdSmi 20)
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
@@ -578,7 +579,7 @@ fn emit_match_tuple_destructure() {
             }],
         )
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // scrutinee(LdZero), Dup, ArrGeti(0), StLoc(0), Dup, ArrGeti(1), StLoc(1), Pop, body(LdLoc 0)
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
@@ -630,7 +631,7 @@ fn emit_match_with_guard() {
             ],
         )
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // scrutinee(LdSmi 5), StLoc(0), guard(LdOne), BrFalse, body1(LdSmi 10), BrJmp, Pop, body2(LdSmi 20)
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
@@ -694,7 +695,7 @@ fn emit_lambda_with_upvalue_capture() {
     let type_env = TypeEnv::new();
     let thir = HirBundle::new(db, resolution, type_env);
 
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
 
     // Main method: the sequence
     let main = &module.methods.last().unwrap();
@@ -736,7 +737,7 @@ fn emit_matrix_lit() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(4))));
         ExprKind::MatrixLit(vec![vec![a, b], vec![c, d]])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // ArrNew(2) -- outer
     assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 2));
@@ -778,7 +779,7 @@ fn emit_record_update() {
             fields: vec![field],
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // emit base, ArrCopy, emit value, ArrSeti(0)
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdZero));
@@ -798,7 +799,7 @@ fn emit_postfix_force() {
             op: PostfixOp::Force,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdSmi(5), Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Panic, ArrGeti(0)
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
@@ -822,7 +823,7 @@ fn emit_postfix_propagate() {
             op: PostfixOp::Propagate,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdSmi(5), Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Ret, ArrGeti(0)
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
@@ -848,7 +849,7 @@ fn emit_type_op_cast() {
             kind: TypeOpKind::Cast,
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdOne, TyCast
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
@@ -868,7 +869,7 @@ fn emit_type_op_test() {
             kind: TypeOpKind::Test(None),
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdOne, TyChk
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
@@ -886,7 +887,7 @@ fn emit_nil_coalesce() {
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         ExprKind::BinOp(BinOp::NilCoalesce, lhs, rhs)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdOne, Dup, ArrTag, LdCst("None"), CmpEq, BrFalse, Pop, LdSmi(2)
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
@@ -918,9 +919,7 @@ fn emit_instance_def_via() {
             }),
         }))
     });
-    let module = emit(&thir);
-    let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::simple(Opcode::Nop));
+    assert!(matches!(emit(&thir), Err(EmitError::Unimplemented(_))));
 }
 
 #[test]
@@ -957,7 +956,7 @@ fn emit_instance_def_methods() {
             body: InstanceBody::Methods(vec![MemberDecl::Fn(decl)]),
         }))
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     // The instance method should have been emitted
     assert_eq!(module.methods.len(), 1);
     let method = &module.methods[0];
@@ -974,7 +973,7 @@ fn emit_foreign_import() {
         let sym = interner.intern("libc.so");
         ExprKind::ForeignImport(sym)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // LdCst("libc.so"), FfiCall
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
@@ -1016,7 +1015,7 @@ fn emit_comprehension_single_generator() {
             }],
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     // ArrNew(0) -- result
@@ -1102,7 +1101,7 @@ fn emit_comprehension_with_filter() {
             ],
         }
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 0));
@@ -1172,7 +1171,7 @@ fn emit_match_or_pattern_literals() {
             ],
         )
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     // scrutinee: LdSmi(5)
@@ -1257,7 +1256,7 @@ fn emit_match_as_pattern() {
             ],
         )
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     // scrutinee: LdSmi(5)
@@ -1323,7 +1322,7 @@ fn emit_wide_locals_above_255() {
         stmts.push(var_last);
         ExprKind::Seq(stmts)
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     // emit_seq adds Pop after each non-final stmt:
@@ -1417,7 +1416,7 @@ fn emit_index_assign_uses_arr_set() {
 
         ExprKind::Seq(vec![let_arr, let_i, let_v, assign_expr])
     });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
     // arr := [0]: ArrNew(1) LdZero ArrSeti(0) StLoc(0) Pop  → 5
@@ -1446,7 +1445,7 @@ fn emit_true_variant_emits_ld_true() {
             intrinsic: "ld.true",
         },
     );
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdTrue));
 }
@@ -1465,7 +1464,7 @@ fn emit_false_variant_emits_ld_false() {
             intrinsic: "ld.false",
         },
     );
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdFalse));
 }
@@ -1490,7 +1489,7 @@ fn emit_intrinsic_call_emits_opcode() {
         .type_env
         .dispatch
         .insert(callee_id, DispatchInfo::Static { intrinsic: "shl" });
-    let module = emit(&thir);
+    let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     // intrinsic path: emit arg(s) then opcode - no LdVar for callee, no Call
     let has_ishl = instrs.iter().any(|i| i.opcode == Opcode::Shl);

@@ -5,8 +5,8 @@ use std::io::Write;
 use std::path::Path;
 
 use musi::driver::compile;
+use music_found::diag::{emit, Diag};
 use music_found::SourceMap;
-use music_found::diag::{Diag, emit};
 
 fn render_diag(diag: &Diag, sources: &SourceMap) -> String {
     let mut buf = Vec::new();
@@ -80,7 +80,7 @@ fn build_produces_seam_bytes() {
     });
 
     let bundle = HirBundle::new(result.db, result.resolution, result.type_env);
-    let module = emit(&bundle);
+    let module = emit(&bundle).expect("emit failed");
     let seam = write_seam(&module);
     assert!(!seam.is_empty(), "seam output should not be empty");
 }

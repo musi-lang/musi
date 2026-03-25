@@ -14,6 +14,7 @@ use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
 use music_sema::env::DispatchInfo;
 
+use crate::error::EmitError;
 use crate::pool::{ConstantEntry, ConstantPool};
 
 /// A compiled method ready for serialisation.
@@ -52,8 +53,13 @@ struct Emitter<'thir> {
 }
 
 /// Entry point: lower a typed IR bundle into a [`SeamModule`].
-#[must_use]
-pub fn emit(thir: &HirBundle) -> SeamModule {
+///
+/// # Errors
+///
+/// Returns [`EmitError::Unimplemented`] when the bundle contains a language
+/// feature that has no codegen path yet (e.g. `via` derived instances,
+/// dynamic dispatch, splice-by-name, or named field assignment).
+pub fn emit(thir: &HirBundle) -> Result<SeamModule, EmitError> {
     let mut emitter = Emitter {
         thir,
         pool: ConstantPool::new(),
@@ -64,12 +70,12 @@ pub fn emit(thir: &HirBundle) -> SeamModule {
         current_upvalues: Vec::new(),
         next_anon: u32::MAX,
     };
-    emitter.emit_module();
-    SeamModule {
+    emitter.emit_module()?;
+    Ok(SeamModule {
         constants: emitter.pool,
         methods: emitter.methods,
         globals: emitter.globals,
-    }
+    })
 }
 
 const fn instruction_byte_size(instr: &Instruction) -> usize {
@@ -82,34 +88,41 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
     }
 }
 
+#[expect(
+    clippy::unwrap_in_result,
+    reason = "capacity overflow `expect`s guard structural invariants (e.g. >65535 locals) — \
+              these are compiler ICEs, not recoverable errors that belong in EmitError"
+)]
 impl Emitter<'_> {
-    fn emit_module(&mut self) {
+    fn emit_module(&mut self) -> Result<(), EmitError> {
         let root = self.thir.db.ast.root.clone();
         for expr_id in root {
-            self.emit_top_level(expr_id);
+            self.emit_top_level(expr_id)?;
         }
         self.finish_main();
+        Ok(())
     }
 
-    fn emit_top_level(&mut self, expr_id: ExprId) {
+    fn emit_top_level(&mut self, expr_id: ExprId) -> Result<(), EmitError> {
         let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
         if let ExprKind::Let(binding) = kind {
-            self.emit_top_let(&binding);
+            self.emit_top_let(&binding)?;
         } else {
-            self.emit_expr(expr_id);
+            self.emit_expr(expr_id)?;
         }
+        Ok(())
     }
 
-    fn emit_top_let(&mut self, binding: &LetBinding) {
+    fn emit_top_let(&mut self, binding: &LetBinding) -> Result<(), EmitError> {
         let pat_node = self.thir.db.ast.pats.get(binding.pat);
         let PatKind::Bind(ident) = &pat_node.kind else {
-            return;
+            return Ok(());
         };
         let name = ident.name;
 
         if let Some(ref sig) = binding.sig {
             if let Some(body) = binding.value {
-                self.emit_function(name, &sig.params, body);
+                self.emit_function(name, &sig.params, body)?;
             }
         } else if let Some(value) = binding.value {
             let global_idx = u16::try_from(self.globals.len()).expect("too many globals (>65535)");
@@ -119,12 +132,18 @@ impl Emitter<'_> {
                 exported: vis == Visibility::Exported || vis == Visibility::Opaque,
                 opaque: vis == Visibility::Opaque,
             });
-            self.emit_expr(value);
+            self.emit_expr(value)?;
             self.push(Instruction::with_u16(Opcode::StGlb, global_idx));
         }
+        Ok(())
     }
 
-    fn emit_function(&mut self, name: Symbol, params: &[Param], body: ExprId) {
+    fn emit_function(
+        &mut self,
+        name: Symbol,
+        params: &[Param],
+        body: ExprId,
+    ) -> Result<(), EmitError> {
         let saved_instructions = mem::take(&mut self.current_instructions);
         let saved_locals = mem::take(&mut self.current_locals);
 
@@ -132,7 +151,7 @@ impl Emitter<'_> {
             let _slot = self.local_slot(param.name.name);
         }
 
-        self.emit_expr(body);
+        self.emit_expr(body)?;
         self.push(Instruction::simple(Opcode::Ret));
 
         let locals_count =
@@ -143,6 +162,7 @@ impl Emitter<'_> {
             locals_count,
         });
         self.current_locals = saved_locals;
+        Ok(())
     }
 
     fn finish_main(&mut self) {
@@ -158,55 +178,69 @@ impl Emitter<'_> {
         }
     }
 
-    fn emit_expr(&mut self, expr_id: ExprId) {
+    #[expect(
+        clippy::panic,
+        reason = "Piecewise must be lowered to Branch before emission — reaching this arm is a compiler ICE"
+    )]
+    fn emit_expr(&mut self, expr_id: ExprId) -> Result<(), EmitError> {
         let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
         match kind {
             ExprKind::Lit(ref lit) => self.emit_literal(lit),
             ExprKind::Var(ref ident) => self.emit_var(ident),
-            ExprKind::App(callee, ref args) => self.emit_app(callee, args),
-            ExprKind::BinOp(op, lhs, rhs) => self.emit_binop(op, lhs, rhs, expr_id),
-            ExprKind::UnaryOp(op, operand) => self.emit_unary(op, operand, expr_id),
+            ExprKind::App(callee, ref args) => self.emit_app(callee, args)?,
+            ExprKind::BinOp(op, lhs, rhs) => self.emit_binop(op, lhs, rhs, expr_id)?,
+            ExprKind::UnaryOp(op, operand) => self.emit_unary(op, operand, expr_id)?,
             ExprKind::Branch {
                 cond,
                 then_br,
                 else_br,
-            } => self.emit_branch(cond, then_br, else_br),
-            ExprKind::Let(ref binding) => self.emit_let(binding),
+            } => self.emit_branch(cond, then_br, else_br)?,
+            ExprKind::Let(ref binding) => self.emit_let(binding)?,
             ExprKind::Lambda {
                 ref params, body, ..
-            } => self.emit_lambda(expr_id, params, body),
-            ExprKind::Seq(ref stmts) => self.emit_seq(stmts),
-            ExprKind::Match(scrutinee, ref arms) => self.emit_match(scrutinee, arms),
-            ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields),
-            ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args),
-            ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field),
-            ExprKind::Return(opt) => self.emit_return(opt),
-            ExprKind::TupleLit(ref elems) => self.emit_tuple_lit(elems),
-            ExprKind::ArrayLit(ref elems) => self.emit_array_lit(elems),
-            ExprKind::Assign(target, value) => self.emit_assign(target, value),
+            } => self.emit_lambda(expr_id, params, body)?,
+            ExprKind::Seq(ref stmts) => self.emit_seq(stmts)?,
+            ExprKind::Match(scrutinee, ref arms) => self.emit_match(scrutinee, arms)?,
+            ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields)?,
+            ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args)?,
+            ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field)?,
+            ExprKind::Return(opt) => self.emit_return(opt)?,
+            ExprKind::TupleLit(ref elems) => self.emit_tuple_lit(elems)?,
+            ExprKind::ArrayLit(ref elems) => self.emit_array_lit(elems)?,
+            ExprKind::Assign(target, value) => self.emit_assign(target, value)?,
             ExprKind::Index {
                 expr, ref indices, ..
-            } => self.emit_index(expr, indices),
-            ExprKind::FStrLit(ref parts) => self.emit_fstr(parts),
-            ExprKind::Need(operand) => self.emit_need(operand),
+            } => self.emit_index(expr, indices)?,
+            ExprKind::FStrLit(ref parts) => self.emit_fstr(parts)?,
+            ExprKind::Need(operand) => self.emit_need(operand)?,
             ExprKind::Handle {
                 ref handlers, body, ..
-            } => self.emit_handle(handlers, body),
-            ExprKind::Resume(opt) => self.emit_resume(opt),
-            ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows),
-            ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields),
-            ExprKind::Postfix { expr, op } => self.emit_postfix(expr, op),
-            ExprKind::TypeOp { expr, kind, .. } => self.emit_type_op(expr, kind),
-            ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst),
+            } => self.emit_handle(handlers, body)?,
+            ExprKind::Resume(opt) => self.emit_resume(opt)?,
+            ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
+            ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
+            ExprKind::Postfix { expr, op } => self.emit_postfix(expr, op)?,
+            ExprKind::TypeOp { expr, kind, .. } => self.emit_type_op(expr, kind)?,
+            ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst)?,
             ExprKind::ForeignImport(sym) => self.emit_foreign_import(sym),
             ExprKind::Comprehension {
                 expr: body,
                 ref clauses,
-            } => self.emit_comprehension(body, clauses),
-            ExprKind::Quote(ref qk) => self.emit_quote(qk),
-            ExprKind::Splice(ref sk) => self.emit_splice(sk),
-            _ => self.push(Instruction::simple(Opcode::Nop)),
+            } => self.emit_comprehension(body, clauses)?,
+            ExprKind::Quote(ref qk) => self.emit_quote(qk)?,
+            ExprKind::Splice(ref sk) => self.emit_splice(sk)?,
+            ExprKind::RecordDef(_)
+            | ExprKind::ChoiceDef(_)
+            | ExprKind::EffectDef(_)
+            | ExprKind::ClassDef { .. }
+            | ExprKind::Import { .. } => {
+                // Type/module definitions have no runtime representation
+            }
+            ExprKind::Piecewise(_) => {
+                panic!("Piecewise should be lowered to Branch before emission")
+            }
         }
+        Ok(())
     }
 
     fn emit_literal(&mut self, lit: &Literal) {
@@ -241,6 +275,10 @@ impl Emitter<'_> {
         }
     }
 
+    #[expect(
+        clippy::panic,
+        reason = "unresolved variable after sema is a compiler ICE — sema guarantees all variables resolve"
+    )]
     fn emit_var(&mut self, ident: &Ident) {
         if let Some(slot) = self.find_local(ident.name) {
             self.emit_ld_loc(slot);
@@ -249,29 +287,39 @@ impl Emitter<'_> {
         } else if let Some(idx) = self.find_global(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdGlb, idx));
         } else {
-            self.push(Instruction::simple(Opcode::Nop));
+            panic!(
+                "unresolved variable: '{}'",
+                self.thir.db.interner.resolve(ident.name)
+            )
         }
     }
 
-    fn emit_app(&mut self, callee: ExprId, args: &ExprList) {
+    fn emit_app(&mut self, callee: ExprId, args: &ExprList) -> Result<(), EmitError> {
         if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(callee) {
             if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
                 for &arg in args {
-                    self.emit_expr(arg);
+                    self.emit_expr(arg)?;
                 }
                 self.push(Instruction::simple(opcode));
-                return;
+                return Ok(());
             }
         }
-        self.emit_expr(callee);
+        self.emit_expr(callee)?;
         for &arg in args {
-            self.emit_expr(arg);
+            self.emit_expr(arg)?;
         }
         let arity = u8::try_from(args.len()).expect("too many arguments (>255)");
         self.push(Instruction::with_u8(Opcode::Call, arity));
+        Ok(())
     }
 
-    fn emit_binop(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, expr_id: ExprId) {
+    fn emit_binop(
+        &mut self,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        expr_id: ExprId,
+    ) -> Result<(), EmitError> {
         if matches!(op, BinOp::Range | BinOp::RangeExcl) {
             return self.emit_range(op, lhs, rhs);
         }
@@ -279,15 +327,15 @@ impl Emitter<'_> {
             return self.emit_nil_coalesce(lhs, rhs);
         }
 
-        self.emit_expr(lhs);
-        self.emit_expr(rhs);
+        self.emit_expr(lhs)?;
+        self.emit_expr(rhs)?;
 
         if let Some(dispatch) = self.thir.dispatch(expr_id) {
             match dispatch {
                 DispatchInfo::Static { intrinsic } => {
                     if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
                         self.push(Instruction::simple(opcode));
-                        return;
+                        return Ok(());
                     }
                 }
                 DispatchInfo::Dictionary { method_idx, .. } => {
@@ -296,26 +344,31 @@ impl Emitter<'_> {
                     // ClsDict takes a u16 dictionary index; 0 is a placeholder until Phase 4
                     self.push(Instruction::with_u16(Opcode::ClsDict, 0u16));
                     self.push(Instruction::with_u8(Opcode::ClsCall, method_u8));
-                    return;
+                    return Ok(());
                 }
                 DispatchInfo::Dynamic => {
-                    self.push(Instruction::simple(Opcode::Nop));
-                    return;
+                    return Err(EmitError::Unimplemented("dynamic dispatch"));
                 }
             }
         }
 
         self.push(Instruction::simple(binop_to_opcode(op)));
+        Ok(())
     }
 
-    fn emit_unary(&mut self, op: UnaryOp, operand: ExprId, expr_id: ExprId) {
-        self.emit_expr(operand);
+    fn emit_unary(
+        &mut self,
+        op: UnaryOp,
+        operand: ExprId,
+        expr_id: ExprId,
+    ) -> Result<(), EmitError> {
+        self.emit_expr(operand)?;
         match op {
             UnaryOp::Neg => {
                 if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(expr_id) {
                     if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
                         self.push(Instruction::simple(opcode));
-                        return;
+                        return Ok(());
                     }
                 }
                 self.push(Instruction::simple(Opcode::INeg));
@@ -323,16 +376,23 @@ impl Emitter<'_> {
             UnaryOp::Not => self.push(Instruction::simple(Opcode::Not)),
             UnaryOp::Mut | UnaryOp::Spread => {}
         }
+        Ok(())
     }
 
-    fn emit_branch(&mut self, cond: ExprId, then_br: ExprId, else_br: ExprId) {
-        self.emit_expr(cond);
+    fn emit_branch(
+        &mut self,
+        cond: ExprId,
+        then_br: ExprId,
+        else_br: ExprId,
+    ) -> Result<(), EmitError> {
+        self.emit_expr(cond)?;
         let false_jump = self.placeholder_jump(Opcode::BrFalse);
-        self.emit_expr(then_br);
+        self.emit_expr(then_br)?;
         let end_jump = self.placeholder_jump(Opcode::BrJmp);
         self.patch_jump(false_jump);
-        self.emit_expr(else_br);
+        self.emit_expr(else_br)?;
         self.patch_jump(end_jump);
+        Ok(())
     }
 
     fn placeholder_jump(&mut self, opcode: Opcode) -> usize {
@@ -352,18 +412,24 @@ impl Emitter<'_> {
         self.current_instructions[placeholder_pos] = Instruction::with_i16(old_opcode, offset);
     }
 
-    fn emit_let(&mut self, binding: &LetBinding) {
+    fn emit_let(&mut self, binding: &LetBinding) -> Result<(), EmitError> {
         let pat_node = self.thir.db.ast.pats.get(binding.pat);
         if let PatKind::Bind(ident) = &pat_node.kind {
             if let Some(value) = binding.value {
-                self.emit_expr(value);
+                self.emit_expr(value)?;
                 let slot = self.local_slot(ident.name);
                 self.emit_st_loc(slot);
             }
         }
+        Ok(())
     }
 
-    fn emit_lambda(&mut self, expr_id: ExprId, params: &[Param], body: ExprId) {
+    fn emit_lambda(
+        &mut self,
+        expr_id: ExprId,
+        params: &[Param],
+        body: ExprId,
+    ) -> Result<(), EmitError> {
         let captured = self
             .thir
             .resolution
@@ -395,7 +461,7 @@ impl Emitter<'_> {
             let _slot = self.local_slot(param.name.name);
         }
 
-        self.emit_expr(body);
+        self.emit_expr(body)?;
         self.push(Instruction::simple(Opcode::Ret));
 
         let locals_count =
@@ -416,26 +482,28 @@ impl Emitter<'_> {
             method_idx,
             upval_count,
         ));
+        Ok(())
     }
 
-    fn emit_seq(&mut self, stmts: &ExprList) {
+    fn emit_seq(&mut self, stmts: &ExprList) -> Result<(), EmitError> {
         if stmts.is_empty() {
             self.push(Instruction::simple(Opcode::LdUnit));
-            return;
+            return Ok(());
         }
         for (i, &stmt) in stmts.iter().enumerate() {
-            self.emit_expr(stmt);
+            self.emit_expr(stmt)?;
             if i + 1 < stmts.len() {
                 self.push(Instruction::simple(Opcode::Pop));
             }
         }
+        Ok(())
     }
 
-    fn emit_match(&mut self, scrutinee: ExprId, arms: &[MatchArm]) {
-        self.emit_expr(scrutinee);
+    fn emit_match(&mut self, scrutinee: ExprId, arms: &[MatchArm]) -> Result<(), EmitError> {
+        self.emit_expr(scrutinee)?;
 
         if arms.is_empty() {
-            return;
+            return Ok(());
         }
 
         let mut end_jumps = Vec::new();
@@ -448,37 +516,37 @@ impl Emitter<'_> {
                 PatKind::Variant { tag, fields } => {
                     let tag = *tag;
                     let fields = fields.clone();
-                    self.emit_match_variant(&tag, &fields, arm, is_last, &mut end_jumps);
+                    self.emit_match_variant(&tag, &fields, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Bind(ident) => {
                     let slot = self.local_slot(ident.name);
                     self.emit_st_loc(slot);
-                    self.emit_guard_and_body(arm, is_last, &mut end_jumps);
+                    self.emit_guard_and_body(arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Lit(literal) => {
                     let literal = literal.clone();
-                    self.emit_match_lit(&literal, arm, is_last, &mut end_jumps);
+                    self.emit_match_lit(&literal, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Tuple(pats) | PatKind::Array(pats) => {
                     let pats = pats.clone();
-                    self.emit_match_tuple_or_array(&pats, arm, is_last, &mut end_jumps);
+                    self.emit_match_tuple_or_array(&pats, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Record(fields) => {
                     let fields = fields.clone();
-                    self.emit_match_record(&fields, arm, is_last, &mut end_jumps);
+                    self.emit_match_record(&fields, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Or(pats) => {
                     let pats = pats.clone();
-                    self.emit_match_or(&pats, arm, is_last, &mut end_jumps);
+                    self.emit_match_or(&pats, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::As { name, pat } => {
                     let name = *name;
                     let inner_pat = *pat;
-                    self.emit_match_as(name, inner_pat, arm, is_last, &mut end_jumps);
+                    self.emit_match_as(name, inner_pat, arm, is_last, &mut end_jumps)?;
                 }
                 PatKind::Wildcard => {
                     self.push(Instruction::simple(Opcode::Pop));
-                    self.emit_guard_and_body(arm, is_last, &mut end_jumps);
+                    self.emit_guard_and_body(arm, is_last, &mut end_jumps)?;
                 }
             }
         }
@@ -486,19 +554,27 @@ impl Emitter<'_> {
         for end_jump in end_jumps {
             self.patch_jump(end_jump);
         }
+        Ok(())
     }
 
-    fn emit_guard_and_body(&mut self, arm: &MatchArm, is_last: bool, end_jumps: &mut Vec<usize>) {
-        let guard_jump = arm.guard.and_then(|guard| {
-            self.emit_expr(guard);
+    fn emit_guard_and_body(
+        &mut self,
+        arm: &MatchArm,
+        is_last: bool,
+        end_jumps: &mut Vec<usize>,
+    ) -> Result<(), EmitError> {
+        let guard_jump = if let Some(guard) = arm.guard {
+            self.emit_expr(guard)?;
             if is_last {
                 None
             } else {
                 Some(self.placeholder_jump(Opcode::BrFalse))
             }
-        });
+        } else {
+            None
+        };
 
-        self.emit_expr(arm.body);
+        self.emit_expr(arm.body)?;
 
         if !is_last {
             end_jumps.push(self.placeholder_jump(Opcode::BrJmp));
@@ -506,6 +582,7 @@ impl Emitter<'_> {
         if let Some(gj) = guard_jump {
             self.patch_jump(gj);
         }
+        Ok(())
     }
 
     fn emit_match_lit(
@@ -514,7 +591,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         self.push(Instruction::simple(Opcode::Dup));
         self.emit_literal(literal);
         self.push(Instruction::simple(Opcode::CmpEq));
@@ -526,11 +603,12 @@ impl Emitter<'_> {
         };
 
         self.push(Instruction::simple(Opcode::Pop));
-        self.emit_guard_and_body(arm, is_last, end_jumps);
+        self.emit_guard_and_body(arm, is_last, end_jumps)?;
 
         if let Some(next) = next_arm {
             self.patch_jump(next);
         }
+        Ok(())
     }
 
     fn emit_match_tuple_or_array(
@@ -539,7 +617,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         for (i, &sub_pat) in pats.iter().enumerate() {
             let sub_pat_node = self.thir.db.ast.pats.get(sub_pat);
             if let PatKind::Bind(ident) = &sub_pat_node.kind {
@@ -552,7 +630,8 @@ impl Emitter<'_> {
         }
 
         self.push(Instruction::simple(Opcode::Pop));
-        self.emit_guard_and_body(arm, is_last, end_jumps);
+        self.emit_guard_and_body(arm, is_last, end_jumps)?;
+        Ok(())
     }
 
     fn emit_match_record(
@@ -561,7 +640,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         for (i, field) in fields.iter().enumerate() {
             let bind_ident = if let Some(pat_id) = field.pat {
                 let pat_node = self.thir.db.ast.pats.get(pat_id);
@@ -584,7 +663,8 @@ impl Emitter<'_> {
         }
 
         self.push(Instruction::simple(Opcode::Pop));
-        self.emit_guard_and_body(arm, is_last, end_jumps);
+        self.emit_guard_and_body(arm, is_last, end_jumps)?;
+        Ok(())
     }
 
     fn emit_match_variant(
@@ -594,7 +674,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
 
@@ -622,14 +702,15 @@ impl Emitter<'_> {
         }
 
         self.push(Instruction::simple(Opcode::Pop));
-        self.emit_guard_and_body(arm, is_last, end_jumps);
+        self.emit_guard_and_body(arm, is_last, end_jumps)?;
 
         if let Some(next) = next_arm {
             self.patch_jump(next);
         }
+        Ok(())
     }
 
-    fn emit_record_lit(&mut self, fields: &[RecordField]) {
+    fn emit_record_lit(&mut self, fields: &[RecordField]) -> Result<(), EmitError> {
         let field_count = u16::try_from(fields.len()).expect("too many fields (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
 
@@ -638,23 +719,29 @@ impl Emitter<'_> {
                 RecordField::Named { value, .. } => {
                     if let Some(val_id) = value {
                         let idx = u8::try_from(i).expect("too many fields (>255)");
-                        self.emit_expr(*val_id);
+                        self.emit_expr(*val_id)?;
                         self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
                     }
                 }
                 RecordField::Spread(expr_id) => {
-                    self.emit_expr(*expr_id);
+                    self.emit_expr(*expr_id)?;
                     self.push(Instruction::simple(Opcode::ArrConcat));
                 }
             }
         }
+        Ok(())
     }
 
-    fn emit_variant_lit(&mut self, expr_id: ExprId, tag: &Ident, args: &ExprList) {
+    fn emit_variant_lit(
+        &mut self,
+        expr_id: ExprId,
+        tag: &Ident,
+        args: &ExprList,
+    ) -> Result<(), EmitError> {
         if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(expr_id) {
             if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
                 self.push(Instruction::simple(opcode));
-                return;
+                return Ok(());
             }
         }
         let tag_name = self.thir.db.interner.resolve(tag.name);
@@ -664,14 +751,15 @@ impl Emitter<'_> {
         self.push(Instruction::with_tagged(Opcode::ArrNewt, tag_byte, len));
 
         for (i, &arg) in args.iter().enumerate() {
-            self.emit_expr(arg);
+            self.emit_expr(arg)?;
             let idx = u8::try_from(i).expect("too many variant args (>255)");
             self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
         }
+        Ok(())
     }
 
-    fn emit_access(&mut self, expr: ExprId, field: &FieldTarget) {
-        self.emit_expr(expr);
+    fn emit_access(&mut self, expr: ExprId, field: &FieldTarget) -> Result<(), EmitError> {
+        self.emit_expr(expr)?;
         match *field {
             FieldTarget::Index(idx) => {
                 let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
@@ -681,50 +769,55 @@ impl Emitter<'_> {
                 self.push(Instruction::with_u8(Opcode::ArrGeti, 0));
             }
         }
+        Ok(())
     }
 
-    fn emit_return(&mut self, value: Option<ExprId>) {
+    fn emit_return(&mut self, value: Option<ExprId>) -> Result<(), EmitError> {
         if let Some(expr_id) = value {
-            self.emit_expr(expr_id);
+            self.emit_expr(expr_id)?;
         } else {
             self.push(Instruction::simple(Opcode::LdUnit));
         }
         self.push(Instruction::simple(Opcode::Ret));
+        Ok(())
     }
 
-    fn emit_tuple_lit(&mut self, elems: &ExprList) {
+    fn emit_tuple_lit(&mut self, elems: &ExprList) -> Result<(), EmitError> {
         let len = u16::try_from(elems.len()).expect("too many tuple elements (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, len));
         for (i, &elem) in elems.iter().enumerate() {
-            self.emit_expr(elem);
+            self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many tuple elements (>255)");
             self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
         }
+        Ok(())
     }
 
-    fn emit_array_lit(&mut self, elems: &ExprList) {
+    fn emit_array_lit(&mut self, elems: &ExprList) -> Result<(), EmitError> {
         let len = u16::try_from(elems.len()).expect("too many array elements (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, len));
         for (i, &elem) in elems.iter().enumerate() {
-            self.emit_expr(elem);
+            self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many array elements (>255)");
             self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
         }
+        Ok(())
     }
 
-    fn emit_index(&mut self, expr: ExprId, indices: &ExprList) {
-        self.emit_expr(expr);
+    fn emit_index(&mut self, expr: ExprId, indices: &ExprList) -> Result<(), EmitError> {
+        self.emit_expr(expr)?;
         for &index in indices {
-            self.emit_expr(index);
+            self.emit_expr(index)?;
             self.push(Instruction::simple(Opcode::ArrGet));
         }
+        Ok(())
     }
 
-    fn emit_fstr(&mut self, parts: &[FStrPart]) {
+    fn emit_fstr(&mut self, parts: &[FStrPart]) -> Result<(), EmitError> {
         if parts.is_empty() {
             let idx = self.pool.add(ConstantEntry::Str(String::new()));
             self.push(Instruction::with_u16(Opcode::LdCst, idx));
-            return;
+            return Ok(());
         }
 
         if parts.len() == 1 {
@@ -733,9 +826,9 @@ impl Emitter<'_> {
                     let idx = self.pool.add(ConstantEntry::Str(s.clone()));
                     self.push(Instruction::with_u16(Opcode::LdCst, idx));
                 }
-                FStrPart::Expr(expr_id) => self.emit_expr(*expr_id),
+                FStrPart::Expr(expr_id) => self.emit_expr(*expr_id)?,
             }
-            return;
+            return Ok(());
         }
 
         for (i, part) in parts.iter().enumerate() {
@@ -744,15 +837,16 @@ impl Emitter<'_> {
                     let idx = self.pool.add(ConstantEntry::Str(s.clone()));
                     self.push(Instruction::with_u16(Opcode::LdCst, idx));
                 }
-                FStrPart::Expr(expr_id) => self.emit_expr(*expr_id),
+                FStrPart::Expr(expr_id) => self.emit_expr(*expr_id)?,
             }
             if i > 0 {
                 self.push(Instruction::simple(Opcode::ArrConcat));
             }
         }
+        Ok(())
     }
 
-    fn emit_range(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId) {
+    fn emit_range(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId) -> Result<(), EmitError> {
         let tag_str = if op == BinOp::RangeExcl {
             "RangeExcl"
         } else {
@@ -762,42 +856,46 @@ impl Emitter<'_> {
         let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
         self.push(Instruction::with_tagged(Opcode::ArrNewt, tag_byte, 2));
 
-        self.emit_expr(lhs);
+        self.emit_expr(lhs)?;
         self.push(Instruction::with_u8(Opcode::ArrSeti, 0));
 
-        self.emit_expr(rhs);
+        self.emit_expr(rhs)?;
         self.push(Instruction::with_u8(Opcode::ArrSeti, 1));
+        Ok(())
     }
 
-    fn emit_need(&mut self, operand: ExprId) {
-        self.emit_expr(operand);
+    fn emit_need(&mut self, operand: ExprId) -> Result<(), EmitError> {
+        self.emit_expr(operand)?;
         self.push(Instruction::with_u16(Opcode::EffNeed, 0));
+        Ok(())
     }
 
-    fn emit_handle(&mut self, handlers: &[FnDecl], body: ExprId) {
+    fn emit_handle(&mut self, handlers: &[FnDecl], body: ExprId) -> Result<(), EmitError> {
         let skip_jump = self.placeholder_jump(Opcode::EffPush);
 
         for handler in handlers {
             if let Some(handler_body) = handler.body {
-                self.emit_expr(handler_body);
+                self.emit_expr(handler_body)?;
             }
         }
 
         self.patch_jump(skip_jump);
-        self.emit_expr(body);
+        self.emit_expr(body)?;
         self.push(Instruction::simple(Opcode::EffPop));
+        Ok(())
     }
 
-    fn emit_resume(&mut self, value: Option<ExprId>) {
+    fn emit_resume(&mut self, value: Option<ExprId>) -> Result<(), EmitError> {
         if let Some(expr_id) = value {
-            self.emit_expr(expr_id);
+            self.emit_expr(expr_id)?;
             self.push(Instruction::with_u8(Opcode::EffResume, 1));
         } else {
             self.push(Instruction::with_u8(Opcode::EffResume, 0));
         }
+        Ok(())
     }
 
-    fn emit_matrix_lit(&mut self, rows: &[ExprList]) {
+    fn emit_matrix_lit(&mut self, rows: &[ExprList]) -> Result<(), EmitError> {
         let row_count = u16::try_from(rows.len()).expect("too many matrix rows (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, row_count));
 
@@ -806,7 +904,7 @@ impl Emitter<'_> {
             self.push(Instruction::with_u16(Opcode::ArrNew, col_count));
 
             for (ci, &elem) in row.iter().enumerate() {
-                self.emit_expr(elem);
+                self.emit_expr(elem)?;
                 let col_idx = u8::try_from(ci).expect("too many matrix columns (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrSeti, col_idx));
             }
@@ -814,10 +912,15 @@ impl Emitter<'_> {
             let row_idx = u8::try_from(ri).expect("too many matrix rows (>255)");
             self.push(Instruction::with_u8(Opcode::ArrSeti, row_idx));
         }
+        Ok(())
     }
 
-    fn emit_record_update(&mut self, base: ExprId, fields: &[RecordField]) {
-        self.emit_expr(base);
+    fn emit_record_update(
+        &mut self,
+        base: ExprId,
+        fields: &[RecordField],
+    ) -> Result<(), EmitError> {
+        self.emit_expr(base)?;
         self.push(Instruction::simple(Opcode::ArrCopy));
 
         for (i, field) in fields.iter().enumerate() {
@@ -825,20 +928,21 @@ impl Emitter<'_> {
                 RecordField::Named { value, .. } => {
                     if let Some(val_id) = value {
                         let idx = u8::try_from(i).expect("too many fields (>255)");
-                        self.emit_expr(*val_id);
+                        self.emit_expr(*val_id)?;
                         self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
                     }
                 }
                 RecordField::Spread(expr_id) => {
-                    self.emit_expr(*expr_id);
+                    self.emit_expr(*expr_id)?;
                     self.push(Instruction::simple(Opcode::ArrConcat));
                 }
             }
         }
+        Ok(())
     }
 
-    fn emit_postfix(&mut self, expr: ExprId, op: PostfixOp) {
-        self.emit_expr(expr);
+    fn emit_postfix(&mut self, expr: ExprId, op: PostfixOp) -> Result<(), EmitError> {
+        self.emit_expr(expr)?;
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
 
@@ -855,10 +959,11 @@ impl Emitter<'_> {
 
         self.patch_jump(skip_jump);
         self.push(Instruction::with_u8(Opcode::ArrGeti, 0));
+        Ok(())
     }
 
-    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) {
-        self.emit_expr(expr);
+    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) -> Result<(), EmitError> {
+        self.emit_expr(expr)?;
         match kind {
             TypeOpKind::Test(opt_ident) => {
                 self.push(Instruction::simple(Opcode::TyChk));
@@ -872,10 +977,11 @@ impl Emitter<'_> {
                 self.push(Instruction::simple(Opcode::TyCast));
             }
         }
+        Ok(())
     }
 
-    fn emit_nil_coalesce(&mut self, lhs: ExprId, rhs: ExprId) {
-        self.emit_expr(lhs);
+    fn emit_nil_coalesce(&mut self, lhs: ExprId, rhs: ExprId) -> Result<(), EmitError> {
+        self.emit_expr(lhs)?;
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
 
@@ -886,12 +992,13 @@ impl Emitter<'_> {
         let end_jump = self.placeholder_jump(Opcode::BrFalse);
 
         self.push(Instruction::simple(Opcode::Pop));
-        self.emit_expr(rhs);
+        self.emit_expr(rhs)?;
 
         self.patch_jump(end_jump);
+        Ok(())
     }
 
-    fn emit_instance_def(&mut self, inst: &InstanceDef) {
+    fn emit_instance_def(&mut self, inst: &InstanceDef) -> Result<(), EmitError> {
         match &inst.body {
             InstanceBody::Methods(members) => {
                 for member in members {
@@ -901,15 +1008,16 @@ impl Emitter<'_> {
                                 MemberName::Ident(ident) | MemberName::Op(ident) => ident.name,
                             };
                             let params = decl.params.as_deref().unwrap_or(&[]);
-                            self.emit_function(name, params, body);
+                            self.emit_function(name, params, body)?;
                         }
                     }
                 }
             }
             InstanceBody::Via(_) => {
-                self.push(Instruction::simple(Opcode::Nop));
+                return Err(EmitError::Unimplemented("'via' derived instance"));
             }
         }
+        Ok(())
     }
 
     fn emit_foreign_import(&mut self, sym: Symbol) {
@@ -928,7 +1036,11 @@ impl Emitter<'_> {
         slot
     }
 
-    fn emit_comprehension(&mut self, body: ExprId, clauses: &[CompClause]) {
+    fn emit_comprehension(
+        &mut self,
+        body: ExprId,
+        clauses: &[CompClause],
+    ) -> Result<(), EmitError> {
         self.push(Instruction::with_u16(Opcode::ArrNew, 0));
 
         for (clause_idx, clause) in clauses.iter().enumerate() {
@@ -937,7 +1049,7 @@ impl Emitter<'_> {
                     let iter_expr = *iter;
                     let pat_id = *pat;
 
-                    self.emit_expr(iter_expr);
+                    self.emit_expr(iter_expr)?;
                     let iter_slot = self.alloc_anon_slot();
                     self.emit_st_loc(iter_slot);
 
@@ -969,14 +1081,14 @@ impl Emitter<'_> {
                     for subsequent in &clauses[clause_idx + 1..] {
                         match subsequent {
                             CompClause::Filter(guard) => {
-                                self.emit_expr(*guard);
+                                self.emit_expr(*guard)?;
                                 filter_jumps.push(self.placeholder_jump(Opcode::BrFalse));
                             }
                             CompClause::Generator { .. } => break,
                         }
                     }
 
-                    self.emit_expr(body);
+                    self.emit_expr(body)?;
                     self.push(Instruction::simple(Opcode::ArrConcat));
 
                     for fj in filter_jumps {
@@ -1005,6 +1117,7 @@ impl Emitter<'_> {
                 }
             }
         }
+        Ok(())
     }
 
     fn emit_match_or(
@@ -1013,7 +1126,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         let mut body_jumps = Vec::new();
 
         for (si, &sub_pat) in pats.iter().enumerate() {
@@ -1032,14 +1145,14 @@ impl Emitter<'_> {
                             for bj in &body_jumps {
                                 self.patch_jump(*bj);
                             }
-                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.emit_guard_and_body(arm, is_last, end_jumps)?;
                         } else {
                             let next_arm_jump = self.placeholder_jump(Opcode::BrFalse);
                             self.push(Instruction::simple(Opcode::Pop));
                             for bj in &body_jumps {
                                 self.patch_jump(*bj);
                             }
-                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.emit_guard_and_body(arm, is_last, end_jumps)?;
                             self.patch_jump(next_arm_jump);
                         }
                     } else {
@@ -1061,14 +1174,14 @@ impl Emitter<'_> {
                             for bj in &body_jumps {
                                 self.patch_jump(*bj);
                             }
-                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.emit_guard_and_body(arm, is_last, end_jumps)?;
                         } else {
                             let next_arm_jump = self.placeholder_jump(Opcode::BrFalse);
                             self.push(Instruction::simple(Opcode::Pop));
                             for bj in &body_jumps {
                                 self.patch_jump(*bj);
                             }
-                            self.emit_guard_and_body(arm, is_last, end_jumps);
+                            self.emit_guard_and_body(arm, is_last, end_jumps)?;
                             self.patch_jump(next_arm_jump);
                         }
                     } else {
@@ -1081,11 +1194,12 @@ impl Emitter<'_> {
                         for bj in &body_jumps {
                             self.patch_jump(*bj);
                         }
-                        self.emit_guard_and_body(arm, is_last, end_jumps);
+                        self.emit_guard_and_body(arm, is_last, end_jumps)?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
     fn emit_match_as(
@@ -1095,7 +1209,7 @@ impl Emitter<'_> {
         arm: &MatchArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) {
+    ) -> Result<(), EmitError> {
         self.push(Instruction::simple(Opcode::Dup));
         let name_slot = self.local_slot(name.name);
         self.emit_st_loc(name_slot);
@@ -1105,29 +1219,30 @@ impl Emitter<'_> {
             PatKind::Variant { tag, fields } => {
                 let tag = *tag;
                 let fields = fields.clone();
-                self.emit_match_variant(&tag, &fields, arm, is_last, end_jumps);
+                self.emit_match_variant(&tag, &fields, arm, is_last, end_jumps)?;
             }
             PatKind::Lit(literal) => {
                 let literal = literal.clone();
-                self.emit_match_lit(&literal, arm, is_last, end_jumps);
+                self.emit_match_lit(&literal, arm, is_last, end_jumps)?;
             }
             PatKind::Bind(ident) => {
                 let slot = self.local_slot(ident.name);
                 self.emit_st_loc(slot);
-                self.emit_guard_and_body(arm, is_last, end_jumps);
+                self.emit_guard_and_body(arm, is_last, end_jumps)?;
             }
             _ => {
                 self.push(Instruction::simple(Opcode::Pop));
-                self.emit_guard_and_body(arm, is_last, end_jumps);
+                self.emit_guard_and_body(arm, is_last, end_jumps)?;
             }
         }
+        Ok(())
     }
 
-    fn emit_assign(&mut self, target: ExprId, value: ExprId) {
+    fn emit_assign(&mut self, target: ExprId, value: ExprId) -> Result<(), EmitError> {
         let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
         match target_kind {
             ExprKind::Var(ident) => {
-                self.emit_expr(value);
+                self.emit_expr(value)?;
                 if let Some(slot) = self.find_local(ident.name) {
                     self.emit_st_loc(slot);
                 } else if let Some(slot) = self.find_upvalue(ident.name) {
@@ -1145,34 +1260,33 @@ impl Emitter<'_> {
                 let indices = indices.clone();
                 if let Some((last_idx, leading)) = indices.split_last() {
                     // Navigate to the containing array.
-                    self.emit_expr(expr);
+                    self.emit_expr(expr)?;
                     for &idx in leading {
-                        self.emit_expr(idx);
+                        self.emit_expr(idx)?;
                         self.push(Instruction::simple(Opcode::ArrGet));
                     }
-                    self.emit_expr(*last_idx);
-                    self.emit_expr(value);
+                    self.emit_expr(*last_idx)?;
+                    self.emit_expr(value)?;
                     self.push(Instruction::simple(Opcode::ArrSet));
                 }
             }
             ExprKind::Access { expr, field, .. } => {
                 // rec.field <- val  →  [rec, val] ArrSeti(field_idx)
-                self.emit_expr(expr);
-                self.emit_expr(value);
+                self.emit_expr(expr)?;
+                self.emit_expr(value)?;
                 match field {
                     FieldTarget::Index(idx) => {
                         let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
                         self.push(Instruction::with_u8(Opcode::ArrSeti, field_u8));
                     }
                     FieldTarget::Name(_) => {
-                        // Named fields are resolved to positional indices by sema.
-                        // Until that lowering exists, emit Nop as a placeholder.
-                        self.push(Instruction::simple(Opcode::Nop));
+                        return Err(EmitError::Unimplemented("named field assignment"));
                     }
                 }
             }
             _ => {}
         }
+        Ok(())
     }
 
     fn push(&mut self, instruction: Instruction) {
@@ -1225,27 +1339,29 @@ impl Emitter<'_> {
             .and_then(|p| u16::try_from(p).ok())
     }
 
-    fn emit_quote(&mut self, qk: &QuoteKind) {
+    fn emit_quote(&mut self, qk: &QuoteKind) -> Result<(), EmitError> {
         match qk {
-            QuoteKind::Expr(e) => self.emit_expr(*e),
-            QuoteKind::Block(stmts) => self.emit_seq(stmts),
+            QuoteKind::Expr(e) => self.emit_expr(*e)?,
+            QuoteKind::Block(stmts) => self.emit_seq(stmts)?,
         }
+        Ok(())
     }
 
-    fn emit_splice(&mut self, sk: &SpliceKind) {
+    fn emit_splice(&mut self, sk: &SpliceKind) -> Result<(), EmitError> {
         match sk {
-            SpliceKind::Ident(_) => self.push(Instruction::simple(Opcode::Nop)),
-            SpliceKind::Expr(e) => self.emit_expr(*e),
+            SpliceKind::Ident(_) => return Err(EmitError::Unimplemented("splice-by-name")),
+            SpliceKind::Expr(e) => self.emit_expr(*e)?,
             SpliceKind::Array(es) => {
                 let len = u16::try_from(es.len()).expect("too many splice elements (>65535)");
                 self.push(Instruction::with_u16(Opcode::ArrNew, len));
                 for (i, &e) in es.iter().enumerate() {
-                    self.emit_expr(e);
+                    self.emit_expr(e)?;
                     let idx = u8::try_from(i).expect("too many splice elements (>255)");
                     self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -1259,7 +1375,11 @@ const fn resolve_visibility(binding: &LetBinding) -> Visibility {
     }
 }
 
-const fn binop_to_opcode(op: BinOp) -> Opcode {
+#[expect(
+    clippy::panic,
+    reason = "NilCoalesce/PipeRight/Range/RangeExcl are intercepted by callers — reaching this arm is a compiler ICE"
+)]
+fn binop_to_opcode(op: BinOp) -> Opcode {
     match op {
         BinOp::Add => Opcode::IAdd,
         BinOp::Sub => Opcode::ISub,
@@ -1277,10 +1397,7 @@ const fn binop_to_opcode(op: BinOp) -> Opcode {
         BinOp::Xor => Opcode::Xor,
         BinOp::Cons => Opcode::ArrConcat,
         BinOp::NilCoalesce | BinOp::PipeRight | BinOp::Range | BinOp::RangeExcl => {
-            // NilCoalesce, Range, and RangeExcl are intercepted before reaching
-            // this function; PipeRight is desugared. This arm is unreachable in
-            // practice but needed for exhaustiveness.
-            Opcode::Nop
+            panic!("intercepted before reaching binop_to_opcode")
         }
     }
 }
