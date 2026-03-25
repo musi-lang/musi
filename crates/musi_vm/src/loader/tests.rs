@@ -130,3 +130,34 @@ fn invalid_opcode_in_method() {
         Err(LoadError::InvalidOpcode { byte: 0xFF, .. })
     ));
 }
+
+#[test]
+fn arrgeti_arrseti_are_one_byte_operand() {
+    // ArrGeti(5), ArrSeti(3), Halt — 5 bytes total, 3 instructions.
+    // If loader treated ArrGeti/ArrSeti as 2-byte operands it would mis-parse
+    // ArrSeti's index as the second operand byte of ArrGeti, then choke on
+    // the byte that follows. Verifying the code round-trips byte-for-byte
+    // confirms the loader reads exactly 1 operand byte per instruction.
+    let bytes = [
+        op(Opcode::ArrGeti),
+        5,
+        op(Opcode::ArrSeti),
+        3,
+        op(Opcode::Halt),
+    ];
+    let seam = minimal_seam(&bytes, 3);
+    let module = load(&seam).unwrap();
+    assert_eq!(module.methods[0].code, &bytes);
+}
+
+#[test]
+fn tychk_tycast_have_no_operand() {
+    // TyChk, TyCast, Halt — 3 bytes, 3 instructions.
+    // If loader treated TyChk/TyCast as 2-byte operands it would consume the
+    // next instruction byte as an operand, causing a decode error or wrong
+    // instruction count.
+    let bytes = [op(Opcode::TyChk), op(Opcode::TyCast), op(Opcode::Halt)];
+    let seam = minimal_seam(&bytes, 3);
+    let module = load(&seam).unwrap();
+    assert_eq!(module.methods[0].code, &bytes);
+}

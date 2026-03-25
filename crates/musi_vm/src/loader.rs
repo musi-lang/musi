@@ -211,7 +211,9 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::ArrTag
         | Opcode::TyTag
         | Opcode::EffResume
-        | Opcode::ClsCall => Ok(1),
+        | Opcode::ClsCall
+        | Opcode::ArrGeti
+        | Opcode::ArrSeti => Ok(1),
 
         // U16 or I16 operand (2 bytes)
         Opcode::LdCst
@@ -227,10 +229,6 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::BrJmp
         | Opcode::BrBack
         | Opcode::ArrNew
-        | Opcode::ArrGeti
-        | Opcode::ArrSeti
-        | Opcode::TyChk
-        | Opcode::TyCast
         | Opcode::EffPush
         | Opcode::EffNeed
         | Opcode::ClsDict
