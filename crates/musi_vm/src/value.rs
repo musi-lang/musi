@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use music_il::format::{NAN_BOX_BOOL, NAN_BOX_PTR, NAN_BOX_SMI, NAN_BOX_UNIT};
+use music_il::format::{NAN_BOX_BOOL, NAN_BOX_PTR, NAN_BOX_SMI, NAN_BOX_TAG, NAN_BOX_UNIT};
 
 const QNAN: u64 = 0x7FF8_0000_0000_0000;
 const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
@@ -43,6 +43,21 @@ impl Value {
     #[must_use]
     pub const fn from_ptr(idx: usize) -> Self {
         Self::tagged(NAN_BOX_PTR as u64, idx as u64)
+    }
+
+    #[must_use]
+    pub const fn from_tag(idx: u16) -> Self {
+        Self::tagged(NAN_BOX_TAG as u64, idx as u64)
+    }
+
+    #[must_use]
+    pub const fn is_tag(self) -> bool {
+        !self.is_float() && self.tag() == NAN_BOX_TAG
+    }
+
+    #[must_use]
+    pub const fn as_tag_idx(self) -> u16 {
+        (self.0 & PAYLOAD_MASK) as u16
     }
 
     #[must_use]
@@ -121,6 +136,8 @@ impl fmt::Debug for Value {
             write!(f, "Unit")
         } else if self.is_ptr() {
             write!(f, "Ptr({})", self.as_ptr_idx())
+        } else if self.is_tag() {
+            write!(f, "Tag({})", self.as_tag_idx())
         } else {
             write!(f, "Value(0x{:016x})", self.0)
         }

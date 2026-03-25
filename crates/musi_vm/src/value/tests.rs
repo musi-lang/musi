@@ -128,3 +128,36 @@ fn ptr_roundtrip_max_payload() {
     assert!(v.is_ptr());
     assert_eq!(v.as_ptr_idx(), max_idx);
 }
+
+#[test]
+fn tag_roundtrip() {
+    let v = Value::from_tag(42);
+    assert!(v.is_tag());
+    assert!(!v.is_int());
+    assert!(!v.is_bool());
+    assert!(!v.is_float());
+    assert!(!v.is_unit());
+    assert!(!v.is_ptr());
+    assert_eq!(v.as_tag_idx(), 42);
+}
+
+#[test]
+fn tag_zero() {
+    let v = Value::from_tag(0);
+    assert!(v.is_tag());
+    assert_eq!(v.as_tag_idx(), 0);
+}
+
+#[test]
+fn tag_max() {
+    let v = Value::from_tag(u16::MAX);
+    assert!(v.is_tag());
+    assert_eq!(v.as_tag_idx(), u16::MAX);
+}
+
+#[test]
+fn tag_equality() {
+    // Two values with the same index are bit-identical — CmpEq works at u64 level
+    assert_eq!(Value::from_tag(7), Value::from_tag(7));
+    assert_ne!(Value::from_tag(7), Value::from_tag(8));
+}

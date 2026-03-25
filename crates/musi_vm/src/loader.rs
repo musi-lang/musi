@@ -108,9 +108,11 @@ fn decode_cnst(data: &[u8]) -> Result<Vec<Value>, LoadError> {
                 pos = pos.wrapping_add(8);
             }
             0x03 => {
-                // Str: 2-byte LE string-table offset; not usable as Value in Phase 1
+                // Str: 2-byte LE string-table index
+                let bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
+                let str_idx = u16::from_le_bytes(bytes);
+                out.push(Value::from_tag(str_idx));
                 pos = pos.wrapping_add(2);
-                out.push(Value::UNIT);
             }
             other => return Err(LoadError::InvalidConstantTag { tag: other }),
         }
@@ -208,8 +210,6 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::Call
         | Opcode::CallTail
         | Opcode::ClsUpv
-        | Opcode::ArrTag
-        | Opcode::TyTag
         | Opcode::EffResume
         | Opcode::ClsCall
         | Opcode::ArrGeti

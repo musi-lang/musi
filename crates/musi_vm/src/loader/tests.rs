@@ -94,6 +94,49 @@ fn load_constants_int() {
 }
 
 #[test]
+fn load_constants_str() {
+    let mut cnst_content = Vec::new();
+    cnst_content.extend_from_slice(&1u16.to_le_bytes());
+    cnst_content.push(0x03); // Str tag
+    cnst_content.extend_from_slice(&5u16.to_le_bytes()); // string-table index 5
+
+    let cnst_len = u32::try_from(cnst_content.len()).unwrap();
+
+    let meth_content: Vec<u8> = {
+        let mut v = Vec::new();
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.extend_from_slice(&u32::MAX.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.push(op(Opcode::Halt));
+        v
+    };
+    let meth_len = u32::try_from(meth_content.len()).unwrap();
+    let total_size = u32::try_from(16 + 8 + cnst_content.len() + 8 + meth_content.len()).unwrap();
+
+    let mut buf = vec![0u8; 16];
+    buf[0..4].copy_from_slice(b"SEAM");
+    buf[4] = 0;
+    buf[5] = 1;
+    buf[8..12].copy_from_slice(&2u32.to_le_bytes());
+    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+    buf.extend_from_slice(b"CNST");
+    buf.extend_from_slice(&cnst_len.to_le_bytes());
+    buf.extend_from_slice(&cnst_content);
+    buf.extend_from_slice(b"METH");
+    buf.extend_from_slice(&meth_len.to_le_bytes());
+    buf.extend_from_slice(&meth_content);
+
+    let module = load(&buf).unwrap();
+    assert_eq!(module.constants.len(), 1);
+    assert!(
+        module.constants[0].is_tag(),
+        "string constant must be a Tag value, not UNIT"
+    );
+    assert_eq!(module.constants[0].as_tag_idx(), 5);
+}
+
+#[test]
 fn bad_magic() {
     let mut data = vec![0u8; 16];
     data[0..4].copy_from_slice(b"BADM");
@@ -129,6 +172,17 @@ fn invalid_opcode_in_method() {
         load(&seam),
         Err(LoadError::InvalidOpcode { byte: 0xFF, .. })
     ));
+}
+
+#[test]
+fn arrtag_tytag_have_no_operand() {
+    // ArrTag, TyTag, Halt — 3 bytes, 3 instructions.
+    // If loader treated ArrTag/TyTag as 1-byte operands it would consume the
+    // next instruction byte as an operand, mis-counting instructions.
+    let bytes = [op(Opcode::ArrTag), op(Opcode::TyTag), op(Opcode::Halt)];
+    let seam = minimal_seam(&bytes, 3);
+    let module = load(&seam).unwrap();
+    assert_eq!(module.methods[0].code, &bytes);
 }
 
 #[test]

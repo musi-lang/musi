@@ -102,6 +102,21 @@ impl Vm {
                     self.dispatch_effect(op, method_idx, &mut pc)?;
                 }
 
+                Opcode::ArrNew
+                | Opcode::ArrNewt
+                | Opcode::ArrGet
+                | Opcode::ArrSet
+                | Opcode::ArrGeti
+                | Opcode::ArrSeti
+                | Opcode::ArrLen
+                | Opcode::ArrTag
+                | Opcode::ArrCopy
+                | Opcode::ArrConcat
+                | Opcode::TyChk
+                | Opcode::TyCast => {
+                    self.dispatch_array(op, method_idx, &mut pc)?;
+                }
+
                 _ => self.dispatch_load_store_stack(op, method_idx, &mut pc)?,
             }
         }
@@ -453,6 +468,148 @@ impl Vm {
         ))
     }
 
+    fn dispatch_array(
+        &mut self,
+        op: Opcode,
+        method_idx: usize,
+        pc: &mut usize,
+    ) -> Result<(), VmError> {
+        match op {
+            Opcode::ArrGeti | Opcode::ArrSeti | Opcode::ArrGet | Opcode::ArrSet => {
+                return self.dispatch_arr_rw(op, method_idx, pc);
+            }
+            Opcode::ArrNew => {
+                let len = usize::from(self.read_u16(method_idx, pc)?);
+                let heap_idx = self.heap.alloc_array(len);
+                self.push_stack(Value::from_ptr(heap_idx))?;
+            }
+            Opcode::ArrNewt => {
+                let tag_pool_idx = usize::from(self.read_u8(method_idx, pc)?);
+                let len = usize::from(self.read_u16(method_idx, pc)?);
+                let tag = self
+                    .module
+                    .constants
+                    .get(tag_pool_idx)
+                    .copied()
+                    .ok_or(VmError::InvalidConstant(tag_pool_idx))?;
+                let heap_idx = self.heap.alloc_tagged_array(tag, len);
+                self.push_stack(Value::from_ptr(heap_idx))?;
+            }
+            Opcode::ArrLen => {
+                let arr_ptr = self.pop_stack()?;
+                if !arr_ptr.is_ptr() {
+                    return Err(VmError::NotAnArray);
+                }
+                let arr = self
+                    .heap
+                    .get_array(arr_ptr.as_ptr_idx())
+                    .ok_or(VmError::NotAnArray)?;
+                let len = arr.borrow().elements.len();
+                self.frames
+                    .last_mut()
+                    .unwrap()
+                    .push(Value::from_int(i64::try_from(len).unwrap_or(i64::MAX)));
+            }
+            Opcode::ArrTag => {
+                let arr_ptr = self.pop_stack()?;
+                if !arr_ptr.is_ptr() {
+                    return Err(VmError::NotAnArray);
+                }
+                let arr = self
+                    .heap
+                    .get_array(arr_ptr.as_ptr_idx())
+                    .ok_or(VmError::NotAnArray)?;
+                let tag = arr.borrow().tag.unwrap_or(Value::UNIT);
+                self.frames.last_mut().unwrap().push(tag);
+            }
+            Opcode::ArrCopy => {
+                let arr_ptr = self.pop_stack()?;
+                if !arr_ptr.is_ptr() {
+                    return Err(VmError::NotAnArray);
+                }
+                let arr = self
+                    .heap
+                    .get_array(arr_ptr.as_ptr_idx())
+                    .ok_or(VmError::NotAnArray)?;
+                let (tag, elements) = {
+                    let borrow = arr.borrow();
+                    (borrow.tag, borrow.elements.clone())
+                };
+                let new_idx = self.heap.alloc_array_from(tag, elements);
+                self.frames
+                    .last_mut()
+                    .unwrap()
+                    .push(Value::from_ptr(new_idx));
+            }
+            Opcode::ArrConcat => {
+                let b = self.pop_stack()?;
+                let a = self.pop_stack()?;
+                let result = exec_arr_concat(&mut self.heap, a, b)?;
+                self.frames.last_mut().unwrap().push(result);
+            }
+            // No-op until the type system provides type-table indices as operands
+            Opcode::TyChk | Opcode::TyCast => {}
+            _ => return Err(VmError::UnsupportedOpcode(op)),
+        }
+        Ok(())
+    }
+
+    fn dispatch_arr_rw(
+        &mut self,
+        op: Opcode,
+        method_idx: usize,
+        pc: &mut usize,
+    ) -> Result<(), VmError> {
+        match op {
+            Opcode::ArrGeti => {
+                let elem_idx = usize::from(self.read_u8(method_idx, pc)?);
+                let arr_ptr = self.pop_stack()?;
+                let val = exec_arr_geti(&self.heap, arr_ptr, elem_idx)?;
+                self.frames.last_mut().unwrap().push(val);
+            }
+            Opcode::ArrSeti => {
+                let elem_idx = usize::from(self.read_u8(method_idx, pc)?);
+                let val = self.pop_stack()?;
+                // Array stays on TOS — peek without popping
+                let arr_ptr = self.peek_stack()?;
+                exec_arr_seti(&self.heap, arr_ptr, elem_idx, val)?;
+            }
+            Opcode::ArrGet => {
+                let idx_val = self.pop_stack()?;
+                let arr_ptr = self.pop_stack()?;
+                let val = exec_arr_get(&self.heap, arr_ptr, idx_val)?;
+                self.frames.last_mut().unwrap().push(val);
+            }
+            Opcode::ArrSet => {
+                let val = self.pop_stack()?;
+                let idx_val = self.pop_stack()?;
+                let arr_ptr = self.pop_stack()?;
+                exec_arr_set(&self.heap, arr_ptr, idx_val, val)?;
+            }
+            _ => return Err(VmError::UnsupportedOpcode(op)),
+        }
+        Ok(())
+    }
+
+    fn pop_stack(&mut self) -> Result<Value, VmError> {
+        self.frames.last_mut().ok_or(VmError::StackUnderflow)?.pop()
+    }
+
+    fn push_stack(&mut self, v: Value) -> Result<(), VmError> {
+        self.frames
+            .last_mut()
+            .ok_or(VmError::StackUnderflow)?
+            .push(v);
+        Ok(())
+    }
+
+    fn peek_stack(&mut self) -> Result<Value, VmError> {
+        self.frames
+            .last_mut()
+            .ok_or(VmError::StackUnderflow)?
+            .peek()
+    }
+
     fn read_u8(&self, method_idx: usize, pc: &mut usize) -> Result<u8, VmError> {
         let b = *self
             .module
@@ -548,6 +705,140 @@ impl Vm {
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
         Ok(())
+    }
+}
+
+fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> Result<Value, VmError> {
+    if !arr_ptr.is_ptr() {
+        return Err(VmError::NotAnArray);
+    }
+    let arr = heap
+        .get_array(arr_ptr.as_ptr_idx())
+        .ok_or(VmError::NotAnArray)?;
+    let borrow = arr.borrow();
+    let len = borrow.elements.len();
+    borrow
+        .elements
+        .get(elem_idx)
+        .copied()
+        .ok_or(VmError::IndexOutOfBounds {
+            index: elem_idx,
+            length: len,
+        })
+}
+
+fn exec_arr_seti(heap: &Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> Result<(), VmError> {
+    if !arr_ptr.is_ptr() {
+        return Err(VmError::NotAnArray);
+    }
+    let arr = heap
+        .get_array(arr_ptr.as_ptr_idx())
+        .ok_or(VmError::NotAnArray)?;
+    let mut borrow = arr.borrow_mut();
+    let len = borrow.elements.len();
+    *borrow
+        .elements
+        .get_mut(elem_idx)
+        .ok_or(VmError::IndexOutOfBounds {
+            index: elem_idx,
+            length: len,
+        })? = val;
+    Ok(())
+}
+
+fn exec_arr_get(heap: &Heap, arr_ptr: Value, idx_val: Value) -> Result<Value, VmError> {
+    if !idx_val.is_int() {
+        return Err(VmError::TypeError {
+            expected: "`Int`",
+            found: "non-`Int`",
+        });
+    }
+    if !arr_ptr.is_ptr() {
+        return Err(VmError::NotAnArray);
+    }
+    let raw_idx = idx_val.as_int();
+    let arr = heap
+        .get_array(arr_ptr.as_ptr_idx())
+        .ok_or(VmError::NotAnArray)?;
+    let borrow = arr.borrow();
+    let len = borrow.elements.len();
+    let elem_idx = usize::try_from(raw_idx).map_err(|_| VmError::IndexOutOfBounds {
+        index: 0,
+        length: len,
+    })?;
+    borrow
+        .elements
+        .get(elem_idx)
+        .copied()
+        .ok_or(VmError::IndexOutOfBounds {
+            index: elem_idx,
+            length: len,
+        })
+}
+
+fn exec_arr_set(heap: &Heap, arr_ptr: Value, idx_val: Value, val: Value) -> Result<(), VmError> {
+    if !idx_val.is_int() {
+        return Err(VmError::TypeError {
+            expected: "`Int`",
+            found: "non-`Int`",
+        });
+    }
+    if !arr_ptr.is_ptr() {
+        return Err(VmError::NotAnArray);
+    }
+    let raw_idx = idx_val.as_int();
+    let arr = heap
+        .get_array(arr_ptr.as_ptr_idx())
+        .ok_or(VmError::NotAnArray)?;
+    let mut borrow = arr.borrow_mut();
+    let len = borrow.elements.len();
+    let elem_idx = usize::try_from(raw_idx).map_err(|_| VmError::IndexOutOfBounds {
+        index: 0,
+        length: len,
+    })?;
+    *borrow
+        .elements
+        .get_mut(elem_idx)
+        .ok_or(VmError::IndexOutOfBounds {
+            index: elem_idx,
+            length: len,
+        })? = val;
+    Ok(())
+}
+
+fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> Result<Value, VmError> {
+    match (a.is_ptr(), b.is_ptr()) {
+        (true, true) => {
+            let arr_a = heap.get_array(a.as_ptr_idx()).ok_or(VmError::NotAnArray)?;
+            let arr_b = heap.get_array(b.as_ptr_idx()).ok_or(VmError::NotAnArray)?;
+            let (tag, mut elems) = {
+                let borrow = arr_a.borrow();
+                (borrow.tag, borrow.elements.clone())
+            };
+            let tail = arr_b.borrow().elements.clone();
+            elems.extend_from_slice(&tail);
+            Ok(Value::from_ptr(heap.alloc_array_from(tag, elems)))
+        }
+        (true, false) => {
+            let arr_a = heap.get_array(a.as_ptr_idx()).ok_or(VmError::NotAnArray)?;
+            let (tag, mut elems) = {
+                let borrow = arr_a.borrow();
+                (borrow.tag, borrow.elements.clone())
+            };
+            elems.push(b);
+            Ok(Value::from_ptr(heap.alloc_array_from(tag, elems)))
+        }
+        (false, true) => {
+            let arr_b = heap.get_array(b.as_ptr_idx()).ok_or(VmError::NotAnArray)?;
+            let (tag, tail) = {
+                let borrow = arr_b.borrow();
+                (borrow.tag, borrow.elements.clone())
+            };
+            let mut elems = vec![a];
+            elems.extend_from_slice(&tail);
+            Ok(Value::from_ptr(heap.alloc_array_from(tag, elems)))
+        }
+        (false, false) => Ok(Value::UNIT),
     }
 }
 

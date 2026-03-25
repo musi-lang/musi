@@ -37,6 +37,19 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
     }
 }
 
+fn module_with_constants_and_code(constants: Vec<Value>, code: Vec<u8>) -> Module {
+    Module {
+        constants,
+        strings: Vec::new(),
+        methods: vec![Method {
+            name: u32::MAX,
+            locals_count: 0,
+            code,
+        }],
+        globals: Vec::new(),
+    }
+}
+
 #[test]
 fn ldsmi_halt_returns_int() {
     let mut vm = Vm::new(module_with_code(vec![
@@ -582,4 +595,197 @@ fn effect_nested() {
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 77);
+}
+
+// ── Array opcodes ─────────────────────────────────────────────────────────────
+
+#[test]
+fn arr_new_and_geti_seti() {
+    // ArrNew(2); LdSmi(10); ArrSeti(0); ArrGeti(0); Halt → 10
+    //
+    // Stack trace:
+    //   ArrNew(2): [arr_ptr]
+    //   LdSmi(10): [arr_ptr, 10]
+    //   ArrSeti(0): pop 10, peek arr_ptr, arr[0]=10 → [arr_ptr]
+    //   ArrGeti(0): pop arr_ptr, push arr[0]=10 → [10]
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        2,
+        0, // u16 LE: len=2
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::ArrSeti),
+        0,
+        op(Opcode::ArrGeti),
+        0,
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 10);
+}
+
+#[test]
+fn arr_get_set_dynamic() {
+    // ArrNew(1); Dup; LdZero(idx); LdSmi(42); ArrSet; LdZero(idx); ArrGet; Halt → 42
+    //
+    // Stack trace:
+    //   ArrNew(1): [ptr]
+    //   Dup:       [ptr, ptr]
+    //   LdZero:    [ptr, ptr, 0]
+    //   LdSmi(42): [ptr, ptr, 0, 42]
+    //   ArrSet:    pop 42, pop 0, pop ptr → arr[0]=42; [ptr]
+    //   LdZero:    [ptr, 0]
+    //   ArrGet:    pop 0, pop ptr, push arr[0]=42 → [42]
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        1,
+        0,
+        op(Opcode::Dup),
+        op(Opcode::LdZero),
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::ArrSet),
+        op(Opcode::LdZero),
+        op(Opcode::ArrGet),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn arr_len() {
+    // ArrNew(3); ArrLen; Halt → 3
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        3,
+        0,
+        op(Opcode::ArrLen),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 3);
+}
+
+#[test]
+fn arr_tag_variant() {
+    // constants[0] = Tag(0).
+    // ArrNewt(pool_idx=0, len=1); ArrTag; LdCst(0); CmpEq; Halt → true
+    //
+    // ArrTag returns the stored tag (Tag(0)).
+    // LdCst(0) loads the same value.
+    // CmpEq compares bit-identical values → true.
+    let constants = vec![Value::from_tag(0)];
+    let code = vec![
+        op(Opcode::ArrNewt),
+        0, // tag_pool_idx = 0
+        1,
+        0, // len = 1 (u16 LE)
+        op(Opcode::ArrTag),
+        op(Opcode::LdCst),
+        0,
+        0, // constants[0]
+        op(Opcode::CmpEq),
+        op(Opcode::Halt),
+    ];
+    let mut vm = Vm::new(module_with_constants_and_code(constants, code));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
+#[test]
+fn arr_copy() {
+    // ArrNew(1); LdSmi(5); ArrSeti(0); ArrCopy; ArrGeti(0); Halt → 5
+    //
+    // Copy produces an independent array with the same elements.
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        1,
+        0,
+        op(Opcode::LdSmi),
+        5,
+        0,
+        op(Opcode::ArrSeti),
+        0,
+        op(Opcode::ArrCopy),
+        op(Opcode::ArrGeti),
+        0,
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 5);
+}
+
+#[test]
+fn arr_concat() {
+    // Build two length-1 arrays, concat them, verify the result has length 2.
+    //
+    // Stack trace:
+    //   ArrNew(1): [a]
+    //   LdSmi(10); ArrSeti(0): a[0]=10, [a]
+    //   ArrNew(1): [a, b]
+    //   LdSmi(20); ArrSeti(0): b[0]=20, [a, b]
+    //   ArrConcat: pop b, pop a, create [10,20], [c]
+    //   ArrLen: [2]
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        1,
+        0,
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::ArrSeti),
+        0,
+        op(Opcode::ArrNew),
+        1,
+        0,
+        op(Opcode::LdSmi),
+        20,
+        0,
+        op(Opcode::ArrSeti),
+        0,
+        op(Opcode::ArrConcat),
+        op(Opcode::ArrLen),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 2);
+}
+
+#[test]
+fn tychk_passthrough() {
+    // TyChk is a no-op — value passes through unchanged.
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyChk),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn tycast_passthrough() {
+    // TyCast is a no-op — value passes through unchanged.
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyCast),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
 }

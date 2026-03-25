@@ -55,4 +55,8 @@ pub enum VmError {
     InvalidMethod(usize),
     #[error("no effect handler installed")]
     NoEffectHandler,
+    #[error("array index {index} out of bounds (length {length})")]
+    IndexOutOfBounds { index: usize, length: usize },
+    #[error("expected array")]
+    NotAnArray,
 }
