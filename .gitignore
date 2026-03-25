@@ -182,6 +182,7 @@ target
 #.idea/
 .claude/worktrees/
 .claude/session-handoff.md
+.worktrees/
 
 # Logs
 logs
