@@ -290,6 +290,7 @@ name = "musi"
 version = "0.1.0-rc1"
 dependencies = [
  "clap",
+ "musi_vm",
  "music_db",
  "music_emit",
  "music_found",
@@ -299,6 +300,15 @@ dependencies = [
  "music_resolve",
  "music_sema",
  "tempfile",
+]
+
+[[package]]
+name = "musi_vm"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_il",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

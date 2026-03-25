@@ -680,7 +680,7 @@ fn emit_lambda_with_upvalue_capture() {
     // The lambda body (method 0): should use LdUpv(0) to access x
     let lambda_method = &module.methods[0];
     let lambda_instrs = &lambda_method.instructions;
-    assert_eq!(lambda_instrs[0], Instruction::with_u8(Opcode::LdUpv, 0));
+    assert_eq!(lambda_instrs[0], Instruction::with_u16(Opcode::LdUpv, 0));
     assert_eq!(lambda_instrs[1], Instruction::simple(Opcode::Ret));
 }
 
@@ -943,7 +943,7 @@ fn emit_foreign_import() {
     let instrs = &module.methods[0].instructions;
     // LdCst("libc.so"), FfiCall
     assert_eq!(instrs[0].opcode, Opcode::LdCst);
-    assert_eq!(instrs[1], Instruction::simple(Opcode::FfiCall));
+    assert_eq!(instrs[1], Instruction::with_u16(Opcode::FfiCall, 0));
     assert_eq!(module.constants.len(), 1);
 }
 

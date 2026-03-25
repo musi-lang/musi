@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use commands::{build::BuildArgs, check::CheckArgs};
+use commands::{build::BuildArgs, check::CheckArgs, run::RunArgs};
 
 #[derive(Parser)]
 #[command(name = "musi", about = "Musi language compiler")]
@@ -19,6 +19,8 @@ enum Command {
     Check(CheckArgs),
     /// Compile a source file to SEAM bytecode.
     Build(BuildArgs),
+    /// Execute a SEAM bytecode file.
+    Run(RunArgs),
 }
 
 fn main() -> ExitCode {
@@ -26,5 +28,6 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Check(ref args) => commands::check::run(args),
         Command::Build(ref args) => commands::build::run(args),
+        Command::Run(ref args) => commands::run::run(args),
     }
 }

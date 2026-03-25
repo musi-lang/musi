@@ -6,8 +6,8 @@ use clap::Args;
 use music_emit::{emit, write_seam};
 use music_hir::HirBundle;
 
-use musi::diagnostic::render;
 use musi::driver::compile;
+use music_found::diag::emit_to_stderr;
 
 #[derive(Args)]
 pub struct BuildArgs {
@@ -28,7 +28,7 @@ pub fn run(args: &BuildArgs) -> ExitCode {
     };
 
     for diag in &result.diagnostics {
-        eprintln!("{}", render(diag, &result.db.source));
+        emit_to_stderr(diag, &result.db.source);
     }
 
     if result.has_errors {

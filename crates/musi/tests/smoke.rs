@@ -4,8 +4,15 @@ use std::io::ErrorKind;
 use std::io::Write;
 use std::path::Path;
 
-use musi::diagnostic::render;
 use musi::driver::compile;
+use music_found::SourceMap;
+use music_found::diag::{Diag, emit};
+
+fn render_diag(diag: &Diag, sources: &SourceMap) -> String {
+    let mut buf = Vec::new();
+    emit(&mut buf, diag, sources, false).unwrap();
+    String::from_utf8(buf).unwrap()
+}
 
 #[test]
 fn check_valid_file() {
@@ -45,10 +52,10 @@ fn diagnostic_has_line_col() {
     write!(file, "let x :=").expect("write");
     let result = compile(file.path()).expect("compile");
     assert!(!result.diagnostics.is_empty());
-    let rendered = render(&result.diagnostics[0], &result.db.source);
+    let rendered = render_diag(&result.diagnostics[0], &result.db.source);
     assert!(
-        rendered.contains(" --> "),
-        "expected ' --> ' in rendered diagnostic: {rendered}"
+        rendered.contains("error:"),
+        "expected 'error:' in rendered diagnostic: {rendered}"
     );
     assert!(
         rendered.contains(':'),

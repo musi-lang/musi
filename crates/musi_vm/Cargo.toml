@@ -1,0 +1,18 @@
+[package]
+name = "musi_vm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "SEAM bytecode virtual machine"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_il = { path = "../music_il" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -3,8 +3,8 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use musi::diagnostic::render;
 use musi::driver::compile;
+use music_found::diag::emit_to_stderr;
 
 #[derive(Args)]
 pub struct CheckArgs {
@@ -22,7 +22,7 @@ pub fn run(args: &CheckArgs) -> ExitCode {
     };
 
     for diag in &result.diagnostics {
-        eprintln!("{}", render(diag, &result.db.source));
+        emit_to_stderr(diag, &result.db.source);
     }
 
     if result.has_errors {

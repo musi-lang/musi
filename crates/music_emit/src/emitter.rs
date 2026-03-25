@@ -235,7 +235,7 @@ impl Emitter<'_> {
         if let Some(slot) = self.find_local(ident.name) {
             self.emit_ld_loc(slot);
         } else if let Some(slot) = self.find_upvalue(ident.name) {
-            self.push(Instruction::with_u8(Opcode::LdUpv, slot));
+            self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
         } else if let Some(idx) = self.find_global(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdGlb, idx));
         } else {
@@ -283,7 +283,8 @@ impl Emitter<'_> {
                 DispatchInfo::Dictionary { method_idx, .. } => {
                     let method_u8 =
                         u8::try_from(*method_idx).expect("method index overflow (>255)");
-                    self.push(Instruction::simple(Opcode::ClsDict));
+                    // ClsDict takes a u16 dictionary index; 0 is a placeholder until Phase 4
+                    self.push(Instruction::with_u16(Opcode::ClsDict, 0u16));
                     self.push(Instruction::with_u8(Opcode::ClsCall, method_u8));
                     return;
                 }
@@ -364,7 +365,7 @@ impl Emitter<'_> {
             if let Some(slot) = self.find_local(cap) {
                 self.emit_ld_loc(slot);
             } else if let Some(slot) = self.find_upvalue(cap) {
-                self.push(Instruction::with_u8(Opcode::LdUpv, slot));
+                self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
             } else if let Some(idx) = self.find_global(cap) {
                 self.push(Instruction::with_u16(Opcode::LdGlb, idx));
             }
@@ -901,7 +902,8 @@ impl Emitter<'_> {
         let name = self.thir.db.interner.resolve(sym);
         let idx = self.pool.add(ConstantEntry::Str(name.into()));
         self.push(Instruction::with_u16(Opcode::LdCst, idx));
-        self.push(Instruction::simple(Opcode::FfiCall));
+        // FfiCall takes a u16 FFI index; 0 is a placeholder until Phase 4
+        self.push(Instruction::with_u16(Opcode::FfiCall, 0u16));
     }
 
     fn alloc_anon_slot(&mut self) -> u16 {
@@ -1112,7 +1114,7 @@ impl Emitter<'_> {
                 if let Some(slot) = self.find_local(ident.name) {
                     self.emit_st_loc(slot);
                 } else if let Some(slot) = self.find_upvalue(ident.name) {
-                    self.push(Instruction::with_u8(Opcode::StUpv, slot));
+                    self.push(Instruction::with_u16(Opcode::StUpv, u16::from(slot)));
                 } else if let Some(idx) = self.find_global(ident.name) {
                     self.push(Instruction::with_u16(Opcode::StGlb, idx));
                 }
