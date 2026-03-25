@@ -1,10 +1,10 @@
-use music_ast::common::{FnDecl, MemberDecl, MemberName, ModifierSet, Param, TyRef};
+use music_ast::common::{FnDecl, MemberDecl, MemberName, ModifierSet, Param, Signature, TyRef};
 use music_ast::data::AstData;
 use music_ast::expr::{
-    BinOp, CompClause, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef, LetBinding,
-    MatchArm, PostfixOp, RecordField, TypeOpKind,
+    AccessMode, BinOp, CompClause, ExprKind, FStrPart, FieldTarget, IndexKind, InstanceBody,
+    InstanceDef, LetBinding, MatchArm, PostfixOp, RecordField, TypeOpKind, UnaryOp,
 };
-use music_ast::pat::PatKind;
+use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_db::Db;
 use music_found::{Ident, Interner, Literal, SourceMap, Span, Spanned};
@@ -1494,4 +1494,370 @@ fn emit_intrinsic_call_emits_opcode() {
     // intrinsic path: emit arg(s) then opcode - no LdVar for callee, no Call
     let has_ishl = instrs.iter().any(|i| i.opcode == Opcode::Shl);
     assert!(has_ishl, "expected Shl in {instrs:?}");
+}
+
+// --- Phase 2.5A: Float dispatch tests ---
+
+#[test]
+fn emit_float_binop_uses_dispatch() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|ast, _int| {
+        let lhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Float(1.0))));
+        let rhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Float(2.0))));
+        ExprKind::BinOp(BinOp::Add, lhs, rhs)
+    });
+    // The binop expr is the last allocated — find it via the root
+    let binop_id = thir.db.ast.root[0];
+    let _ = thir
+        .type_env
+        .dispatch
+        .insert(binop_id, DispatchInfo::Static { intrinsic: "f.add" });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    let has_fadd = instrs.iter().any(|i| i.opcode == Opcode::FAdd);
+    assert!(has_fadd, "expected FAdd in {instrs:?}");
+    let has_iadd = instrs.iter().any(|i| i.opcode == Opcode::IAdd);
+    assert!(
+        !has_iadd,
+        "should not have IAdd when dispatch provides f.add"
+    );
+}
+
+#[test]
+fn emit_float_neg_uses_dispatch() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|ast, _int| {
+        let operand = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Float(3.0))));
+        ExprKind::UnaryOp(UnaryOp::Neg, operand)
+    });
+    let neg_id = thir.db.ast.root[0];
+    let _ = thir
+        .type_env
+        .dispatch
+        .insert(neg_id, DispatchInfo::Static { intrinsic: "f.neg" });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    let has_fneg = instrs.iter().any(|i| i.opcode == Opcode::FNeg);
+    assert!(has_fneg, "expected FNeg in {instrs:?}");
+}
+
+// --- Phase 2.5B: Test coverage gaps ---
+
+#[test]
+fn emit_var_global() {
+    let thir = build_thir(&[
+        |ast, interner| {
+            let x_sym = interner.intern("x");
+            let pat_id = ast
+                .pats
+                .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
+            let value = ast
+                .exprs
+                .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(99))));
+            ExprKind::Let(Box::new(LetBinding {
+                modifiers: ModifierSet::default(),
+                attrs: Vec::new(),
+                pat: pat_id,
+                sig: None,
+                value: Some(value),
+            }))
+        },
+        |_ast, interner| {
+            let x_sym = interner.intern("x");
+            ExprKind::Var(Ident::dummy(x_sym))
+        },
+    ]);
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    // Second expr should load the global
+    let has_ldglb = instrs.iter().any(|i| i.opcode == Opcode::LdGlb);
+    assert!(has_ldglb, "expected LdGlb in {instrs:?}");
+}
+
+#[test]
+fn emit_access_positional() {
+    let thir = build_thir_single(|ast, _int| {
+        let record = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        ExprKind::Access {
+            expr: record,
+            field: FieldTarget::Index(2),
+            mode: AccessMode::Direct,
+        }
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[1], Instruction::with_u8(Opcode::ArrGeti, 2));
+}
+
+#[test]
+fn emit_unary_neg() {
+    let thir = build_thir_single(|ast, _int| {
+        let operand = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(5))));
+        ExprKind::UnaryOp(UnaryOp::Neg, operand)
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 5));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::INeg));
+}
+
+#[test]
+fn emit_unary_not() {
+    let thir = build_thir_single(|ast, _int| {
+        let operand = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        ExprKind::UnaryOp(UnaryOp::Not, operand)
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Not));
+}
+
+#[test]
+fn emit_tuple_lit() {
+    let thir = build_thir_single(|ast, _int| {
+        let a = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let b = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        let c = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(3))));
+        ExprKind::TupleLit(vec![a, b, c])
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 3));
+    assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSeti, 0));
+    assert_eq!(instrs[4], Instruction::with_u8(Opcode::ArrSeti, 1));
+    assert_eq!(instrs[6], Instruction::with_u8(Opcode::ArrSeti, 2));
+}
+
+#[test]
+fn emit_assign_var() {
+    let thir = build_thir_single(|ast, interner| {
+        let x_sym = interner.intern("x");
+        let pat_id = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
+        let init = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let let_expr = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Let(Box::new(LetBinding {
+                modifiers: ModifierSet::default(),
+                attrs: Vec::new(),
+                pat: pat_id,
+                sig: None,
+                value: Some(init),
+            }))));
+        let target = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(x_sym))));
+        let new_val = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        let assign = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Assign(target, new_val)));
+        ExprKind::Seq(vec![let_expr, assign])
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    // let x := 1; x <- 2
+    // [LdSmi 1, StLoc 0, Pop, LdSmi 2, StLoc 0, ...]
+    let st_count = instrs.iter().filter(|i| i.opcode == Opcode::StLoc).count();
+    assert!(st_count >= 2, "expected at least 2 StLoc in {instrs:?}");
+}
+
+#[test]
+fn emit_assign_field() {
+    let thir = build_thir_single(|ast, _int| {
+        let record = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let target = ast.exprs.alloc(Spanned::dummy(ExprKind::Access {
+            expr: record,
+            field: FieldTarget::Index(1),
+            mode: AccessMode::Direct,
+        }));
+        let value = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(42))));
+        ExprKind::Assign(target, value)
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    let has_arrseti = instrs
+        .iter()
+        .any(|i| i.opcode == Opcode::ArrSeti && i.operand == Operand::U8(1));
+    assert!(has_arrseti, "expected ArrSeti(1) in {instrs:?}");
+}
+
+#[test]
+fn emit_dictionary_dispatch() {
+    use music_sema::env::DispatchInfo;
+    let mut thir = build_thir_single(|ast, _interner| {
+        let lhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let rhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        ExprKind::BinOp(BinOp::Add, lhs, rhs)
+    });
+    let binop_id = thir.db.ast.root[0];
+    let cls_sym = thir.db.interner.intern("Num");
+    let _ = thir.type_env.dispatch.insert(
+        binop_id,
+        DispatchInfo::Dictionary {
+            class: cls_sym,
+            method_idx: 3,
+        },
+    );
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    let has_clsdict = instrs.iter().any(|i| i.opcode == Opcode::ClsDict);
+    let has_clscall = instrs
+        .iter()
+        .any(|i| i.opcode == Opcode::ClsCall && i.operand == Operand::U8(3));
+    assert!(has_clsdict, "expected ClsDict in {instrs:?}");
+    assert!(has_clscall, "expected ClsCall(3) in {instrs:?}");
+}
+
+#[test]
+fn emit_match_record_pattern() {
+    let thir = build_thir_single(|ast, interner| {
+        let scrutinee = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let x_sym = interner.intern("x");
+        let y_sym = interner.intern("y");
+        let x_bind = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
+        let y_bind = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(y_sym))));
+        let pat = ast.pats.alloc(Spanned::dummy(PatKind::Record(vec![
+            RecordPatField {
+                mutable: false,
+                name: Ident::dummy(x_sym),
+                pat: Some(x_bind),
+            },
+            RecordPatField {
+                mutable: false,
+                name: Ident::dummy(y_sym),
+                pat: Some(y_bind),
+            },
+        ])));
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let arm = MatchArm {
+            attrs: Vec::new(),
+            pat,
+            guard: None,
+            body,
+        };
+        ExprKind::Match(scrutinee, vec![arm])
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    // Should have ArrGeti for both field indices
+    let geti_count = instrs
+        .iter()
+        .filter(|i| i.opcode == Opcode::ArrGeti)
+        .count();
+    assert!(geti_count >= 2, "expected 2+ ArrGeti in {instrs:?}");
+}
+
+#[test]
+fn emit_match_variant_with_fields() {
+    let thir = build_thir_single(|ast, interner| {
+        let scrutinee = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let some_sym = interner.intern("Some");
+        let val_sym = interner.intern("val");
+        let field_bind = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(val_sym))));
+        let pat = ast.pats.alloc(Spanned::dummy(PatKind::Variant {
+            tag: Ident::dummy(some_sym),
+            fields: vec![field_bind],
+        }));
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let arm = MatchArm {
+            attrs: Vec::new(),
+            pat,
+            guard: None,
+            body,
+        };
+        ExprKind::Match(scrutinee, vec![arm])
+    });
+    let module = emit(&thir).unwrap();
+    let instrs = &module.methods[0].instructions;
+    let has_arrtag = instrs.iter().any(|i| i.opcode == Opcode::ArrTag);
+    let has_geti = instrs.iter().any(|i| i.opcode == Opcode::ArrGeti);
+    assert!(has_arrtag, "expected ArrTag in {instrs:?}");
+    assert!(has_geti, "expected ArrGeti for field binding in {instrs:?}");
+}
+
+#[test]
+fn emit_top_level_function() {
+    let thir = build_thir(&[|ast, interner| {
+        let f_sym = interner.intern("f");
+        let x_sym = interner.intern("x");
+        let pat_id = ast
+            .pats
+            .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(f_sym))));
+        let body = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(x_sym))));
+        let param = Param {
+            mutable: false,
+            name: Ident::dummy(x_sym),
+            ty: None,
+            default: None,
+        };
+        ExprKind::Let(Box::new(LetBinding {
+            modifiers: ModifierSet::default(),
+            attrs: Vec::new(),
+            pat: pat_id,
+            sig: Some(Box::new(Signature {
+                params: vec![param],
+                ty_params: Vec::new(),
+                constraints: Vec::new(),
+                effects: Vec::new(),
+                ret_ty: None,
+            })),
+            value: Some(body),
+        }))
+    }]);
+    let module = emit(&thir).unwrap();
+    // Top-level function should produce a named method
+    assert_eq!(module.methods.len(), 1);
+    assert!(module.methods[0].name.is_some());
+    let instrs = &module.methods[0].instructions;
+    // Body loads the param then returns
+    assert_eq!(instrs[0], Instruction::with_u8(Opcode::LdLoc, 0));
+    assert_eq!(instrs[1], Instruction::simple(Opcode::Ret));
 }

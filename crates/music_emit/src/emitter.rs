@@ -766,7 +766,7 @@ impl Emitter<'_> {
                 self.push(Instruction::with_u8(Opcode::ArrGeti, field_u8));
             }
             FieldTarget::Name(_) => {
-                self.push(Instruction::with_u8(Opcode::ArrGeti, 0));
+                return Err(EmitError::Unimplemented("named field access"));
             }
         }
         Ok(())
