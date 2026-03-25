@@ -2,7 +2,7 @@
 
 use music_il::opcode::Opcode;
 
-use crate::error::VmError;
+use crate::errors::VmError;
 use crate::frame::CallFrame;
 use crate::heap::Heap;
 use crate::module::Module;
@@ -10,11 +10,21 @@ use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
 
+struct EffectHandler {
+    /// Index into `self.frames` for the frame that called `handle`.
+    handler_frame_depth: usize,
+    /// Byte offset in the method's code where the handler body starts.
+    handler_pc: usize,
+    /// Operand stack depth of the handler frame at the point `EffPush` executed.
+    saved_stack_depth: usize,
+}
+
 pub struct Vm {
     module: Module,
     globals: Vec<Value>,
     heap: Heap,
     frames: Vec<CallFrame>,
+    effect_handlers: Vec<EffectHandler>,
 }
 
 impl Vm {
@@ -26,6 +36,7 @@ impl Vm {
             globals: vec![Value::UNIT; globals_count],
             heap: Heap::new(),
             frames: Vec::new(),
+            effect_handlers: Vec::new(),
         }
     }
 
@@ -85,6 +96,10 @@ impl Vm {
                     if let Some(ret) = self.dispatch_call(op, method_idx, &mut pc)? {
                         return Ok(ret);
                     }
+                }
+
+                Opcode::EffPush | Opcode::EffPop | Opcode::EffNeed | Opcode::EffResume => {
+                    self.dispatch_effect(op, method_idx, &mut pc)?;
                 }
 
                 _ => self.dispatch_load_store_stack(op, method_idx, &mut pc)?,
@@ -462,9 +477,81 @@ impl Vm {
         let hi = self.read_u8(method_idx, pc)?;
         Ok(i16::from_le_bytes([lo, hi]))
     }
+
+    fn dispatch_effect(
+        &mut self,
+        op: Opcode,
+        method_idx: usize,
+        pc: &mut usize,
+    ) -> Result<(), VmError> {
+        match op {
+            Opcode::EffPush => {
+                let skip_offset = self.read_i16(method_idx, pc)?;
+                let handler_pc = *pc;
+                let saved_stack_depth = self
+                    .frames
+                    .last()
+                    .ok_or(VmError::StackUnderflow)?
+                    .stack_depth();
+                let handler_frame_depth = self.frames.len() - 1;
+                self.effect_handlers.push(EffectHandler {
+                    handler_frame_depth,
+                    handler_pc,
+                    saved_stack_depth,
+                });
+                *pc = pc.wrapping_add_signed(isize::from(skip_offset));
+            }
+            Opcode::EffPop => {
+                let _ = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
+            }
+            Opcode::EffNeed => {
+                let _effect_idx = self.read_u16(method_idx, pc)?;
+                let handler = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
+                let cont_frames = self.frames[handler.handler_frame_depth + 1..].to_vec();
+                let resume_pc = *pc;
+                let cont_idx = self.heap.alloc_continuation(cont_frames, resume_pc);
+                self.frames.truncate(handler.handler_frame_depth + 1);
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                frame.truncate_stack(handler.saved_stack_depth);
+                frame.push(Value::from_ptr(cont_idx));
+                *pc = handler.handler_pc;
+            }
+            Opcode::EffResume => {
+                let flag = self.read_u8(method_idx, pc)?;
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                let value = if flag != 0 { frame.pop()? } else { Value::UNIT };
+                let cont_ptr = frame.pop()?;
+                if !cont_ptr.is_ptr() {
+                    return Err(VmError::TypeError {
+                        expected: "Continuation",
+                        found: "non-ptr",
+                    });
+                }
+                let cont_idx = cont_ptr.as_ptr_idx();
+                let (cont_frames, resume_pc) = {
+                    let cont = self
+                        .heap
+                        .get_continuation(cont_idx)
+                        .ok_or(VmError::TypeError {
+                            expected: "Continuation",
+                            found: "non-continuation",
+                        })?;
+                    (cont.frames.clone(), cont.resume_pc)
+                };
+                self.frames.extend(cont_frames);
+                *pc = resume_pc;
+                self.frames
+                    .last_mut()
+                    .ok_or(VmError::StackUnderflow)?
+                    .push(value);
+            }
+            _ => return Err(VmError::UnsupportedOpcode(op)),
+        }
+        Ok(())
+    }
 }
 
-/// Handles scalar arithmetic, bitwise, and comparison opcodes — pure stack
+/// Handles scalar arithmetic, bitwise, and comparison opcodes - pure stack
 /// operations with no operand bytes and no PC mutation.
 fn exec_scalar_op(op: Opcode, frame: &mut CallFrame) -> Result<(), VmError> {
     match op {
@@ -539,8 +626,8 @@ fn pop_int(frame: &mut CallFrame) -> Result<i64, VmError> {
     let v = frame.pop()?;
     if !v.is_int() {
         return Err(VmError::TypeError {
-            expected: "Int",
-            found: "non-Int",
+            expected: "`Int`",
+            found: "non-`Int`",
         });
     }
     Ok(v.as_int())
@@ -550,8 +637,8 @@ fn pop_float(frame: &mut CallFrame) -> Result<f64, VmError> {
     let v = frame.pop()?;
     if !v.is_float() {
         return Err(VmError::TypeError {
-            expected: "Float",
-            found: "non-Float",
+            expected: "`Float`",
+            found: "non-`Float`",
         });
     }
     Ok(v.as_float())
@@ -594,7 +681,7 @@ fn apply_cmp(
         float_cmp(&a.as_float(), &b.as_float())
     } else {
         return Err(VmError::TypeError {
-            expected: "Int or Float (matching)",
+            expected: "`Int` or `Float` (matching)",
             found: "mixed types",
         });
     };

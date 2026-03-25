@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use super::CallFrame;
-use crate::error::VmError;
+use crate::errors::VmError;
 use crate::value::Value;
 
 #[test]

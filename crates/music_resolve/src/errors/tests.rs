@@ -3,7 +3,7 @@ use music_found::{Span, Symbol};
 use crate::errors::{ResolveError, ResolveErrorKind};
 
 fn dummy_symbol() -> Symbol {
-    // Symbol(0) — the raw constructor is not public, but from_raw on Idx
+    // Symbol(0) - the raw constructor is not public, but from_raw on Idx
     // is. Symbol only exposes raw(). We need an interner to create real ones.
     // For Display tests we only care that the format includes the symbol repr.
     use music_found::Interner;

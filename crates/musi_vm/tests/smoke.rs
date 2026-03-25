@@ -6,7 +6,7 @@
     clippy::tests_outside_test_module
 )]
 
-use musi_vm::{Vm, load};
+use musi_vm::{load, Vm};
 use music_il::opcode::Opcode;
 
 const fn op(o: Opcode) -> u8 {
@@ -199,6 +199,47 @@ fn smoke_function_call() {
     let module = load(&seam).unwrap();
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 7);
+}
+
+#[test]
+fn smoke_effect_basic() {
+    // Direct Module construction (not .seam) verifying EffPush → EffNeed → EffResume round-trip.
+    // Byte layout: same as effect_need_resume in vm/tests.rs
+    // [0]  EffPush   [1,2]  5,0     skip 5 bytes → land at main body [8]
+    // [3]  LdSmi     [4,5]  77,0    handler: push resume value
+    // [6]  EffResume [7]    1       handler: pop value, pop cont_ptr, restore
+    // [8]  LdSmi     [9,10] 0,0     main: dummy arg for need
+    // [11] EffNeed   [12,13] 0,0    main: suspend → resume_pc=14
+    // [14] Halt                      returns 77
+    use musi_vm::module::{Method, Module};
+    let module = Module {
+        constants: Vec::new(),
+        strings: Vec::new(),
+        methods: vec![Method {
+            name: u32::MAX,
+            locals_count: 0,
+            code: vec![
+                op(Opcode::EffPush),
+                5,
+                0,
+                op(Opcode::LdSmi),
+                77,
+                0,
+                op(Opcode::EffResume),
+                1,
+                op(Opcode::LdSmi),
+                0,
+                0,
+                op(Opcode::EffNeed),
+                0,
+                0,
+                op(Opcode::Halt),
+            ],
+        }],
+        globals: Vec::new(),
+    };
+    let mut vm = Vm::new(module);
+    assert_eq!(vm.run().unwrap().as_int(), 77);
 }
 
 #[test]

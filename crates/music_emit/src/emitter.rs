@@ -758,11 +758,11 @@ impl Emitter<'_> {
 
     fn emit_need(&mut self, operand: ExprId) {
         self.emit_expr(operand);
-        self.push(Instruction::simple(Opcode::EffNeed));
+        self.push(Instruction::with_u16(Opcode::EffNeed, 0));
     }
 
     fn emit_handle(&mut self, handlers: &[FnDecl], body: ExprId) {
-        self.push(Instruction::simple(Opcode::EffPush));
+        let skip_jump = self.placeholder_jump(Opcode::EffPush);
 
         for handler in handlers {
             if let Some(handler_body) = handler.body {
@@ -770,6 +770,7 @@ impl Emitter<'_> {
             }
         }
 
+        self.patch_jump(skip_jump);
         self.emit_expr(body);
         self.push(Instruction::simple(Opcode::EffPop));
     }
@@ -777,10 +778,10 @@ impl Emitter<'_> {
     fn emit_resume(&mut self, value: Option<ExprId>) {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id);
+            self.push(Instruction::with_u8(Opcode::EffResume, 1));
         } else {
-            self.push(Instruction::simple(Opcode::LdUnit));
+            self.push(Instruction::with_u8(Opcode::EffResume, 0));
         }
-        self.push(Instruction::simple(Opcode::EffResume));
     }
 
     fn emit_matrix_lit(&mut self, rows: &[ExprList]) {

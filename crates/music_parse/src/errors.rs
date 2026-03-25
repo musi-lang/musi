@@ -73,7 +73,7 @@ impl fmt::Display for ParseErrorKind {
                 write!(f, "expected pattern, found {found}")
             }
             Self::ExpectedType { found } => {
-                write!(f, "expected type, found {found}")
+                write!(f, "expected type, found `{found}`")
             }
             Self::UnclosedDelimiter { open, .. } => {
                 write!(f, "unclosed delimiter {open}")

@@ -337,7 +337,7 @@ impl SemaDb {
             }
         };
 
-        // #2: Constraint satisfaction — check that concrete type args
+        // #2: Constraint satisfaction - check that concrete type args
         // have instances for the callee's declared constraints.
         self.check_constraints_at_call(callee, args, span);
 
@@ -1208,7 +1208,7 @@ impl SemaDb {
 
         let key = (class_name, type_name);
 
-        // #4: Coherence — check for duplicate instance
+        // #4: Coherence - check for duplicate instance
         if self.env.instances.contains_key(&key) {
             self.errors.push(SemaError {
                 kind: SemaErrorKind::DuplicateInstance {
@@ -1294,7 +1294,7 @@ impl SemaDb {
             }
         }
 
-        // #6: Check Resume on Never — synth each handler body with
+        // #6: Check Resume on Never - synth each handler body with
         // current_handler_ret set if the op returns Never
         let prev_handler_ret = self.current_handler_ret;
         for handler in handlers {
@@ -1319,7 +1319,7 @@ impl SemaDb {
         self.synth(body)
     }
 
-    /// #6: Checks Resume usage — emits `ResumeOnNever` if we're in a handler
+    /// #6: Checks Resume usage - emits `ResumeOnNever` if we're in a handler
     /// for an operation that returns Never.
     fn synth_resume(&mut self, val: Option<ExprId>, span: Span) -> SemaTypeId {
         if let Some(v) = val {

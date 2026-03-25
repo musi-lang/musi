@@ -3,7 +3,7 @@
 use music_il::opcode::Opcode;
 
 use super::Vm;
-use crate::error::VmError;
+use crate::errors::VmError;
 use crate::module::{GlobalDef, Method, Module};
 use crate::value::Value;
 
@@ -479,4 +479,62 @@ fn call_stack_overflow() {
     ];
     let mut vm = Vm::new(module_with_code(code));
     assert!(matches!(vm.run(), Err(VmError::CallStackOverflow)));
+}
+
+#[test]
+fn effect_push_pop() {
+    // Install handler, main body runs normally, handler removed via EffPop.
+    // Byte layout:
+    // [0]  EffPush  [1,2]  5,0      skip 5 bytes past handler body → land at [8]
+    // [3]  LdSmi   [4,5]  99,0     handler body (dead code)
+    // [6]  EffResume [7]  0        handler body cont. (dead code)
+    // [8]  LdSmi   [9,10] 42,0    main body
+    // [11] EffPop
+    // [12] Halt                     returns 42
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        5,
+        0,
+        op(Opcode::LdSmi),
+        99,
+        0,
+        op(Opcode::EffResume),
+        0,
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::EffPop),
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 42);
+}
+
+#[test]
+fn effect_need_resume() {
+    // Install handler; main body calls EffNeed (suspends); handler resumes with 77.
+    // Byte layout:
+    // [0]  EffPush   [1,2]  5,0     skip 5 bytes to main body → land at [8]
+    // [3]  LdSmi     [4,5]  77,0    handler: push resume value onto stack
+    // [6]  EffResume [7]    1       handler: pop value, pop cont_ptr, restore
+    // [8]  LdSmi     [9,10] 0,0     main: dummy arg for need
+    // [11] EffNeed   [12,13] 0,0    main: suspend → resume_pc=14
+    // [14] Halt                      returns 77
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        5,
+        0,
+        op(Opcode::LdSmi),
+        77,
+        0,
+        op(Opcode::EffResume),
+        1,
+        op(Opcode::LdSmi),
+        0,
+        0,
+        op(Opcode::EffNeed),
+        0,
+        0,
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 77);
 }

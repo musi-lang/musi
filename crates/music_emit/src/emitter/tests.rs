@@ -403,7 +403,7 @@ fn emit_need() {
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 7));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::EffNeed));
+    assert_eq!(instrs[1], Instruction::with_u16(Opcode::EffNeed, 0));
 }
 
 #[test]
@@ -434,8 +434,9 @@ fn emit_handle_with_body() {
     });
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
-    // EffPush, handler body (LdSmi 2), body (LdOne), EffPop
-    assert_eq!(instrs[0], Instruction::simple(Opcode::EffPush));
+    // EffPush(skip=1), handler body (LdSmi 2), body (LdOne), EffPop
+    // patch_jump: current=2, placeholder=0, offset = 2-0-1 = 1
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::EffPush, 1));
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[3], Instruction::simple(Opcode::EffPop));
@@ -452,7 +453,7 @@ fn emit_resume_with_value() {
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 3));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::EffResume));
+    assert_eq!(instrs[1], Instruction::with_u8(Opcode::EffResume, 1));
 }
 
 #[test]
@@ -460,8 +461,7 @@ fn emit_resume_unit() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Resume(None));
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::simple(Opcode::LdUnit));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::EffResume));
+    assert_eq!(instrs[0], Instruction::with_u8(Opcode::EffResume, 0));
 }
 
 #[test]
@@ -1024,7 +1024,7 @@ fn emit_comprehension_single_generator() {
     assert_eq!(instrs[lp + 13], Instruction::simple(Opcode::IAdd));
     assert_eq!(instrs[lp + 14].opcode, Opcode::StLoc);
 
-    // BrBack (negative offset) — signals loop back-edge
+    // BrBack (negative offset) - signals loop back-edge
     assert_eq!(instrs[lp + 15].opcode, Opcode::BrBack);
     assert!(
         matches!(instrs[lp + 15].operand, Operand::I16(off) if off < 0),
@@ -1457,7 +1457,7 @@ fn emit_intrinsic_call_emits_opcode() {
         .insert(callee_id, DispatchInfo::Static { intrinsic: "shl" });
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
-    // intrinsic path: emit arg(s) then opcode — no LdVar for callee, no Call
+    // intrinsic path: emit arg(s) then opcode - no LdVar for callee, no Call
     let has_ishl = instrs.iter().any(|i| i.opcode == Opcode::Shl);
     assert!(has_ishl, "expected Shl in {instrs:?}");
 }

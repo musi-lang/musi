@@ -3,7 +3,7 @@
 use music_il::format::{self, HEADER_SIZE};
 use music_il::opcode::Opcode;
 
-use crate::error::LoadError;
+use crate::errors::LoadError;
 use crate::module::{GlobalDef, Method, Module};
 use crate::value::Value;
 

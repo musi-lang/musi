@@ -103,7 +103,7 @@ fn unit() {
 
 #[test]
 fn ptr_roundtrip_zero() {
-    // idx=0 exercises NAN_BOX_PTR tag (0b000) — payload all zeros, most collision-prone
+    // idx=0 exercises NAN_BOX_PTR tag (0b000) - payload all zeros, most collision-prone
     let v = Value::from_ptr(0);
     assert!(v.is_ptr());
     assert!(!v.is_int());

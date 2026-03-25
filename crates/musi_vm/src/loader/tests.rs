@@ -3,7 +3,7 @@
 use music_il::opcode::Opcode;
 
 use super::load;
-use crate::error::LoadError;
+use crate::errors::LoadError;
 
 const fn op(o: Opcode) -> u8 {
     o as u8

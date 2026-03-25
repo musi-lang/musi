@@ -1,6 +1,7 @@
-use crate::error::VmError;
+use crate::errors::VmError;
 use crate::value::Value;
 
+#[derive(Clone)]
 pub struct CallFrame {
     locals: Vec<Value>,
     stack: Vec<Value>,
@@ -94,6 +95,15 @@ impl CallFrame {
         self.push(a);
         self.push(b);
         Ok(())
+    }
+
+    #[must_use]
+    pub const fn stack_depth(&self) -> usize {
+        self.stack.len()
+    }
+
+    pub fn truncate_stack(&mut self, depth: usize) {
+        self.stack.truncate(depth);
     }
 
     /// # Errors

@@ -48,9 +48,9 @@ pub fn static_opcode(s: &str) -> Option<&'static str> {
 /// Extracts the `opcode` field from `@_intrinsic(...)` if present.
 ///
 /// Supported forms:
-/// - `@_intrinsic(opcode := "shl")` — named
-/// - `@_intrinsic("name", "shl")` — positional, opcode at index 1
-/// - `@_intrinsic("shl")` — single positional matched against `KNOWN_OPCODES`
+/// - `@_intrinsic(opcode := "shl")` - named
+/// - `@_intrinsic("name", "shl")` - positional, opcode at index 1
+/// - `@_intrinsic("shl")` - single positional matched against `KNOWN_OPCODES`
 #[must_use]
 pub fn extract_intrinsic_opcode(
     ast: &AstData,
@@ -94,12 +94,12 @@ fn check_attr(ast: &AstData, interner: &Interner, attr_id: AttrId) -> Option<&'s
         })
         .collect();
 
-    // @_intrinsic("name", "opcode") — opcode at index 1
+    // @_intrinsic("name", "opcode") - opcode at index 1
     if positional.len() >= 2 {
         return extract_str_opcode(ast, positional[1]);
     }
 
-    // @_intrinsic("opcode") — single positional treated as opcode if known
+    // @_intrinsic("opcode") - single positional treated as opcode if known
     if let [single] = positional.as_slice() {
         return extract_str_opcode(ast, *single);
     }

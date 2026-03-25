@@ -30,14 +30,14 @@ pub enum VmError {
     PcOutOfBounds,
     #[error("division by zero")]
     DivisionByZero,
-    #[error("type error: expected {expected}, got {found}")]
+    #[error("type error: expected {expected}, found {found}")]
     TypeError {
         expected: &'static str,
         found: &'static str,
     },
     #[error("invalid opcode 0x{0:02x}")]
     InvalidOpcode(u8),
-    #[error("unsupported opcode: {0:?}")]
+    #[error("unsupported opcode '{0:?}'")]
     UnsupportedOpcode(Opcode),
     #[error("explicit panic")]
     ExplicitPanic,
@@ -53,4 +53,6 @@ pub enum VmError {
     CallStackOverflow,
     #[error("invalid method index {0}")]
     InvalidMethod(usize),
+    #[error("no effect handler installed")]
+    NoEffectHandler,
 }
