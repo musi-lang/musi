@@ -88,7 +88,11 @@ impl Vm {
                 Opcode::Nop => {}
                 Opcode::Panic => return Err(VmError::ExplicitPanic),
 
-                Opcode::BrTrue | Opcode::BrFalse | Opcode::BrJmp | Opcode::BrBack => {
+                Opcode::BrTrue
+                | Opcode::BrFalse
+                | Opcode::BrJmp
+                | Opcode::BrBack
+                | Opcode::BrTbl => {
                     self.dispatch_branch(op, method_idx, &mut pc)?;
                 }
 
@@ -166,6 +170,38 @@ impl Vm {
             Opcode::BrJmp | Opcode::BrBack => {
                 let offset = self.read_i16(method_idx, pc)?;
                 *pc = pc.wrapping_add_signed(isize::from(offset));
+            }
+            Opcode::BrTbl => {
+                let count = usize::from(self.read_u16(method_idx, pc)?);
+                let base_pc = *pc;
+                *pc = pc.wrapping_add(count * 2);
+                let idx_val = self
+                    .frames
+                    .last_mut()
+                    .ok_or(VmError::StackUnderflow)?
+                    .pop()?;
+                if !idx_val.is_int() {
+                    return Err(VmError::TypeError {
+                        expected: "Int",
+                        found: "non-Int",
+                    });
+                }
+                let idx = idx_val.as_int();
+                if let Ok(i) = usize::try_from(idx) {
+                    if i < count {
+                        let off_pos = base_pc + i * 2;
+                        let code = &self
+                            .module
+                            .methods
+                            .get(method_idx)
+                            .ok_or(VmError::InvalidMethod(method_idx))?
+                            .code;
+                        let lo = *code.get(off_pos).ok_or(VmError::PcOutOfBounds)?;
+                        let hi = *code.get(off_pos + 1).ok_or(VmError::PcOutOfBounds)?;
+                        let offset = i16::from_le_bytes([lo, hi]);
+                        *pc = pc.wrapping_add_signed(isize::from(offset));
+                    }
+                }
             }
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }

@@ -789,3 +789,113 @@ fn tycast_passthrough() {
     assert!(result.is_int());
     assert_eq!(result.as_int(), 42);
 }
+
+// ── BrTbl ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn brtbl_in_range() {
+    // BrTbl with count=3, index=1 → lands on LdSmi(99).
+    //
+    // Byte layout:
+    //  [0-2]   LdSmi 1 0          push index=1
+    //  [3]     BrTbl
+    //  [4-5]   3 0                count=3
+    //  [6-7]   0 0                offset[0]=0  → after-table(12) + 0  = 12
+    //  [8-9]   6 0                offset[1]=6  → after-table(12) + 6  = 18
+    //  [10-11] 12 0               offset[2]=12 → after-table(12) + 12 = 24
+    //  [12-14] LdSmi 10 0         branch 0
+    //  [15-17] BrJmp 9 0          skip to Halt at 27
+    //  [18-20] LdSmi 99 0         branch 1 ← idx=1 lands here
+    //  [21-23] BrJmp 3 0          skip to Halt at 27
+    //  [24-26] LdSmi 77 0         branch 2
+    //  [27]    Halt
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        1,
+        0,
+        op(Opcode::BrTbl),
+        3,
+        0,
+        0,
+        0,
+        6,
+        0,
+        12,
+        0,
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::BrJmp),
+        9,
+        0,
+        op(Opcode::LdSmi),
+        99,
+        0,
+        op(Opcode::BrJmp),
+        3,
+        0,
+        op(Opcode::LdSmi),
+        77,
+        0,
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 99);
+}
+
+#[test]
+fn brtbl_out_of_range() {
+    // index=5, count=3 → out of range, falls through to LdSmi(42).
+    //
+    // Byte layout:
+    //  [0-2]   LdSmi 5 0    push index=5
+    //  [3]     BrTbl
+    //  [4-5]   3 0          count=3
+    //  [6-11]  zeros        three offsets (never used)
+    //  [12-14] LdSmi 42 0   fall-through target
+    //  [15]    Halt
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        5,
+        0,
+        op(Opcode::BrTbl),
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 42);
+}
+
+#[test]
+fn brtbl_negative_index() {
+    // index=-1 → usize::try_from fails, falls through to LdSmi(42).
+    //
+    // Same layout as brtbl_out_of_range except LdSmi encodes -1 (i16 LE = 0xFF 0xFF).
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        0xFF,
+        0xFF,
+        op(Opcode::BrTbl),
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 42);
+}

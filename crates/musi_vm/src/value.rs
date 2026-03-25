@@ -32,6 +32,10 @@ impl Value {
 
     #[must_use]
     pub const fn from_int(i: i64) -> Self {
+        debug_assert!(
+            i >= -(1i64 << 47) && i < (1i64 << 47),
+            "from_int: value outside 48-bit signed range"
+        );
         Self(QNAN | ((NAN_BOX_SMI as u64) << TAG_SHIFT) | (i as u64 & PAYLOAD_MASK))
     }
 
@@ -57,6 +61,10 @@ impl Value {
 
     #[must_use]
     pub const fn as_tag_idx(self) -> u16 {
+        debug_assert!(
+            (self.0 & PAYLOAD_MASK) <= u16::MAX as u64,
+            "as_tag_idx: payload exceeds u16 range"
+        );
         (self.0 & PAYLOAD_MASK) as u16
     }
 

@@ -161,3 +161,26 @@ fn tag_equality() {
     assert_eq!(Value::from_tag(7), Value::from_tag(7));
     assert_ne!(Value::from_tag(7), Value::from_tag(8));
 }
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic]
+fn from_int_debug_panic_overflow() {
+    let _ = Value::from_int(1i64 << 47);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic]
+fn from_int_debug_panic_underflow() {
+    let _ = Value::from_int(-(1i64 << 47) - 1);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic]
+fn as_tag_idx_debug_panic() {
+    // from_ptr with payload > u16::MAX; calling as_tag_idx on it triggers the guard
+    let v = Value::from_ptr(0x1_0000);
+    let _ = v.as_tag_idx();
+}
