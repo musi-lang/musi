@@ -9,7 +9,7 @@ use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
 use music_found::{Ident, Literal, Symbol};
 use music_hir::HirBundle;
-use music_il::instruction::Instruction;
+use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
 use music_sema::env::DispatchInfo;
@@ -69,6 +69,16 @@ pub fn emit(thir: &HirBundle) -> SeamModule {
         constants: emitter.pool,
         methods: emitter.methods,
         globals: emitter.globals,
+    }
+}
+
+const fn instruction_byte_size(instr: &Instruction) -> usize {
+    1 + match &instr.operand {
+        Operand::None => 0,
+        Operand::U8(_) => 1,
+        Operand::I16(_) | Operand::U16(_) => 2,
+        Operand::Wide(_, _) | Operand::Tagged(_, _) => 3,
+        Operand::Table(offsets) => 2 + offsets.len() * 2,
     }
 }
 
@@ -333,8 +343,11 @@ impl Emitter<'_> {
 
     fn patch_jump(&mut self, placeholder_pos: usize) {
         let current = self.current_instructions.len();
-        let offset = i16::try_from(current.wrapping_sub(placeholder_pos).wrapping_sub(1))
-            .expect("jump too far");
+        let byte_offset: usize = self.current_instructions[placeholder_pos + 1..current]
+            .iter()
+            .map(instruction_byte_size)
+            .sum();
+        let offset = i16::try_from(byte_offset).expect("jump too far");
         let old_opcode = self.current_instructions[placeholder_pos].opcode;
         self.current_instructions[placeholder_pos] = Instruction::with_i16(old_opcode, offset);
     }
@@ -975,12 +988,15 @@ impl Emitter<'_> {
                     self.push(Instruction::simple(Opcode::IAdd));
                     self.emit_st_loc(counter_slot);
 
-                    let back_pos = self.current_instructions.len();
-                    let back_offset = isize::try_from(loop_start).expect("loop_start overflow")
-                        - isize::try_from(back_pos).expect("back_pos overflow")
-                        - 1;
-                    let back_i16 = i16::try_from(back_offset).expect("backward jump too far");
-                    self.push(Instruction::with_i16(Opcode::BrBack, back_i16));
+                    let brback_pos = self.current_instructions.len();
+                    self.push(Instruction::with_i16(Opcode::BrBack, 0));
+                    let back_bytes: usize = self.current_instructions[loop_start..=brback_pos]
+                        .iter()
+                        .map(instruction_byte_size)
+                        .sum();
+                    let back_i16 = -i16::try_from(back_bytes).expect("backward jump too far");
+                    self.current_instructions[brback_pos] =
+                        Instruction::with_i16(Opcode::BrBack, back_i16);
 
                     self.patch_jump(end_jump);
                 }

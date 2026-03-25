@@ -174,6 +174,41 @@ fn emit_branch() {
 }
 
 #[test]
+fn emit_branch_mixed_width() {
+    // Branch where then_br emits a 1-byte instruction (LdZero) to verify
+    // byte-level offset computation (old code counted instruction slots).
+    // cond=1 (LdOne, 1 byte), then_br=0 (LdZero, 1 byte), else_br=42 (LdSmi, 3 bytes)
+    //
+    // BrFalse must skip: LdZero(1) + BrJmp(3) = 4 bytes
+    // BrJmp must skip:   LdSmi(42)(3) = 3 bytes
+    let thir = build_thir_single(|ast, _int| {
+        let cond = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
+        let then_br = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
+        let else_br = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(42))));
+        ExprKind::Branch {
+            cond,
+            then_br,
+            else_br,
+        }
+    });
+    let module = emit(&thir);
+    let instrs = &module.methods[0].instructions;
+    assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[1].opcode, Opcode::BrFalse);
+    assert_eq!(instrs[1].operand, Operand::I16(4)); // LdZero(1) + BrJmp(3)
+    assert_eq!(instrs[2], Instruction::simple(Opcode::LdZero));
+    assert_eq!(instrs[3].opcode, Opcode::BrJmp);
+    assert_eq!(instrs[3].operand, Operand::I16(3)); // LdSmi(42)(3)
+    assert_eq!(instrs[4], Instruction::with_i16(Opcode::LdSmi, 42));
+}
+
+#[test]
 fn emit_sequence_pops_intermediates() {
     let thir = build_thir_single(|ast, _int| {
         let a = ast
@@ -434,9 +469,9 @@ fn emit_handle_with_body() {
     });
     let module = emit(&thir);
     let instrs = &module.methods[0].instructions;
-    // EffPush(skip=1), handler body (LdSmi 2), body (LdOne), EffPop
-    // patch_jump: current=2, placeholder=0, offset = 2-0-1 = 1
-    assert_eq!(instrs[0], Instruction::with_i16(Opcode::EffPush, 1));
+    // EffPush(skip=3), handler body (LdSmi 2 = 3 bytes), body (LdOne), EffPop
+    // patch_jump: byte_offset = bytes([LdSmi 2]) = 3
+    assert_eq!(instrs[0], Instruction::with_i16(Opcode::EffPush, 3));
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[3], Instruction::simple(Opcode::EffPop));

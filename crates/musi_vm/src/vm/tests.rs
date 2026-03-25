@@ -538,3 +538,48 @@ fn effect_need_resume() {
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 77);
 }
+
+#[test]
+fn effect_nested() {
+    // Two handlers installed; inner EffNeed fires (LIFO), inner handler resumes
+    // with 77, outer handler survives and is removed via EffPop.
+    //
+    // Byte layout:
+    // [0-2]   EffPush 5,0      outer: skip=5 → handler_pc=3, land at 8
+    // [3-5]   LdSmi 88,0       outer handler body (unreachable)
+    // [6-7]   EffResume 1
+    // [8-10]  EffPush 5,0      inner: skip=5 → handler_pc=11, land at 16
+    // [11-13] LdSmi 77,0       inner handler body
+    // [14-15] EffResume 1
+    // [16-18] LdSmi 0,0        main: dummy arg
+    // [19-21] EffNeed 0,0      suspend → resume_pc=22
+    // [22]    EffPop            remove outer
+    // [23]    Halt              returns 77
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        5,
+        0,
+        op(Opcode::LdSmi),
+        88,
+        0,
+        op(Opcode::EffResume),
+        1,
+        op(Opcode::EffPush),
+        5,
+        0,
+        op(Opcode::LdSmi),
+        77,
+        0,
+        op(Opcode::EffResume),
+        1,
+        op(Opcode::LdSmi),
+        0,
+        0,
+        op(Opcode::EffNeed),
+        0,
+        0,
+        op(Opcode::EffPop),
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 77);
+}
