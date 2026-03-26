@@ -176,11 +176,11 @@ fn seq() {
 
 #[test]
 fn comprehension() {
-    let e = ExprKind::Comprehension {
+    let e = ExprKind::Comprehension(Box::new(ComprehensionData {
         expr: dummy_expr_id(),
         clauses: vec![CompClause::Filter(dummy_expr_id())],
-    };
-    assert!(matches!(e, ExprKind::Comprehension { .. }));
+    }));
+    assert!(matches!(e, ExprKind::Comprehension(_)));
 }
 
 #[test]
@@ -276,8 +276,11 @@ fn case_expr() {
         guard: None,
         body: dummy_expr_id(),
     };
-    let e = ExprKind::Case(dummy_expr_id(), vec![arm]);
-    assert!(matches!(e, ExprKind::Case(_, ref arms) if arms.len() == 1));
+    let e = ExprKind::Case(Box::new(CaseData {
+        scrutinee: dummy_expr_id(),
+        arms: vec![arm],
+    }));
+    assert!(matches!(e, ExprKind::Case(ref data) if data.arms.len() == 1));
 }
 
 #[test]
@@ -443,23 +446,23 @@ fn instance_def_methods() {
 
 #[test]
 fn class_def() {
-    let e = ExprKind::ClassDef {
+    let e = ExprKind::ClassDef(Box::new(ClassDefData {
         constraints: vec![],
         members: vec![],
-    };
-    assert!(matches!(e, ExprKind::ClassDef { .. }));
+    }));
+    assert!(matches!(e, ExprKind::ClassDef(_)));
 }
 
 #[test]
 fn data_def_product() {
-    let e = ExprKind::DataDef(DataBody::Product(vec![]));
-    assert!(matches!(e, ExprKind::DataDef(DataBody::Product(_))));
+    let e = ExprKind::DataDef(Box::new(DataBody::Product(vec![])));
+    assert!(matches!(e, ExprKind::DataDef(ref b) if matches!(b.as_ref(), DataBody::Product(_))));
 }
 
 #[test]
 fn data_def_sum() {
-    let e = ExprKind::DataDef(DataBody::Sum(vec![]));
-    assert!(matches!(e, ExprKind::DataDef(DataBody::Sum(_))));
+    let e = ExprKind::DataDef(Box::new(DataBody::Sum(vec![])));
+    assert!(matches!(e, ExprKind::DataDef(ref b) if matches!(b.as_ref(), DataBody::Sum(_))));
 }
 
 #[test]
@@ -561,7 +564,7 @@ fn expr_kind_clone_eq() {
 fn handle_expr() {
     use crate::common::{FnDecl, MemberName, TyRef};
     let (_i, ident) = test_ident();
-    let e = ExprKind::Handle {
+    let e = ExprKind::Handle(Box::new(HandleData {
         effect: TyRef {
             name: ident,
             args: vec![],
@@ -574,8 +577,8 @@ fn handle_expr() {
             body: Some(dummy_expr_id()),
         }],
         body: dummy_expr_id(),
-    };
-    assert!(matches!(e, ExprKind::Handle { .. }));
+    }));
+    assert!(matches!(e, ExprKind::Handle(_)));
 }
 
 #[test]
