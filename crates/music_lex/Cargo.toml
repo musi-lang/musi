@@ -9,7 +9,15 @@ publish.workspace = true
 
 [dependencies]
 music_shared = { path = "../music_shared" }
+smallvec = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "lex"
+harness = false
 
 [lints]
 workspace = true

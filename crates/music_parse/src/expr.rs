@@ -11,8 +11,8 @@ use music_ast::expr::{
 };
 use music_ast::pat::PatKind;
 use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
+use music_lex::{TokenKind, TriviaList};
 use music_shared::{Ident, Literal, Span};
-use music_lex::TokenKind;
 
 use crate::errors::{describe_token, ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
@@ -362,8 +362,8 @@ impl Parser<'_> {
         sub_tokens.push(music_lex::Token {
             kind: TokenKind::Eof,
             span: eof_span,
-            leading_trivia: Vec::new(),
-            trailing_trivia: Vec::new(),
+            leading_trivia: TriviaList::new(),
+            trailing_trivia: TriviaList::new(),
         });
         let mut sub = Parser::new(&sub_tokens, self.source, self.interner);
         sub.ast = mem::take(&mut self.ast);

@@ -1,6 +1,7 @@
 use music_shared::Span;
+use smallvec::SmallVec;
 
-pub type TriviaList = Vec<Trivia>;
+pub type TriviaList = SmallVec<[Trivia; 2]>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FStrPart {

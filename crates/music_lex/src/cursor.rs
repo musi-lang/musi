@@ -1,5 +1,15 @@
 use music_shared::Span;
 
+/// Length of a UTF-8 character from its first byte, without decoding.
+const fn char_len_utf8(first: u8) -> usize {
+    match first.leading_ones() {
+        2 => 2,
+        3 => 3,
+        4 => 4,
+        _ => 1, // ASCII (0 leading ones) or invalid lead byte
+    }
+}
+
 pub struct Cursor<'src> {
     src: &'src str,
     pos: usize,
@@ -14,6 +24,10 @@ impl<'src> Cursor<'src> {
         u32::try_from(self.pos).expect("source exceeds u32::MAX bytes")
     }
 
+    pub const fn src_len(&self) -> usize {
+        self.src.len()
+    }
+
     pub const fn is_eof(&self) -> bool {
         self.pos >= self.src.len()
     }
@@ -22,20 +36,46 @@ impl<'src> Cursor<'src> {
         self.src.as_bytes().get(self.pos..).unwrap_or_default()
     }
 
+    pub fn peek_byte(&self) -> Option<u8> {
+        self.src.as_bytes().get(self.pos).copied()
+    }
+
     pub fn peek(&self) -> Option<char> {
-        self.src.get(self.pos..)?.chars().next()
+        let b = *self.src.as_bytes().get(self.pos)?;
+        if b.is_ascii() {
+            Some(char::from(b))
+        } else {
+            self.src.get(self.pos..)?.chars().next()
+        }
     }
 
     pub fn peek_next(&self) -> Option<char> {
-        let mut chars = self.src.get(self.pos..)?.chars();
-        let _ = chars.next()?;
-        chars.next()
+        let bytes = self.src.as_bytes();
+        let first = *bytes.get(self.pos)?;
+        let next_pos = if first.is_ascii() {
+            self.pos + 1
+        } else {
+            self.pos + char_len_utf8(first)
+        };
+        let second = *bytes.get(next_pos)?;
+        if second.is_ascii() {
+            Some(char::from(second))
+        } else {
+            self.src.get(next_pos..)?.chars().next()
+        }
     }
 
     pub fn advance(&mut self) -> Option<char> {
-        let ch = self.peek()?;
-        self.pos += ch.len_utf8();
-        Some(ch)
+        let bytes = self.src.as_bytes();
+        let b = *bytes.get(self.pos)?;
+        if b.is_ascii() {
+            self.pos += 1;
+            Some(char::from(b))
+        } else {
+            let ch = self.src.get(self.pos..)?.chars().next()?;
+            self.pos += ch.len_utf8();
+            Some(ch)
+        }
     }
 
     pub const fn advance_by(&mut self, n: usize) {
@@ -62,6 +102,18 @@ impl<'src> Cursor<'src> {
         self.src
             .get(start..self.pos)
             .expect("eat_while boundaries are valid UTF-8")
+    }
+
+    /// Fast byte-level scanning for ASCII-only predicates.
+    /// Stops at non-ASCII bytes or when the predicate returns false.
+    /// Returns the number of bytes consumed.
+    pub fn eat_while_ascii(&mut self, predicate: impl Fn(u8) -> bool) -> usize {
+        let start = self.pos;
+        let bytes = self.src.as_bytes();
+        while self.pos < bytes.len() && bytes[self.pos].is_ascii() && predicate(bytes[self.pos]) {
+            self.pos += 1;
+        }
+        self.pos - start
     }
 
     pub fn slice(&self, start: u32) -> &'src str {

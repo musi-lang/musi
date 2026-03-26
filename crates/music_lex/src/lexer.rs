@@ -1,35 +1,45 @@
 use core::mem;
 
 use music_shared::Span;
+use smallvec::SmallVec;
 
 use crate::cursor::Cursor;
 use crate::errors::{LexError, LexErrorKind, LexResult};
 use crate::token::{
-    FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList, keyword_from_str, single_char_token,
+    keyword_from_str, single_char_token, FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList,
 };
 
-const COMPOUNDS: &[(&[u8], TokenKind)] = &[
+// Compound tables grouped by first byte, longest-first for maximal munch.
+const COMPOUNDS_COLON: &[(&[u8], TokenKind)] = &[
     (b":?>", TokenKind::ColonQuestionGt),
     (b":=", TokenKind::ColonEq),
     (b"::", TokenKind::ColonColon),
     (b":?", TokenKind::ColonQuestion),
+];
+const COMPOUNDS_DOT: &[(&[u8], TokenKind)] = &[
     (b"...", TokenKind::DotDotDot),
     (b"..<", TokenKind::DotDotLt),
     (b"..", TokenKind::DotDot),
     (b".[", TokenKind::DotLBracket),
     (b".{", TokenKind::DotLBrace),
+];
+const COMPOUNDS_LT: &[(&[u8], TokenKind)] = &[
     (b"<-", TokenKind::LtMinus),
     (b"<=", TokenKind::LtEq),
     (b"<:", TokenKind::LtColon),
-    (b"->", TokenKind::MinusGt),
-    (b"~>", TokenKind::TildeGt),
-    (b"=>", TokenKind::EqGt),
-    (b"/=", TokenKind::SlashEq),
-    (b">=", TokenKind::GtEq),
+];
+const COMPOUNDS_MINUS: &[(&[u8], TokenKind)] = &[(b"->", TokenKind::MinusGt)];
+const COMPOUNDS_TILDE: &[(&[u8], TokenKind)] = &[(b"~>", TokenKind::TildeGt)];
+const COMPOUNDS_EQ: &[(&[u8], TokenKind)] = &[(b"=>", TokenKind::EqGt)];
+const COMPOUNDS_SLASH: &[(&[u8], TokenKind)] = &[(b"/=", TokenKind::SlashEq)];
+const COMPOUNDS_GT: &[(&[u8], TokenKind)] = &[(b">=", TokenKind::GtEq)];
+const COMPOUNDS_QUESTION: &[(&[u8], TokenKind)] = &[
     (b"??", TokenKind::QuestionQuestion),
     (b"?.", TokenKind::QuestionDot),
-    (b"!.", TokenKind::BangDot),
-    (b"|>", TokenKind::PipeGt),
+];
+const COMPOUNDS_BANG: &[(&[u8], TokenKind)] = &[(b"!.", TokenKind::BangDot)];
+const COMPOUNDS_PIPE: &[(&[u8], TokenKind)] = &[(b"|>", TokenKind::PipeGt)];
+const COMPOUNDS_HASH: &[(&[u8], TokenKind)] = &[
     (b"#(", TokenKind::HashLParen),
     (b"#[", TokenKind::HashLBracket),
 ];
@@ -38,16 +48,12 @@ const fn is_ident_start(c: char) -> bool {
     c.is_ascii_alphabetic() || c == '_'
 }
 
-const fn is_ident_cont(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
-}
-
-const fn is_digit_for_base(c: char, base: u32) -> bool {
+const fn is_digit_for_base_byte(b: u8, base: u32) -> bool {
     match base {
-        2 => matches!(c, '0' | '1'),
-        8 => matches!(c, '0'..='7'),
-        16 => c.is_ascii_hexdigit(),
-        _ => c.is_ascii_digit(),
+        2 => matches!(b, b'0' | b'1'),
+        8 => matches!(b, b'0'..=b'7'),
+        16 => b.is_ascii_hexdigit(),
+        _ => b.is_ascii_digit(),
     }
 }
 
@@ -67,7 +73,7 @@ impl<'src> Lexer<'src> {
 
     #[must_use]
     pub fn lex(mut self) -> (Vec<Token>, Vec<LexError>) {
-        let mut tokens = Vec::new();
+        let mut tokens = Vec::with_capacity(self.cursor.src_len() / 5);
         loop {
             let leading = self.collect_trivia();
             if self.cursor.is_eof() {
@@ -75,7 +81,7 @@ impl<'src> Lexer<'src> {
                     kind: TokenKind::Eof,
                     span: self.cursor.span_from(self.cursor.pos()),
                     leading_trivia: leading,
-                    trailing_trivia: Vec::new(),
+                    trailing_trivia: SmallVec::new(),
                 });
                 break;
             }
@@ -100,8 +106,24 @@ impl<'src> Lexer<'src> {
     }
 
     fn try_compound(&mut self) -> Option<TokenKind> {
+        let first = self.cursor.peek_byte()?;
+        let table = match first {
+            b':' => COMPOUNDS_COLON,
+            b'.' => COMPOUNDS_DOT,
+            b'<' => COMPOUNDS_LT,
+            b'-' => COMPOUNDS_MINUS,
+            b'~' => COMPOUNDS_TILDE,
+            b'=' => COMPOUNDS_EQ,
+            b'/' => COMPOUNDS_SLASH,
+            b'>' => COMPOUNDS_GT,
+            b'?' => COMPOUNDS_QUESTION,
+            b'!' => COMPOUNDS_BANG,
+            b'|' => COMPOUNDS_PIPE,
+            b'#' => COMPOUNDS_HASH,
+            _ => return None,
+        };
         let remaining = self.cursor.remaining();
-        for (bytes, kind) in COMPOUNDS {
+        for (bytes, kind) in table {
             if remaining.starts_with(bytes) {
                 self.cursor.advance_by(bytes.len());
                 return Some(kind.clone());
@@ -133,7 +155,9 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_ident_or_keyword(&mut self, start: u32) -> LexResult<TokenKind> {
-        let _ = self.cursor.eat_while(is_ident_cont);
+        let _ = self
+            .cursor
+            .eat_while_ascii(|b| b.is_ascii_alphanumeric() || b == b'_');
         let text = self.cursor.slice(start);
         if text.len() == 1 && text.starts_with('f') && self.cursor.peek() == Some('"') {
             return self.scan_fstring(start);
@@ -154,7 +178,9 @@ impl<'src> Lexer<'src> {
                 return self.scan_int_digits(start, base);
             }
         }
-        let _ = self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
+        let _ = self
+            .cursor
+            .eat_while_ascii(|b| b.is_ascii_digit() || b == b'_');
         if self.cursor.peek() == Some('.')
             && self.cursor.peek_next().is_some_and(|c| c.is_ascii_digit())
         {
@@ -170,7 +196,7 @@ impl<'src> Lexer<'src> {
         let before = self.cursor.pos();
         let _ = self
             .cursor
-            .eat_while(|c| is_digit_for_base(c, base) || c == '_');
+            .eat_while_ascii(|b| is_digit_for_base_byte(b, base) || b == b'_');
         if self.cursor.pos() == before {
             return Err(LexError {
                 kind: LexErrorKind::InvalidNumberPrefix,
@@ -183,30 +209,38 @@ impl<'src> Lexer<'src> {
     fn finish_int(&self, start: u32, base: u32) -> LexResult<TokenKind> {
         let raw = self.cursor.slice(start);
         let skip = if base == 10 { 0 } else { 2 };
-        let digits: String = raw.chars().skip(skip).filter(|&c| c != '_').collect();
-        if digits.is_empty() {
+        let text = raw.get(skip..).unwrap_or_default();
+        if text.is_empty() || text == "_" {
             return Err(LexError {
                 kind: LexErrorKind::InvalidNumberPrefix,
                 span: self.cursor.span_from(start),
             });
         }
-        i64::from_str_radix(&digits, base)
-            .map(TokenKind::Int)
-            .map_err(|_| LexError {
-                kind: LexErrorKind::NumberOverflow,
-                span: self.cursor.span_from(start),
-            })
+        let parse_result = if text.contains('_') {
+            let cleaned: String = text.chars().filter(|&c| c != '_').collect();
+            i64::from_str_radix(&cleaned, base)
+        } else {
+            i64::from_str_radix(text, base)
+        };
+        parse_result.map(TokenKind::Int).map_err(|_| LexError {
+            kind: LexErrorKind::NumberOverflow,
+            span: self.cursor.span_from(start),
+        })
     }
 
     fn scan_float(&mut self, start: u32) -> LexResult<TokenKind> {
         if self.cursor.eat('.') {
-            let _ = self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
+            let _ = self
+                .cursor
+                .eat_while_ascii(|b| b.is_ascii_digit() || b == b'_');
         }
         if matches!(self.cursor.peek(), Some('e' | 'E')) {
             let _ = self.cursor.advance();
             let _ = self.cursor.eat('+') || self.cursor.eat('-');
             let before_exp_digits = self.cursor.pos();
-            let _ = self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
+            let _ = self
+                .cursor
+                .eat_while_ascii(|b| b.is_ascii_digit() || b == b'_');
             if self.cursor.pos() == before_exp_digits {
                 return Err(LexError {
                     kind: LexErrorKind::InvalidNumberPrefix,
@@ -215,14 +249,16 @@ impl<'src> Lexer<'src> {
             }
         }
         let raw = self.cursor.slice(start);
-        let cleaned: String = raw.chars().filter(|&c| c != '_').collect();
-        cleaned
-            .parse::<f64>()
-            .map(TokenKind::Float)
-            .map_err(|_| LexError {
-                kind: LexErrorKind::NumberOverflow,
-                span: self.cursor.span_from(start),
-            })
+        let parse_result = if raw.contains('_') {
+            let cleaned: String = raw.chars().filter(|&c| c != '_').collect();
+            cleaned.parse::<f64>()
+        } else {
+            raw.parse::<f64>()
+        };
+        parse_result.map(TokenKind::Float).map_err(|_| LexError {
+            kind: LexErrorKind::NumberOverflow,
+            span: self.cursor.span_from(start),
+        })
     }
 
     fn scan_string(&mut self, start: u32) -> LexResult<TokenKind> {
@@ -491,7 +527,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn collect_trivia(&mut self) -> TriviaList {
-        let mut trivia = Vec::new();
+        let mut trivia = SmallVec::new();
         loop {
             match self.cursor.peek() {
                 Some(' ' | '\t' | '\r') => trivia.push(self.scan_whitespace()),
@@ -519,7 +555,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn collect_trailing_trivia(&mut self) -> TriviaList {
-        let mut trivia = Vec::new();
+        let mut trivia = SmallVec::new();
         loop {
             match self.cursor.peek() {
                 Some(' ' | '\t' | '\r') => trivia.push(self.scan_whitespace()),
@@ -543,7 +579,7 @@ impl<'src> Lexer<'src> {
         let start = self.cursor.pos();
         let _ = self
             .cursor
-            .eat_while(|c| c == ' ' || c == '\t' || c == '\r');
+            .eat_while_ascii(|b| b == b' ' || b == b'\t' || b == b'\r');
         Trivia {
             kind: TriviaKind::Whitespace,
             span: self.cursor.span_from(start),
