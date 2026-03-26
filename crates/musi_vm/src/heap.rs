@@ -33,6 +33,8 @@ pub enum HeapObject {
     String(String),
     Slice(VmSlice),
     CPtr(*mut c_void),
+    /// Single-element mutable box for captured mutable variables.
+    Cell(Value),
 }
 
 struct HeapEntry {
@@ -130,6 +132,10 @@ impl Heap {
         self.alloc(HeapObject::CPtr(ptr))
     }
 
+    pub fn alloc_cell(&mut self, value: Value) -> usize {
+        self.alloc(HeapObject::Cell(value))
+    }
+
     // ── GC: mark phase ───────────────────────────────────────────────────────
 
     pub fn mark_value(&mut self, value: Value) {
@@ -182,6 +188,11 @@ impl Heap {
                 }
                 HeapObject::Slice(s) => {
                     worklist.push(s.source);
+                }
+                HeapObject::Cell(v) => {
+                    if v.is_ptr() {
+                        worklist.push(v.as_ptr_idx());
+                    }
                 }
                 HeapObject::String(_) | HeapObject::CPtr(_) => {}
             }

@@ -234,6 +234,11 @@ impl SemaDb {
     fn synth_var(&mut self, ident: &Ident) -> SemaTypeId {
         if let Some(def_id) = self.find_def_for_name(ident.name) {
             let _inserted = self.used_defs.insert(def_id);
+            // Track mutable variables captured across lambda boundaries
+            if self.depth > 0 && self.mutable_defs.contains(&def_id) {
+                let _inserted = self.env.captured_mutables.insert(def_id);
+                let _inserted = self.env.captured_mutable_names.insert(ident.name);
+            }
             let def_info = self.resolution.defs.get(def_id);
             match def_info.kind {
                 DefKind::Builtin(bt) => return self.env.intern(Ty::Builtin(bt)),
@@ -1005,6 +1010,7 @@ impl SemaDb {
                 let _ = self
                     .variant_registry
                     .insert(v.name.name, VariantDefInfo { tag_index, arity });
+                let _ = self.env.variant_tags.insert(v.name.name, tag_index);
             }
         }
     }

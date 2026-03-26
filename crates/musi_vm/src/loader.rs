@@ -294,7 +294,6 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::StLoc
         | Opcode::Call
         | Opcode::CallTail
-        | Opcode::ClsUpv
         | Opcode::EffCont
         | Opcode::TyclCall
         | Opcode::ArrGetI

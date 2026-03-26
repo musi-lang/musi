@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use music_arena::Arena;
 use music_ast::ExprId;
 use music_builtins::types::BuiltinType;
 use music_found::{Span, Symbol, SymbolList};
 use music_il::opcode::Opcode;
+use music_resolve::def::DefId;
 
 use crate::types::{SemaTypeId, SemaTypeList, Ty, TyVarId};
 
@@ -59,6 +60,12 @@ pub struct TypeEnv {
     pub variant_info: HashMap<ExprId, VariantInfo>,
     /// Stable class IDs for type class dispatch in the emitter.
     pub class_ids: HashMap<Symbol, u16>,
+    /// Variant name -> numeric tag index, populated during data def processing.
+    pub variant_tags: HashMap<Symbol, u16>,
+    /// Mutable bindings captured across lambda boundaries, requiring heap boxing.
+    pub captured_mutables: HashSet<DefId>,
+    /// Names of mutable bindings captured across lambda boundaries (for emitter lookup).
+    pub captured_mutable_names: HashSet<Symbol>,
     next_var: TyVarId,
     next_effect_idx: u16,
     next_class_id: u16,
@@ -82,6 +89,9 @@ impl TypeEnv {
             need_effects: HashMap::new(),
             variant_info: HashMap::new(),
             class_ids: HashMap::new(),
+            variant_tags: HashMap::new(),
+            captured_mutables: HashSet::new(),
+            captured_mutable_names: HashSet::new(),
             next_var: 0,
             next_effect_idx: 0,
             next_class_id: 0,

@@ -23,7 +23,6 @@ use music_resolve::queries::ResolutionMap;
 use music_sema::env::{DispatchInfo, TypeEnv};
 
 use music_emit::emitter::emit;
-use music_emit::error::EmitError;
 
 fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> HirBundle {
     let mut interner = Interner::new();
@@ -811,11 +810,15 @@ fn emit_postfix_propagate() {
 
 #[test]
 fn emit_type_op_cast() {
-    let thir = build_thir_single(|ast, _int| {
+    let thir = build_thir_single(|ast, interner| {
         let inner = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
-        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Tuple(vec![])));
+        let int_sym = interner.intern("Int");
+        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Named {
+            name: Ident::dummy(int_sym),
+            args: vec![],
+        }));
         ExprKind::TypeOp {
             expr: inner,
             ty: ty_id,
@@ -833,11 +836,15 @@ fn emit_type_op_cast() {
 
 #[test]
 fn emit_type_op_test() {
-    let thir = build_thir_single(|ast, _int| {
+    let thir = build_thir_single(|ast, interner| {
         let inner = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
-        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Tuple(vec![])));
+        let int_sym = interner.intern("Int");
+        let ty_id = ast.types.alloc(Spanned::dummy(TyKind::Named {
+            name: Ident::dummy(int_sym),
+            args: vec![],
+        }));
         ExprKind::TypeOp {
             expr: inner,
             ty: ty_id,
@@ -895,7 +902,9 @@ fn emit_instance_def_via() {
             }),
         }))
     });
-    assert!(matches!(emit(&thir), Err(EmitError::Unimplemented(_))));
+    let module = emit(&thir).unwrap();
+    // Via instances produce no bytecode at the definition site
+    assert!(module.methods.is_empty());
 }
 
 #[test]

@@ -1075,6 +1075,7 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
                 HeapObject::Closure(_) => "<closure>".into(),
                 HeapObject::Continuation(_) => "<continuation>".into(),
                 HeapObject::CPtr(_) => "<cptr>".into(),
+                HeapObject::Cell(v) => format!("<cell:{v:?}>"),
             };
         }
     }

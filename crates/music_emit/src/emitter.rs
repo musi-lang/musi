@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 
 use music_ast::common::{AttrArg, FnDecl, MemberDecl, MemberName, Param};
@@ -19,6 +19,7 @@ use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
 use music_sema::env::DispatchInfo;
+use music_sema::types::Ty;
 
 use crate::error::EmitError;
 use crate::pool::{ConstantEntry, ConstantPool};
@@ -63,6 +64,8 @@ struct Emitter<'thir> {
     current_instructions: Vec<Instruction>,
     current_locals: SymbolList,
     current_upvalues: SymbolList,
+    /// Locals that are heap-boxed cells (captured mutable variables).
+    cell_locals: HashSet<Symbol>,
     next_anon: u32,
 }
 
@@ -84,6 +87,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         current_instructions: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
+        cell_locals: HashSet::new(),
         next_anon: u32::MAX,
     };
     emitter.emit_module()?;
@@ -174,6 +178,7 @@ impl Emitter<'_> {
     fn emit_function(&mut self, name: Symbol, params: &[Param], body: ExprId) -> EmitResult {
         let saved_instructions = mem::take(&mut self.current_instructions);
         let saved_locals = mem::take(&mut self.current_locals);
+        let saved_cells = mem::take(&mut self.cell_locals);
 
         for param in params {
             let _slot = self.local_slot(param.name.name);
@@ -190,6 +195,7 @@ impl Emitter<'_> {
             locals_count,
         });
         self.current_locals = saved_locals;
+        self.cell_locals = saved_cells;
         Ok(())
     }
 
@@ -248,7 +254,7 @@ impl Emitter<'_> {
             ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
             ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
             ExprKind::Postfix { expr, op } => self.emit_postfix(expr, op)?,
-            ExprKind::TypeOp { expr, kind, .. } => self.emit_type_op(expr, kind)?,
+            ExprKind::TypeOp { expr, ty, kind } => self.emit_type_op(expr, ty, kind)?,
             ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst)?,
             ExprKind::ForeignImport(sym) => self.emit_foreign_import(sym),
             ExprKind::Comprehension {
@@ -309,8 +315,15 @@ impl Emitter<'_> {
     fn emit_var(&mut self, ident: &Ident) {
         if let Some(slot) = self.find_local(ident.name) {
             self.emit_ld_loc(slot);
+            if self.cell_locals.contains(&ident.name) {
+                self.push(Instruction::with_u8(Opcode::ArrGetI, 0));
+            }
         } else if let Some(slot) = self.find_upvalue(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
+            // Upvalues pointing to cells also need dereferencing
+            if self.cell_locals.contains(&ident.name) {
+                self.push(Instruction::with_u8(Opcode::ArrGetI, 0));
+            }
         } else if let Some(idx) = self.find_global(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdGlob, idx));
         } else {
@@ -334,7 +347,11 @@ impl Emitter<'_> {
             for &arg in args {
                 self.emit_expr(arg)?;
             }
+            let pin_count = self.emit_ffi_pins(foreign_idx);
             self.push(Instruction::with_u16(Opcode::FfiCall, foreign_idx));
+            for _ in 0..pin_count {
+                self.push(Instruction::simple(Opcode::GcUnpin));
+            }
             return Ok(());
         }
 
@@ -373,12 +390,48 @@ impl Emitter<'_> {
                     return Ok(());
                 }
                 DispatchInfo::Dynamic => {
-                    return Err(EmitError::Unimplemented("dynamic dispatch"));
+                    return self.emit_dynamic_binop(op);
                 }
             }
         }
 
         self.push(Instruction::simple(binop_to_opcode(op)));
+        Ok(())
+    }
+
+    /// Emits a runtime type-switch for binary operators on `Any`-typed values.
+    ///
+    /// Stack state on entry: `[..., lhs, rhs]`.
+    /// Emits: save rhs, check lhs tag, branch to int or float path, rejoin.
+    fn emit_dynamic_binop(&mut self, op: BinOp) -> EmitResult {
+        let Some((int_opcode, float_opcode)) = dynamic_binop_opcodes(op) else {
+            return Err(EmitError::Unimplemented(
+                "dynamic dispatch for this operator",
+            ));
+        };
+
+        // Stack: [lhs, rhs]
+        self.push(Instruction::simple(Opcode::Swap)); // [rhs, lhs]
+        self.push(Instruction::simple(Opcode::Dup)); // [rhs, lhs, lhs]
+        self.push(Instruction::simple(Opcode::TyTag)); // [rhs, lhs, tag]
+        self.push(Instruction::with_i16(
+            Opcode::LdSmi,
+            i16::from(format::NAN_BOX_SMI),
+        )); // [rhs, lhs, tag, 1]
+        self.push(Instruction::simple(Opcode::CmpEq)); // [rhs, lhs, is_int]
+        let int_path_jump = self.placeholder_jump(Opcode::BrTrue);
+
+        // Float path (fallthrough)
+        self.push(Instruction::simple(Opcode::Swap)); // [lhs, rhs]
+        self.push(Instruction::simple(float_opcode));
+        let end_jump = self.placeholder_jump(Opcode::BrJmp);
+
+        // Int path
+        self.patch_jump(int_path_jump);
+        self.push(Instruction::simple(Opcode::Swap)); // [lhs, rhs]
+        self.push(Instruction::simple(int_opcode));
+
+        self.patch_jump(end_jump);
         Ok(())
     }
 
@@ -430,9 +483,26 @@ impl Emitter<'_> {
         let pat_node = self.thir.db.ast.pats.get(binding.pat);
         if let PatKind::Bind(ident) = &pat_node.kind {
             if let Some(value) = binding.value {
-                self.emit_expr(value)?;
-                let slot = self.local_slot(ident.name);
-                self.emit_st_loc(slot);
+                let is_captured_mut = binding.modifiers.mutable
+                    && self
+                        .thir
+                        .type_env
+                        .captured_mutable_names
+                        .contains(&ident.name);
+
+                if is_captured_mut {
+                    // Allocate a heap cell: ArrNew(1) then store value at index 0
+                    self.push(Instruction::with_u16(Opcode::ArrNew, 1));
+                    self.emit_expr(value)?;
+                    self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
+                    let slot = self.local_slot(ident.name);
+                    self.emit_st_loc(slot);
+                    let _inserted = self.cell_locals.insert(ident.name);
+                } else {
+                    self.emit_expr(value)?;
+                    let slot = self.local_slot(ident.name);
+                    self.emit_st_loc(slot);
+                }
             }
         }
         Ok(())
@@ -462,9 +532,15 @@ impl Emitter<'_> {
         let saved_instructions = mem::take(&mut self.current_instructions);
         let saved_locals = mem::take(&mut self.current_locals);
         let saved_upvalues = mem::take(&mut self.current_upvalues);
+        let saved_cells = mem::take(&mut self.cell_locals);
 
-        // Register captures as upvalue slots inside the lambda body
         self.current_upvalues.clone_from(&captured);
+        // Propagate cell status for captured mutable variables into the lambda
+        for &cap in &captured {
+            if saved_cells.contains(&cap) {
+                let _inserted = self.cell_locals.insert(cap);
+            }
+        }
 
         for param in params {
             let _slot = self.local_slot(param.name.name);
@@ -485,6 +561,7 @@ impl Emitter<'_> {
         });
         self.current_locals = saved_locals;
         self.current_upvalues = saved_upvalues;
+        self.cell_locals = saved_cells;
 
         self.push(Instruction::with_wide(
             Opcode::ClsNew,
@@ -512,6 +589,12 @@ impl Emitter<'_> {
         self.emit_expr(scrutinee)?;
 
         if arms.is_empty() {
+            return Ok(());
+        }
+
+        // Try BrTbl for dense variant dispatch: all arms must be variant
+        // patterns with known tag indices and no guards.
+        if self.try_emit_brtbl_case(arms)?.is_some() {
             return Ok(());
         }
 
@@ -564,6 +647,140 @@ impl Emitter<'_> {
             self.patch_jump(end_jump);
         }
         Ok(())
+    }
+
+    /// Tries to emit a `BrTbl`-based dispatch for a case expression where all
+    /// arms are variant patterns with known numeric tags and no guards.
+    ///
+    /// Returns `Some(())` if `BrTbl` was emitted, `None` to fall back to chained `BrFalse`.
+    fn collect_brtbl_arms(&self, arms: &[CaseArm]) -> Option<(Vec<(u16, usize)>, usize)> {
+        let mut tag_arms: Vec<(u16, usize)> = Vec::with_capacity(arms.len());
+        for (i, arm) in arms.iter().enumerate() {
+            if arm.guard.is_some() {
+                return None;
+            }
+            let pat_node = self.thir.db.ast.pats.get(arm.pat);
+            match &pat_node.kind {
+                PatKind::Variant { tag, .. } => {
+                    let tag_idx = *self.thir.type_env.variant_tags.get(&tag.name)?;
+                    tag_arms.push((tag_idx, i));
+                }
+                PatKind::Wildcard | PatKind::Bind(_) => {
+                    if i + 1 != arms.len() {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        }
+        if tag_arms.is_empty() {
+            return None;
+        }
+        let max_tag = tag_arms.iter().map(|&(t, _)| t).max().unwrap_or(0);
+        let table_size = usize::from(max_tag) + 1;
+        if table_size > 255 {
+            return None;
+        }
+        Some((tag_arms, table_size))
+    }
+
+    fn try_emit_brtbl_case(&mut self, arms: &[CaseArm]) -> EmitResult<Option<()>> {
+        let Some((tag_arms, table_size)) = self.collect_brtbl_arms(arms) else {
+            return Ok(None);
+        };
+
+        // Emit ArrTag to get the numeric tag from the scrutinee (already on stack)
+        self.push(Instruction::simple(Opcode::Dup));
+        self.push(Instruction::simple(Opcode::ArrTag));
+
+        // Emit BrTbl placeholder — offsets will be patched
+        let brtbl_pos = self.current_instructions.len();
+        self.push(Instruction::with_table(
+            Opcode::BrTbl,
+            vec![0i16; table_size],
+        ));
+
+        // Default path (for tags not in the table or wildcard arm): Panic or last arm
+        let has_default = {
+            let last = arms.last().unwrap();
+            let pat = self.thir.db.ast.pats.get(last.pat);
+            matches!(pat.kind, PatKind::Wildcard | PatKind::Bind(_))
+        };
+
+        let default_start = self.current_instructions.len();
+        if has_default {
+            let last_arm = arms.last().unwrap();
+            let pat = self.thir.db.ast.pats.get(last_arm.pat);
+            if let PatKind::Bind(ident) = &pat.kind {
+                let slot = self.local_slot(ident.name);
+                self.emit_st_loc(slot);
+            } else {
+                self.push(Instruction::simple(Opcode::Pop));
+            }
+            self.emit_expr(last_arm.body)?;
+        } else {
+            self.push(Instruction::simple(Opcode::Panic));
+        }
+        let end_jump_default = self.placeholder_jump(Opcode::BrJmp);
+
+        // Emit each variant arm's code and record its start position
+        let mut arm_starts: HashMap<usize, usize> = HashMap::new();
+        let mut end_jumps = Vec::new();
+
+        for &(_, arm_idx) in &tag_arms {
+            let arm = &arms[arm_idx];
+            let _prev = arm_starts.insert(arm_idx, self.current_instructions.len());
+
+            let pat_node = self.thir.db.ast.pats.get(arm.pat);
+            if let PatKind::Variant { fields, .. } = &pat_node.kind {
+                for (fi, &field_pat) in fields.iter().enumerate() {
+                    let field_pat_node = self.thir.db.ast.pats.get(field_pat);
+                    if let PatKind::Bind(field_ident) = &field_pat_node.kind {
+                        self.push(Instruction::simple(Opcode::Dup));
+                        let field_u8 = u8::try_from(fi).expect("too many fields (>255)");
+                        self.push(Instruction::with_u8(Opcode::ArrGetI, field_u8));
+                        let slot = self.local_slot(field_ident.name);
+                        self.emit_st_loc(slot);
+                    }
+                }
+            }
+            self.push(Instruction::simple(Opcode::Pop));
+            self.emit_expr(arm.body)?;
+            end_jumps.push(self.placeholder_jump(Opcode::BrJmp));
+        }
+
+        // Patch BrTbl offsets: each entry points to the arm code or default
+        let mut offsets = vec![0i16; table_size];
+        for &(tag_idx, arm_idx) in &tag_arms {
+            let arm_start = arm_starts[&arm_idx];
+            let byte_offset: usize = self.current_instructions[brtbl_pos + 1..arm_start]
+                .iter()
+                .map(instruction_byte_size)
+                .sum();
+            offsets[usize::from(tag_idx)] =
+                i16::try_from(byte_offset).expect("BrTbl offset too far");
+        }
+        // Default entries point to the default path
+        let default_byte_offset: usize = self.current_instructions[brtbl_pos + 1..default_start]
+            .iter()
+            .map(instruction_byte_size)
+            .sum();
+        let default_offset =
+            i16::try_from(default_byte_offset).expect("BrTbl default offset too far");
+        for (i, offset) in offsets.iter_mut().enumerate() {
+            if !tag_arms.iter().any(|&(t, _)| usize::from(t) == i) {
+                *offset = default_offset;
+            }
+        }
+        self.current_instructions[brtbl_pos] = Instruction::with_table(Opcode::BrTbl, offsets);
+
+        // Patch all end jumps (including default)
+        self.patch_jump(end_jump_default);
+        for ej in end_jumps {
+            self.patch_jump(ej);
+        }
+
+        Ok(Some(()))
     }
 
     fn emit_guard_and_body(
@@ -773,8 +990,12 @@ impl Emitter<'_> {
                 let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrGetI, field_u8));
             }
-            FieldTarget::Name(_) => {
-                return Err(EmitError::Unimplemented("named field access"));
+            FieldTarget::Name(ref ident) => {
+                if let Some(idx) = self.resolve_field_index(expr, ident.name) {
+                    self.push(Instruction::with_u8(Opcode::ArrGetI, idx));
+                } else {
+                    return Err(EmitError::Unimplemented("named field access on non-record"));
+                }
             }
         }
         Ok(())
@@ -993,10 +1214,9 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) -> EmitResult {
+    fn emit_type_op(&mut self, expr: ExprId, ty_id: TyId, kind: TypeOpKind) -> EmitResult {
         self.emit_expr(expr)?;
-        // Placeholder: use Int type ID until full type resolution is wired
-        let type_id = format::BUILTIN_TYPE_INT;
+        let type_id = self.type_to_table_id(ty_id);
         match kind {
             TypeOpKind::Test(opt_ident) => {
                 self.push(Instruction::with_u16(Opcode::TyChk, type_id));
@@ -1047,7 +1267,10 @@ impl Emitter<'_> {
                 }
             }
             InstanceBody::Via(_) => {
-                return Err(EmitError::Unimplemented("'via' derived instance"));
+                // Via-derived instances delegate to the target type's methods.
+                // Sema registers the instance; actual forwarding stubs are
+                // generated when class descriptors are built. No bytecode
+                // needed at the instance definition site.
             }
         }
         Ok(())
@@ -1280,13 +1503,23 @@ impl Emitter<'_> {
         let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
         match target_kind {
             ExprKind::Var(ident) => {
-                self.emit_expr(value)?;
-                if let Some(slot) = self.find_local(ident.name) {
-                    self.emit_st_loc(slot);
-                } else if let Some(slot) = self.find_upvalue(ident.name) {
-                    self.push(Instruction::with_u16(Opcode::StUpv, u16::from(slot)));
-                } else if let Some(idx) = self.find_global(ident.name) {
-                    self.push(Instruction::with_u16(Opcode::StGlob, idx));
+                if self.cell_locals.contains(&ident.name) {
+                    if let Some(slot) = self.find_local(ident.name) {
+                        self.emit_ld_loc(slot);
+                    } else if let Some(slot) = self.find_upvalue(ident.name) {
+                        self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
+                    }
+                    self.emit_expr(value)?;
+                    self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
+                } else {
+                    self.emit_expr(value)?;
+                    if let Some(slot) = self.find_local(ident.name) {
+                        self.emit_st_loc(slot);
+                    } else if let Some(slot) = self.find_upvalue(ident.name) {
+                        self.push(Instruction::with_u16(Opcode::StUpv, u16::from(slot)));
+                    } else if let Some(idx) = self.find_global(ident.name) {
+                        self.push(Instruction::with_u16(Opcode::StGlob, idx));
+                    }
                 }
             }
             ExprKind::Index {
@@ -1317,8 +1550,14 @@ impl Emitter<'_> {
                         let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
                         self.push(Instruction::with_u8(Opcode::ArrSetI, field_u8));
                     }
-                    FieldTarget::Name(_) => {
-                        return Err(EmitError::Unimplemented("named field assignment"));
+                    FieldTarget::Name(ref ident) => {
+                        if let Some(idx) = self.resolve_field_index(expr, ident.name) {
+                            self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
+                        } else {
+                            return Err(EmitError::Unimplemented(
+                                "named field assignment on non-record",
+                            ));
+                        }
                     }
                 }
             }
@@ -1469,6 +1708,51 @@ impl Emitter<'_> {
         }
     }
 
+    /// Emits `GcPin` for each pointer-type argument before an FFI call.
+    ///
+    /// Returns the number of pins emitted so the caller can emit matching unpins.
+    fn emit_ffi_pins(&mut self, foreign_idx: u16) -> usize {
+        let idx = usize::from(foreign_idx);
+        if idx >= self.foreigns.len() {
+            return 0;
+        }
+        let param_types = self.foreigns[idx].param_types.clone();
+        let mut pin_count = 0usize;
+        for pt in &param_types {
+            if matches!(pt, FfiType::Str | FfiType::Ptr) {
+                self.push(Instruction::simple(Opcode::GcPin));
+                pin_count += 1;
+            }
+        }
+        pin_count
+    }
+
+    fn type_to_table_id(&self, ty_id: TyId) -> u16 {
+        let ty_kind = &self.thir.db.ast.types.get(ty_id).kind;
+        let TyKind::Named { name, .. } = ty_kind else {
+            return format::BUILTIN_TYPE_ANY;
+        };
+        let resolved = self.thir.db.interner.resolve(name.name);
+        BuiltinType::ALL
+            .iter()
+            .find(|bt| bt.name() == resolved)
+            .map_or(format::BUILTIN_TYPE_ANY, |bt| bt.type_id())
+    }
+
+    fn resolve_field_index(&self, base_expr: ExprId, field_name: Symbol) -> Option<u8> {
+        let ty_id = self.thir.expr_type(base_expr)?;
+        let resolved = self.thir.type_env.resolve_var(ty_id);
+        let ty = self.thir.type_env.types.get(resolved);
+        if let Ty::Record { fields } = ty {
+            for (i, &(name, _)) in fields.iter().enumerate() {
+                if name == field_name {
+                    return u8::try_from(i).ok();
+                }
+            }
+        }
+        None
+    }
+
     fn find_upvalue(&self, name: Symbol) -> Option<u8> {
         self.current_upvalues
             .iter()
@@ -1516,6 +1800,33 @@ const fn resolve_visibility(binding: &LetBinding) -> Visibility {
         Visibility::Exported
     } else {
         Visibility::Private
+    }
+}
+
+/// Maps a binary operator to `(int_opcode, float_opcode)` for dynamic dispatch.
+///
+/// Returns `None` for operators that have no float variant (logic, cons, etc.).
+const fn dynamic_binop_opcodes(op: BinOp) -> Option<(Opcode, Opcode)> {
+    match op {
+        BinOp::Add => Some((Opcode::IAdd, Opcode::FAdd)),
+        BinOp::Sub => Some((Opcode::ISub, Opcode::FSub)),
+        BinOp::Mul => Some((Opcode::IMul, Opcode::FMul)),
+        BinOp::Div => Some((Opcode::IDiv, Opcode::FDiv)),
+        BinOp::Rem => Some((Opcode::IRem, Opcode::IRem)),
+        BinOp::Eq => Some((Opcode::CmpEq, Opcode::CmpEq)),
+        BinOp::NotEq => Some((Opcode::CmpNeq, Opcode::CmpNeq)),
+        BinOp::Lt => Some((Opcode::CmpLt, Opcode::CmpLt)),
+        BinOp::Gt => Some((Opcode::CmpGt, Opcode::CmpGt)),
+        BinOp::LtEq => Some((Opcode::CmpLeq, Opcode::CmpLeq)),
+        BinOp::GtEq => Some((Opcode::CmpGeq, Opcode::CmpGeq)),
+        BinOp::And
+        | BinOp::Or
+        | BinOp::Xor
+        | BinOp::Cons
+        | BinOp::NilCoalesce
+        | BinOp::PipeRight
+        | BinOp::Range
+        | BinOp::RangeExcl => None,
     }
 }
 

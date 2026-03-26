@@ -1,4 +1,4 @@
-/// All 79 active opcodes in the SEAM bytecode instruction set.
+/// All 78 active opcodes in the SEAM bytecode instruction set.
 ///
 /// Each variant carries its encoding as a `u8` discriminant via `#[repr(u8)]`.
 /// Gaps in the opcode space are reserved for future use.
@@ -66,12 +66,12 @@ pub enum Opcode {
     BrTbl = 0x2E,
     BrBack = 0x2F,
 
-    // -- Call / Return / Closure (0x31-0x35) --
+    // -- Call / Return / Closure (0x31-0x34) --
     Call = 0x31,
     CallTail = 0x32,
     Ret = 0x33,
     ClsNew = 0x34,
-    ClsUpv = 0x35,
+    // 0x35 reserved (formerly ClsUpv — upvalues now captured inline by ClsNew)
 
     // -- Array / Memory (0x37-0x41) --
     ArrNew = 0x37,
@@ -115,7 +115,7 @@ pub enum Opcode {
 }
 
 /// Total number of active opcodes in the instruction set.
-pub const OPCODE_COUNT: usize = 79;
+pub const OPCODE_COUNT: usize = 78;
 
 /// Lookup table for `from_byte`: maps every `u8` to `Some(Opcode)` or `None`.
 const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
@@ -171,7 +171,7 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x32] = Some(Opcode::CallTail);
     table[0x33] = Some(Opcode::Ret);
     table[0x34] = Some(Opcode::ClsNew);
-    table[0x35] = Some(Opcode::ClsUpv);
+    // 0x35 reserved
     table[0x37] = Some(Opcode::ArrNew);
     table[0x38] = Some(Opcode::ArrGet);
     table[0x39] = Some(Opcode::ArrSet);
@@ -274,7 +274,6 @@ impl Opcode {
             Self::CallTail => "call.tail",
             Self::Ret => "ret",
             Self::ClsNew => "cls.new",
-            Self::ClsUpv => "cls.upv",
 
             Self::ArrNew => "arr.new",
             Self::ArrGet => "arr.get",
@@ -318,7 +317,7 @@ impl Opcode {
     }
 }
 
-/// All 79 active opcodes in declaration order.
+/// All 78 active opcodes in declaration order.
 pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     // Data Movement
     Opcode::LdLoc,
@@ -379,7 +378,6 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::CallTail,
     Opcode::Ret,
     Opcode::ClsNew,
-    Opcode::ClsUpv,
     // Array / Memory
     Opcode::ArrNew,
     Opcode::ArrGet,
