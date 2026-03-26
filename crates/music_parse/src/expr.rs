@@ -1137,10 +1137,10 @@ impl Parser<'_> {
         let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
 
         if self.at(&TokenKind::RBrace) {
-            let end =
-                self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
-            let span = start.to(end);
-            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Product(Vec::new())), span));
+            return Err(self.err_expected_token_in(
+                "';' or '|' to disambiguate empty data type",
+                Some("in data definition"),
+            ));
         }
 
         if self.at(&TokenKind::Pipe) {

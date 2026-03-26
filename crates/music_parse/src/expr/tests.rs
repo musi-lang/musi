@@ -554,6 +554,12 @@ fn data_variant_default_no_payload() {
 }
 
 #[test]
+fn data_empty_braces_is_error() {
+    let (_ast, errors) = parse_expr("data {}");
+    assert!(!errors.is_empty(), "data {{}} should be a parse error");
+}
+
+#[test]
 fn bracket_params_trailing_comma() {
     let (ast, errors) = parse_expr("let f [T, U,] := 42");
     assert!(errors.is_empty(), "errors: {errors:?}");

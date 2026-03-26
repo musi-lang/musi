@@ -9,7 +9,7 @@ export let Bool := data {
 };
 /// The unit type, representing absence of data.
 @builtin
-export let Unit := data {};
+export let Unit := data { ; };
 /// The uninhabited type, used for non-terminating functions.
 @builtin
 export let Never := data { | };
@@ -17,75 +17,75 @@ export let Never := data { | };
 // --- Platform-sized numeric types ---
 /// Platform-sized signed integer.
 @builtin
-export opaque let Int := data {};
+export opaque let Int := data { ; };
 /// Platform-sized unsigned integer.
 @builtin
-export opaque let Nat := data {};
+export opaque let Nat := data { ; };
 /// Platform-sized floating-point number.
 @builtin
-export opaque let Float := data {};
+export opaque let Float := data { ; };
 
 // --- Sized integers ---
 /// 8-bit signed integer.
 @builtin
-export opaque let Int8 := data {};
+export opaque let Int8 := data { ; };
 /// 16-bit signed integer.
 @builtin
-export opaque let Int16 := data {};
+export opaque let Int16 := data { ; };
 /// 32-bit signed integer.
 @builtin
-export opaque let Int32 := data {};
+export opaque let Int32 := data { ; };
 /// 64-bit signed integer.
 @builtin
-export opaque let Int64 := data {};
+export opaque let Int64 := data { ; };
 
 // --- Sized unsigned integers ---
 /// 8-bit unsigned integer.
 @builtin
-export opaque let Nat8 := data {};
+export opaque let Nat8 := data { ; };
 /// 16-bit unsigned integer.
 @builtin
-export opaque let Nat16 := data {};
+export opaque let Nat16 := data { ; };
 /// 32-bit unsigned integer.
 @builtin
-export opaque let Nat32 := data {};
+export opaque let Nat32 := data { ; };
 /// 64-bit unsigned integer.
 @builtin
-export opaque let Nat64 := data {};
+export opaque let Nat64 := data { ; };
 
 // --- Sized floats ---
 /// 32-bit floating-point number.
 @builtin
-export opaque let Float32 := data {};
+export opaque let Float32 := data { ; };
 /// 64-bit floating-point number.
 @builtin
-export opaque let Float64 := data {};
+export opaque let Float64 := data { ; };
 
 // --- Text types ---
 /// A single Unicode character.
 @builtin
-export opaque let Rune := data {};
+export opaque let Rune := data { ; };
 /// A sequence of byte values representing UTF-8 encoded text.
 export let String := Array of Nat8;
 
 // --- Collection types ---
 /// A fixed-size array of elements of type `T`.
 @builtin
-export opaque let Array [T] := data {};
+export opaque let Array [T] := data { ; };
 /// A linked list of elements of type `T`.
 @builtin
-export opaque let List [T] := data {};
+export opaque let List [T] := data { ; };
 
 // --- Universe types - compiler intrinsics, declared here for visibility. ---
 /// The type of types.
 @builtin
-export opaque let Type := data {};
+export opaque let Type := data { ; };
 /// A type that can represent any value (escape hatch for the type system).
 @builtin
-export opaque let Any := data {};
+export opaque let Any := data { ; };
 /// A placeholder for unknown or yet-to-be-determined types.
 @builtin
-export opaque let Unknown := data {};
+export opaque let Unknown := data { ; };
 
 // --- Core type classes ---
 /// Equality type class for types that can be compared for equality.

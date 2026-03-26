@@ -306,11 +306,10 @@ with-clause    = "with" effect-set
 ; §4.7  Type definitions (anonymous - always bound via let)
 ast-data       = "data" "{" data-body "}"
 
-data-body      = variant-list  ; sum type (choice)
-                 / rec-def-fields  ; product type (record)
+data-body      = variant-list  ; sum type
+                 / rec-def-fields  ; product type
                  / "|"  ; empty sum (Never)
-                 / ";"  ; leading ; forces product (same as empty)
-                 / <empty>  ; empty product (Unit)
+                 / ";"  ; empty product (Unit)
 
 variant-list   = ["|"] variant *("|" variant) ["|"]  ; leading/trailing | allowed
 
