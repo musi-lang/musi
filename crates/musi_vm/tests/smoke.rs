@@ -6,7 +6,8 @@
     clippy::tests_outside_test_module
 )]
 
-use musi_vm::{load, Vm};
+use musi_vm::module::ENTRY_POINT_NAME;
+use musi_vm::{Vm, load};
 use music_il::opcode::Opcode;
 
 const fn op(o: Opcode) -> u8 {
@@ -16,7 +17,7 @@ const fn op(o: Opcode) -> u8 {
 fn minimal_seam(instr_bytes: &[u8], instr_count: u16) -> Vec<u8> {
     let mut content = Vec::new();
     content.extend_from_slice(&1u16.to_le_bytes());
-    content.extend_from_slice(&u32::MAX.to_le_bytes()); // entry point
+    content.extend_from_slice(&ENTRY_POINT_NAME.to_le_bytes()); // entry point
     content.extend_from_slice(&0u16.to_le_bytes());
     content.extend_from_slice(&instr_count.to_le_bytes());
     content.extend_from_slice(instr_bytes);
@@ -119,7 +120,7 @@ fn two_method_seam(
     content.extend_from_slice(&2u16.to_le_bytes()); // method count = 2
 
     // method 0: entry
-    content.extend_from_slice(&u32::MAX.to_le_bytes()); // name
+    content.extend_from_slice(&ENTRY_POINT_NAME.to_le_bytes()); // name
     content.extend_from_slice(&0u16.to_le_bytes()); // locals
     content.extend_from_slice(&entry_instr.to_le_bytes());
     content.extend_from_slice(entry_bytes);
@@ -150,7 +151,7 @@ fn seam_with_global(instr_bytes: &[u8], instr_count: u16) -> Vec<u8> {
     // Two sections: METH + GLOB
     let mut meth_content = Vec::new();
     meth_content.extend_from_slice(&1u16.to_le_bytes()); // 1 method
-    meth_content.extend_from_slice(&u32::MAX.to_le_bytes());
+    meth_content.extend_from_slice(&ENTRY_POINT_NAME.to_le_bytes());
     meth_content.extend_from_slice(&0u16.to_le_bytes()); // locals
     meth_content.extend_from_slice(&instr_count.to_le_bytes());
     meth_content.extend_from_slice(instr_bytes);
@@ -203,11 +204,11 @@ fn smoke_function_call() {
 
 #[test]
 fn smoke_effect_basic() {
-    // Direct Module construction (not .seam) verifying EffPush → EffNeed → EffResume round-trip.
+    // Direct Module construction (not .seam) verifying EffPush → EffNeed → EffCont round-trip.
     // Byte layout: same as effect_need_resume in vm/tests.rs
     // [0]  EffPush   [1,2]  5,0     skip 5 bytes → land at main body [8]
     // [3]  LdSmi     [4,5]  77,0    handler: push resume value
-    // [6]  EffResume [7]    1       handler: pop value, pop cont_ptr, restore
+    // [6]  EffCont   [7]    1       handler: pop value, pop cont_ptr, restore
     // [8]  LdSmi     [9,10] 0,0     main: dummy arg for need
     // [11] EffNeed   [12,13] 0,0    main: suspend → resume_pc=14
     // [14] Halt                      returns 77
@@ -216,16 +217,18 @@ fn smoke_effect_basic() {
         constants: Vec::new(),
         strings: Vec::new(),
         methods: vec![Method {
-            name: u32::MAX,
+            name: ENTRY_POINT_NAME,
             locals_count: 0,
             code: vec![
                 op(Opcode::EffPush),
-                5,
                 0,
+                0, // effect_id = 0
+                5,
+                0, // skip = 5
                 op(Opcode::LdSmi),
                 77,
                 0,
-                op(Opcode::EffResume),
+                op(Opcode::EffCont),
                 1,
                 op(Opcode::LdSmi),
                 0,
@@ -244,15 +247,15 @@ fn smoke_effect_basic() {
 
 #[test]
 fn smoke_globals() {
-    // StGlb(0) stores 42, LdGlb(0) loads it back
+    // StGlob(0) stores 42, LdGlob(0) loads it back
     let instr_bytes = &[
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::StGlb),
+        op(Opcode::StGlob),
         0,
         0,
-        op(Opcode::LdGlb),
+        op(Opcode::LdGlob),
         0,
         0,
         op(Opcode::Halt),

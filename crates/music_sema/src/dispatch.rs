@@ -1,5 +1,6 @@
 use music_ast::expr::BinOp;
 use music_builtins::types::BuiltinType;
+use music_il::opcode::Opcode;
 
 use crate::env::{DispatchInfo, TypeEnv};
 use crate::types::{SemaTypeId, Ty};
@@ -13,20 +14,20 @@ pub struct BinOpResolution {
     pub needs_class: Option<&'static str>,
 }
 
-/// Maps a binary operator to (class name, intrinsic, method index).
-const fn binop_class_method(op: BinOp) -> Option<(&'static str, &'static str, usize)> {
+/// Maps a binary operator to (class name, int opcode, float opcode, method index).
+const fn binop_class_method(op: BinOp) -> Option<(&'static str, Opcode, Option<Opcode>, usize)> {
     match op {
-        BinOp::Add => Some(("Num", "i.add", 0)),
-        BinOp::Sub => Some(("Num", "i.sub", 1)),
-        BinOp::Mul => Some(("Num", "i.mul", 2)),
-        BinOp::Div => Some(("Num", "i.div", 3)),
-        BinOp::Rem => Some(("Num", "i.mod", 4)),
-        BinOp::Eq => Some(("Eq", "cmp.eq", 0)),
-        BinOp::NotEq => Some(("Eq", "cmp.neq", 1)),
-        BinOp::Lt => Some(("Ord", "cmp.lt", 0)),
-        BinOp::Gt => Some(("Ord", "cmp.gt", 1)),
-        BinOp::LtEq => Some(("Ord", "cmp.leq", 2)),
-        BinOp::GtEq => Some(("Ord", "cmp.geq", 3)),
+        BinOp::Add => Some(("Num", Opcode::IAdd, Some(Opcode::FAdd), 0)),
+        BinOp::Sub => Some(("Num", Opcode::ISub, Some(Opcode::FSub), 1)),
+        BinOp::Mul => Some(("Num", Opcode::IMul, Some(Opcode::FMul), 2)),
+        BinOp::Div => Some(("Num", Opcode::IDiv, Some(Opcode::FDiv), 3)),
+        BinOp::Rem => Some(("Num", Opcode::IRem, None, 4)),
+        BinOp::Eq => Some(("Eq", Opcode::CmpEq, None, 0)),
+        BinOp::NotEq => Some(("Eq", Opcode::CmpNeq, None, 1)),
+        BinOp::Lt => Some(("Ord", Opcode::CmpLt, None, 0)),
+        BinOp::Gt => Some(("Ord", Opcode::CmpGt, None, 1)),
+        BinOp::LtEq => Some(("Ord", Opcode::CmpLeq, None, 2)),
+        BinOp::GtEq => Some(("Ord", Opcode::CmpGeq, None, 3)),
         BinOp::And
         | BinOp::Or
         | BinOp::Xor
@@ -125,10 +126,10 @@ fn resolve_logical(env: &TypeEnv, op: BinOp, lhs_ty: SemaTypeId) -> BinOpResolut
             | BuiltinType::Nat32
             | BuiltinType::Nat64,
         ) => {
-            let intrinsic = match op {
-                BinOp::And => "and",
-                BinOp::Or => "or",
-                BinOp::Xor => "xor",
+            let opcode = match op {
+                BinOp::And => Opcode::And,
+                BinOp::Or => Opcode::Or,
+                BinOp::Xor => Opcode::Xor,
                 _ => {
                     return BinOpResolution {
                         result_ty: resolved,
@@ -139,7 +140,7 @@ fn resolve_logical(env: &TypeEnv, op: BinOp, lhs_ty: SemaTypeId) -> BinOpResolut
             };
             BinOpResolution {
                 result_ty: resolved,
-                dispatch: Some(DispatchInfo::Static { intrinsic }),
+                dispatch: Some(DispatchInfo::Static { opcode }),
                 needs_class: None,
             }
         }
@@ -177,7 +178,7 @@ pub fn resolve_binop(
         return BinOpResolution {
             result_ty: list_ty,
             dispatch: Some(DispatchInfo::Static {
-                intrinsic: "list.cons",
+                opcode: Opcode::ArrCaten,
             }),
             needs_class: None,
         };
@@ -188,7 +189,7 @@ pub fn resolve_binop(
         return BinOpResolution {
             result_ty: range_ty,
             dispatch: Some(DispatchInfo::Static {
-                intrinsic: "range.new",
+                opcode: Opcode::ArrNew,
             }),
             needs_class: None,
         };
@@ -199,7 +200,7 @@ pub fn resolve_binop(
         return BinOpResolution {
             result_ty: resolved,
             dispatch: Some(DispatchInfo::Static {
-                intrinsic: "option.unwrap_or",
+                opcode: Opcode::Nop,
             }),
             needs_class: None,
         };
@@ -214,7 +215,7 @@ pub fn resolve_binop(
         };
     }
 
-    let Some((class_name, intrinsic, _)) = binop_class_method(op) else {
+    let Some((class_name, int_opcode, float_opcode, _)) = binop_class_method(op) else {
         return BinOpResolution {
             result_ty: lhs_ty,
             dispatch: None,
@@ -233,15 +234,13 @@ pub fn resolve_binop(
                 resolved
             };
             let effective = if is_float_type(bt) {
-                float_intrinsic(intrinsic)
+                float_opcode.unwrap_or(int_opcode)
             } else {
-                intrinsic
+                int_opcode
             };
             BinOpResolution {
                 result_ty,
-                dispatch: Some(DispatchInfo::Static {
-                    intrinsic: effective,
-                }),
+                dispatch: Some(DispatchInfo::Static { opcode: effective }),
                 needs_class: None,
             }
         }
@@ -280,21 +279,11 @@ const fn is_float_type(bt: BuiltinType) -> bool {
     )
 }
 
-fn float_intrinsic(intrinsic: &str) -> &str {
-    match intrinsic {
-        "i.add" => "f.add",
-        "i.sub" => "f.sub",
-        "i.mul" => "f.mul",
-        "i.div" => "f.div",
-        _ => intrinsic,
-    }
-}
-
 /// Returns the method index within a class for dictionary dispatch.
 #[must_use]
 pub const fn method_index_for_op(op: BinOp) -> usize {
     match binop_class_method(op) {
-        Some((_, _, idx)) => idx,
+        Some((_, _, _, idx)) => idx,
         None => 0,
     }
 }

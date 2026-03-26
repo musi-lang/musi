@@ -21,7 +21,7 @@ pub enum ScopeKind {
     Module,
     Function,
     Lambda,
-    MatchArm,
+    CaseArm,
     Comprehension,
     Block,
     TypeParams,

@@ -7,7 +7,7 @@ use music_lex::Lexer;
 use crate::ParseError;
 
 fn parse_pat_from(source: &str) -> (AstData, Vec<ParseError>) {
-    let full = String::from("match x (") + source + " => 0);";
+    let full = String::from("case x of (") + source + " => 0);";
     let (tokens, lex_errors) = Lexer::new(&full).lex();
     assert!(
         lex_errors.is_empty(),
@@ -20,11 +20,11 @@ fn parse_pat_from(source: &str) -> (AstData, Vec<ParseError>) {
 fn extract_pat_kind(ast: &AstData) -> &PatKind {
     assert_eq!(ast.root.len(), 1);
     match &ast.exprs.get(ast.root[0]).kind {
-        ExprKind::Match(_, arms) => {
+        ExprKind::Case(_, arms) => {
             assert!(!arms.is_empty());
             &ast.pats.get(arms[0].pat).kind
         }
-        other => panic!("expected Match, got {other:?}"),
+        other => panic!("expected Case, got {other:?}"),
     }
 }
 

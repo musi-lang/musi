@@ -2,106 +2,91 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreludeClass {
     pub name: &'static str,
-    pub methods: &'static [IntrinsicMethod],
+    pub methods: &'static [PreludeMethod],
 }
 
-/// A method within a prelude class that maps to a compiler intrinsic.
+/// A method within a prelude class, used for name resolution seeding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IntrinsicMethod {
+pub struct PreludeMethod {
     pub name: &'static str,
     pub op_name: &'static str,
-    pub intrinsic: &'static str,
 }
 
-/// All prelude type classes and their intrinsic method mappings.
+/// All prelude type classes and their method names.
 pub const PRELUDE_CLASSES: &[PreludeClass] = &[
     PreludeClass {
         name: "Eq",
         methods: &[
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "eq",
                 op_name: "(=)",
-                intrinsic: "cmp.eq",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "ne",
                 op_name: "(/=)",
-                intrinsic: "cmp.neq",
             },
         ],
     },
     PreludeClass {
         name: "Ord",
         methods: &[
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "lt",
                 op_name: "(<)",
-                intrinsic: "cmp.lt",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "gt",
                 op_name: "(>)",
-                intrinsic: "cmp.gt",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "le",
                 op_name: "(<=)",
-                intrinsic: "cmp.leq",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "ge",
                 op_name: "(>=)",
-                intrinsic: "cmp.geq",
             },
         ],
     },
     PreludeClass {
         name: "Num",
         methods: &[
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "add",
                 op_name: "(+)",
-                intrinsic: "i.add",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "sub",
                 op_name: "(-)",
-                intrinsic: "i.sub",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "mul",
                 op_name: "(*)",
-                intrinsic: "i.mul",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "div",
                 op_name: "(/)",
-                intrinsic: "i.div",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "rem",
                 op_name: "(%)",
-                intrinsic: "i.mod",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "neg",
                 op_name: "neg",
-                intrinsic: "i.neg",
             },
         ],
     },
     PreludeClass {
         name: "Bits",
         methods: &[
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "shl",
                 op_name: "shl",
-                intrinsic: "shl",
             },
-            IntrinsicMethod {
+            PreludeMethod {
                 name: "shr",
                 op_name: "shr",
-                intrinsic: "shr",
             },
         ],
     },

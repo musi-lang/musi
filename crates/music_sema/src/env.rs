@@ -4,6 +4,7 @@ use music_arena::Arena;
 use music_ast::ExprId;
 use music_builtins::types::BuiltinType;
 use music_found::{Span, Symbol};
+use music_il::opcode::Opcode;
 
 use crate::types::{SemaTypeId, Ty, TyVarId};
 
@@ -17,8 +18,8 @@ pub struct InstanceEntry {
 /// How a call site should be dispatched at codegen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DispatchInfo {
-    /// Resolved to a compiler intrinsic at compile time.
-    Static { intrinsic: &'static str },
+    /// Resolved to a VM opcode at compile time.
+    Static { opcode: Opcode },
     /// Resolved via a type class dictionary at runtime.
     Dictionary { class: Symbol, method_idx: usize },
     /// Fully dynamic dispatch (e.g. through `Any`).
@@ -40,7 +41,14 @@ pub struct TypeEnv {
     pub instances: HashMap<(Symbol, Symbol), InstanceEntry>,
     /// Effect name -> operation names.
     pub effect_ops: HashMap<Symbol, Vec<Symbol>>,
+    /// Effect name -> stable numeric ID (assigned in declaration order).
+    pub effect_indices: HashMap<Symbol, u16>,
+    /// Handle `ExprId` -> effect ID for the handler.
+    pub handle_effects: HashMap<ExprId, u16>,
+    /// Need `ExprId` -> effect ID being invoked.
+    pub need_effects: HashMap<ExprId, u16>,
     next_var: TyVarId,
+    next_effect_idx: u16,
 }
 
 impl TypeEnv {
@@ -56,7 +64,11 @@ impl TypeEnv {
             builtin_types: HashMap::new(),
             instances: HashMap::new(),
             effect_ops: HashMap::new(),
+            effect_indices: HashMap::new(),
+            handle_effects: HashMap::new(),
+            need_effects: HashMap::new(),
             next_var: 0,
+            next_effect_idx: 0,
         }
     }
 
@@ -121,6 +133,16 @@ impl TypeEnv {
             }
         }
         id
+    }
+
+    /// Returns the stable numeric ID for an effect, assigning one if first seen.
+    pub fn assign_effect_id(&mut self, name: Symbol) -> u16 {
+        let next = &mut self.next_effect_idx;
+        *self.effect_indices.entry(name).or_insert_with(|| {
+            let id = *next;
+            *next = next.wrapping_add(1);
+            id
+        })
     }
 
     /// Binds a unification variable to a type.

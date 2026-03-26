@@ -4,6 +4,7 @@ use music_il::opcode::Opcode;
 
 use super::load;
 use crate::errors::LoadError;
+use crate::module::ConstantEntry;
 
 const fn op(o: Opcode) -> u8 {
     o as u8
@@ -29,6 +30,47 @@ fn minimal_seam(instr_bytes: &[u8], instr_count: u16) -> Vec<u8> {
     buf.extend_from_slice(b"METH");
     buf.extend_from_slice(&content_len.to_le_bytes());
     buf.extend_from_slice(&content);
+
+    buf
+}
+
+/// Build a .seam binary with STRT, CNST, and METH sections.
+fn seam_with_strt_cnst(strt_data: &[u8], cnst_content: &[u8]) -> Vec<u8> {
+    let meth_content: Vec<u8> = {
+        let mut v = Vec::new();
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.extend_from_slice(&u32::MAX.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.push(op(Opcode::Halt));
+        v
+    };
+
+    let strt_len = u32::try_from(strt_data.len()).unwrap();
+    let cnst_len = u32::try_from(cnst_content.len()).unwrap();
+    let meth_len = u32::try_from(meth_content.len()).unwrap();
+    let total_size =
+        u32::try_from(16 + 8 + strt_data.len() + 8 + cnst_content.len() + 8 + meth_content.len())
+            .unwrap();
+
+    let mut buf = vec![0u8; 16];
+    buf[0..4].copy_from_slice(b"SEAM");
+    buf[4] = 0;
+    buf[5] = 1;
+    buf[8..12].copy_from_slice(&3u32.to_le_bytes());
+    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+
+    buf.extend_from_slice(b"STRT");
+    buf.extend_from_slice(&strt_len.to_le_bytes());
+    buf.extend_from_slice(strt_data);
+
+    buf.extend_from_slice(b"CNST");
+    buf.extend_from_slice(&cnst_len.to_le_bytes());
+    buf.extend_from_slice(cnst_content);
+
+    buf.extend_from_slice(b"METH");
+    buf.extend_from_slice(&meth_len.to_le_bytes());
+    buf.extend_from_slice(&meth_content);
 
     buf
 }
@@ -89,51 +131,55 @@ fn load_constants_int() {
 
     let module = load(&buf).unwrap();
     assert_eq!(module.constants.len(), 1);
-    assert!(module.constants[0].is_int());
-    assert_eq!(module.constants[0].as_int(), 42);
+    let ConstantEntry::Value(v) = &module.constants[0] else {
+        panic!("expected Value");
+    };
+    assert!(v.is_int());
+    assert_eq!(v.as_int(), 42);
 }
 
 #[test]
-fn load_constants_str() {
+fn load_constants_str_as_string_ref() {
+    // STRT: "hello\0" (6 bytes), CNST: 1 entry, tag=0x03, offset=0
+    let strt_data = b"hello\0";
     let mut cnst_content = Vec::new();
     cnst_content.extend_from_slice(&1u16.to_le_bytes());
-    cnst_content.push(0x03); // Str tag
-    cnst_content.extend_from_slice(&5u16.to_le_bytes()); // string-table index 5
+    cnst_content.push(0x03);
+    cnst_content.extend_from_slice(&0u16.to_le_bytes()); // byte offset 0
 
-    let cnst_len = u32::try_from(cnst_content.len()).unwrap();
-
-    let meth_content: Vec<u8> = {
-        let mut v = Vec::new();
-        v.extend_from_slice(&1u16.to_le_bytes());
-        v.extend_from_slice(&u32::MAX.to_le_bytes());
-        v.extend_from_slice(&0u16.to_le_bytes());
-        v.extend_from_slice(&1u16.to_le_bytes());
-        v.push(op(Opcode::Halt));
-        v
-    };
-    let meth_len = u32::try_from(meth_content.len()).unwrap();
-    let total_size = u32::try_from(16 + 8 + cnst_content.len() + 8 + meth_content.len()).unwrap();
-
-    let mut buf = vec![0u8; 16];
-    buf[0..4].copy_from_slice(b"SEAM");
-    buf[4] = 0;
-    buf[5] = 1;
-    buf[8..12].copy_from_slice(&2u32.to_le_bytes());
-    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
-    buf.extend_from_slice(b"CNST");
-    buf.extend_from_slice(&cnst_len.to_le_bytes());
-    buf.extend_from_slice(&cnst_content);
-    buf.extend_from_slice(b"METH");
-    buf.extend_from_slice(&meth_len.to_le_bytes());
-    buf.extend_from_slice(&meth_content);
-
+    let buf = seam_with_strt_cnst(strt_data, &cnst_content);
     let module = load(&buf).unwrap();
+
     assert_eq!(module.constants.len(), 1);
     assert!(
-        module.constants[0].is_tag(),
-        "string constant must be a Tag value, not UNIT"
+        matches!(module.constants[0], ConstantEntry::StringRef(0)),
+        "expected StringRef(0), got {:?}",
+        module.constants[0]
     );
-    assert_eq!(module.constants[0].as_tag_idx(), 5);
+    assert_eq!(module.strings[0], "hello");
+}
+
+#[test]
+fn load_two_strings_correct_indices() {
+    // STRT: "hello\0world\0" → strings[0]="hello" at offset 0, strings[1]="world" at offset 6
+    let strt_data = b"hello\0world\0";
+    let mut cnst_content = Vec::new();
+    cnst_content.extend_from_slice(&2u16.to_le_bytes());
+    // First string: byte offset 0 → index 0
+    cnst_content.push(0x03);
+    cnst_content.extend_from_slice(&0u16.to_le_bytes());
+    // Second string: byte offset 6 → index 1
+    cnst_content.push(0x03);
+    cnst_content.extend_from_slice(&6u16.to_le_bytes());
+
+    let buf = seam_with_strt_cnst(strt_data, &cnst_content);
+    let module = load(&buf).unwrap();
+
+    assert_eq!(module.constants.len(), 2);
+    assert!(matches!(module.constants[0], ConstantEntry::StringRef(0)));
+    assert!(matches!(module.constants[1], ConstantEntry::StringRef(1)));
+    assert_eq!(module.strings[0], "hello");
+    assert_eq!(module.strings[1], "world");
 }
 
 #[test]
@@ -176,9 +222,6 @@ fn invalid_opcode_in_method() {
 
 #[test]
 fn arrtag_tytag_have_no_operand() {
-    // ArrTag, TyTag, Halt — 3 bytes, 3 instructions.
-    // If loader treated ArrTag/TyTag as 1-byte operands it would consume the
-    // next instruction byte as an operand, mis-counting instructions.
     let bytes = [op(Opcode::ArrTag), op(Opcode::TyTag), op(Opcode::Halt)];
     let seam = minimal_seam(&bytes, 3);
     let module = load(&seam).unwrap();
@@ -187,15 +230,10 @@ fn arrtag_tytag_have_no_operand() {
 
 #[test]
 fn arrgeti_arrseti_are_one_byte_operand() {
-    // ArrGeti(5), ArrSeti(3), Halt — 5 bytes total, 3 instructions.
-    // If loader treated ArrGeti/ArrSeti as 2-byte operands it would mis-parse
-    // ArrSeti's index as the second operand byte of ArrGeti, then choke on
-    // the byte that follows. Verifying the code round-trips byte-for-byte
-    // confirms the loader reads exactly 1 operand byte per instruction.
     let bytes = [
-        op(Opcode::ArrGeti),
+        op(Opcode::ArrGetI),
         5,
-        op(Opcode::ArrSeti),
+        op(Opcode::ArrSetI),
         3,
         op(Opcode::Halt),
     ];
@@ -206,10 +244,6 @@ fn arrgeti_arrseti_are_one_byte_operand() {
 
 #[test]
 fn tychk_tycast_have_no_operand() {
-    // TyChk, TyCast, Halt — 3 bytes, 3 instructions.
-    // If loader treated TyChk/TyCast as 2-byte operands it would consume the
-    // next instruction byte as an operand, causing a decode error or wrong
-    // instruction count.
     let bytes = [op(Opcode::TyChk), op(Opcode::TyCast), op(Opcode::Halt)];
     let seam = minimal_seam(&bytes, 3);
     let module = load(&seam).unwrap();

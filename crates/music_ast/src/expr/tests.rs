@@ -269,15 +269,15 @@ fn lambda() {
 }
 
 #[test]
-fn match_expr() {
-    let arm = MatchArm {
+fn case_expr() {
+    let arm = CaseArm {
         attrs: vec![],
         pat: dummy_pat_id(),
         guard: None,
         body: dummy_expr_id(),
     };
-    let e = ExprKind::Match(dummy_expr_id(), vec![arm]);
-    assert!(matches!(e, ExprKind::Match(_, ref arms) if arms.len() == 1));
+    let e = ExprKind::Case(dummy_expr_id(), vec![arm]);
+    assert!(matches!(e, ExprKind::Case(_, ref arms) if arms.len() == 1));
 }
 
 #[test]
@@ -451,15 +451,15 @@ fn class_def() {
 }
 
 #[test]
-fn record_def() {
-    let e = ExprKind::RecordDef(vec![]);
-    assert!(matches!(e, ExprKind::RecordDef(_)));
+fn data_def_product() {
+    let e = ExprKind::DataDef(DataBody::Product(vec![]));
+    assert!(matches!(e, ExprKind::DataDef(DataBody::Product(_))));
 }
 
 #[test]
-fn choice_def() {
-    let e = ExprKind::ChoiceDef(vec![]);
-    assert!(matches!(e, ExprKind::ChoiceDef(_)));
+fn data_def_sum() {
+    let e = ExprKind::DataDef(DataBody::Sum(vec![]));
+    assert!(matches!(e, ExprKind::DataDef(DataBody::Sum(_))));
 }
 
 #[test]

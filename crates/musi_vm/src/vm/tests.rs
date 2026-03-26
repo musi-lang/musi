@@ -4,7 +4,7 @@ use music_il::opcode::Opcode;
 
 use super::Vm;
 use crate::errors::VmError;
-use crate::module::{GlobalDef, Method, Module};
+use crate::module::{ConstantEntry, ENTRY_POINT_NAME, GlobalDef, Method, Module};
 use crate::value::Value;
 
 const fn op(o: Opcode) -> u8 {
@@ -16,7 +16,7 @@ fn module_with_code(code: Vec<u8>) -> Module {
         constants: Vec::new(),
         strings: Vec::new(),
         methods: vec![Method {
-            name: u32::MAX,
+            name: ENTRY_POINT_NAME,
             locals_count: 0,
             code,
         }],
@@ -29,7 +29,7 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
         constants: Vec::new(),
         strings: Vec::new(),
         methods: vec![Method {
-            name: u32::MAX,
+            name: ENTRY_POINT_NAME,
             locals_count: locals,
             code,
         }],
@@ -37,12 +37,29 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
     }
 }
 
-fn module_with_constants_and_code(constants: Vec<Value>, code: Vec<u8>) -> Module {
+fn module_with_constants_and_code(constants: Vec<ConstantEntry>, code: Vec<u8>) -> Module {
     Module {
         constants,
         strings: Vec::new(),
         methods: vec![Method {
-            name: u32::MAX,
+            name: ENTRY_POINT_NAME,
+            locals_count: 0,
+            code,
+        }],
+        globals: Vec::new(),
+    }
+}
+
+fn module_with_strings_and_code(
+    strings: Vec<String>,
+    constants: Vec<ConstantEntry>,
+    code: Vec<u8>,
+) -> Module {
+    Module {
+        constants,
+        strings,
+        methods: vec![Method {
+            name: ENTRY_POINT_NAME,
             locals_count: 0,
             code,
         }],
@@ -107,15 +124,14 @@ fn idiv_by_zero_error() {
 
 #[test]
 fn brtrue_taken() {
-    // after BrTrue operand, pc=4; offset +3 → land at LdSmi(99) skipping LdSmi(1)
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::LdTrue),
+        op(Opcode::LdTru),
         op(Opcode::BrTrue),
         3,
-        0, // after=4, target=7
+        0,
         op(Opcode::LdSmi),
         1,
-        0, // skipped
+        0,
         op(Opcode::LdSmi),
         99,
         0,
@@ -127,10 +143,10 @@ fn brtrue_taken() {
 #[test]
 fn brfalse_not_taken_when_true() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::LdTrue),
+        op(Opcode::LdTru),
         op(Opcode::BrFalse),
         3,
-        0, // not taken
+        0,
         op(Opcode::LdSmi),
         42,
         0,
@@ -141,14 +157,13 @@ fn brfalse_not_taken_when_true() {
 
 #[test]
 fn brjmp_unconditional() {
-    // after BrJmp operand pc=3; offset +3 → land at LdSmi(7)
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::BrJmp),
         3,
-        0, // after=3, target=6
+        0,
         op(Opcode::LdSmi),
         1,
-        0, // skipped
+        0,
         op(Opcode::LdSmi),
         7,
         0,
@@ -181,14 +196,13 @@ fn stloc_ldloc() {
 
 #[test]
 fn brback_forward_jump() {
-    // BrBack with a positive offset behaves identically to BrJmp
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::BrBack),
         3,
-        0, // after=3, target=6
+        0,
         op(Opcode::LdSmi),
         1,
-        0, // skipped
+        0,
         op(Opcode::LdSmi),
         42,
         0,
@@ -217,25 +231,12 @@ fn panic_opcode() {
 
 #[test]
 fn nested_branches() {
-    // if true { if false { 1 } else { 42 } } else { 0 }  → 42
-    //
-    // pc layout:
-    //  0: LdTrue
-    //  1: BrFalse +16 → after=4, target=20 (else_outer)
-    //  4: LdFalse
-    //  5: BrFalse +6  → after=8, target=14 (else_inner)
-    //  8: LdSmi 1
-    // 11: BrJmp +9    → after=14, target=23 (Halt)
-    // 14: LdSmi 42
-    // 17: BrJmp +3    → after=20, target=23 (Halt)
-    // 20: LdSmi 0     (else_outer)
-    // 23: Halt
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::LdTrue),
+        op(Opcode::LdTru),
         op(Opcode::BrFalse),
         16,
         0,
-        op(Opcode::LdFalse),
+        op(Opcode::LdFls),
         op(Opcode::BrFalse),
         6,
         0,
@@ -247,13 +248,13 @@ fn nested_branches() {
         0,
         op(Opcode::LdSmi),
         42,
-        0, // else_inner
+        0,
         op(Opcode::BrJmp),
         3,
         0,
         op(Opcode::LdSmi),
         0,
-        0, // else_outer
+        0,
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 42);
@@ -272,7 +273,7 @@ fn two_method_module_locals(
         strings: Vec::new(),
         methods: vec![
             Method {
-                name: u32::MAX,
+                name: ENTRY_POINT_NAME,
                 locals_count: entry_locals,
                 code: entry_code,
             },
@@ -292,17 +293,15 @@ fn two_method_module(entry_code: Vec<u8>, callee_code: Vec<u8>) -> Module {
 
 #[test]
 fn call_simple() {
-    // entry: push bare method index 1 as callee, push arg 99, Call(1)
-    // callee (idx=1, locals=1): load local 0, Ret
     let entry_code = vec![
         op(Opcode::LdSmi),
         1,
-        0, // callee = method index 1
+        0,
         op(Opcode::LdSmi),
         99,
         0,
         op(Opcode::Call),
-        1, // arity=1
+        1,
         op(Opcode::Halt),
     ];
     let callee_code = vec![op(Opcode::LdLoc), 0, op(Opcode::Ret)];
@@ -312,12 +311,10 @@ fn call_simple() {
 
 #[test]
 fn call_nested() {
-    // entry (idx=0) → method 1 → method 2 which returns arg + 1
-    // entry passes 10 → expects 11
     let entry_code = vec![
         op(Opcode::LdSmi),
         1,
-        0, // callee = method 1
+        0,
         op(Opcode::LdSmi),
         10,
         0,
@@ -328,7 +325,7 @@ fn call_nested() {
     let m1_code = vec![
         op(Opcode::LdSmi),
         2,
-        0, // callee = method 2
+        0,
         op(Opcode::LdLoc),
         0,
         op(Opcode::Call),
@@ -347,7 +344,7 @@ fn call_nested() {
         strings: Vec::new(),
         methods: vec![
             Method {
-                name: u32::MAX,
+                name: ENTRY_POINT_NAME,
                 locals_count: 0,
                 code: entry_code,
             },
@@ -370,17 +367,16 @@ fn call_nested() {
 
 #[test]
 fn call_tail() {
-    // tail call reuses the current frame, so no stack growth
     let entry_code = vec![
         op(Opcode::LdSmi),
         1,
-        0, // callee = method 1
+        0,
         op(Opcode::LdSmi),
         42,
         0,
         op(Opcode::CallTail),
         1,
-        op(Opcode::Halt), // unreachable
+        op(Opcode::Halt),
     ];
     let callee_code = vec![op(Opcode::LdLoc), 0, op(Opcode::Ret)];
     let mut vm = Vm::new(two_method_module_locals(0, 1, entry_code, callee_code));
@@ -389,15 +385,14 @@ fn call_tail() {
 
 #[test]
 fn globals_store_load() {
-    // StGlb(0) then LdGlb(0) round-trips a value
     let code = vec![
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::StGlb),
+        op(Opcode::StGlob),
         0,
         0,
-        op(Opcode::LdGlb),
+        op(Opcode::LdGlob),
         0,
         0,
         op(Opcode::Halt),
@@ -406,7 +401,7 @@ fn globals_store_load() {
         constants: Vec::new(),
         strings: Vec::new(),
         methods: vec![Method {
-            name: u32::MAX,
+            name: ENTRY_POINT_NAME,
             locals_count: 0,
             code,
         }],
@@ -422,59 +417,49 @@ fn globals_store_load() {
 
 #[test]
 fn closure_basic() {
-    // entry: push upvalue 55, ClsNew(method=1, upvals=1), Call(0)
-    // closure body: LdUpv(0), Ret → returns captured value
-    // ClsNew encoding: opcode, u16 method_idx LE, u8 upval_count
     let entry_code = vec![
         op(Opcode::LdSmi),
         55,
-        0, // push upvalue
+        0,
         op(Opcode::ClsNew),
         1,
         0,
-        1, // method_idx=1, upval_count=1
+        1,
         op(Opcode::Call),
-        0, // call closure with 0 args
+        0,
         op(Opcode::Halt),
     ];
-    let closure_body = vec![
-        op(Opcode::LdUpv),
-        0,
-        0, // slot=0 (u16 LE)
-        op(Opcode::Ret),
-    ];
+    let closure_body = vec![op(Opcode::LdUpv), 0, 0, op(Opcode::Ret)];
     let mut vm = Vm::new(two_method_module(entry_code, closure_body));
     assert_eq!(vm.run().unwrap().as_int(), 55);
 }
 
 #[test]
 fn closure_mutation() {
-    // entry: push upvalue 10, ClsNew(method=1, upvals=1), push arg 99, Call(1)
-    // closure body: load arg, StUpv(0), LdUpv(0), Ret → returns 99
     let entry_code = vec![
         op(Opcode::LdSmi),
         10,
-        0, // initial upvalue
+        0,
         op(Opcode::ClsNew),
         1,
         0,
-        1, // method_idx=1, upval_count=1
+        1,
         op(Opcode::LdSmi),
         99,
-        0, // arg
+        0,
         op(Opcode::Call),
-        1, // arity=1
+        1,
         op(Opcode::Halt),
     ];
     let closure_body = vec![
         op(Opcode::LdLoc),
-        0, // load arg
+        0,
         op(Opcode::StUpv),
         0,
-        0, // store into upvalue slot 0
+        0,
         op(Opcode::LdUpv),
         0,
-        0, // load upvalue slot 0
+        0,
         op(Opcode::Ret),
     ];
     let mut vm = Vm::new(two_method_module_locals(0, 1, entry_code, closure_body));
@@ -483,35 +468,24 @@ fn closure_mutation() {
 
 #[test]
 fn call_stack_overflow() {
-    // entry self-calls infinitely via bare method index 0
-    let code = vec![
-        op(Opcode::LdZero), // method index 0
-        op(Opcode::Call),
-        0,
-        op(Opcode::Halt),
-    ];
+    let code = vec![op(Opcode::LdNil), op(Opcode::Call), 0, op(Opcode::Halt)];
     let mut vm = Vm::new(module_with_code(code));
     assert!(matches!(vm.run(), Err(VmError::CallStackOverflow)));
 }
 
 #[test]
 fn effect_push_pop() {
-    // Install handler, main body runs normally, handler removed via EffPop.
-    // Byte layout:
-    // [0]  EffPush  [1,2]  5,0      skip 5 bytes past handler body → land at [8]
-    // [3]  LdSmi   [4,5]  99,0     handler body (dead code)
-    // [6]  EffResume [7]  0        handler body cont. (dead code)
-    // [8]  LdSmi   [9,10] 42,0    main body
-    // [11] EffPop
-    // [12] Halt                     returns 42
+    // EffPush: u16 effect_id=0 + i16 skip=5
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::EffPush),
-        5,
         0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5 bytes (handler body)
         op(Opcode::LdSmi),
         99,
         0,
-        op(Opcode::EffResume),
+        op(Opcode::EffCont),
         0,
         op(Opcode::LdSmi),
         42,
@@ -524,22 +498,16 @@ fn effect_push_pop() {
 
 #[test]
 fn effect_need_resume() {
-    // Install handler; main body calls EffNeed (suspends); handler resumes with 77.
-    // Byte layout:
-    // [0]  EffPush   [1,2]  5,0     skip 5 bytes to main body → land at [8]
-    // [3]  LdSmi     [4,5]  77,0    handler: push resume value onto stack
-    // [6]  EffResume [7]    1       handler: pop value, pop cont_ptr, restore
-    // [8]  LdSmi     [9,10] 0,0     main: dummy arg for need
-    // [11] EffNeed   [12,13] 0,0    main: suspend → resume_pc=14
-    // [14] Halt                      returns 77
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::EffPush),
-        5,
         0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::EffResume),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
@@ -554,36 +522,26 @@ fn effect_need_resume() {
 
 #[test]
 fn effect_nested() {
-    // Two handlers installed; inner EffNeed fires (LIFO), inner handler resumes
-    // with 77, outer handler survives and is removed via EffPop.
-    //
-    // Byte layout:
-    // [0-2]   EffPush 5,0      outer: skip=5 → handler_pc=3, land at 8
-    // [3-5]   LdSmi 88,0       outer handler body (unreachable)
-    // [6-7]   EffResume 1
-    // [8-10]  EffPush 5,0      inner: skip=5 → handler_pc=11, land at 16
-    // [11-13] LdSmi 77,0       inner handler body
-    // [14-15] EffResume 1
-    // [16-18] LdSmi 0,0        main: dummy arg
-    // [19-21] EffNeed 0,0      suspend → resume_pc=22
-    // [22]    EffPop            remove outer
-    // [23]    Halt              returns 77
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::EffPush),
-        5,
         0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5
         op(Opcode::LdSmi),
         88,
         0,
-        op(Opcode::EffResume),
+        op(Opcode::EffCont),
         1,
         op(Opcode::EffPush),
-        5,
         0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::EffResume),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
@@ -597,27 +555,121 @@ fn effect_nested() {
     assert_eq!(vm.run().unwrap().as_int(), 77);
 }
 
+#[test]
+fn effect_dispatch_by_id() {
+    // Handler A (effect=0): resume with 10
+    // Handler B (effect=1): resume with 20
+    // EffNeed(effect=0) should hit Handler A, not B
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5 (LdSmi + EffCont)
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::EffCont),
+        1,
+        op(Opcode::EffPush),
+        1,
+        0, // effect_id = 1
+        5,
+        0, // skip = 5
+        op(Opcode::LdSmi),
+        20,
+        0,
+        op(Opcode::EffCont),
+        1,
+        op(Opcode::LdSmi),
+        0,
+        0,
+        op(Opcode::EffNeed),
+        0,
+        0,                  // effect_id = 0 -> should find Handler A
+        op(Opcode::EffPop), // clean up Handler B
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 10);
+}
+
+#[test]
+fn effect_dispatch_skips_wrong_handler() {
+    // Handler A (effect=0): resume with 10
+    // Handler B (effect=1): resume with 20
+    // EffNeed(effect=1) should hit Handler B (topmost matching)
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::EffCont),
+        1,
+        op(Opcode::EffPush),
+        1,
+        0, // effect_id = 1
+        5,
+        0, // skip = 5
+        op(Opcode::LdSmi),
+        20,
+        0,
+        op(Opcode::EffCont),
+        1,
+        op(Opcode::LdSmi),
+        0,
+        0,
+        op(Opcode::EffNeed),
+        1,
+        0,                  // effect_id = 1 -> should find Handler B
+        op(Opcode::EffPop), // clean up Handler A
+        op(Opcode::Halt),
+    ]));
+    assert_eq!(vm.run().unwrap().as_int(), 20);
+}
+
+#[test]
+fn effect_no_matching_handler() {
+    // Only handler is for effect=0, but we need effect=99
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::EffPush),
+        0,
+        0, // effect_id = 0
+        5,
+        0, // skip = 5
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::EffCont),
+        1,
+        op(Opcode::LdSmi),
+        0,
+        0,
+        op(Opcode::EffNeed),
+        99,
+        0, // effect_id = 99 -> no match
+        op(Opcode::Halt),
+    ]));
+    assert!(matches!(vm.run(), Err(VmError::NoEffectHandler)));
+}
+
 // ── Array opcodes ─────────────────────────────────────────────────────────────
 
 #[test]
 fn arr_new_and_geti_seti() {
-    // ArrNew(2); LdSmi(10); ArrSeti(0); ArrGeti(0); Halt → 10
-    //
-    // Stack trace:
-    //   ArrNew(2): [arr_ptr]
-    //   LdSmi(10): [arr_ptr, 10]
-    //   ArrSeti(0): pop 10, peek arr_ptr, arr[0]=10 → [arr_ptr]
-    //   ArrGeti(0): pop arr_ptr, push arr[0]=10 → [10]
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
         2,
-        0, // u16 LE: len=2
+        0,
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::ArrSeti),
+        op(Opcode::ArrSetI),
         0,
-        op(Opcode::ArrGeti),
+        op(Opcode::ArrGetI),
         0,
         op(Opcode::Halt),
     ]));
@@ -628,27 +680,17 @@ fn arr_new_and_geti_seti() {
 
 #[test]
 fn arr_get_set_dynamic() {
-    // ArrNew(1); Dup; LdZero(idx); LdSmi(42); ArrSet; LdZero(idx); ArrGet; Halt → 42
-    //
-    // Stack trace:
-    //   ArrNew(1): [ptr]
-    //   Dup:       [ptr, ptr]
-    //   LdZero:    [ptr, ptr, 0]
-    //   LdSmi(42): [ptr, ptr, 0, 42]
-    //   ArrSet:    pop 42, pop 0, pop ptr → arr[0]=42; [ptr]
-    //   LdZero:    [ptr, 0]
-    //   ArrGet:    pop 0, pop ptr, push arr[0]=42 → [42]
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
         1,
         0,
         op(Opcode::Dup),
-        op(Opcode::LdZero),
+        op(Opcode::LdNil),
         op(Opcode::LdSmi),
         42,
         0,
         op(Opcode::ArrSet),
-        op(Opcode::LdZero),
+        op(Opcode::LdNil),
         op(Opcode::ArrGet),
         op(Opcode::Halt),
     ]));
@@ -659,7 +701,6 @@ fn arr_get_set_dynamic() {
 
 #[test]
 fn arr_len() {
-    // ArrNew(3); ArrLen; Halt → 3
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
         3,
@@ -674,22 +715,16 @@ fn arr_len() {
 
 #[test]
 fn arr_tag_variant() {
-    // constants[0] = Tag(0).
-    // ArrNewt(pool_idx=0, len=1); ArrTag; LdCst(0); CmpEq; Halt → true
-    //
-    // ArrTag returns the stored tag (Tag(0)).
-    // LdCst(0) loads the same value.
-    // CmpEq compares bit-identical values → true.
-    let constants = vec![Value::from_tag(0)];
+    let constants = vec![ConstantEntry::Value(Value::from_tag(0))];
     let code = vec![
-        op(Opcode::ArrNewt),
-        0, // tag_pool_idx = 0
-        1,
-        0, // len = 1 (u16 LE)
-        op(Opcode::ArrTag),
-        op(Opcode::LdCst),
+        op(Opcode::ArrNewT),
         0,
-        0, // constants[0]
+        1,
+        0,
+        op(Opcode::ArrTag),
+        op(Opcode::LdConst),
+        0,
+        0,
         op(Opcode::CmpEq),
         op(Opcode::Halt),
     ];
@@ -701,9 +736,6 @@ fn arr_tag_variant() {
 
 #[test]
 fn arr_copy() {
-    // ArrNew(1); LdSmi(5); ArrSeti(0); ArrCopy; ArrGeti(0); Halt → 5
-    //
-    // Copy produces an independent array with the same elements.
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
         1,
@@ -711,10 +743,10 @@ fn arr_copy() {
         op(Opcode::LdSmi),
         5,
         0,
-        op(Opcode::ArrSeti),
+        op(Opcode::ArrSetI),
         0,
         op(Opcode::ArrCopy),
-        op(Opcode::ArrGeti),
+        op(Opcode::ArrGetI),
         0,
         op(Opcode::Halt),
     ]));
@@ -725,15 +757,6 @@ fn arr_copy() {
 
 #[test]
 fn arr_concat() {
-    // Build two length-1 arrays, concat them, verify the result has length 2.
-    //
-    // Stack trace:
-    //   ArrNew(1): [a]
-    //   LdSmi(10); ArrSeti(0): a[0]=10, [a]
-    //   ArrNew(1): [a, b]
-    //   LdSmi(20); ArrSeti(0): b[0]=20, [a, b]
-    //   ArrConcat: pop b, pop a, create [10,20], [c]
-    //   ArrLen: [2]
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
         1,
@@ -741,7 +764,7 @@ fn arr_concat() {
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::ArrSeti),
+        op(Opcode::ArrSetI),
         0,
         op(Opcode::ArrNew),
         1,
@@ -749,9 +772,9 @@ fn arr_concat() {
         op(Opcode::LdSmi),
         20,
         0,
-        op(Opcode::ArrSeti),
+        op(Opcode::ArrSetI),
         0,
-        op(Opcode::ArrConcat),
+        op(Opcode::ArrCaten),
         op(Opcode::ArrLen),
         op(Opcode::Halt),
     ]));
@@ -762,7 +785,6 @@ fn arr_concat() {
 
 #[test]
 fn tychk_passthrough() {
-    // TyChk is a no-op — value passes through unchanged.
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         42,
@@ -777,7 +799,6 @@ fn tychk_passthrough() {
 
 #[test]
 fn tycast_passthrough() {
-    // TyCast is a no-op — value passes through unchanged.
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         42,
@@ -794,21 +815,6 @@ fn tycast_passthrough() {
 
 #[test]
 fn brtbl_in_range() {
-    // BrTbl with count=3, index=1 → lands on LdSmi(99).
-    //
-    // Byte layout:
-    //  [0-2]   LdSmi 1 0          push index=1
-    //  [3]     BrTbl
-    //  [4-5]   3 0                count=3
-    //  [6-7]   0 0                offset[0]=0  → after-table(12) + 0  = 12
-    //  [8-9]   6 0                offset[1]=6  → after-table(12) + 6  = 18
-    //  [10-11] 12 0               offset[2]=12 → after-table(12) + 12 = 24
-    //  [12-14] LdSmi 10 0         branch 0
-    //  [15-17] BrJmp 9 0          skip to Halt at 27
-    //  [18-20] LdSmi 99 0         branch 1 ← idx=1 lands here
-    //  [21-23] BrJmp 3 0          skip to Halt at 27
-    //  [24-26] LdSmi 77 0         branch 2
-    //  [27]    Halt
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         1,
@@ -844,15 +850,6 @@ fn brtbl_in_range() {
 
 #[test]
 fn brtbl_out_of_range() {
-    // index=5, count=3 → out of range, falls through to LdSmi(42).
-    //
-    // Byte layout:
-    //  [0-2]   LdSmi 5 0    push index=5
-    //  [3]     BrTbl
-    //  [4-5]   3 0          count=3
-    //  [6-11]  zeros        three offsets (never used)
-    //  [12-14] LdSmi 42 0   fall-through target
-    //  [15]    Halt
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         5,
@@ -876,9 +873,6 @@ fn brtbl_out_of_range() {
 
 #[test]
 fn brtbl_negative_index() {
-    // index=-1 → usize::try_from fails, falls through to LdSmi(42).
-    //
-    // Same layout as brtbl_out_of_range except LdSmi encodes -1 (i16 LE = 0xFF 0xFF).
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         0xFF,
@@ -898,4 +892,230 @@ fn brtbl_negative_index() {
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 42);
+}
+
+// ── String tests ──────────────────────────────────────────────────────────────
+
+#[test]
+fn ldcst_string_resolves_to_ptr() {
+    // StringRef(0) → heap-allocated "hello" → LdConst pushes a PTR
+    let module = module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![op(Opcode::LdConst), 0, 0, op(Opcode::Halt)],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_ptr(), "expected PTR, got {result:?}");
+}
+
+#[test]
+fn string_cmpeq_same_content() {
+    // Two separate StringRef entries pointing at the same string → structural equality
+    let module = module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0), ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            1,
+            0,
+            op(Opcode::CmpEq),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool(), "identical strings should be equal");
+}
+
+#[test]
+fn string_cmpeq_different_content() {
+    let module = module_with_strings_and_code(
+        vec!["hello".into(), "world".into()],
+        vec![ConstantEntry::StringRef(0), ConstantEntry::StringRef(1)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            1,
+            0,
+            op(Opcode::CmpEq),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(!result.as_bool(), "different strings should not be equal");
+}
+
+#[test]
+fn string_cmpneq() {
+    let module = module_with_strings_and_code(
+        vec!["hello".into(), "world".into()],
+        vec![ConstantEntry::StringRef(0), ConstantEntry::StringRef(1)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            1,
+            0,
+            op(Opcode::CmpNeq),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(
+        result.as_bool(),
+        "CmpNeq on different strings should be true"
+    );
+}
+
+#[test]
+fn string_concat_via_arrconcat() {
+    // "hel" ++ "lo" → new heap string
+    let module = module_with_strings_and_code(
+        vec!["hel".into(), "lo".into()],
+        vec![ConstantEntry::StringRef(0), ConstantEntry::StringRef(1)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            1,
+            0,
+            op(Opcode::ArrCaten),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_ptr());
+    let display = super::display_value(result, &vm.heap);
+    assert_eq!(display, "hello");
+}
+
+#[test]
+fn string_concat_then_cmpeq() {
+    // ("hel" ++ "lo") == "hello" → true
+    let module = module_with_strings_and_code(
+        vec!["hel".into(), "lo".into(), "hello".into()],
+        vec![
+            ConstantEntry::StringRef(0),
+            ConstantEntry::StringRef(1),
+            ConstantEntry::StringRef(2),
+        ],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            1,
+            0,
+            op(Opcode::ArrCaten),
+            op(Opcode::LdConst),
+            2,
+            0,
+            op(Opcode::CmpEq),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(
+        result.as_bool(),
+        "concatenated string should equal original"
+    );
+}
+
+#[test]
+fn string_arrlen() {
+    let module = module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::ArrLen),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 5);
+}
+
+#[test]
+fn string_arrget() {
+    // "hello"[1] → 'e' → 101
+    let module = module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdOne),
+            op(Opcode::ArrGet),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 101); // 'e'
+}
+
+#[test]
+fn string_arrset_errors() {
+    let module = module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::Dup),
+            op(Opcode::LdNil),
+            op(Opcode::LdSmi),
+            65,
+            0,
+            op(Opcode::ArrSet),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    assert!(matches!(vm.run(), Err(VmError::TypeError { .. })));
+}
+
+#[test]
+fn string_arrcopy() {
+    // ArrCopy on a string creates a new heap string
+    let module = module_with_strings_and_code(
+        vec!["test".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::ArrCopy),
+            op(Opcode::ArrLen),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 4);
 }

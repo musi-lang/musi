@@ -78,11 +78,12 @@ comment = "///" *(<any except newline>)  ; line doc (doc=true)
           / "//" *(<any except newline>)  ; line (doc=false)
           / "/**" *(<any except "*/">) "*/"  ; block doc (doc=true)
           / "/*" *(<any except "*/">) "*/"  ; block (doc=false)
-; §1.5  Keywords (29)
+; §1.5  Keywords (28)
 keyword = "and"
           / "as"
-          / "choice"
+          / "case"
           / "class"
+          / "data"
           / "effect"
           / "export"
           / "foreign"
@@ -93,7 +94,6 @@ keyword = "and"
           / "instance"
           / "law"
           / "let"
-          / "match"
           / "mut"
           / "need"
           / "not"
@@ -101,7 +101,6 @@ keyword = "and"
           / "opaque"
           / "or"
           / "quote"
-          / "record"
           / "resume"
           / "return"
           / "via"
@@ -213,13 +212,12 @@ ast-expr-atom = lit  ; INT / FLOAT / STRING / FSTRING / RUNE
                 / ast-array  ; LBRACKET
                 / ast-rec-lit  ; DOT_LBRACE
                 / ast-dot-pfx  ; DOT
-                / ast-match  ; KW_MATCH
+                / ast-case  ; KW_CASE
                 / ast-let  ; KW_LET
                 / ast-return  ; KW_RETURN
                 / ast-resume  ; KW_RESUME
                 / ast-import  ; KW_IMPORT
-                / ast-choice  ; KW_CHOICE
-                / ast-record  ; KW_RECORD
+                / ast-data  ; KW_DATA
                 / ast-effect  ; KW_EFFECT
                 / ast-class  ; KW_CLASS
                 / ast-need  ; KW_NEED
@@ -259,10 +257,10 @@ pw-arm   = ast-expr "if" pw-guard
 
 pw-guard = "_"
            / ast-expr
-; §4.3  Match
-ast-match = "match" ast-expr "(" ["|"] match-arm *("|" match-arm) ["|"] ")"  ; leading/trailing | allowed
+; §4.3  Case
+ast-case = "case" ast-expr "of" "(" ["|"] case-arm *("|" case-arm) ["|"] ")"  ; leading/trailing | allowed
 
-match-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
+case-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
 ; §4.4  Arrays, matrices, comprehensions
 ;
 ;   [a, b, c]            array
@@ -306,15 +304,19 @@ bracket-params = "[" ident *("," ident) [","] "]"  ; trailing , allowed
 
 with-clause    = "with" effect-set
 ; §4.7  Type definitions (anonymous - always bound via let)
-ast-choice     = "choice" "{" variant-list "}"
+ast-data       = "data" "{" data-body "}"
 
-ast-record     = "record" "{" rec-def-fields "}"
+data-body      = variant-list  ; sum type (choice)
+                 / rec-def-fields  ; product type (record)
+                 / "|"  ; empty sum (Never)
+                 / ";"  ; leading ; forces product (same as empty)
+                 / <empty>  ; empty product (Unit)
 
-variant-list   = variant *("|" variant) ["|"]  ; trailing | allowed
+variant-list   = ["|"] variant *("|" variant) ["|"]  ; leading/trailing | allowed
 
-variant        = ident [":" ast-ty]
+variant        = [attrs] ident [":" ast-ty] [":=" ast-expr]
 
-rec-def-fields = rec-def-field *(";" rec-def-field)
+rec-def-fields = [";"] rec-def-field *(";" rec-def-field) [";"]  ; leading/trailing ; allowed
 
 rec-def-field  = ident ":" ast-ty [":=" ast-expr]
 ; §4.8  Effects (anonymous - always bound via let)
@@ -348,12 +350,14 @@ splice    = "#" ident  ; splice identifier
             / "#[" expr-list "]"  ; splice array (splat)
 ; §5  Types
 ; §5.1  Type precedence
-;   arrow (right) > union/sum (left) > base
-ast-ty       = ast-ty-arrow
+;   arrow (right) > sum/+ (left) > product/* (left) > base
+ast-ty         = ast-ty-arrow
 
-ast-ty-arrow = ast-ty-union [("->" / "~>") ast-ty-arrow]
+ast-ty-arrow   = ast-ty-sum [("->" / "~>") ast-ty-arrow]
 
-ast-ty-union = ast-ty-base *("|" ast-ty-base)
+ast-ty-sum     = ast-ty-product *("+" ast-ty-product)
+
+ast-ty-product = ast-ty-base *("*" ast-ty-base)
 ; §5.2  Base types
 ast-ty-base = "mut" ast-ty-base  ; mut T - mutable type (mut T <: T)
               / ident ["of" ty-arg-list]  ; Named, Named of T

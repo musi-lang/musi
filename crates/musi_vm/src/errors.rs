@@ -1,5 +1,7 @@
 use music_il::opcode::Opcode;
 
+use crate::types::{ConstIdx, GlobalSlot, HeapIdx, MethodIdx};
+
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     #[error("invalid magic bytes")]
@@ -14,6 +16,8 @@ pub enum LoadError {
     InvalidOpcode { byte: u8, offset: usize },
     #[error("invalid constant tag 0x{tag:02x}")]
     InvalidConstantTag { tag: u8 },
+    #[error("invalid string offset {offset} in CNST section")]
+    InvalidStringOffset { offset: u16 },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +29,7 @@ pub enum VmError {
     #[error("invalid local slot {0}")]
     InvalidLocal(usize),
     #[error("invalid constant pool index {0}")]
-    InvalidConstant(usize),
+    InvalidConstant(ConstIdx),
     #[error("pc out of bounds")]
     PcOutOfBounds,
     #[error("division by zero")]
@@ -42,7 +46,7 @@ pub enum VmError {
     #[error("explicit panic")]
     ExplicitPanic,
     #[error("invalid global slot {0}")]
-    InvalidGlobal(usize),
+    InvalidGlobal(GlobalSlot),
     #[error("not callable")]
     NotCallable,
     #[error("invalid upvalue slot {0}")]
@@ -52,11 +56,13 @@ pub enum VmError {
     #[error("call stack overflow")]
     CallStackOverflow,
     #[error("invalid method index {0}")]
-    InvalidMethod(usize),
+    InvalidMethod(MethodIdx),
     #[error("no effect handler installed")]
     NoEffectHandler,
     #[error("array index {index} out of bounds (length {length})")]
     IndexOutOfBounds { index: usize, length: usize },
     #[error("expected array")]
     NotAnArray,
+    #[error("invalid heap index {0}")]
+    InvalidHeapIndex(HeapIdx),
 }

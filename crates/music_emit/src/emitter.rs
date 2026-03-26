@@ -2,8 +2,8 @@ use std::mem;
 
 use music_ast::common::{FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
-    BinOp, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef, LetBinding,
-    MatchArm, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
+    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef,
+    LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
@@ -84,6 +84,7 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
         Operand::U8(_) => 1,
         Operand::I16(_) | Operand::U16(_) => 2,
         Operand::Wide(_, _) | Operand::Tagged(_, _) => 3,
+        Operand::IndexedJump(_, _) => 4,
         Operand::Table(offsets) => 2 + offsets.len() * 2,
     }
 }
@@ -133,7 +134,7 @@ impl Emitter<'_> {
                 opaque: vis == Visibility::Opaque,
             });
             self.emit_expr(value)?;
-            self.push(Instruction::with_u16(Opcode::StGlb, global_idx));
+            self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
         }
         Ok(())
     }
@@ -200,7 +201,7 @@ impl Emitter<'_> {
                 ref params, body, ..
             } => self.emit_lambda(expr_id, params, body)?,
             ExprKind::Seq(ref stmts) => self.emit_seq(stmts)?,
-            ExprKind::Match(scrutinee, ref arms) => self.emit_match(scrutinee, arms)?,
+            ExprKind::Case(scrutinee, ref arms) => self.emit_case(scrutinee, arms)?,
             ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields)?,
             ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args)?,
             ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field)?,
@@ -212,10 +213,10 @@ impl Emitter<'_> {
                 expr, ref indices, ..
             } => self.emit_index(expr, indices)?,
             ExprKind::FStrLit(ref parts) => self.emit_fstr(parts)?,
-            ExprKind::Need(operand) => self.emit_need(operand)?,
+            ExprKind::Need(operand) => self.emit_need(expr_id, operand)?,
             ExprKind::Handle {
                 ref handlers, body, ..
-            } => self.emit_handle(handlers, body)?,
+            } => self.emit_handle(expr_id, handlers, body)?,
             ExprKind::Resume(opt) => self.emit_resume(opt)?,
             ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
             ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
@@ -229,8 +230,7 @@ impl Emitter<'_> {
             } => self.emit_comprehension(body, clauses)?,
             ExprKind::Quote(ref qk) => self.emit_quote(qk)?,
             ExprKind::Splice(ref sk) => self.emit_splice(sk)?,
-            ExprKind::RecordDef(_)
-            | ExprKind::ChoiceDef(_)
+            ExprKind::DataDef(_)
             | ExprKind::EffectDef(_)
             | ExprKind::ClassDef { .. }
             | ExprKind::Import { .. } => {
@@ -245,23 +245,23 @@ impl Emitter<'_> {
 
     fn emit_literal(&mut self, lit: &Literal) {
         match *lit {
-            Literal::Int(0) => self.push(Instruction::simple(Opcode::LdZero)),
+            Literal::Int(0) => self.push(Instruction::simple(Opcode::LdNil)),
             Literal::Int(1) => self.push(Instruction::simple(Opcode::LdOne)),
             Literal::Int(n) => {
                 if let Ok(small) = i16::try_from(n) {
                     self.push(Instruction::with_i16(Opcode::LdSmi, small));
                 } else {
                     let idx = self.pool.add(ConstantEntry::Int(n));
-                    self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                    self.push(Instruction::with_u16(Opcode::LdConst, idx));
                 }
             }
             Literal::Float(f) => {
                 let idx = self.pool.add(ConstantEntry::Float(f.to_bits()));
-                self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                self.push(Instruction::with_u16(Opcode::LdConst, idx));
             }
             Literal::Str(ref s) => {
                 let idx = self.pool.add(ConstantEntry::Str(s.clone()));
-                self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                self.push(Instruction::with_u16(Opcode::LdConst, idx));
             }
             Literal::Rune(c) => {
                 let scalar = u32::from(c);
@@ -269,7 +269,7 @@ impl Emitter<'_> {
                     self.push(Instruction::with_i16(Opcode::LdSmi, small));
                 } else {
                     let idx = self.pool.add(ConstantEntry::Int(i64::from(scalar)));
-                    self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                    self.push(Instruction::with_u16(Opcode::LdConst, idx));
                 }
             }
         }
@@ -285,7 +285,7 @@ impl Emitter<'_> {
         } else if let Some(slot) = self.find_upvalue(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
         } else if let Some(idx) = self.find_global(ident.name) {
-            self.push(Instruction::with_u16(Opcode::LdGlb, idx));
+            self.push(Instruction::with_u16(Opcode::LdGlob, idx));
         } else {
             panic!(
                 "unresolved variable: '{}'",
@@ -295,14 +295,12 @@ impl Emitter<'_> {
     }
 
     fn emit_app(&mut self, callee: ExprId, args: &ExprList) -> Result<(), EmitError> {
-        if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(callee) {
-            if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
-                for &arg in args {
-                    self.emit_expr(arg)?;
-                }
-                self.push(Instruction::simple(opcode));
-                return Ok(());
+        if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(callee) {
+            for &arg in args {
+                self.emit_expr(arg)?;
             }
+            self.push(Instruction::simple(*opcode));
+            return Ok(());
         }
         self.emit_expr(callee)?;
         for &arg in args {
@@ -332,18 +330,16 @@ impl Emitter<'_> {
 
         if let Some(dispatch) = self.thir.dispatch(expr_id) {
             match dispatch {
-                DispatchInfo::Static { intrinsic } => {
-                    if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
-                        self.push(Instruction::simple(opcode));
-                        return Ok(());
-                    }
+                DispatchInfo::Static { opcode } => {
+                    self.push(Instruction::simple(*opcode));
+                    return Ok(());
                 }
                 DispatchInfo::Dictionary { method_idx, .. } => {
                     let method_u8 =
                         u8::try_from(*method_idx).expect("method index overflow (>255)");
-                    // ClsDict takes a u16 dictionary index; 0 is a placeholder until Phase 4
-                    self.push(Instruction::with_u16(Opcode::ClsDict, 0u16));
-                    self.push(Instruction::with_u8(Opcode::ClsCall, method_u8));
+                    // TyclDict takes a u16 dictionary index; 0 is a placeholder until Phase 4
+                    self.push(Instruction::with_u16(Opcode::TyclDict, 0u16));
+                    self.push(Instruction::with_u8(Opcode::TyclCall, method_u8));
                     return Ok(());
                 }
                 DispatchInfo::Dynamic => {
@@ -365,11 +361,9 @@ impl Emitter<'_> {
         self.emit_expr(operand)?;
         match op {
             UnaryOp::Neg => {
-                if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(expr_id) {
-                    if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
-                        self.push(Instruction::simple(opcode));
-                        return Ok(());
-                    }
+                if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(expr_id) {
+                    self.push(Instruction::simple(*opcode));
+                    return Ok(());
                 }
                 self.push(Instruction::simple(Opcode::INeg));
             }
@@ -446,7 +440,7 @@ impl Emitter<'_> {
             } else if let Some(slot) = self.find_upvalue(cap) {
                 self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
             } else if let Some(idx) = self.find_global(cap) {
-                self.push(Instruction::with_u16(Opcode::LdGlb, idx));
+                self.push(Instruction::with_u16(Opcode::LdGlob, idx));
             }
         }
 
@@ -499,7 +493,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_match(&mut self, scrutinee: ExprId, arms: &[MatchArm]) -> Result<(), EmitError> {
+    fn emit_case(&mut self, scrutinee: ExprId, arms: &[CaseArm]) -> Result<(), EmitError> {
         self.emit_expr(scrutinee)?;
 
         if arms.is_empty() {
@@ -559,7 +553,7 @@ impl Emitter<'_> {
 
     fn emit_guard_and_body(
         &mut self,
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -588,7 +582,7 @@ impl Emitter<'_> {
     fn emit_match_lit(
         &mut self,
         literal: &Literal,
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -614,7 +608,7 @@ impl Emitter<'_> {
     fn emit_match_tuple_or_array(
         &mut self,
         pats: &[music_ast::PatId],
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -623,7 +617,7 @@ impl Emitter<'_> {
             if let PatKind::Bind(ident) = &sub_pat_node.kind {
                 self.push(Instruction::simple(Opcode::Dup));
                 let idx = u8::try_from(i).expect("too many tuple/array elements (>255)");
-                self.push(Instruction::with_u8(Opcode::ArrGeti, idx));
+                self.push(Instruction::with_u8(Opcode::ArrGetI, idx));
                 let slot = self.local_slot(ident.name);
                 self.emit_st_loc(slot);
             }
@@ -637,7 +631,7 @@ impl Emitter<'_> {
     fn emit_match_record(
         &mut self,
         fields: &[RecordPatField],
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -656,7 +650,7 @@ impl Emitter<'_> {
             if let Some(ident) = bind_ident {
                 self.push(Instruction::simple(Opcode::Dup));
                 let idx = u8::try_from(i).expect("too many record fields (>255)");
-                self.push(Instruction::with_u8(Opcode::ArrGeti, idx));
+                self.push(Instruction::with_u8(Opcode::ArrGetI, idx));
                 let slot = self.local_slot(ident.name);
                 self.emit_st_loc(slot);
             }
@@ -671,7 +665,7 @@ impl Emitter<'_> {
         &mut self,
         tag: &Ident,
         fields: &[music_ast::PatId],
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -681,7 +675,7 @@ impl Emitter<'_> {
         let tag_idx = self.pool.add(ConstantEntry::Str(
             self.thir.db.interner.resolve(tag.name).into(),
         ));
-        self.push(Instruction::with_u16(Opcode::LdCst, tag_idx));
+        self.push(Instruction::with_u16(Opcode::LdConst, tag_idx));
         self.push(Instruction::simple(Opcode::CmpEq));
 
         let next_arm = if is_last {
@@ -695,7 +689,7 @@ impl Emitter<'_> {
             if let PatKind::Bind(field_ident) = &field_pat_node.kind {
                 self.push(Instruction::simple(Opcode::Dup));
                 let field_u8 = u8::try_from(fi).expect("too many fields (>255)");
-                self.push(Instruction::with_u8(Opcode::ArrGeti, field_u8));
+                self.push(Instruction::with_u8(Opcode::ArrGetI, field_u8));
                 let slot = self.local_slot(field_ident.name);
                 self.emit_st_loc(slot);
             }
@@ -720,12 +714,12 @@ impl Emitter<'_> {
                     if let Some(val_id) = value {
                         let idx = u8::try_from(i).expect("too many fields (>255)");
                         self.emit_expr(*val_id)?;
-                        self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+                        self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
                     }
                 }
                 RecordField::Spread(expr_id) => {
                     self.emit_expr(*expr_id)?;
-                    self.push(Instruction::simple(Opcode::ArrConcat));
+                    self.push(Instruction::simple(Opcode::ArrCaten));
                 }
             }
         }
@@ -738,22 +732,20 @@ impl Emitter<'_> {
         tag: &Ident,
         args: &ExprList,
     ) -> Result<(), EmitError> {
-        if let Some(DispatchInfo::Static { intrinsic }) = self.thir.dispatch(expr_id) {
-            if let Some(opcode) = Opcode::from_mnemonic(intrinsic) {
-                self.push(Instruction::simple(opcode));
-                return Ok(());
-            }
+        if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(expr_id) {
+            self.push(Instruction::simple(*opcode));
+            return Ok(());
         }
         let tag_name = self.thir.db.interner.resolve(tag.name);
         let tag_idx = self.pool.add(ConstantEntry::Str(tag_name.into()));
         let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
         let len = u16::try_from(args.len()).expect("too many variant args (>65535)");
-        self.push(Instruction::with_tagged(Opcode::ArrNewt, tag_byte, len));
+        self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, len));
 
         for (i, &arg) in args.iter().enumerate() {
             self.emit_expr(arg)?;
             let idx = u8::try_from(i).expect("too many variant args (>255)");
-            self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+            self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
         }
         Ok(())
     }
@@ -763,7 +755,7 @@ impl Emitter<'_> {
         match *field {
             FieldTarget::Index(idx) => {
                 let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
-                self.push(Instruction::with_u8(Opcode::ArrGeti, field_u8));
+                self.push(Instruction::with_u8(Opcode::ArrGetI, field_u8));
             }
             FieldTarget::Name(_) => {
                 return Err(EmitError::Unimplemented("named field access"));
@@ -788,7 +780,7 @@ impl Emitter<'_> {
         for (i, &elem) in elems.iter().enumerate() {
             self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many tuple elements (>255)");
-            self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+            self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
         }
         Ok(())
     }
@@ -799,7 +791,7 @@ impl Emitter<'_> {
         for (i, &elem) in elems.iter().enumerate() {
             self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many array elements (>255)");
-            self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+            self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
         }
         Ok(())
     }
@@ -816,7 +808,7 @@ impl Emitter<'_> {
     fn emit_fstr(&mut self, parts: &[FStrPart]) -> Result<(), EmitError> {
         if parts.is_empty() {
             let idx = self.pool.add(ConstantEntry::Str(String::new()));
-            self.push(Instruction::with_u16(Opcode::LdCst, idx));
+            self.push(Instruction::with_u16(Opcode::LdConst, idx));
             return Ok(());
         }
 
@@ -824,7 +816,7 @@ impl Emitter<'_> {
             match &parts[0] {
                 FStrPart::Lit(s) => {
                     let idx = self.pool.add(ConstantEntry::Str(s.clone()));
-                    self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                    self.push(Instruction::with_u16(Opcode::LdConst, idx));
                 }
                 FStrPart::Expr(expr_id) => self.emit_expr(*expr_id)?,
             }
@@ -835,12 +827,12 @@ impl Emitter<'_> {
             match part {
                 FStrPart::Lit(s) => {
                     let idx = self.pool.add(ConstantEntry::Str(s.clone()));
-                    self.push(Instruction::with_u16(Opcode::LdCst, idx));
+                    self.push(Instruction::with_u16(Opcode::LdConst, idx));
                 }
                 FStrPart::Expr(expr_id) => self.emit_expr(*expr_id)?,
             }
             if i > 0 {
-                self.push(Instruction::simple(Opcode::ArrConcat));
+                self.push(Instruction::simple(Opcode::ArrCaten));
             }
         }
         Ok(())
@@ -854,24 +846,48 @@ impl Emitter<'_> {
         };
         let tag_idx = self.pool.add(ConstantEntry::Str(tag_str.into()));
         let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
-        self.push(Instruction::with_tagged(Opcode::ArrNewt, tag_byte, 2));
+        self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, 2));
 
         self.emit_expr(lhs)?;
-        self.push(Instruction::with_u8(Opcode::ArrSeti, 0));
+        self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
 
         self.emit_expr(rhs)?;
-        self.push(Instruction::with_u8(Opcode::ArrSeti, 1));
+        self.push(Instruction::with_u8(Opcode::ArrSetI, 1));
         Ok(())
     }
 
-    fn emit_need(&mut self, operand: ExprId) -> Result<(), EmitError> {
+    fn emit_need(&mut self, expr_id: ExprId, operand: ExprId) -> Result<(), EmitError> {
         self.emit_expr(operand)?;
-        self.push(Instruction::with_u16(Opcode::EffNeed, 0));
+        let effect_id = self
+            .thir
+            .type_env
+            .need_effects
+            .get(&expr_id)
+            .copied()
+            .unwrap_or(0);
+        self.push(Instruction::with_u16(Opcode::EffNeed, effect_id));
         Ok(())
     }
 
-    fn emit_handle(&mut self, handlers: &[FnDecl], body: ExprId) -> Result<(), EmitError> {
-        let skip_jump = self.placeholder_jump(Opcode::EffPush);
+    fn emit_handle(
+        &mut self,
+        expr_id: ExprId,
+        handlers: &[FnDecl],
+        body: ExprId,
+    ) -> Result<(), EmitError> {
+        let effect_id = self
+            .thir
+            .type_env
+            .handle_effects
+            .get(&expr_id)
+            .copied()
+            .unwrap_or(0);
+        let pos = self.current_instructions.len();
+        self.push(Instruction::with_indexed_jump(
+            Opcode::EffPush,
+            effect_id,
+            0,
+        ));
 
         for handler in handlers {
             if let Some(handler_body) = handler.body {
@@ -879,7 +895,15 @@ impl Emitter<'_> {
             }
         }
 
-        self.patch_jump(skip_jump);
+        let current = self.current_instructions.len();
+        let byte_offset: usize = self.current_instructions[pos + 1..current]
+            .iter()
+            .map(instruction_byte_size)
+            .sum();
+        let offset = i16::try_from(byte_offset).expect("jump too far");
+        self.current_instructions[pos] =
+            Instruction::with_indexed_jump(Opcode::EffPush, effect_id, offset);
+
         self.emit_expr(body)?;
         self.push(Instruction::simple(Opcode::EffPop));
         Ok(())
@@ -888,9 +912,9 @@ impl Emitter<'_> {
     fn emit_resume(&mut self, value: Option<ExprId>) -> Result<(), EmitError> {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id)?;
-            self.push(Instruction::with_u8(Opcode::EffResume, 1));
+            self.push(Instruction::with_u8(Opcode::EffCont, 1));
         } else {
-            self.push(Instruction::with_u8(Opcode::EffResume, 0));
+            self.push(Instruction::with_u8(Opcode::EffCont, 0));
         }
         Ok(())
     }
@@ -906,11 +930,11 @@ impl Emitter<'_> {
             for (ci, &elem) in row.iter().enumerate() {
                 self.emit_expr(elem)?;
                 let col_idx = u8::try_from(ci).expect("too many matrix columns (>255)");
-                self.push(Instruction::with_u8(Opcode::ArrSeti, col_idx));
+                self.push(Instruction::with_u8(Opcode::ArrSetI, col_idx));
             }
 
             let row_idx = u8::try_from(ri).expect("too many matrix rows (>255)");
-            self.push(Instruction::with_u8(Opcode::ArrSeti, row_idx));
+            self.push(Instruction::with_u8(Opcode::ArrSetI, row_idx));
         }
         Ok(())
     }
@@ -929,12 +953,12 @@ impl Emitter<'_> {
                     if let Some(val_id) = value {
                         let idx = u8::try_from(i).expect("too many fields (>255)");
                         self.emit_expr(*val_id)?;
-                        self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+                        self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
                     }
                 }
                 RecordField::Spread(expr_id) => {
                     self.emit_expr(*expr_id)?;
-                    self.push(Instruction::simple(Opcode::ArrConcat));
+                    self.push(Instruction::simple(Opcode::ArrCaten));
                 }
             }
         }
@@ -947,7 +971,7 @@ impl Emitter<'_> {
         self.push(Instruction::simple(Opcode::ArrTag));
 
         let none_idx = self.pool.add(ConstantEntry::Str("None".into()));
-        self.push(Instruction::with_u16(Opcode::LdCst, none_idx));
+        self.push(Instruction::with_u16(Opcode::LdConst, none_idx));
         self.push(Instruction::simple(Opcode::CmpEq));
 
         let skip_jump = self.placeholder_jump(Opcode::BrFalse);
@@ -958,7 +982,7 @@ impl Emitter<'_> {
         }
 
         self.patch_jump(skip_jump);
-        self.push(Instruction::with_u8(Opcode::ArrGeti, 0));
+        self.push(Instruction::with_u8(Opcode::ArrGetI, 0));
         Ok(())
     }
 
@@ -986,7 +1010,7 @@ impl Emitter<'_> {
         self.push(Instruction::simple(Opcode::ArrTag));
 
         let none_idx = self.pool.add(ConstantEntry::Str("None".into()));
-        self.push(Instruction::with_u16(Opcode::LdCst, none_idx));
+        self.push(Instruction::with_u16(Opcode::LdConst, none_idx));
         self.push(Instruction::simple(Opcode::CmpEq));
 
         let end_jump = self.placeholder_jump(Opcode::BrFalse);
@@ -1005,7 +1029,7 @@ impl Emitter<'_> {
                     if let MemberDecl::Fn(decl) = member {
                         if let Some(body) = decl.body {
                             let name = match decl.name {
-                                MemberName::Ident(ident) | MemberName::Op(ident) => ident.name,
+                                MemberName::Ident(ident) | MemberName::Op(ident, _) => ident.name,
                             };
                             let params = decl.params.as_deref().unwrap_or(&[]);
                             self.emit_function(name, params, body)?;
@@ -1023,7 +1047,7 @@ impl Emitter<'_> {
     fn emit_foreign_import(&mut self, sym: Symbol) {
         let name = self.thir.db.interner.resolve(sym);
         let idx = self.pool.add(ConstantEntry::Str(name.into()));
-        self.push(Instruction::with_u16(Opcode::LdCst, idx));
+        self.push(Instruction::with_u16(Opcode::LdConst, idx));
         // FfiCall takes a u16 FFI index; 0 is a placeholder until Phase 4
         self.push(Instruction::with_u16(Opcode::FfiCall, 0u16));
     }
@@ -1053,7 +1077,7 @@ impl Emitter<'_> {
                     let iter_slot = self.alloc_anon_slot();
                     self.emit_st_loc(iter_slot);
 
-                    self.push(Instruction::simple(Opcode::LdZero));
+                    self.push(Instruction::simple(Opcode::LdNil));
                     let counter_slot = self.alloc_anon_slot();
                     self.emit_st_loc(counter_slot);
 
@@ -1089,7 +1113,7 @@ impl Emitter<'_> {
                     }
 
                     self.emit_expr(body)?;
-                    self.push(Instruction::simple(Opcode::ArrConcat));
+                    self.push(Instruction::simple(Opcode::ArrCaten));
 
                     for fj in filter_jumps {
                         self.patch_jump(fj);
@@ -1123,7 +1147,7 @@ impl Emitter<'_> {
     fn emit_match_or(
         &mut self,
         pats: &[music_ast::PatId],
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -1166,7 +1190,7 @@ impl Emitter<'_> {
                     let tag_idx = self.pool.add(ConstantEntry::Str(
                         self.thir.db.interner.resolve(tag.name).into(),
                     ));
-                    self.push(Instruction::with_u16(Opcode::LdCst, tag_idx));
+                    self.push(Instruction::with_u16(Opcode::LdConst, tag_idx));
                     self.push(Instruction::simple(Opcode::CmpEq));
                     if is_last_sub {
                         if is_last {
@@ -1206,7 +1230,7 @@ impl Emitter<'_> {
         &mut self,
         name: Ident,
         inner_pat: music_ast::PatId,
-        arm: &MatchArm,
+        arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
     ) -> Result<(), EmitError> {
@@ -1248,7 +1272,7 @@ impl Emitter<'_> {
                 } else if let Some(slot) = self.find_upvalue(ident.name) {
                     self.push(Instruction::with_u16(Opcode::StUpv, u16::from(slot)));
                 } else if let Some(idx) = self.find_global(ident.name) {
-                    self.push(Instruction::with_u16(Opcode::StGlb, idx));
+                    self.push(Instruction::with_u16(Opcode::StGlob, idx));
                 }
             }
             ExprKind::Index {
@@ -1277,7 +1301,7 @@ impl Emitter<'_> {
                 match field {
                     FieldTarget::Index(idx) => {
                         let field_u8 = u8::try_from(idx).expect("field index overflow (>255)");
-                        self.push(Instruction::with_u8(Opcode::ArrSeti, field_u8));
+                        self.push(Instruction::with_u8(Opcode::ArrSetI, field_u8));
                     }
                     FieldTarget::Name(_) => {
                         return Err(EmitError::Unimplemented("named field assignment"));
@@ -1357,7 +1381,7 @@ impl Emitter<'_> {
                 for (i, &e) in es.iter().enumerate() {
                     self.emit_expr(e)?;
                     let idx = u8::try_from(i).expect("too many splice elements (>255)");
-                    self.push(Instruction::with_u8(Opcode::ArrSeti, idx));
+                    self.push(Instruction::with_u8(Opcode::ArrSetI, idx));
                 }
             }
         }
@@ -1385,7 +1409,7 @@ fn binop_to_opcode(op: BinOp) -> Opcode {
         BinOp::Sub => Opcode::ISub,
         BinOp::Mul => Opcode::IMul,
         BinOp::Div => Opcode::IDiv,
-        BinOp::Rem => Opcode::IMod,
+        BinOp::Rem => Opcode::IRem,
         BinOp::Eq => Opcode::CmpEq,
         BinOp::NotEq => Opcode::CmpNeq,
         BinOp::Lt => Opcode::CmpLt,
@@ -1395,7 +1419,7 @@ fn binop_to_opcode(op: BinOp) -> Opcode {
         BinOp::And => Opcode::And,
         BinOp::Or => Opcode::Or,
         BinOp::Xor => Opcode::Xor,
-        BinOp::Cons => Opcode::ArrConcat,
+        BinOp::Cons => Opcode::ArrCaten,
         BinOp::NilCoalesce | BinOp::PipeRight | BinOp::Range | BinOp::RangeExcl => {
             panic!("intercepted before reaching binop_to_opcode")
         }

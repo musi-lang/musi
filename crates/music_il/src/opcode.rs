@@ -7,17 +7,17 @@
 pub enum Opcode {
     // -- Data Movement (0x00-0x0E) --
     LdLoc = 0x00,
-    LdCst = 0x01,
-    LdGlb = 0x02,
+    LdConst = 0x01,
+    LdGlob = 0x02,
     LdUpv = 0x03,
     LdUnit = 0x04,
-    LdTrue = 0x05,
-    LdFalse = 0x06,
-    LdZero = 0x07,
+    LdTru = 0x05,
+    LdFls = 0x06,
+    LdNil = 0x07,
     LdOne = 0x08,
     LdSmi = 0x09,
     StLoc = 0x0A,
-    StGlb = 0x0B,
+    StGlob = 0x0B,
     StUpv = 0x0C,
     LdLocW = 0x0D,
     StLocW = 0x0E,
@@ -33,7 +33,7 @@ pub enum Opcode {
     ISub = 0x15,
     IMul = 0x16,
     IDiv = 0x17,
-    IMod = 0x18,
+    IRem = 0x18,
     INeg = 0x19,
     FAdd = 0x1A,
     FSub = 0x1B,
@@ -84,13 +84,13 @@ pub enum Opcode {
     ArrZip = 0x3E,
     ArrFill = 0x3F,
     ArrCopy = 0x40,
-    ArrConcat = 0x41,
+    ArrCaten = 0x41,
 
     // -- Array Fast Paths (0x42-0x45) --
-    ArrGeti = 0x42,
-    ArrSeti = 0x43,
+    ArrGetI = 0x42,
+    ArrSetI = 0x43,
     ArrTag = 0x44,
-    ArrNewt = 0x45,
+    ArrNewT = 0x45,
 
     // -- Type Operations (0x4A-0x4C) --
     TyChk = 0x4A,
@@ -101,11 +101,11 @@ pub enum Opcode {
     EffPush = 0x4E,
     EffPop = 0x4F,
     EffNeed = 0x50,
-    EffResume = 0x51,
+    EffCont = 0x51,
 
-    // -- Class Dispatch (0x52-0x53) --
-    ClsDict = 0x52,
-    ClsCall = 0x53,
+    // -- Type Class Dispatch (0x52-0x53) --
+    TyclDict = 0x52,
+    TyclCall = 0x53,
 
     // -- GC / Foreign / Misc (0x56-0x5B) --
     GcPin = 0x56,
@@ -123,17 +123,17 @@ pub const OPCODE_COUNT: usize = 82;
 const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     let mut table: [Option<Opcode>; 256] = [None; 256];
     table[0x00] = Some(Opcode::LdLoc);
-    table[0x01] = Some(Opcode::LdCst);
-    table[0x02] = Some(Opcode::LdGlb);
+    table[0x01] = Some(Opcode::LdConst);
+    table[0x02] = Some(Opcode::LdGlob);
     table[0x03] = Some(Opcode::LdUpv);
     table[0x04] = Some(Opcode::LdUnit);
-    table[0x05] = Some(Opcode::LdTrue);
-    table[0x06] = Some(Opcode::LdFalse);
-    table[0x07] = Some(Opcode::LdZero);
+    table[0x05] = Some(Opcode::LdTru);
+    table[0x06] = Some(Opcode::LdFls);
+    table[0x07] = Some(Opcode::LdNil);
     table[0x08] = Some(Opcode::LdOne);
     table[0x09] = Some(Opcode::LdSmi);
     table[0x0A] = Some(Opcode::StLoc);
-    table[0x0B] = Some(Opcode::StGlb);
+    table[0x0B] = Some(Opcode::StGlob);
     table[0x0C] = Some(Opcode::StUpv);
     table[0x0D] = Some(Opcode::LdLocW);
     table[0x0E] = Some(Opcode::StLocW);
@@ -145,7 +145,7 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x15] = Some(Opcode::ISub);
     table[0x16] = Some(Opcode::IMul);
     table[0x17] = Some(Opcode::IDiv);
-    table[0x18] = Some(Opcode::IMod);
+    table[0x18] = Some(Opcode::IRem);
     table[0x19] = Some(Opcode::INeg);
     table[0x1A] = Some(Opcode::FAdd);
     table[0x1B] = Some(Opcode::FSub);
@@ -184,20 +184,20 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x3E] = Some(Opcode::ArrZip);
     table[0x3F] = Some(Opcode::ArrFill);
     table[0x40] = Some(Opcode::ArrCopy);
-    table[0x41] = Some(Opcode::ArrConcat);
-    table[0x42] = Some(Opcode::ArrGeti);
-    table[0x43] = Some(Opcode::ArrSeti);
+    table[0x41] = Some(Opcode::ArrCaten);
+    table[0x42] = Some(Opcode::ArrGetI);
+    table[0x43] = Some(Opcode::ArrSetI);
     table[0x44] = Some(Opcode::ArrTag);
-    table[0x45] = Some(Opcode::ArrNewt);
+    table[0x45] = Some(Opcode::ArrNewT);
     table[0x4A] = Some(Opcode::TyChk);
     table[0x4B] = Some(Opcode::TyCast);
     table[0x4C] = Some(Opcode::TyTag);
     table[0x4E] = Some(Opcode::EffPush);
     table[0x4F] = Some(Opcode::EffPop);
     table[0x50] = Some(Opcode::EffNeed);
-    table[0x51] = Some(Opcode::EffResume);
-    table[0x52] = Some(Opcode::ClsDict);
-    table[0x53] = Some(Opcode::ClsCall);
+    table[0x51] = Some(Opcode::EffCont);
+    table[0x52] = Some(Opcode::TyclDict);
+    table[0x53] = Some(Opcode::TyclCall);
     table[0x56] = Some(Opcode::GcPin);
     table[0x57] = Some(Opcode::GcUnpin);
     table[0x58] = Some(Opcode::FfiCall);
@@ -221,17 +221,17 @@ impl Opcode {
     pub const fn mnemonic(self) -> &'static str {
         match self {
             Self::LdLoc => "ld.loc",
-            Self::LdCst => "ld.cst",
-            Self::LdGlb => "ld.glb",
+            Self::LdConst => "ld.const",
+            Self::LdGlob => "ld.glob",
             Self::LdUpv => "ld.upv",
             Self::LdUnit => "ld.unit",
-            Self::LdTrue => "ld.true",
-            Self::LdFalse => "ld.false",
-            Self::LdZero => "ld.zero",
+            Self::LdTru => "ld.tru",
+            Self::LdFls => "ld.fls",
+            Self::LdNil => "ld.nil",
             Self::LdOne => "ld.one",
             Self::LdSmi => "ld.smi",
             Self::StLoc => "st.loc",
-            Self::StGlb => "st.glb",
+            Self::StGlob => "st.glob",
             Self::StUpv => "st.upv",
             Self::LdLocW => "ld.loc.w",
             Self::StLocW => "st.loc.w",
@@ -245,7 +245,7 @@ impl Opcode {
             Self::ISub => "i.sub",
             Self::IMul => "i.mul",
             Self::IDiv => "i.div",
-            Self::IMod => "i.mod",
+            Self::IRem => "i.rem",
             Self::INeg => "i.neg",
             Self::FAdd => "f.add",
             Self::FSub => "f.sub",
@@ -290,12 +290,12 @@ impl Opcode {
             Self::ArrZip => "arr.zip",
             Self::ArrFill => "arr.fill",
             Self::ArrCopy => "arr.copy",
-            Self::ArrConcat => "arr.concat",
+            Self::ArrCaten => "arr.caten",
 
-            Self::ArrGeti => "arr.geti",
-            Self::ArrSeti => "arr.seti",
+            Self::ArrGetI => "arr.get.i",
+            Self::ArrSetI => "arr.set.i",
             Self::ArrTag => "arr.tag",
-            Self::ArrNewt => "arr.newt",
+            Self::ArrNewT => "arr.new.t",
 
             Self::TyChk => "ty.chk",
             Self::TyCast => "ty.cast",
@@ -304,10 +304,10 @@ impl Opcode {
             Self::EffPush => "eff.push",
             Self::EffPop => "eff.pop",
             Self::EffNeed => "eff.need",
-            Self::EffResume => "eff.resume",
+            Self::EffCont => "eff.cont",
 
-            Self::ClsDict => "cls.dict",
-            Self::ClsCall => "cls.call",
+            Self::TyclDict => "tycl.dict",
+            Self::TyclCall => "tycl.call",
 
             Self::GcPin => "gc.pin",
             Self::GcUnpin => "gc.unpin",
@@ -329,17 +329,17 @@ impl Opcode {
 pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     // Data Movement
     Opcode::LdLoc,
-    Opcode::LdCst,
-    Opcode::LdGlb,
+    Opcode::LdConst,
+    Opcode::LdGlob,
     Opcode::LdUpv,
     Opcode::LdUnit,
-    Opcode::LdTrue,
-    Opcode::LdFalse,
-    Opcode::LdZero,
+    Opcode::LdTru,
+    Opcode::LdFls,
+    Opcode::LdNil,
     Opcode::LdOne,
     Opcode::LdSmi,
     Opcode::StLoc,
-    Opcode::StGlb,
+    Opcode::StGlob,
     Opcode::StUpv,
     Opcode::LdLocW,
     Opcode::StLocW,
@@ -353,7 +353,7 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::ISub,
     Opcode::IMul,
     Opcode::IDiv,
-    Opcode::IMod,
+    Opcode::IRem,
     Opcode::INeg,
     Opcode::FAdd,
     Opcode::FSub,
@@ -398,12 +398,12 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::ArrZip,
     Opcode::ArrFill,
     Opcode::ArrCopy,
-    Opcode::ArrConcat,
+    Opcode::ArrCaten,
     // Array Fast Paths
-    Opcode::ArrGeti,
-    Opcode::ArrSeti,
+    Opcode::ArrGetI,
+    Opcode::ArrSetI,
     Opcode::ArrTag,
-    Opcode::ArrNewt,
+    Opcode::ArrNewT,
     // Type Operations
     Opcode::TyChk,
     Opcode::TyCast,
@@ -412,10 +412,10 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::EffPush,
     Opcode::EffPop,
     Opcode::EffNeed,
-    Opcode::EffResume,
+    Opcode::EffCont,
     // Class Dispatch
-    Opcode::ClsDict,
-    Opcode::ClsCall,
+    Opcode::TyclDict,
+    Opcode::TyclCall,
     // GC / Foreign / Misc
     Opcode::GcPin,
     Opcode::GcUnpin,

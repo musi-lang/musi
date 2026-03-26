@@ -16,7 +16,8 @@ pub enum TyKind {
         from: TyId,
         to: TyId,
     },
-    Union(TyList),
+    Sum(TyList),
+    Product(TyList),
     Mut(TyId),
     Option(TyId),
     Pi {

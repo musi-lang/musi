@@ -2,11 +2,11 @@ use core::mem;
 
 use music_ast::common::{
     Attr, AttrArg, Constraint, EffectItem, FnDecl, LawDecl, MemberDecl, MemberName, ModifierSet,
-    Param, RecordDefField, Signature, TyRef, VariantDef,
+    OpFixity, Param, RecordDefField, Signature, TyRef, VariantDef,
 };
 use music_ast::expr::{
-    AccessMode, BinOp, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind, IndexKind,
-    InstanceBody, InstanceDef, LetBinding, MatchArm, PiecewiseArm, PostfixOp, PwGuard, QuoteKind,
+    AccessMode, BinOp, CaseArm, CompClause, DataBody, ExprKind, FStrPart, FieldTarget, ImportKind,
+    IndexKind, InstanceBody, InstanceDef, LetBinding, PiecewiseArm, PostfixOp, PwGuard, QuoteKind,
     RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
@@ -14,7 +14,7 @@ use music_ast::{AttrList, ExprId, ExprList, PatId};
 use music_found::{Ident, Literal, Span};
 use music_lex::TokenKind;
 
-use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
+use crate::errors::{describe_token, ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
 
 // Prefix binding power for unary operators.
@@ -123,14 +123,13 @@ impl Parser<'_> {
             TokenKind::LBracket => self.parse_array(),
             TokenKind::DotLBrace => self.parse_rec_lit(),
             TokenKind::Dot => self.parse_dot_pfx(),
-            TokenKind::KwMatch => self.parse_match(),
+            TokenKind::KwCase => self.parse_case(),
             TokenKind::KwLet => self.parse_let(ModifierSet::default(), Vec::new()),
             TokenKind::KwReturn => self.parse_return(),
             TokenKind::KwResume => self.parse_resume(),
             TokenKind::KwImport => self.parse_import(),
             TokenKind::KwForeign => self.parse_foreign(ModifierSet::default()),
-            TokenKind::KwChoice => self.parse_choice_def(),
-            TokenKind::KwRecord => self.parse_record_def(),
+            TokenKind::KwData => self.parse_data_def(),
             TokenKind::KwEffect => self.parse_effect_def(),
             TokenKind::KwClass => self.parse_class_def(),
             TokenKind::KwInstance => self.parse_instance_def(false, Vec::new()),
@@ -932,27 +931,28 @@ impl Parser<'_> {
         Ok(args)
     }
 
-    // ── Match ─────────────────────────────────────────────────────
+    // ── Case ──────────────────────────────────────────────────────
 
-    fn parse_match(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwMatch, "'match'")?;
+    fn parse_case(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwCase, "'case'")?;
         let scrutinee = self.parse_expr_no_call(0)?;
+        let _ = self.expect(&TokenKind::KwOf, "'of'")?;
         let open_span = self.expect(&TokenKind::LParen, "'('")?;
         let _ = self.eat(&TokenKind::Pipe); // optional leading |
-        let mut arms = vec![self.parse_match_arm()?];
+        let mut arms = vec![self.parse_case_arm()?];
         while self.eat(&TokenKind::Pipe) {
             if self.at(&TokenKind::RParen) {
                 break;
             }
-            arms.push(self.parse_match_arm()?);
+            arms.push(self.parse_case_arm()?);
         }
         let end =
-            self.expect_closing(&TokenKind::RParen, "'('", open_span, "in match expression")?;
+            self.expect_closing(&TokenKind::RParen, "'('", open_span, "in case expression")?;
         let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Match(scrutinee, arms), span))
+        Ok(self.alloc_expr(ExprKind::Case(scrutinee, arms), span))
     }
 
-    fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {
+    fn parse_case_arm(&mut self) -> ParseResult<CaseArm> {
         let attrs = self.parse_attrs()?;
         let pat = self.parse_pat()?;
         let guard = if self.eat(&TokenKind::KwIf) {
@@ -962,7 +962,7 @@ impl Parser<'_> {
         };
         let _ = self.expect(&TokenKind::EqGt, "'=>'")?;
         let body = self.parse_expr(0)?;
-        Ok(MatchArm {
+        Ok(CaseArm {
             attrs,
             pat,
             guard,
@@ -1132,54 +1132,138 @@ impl Parser<'_> {
 
     // ── Type definitions ──────────────────────────────────────────
 
-    fn parse_choice_def(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwChoice, "'choice'")?;
+    fn parse_data_def(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwData, "'data'")?;
         let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
-        let mut variants = Vec::new();
-        if !self.at(&TokenKind::RBrace) {
-            variants.push(self.parse_variant_def()?);
-            while self.eat(&TokenKind::Pipe) {
-                if self.at(&TokenKind::RBrace) {
-                    break;
+
+        if self.at(&TokenKind::RBrace) {
+            let end =
+                self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
+            let span = start.to(end);
+            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Product(Vec::new())), span));
+        }
+
+        if self.at(&TokenKind::Pipe) {
+            let _ = self.advance();
+            let variants = if self.at(&TokenKind::RBrace) {
+                Vec::new()
+            } else {
+                self.parse_variant_list()?
+            };
+            let end =
+                self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
+            let span = start.to(end);
+            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Sum(variants)), span));
+        }
+
+        if self.at(&TokenKind::Semi) {
+            let _ = self.advance();
+            let mut fields = Vec::new();
+            if !self.at(&TokenKind::RBrace) {
+                fields.push(self.parse_rec_def_field()?);
+                while self.eat(&TokenKind::Semi) {
+                    if self.at(&TokenKind::RBrace) {
+                        break;
+                    }
+                    fields.push(self.parse_rec_def_field()?);
                 }
-                variants.push(self.parse_variant_def()?);
+            }
+            let end =
+                self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
+            let span = start.to(end);
+            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Product(fields)), span));
+        }
+
+        let body = self.parse_data_body()?;
+        let end =
+            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
+        let span = start.to(end);
+        Ok(self.alloc_expr(ExprKind::DataDef(body), span))
+    }
+
+    fn parse_data_body(&mut self) -> ParseResult<DataBody> {
+        let attrs = self.parse_attrs()?;
+        let name = self.expect_ident()?;
+
+        if self.eat(&TokenKind::Colon) {
+            let ty = self.parse_ty()?;
+            let default = self.parse_opt_default()?;
+
+            match self.peek_kind() {
+                TokenKind::Pipe => {
+                    let first = VariantDef {
+                        attrs,
+                        name,
+                        payload: Some(ty),
+                        default,
+                    };
+                    let mut variants = vec![first];
+                    variants.extend(self.parse_variant_list()?);
+                    Ok(DataBody::Sum(variants))
+                }
+                TokenKind::Semi | TokenKind::RBrace => {
+                    let first = RecordDefField { name, ty, default };
+                    let mut fields = vec![first];
+                    while self.eat(&TokenKind::Semi) {
+                        if self.at(&TokenKind::RBrace) {
+                            break;
+                        }
+                        fields.push(self.parse_rec_def_field()?);
+                    }
+                    Ok(DataBody::Product(fields))
+                }
+                _ => {
+                    Err(self.err_expected_token_in("'|' or ';' or '}'", Some("in data definition")))
+                }
+            }
+        } else {
+            let default = self.parse_opt_default()?;
+            let first = VariantDef {
+                attrs,
+                name,
+                payload: None,
+                default,
+            };
+            match self.peek_kind() {
+                TokenKind::Pipe => {
+                    let mut variants = vec![first];
+                    variants.extend(self.parse_variant_list()?);
+                    Ok(DataBody::Sum(variants))
+                }
+                TokenKind::RBrace => Ok(DataBody::Sum(vec![first])),
+                _ => {
+                    Err(self.err_expected_token_in("':', '|', or '}'", Some("in data definition")))
+                }
             }
         }
-        let end =
-            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in choice definition")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::ChoiceDef(variants), span))
+    }
+
+    fn parse_variant_list(&mut self) -> ParseResult<Vec<VariantDef>> {
+        let mut variants = Vec::new();
+        while self.eat(&TokenKind::Pipe) {
+            if self.at(&TokenKind::RBrace) {
+                break;
+            }
+            variants.push(self.parse_variant_def()?);
+        }
+        Ok(variants)
     }
 
     fn parse_variant_def(&mut self) -> ParseResult<VariantDef> {
         let attrs = self.parse_attrs()?;
         let name = self.expect_ident()?;
         let payload = if self.eat(&TokenKind::Colon) {
-            Some(self.parse_ty_no_union()?)
+            Some(self.parse_ty()?)
         } else {
             None
         };
+        let default = self.parse_opt_default()?;
         Ok(VariantDef {
             attrs,
             name,
             payload,
+            default,
         })
-    }
-
-    fn parse_record_def(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwRecord, "'record'")?;
-        let open_span = self.expect(&TokenKind::LBrace, "'{'")?;
-        let mut fields = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            fields.push(self.parse_rec_def_field()?);
-            if !self.eat(&TokenKind::Semi) {
-                break;
-            }
-        }
-        let end =
-            self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in record definition")?;
-        let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::RecordDef(fields), span))
     }
 
     fn parse_rec_def_field(&mut self) -> ParseResult<RecordDefField> {
@@ -1253,18 +1337,70 @@ impl Parser<'_> {
     fn parse_member_name(&mut self) -> ParseResult<MemberName> {
         if self.at(&TokenKind::LParen) {
             let _ = self.advance();
-            let ident = self.parse_op_ident();
+            if self.eat_wildcard() {
+                // (_ op _) — infix
+                let ident = self.parse_op_ident()?;
+                let _ = self.expect_wildcard("'_' after operator in (_ op _)")?;
+                let _ = self.expect(&TokenKind::RParen, "')'")?;
+                return Ok(MemberName::Op(ident, OpFixity::Infix));
+            }
+            // (op _) — prefix
+            let ident = self.parse_op_ident()?;
+            let _ = self.expect_wildcard("'_' after operator in (op _)")?;
             let _ = self.expect(&TokenKind::RParen, "')'")?;
-            return Ok(MemberName::Op(ident));
+            return Ok(MemberName::Op(ident, OpFixity::Prefix));
         }
         let ident = self.expect_ident()?;
         Ok(MemberName::Ident(ident))
     }
 
-    fn parse_op_ident(&mut self) -> Ident {
+    fn expect_wildcard(&mut self, expected: &'static str) -> ParseResult<Span> {
+        if self.eat_wildcard() {
+            Ok(self.prev_span())
+        } else {
+            Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected,
+                    found: describe_token(&self.peek().kind),
+                },
+                span: self.span(),
+                context: None,
+            })
+        }
+    }
+
+    fn is_op_token(&self) -> bool {
+        matches!(
+            self.peek_kind(),
+            TokenKind::Plus
+                | TokenKind::Minus
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Percent
+                | TokenKind::Eq
+                | TokenKind::SlashEq
+                | TokenKind::Lt
+                | TokenKind::Gt
+                | TokenKind::LtEq
+                | TokenKind::GtEq
+                | TokenKind::ColonColon
+        )
+    }
+
+    fn parse_op_ident(&mut self) -> ParseResult<Ident> {
+        if !self.is_op_token() {
+            return Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "operator symbol",
+                    found: describe_token(&self.peek().kind),
+                },
+                span: self.span(),
+                context: None,
+            });
+        }
         let span = self.span();
         let _ = self.advance();
-        self.make_ident_from_span(span)
+        Ok(self.make_ident_from_span(span))
     }
 
     fn parse_law_decl(&mut self) -> ParseResult<LawDecl> {

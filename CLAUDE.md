@@ -23,34 +23,34 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 | `fn f()`            | `let f := () => ...`                 | No fn keyword                                         |
 | `null`/`nil`        | `.None`                              | Variant, dot-prefixed                                 |
 | `true`/`false`      | `.True`/`.False`                     | Variants, dot-prefixed, capitalized                   |
-| `enum`              | `choice { A \| B : T }`              | `\|` separates variants, `:` for payload              |
-| `struct`            | `record { x : T; y : U }`            | Fields separated by `;`                               |
+| `enum`              | `data { A \| B : T }`                | `\|` separates variants, `:` for payload              |
+| `struct`            | `data { x : T; y : U }`              | Fields separated by `;`                               |
 | `x.field` (obj lit) | `.{ field := value }`                | Record literals use `.{`                              |
-| `=>` (match arm)    | `=>`                                 | Same, but match uses `\|` separator and `( )` wrapper |
+| `=>` (match arm)    | `=>`                                 | Same, but case uses `\|` separator and `( )` wrapper  |
 | `->` (fn type)      | `->` (pure) / `~>` (effectful)       | Two arrow types                                       |
 | `#[attr]`           | `@attr`                              | Rust-style attributes replaced by `@` prefix          |
 | `'T`                | `T` (declared in `[T]`)              | No tick prefix for type variables                     |
-| `enum { A, B }`     | `choice { A \| B }`                  | `\|` separates variants, not `+`                      |
-| `A + B` (type sum)  | `A \| B`                             | `+` is arithmetic only                                |
+| `enum { A, B }`     | `data { A \| B }`                    | `\|` separates variants                               |
+| `A \| B` (type sum) | `A + B`                              | `+` for sum types, `*` for product types              |
 
 ### Key Syntax Rules
 
 - **Comments**: `//`, `///` (doc), `/** */` (doc), `/* */`
 - **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
 - **Runes**: `'a'` (single character)
-- **Keywords** (29): `let`, `mut`, `return`, `match`, `if`, `in`, `and`, `or`, `xor`, `not`, `record`, `choice`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
-- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `case`, `while`, `for`, `loop`, `fatal`, `defer`, `try`
+- **Keywords** (28): `let`, `mut`, `return`, `case`, `if`, `in`, `and`, `or`, `xor`, `not`, `data`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
+- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `match`, `while`, `for`, `loop`, `fatal`, `defer`, `try`, `record`, `choice`
 - **Semicolons** separate statements in sequences; trailing `;` makes value `Unit`
 - **Variants** are dot-prefixed: `.Some(x)`, `.None`, `.Ok(v)`, `.Err(e)`
 - **Type params** use `[T]` brackets: `let id[T] := (x : T) : T => x`
 - **Attributes**: `@name` or `@name(args)` -- metadata annotations, runtime-inspectable
-- **Choice variants** use `|` separator and `:` for payload: `choice { Some : T | None }`
+- **Data variants** use `|` separator and `:` for payload: `data { Some : T | None }`
 - **Quote/splice**: `quote (expr)` captures syntax. `$name`, `$(expr)`, `$[exprs]` splice into quotes.
 - **Mut model**: `let`/`let mut` for binding mutability. `mut` on values for data writability.
-- **Anonymous sums**: `A | B` in type position. No `+` or `*` in types -- those are arithmetic only.
+- **Anonymous sums**: `A + B` in type position. **Products**: `A * B`. `|` is variant separator in `data`, not a type operator.
 - **Matrix syntax**: `[a, b; c, d]` -- semicolons separate rows
 - **Comprehensions**: `[x * 2 | x in xs]` -- `in` is a keyword
-- **Types as values**: Types bound via `let`. `let MyInt := Int;` is a type alias. `record`, `choice`, `effect`, `class` are anonymous expressions always bound via `let`.
+- **Types as values**: Types bound via `let`. `let MyInt := Int;` is a type alias. `data`, `effect`, `class` are anonymous expressions always bound via `let`.
 - **Opaque exports**: `export opaque let T := ...` -- hides internal representation
 - **Pipeline**: `x |> f` equals `f(x)`
 - **Cons**: `x :: xs`

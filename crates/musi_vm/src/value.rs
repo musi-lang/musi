@@ -46,6 +46,7 @@ impl Value {
 
     #[must_use]
     pub const fn from_ptr(idx: usize) -> Self {
+        debug_assert!(idx < (1usize << 48), "from_ptr: index exceeds 48-bit range");
         Self::tagged(NAN_BOX_PTR as u64, idx as u64)
     }
 

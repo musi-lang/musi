@@ -1,6 +1,7 @@
 use music_ast::expr::BinOp;
 use music_builtins::types::BuiltinType;
 use music_found::Interner;
+use music_il::opcode::Opcode;
 
 use crate::dispatch::resolve_binop;
 use crate::env::{DispatchInfo, TypeEnv};
@@ -20,7 +21,9 @@ fn int_add_resolves_to_static() {
     assert_eq!(res.result_ty, int);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "i.add" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::IAdd
+        })
     ));
     assert!(res.needs_class.is_none());
 }
@@ -35,7 +38,7 @@ fn int_eq_resolves_to_static_bool() {
     assert!(matches!(
         res.dispatch,
         Some(DispatchInfo::Static {
-            intrinsic: "cmp.eq"
+            opcode: Opcode::CmpEq
         })
     ));
 }
@@ -48,7 +51,9 @@ fn bool_and_resolves_to_static() {
     assert_eq!(res.result_ty, bool_ty);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "and" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::And
+        })
     ));
 }
 
@@ -60,7 +65,9 @@ fn int_and_resolves_to_bitwise() {
     assert_eq!(res.result_ty, int);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "and" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::And
+        })
     ));
 }
 
@@ -93,7 +100,7 @@ fn cons_produces_list() {
     assert!(matches!(
         res.dispatch,
         Some(DispatchInfo::Static {
-            intrinsic: "list.cons"
+            opcode: Opcode::ArrCaten
         })
     ));
 }
@@ -114,7 +121,9 @@ fn float_mul_resolves_to_static() {
     assert_eq!(res.result_ty, float);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "f.mul" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::FMul
+        })
     ));
 }
 
@@ -126,7 +135,9 @@ fn float_add_resolves_to_static() {
     assert_eq!(res.result_ty, float);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "f.add" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::FAdd
+        })
     ));
 }
 
@@ -138,7 +149,9 @@ fn float_sub_resolves_to_static() {
     assert_eq!(res.result_ty, float);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "f.sub" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::FSub
+        })
     ));
 }
 
@@ -150,7 +163,9 @@ fn float_div_resolves_to_static() {
     assert_eq!(res.result_ty, float);
     assert!(matches!(
         res.dispatch,
-        Some(DispatchInfo::Static { intrinsic: "f.div" })
+        Some(DispatchInfo::Static {
+            opcode: Opcode::FDiv
+        })
     ));
 }
 
@@ -164,7 +179,7 @@ fn int_lt_resolves_to_bool() {
     assert!(matches!(
         res.dispatch,
         Some(DispatchInfo::Static {
-            intrinsic: "cmp.lt"
+            opcode: Opcode::CmpLt
         })
     ));
 }

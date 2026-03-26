@@ -1,4 +1,5 @@
 !.github/workflows
+.claude/
 
 .cursorignore
 .cursorindexingignore

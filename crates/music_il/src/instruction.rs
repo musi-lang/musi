@@ -26,6 +26,8 @@ pub enum Operand {
     Wide(u16, u8),
     /// Two-part operand: `arr.newt tag(u8) + length(u16)`.
     Tagged(u8, u16),
+    /// Two-part operand: `eff.push index(u16) + jump_offset(i16)`.
+    IndexedJump(u16, i16),
     /// Variable-length: `br.tbl` offset table.
     Table(Vec<i16>),
 }
@@ -82,6 +84,15 @@ impl Instruction {
         Self {
             opcode,
             operand: Operand::Tagged(tag, length),
+        }
+    }
+
+    /// An instruction with an indexed jump operand (u16 index + i16 jump offset).
+    #[must_use]
+    pub const fn with_indexed_jump(opcode: Opcode, idx: u16, jump: i16) -> Self {
+        Self {
+            opcode,
+            operand: Operand::IndexedJump(idx, jump),
         }
     }
 

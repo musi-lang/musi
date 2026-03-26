@@ -42,37 +42,12 @@ fn bits_class_has_two_methods() {
 }
 
 #[test]
-fn show_class_has_no_intrinsic_methods() {
+fn show_class_has_no_methods() {
     let show = PRELUDE_CLASSES
         .iter()
         .find(|c| c.name == "Show")
         .expect("Show class missing");
     assert_eq!(show.methods.len(), 0);
-}
-
-#[test]
-fn intrinsic_names_use_bytecode_mnemonics() {
-    let num = PRELUDE_CLASSES
-        .iter()
-        .find(|c| c.name == "Num")
-        .expect("Num class missing");
-    let add = num
-        .methods
-        .iter()
-        .find(|m| m.name == "add")
-        .expect("add method missing");
-    assert_eq!(add.intrinsic, "i.add");
-
-    let eq = PRELUDE_CLASSES
-        .iter()
-        .find(|c| c.name == "Eq")
-        .expect("Eq class missing");
-    let eq_method = eq
-        .methods
-        .iter()
-        .find(|m| m.name == "eq")
-        .expect("eq method missing");
-    assert_eq!(eq_method.intrinsic, "cmp.eq");
 }
 
 #[test]
@@ -88,12 +63,6 @@ fn all_methods_have_nonempty_fields() {
             assert!(
                 !method.op_name.is_empty(),
                 "op_name is empty for {}.{}",
-                class.name,
-                method.name
-            );
-            assert!(
-                !method.intrinsic.is_empty(),
-                "intrinsic is empty for {}.{}",
                 class.name,
                 method.name
             );

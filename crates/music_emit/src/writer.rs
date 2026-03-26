@@ -161,6 +161,10 @@ fn encode_instruction(out: &mut Vec<u8>, instr: &Instruction) {
             out.push(*tag);
             out.extend_from_slice(&length.to_le_bytes());
         }
+        Operand::IndexedJump(idx, jump) => {
+            out.extend_from_slice(&idx.to_le_bytes());
+            out.extend_from_slice(&jump.to_le_bytes());
+        }
         Operand::Table(offsets) => {
             let len = u16::try_from(offsets.len()).expect("branch table too large (>65535)");
             out.extend_from_slice(&len.to_le_bytes());

@@ -16,8 +16,8 @@ fn with_u8_stores_byte_operand() {
 
 #[test]
 fn with_u16_stores_wide_index() {
-    let instr = Instruction::with_u16(Opcode::LdCst, 1000);
-    assert_eq!(instr.opcode, Opcode::LdCst);
+    let instr = Instruction::with_u16(Opcode::LdConst, 1000);
+    assert_eq!(instr.opcode, Opcode::LdConst);
     assert_eq!(instr.operand, Operand::U16(1000));
 }
 
@@ -37,8 +37,8 @@ fn with_wide_stores_fn_ref_and_upval_count() {
 
 #[test]
 fn with_tagged_stores_tag_and_length() {
-    let instr = Instruction::with_tagged(Opcode::ArrNewt, 1, 2);
-    assert_eq!(instr.opcode, Opcode::ArrNewt);
+    let instr = Instruction::with_tagged(Opcode::ArrNewT, 1, 2);
+    assert_eq!(instr.opcode, Opcode::ArrNewT);
     assert_eq!(instr.operand, Operand::Tagged(1, 2));
 }
 
@@ -48,6 +48,13 @@ fn with_table_stores_offset_vec() {
     let instr = Instruction::with_table(Opcode::BrTbl, offsets.clone());
     assert_eq!(instr.opcode, Opcode::BrTbl);
     assert_eq!(instr.operand, Operand::Table(offsets));
+}
+
+#[test]
+fn with_indexed_jump_stores_both_values() {
+    let instr = Instruction::with_indexed_jump(Opcode::EffPush, 7, -42);
+    assert_eq!(instr.opcode, Opcode::EffPush);
+    assert_eq!(instr.operand, Operand::IndexedJump(7, -42));
 }
 
 #[test]

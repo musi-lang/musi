@@ -58,10 +58,17 @@ fn effect_arrow_type() {
 }
 
 #[test]
-fn union_type() {
-    let (ast, errors) = parse_ty_from("Int | String");
+fn sum_type() {
+    let (ast, errors) = parse_ty_from("Int + String");
     assert!(errors.is_empty());
-    assert!(matches!(extract_ty_kind(&ast), TyKind::Union(members) if members.len() == 2));
+    assert!(matches!(extract_ty_kind(&ast), TyKind::Sum(members) if members.len() == 2));
+}
+
+#[test]
+fn product_type() {
+    let (ast, errors) = parse_ty_from("Int * String");
+    assert!(errors.is_empty());
+    assert!(matches!(extract_ty_kind(&ast), TyKind::Product(members) if members.len() == 2));
 }
 
 #[test]

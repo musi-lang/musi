@@ -259,13 +259,13 @@ fn let_with_sig() {
     }
 }
 
-// ── Match ─────────────────────────────────────────────────────
+// ── Case ──────────────────────────────────────────────────────
 
 #[test]
-fn match_expr() {
-    let (ast, errors) = parse_expr("match x (.Some(v) => v | .None => 0)");
+fn case_expr() {
+    let (ast, errors) = parse_expr("case x of (.Some(v) => v | .None => 0)");
     assert!(errors.is_empty());
-    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
 }
 
 // ── Return / Resume / Need ────────────────────────────────────
@@ -325,17 +325,23 @@ fn variant_with_args() {
 // ── Type defs ─────────────────────────────────────────────────
 
 #[test]
-fn record_def() {
-    let (ast, errors) = parse_expr("record { x : Int; y : Int }");
+fn data_product() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { x : Int; y : Int }");
     assert!(errors.is_empty());
-    assert!(matches!(root_kind(&ast), ExprKind::RecordDef(fields) if fields.len() == 2));
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 2)
+    );
 }
 
 #[test]
-fn choice_def() {
-    let (ast, errors) = parse_expr("choice { Some : T | None }");
+fn data_sum() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { Some : T | None }");
     assert!(errors.is_empty());
-    assert!(matches!(root_kind(&ast), ExprKind::ChoiceDef(variants) if variants.len() == 2));
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2)
+    );
 }
 
 // ── Error recovery ────────────────────────────────────────────
@@ -498,10 +504,53 @@ fn type_cast_named() {
 // ── Trailing separators ───────────────────────────────────────
 
 #[test]
-fn choice_trailing_pipe() {
-    let (ast, errors) = parse_expr("choice { A | B | }");
+fn data_sum_trailing_pipe() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { A | B | }");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::ChoiceDef(variants) if variants.len() == 2));
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2)
+    );
+}
+
+#[test]
+fn data_product_leading_semi() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { ; x : Int ; y : Int }");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 2)
+    );
+}
+
+#[test]
+fn data_product_leading_trailing_semi() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { ; x : Int ; }");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 1)
+    );
+}
+
+#[test]
+fn data_variant_default() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { A : Int := 0 | B }");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2 && variants[0].default.is_some())
+    );
+}
+
+#[test]
+fn data_variant_default_no_payload() {
+    use music_ast::expr::DataBody;
+    let (ast, errors) = parse_expr("data { A := 1 | B }");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(
+        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2 && variants[0].default.is_some() && variants[0].payload.is_none())
+    );
 }
 
 #[test]
@@ -545,24 +594,24 @@ fn comprehension_trailing_comma() {
 // ── Leading pipe ──────────────────────────────────────────────
 
 #[test]
-fn match_leading_pipe() {
-    let (ast, errors) = parse_expr("match x (| .A => 1 | .B => 2)");
+fn case_leading_pipe() {
+    let (ast, errors) = parse_expr("case x of (| .A => 1 | .B => 2)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
 }
 
 #[test]
-fn match_trailing_pipe() {
-    let (ast, errors) = parse_expr("match x (.A => 1 | .B => 2 |)");
+fn case_trailing_pipe() {
+    let (ast, errors) = parse_expr("case x of (.A => 1 | .B => 2 |)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
 }
 
 #[test]
-fn match_leading_and_trailing_pipe() {
-    let (ast, errors) = parse_expr("match x (| .A => 1 | .B => 2 |)");
+fn case_leading_and_trailing_pipe() {
+    let (ast, errors) = parse_expr("case x of (| .A => 1 | .B => 2 |)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Match(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
 }
 
 #[test]

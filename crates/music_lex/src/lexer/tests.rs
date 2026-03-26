@@ -1,8 +1,8 @@
 use music_found::Span;
 
-use crate::Lexer;
 use crate::errors::LexErrorKind;
 use crate::token::{FStrPart, TokenKind, TriviaKind};
+use crate::Lexer;
 
 fn lex_kinds(src: &str) -> Vec<TokenKind> {
     let (tokens, errors) = Lexer::new(src).lex();
@@ -122,7 +122,7 @@ fn keywords() {
     assert_eq!(lex_first_kind("and"), TokenKind::KwAnd);
     assert_eq!(lex_first_kind("let"), TokenKind::KwLet);
     assert_eq!(lex_first_kind("return"), TokenKind::KwReturn);
-    assert_eq!(lex_first_kind("match"), TokenKind::KwMatch);
+    assert_eq!(lex_first_kind("case"), TokenKind::KwCase);
 }
 
 #[test]
@@ -303,11 +303,9 @@ fn escaped_ident() {
 fn unterminated_escaped_ident() {
     let (_, errors) = Lexer::new("`hello").lex();
     assert_eq!(errors.len(), 1);
-    assert!(
-        errors[0]
-            .to_string()
-            .contains("unterminated escaped identifier")
-    );
+    assert!(errors[0]
+        .to_string()
+        .contains("unterminated escaped identifier"));
 }
 
 #[test]
@@ -316,24 +314,20 @@ fn line_comment_trivia() {
     assert!(errors.is_empty());
     assert_eq!(tokens.len(), 2); // Int + Eof
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(
-        tokens[0]
-            .leading_trivia
-            .iter()
-            .any(|t| t.kind == TriviaKind::LineComment { doc: false })
-    );
+    assert!(tokens[0]
+        .leading_trivia
+        .iter()
+        .any(|t| t.kind == TriviaKind::LineComment { doc: false }));
 }
 
 #[test]
 fn doc_line_comment_trivia() {
     let (tokens, errors) = Lexer::new("/// doc\n42").lex();
     assert!(errors.is_empty());
-    assert!(
-        tokens[0]
-            .leading_trivia
-            .iter()
-            .any(|t| t.kind == TriviaKind::LineComment { doc: true })
-    );
+    assert!(tokens[0]
+        .leading_trivia
+        .iter()
+        .any(|t| t.kind == TriviaKind::LineComment { doc: true }));
 }
 
 #[test]
@@ -341,24 +335,20 @@ fn block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/* block */42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(
-        tokens[0]
-            .leading_trivia
-            .iter()
-            .any(|t| t.kind == TriviaKind::BlockComment { doc: false })
-    );
+    assert!(tokens[0]
+        .leading_trivia
+        .iter()
+        .any(|t| t.kind == TriviaKind::BlockComment { doc: false }));
 }
 
 #[test]
 fn doc_block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/** doc */42").lex();
     assert!(errors.is_empty());
-    assert!(
-        tokens[0]
-            .leading_trivia
-            .iter()
-            .any(|t| t.kind == TriviaKind::BlockComment { doc: true })
-    );
+    assert!(tokens[0]
+        .leading_trivia
+        .iter()
+        .any(|t| t.kind == TriviaKind::BlockComment { doc: true }));
 }
 
 #[test]
@@ -373,12 +363,10 @@ fn leading_whitespace_trivia() {
     let (tokens, errors) = Lexer::new("  42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(
-        tokens[0]
-            .leading_trivia
-            .iter()
-            .any(|t| t.kind == TriviaKind::Whitespace)
-    );
+    assert!(tokens[0]
+        .leading_trivia
+        .iter()
+        .any(|t| t.kind == TriviaKind::Whitespace));
 }
 
 #[test]
@@ -386,12 +374,10 @@ fn trailing_comment_trivia() {
     let (tokens, errors) = Lexer::new("42 // trailing").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(
-        tokens[0]
-            .trailing_trivia
-            .iter()
-            .any(|t| matches!(t.kind, TriviaKind::LineComment { doc: false }))
-    );
+    assert!(tokens[0]
+        .trailing_trivia
+        .iter()
+        .any(|t| matches!(t.kind, TriviaKind::LineComment { doc: false })));
 }
 
 #[test]

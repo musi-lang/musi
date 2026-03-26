@@ -57,7 +57,7 @@ fn display_expected_type() {
         span: Span::new(0, 1),
         context: None,
     };
-    assert_eq!(err.to_string(), "expected type, found '+'");
+    assert_eq!(err.to_string(), "expected type, found `'+'`");
 }
 
 #[test]

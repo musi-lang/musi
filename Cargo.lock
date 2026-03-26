@@ -429,6 +429,7 @@ dependencies = [
  "music_db",
  "music_found",
  "music_hir",
+ "music_il",
  "music_lex",
  "music_parse",
  "music_resolve",

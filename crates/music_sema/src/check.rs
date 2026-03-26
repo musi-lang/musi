@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use music_ast::common::Param;
 use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, TyRef};
 use music_ast::expr::{
-    BinOp, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef, LetBinding, MatchArm,
+    BinOp, CaseArm, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef, LetBinding,
     RecordField, SpliceKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
@@ -19,9 +19,10 @@ use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
 use crate::env::{DispatchInfo, InstanceEntry, TypeEnv};
 use crate::errors::{SemaError, SemaErrorKind};
-use crate::intrinsic::{IntrinsicMaps, collect_intrinsic_methods};
+use crate::intrinsic::{BuiltinMaps, collect_builtin_methods};
 use crate::types::{SemaTypeId, Ty};
 use crate::unify::unify;
+use music_il::opcode::Opcode;
 
 /// Wraps `Db` with type-checking state. Owns the `Db` during semantic
 /// analysis and returns it via `finish()`.
@@ -32,15 +33,15 @@ pub struct SemaDb {
     pub errors: Vec<SemaError>,
     depth: u32,
     in_quote: bool,
-    in_effectful: bool,
+    current_effect_id: Option<u16>,
     mutable_defs: HashSet<DefId>,
     used_defs: HashSet<DefId>,
     current_handler_ret: Option<SemaTypeId>,
     def_constraints: HashMap<DefId, Vec<(Symbol, Symbol)>>,
-    /// Class methods with `@_intrinsic(opcode := "...")`: symbol → mnemonic.
-    intrinsic_methods: HashMap<Symbol, &'static str>,
-    /// Choice variant names with `@_intrinsic(opcode := "...")`: symbol → mnemonic.
-    intrinsic_variants: HashMap<Symbol, &'static str>,
+    /// Class methods with `@builtin(opcode := ...)`: symbol → opcode.
+    intrinsic_methods: HashMap<Symbol, Opcode>,
+    /// Sum variant names with `@builtin(opcode := ...)`: symbol → opcode.
+    intrinsic_variants: HashMap<Symbol, Opcode>,
 }
 
 impl SemaDb {
@@ -56,7 +57,7 @@ impl SemaDb {
             errors: Vec::new(),
             depth: 0,
             in_quote: false,
-            in_effectful: false,
+            current_effect_id: None,
             mutable_defs: HashSet::new(),
             used_defs: HashSet::new(),
             current_handler_ret: None,
@@ -68,8 +69,8 @@ impl SemaDb {
 
     /// Type-checks all top-level expressions in the module.
     pub fn check_module(&mut self) {
-        let IntrinsicMaps { methods, variants } =
-            collect_intrinsic_methods(&self.db.ast, &self.db.interner);
+        let BuiltinMaps { methods, variants } =
+            collect_builtin_methods(&self.db.ast, &self.db.interner);
         self.intrinsic_methods = methods;
         self.intrinsic_variants = variants;
         let root = self.db.ast.root.clone();
@@ -142,7 +143,7 @@ impl SemaDb {
                 ret_ty,
                 body,
             } => self.synth_lambda(params, ret_ty, body),
-            ExprKind::Match(scrutinee, ref arms) => self.synth_match(scrutinee, arms, span),
+            ExprKind::Case(scrutinee, ref arms) => self.synth_case(scrutinee, arms, span),
             ExprKind::Seq(ref stmts) => self.synth_seq(stmts),
             ExprKind::TupleLit(ref elems) => self.synth_tuple(elems),
             ExprKind::ArrayLit(ref elems) => self.synth_array(elems, span),
@@ -159,14 +160,14 @@ impl SemaDb {
                 self.env.intern(Ty::Never)
             }
             ExprKind::Resume(val) => self.synth_resume(val, span),
-            ExprKind::Need(e) => self.synth_need(e, span),
+            ExprKind::Need(e) => self.synth_need(e, span, expr_id),
             ExprKind::Postfix { expr, .. } | ExprKind::TypeOp { expr, .. } => self.synth(expr),
             ExprKind::Index {
                 expr,
                 ref indices,
                 kind,
             } => self.synth_index(expr, indices, kind, span),
-            ExprKind::RecordDef(_) | ExprKind::ChoiceDef(_) | ExprKind::ClassDef { .. } => {
+            ExprKind::DataDef(_) | ExprKind::ClassDef { .. } => {
                 self.env.intern(Ty::Builtin(BuiltinType::Type))
             }
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
@@ -175,7 +176,7 @@ impl SemaDb {
                 ref effect,
                 ref handlers,
                 body,
-            } => self.synth_handle(effect, handlers, body, span),
+            } => self.synth_handle(effect, handlers, body, span, expr_id),
             ExprKind::FStrLit(_) => self.env.builtin(BuiltinType::String),
             ExprKind::RecordUpdate { base, .. } => self.synth(base),
             ExprKind::Comprehension { expr, .. } => {
@@ -263,11 +264,11 @@ impl SemaDb {
     fn synth_app(&mut self, callee: ExprId, args: &[ExprId], span: Span) -> SemaTypeId {
         let callee_kind = self.db.ast.exprs.get(callee).kind.clone();
         if let ExprKind::Var(ref ident) = callee_kind {
-            if let Some(&intrinsic) = self.intrinsic_methods.get(&ident.name) {
+            if let Some(&opcode) = self.intrinsic_methods.get(&ident.name) {
                 let _ = self
                     .env
                     .dispatch
-                    .insert(callee, DispatchInfo::Static { intrinsic });
+                    .insert(callee, DispatchInfo::Static { opcode });
             }
         }
 
@@ -390,10 +391,12 @@ impl SemaDb {
                         bt,
                         BuiltinType::Float | BuiltinType::Float32 | BuiltinType::Float64
                     ) {
-                        let _ = self
-                            .env
-                            .dispatch
-                            .insert(expr_id, DispatchInfo::Static { intrinsic: "f.neg" });
+                        let _ = self.env.dispatch.insert(
+                            expr_id,
+                            DispatchInfo::Static {
+                                opcode: Opcode::FNeg,
+                            },
+                        );
                     }
                 }
                 operand_ty
@@ -590,9 +593,13 @@ impl SemaDb {
                 let elem_tys: Vec<_> = elems.iter().map(|&t| self.lower_ty(t)).collect();
                 self.env.intern(Ty::Tuple(elem_tys))
             }
-            TyKind::Union(members) => {
+            TyKind::Sum(members) => {
                 let member_tys: Vec<_> = members.iter().map(|&t| self.lower_ty(t)).collect();
                 self.env.intern(Ty::Union(member_tys))
+            }
+            TyKind::Product(members) => {
+                let member_tys: Vec<_> = members.iter().map(|&t| self.lower_ty(t)).collect();
+                self.env.intern(Ty::Tuple(member_tys))
             }
             TyKind::Mut(inner) => {
                 let inner_ty = self.lower_ty(inner);
@@ -620,16 +627,18 @@ impl SemaDb {
         };
 
         self.depth = self.depth.saturating_add(1);
-        let prev_effectful = self.in_effectful;
+        let prev_effect = self.current_effect_id;
         if let Some(ty_id) = ret_ty {
-            if self.is_effect_arrow_context(ty_id) {
-                self.in_effectful = true;
+            if self.is_effect_arrow_context(ty_id) && self.current_effect_id.is_none() {
+                // Effectful function but no specific handle context — use placeholder 0.
+                // The exact effect ID is set when `need` appears inside a `handle` body.
+                self.current_effect_id = Some(0);
             }
         }
 
         let body_ty = self.synth(body);
 
-        self.in_effectful = prev_effectful;
+        self.current_effect_id = prev_effect;
         self.depth = self.depth.saturating_sub(1);
 
         // Determine if the lambda's declared return type uses a pure arrow
@@ -717,7 +726,7 @@ impl SemaDb {
             | ExprKind::Resume(Some(operand)) => {
                 self.walk_for_needs(*operand, out);
             }
-            ExprKind::Match(scrutinee, arms) => {
+            ExprKind::Case(scrutinee, arms) => {
                 self.walk_for_needs(*scrutinee, out);
                 for arm in arms {
                     self.walk_for_needs(arm.body, out);
@@ -738,7 +747,7 @@ impl SemaDb {
         }
     }
 
-    fn synth_match(&mut self, scrutinee: ExprId, arms: &[MatchArm], span: Span) -> SemaTypeId {
+    fn synth_case(&mut self, scrutinee: ExprId, arms: &[CaseArm], span: Span) -> SemaTypeId {
         let _ = self.synth(scrutinee);
 
         if arms.is_empty() {
@@ -924,7 +933,7 @@ impl SemaDb {
             let _ = self
                 .env
                 .dispatch
-                .insert(expr_id, DispatchInfo::Static { intrinsic: opcode });
+                .insert(expr_id, DispatchInfo::Static { opcode });
         }
         self.env.intern(Ty::Any)
     }
@@ -985,15 +994,20 @@ impl SemaDb {
         }
     }
 
-    fn synth_need(&mut self, e: ExprId, span: Span) -> SemaTypeId {
-        if !self.in_effectful {
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::PurityViolation {
-                    effect: self.db.interner.intern("_"),
-                },
-                span,
-                context: Some("need outside effectful function"),
-            });
+    fn synth_need(&mut self, e: ExprId, span: Span, expr_id: ExprId) -> SemaTypeId {
+        match self.current_effect_id {
+            Some(id) => {
+                let _prev = self.env.need_effects.insert(expr_id, id);
+            }
+            None => {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::PurityViolation {
+                        effect: self.db.interner.intern("_"),
+                    },
+                    span,
+                    context: Some("need outside effectful function"),
+                });
+            }
         }
         self.synth(e)
     }
@@ -1257,6 +1271,7 @@ impl SemaDb {
                                 .env
                                 .effect_ops
                                 .insert(bind_ident.name, op_names.clone());
+                            let _ = self.env.assign_effect_id(bind_ident.name);
                         }
                     }
                 }
@@ -1273,8 +1288,11 @@ impl SemaDb {
         handlers: &[FnDecl],
         body: ExprId,
         span: Span,
+        expr_id: ExprId,
     ) -> SemaTypeId {
         let effect_name = effect.name.name;
+        let effect_id = self.env.assign_effect_id(effect_name);
+        let _prev = self.env.handle_effects.insert(expr_id, effect_id);
 
         // Check handler completeness against registered effect ops
         if let Some(required_ops) = self.env.effect_ops.get(&effect_name).cloned() {
@@ -1316,7 +1334,11 @@ impl SemaDb {
         }
         self.current_handler_ret = prev_handler_ret;
 
-        self.synth(body)
+        let prev_effect = self.current_effect_id;
+        self.current_effect_id = Some(effect_id);
+        let body_ty = self.synth(body);
+        self.current_effect_id = prev_effect;
+        body_ty
     }
 
     /// #6: Checks Resume usage - emits `ResumeOnNever` if we're in a handler
@@ -1345,7 +1367,7 @@ impl SemaDb {
 /// Extracts the `Symbol` from a `MemberName`.
 const fn member_name_symbol(name: &MemberName) -> Symbol {
     match name {
-        MemberName::Ident(ident) | MemberName::Op(ident) => ident.name,
+        MemberName::Ident(ident) | MemberName::Op(ident, _) => ident.name,
     }
 }
 

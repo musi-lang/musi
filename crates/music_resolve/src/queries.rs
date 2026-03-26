@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use music_arena::Arena;
 use music_ast::common::{MemberDecl, ModifierSet, Param};
 use music_ast::expr::{
-    CompClause, ExprKind, FStrPart, ImportKind, InstanceBody, LetBinding, MatchArm, PwGuard,
-    QuoteKind, RecordField, SpliceKind,
+    CaseArm, CompClause, DataBody, ExprKind, FStrPart, ImportKind, InstanceBody, LetBinding,
+    PwGuard, QuoteKind, RecordField, SpliceKind,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
@@ -403,7 +403,7 @@ impl ResolveDb {
             } => {
                 self.resolve_lambda(expr_id, params, ret_ty, body, scope);
             }
-            ExprKind::Match(scrutinee, arms) => self.resolve_match(scrutinee, arms, scope),
+            ExprKind::Case(scrutinee, arms) => self.resolve_case(scrutinee, arms, scope),
             ExprKind::Comprehension { expr, clauses } => {
                 self.resolve_comprehension(expr, clauses, scope);
             }
@@ -505,7 +505,7 @@ impl ResolveDb {
                 }
                 SpliceKind::Ident(_) => {}
             },
-            ExprKind::RecordDef(fields) => {
+            ExprKind::DataDef(DataBody::Product(fields)) => {
                 for field in fields {
                     self.resolve_ty(field.ty, scope);
                     if let Some(default) = field.default {
@@ -513,10 +513,13 @@ impl ResolveDb {
                     }
                 }
             }
-            ExprKind::ChoiceDef(variants) => {
+            ExprKind::DataDef(DataBody::Sum(variants)) => {
                 for variant in variants {
                     if let Some(payload) = variant.payload {
                         self.resolve_ty(payload, scope);
+                    }
+                    if let Some(default) = variant.default {
+                        self.resolve_expr(default, scope);
                     }
                 }
             }
@@ -568,13 +571,10 @@ impl ResolveDb {
         self.current_lambda = saved_lambda;
     }
 
-    fn resolve_match(&mut self, scrutinee: ExprId, arms: Vec<MatchArm>, scope: ScopeId) {
+    fn resolve_case(&mut self, scrutinee: ExprId, arms: Vec<CaseArm>, scope: ScopeId) {
         self.resolve_expr(scrutinee, scope);
         for arm in arms {
-            let arm_scope = self
-                .resolution
-                .scopes
-                .push(ScopeKind::MatchArm, Some(scope));
+            let arm_scope = self.resolution.scopes.push(ScopeKind::CaseArm, Some(scope));
             self.resolve_pat(arm.pat, arm_scope);
             if let Some(guard) = arm.guard {
                 self.resolve_expr(guard, arm_scope);
@@ -691,7 +691,7 @@ impl ResolveDb {
                 self.resolve_ty(from, scope);
                 self.resolve_ty(to, scope);
             }
-            TyKind::Union(tys) | TyKind::Tuple(tys) => {
+            TyKind::Sum(tys) | TyKind::Product(tys) | TyKind::Tuple(tys) => {
                 for t in tys {
                     self.resolve_ty(t, scope);
                 }

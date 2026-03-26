@@ -1,10 +1,12 @@
 use music_found::{Span, Spanned};
 
-use crate::common::{FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef};
+use crate::common::{
+    FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef,
+};
 use crate::data::AstData;
 use crate::expr::{
-    CompClause, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef, LetBinding, MatchArm,
-    PiecewiseArm, PwGuard, QuoteKind, RecordField, SpliceKind,
+    CaseArm, CompClause, DataBody, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef,
+    LetBinding, PiecewiseArm, PwGuard, QuoteKind, RecordField, SpliceKind,
 };
 use crate::{ExprId, ParamList, TyId};
 
@@ -24,7 +26,6 @@ pub fn map_expr_children(
     match kind {
         ExprKind::Lit(_)
         | ExprKind::Var(_)
-        | ExprKind::ChoiceDef(_)
         | ExprKind::Import { .. }
         | ExprKind::ForeignImport(_)
         | ExprKind::Return(None)
@@ -181,7 +182,7 @@ fn map_structure(
             ref indices,
             kind: k,
         } => map_index(ast, expr_id, expr, indices, k, span, f),
-        ExprKind::Match(s, ref arms) => map_match(ast, expr_id, s, arms, span, f),
+        ExprKind::Case(s, ref arms) => map_case(ast, expr_id, s, arms, span, f),
         ExprKind::Comprehension { expr, ref clauses } => {
             map_comp(ast, expr_id, expr, clauses, span, f)
         }
@@ -197,7 +198,12 @@ fn map_structure(
             ref handlers,
             body,
         } => map_handle(ast, expr_id, effect.clone(), handlers, body, span, f),
-        ExprKind::RecordDef(ref fields) => map_rec_def(ast, expr_id, fields, span, f),
+        ExprKind::DataDef(DataBody::Sum(ref variants)) => {
+            map_sum_def(ast, expr_id, variants, span, f)
+        }
+        ExprKind::DataDef(DataBody::Product(ref fields)) => {
+            map_rec_def(ast, expr_id, fields, span, f)
+        }
         ExprKind::EffectDef(ref m) => {
             map_member_node(ast, expr_id, m, ExprKind::EffectDef, span, f)
         }
@@ -443,17 +449,17 @@ fn map_index(
     ))
 }
 
-fn map_match(
+fn map_case(
     ast: &mut AstData,
     expr_id: ExprId,
     scrutinee: ExprId,
-    arms: &[MatchArm],
+    arms: &[CaseArm],
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
     let new_scrutinee = f(ast, scrutinee);
     let mut changed = new_scrutinee != scrutinee;
-    let new_arms: Vec<MatchArm> = arms
+    let new_arms: Vec<CaseArm> = arms
         .iter()
         .map(|arm| {
             let new_body = f(ast, arm.body);
@@ -461,7 +467,7 @@ fn map_match(
             if new_body != arm.body || new_guard != arm.guard {
                 changed = true;
             }
-            MatchArm {
+            CaseArm {
                 attrs: arm.attrs.clone(),
                 pat: arm.pat,
                 guard: new_guard,
@@ -473,7 +479,7 @@ fn map_match(
         return expr_id;
     }
     ast.exprs
-        .alloc(Spanned::new(ExprKind::Match(new_scrutinee, new_arms), span))
+        .alloc(Spanned::new(ExprKind::Case(new_scrutinee, new_arms), span))
 }
 
 fn map_comp(
@@ -706,6 +712,43 @@ fn map_handle(
     ))
 }
 
+fn map_sum_def(
+    ast: &mut AstData,
+    expr_id: ExprId,
+    variants: &[VariantDef],
+    span: Span,
+    f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
+) -> ExprId {
+    let mut changed = false;
+    let new_variants: Vec<VariantDef> = variants
+        .iter()
+        .map(|v| {
+            v.default.map_or_else(
+                || v.clone(),
+                |default| {
+                    let new_default = f(ast, default);
+                    if new_default != default {
+                        changed = true;
+                    }
+                    VariantDef {
+                        attrs: v.attrs.clone(),
+                        name: v.name,
+                        payload: v.payload,
+                        default: Some(new_default),
+                    }
+                },
+            )
+        })
+        .collect();
+    if !changed {
+        return expr_id;
+    }
+    ast.exprs.alloc(Spanned::new(
+        ExprKind::DataDef(DataBody::Sum(new_variants)),
+        span,
+    ))
+}
+
 fn map_rec_def(
     ast: &mut AstData,
     expr_id: ExprId,
@@ -736,8 +779,10 @@ fn map_rec_def(
     if !changed {
         return expr_id;
     }
-    ast.exprs
-        .alloc(Spanned::new(ExprKind::RecordDef(new_fields), span))
+    ast.exprs.alloc(Spanned::new(
+        ExprKind::DataDef(DataBody::Product(new_fields)),
+        span,
+    ))
 }
 
 fn map_fn_decls(

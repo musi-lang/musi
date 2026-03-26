@@ -1,7 +1,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::effect::EffectHandler;
+use crate::errors::VmError;
 use crate::frame::CallFrame;
+use crate::types::HeapIdx;
 use crate::value::Value;
 
 pub struct Closure {
@@ -12,22 +15,24 @@ pub struct Closure {
 pub struct Continuation {
     pub frames: Vec<CallFrame>,
     pub resume_pc: usize,
+    pub captured_handlers: Vec<EffectHandler>,
 }
 
-pub struct Array {
-    pub tag: Option<Value>,
+pub struct VmArray {
+    pub tag: Value,
     pub elements: Vec<Value>,
 }
 
-enum HeapObject {
-    Closure(Rc<RefCell<Closure>>),
+pub enum HeapObject {
+    Closure(Closure),
     Continuation(Continuation),
-    Array(Rc<RefCell<Array>>),
+    Array(VmArray),
+    String(String),
 }
 
 #[derive(Default)]
 pub struct Heap {
-    objects: Vec<HeapObject>,
+    objects: Vec<Rc<RefCell<HeapObject>>>,
 }
 
 impl Heap {
@@ -38,75 +43,73 @@ impl Heap {
         }
     }
 
+    #[must_use]
+    pub fn get(&self, idx: usize) -> Option<&Rc<RefCell<HeapObject>>> {
+        self.objects.get(idx)
+    }
+
+    fn alloc(&mut self, obj: HeapObject) -> usize {
+        let idx = self.objects.len();
+        self.objects.push(Rc::new(RefCell::new(obj)));
+        idx
+    }
+
     pub fn alloc_closure(&mut self, method_idx: u16, upvalues: Vec<Value>) -> usize {
-        let idx = self.objects.len();
-        self.objects
-            .push(HeapObject::Closure(Rc::new(RefCell::new(Closure {
-                method_idx,
-                upvalues,
-            }))));
-        idx
+        self.alloc(HeapObject::Closure(Closure {
+            method_idx,
+            upvalues,
+        }))
     }
 
-    #[must_use]
-    pub fn get_closure(&self, idx: usize) -> Option<Rc<RefCell<Closure>>> {
-        match self.objects.get(idx)? {
-            HeapObject::Closure(c) => Some(Rc::clone(c)),
-            _ => None,
-        }
+    pub fn alloc_continuation(
+        &mut self,
+        frames: Vec<CallFrame>,
+        resume_pc: usize,
+        captured_handlers: Vec<EffectHandler>,
+    ) -> usize {
+        self.alloc(HeapObject::Continuation(Continuation {
+            frames,
+            resume_pc,
+            captured_handlers,
+        }))
     }
 
-    pub fn alloc_continuation(&mut self, frames: Vec<CallFrame>, resume_pc: usize) -> usize {
-        let idx = self.objects.len();
-        self.objects
-            .push(HeapObject::Continuation(Continuation { frames, resume_pc }));
-        idx
+    pub fn alloc_array(&mut self, tag: Value, elements: Vec<Value>) -> usize {
+        self.alloc(HeapObject::Array(VmArray { tag, elements }))
     }
 
-    #[must_use]
-    pub fn get_continuation(&self, idx: usize) -> Option<&Continuation> {
-        match self.objects.get(idx)? {
-            HeapObject::Continuation(c) => Some(c),
-            _ => None,
-        }
+    pub fn alloc_string(&mut self, data: String) -> usize {
+        self.alloc(HeapObject::String(data))
     }
 
-    pub fn alloc_array(&mut self, len: usize) -> usize {
-        let idx = self.objects.len();
-        self.objects
-            .push(HeapObject::Array(Rc::new(RefCell::new(Array {
-                tag: None,
-                elements: vec![Value::UNIT; len],
-            }))));
-        idx
+    /// Borrow a heap object immutably and apply `f`.
+    ///
+    /// # Errors
+    /// Returns [`VmError::InvalidHeapIndex`] if `idx` is out of bounds,
+    /// or whatever error `f` returns.
+    pub fn with_obj<T>(
+        &self,
+        idx: HeapIdx,
+        f: impl FnOnce(&HeapObject) -> Result<T, VmError>,
+    ) -> Result<T, VmError> {
+        let rc = self.get(idx).ok_or(VmError::InvalidHeapIndex(idx))?;
+        let borrow = rc.borrow();
+        f(&borrow)
     }
 
-    pub fn alloc_tagged_array(&mut self, tag: Value, len: usize) -> usize {
-        let idx = self.objects.len();
-        self.objects
-            .push(HeapObject::Array(Rc::new(RefCell::new(Array {
-                tag: Some(tag),
-                elements: vec![Value::UNIT; len],
-            }))));
-        idx
-    }
-
-    pub fn alloc_array_from(&mut self, tag: Option<Value>, elements: Vec<Value>) -> usize {
-        let idx = self.objects.len();
-        self.objects
-            .push(HeapObject::Array(Rc::new(RefCell::new(Array {
-                tag,
-                elements,
-            }))));
-        idx
-    }
-
-    #[must_use]
-    pub fn get_array(&self, idx: usize) -> Option<Rc<RefCell<Array>>> {
-        match self.objects.get(idx)? {
-            HeapObject::Array(a) => Some(Rc::clone(a)),
-            _ => None,
-        }
+    /// Borrow a heap object mutably and apply `f`.
+    ///
+    /// # Errors
+    /// Returns [`VmError::InvalidHeapIndex`] if `idx` is out of bounds,
+    /// or whatever error `f` returns.
+    pub fn with_obj_mut<T>(
+        &self,
+        idx: HeapIdx,
+        f: impl FnOnce(&mut HeapObject) -> Result<T, VmError>,
+    ) -> Result<T, VmError> {
+        let rc = self.get(idx).ok_or(VmError::InvalidHeapIndex(idx))?;
+        let mut borrow = rc.borrow_mut();
+        f(&mut borrow)
     }
 }
 

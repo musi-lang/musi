@@ -1,10 +1,12 @@
 #![allow(clippy::arithmetic_side_effects)]
 
+use std::collections::HashMap;
+
 use music_il::format::{self, HEADER_SIZE};
 use music_il::opcode::Opcode;
 
 use crate::errors::LoadError;
-use crate::module::{GlobalDef, Method, Module};
+use crate::module::{ConstantEntry, GlobalDef, Method, Module};
 use crate::value::Value;
 
 /// Decode a `.seam` binary slice into a [`Module`].
@@ -31,7 +33,8 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     let section_count = read_u32_le(data, 8).ok_or(LoadError::TruncatedHeader)?;
 
     let mut strings: Vec<String> = Vec::new();
-    let mut constants: Vec<Value> = Vec::new();
+    let mut offset_map: HashMap<u16, u16> = HashMap::new();
+    let mut constants: Vec<ConstantEntry> = Vec::new();
     let mut methods: Vec<Method> = Vec::new();
     let mut globals: Vec<GlobalDef> = Vec::new();
 
@@ -50,10 +53,12 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
 
         match tag {
             format::section::STRT => {
-                strings = decode_strt(section_data);
+                let (s, m) = decode_strt(section_data);
+                strings = s;
+                offset_map = m;
             }
             format::section::CNST => {
-                constants = decode_cnst(section_data)?;
+                constants = decode_cnst(section_data, &offset_map)?;
             }
             format::section::METH => {
                 methods = decode_meth(section_data)?;
@@ -77,14 +82,33 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     })
 }
 
-fn decode_strt(data: &[u8]) -> Vec<String> {
-    data.split(|&b| b == 0)
-        .filter(|s| !s.is_empty())
-        .map(|s| String::from_utf8_lossy(s).into_owned())
-        .collect()
+/// Decode the STRT section into strings and a byte-offset→index map.
+///
+/// STRT is a sequence of null-terminated UTF-8 strings. The map allows
+/// `decode_cnst` to resolve the cumulative byte offsets written by the
+/// emitter back to sequential string indices.
+fn decode_strt(data: &[u8]) -> (Vec<String>, HashMap<u16, u16>) {
+    let mut strings = Vec::new();
+    let mut offset_map = HashMap::new();
+    let mut pos = 0usize;
+    while pos < data.len() {
+        let idx = u16::try_from(strings.len()).unwrap_or(u16::MAX);
+        let offset = u16::try_from(pos).unwrap_or(u16::MAX);
+        let _ = offset_map.insert(offset, idx);
+        let end = data[pos..]
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(data.len() - pos);
+        strings.push(String::from_utf8_lossy(&data[pos..pos + end]).into_owned());
+        pos += end + 1;
+    }
+    (strings, offset_map)
 }
 
-fn decode_cnst(data: &[u8]) -> Result<Vec<Value>, LoadError> {
+fn decode_cnst(
+    data: &[u8],
+    offset_map: &HashMap<u16, u16>,
+) -> Result<Vec<ConstantEntry>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -98,20 +122,29 @@ fn decode_cnst(data: &[u8]) -> Result<Vec<Value>, LoadError> {
             0x01 => {
                 // Int: 8-byte LE i64
                 let bytes = read_bytes::<8>(data, pos).ok_or(LoadError::TruncatedSection)?;
-                out.push(Value::from_int(i64::from_le_bytes(bytes)));
+                out.push(ConstantEntry::Value(Value::from_int(i64::from_le_bytes(
+                    bytes,
+                ))));
                 pos = pos.wrapping_add(8);
             }
             0x02 => {
                 // Float: 8-byte LE u64 bits
                 let bytes = read_bytes::<8>(data, pos).ok_or(LoadError::TruncatedSection)?;
-                out.push(Value::from_float(f64::from_bits(u64::from_le_bytes(bytes))));
+                out.push(ConstantEntry::Value(Value::from_float(f64::from_bits(
+                    u64::from_le_bytes(bytes),
+                ))));
                 pos = pos.wrapping_add(8);
             }
             0x03 => {
-                // Str: 2-byte LE string-table index
+                // Str: 2-byte LE byte-offset into STRT → resolve to string index
                 let bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
-                let str_idx = u16::from_le_bytes(bytes);
-                out.push(Value::from_tag(str_idx));
+                let byte_offset = u16::from_le_bytes(bytes);
+                let str_idx = offset_map.get(&byte_offset).copied().ok_or(
+                    LoadError::InvalidStringOffset {
+                        offset: byte_offset,
+                    },
+                )?;
+                out.push(ConstantEntry::StringRef(str_idx));
                 pos = pos.wrapping_add(2);
             }
             other => return Err(LoadError::InvalidConstantTag { tag: other }),
@@ -210,16 +243,16 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::Call
         | Opcode::CallTail
         | Opcode::ClsUpv
-        | Opcode::EffResume
-        | Opcode::ClsCall
-        | Opcode::ArrGeti
-        | Opcode::ArrSeti => Ok(1),
+        | Opcode::EffCont
+        | Opcode::TyclCall
+        | Opcode::ArrGetI
+        | Opcode::ArrSetI => Ok(1),
 
         // U16 or I16 operand (2 bytes)
-        Opcode::LdCst
-        | Opcode::LdGlb
+        Opcode::LdConst
+        | Opcode::LdGlob
         | Opcode::LdUpv
-        | Opcode::StGlb
+        | Opcode::StGlob
         | Opcode::StUpv
         | Opcode::LdLocW
         | Opcode::StLocW
@@ -229,13 +262,15 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::BrJmp
         | Opcode::BrBack
         | Opcode::ArrNew
-        | Opcode::EffPush
         | Opcode::EffNeed
-        | Opcode::ClsDict
+        | Opcode::TyclDict
         | Opcode::FfiCall => Ok(2),
 
         // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
-        Opcode::ClsNew | Opcode::ArrNewt => Ok(3),
+        Opcode::ClsNew | Opcode::ArrNewT => Ok(3),
+
+        // IndexedJump (u16 + i16) = 4 bytes
+        Opcode::EffPush => Ok(4),
 
         // Variable: u16 count + count * i16
         Opcode::BrTbl => {

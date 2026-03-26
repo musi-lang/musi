@@ -51,9 +51,15 @@ fn effect_arrow() {
 }
 
 #[test]
-fn union() {
-    let t = TyKind::Union(vec![dummy_ty_id(), dummy_ty_id()]);
-    assert!(matches!(t, TyKind::Union(ref tys) if tys.len() == 2));
+fn sum() {
+    let t = TyKind::Sum(vec![dummy_ty_id(), dummy_ty_id()]);
+    assert!(matches!(t, TyKind::Sum(ref tys) if tys.len() == 2));
+}
+
+#[test]
+fn product() {
+    let t = TyKind::Product(vec![dummy_ty_id(), dummy_ty_id()]);
+    assert!(matches!(t, TyKind::Product(ref tys) if tys.len() == 2));
 }
 
 #[test]

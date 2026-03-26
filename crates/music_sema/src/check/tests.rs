@@ -320,7 +320,7 @@ fn unreachable_after_return() {
 
 #[test]
 fn unreachable_pattern_after_wildcard() {
-    let (_, errors) = check_source("match 1 (| _ => 0 | _ => 1)");
+    let (_, errors) = check_source("case 1 of (| _ => 0 | _ => 1)");
     assert!(
         errors
             .iter()
@@ -370,7 +370,7 @@ fn index_on_non_indexable() {
 
 #[test]
 fn non_exhaustive_match() {
-    let (_, errors) = check_source("match 42 (| 1 => .True)");
+    let (_, errors) = check_source("case 42 of (| 1 => .True)");
     assert!(
         errors
             .iter()
@@ -381,7 +381,7 @@ fn non_exhaustive_match() {
 
 #[test]
 fn exhaustive_match_with_wildcard() {
-    let (_, errors) = check_source("match 42 (| 1 => .True | _ => .False)");
+    let (_, errors) = check_source("case 42 of (| 1 => .True | _ => .False)");
     let has_non_exhaustive = errors
         .iter()
         .any(|e| matches!(e.kind, SemaErrorKind::NonExhaustiveMatch));
@@ -393,7 +393,7 @@ fn exhaustive_match_with_wildcard() {
 
 #[test]
 fn exhaustive_match_with_bind() {
-    let (_, errors) = check_source("match 42 (| 1 => .True | _x => .False)");
+    let (_, errors) = check_source("case 42 of (| 1 => .True | _x => .False)");
     let has_non_exhaustive = errors
         .iter()
         .any(|e| matches!(e.kind, SemaErrorKind::NonExhaustiveMatch));
@@ -421,9 +421,10 @@ fn duplicate_instance_detected() {
 #[test]
 fn intrinsic_method_dispatch_recorded() {
     use crate::env::DispatchInfo;
+    use music_il::opcode::Opcode;
     let (env, _errors) = check_source(
         "let Bits [T] := class { \
-             @_intrinsic(opcode := \"shl\") \
+             @builtin(opcode := 0x23) \
              let shl (a : T, n : Int) : T \
          }; \
          shl(1, 2)",
@@ -431,7 +432,7 @@ fn intrinsic_method_dispatch_recorded() {
     let has_static = env
         .dispatch
         .values()
-        .any(|d| matches!(d, DispatchInfo::Static { intrinsic } if *intrinsic == "shl"));
+        .any(|d| matches!(d, DispatchInfo::Static { opcode } if *opcode == Opcode::Shl));
     assert!(
         has_static,
         "expected Static dispatch for shl, got: {:?}",
@@ -442,9 +443,10 @@ fn intrinsic_method_dispatch_recorded() {
 #[test]
 fn intrinsic_method_positional_opcode() {
     use crate::env::DispatchInfo;
+    use music_il::opcode::Opcode;
     let (env, _errors) = check_source(
         "let Bits [T] := class { \
-             @_intrinsic(\"shr\") \
+             @builtin(0x24) \
              let shr (a : T, n : Int) : T \
          }; \
          shr(1, 1)",
@@ -452,7 +454,7 @@ fn intrinsic_method_positional_opcode() {
     let has_static = env
         .dispatch
         .values()
-        .any(|d| matches!(d, DispatchInfo::Static { intrinsic } if *intrinsic == "shr"));
+        .any(|d| matches!(d, DispatchInfo::Static { opcode } if *opcode == Opcode::Shr));
     assert!(
         has_static,
         "expected Static dispatch for shr, got: {:?}",

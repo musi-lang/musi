@@ -21,8 +21,7 @@ pub enum ExprKind {
     FStrLit(Vec<FStrPart>),
 
     // Def = defines a type
-    RecordDef(Vec<RecordDefField>),
-    ChoiceDef(Vec<VariantDef>),
+    DataDef(DataBody),
     EffectDef(Vec<MemberDecl>),
     ClassDef {
         constraints: Vec<Constraint>,
@@ -70,7 +69,7 @@ pub enum ExprKind {
     },
 
     // Control
-    Match(ExprId, Vec<MatchArm>),
+    Case(ExprId, Vec<CaseArm>),
     Return(Option<ExprId>),
     Resume(Option<ExprId>),
 
@@ -189,7 +188,13 @@ pub enum RecordField {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchArm {
+pub enum DataBody {
+    Product(Vec<RecordDefField>),
+    Sum(Vec<VariantDef>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaseArm {
     pub attrs: AttrList,
     pub pat: PatId,
     pub guard: Option<ExprId>,

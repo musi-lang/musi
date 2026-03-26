@@ -1,5 +1,5 @@
-use music_ast::TyId;
 use music_ast::ty::{Dim, TyKind};
+use music_ast::TyId;
 use music_found::Span;
 use music_lex::TokenKind;
 
@@ -11,15 +11,8 @@ impl Parser<'_> {
         self.parse_ty_arrow()
     }
 
-    /// Parse a type that does not consume `|` at the top level.
-    /// Used in variant payloads where `|` separates choice arms.
-    pub(crate) fn parse_ty_no_union(&mut self) -> ParseResult<TyId> {
-        let left = self.parse_ty_base()?;
-        self.parse_ty_arrow_rest(left)
-    }
-
     fn parse_ty_arrow(&mut self) -> ParseResult<TyId> {
-        let left = self.parse_ty_union()?;
+        let left = self.parse_ty_sum()?;
         self.parse_ty_arrow_rest(left)
     }
 
@@ -46,13 +39,32 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    fn parse_ty_union(&mut self) -> ParseResult<TyId> {
-        let first = self.parse_ty_base()?;
-        if !self.at(&TokenKind::Pipe) {
+    fn parse_ty_sum(&mut self) -> ParseResult<TyId> {
+        let first = self.parse_ty_product()?;
+        if !self.at(&TokenKind::Plus) {
             return Ok(first);
         }
         let mut members = vec![first];
-        while self.eat(&TokenKind::Pipe) {
+        while self.eat(&TokenKind::Plus) {
+            members.push(self.parse_ty_product()?);
+        }
+        let start = self.ast.types.get(first).span;
+        let end = self
+            .ast
+            .types
+            .get(*members.last().expect("at least two members"))
+            .span;
+        let span = start.to(end);
+        Ok(self.alloc_ty(TyKind::Sum(members), span))
+    }
+
+    fn parse_ty_product(&mut self) -> ParseResult<TyId> {
+        let first = self.parse_ty_base()?;
+        if !self.at(&TokenKind::Star) {
+            return Ok(first);
+        }
+        let mut members = vec![first];
+        while self.eat(&TokenKind::Star) {
             members.push(self.parse_ty_base()?);
         }
         let start = self.ast.types.get(first).span;
@@ -62,7 +74,7 @@ impl Parser<'_> {
             .get(*members.last().expect("at least two members"))
             .span;
         let span = start.to(end);
-        Ok(self.alloc_ty(TyKind::Union(members), span))
+        Ok(self.alloc_ty(TyKind::Product(members), span))
     }
 
     fn parse_ty_base(&mut self) -> ParseResult<TyId> {

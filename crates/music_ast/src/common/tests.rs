@@ -180,7 +180,7 @@ fn member_decl_law() {
 #[test]
 fn member_name_op() {
     let (_i, ident) = test_ident();
-    let mn = MemberName::Op(ident);
+    let mn = MemberName::Op(ident, super::OpFixity::Infix);
     let cloned = mn.clone();
     assert_eq!(mn, cloned);
 }
@@ -203,6 +203,7 @@ fn variant_def() {
         attrs: vec![],
         name: ident,
         payload: None,
+        default: None,
     };
     let cloned = v.clone();
     assert_eq!(v, cloned);

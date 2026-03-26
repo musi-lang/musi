@@ -90,10 +90,11 @@ impl CallFrame {
     /// # Errors
     /// Returns `StackUnderflow` if the stack has fewer than two elements.
     pub fn swap(&mut self) -> Result<(), VmError> {
-        let a = self.pop()?;
-        let b = self.pop()?;
-        self.push(a);
-        self.push(b);
+        let len = self.stack.len();
+        if len < 2 {
+            return Err(VmError::StackUnderflow);
+        }
+        self.stack.swap(len - 1, len - 2);
         Ok(())
     }
 

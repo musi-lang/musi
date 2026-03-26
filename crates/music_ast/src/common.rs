@@ -73,10 +73,18 @@ pub struct FnDecl {
     pub body: Option<ExprId>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OpFixity {
+    /// `(_ + _)` — both operand placeholders present.
+    Infix,
+    /// `(- _)` — right operand placeholder only.
+    Prefix,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemberName {
     Ident(Ident),
-    Op(Ident),
+    Op(Ident, OpFixity),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +106,7 @@ pub struct VariantDef {
     pub attrs: AttrList,
     pub name: Ident,
     pub payload: Option<TyId>,
+    pub default: Option<ExprId>,
 }
 
 #[cfg(test)]

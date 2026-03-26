@@ -5,8 +5,9 @@ fn keyword_from_str_all() {
     let keywords = [
         ("and", TokenKind::KwAnd),
         ("as", TokenKind::KwAs),
-        ("choice", TokenKind::KwChoice),
+        ("case", TokenKind::KwCase),
         ("class", TokenKind::KwClass),
+        ("data", TokenKind::KwData),
         ("effect", TokenKind::KwEffect),
         ("export", TokenKind::KwExport),
         ("foreign", TokenKind::KwForeign),
@@ -17,7 +18,6 @@ fn keyword_from_str_all() {
         ("instance", TokenKind::KwInstance),
         ("law", TokenKind::KwLaw),
         ("let", TokenKind::KwLet),
-        ("match", TokenKind::KwMatch),
         ("mut", TokenKind::KwMut),
         ("need", TokenKind::KwNeed),
         ("not", TokenKind::KwNot),
@@ -25,7 +25,6 @@ fn keyword_from_str_all() {
         ("opaque", TokenKind::KwOpaque),
         ("or", TokenKind::KwOr),
         ("quote", TokenKind::KwQuote),
-        ("record", TokenKind::KwRecord),
         ("resume", TokenKind::KwResume),
         ("return", TokenKind::KwReturn),
         ("via", TokenKind::KwVia),
@@ -33,7 +32,7 @@ fn keyword_from_str_all() {
         ("with", TokenKind::KwWith),
         ("xor", TokenKind::KwXor),
     ];
-    assert_eq!(keywords.len(), 29);
+    assert_eq!(keywords.len(), 28);
     for (s, expected) in &keywords {
         assert_eq!(
             keyword_from_str(s),
@@ -49,6 +48,9 @@ fn keyword_from_str_non_keywords() {
     assert_eq!(keyword_from_str("fn"), None);
     assert_eq!(keyword_from_str("else"), None);
     assert_eq!(keyword_from_str("while"), None);
+    assert_eq!(keyword_from_str("record"), None);
+    assert_eq!(keyword_from_str("choice"), None);
+    assert_eq!(keyword_from_str("match"), None);
 }
 
 #[test]
