@@ -9,7 +9,13 @@ publish.workspace = true
 
 [dependencies]
 intaglio = { workspace = true }
-thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "intern"
+harness = false
 
 [lints]
 workspace = true

@@ -42,6 +42,14 @@ impl Interner {
         }
     }
 
+    /// Create an interner pre-sized for approximately `n` strings.
+    #[must_use]
+    pub fn with_capacity(n: usize) -> Self {
+        Self {
+            table: intaglio::SymbolTable::with_capacity(n),
+        }
+    }
+
     /// Intern a string, returning its symbol. Equal strings always yield the
     /// same symbol.
     ///

@@ -66,3 +66,14 @@ fn resolve_invalid_symbol_panics() {
     let bad = Symbol(999);
     let _resolved = interner.resolve(bad);
 }
+
+#[test]
+fn with_capacity_behaves_like_new() {
+    let mut interner = Interner::with_capacity(64);
+    assert!(interner.is_empty());
+    assert_eq!(interner.len(), 0);
+
+    let sym = interner.intern("hello");
+    assert_eq!(interner.resolve(sym), "hello");
+    assert_eq!(interner.len(), 1);
+}

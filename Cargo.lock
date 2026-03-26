@@ -664,8 +664,8 @@ dependencies = [
 name = "music_shared"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "intaglio",
- "thiserror",
 ]
 
 [[package]]
