@@ -25,10 +25,10 @@ fn intern_and_get_round_trip() {
 fn intern_preserves_distinct_types() {
     let mut env = TypeEnv::new();
     let a = env.intern(Ty::Any);
-    let b = env.intern(Ty::Never);
+    let b = env.intern(Ty::Empty);
     assert_ne!(a, b);
     assert_eq!(*env.types.get(a), Ty::Any);
-    assert_eq!(*env.types.get(b), Ty::Never);
+    assert_eq!(*env.types.get(b), Ty::Empty);
 }
 
 #[test]

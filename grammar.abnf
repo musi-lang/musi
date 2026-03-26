@@ -308,7 +308,7 @@ ast-data       = "data" "{" data-body "}"
 
 data-body      = variant-list  ; sum type
                  / rec-def-fields  ; product type
-                 / "|"  ; empty sum (Never)
+                 / "|"  ; empty sum (Empty)
                  / ";"  ; empty product (Unit)
 
 variant-list   = ["|"] variant *("|" variant) ["|"]  ; leading/trailing | allowed

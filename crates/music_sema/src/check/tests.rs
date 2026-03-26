@@ -173,8 +173,8 @@ fn return_produces_never() {
     let has_never = env
         .type_map
         .values()
-        .any(|&ty| matches!(env.types.get(ty), Ty::Never));
-    assert!(has_never, "expected Never type for return");
+        .any(|&ty| matches!(env.types.get(ty), Ty::Empty));
+    assert!(has_never, "expected Empty type for return");
 }
 
 #[test]

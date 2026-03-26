@@ -37,8 +37,8 @@ pub fn unify(
         (Ty::Any, _) => Ok(b),
         (_, Ty::Any) | (Ty::Unit, Ty::Unit) => Ok(a),
 
-        // Never <: everything
-        (Ty::Never, _) => Ok(b),
+        // Empty <: everything
+        (Ty::Empty, _) => Ok(b),
         // everything <: Unknown
         (_, Ty::Unknown) => Ok(a),
 
@@ -192,7 +192,7 @@ fn occurs_check(env: &TypeEnv, var: TyVarId, ty: SemaTypeId) -> bool {
         | Ty::Param(_)
         | Ty::Any
         | Ty::Unknown
-        | Ty::Never
+        | Ty::Empty
         | Ty::Unit
         | Ty::Class(_)
         | Ty::Effect(_) => false,

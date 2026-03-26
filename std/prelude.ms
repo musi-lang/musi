@@ -12,7 +12,7 @@ export let Bool := data {
 export let Unit := data { ; };
 /// The uninhabited type, used for non-terminating functions.
 @builtin
-export let Never := data { | };
+export let Empty := data { | };
 
 // --- Platform-sized numeric types ---
 /// Platform-sized signed integer.

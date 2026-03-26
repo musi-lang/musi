@@ -157,7 +157,7 @@ impl SemaDb {
                 if let Some(v) = val {
                     let _ = self.synth(v);
                 }
-                self.env.intern(Ty::Never)
+                self.env.intern(Ty::Empty)
             }
             ExprKind::Resume(val) => self.synth_resume(val, span),
             ExprKind::Need(e) => self.synth_need(e, span, expr_id),
@@ -751,11 +751,11 @@ impl SemaDb {
         let _ = self.synth(scrutinee);
 
         if arms.is_empty() {
-            return self.env.intern(Ty::Never);
+            return self.env.intern(Ty::Empty);
         }
 
         let mut wildcard_seen = false;
-        let mut result_ty = self.env.intern(Ty::Never);
+        let mut result_ty = self.env.intern(Ty::Empty);
 
         for (i, arm) in arms.iter().enumerate() {
             if wildcard_seen {
@@ -873,7 +873,7 @@ impl SemaDb {
             }
             last_ty = self.synth(stmt);
             let resolved = self.env.resolve_var(last_ty);
-            if matches!(self.env.types.get(resolved), Ty::Never) {
+            if matches!(self.env.types.get(resolved), Ty::Empty) {
                 diverged = true;
             }
         }
@@ -1281,7 +1281,7 @@ impl SemaDb {
         self.env.intern(Ty::Builtin(BuiltinType::Type))
     }
 
-    /// #5 + #6: Validates handler completeness and checks for Resume on Never.
+    /// #5 + #6: Validates handler completeness and checks for Resume on Empty.
     fn synth_handle(
         &mut self,
         effect: &TyRef,
@@ -1312,14 +1312,14 @@ impl SemaDb {
             }
         }
 
-        // #6: Check Resume on Never - synth each handler body with
-        // current_handler_ret set if the op returns Never
+        // #6: Check Resume on Empty - synth each handler body with
+        // current_handler_ret set if the op returns Empty
         let prev_handler_ret = self.current_handler_ret;
         for handler in handlers {
             if let Some(ret_ty_id) = handler.ret_ty {
                 let lowered = self.lower_ty(ret_ty_id);
                 let resolved = self.env.resolve_var(lowered);
-                if matches!(self.env.types.get(resolved), Ty::Never) {
+                if matches!(self.env.types.get(resolved), Ty::Empty) {
                     self.current_handler_ret = Some(resolved);
                 } else {
                     self.current_handler_ret = None;
@@ -1342,7 +1342,7 @@ impl SemaDb {
     }
 
     /// #6: Checks Resume usage - emits `ResumeOnNever` if we're in a handler
-    /// for an operation that returns Never.
+    /// for an operation that returns Empty.
     fn synth_resume(&mut self, val: Option<ExprId>, span: Span) -> SemaTypeId {
         if let Some(v) = val {
             let _ = self.synth(v);
@@ -1350,7 +1350,7 @@ impl SemaDb {
 
         if let Some(ret_ty) = self.current_handler_ret {
             let resolved = self.env.resolve_var(ret_ty);
-            if matches!(self.env.types.get(resolved), Ty::Never) {
+            if matches!(self.env.types.get(resolved), Ty::Empty) {
                 let op_sym = self.db.interner.intern("_");
                 self.errors.push(SemaError {
                     kind: SemaErrorKind::ResumeOnNever { op: op_sym },
@@ -1360,7 +1360,7 @@ impl SemaDb {
             }
         }
 
-        self.env.intern(Ty::Never)
+        self.env.intern(Ty::Empty)
     }
 }
 

@@ -62,10 +62,10 @@ fn any_consistent_with_anything() {
 #[test]
 fn never_subtype_of_anything() {
     let mut env = seeded_env();
-    let never = env.intern(Ty::Never);
+    let empty = env.intern(Ty::Empty);
     let int = env.builtin(BuiltinType::Int);
 
-    let result = unify(&mut env, never, int, SPAN).unwrap();
+    let result = unify(&mut env, empty, int, SPAN).unwrap();
     assert_eq!(result, int);
 }
 

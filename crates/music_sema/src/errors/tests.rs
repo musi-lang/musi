@@ -30,7 +30,7 @@ fn display_type_mismatch() {
     use music_arena::Arena;
     let mut arena = Arena::<Ty>::new();
     let expected = arena.alloc(Ty::Unit);
-    let found = arena.alloc(Ty::Never);
+    let found = arena.alloc(Ty::Empty);
     let err = make_error(SemaErrorKind::TypeMismatch { expected, found });
     let msg = err.to_string();
     assert!(msg.contains("type mismatch"));
@@ -43,7 +43,7 @@ fn display_cannot_unify() {
     use music_arena::Arena;
     let mut arena = Arena::<Ty>::new();
     let left = arena.alloc(Ty::Unit);
-    let right = arena.alloc(Ty::Never);
+    let right = arena.alloc(Ty::Empty);
     let err = make_error(SemaErrorKind::CannotUnify { left, right });
     assert!(err.to_string().contains("cannot unify"));
 }
@@ -248,5 +248,5 @@ fn display_resume_on_never() {
     let err = make_error(SemaErrorKind::ResumeOnNever { op });
     let msg = err.to_string();
     assert!(msg.contains("resume"));
-    assert!(msg.contains("Never"));
+    assert!(msg.contains("Empty"));
 }

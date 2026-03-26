@@ -10,7 +10,7 @@ pub enum BuiltinType {
     Type,
     Any,
     Unknown,
-    Never,
+    Empty,
     // Erasable to NaN-box tags
     Unit,
     Bool,
@@ -43,7 +43,7 @@ impl BuiltinType {
         Self::Type,
         Self::Any,
         Self::Unknown,
-        Self::Never,
+        Self::Empty,
         Self::Unit,
         Self::Bool,
         Self::Int,
@@ -72,7 +72,7 @@ impl BuiltinType {
             Self::Type => "Type",
             Self::Any => "Any",
             Self::Unknown => "Unknown",
-            Self::Never => "Never",
+            Self::Empty => "Empty",
             Self::Unit => "Unit",
             Self::Bool => "Bool",
             Self::Int => "Int",
@@ -105,7 +105,7 @@ impl BuiltinType {
             Self::Type => 0xFFF0,
             Self::Any => 0xFFF1,
             Self::Unknown => 0xFFF2,
-            Self::Never => 0xFFF3,
+            Self::Empty => 0xFFF3,
             Self::Unit => 0xFFF4,
             Self::Bool => 0xFFF5,
             Self::Int => 0xFFF6,
@@ -152,11 +152,11 @@ impl BuiltinType {
             Self::Unit => Some(0b011),
             Self::Rune => Some(0b101),
             Self::Float | Self::Float32 | Self::Float64 => None,
-            // Heap-allocated: String, Array, List, Never, Type, Any, Unknown
+            // Heap-allocated: String, Array, List, Empty, Type, Any, Unknown
             Self::String
             | Self::Array
             | Self::List
-            | Self::Never
+            | Self::Empty
             | Self::Type
             | Self::Any
             | Self::Unknown => Some(0b000),

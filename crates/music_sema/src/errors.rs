@@ -98,7 +98,7 @@ pub enum SemaErrorKind {
     #[error("duplicate instance of {class} for {ty}")]
     DuplicateInstance { class: Symbol, ty: Symbol },
 
-    #[error("resume in handler for operation {op} which returns Never")]
+    #[error("resume in handler for operation {op} which returns Empty")]
     ResumeOnNever { op: Symbol },
 }
 

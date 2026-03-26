@@ -47,7 +47,7 @@ pub enum Ty {
     // -- Gradual --
     Any,
     Unknown,
-    Never,
+    Empty,
     Unit,
 
     // -- Class / effect references --

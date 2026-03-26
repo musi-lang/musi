@@ -12,7 +12,7 @@ fn name_returns_correct_string_for_intrinsics() {
     assert_eq!(BuiltinType::Type.name(), "Type");
     assert_eq!(BuiltinType::Any.name(), "Any");
     assert_eq!(BuiltinType::Unknown.name(), "Unknown");
-    assert_eq!(BuiltinType::Never.name(), "Never");
+    assert_eq!(BuiltinType::Empty.name(), "Empty");
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn intrinsic_type_ids_in_high_range() {
     assert_eq!(BuiltinType::Type.type_id(), 0xFFF0);
     assert_eq!(BuiltinType::Any.type_id(), 0xFFF1);
     assert_eq!(BuiltinType::Unknown.type_id(), 0xFFF2);
-    assert_eq!(BuiltinType::Never.type_id(), 0xFFF3);
+    assert_eq!(BuiltinType::Empty.type_id(), 0xFFF3);
     assert_eq!(BuiltinType::Unit.type_id(), 0xFFF4);
     assert_eq!(BuiltinType::Bool.type_id(), 0xFFF5);
     assert_eq!(BuiltinType::Int.type_id(), 0xFFF6);

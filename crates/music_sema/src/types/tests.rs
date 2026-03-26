@@ -23,8 +23,8 @@ fn builtin_ty_equality() {
 #[test]
 fn gradual_types_are_distinct() {
     assert_ne!(Ty::Any, Ty::Unknown);
-    assert_ne!(Ty::Any, Ty::Never);
-    assert_ne!(Ty::Unknown, Ty::Never);
+    assert_ne!(Ty::Any, Ty::Empty);
+    assert_ne!(Ty::Unknown, Ty::Empty);
     assert_ne!(Ty::Unit, Ty::Any);
 }
 
