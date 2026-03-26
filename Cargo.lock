@@ -576,6 +576,7 @@ dependencies = [
  "music_il",
  "music_resolve",
  "music_sema",
+ "tempfile",
 ]
 
 [[package]]

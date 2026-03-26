@@ -3,8 +3,8 @@ use std::mem;
 
 use music_ast::common::{AttrArg, FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
-    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef,
-    LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
+    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind, InstanceBody,
+    InstanceDef, LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
@@ -61,6 +61,9 @@ struct Emitter<'thir> {
     foreigns: Vec<ForeignDescriptor>,
     /// Maps binding names to their foreign descriptor index for `FfiCall` emission.
     foreign_globals: HashMap<Symbol, u16>,
+    /// Maps import path symbols to the global indices of that module's exports.
+    /// Populated by `emit_project` for multi-module compilation.
+    module_exports: HashMap<Symbol, Vec<u16>>,
     current_instructions: Vec<Instruction>,
     current_locals: SymbolList,
     current_upvalues: SymbolList,
@@ -77,6 +80,23 @@ struct Emitter<'thir> {
 /// feature that has no codegen path yet (e.g. `via` derived instances,
 /// dynamic dispatch, splice-by-name, or named field assignment).
 pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
+    emit_with_context(thir, HashMap::new())
+}
+
+/// Emit a module with import context from a multi-module project.
+///
+/// `module_exports` maps import path symbols (as interned in this module)
+/// to the global indices of the imported module's exports in the combined
+/// output. Used by `emit_project` to wire up qualified imports.
+///
+/// # Errors
+///
+/// Returns [`EmitError`] on emission failure.
+#[expect(clippy::implicit_hasher, reason = "always called with default HashMap")]
+pub fn emit_with_context(
+    thir: &HirBundle,
+    module_exports: HashMap<Symbol, Vec<u16>>,
+) -> EmitResult<SeamModule> {
     let mut emitter = Emitter {
         thir,
         pool: ConstantPool::new(),
@@ -84,6 +104,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         globals: Vec::new(),
         foreigns: Vec::new(),
         foreign_globals: HashMap::new(),
+        module_exports,
         current_instructions: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
@@ -263,11 +284,9 @@ impl Emitter<'_> {
             } => self.emit_comprehension(body, clauses)?,
             ExprKind::Quote(ref qk) => self.emit_quote(qk)?,
             ExprKind::Splice(ref sk) => self.emit_splice(sk)?,
-            ExprKind::DataDef(_)
-            | ExprKind::EffectDef(_)
-            | ExprKind::ClassDef { .. }
-            | ExprKind::Import { .. } => {
-                // Type/module definitions have no runtime representation
+            ExprKind::Import { path, ref kind } => self.emit_import(path, kind),
+            ExprKind::DataDef(_) | ExprKind::EffectDef(_) | ExprKind::ClassDef { .. } => {
+                // Type definitions have no runtime representation
             }
             ExprKind::Piecewise(_) => {
                 panic!("Piecewise should be lowered to Branch before emission")
@@ -1291,6 +1310,51 @@ impl Emitter<'_> {
             return_type: format::FfiType::Void,
         });
         self.push(Instruction::with_u16(Opcode::FfiCall, foreign_idx));
+    }
+
+    /// Emit code for an import expression.
+    ///
+    /// - `Wildcard`: no-op (resolver already inlined exports into scope)
+    /// - `Qualified(alias)`: construct a record of the module's exported globals
+    /// - `Selective(alias, names)`: same as qualified but only selected names
+    fn emit_import(&mut self, path: Symbol, kind: &ImportKind) {
+        match kind {
+            ImportKind::Wildcard => {
+                // Resolver already inlined all exports into scope. No runtime code.
+            }
+            ImportKind::Qualified(alias) => {
+                let global_indices = self.module_exports.get(&path).cloned().unwrap_or_default();
+                self.emit_import_record(alias.name, &global_indices);
+            }
+            ImportKind::Selective(alias, _names) => {
+                // For selective imports, we still build a record but only include
+                // the selected names. Since we don't have name-to-index mapping
+                // at the individual name level yet, use all exports if available.
+                // The resolver ensures only the selected names are in scope.
+                let global_indices = self.module_exports.get(&path).cloned().unwrap_or_default();
+                self.emit_import_record(alias.name, &global_indices);
+            }
+        }
+    }
+
+    /// Emit bytecode to construct a record (array) of imported globals and
+    /// store it in the alias's local slot.
+    fn emit_import_record(&mut self, alias: Symbol, global_indices: &[u16]) {
+        if global_indices.is_empty() {
+            // No exports resolved -- emit an empty record.
+            self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+        } else {
+            let field_count =
+                u16::try_from(global_indices.len()).expect("too many import exports (>65535)");
+            self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
+            for (i, &global_idx) in global_indices.iter().enumerate() {
+                self.push(Instruction::with_u16(Opcode::LdGlob, global_idx));
+                let field_idx = u8::try_from(i).expect("too many import fields (>255)");
+                self.push(Instruction::with_u8(Opcode::ArrSetI, field_idx));
+            }
+        }
+        let slot = self.local_slot(alias);
+        self.emit_st_loc(slot);
     }
 
     fn alloc_anon_slot(&mut self) -> u16 {

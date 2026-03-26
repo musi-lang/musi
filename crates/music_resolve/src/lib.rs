@@ -7,7 +7,7 @@ pub mod queries;
 pub mod scope;
 
 pub use def::{DefId, DefInfo, DefKind, Visibility};
-pub use driver::{ProjectError, ProjectResolution, resolve_project};
+pub use driver::{resolve_project, ModuleResult, ProjectError, ProjectResolution};
 pub use errors::{ResolveError, ResolveErrorKind};
 pub use graph::{CycleError, ModuleExports, ModuleGraph, ModuleId, ModuleState};
 pub use loader::ModuleLoader;

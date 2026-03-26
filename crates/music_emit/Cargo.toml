@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 music_found = { path = "../music_found" }
 music_ast = { path = "../music_ast" }
+music_db = { path = "../music_db" }
 music_il = { path = "../music_il" }
 music_hir = { path = "../music_hir" }
 music_sema = { path = "../music_sema" }
@@ -17,7 +18,7 @@ music_resolve = { path = "../music_resolve" }
 music_builtins = { path = "../music_builtins" }
 
 [dev-dependencies]
-music_db = { path = "../music_db" }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
