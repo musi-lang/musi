@@ -1,7 +1,17 @@
 #![allow(clippy::unwrap_used)]
 
-use super::{Heap, HeapObject};
+use super::{is_nursery_idx, Heap, HeapObject};
 use crate::value::Value;
+
+// ── Nursery allocation tests ─────────────────────────────────────────────────
+
+#[test]
+fn nursery_alloc_uses_nursery_flag() {
+    let mut heap = Heap::new();
+    let idx = heap.alloc_array(Value::UNIT, vec![Value::UNIT; 3]);
+    assert!(is_nursery_idx(idx), "first alloc should land in nursery");
+    assert!(heap.get(idx).is_some());
+}
 
 #[test]
 fn alloc_array_and_access() {
@@ -58,8 +68,8 @@ fn get_array_wrong_type_returns_closure() {
 fn alloc_and_get() {
     let mut heap = Heap::new();
     let idx = heap.alloc_closure(3, vec![Value::from_int(42)]);
-    assert_eq!(idx, 0);
-    let HeapObject::Closure(cls) = heap.get(0).unwrap() else {
+    assert!(is_nursery_idx(idx), "first alloc should be nursery");
+    let HeapObject::Closure(cls) = heap.get(idx).unwrap() else {
         panic!("expected Closure");
     };
     assert_eq!(cls.method_idx, 3);
@@ -73,16 +83,15 @@ fn multiple_closures() {
     let a = heap.alloc_closure(1, vec![]);
     let b = heap.alloc_closure(2, vec![Value::TRUE]);
     let c = heap.alloc_closure(3, vec![]);
-    assert_eq!(a, 0);
-    assert_eq!(b, 1);
-    assert_eq!(c, 2);
-    for (idx, expected_method) in [(0, 1), (1, 2), (2, 3)] {
+    assert!(is_nursery_idx(a));
+    assert!(is_nursery_idx(b));
+    assert!(is_nursery_idx(c));
+    for (idx, expected_method) in [(a, 1), (b, 2), (c, 3)] {
         let HeapObject::Closure(cls) = heap.get(idx).unwrap() else {
             panic!("expected Closure");
         };
         assert_eq!(cls.method_idx, expected_method);
     }
-    assert!(heap.get(3).is_none());
 }
 
 #[test]
@@ -169,15 +178,20 @@ fn slice_bounds_access() {
     assert_eq!(arr.elements[start + 1].as_int(), 30);
 }
 
-// ── GC tests ──────────────────────────────────────────────────────────────────
+// ── GC tests (use zero-capacity nursery for mature-only allocation) ──────────
+
+fn mature_heap() -> Heap {
+    Heap::new_with_nursery_capacity(0)
+}
 
 #[test]
 fn gc_mark_and_sweep() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let a = heap.alloc_string("keep".into());
     let b = heap.alloc_string("discard_1".into());
     let c = heap.alloc_string("discard_2".into());
 
+    assert!(!is_nursery_idx(a));
     heap.mark_object(a);
     heap.sweep();
 
@@ -188,7 +202,7 @@ fn gc_mark_and_sweep() {
 
 #[test]
 fn gc_pin_survives_sweep() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let idx = heap.alloc_string("pinned".into());
     heap.pin(idx);
 
@@ -210,7 +224,7 @@ fn gc_pin_survives_sweep() {
 
 #[test]
 fn gc_reuses_freed_slots() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let a = heap.alloc_string("first".into());
     let b = heap.alloc_string("second".into());
     let _c = heap.alloc_string("third".into());
@@ -232,7 +246,7 @@ fn gc_reuses_freed_slots() {
 
 #[test]
 fn gc_traces_closure_upvalues() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let inner = heap.alloc_string("inner".into());
     let cls = heap.alloc_closure(0, vec![Value::from_ptr(inner)]);
 
@@ -248,7 +262,7 @@ fn gc_traces_closure_upvalues() {
 
 #[test]
 fn gc_traces_array_elements() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let s = heap.alloc_string("elem".into());
     let arr = heap.alloc_array(Value::UNIT, vec![Value::from_ptr(s), Value::from_int(1)]);
 
@@ -261,7 +275,7 @@ fn gc_traces_array_elements() {
 
 #[test]
 fn gc_cycle_terminates() {
-    let mut heap = Heap::new();
+    let mut heap = mature_heap();
     let arr = heap.alloc_array(Value::UNIT, vec![Value::UNIT]);
     let HeapObject::Array(a) = heap.get_mut(arr).unwrap() else {
         panic!("expected Array");
@@ -272,4 +286,179 @@ fn gc_cycle_terminates() {
     heap.sweep();
 
     assert!(heap.get(arr).is_some(), "cyclic array should survive");
+}
+
+// ── Minor GC (nursery) tests ─────────────────────────────────────────────────
+
+#[test]
+fn minor_collect_promotes_reachable() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let idx = heap.alloc_string("keep".into());
+    assert!(is_nursery_idx(idx));
+
+    let roots = vec![Value::from_ptr(idx)];
+    heap.minor_collect(&roots);
+
+    // fix_value resolves the forwarding pointer before clearing
+    let fixed = heap.fix_value(Value::from_ptr(idx));
+    assert!(!is_nursery_idx(fixed.as_ptr_idx()));
+
+    heap.clear_nursery();
+
+    let HeapObject::String(s) = heap.get(fixed.as_ptr_idx()).unwrap() else {
+        panic!("expected String");
+    };
+    assert_eq!(s, "keep");
+}
+
+#[test]
+fn minor_collect_frees_unreachable() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let _idx = heap.alloc_string("garbage".into());
+
+    let roots: Vec<Value> = vec![];
+    heap.minor_collect(&roots);
+    heap.clear_nursery();
+
+    assert_eq!(
+        heap.live_count(),
+        0,
+        "unreachable nursery object should be freed"
+    );
+}
+
+#[test]
+fn minor_collect_fixes_forwarded_references() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let inner = heap.alloc_string("inner".into());
+    let arr = heap.alloc_array(Value::UNIT, vec![Value::from_ptr(inner)]);
+
+    let roots = vec![Value::from_ptr(arr)];
+    heap.minor_collect(&roots);
+
+    // fix_value while forwarding pointers still exist
+    let fixed_arr = heap.fix_value(Value::from_ptr(arr));
+    assert!(fixed_arr.is_ptr());
+    let fixed_idx = fixed_arr.as_ptr_idx();
+    assert!(
+        !is_nursery_idx(fixed_idx),
+        "promoted array should be in mature heap"
+    );
+
+    heap.clear_nursery();
+
+    // The promoted array's element should also point to mature
+    let HeapObject::Array(promoted_arr) = heap.get(fixed_idx).unwrap() else {
+        panic!("expected Array");
+    };
+    assert!(promoted_arr.elements[0].is_ptr());
+    assert!(
+        !is_nursery_idx(promoted_arr.elements[0].as_ptr_idx()),
+        "inner ref should be fixed to mature"
+    );
+}
+
+#[test]
+fn write_barrier_populates_remembered_set() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    // Allocate in nursery first, then promote to get a mature object
+    let mature_arr_nursery = heap.alloc_array(Value::UNIT, vec![Value::UNIT; 1]);
+    let roots = vec![Value::from_ptr(mature_arr_nursery)];
+    heap.minor_collect(&roots);
+    let mature_arr = heap.fix_value(Value::from_ptr(mature_arr_nursery));
+    let mature_idx = mature_arr.as_ptr_idx();
+    heap.clear_nursery();
+
+    // Store a nursery pointer into the mature array
+    let nursery_str = heap.alloc_string("young".into());
+    assert!(is_nursery_idx(nursery_str));
+
+    // Update the mature array to point at the nursery string
+    let HeapObject::Array(arr) = heap.get_mut(mature_idx).unwrap() else {
+        panic!("expected Array");
+    };
+    arr.elements[0] = Value::from_ptr(nursery_str);
+
+    // Write barrier: remember this mature object
+    heap.remember(mature_idx);
+
+    // Minor collect with no explicit roots -- nursery_str reachable via remembered set
+    heap.minor_collect(&[]);
+    heap.clear_nursery();
+
+    // The mature array element should now point to a mature index
+    let HeapObject::Array(arr) = heap.get(mature_idx).unwrap() else {
+        panic!("expected Array");
+    };
+    assert!(arr.elements[0].is_ptr());
+    assert!(
+        !is_nursery_idx(arr.elements[0].as_ptr_idx()),
+        "nursery ref should be promoted via remembered set"
+    );
+}
+
+#[test]
+fn nursery_overflow_falls_through_to_mature() {
+    let mut heap = Heap::new_with_nursery_capacity(2);
+    let a = heap.alloc_string("one".into());
+    let b = heap.alloc_string("two".into());
+    // Nursery is now full (capacity 2); next alloc goes to mature
+    let c = heap.alloc_string("three".into());
+    assert!(is_nursery_idx(a));
+    assert!(is_nursery_idx(b));
+    assert!(!is_nursery_idx(c), "overflow should go to mature heap");
+}
+
+#[test]
+fn pin_nursery_object_survives_minor_collect() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let idx = heap.alloc_string("pinned_young".into());
+    heap.pin(idx);
+
+    // No roots, but pinned objects should survive
+    heap.minor_collect(&[]);
+    let fixed = heap.fix_value(Value::from_ptr(idx));
+    heap.clear_nursery();
+
+    assert!(!is_nursery_idx(fixed.as_ptr_idx()));
+    let HeapObject::String(s) = heap.get(fixed.as_ptr_idx()).unwrap() else {
+        panic!("expected String");
+    };
+    assert_eq!(s, "pinned_young");
+}
+
+#[test]
+fn promote_all_nursery_before_major_gc() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let a = heap.alloc_string("a".into());
+    let b = heap.alloc_string("b".into());
+    assert!(is_nursery_idx(a));
+    assert!(is_nursery_idx(b));
+
+    heap.promote_all_nursery();
+
+    let fixed_a = heap.fix_value(Value::from_ptr(a));
+    let fixed_b = heap.fix_value(Value::from_ptr(b));
+    heap.clear_nursery();
+
+    assert!(!is_nursery_idx(fixed_a.as_ptr_idx()));
+    assert!(!is_nursery_idx(fixed_b.as_ptr_idx()));
+
+    let HeapObject::String(sa) = heap.get(fixed_a.as_ptr_idx()).unwrap() else {
+        panic!("expected String");
+    };
+    assert_eq!(sa, "a");
+
+    let HeapObject::String(sb) = heap.get(fixed_b.as_ptr_idx()).unwrap() else {
+        panic!("expected String");
+    };
+    assert_eq!(sb, "b");
+}
+
+#[test]
+fn live_count_includes_nursery() {
+    let mut heap = Heap::new_with_nursery_capacity(4);
+    let _a = heap.alloc_string("a".into());
+    let _b = heap.alloc_string("b".into());
+    assert_eq!(heap.live_count(), 2);
 }

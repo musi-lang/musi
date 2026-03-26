@@ -111,8 +111,16 @@ impl CallFrame {
         self.locals.iter().copied()
     }
 
+    pub fn locals_iter_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        self.locals.iter_mut()
+    }
+
     pub fn stack_iter(&self) -> impl Iterator<Item = Value> + '_ {
         self.stack.iter().copied()
+    }
+
+    pub fn stack_iter_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        self.stack.iter_mut()
     }
 
     /// # Errors

@@ -7,7 +7,7 @@ use crate::effect::EffectHandler;
 use crate::errors::{VmError, VmResult};
 use crate::ffi::{self, FfiRuntime};
 use crate::frame::CallFrame;
-use crate::heap::{Heap, HeapObject};
+use crate::heap::{is_nursery_idx, Heap, HeapObject};
 use crate::module::{ConstantEntry, Module, ENTRY_POINT_NAME};
 use crate::value::Value;
 
@@ -493,6 +493,7 @@ impl Vm {
                     }
                     _ => return Err(VmError::NoClosureContext),
                 }
+                self.write_barrier(closure_idx, v);
             }
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
@@ -643,6 +644,9 @@ impl Vm {
                 // Array stays on TOS -- peek without popping
                 let arr_ptr = self.peek_stack()?;
                 exec_arr_seti(&mut self.heap, arr_ptr, elem_idx, val)?;
+                if arr_ptr.is_ptr() {
+                    self.write_barrier(arr_ptr.as_ptr_idx(), val);
+                }
             }
             Opcode::ArrGet => {
                 let idx_val = self.pop_stack()?;
@@ -655,6 +659,9 @@ impl Vm {
                 let idx_val = self.pop_stack()?;
                 let arr_ptr = self.pop_stack()?;
                 exec_arr_set(&mut self.heap, arr_ptr, idx_val, val)?;
+                if arr_ptr.is_ptr() {
+                    self.write_barrier(arr_ptr.as_ptr_idx(), val);
+                }
             }
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
@@ -1021,12 +1028,26 @@ impl Vm {
     // ── GC ────────────────────────────────────────────────────────────────────
 
     fn maybe_collect(&mut self) {
+        if self.heap.nursery_full() {
+            self.minor_collect();
+        }
         if self.heap.should_collect() {
             self.collect_garbage();
         }
     }
 
+    fn minor_collect(&mut self) {
+        let roots = self.gather_roots();
+        self.heap.minor_collect(&roots);
+        self.fix_forwarded_roots();
+        self.heap.clear_nursery();
+    }
+
     fn collect_garbage(&mut self) {
+        self.heap.promote_all_nursery();
+        self.fix_forwarded_roots();
+        self.heap.clear_nursery();
+
         for &val in &self.globals {
             self.heap.mark_value(val);
         }
@@ -1046,6 +1067,54 @@ impl Vm {
         }
         self.heap.sweep();
         self.heap.reset_threshold();
+    }
+
+    fn gather_roots(&self) -> Vec<Value> {
+        let mut roots = Vec::new();
+        roots.extend_from_slice(&self.globals);
+        roots.extend_from_slice(&self.resolved_constants);
+        for frame in &self.frames {
+            roots.extend(frame.locals_iter());
+            roots.extend(frame.stack_iter());
+            if let Some(idx) = frame.closure {
+                roots.push(Value::from_ptr(idx));
+            }
+        }
+        roots
+    }
+
+    fn fix_forwarded_roots(&mut self) {
+        for val in &mut self.globals {
+            *val = self.heap.fix_value(*val);
+        }
+        for val in &mut self.resolved_constants {
+            *val = self.heap.fix_value(*val);
+        }
+        for frame in &mut self.frames {
+            for val in frame.locals_iter_mut() {
+                *val = self.heap.fix_value(*val);
+            }
+            for val in frame.stack_iter_mut() {
+                *val = self.heap.fix_value(*val);
+            }
+            if let Some(idx) = frame.closure {
+                if is_nursery_idx(idx) {
+                    let fixed = self.heap.fix_value(Value::from_ptr(idx));
+                    if fixed.is_ptr() {
+                        frame.closure = Some(fixed.as_ptr_idx());
+                    }
+                }
+            }
+        }
+    }
+
+    fn write_barrier(&mut self, target_idx: usize, stored_value: Value) {
+        if stored_value.is_ptr()
+            && is_nursery_idx(stored_value.as_ptr_idx())
+            && !is_nursery_idx(target_idx)
+        {
+            self.heap.remember(target_idx);
+        }
     }
 }
 
@@ -1076,6 +1145,7 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
                 HeapObject::Continuation(_) => "<continuation>".into(),
                 HeapObject::CPtr(_) => "<cptr>".into(),
                 HeapObject::Cell(v) => format!("<cell:{v:?}>"),
+                HeapObject::Forwarded(idx) => format!("<forwarded:{idx}>"),
             };
         }
     }
