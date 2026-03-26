@@ -73,6 +73,12 @@ pub enum VmError {
     InvalidDictionary,
     #[error("unimplemented: {0}")]
     Unimplemented(&'static str),
+    #[error("FFI library not found: {0}")]
+    FfiLibraryNotFound(String),
+    #[error("FFI symbol not found: {0}")]
+    FfiSymbolNotFound(String),
+    #[error("FFI foreign descriptor index {0} out of bounds")]
+    FfiForeignIndexOutOfBounds(usize),
 }
 
 pub type VmResult<T = ()> = Result<T, VmError>;

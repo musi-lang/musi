@@ -1,5 +1,6 @@
 pub(crate) mod effect;
 pub mod errors;
+pub mod ffi;
 pub(crate) mod frame;
 pub mod heap;
 pub mod loader;

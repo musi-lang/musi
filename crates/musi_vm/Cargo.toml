@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 music_il = { path = "../music_il" }
 thiserror = { workspace = true }
+libloading = { workspace = true }
+libffi = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

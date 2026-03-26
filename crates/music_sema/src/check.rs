@@ -488,6 +488,10 @@ impl SemaDb {
             });
         }
 
+        if binding.modifiers.foreign_abi.is_some() {
+            self.validate_foreign_sig(binding, span);
+        }
+
         // #6: track mutable bindings
         if binding.modifiers.mutable {
             let pat = self.db.ast.pats.get(binding.pat);
@@ -571,6 +575,46 @@ impl SemaDb {
         }
 
         self.env.intern(Ty::Unit)
+    }
+
+    fn validate_foreign_sig(&mut self, binding: &LetBinding, span: Span) {
+        let Some(ref sig) = binding.sig else { return };
+        for param in &sig.params {
+            if let Some(ty_id) = param.ty {
+                if let Some(type_name) = self.non_ffi_type_name(ty_id) {
+                    self.errors.push(SemaError {
+                        kind: SemaErrorKind::IncompatibleFfiType { type_name },
+                        span,
+                        context: None,
+                    });
+                }
+            }
+        }
+        if let Some(ret_ty_id) = sig.ret_ty {
+            if let Some(type_name) = self.non_ffi_type_name(ret_ty_id) {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::IncompatibleFfiType { type_name },
+                    span,
+                    context: None,
+                });
+            }
+        }
+    }
+
+    fn non_ffi_type_name(&self, ty_id: TyId) -> Option<String> {
+        let ty_kind = &self.db.ast.types.get(ty_id).kind;
+        if let TyKind::Named { name, .. } = ty_kind {
+            let resolved = self.db.interner.resolve(name.name);
+            match resolved {
+                "Int" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat" | "Nat8" | "Nat16"
+                | "Nat32" | "Nat64" | "Float" | "Float32" | "Float64" | "Bool" | "Unit"
+                | "Rune" | "CPtr" | "CString" => None,
+                _ => Some(resolved.to_owned()),
+            }
+        } else {
+            // Non-named types (Arrow, Tuple, etc.) are not FFI-compatible
+            Some(format!("{ty_kind:?}"))
+        }
     }
 
     fn maybe_assign_class_id(&mut self, binding: &LetBinding) {

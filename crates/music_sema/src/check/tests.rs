@@ -504,3 +504,29 @@ fn variant_info_nullary() {
         "expected VariantInfo for .B with tag_index=1, arity=0"
     );
 }
+
+// --- FFI type validation ---
+
+#[test]
+fn foreign_let_valid_ffi_types() {
+    let (_, errors) = check_source("foreign \"C\" let _f (x : Int) : Float");
+    let has_ffi_error = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::IncompatibleFfiType { .. }));
+    assert!(
+        !has_ffi_error,
+        "Int and Float are FFI-compatible, should not error: {errors:?}"
+    );
+}
+
+#[test]
+fn foreign_let_incompatible_param_type() {
+    let (_, errors) = check_source("foreign \"C\" let _f (x : Array of Int) : Int");
+    let has_ffi_error = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::IncompatibleFfiType { .. }));
+    assert!(
+        has_ffi_error,
+        "Array is not FFI-compatible, expected IncompatibleFfiType: {errors:?}"
+    );
+}

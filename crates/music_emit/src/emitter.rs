@@ -1,16 +1,20 @@
+use std::collections::HashMap;
 use std::mem;
 
-use music_ast::common::{FnDecl, MemberDecl, MemberName, Param};
+use music_ast::common::{AttrArg, FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
     BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, InstanceBody, InstanceDef,
     LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
-use music_ast::{ExprId, ExprList};
+use music_ast::ty::TyKind;
+use music_ast::{ExprId, ExprList, TyId};
 use music_builtins::types::BuiltinType;
 use music_found::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
-use music_il::format::{self, ClassDescriptor, ForeignDescriptor, TypeDescriptor, TypeKind};
+use music_il::format::{
+    self, ClassDescriptor, FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,
+};
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
@@ -54,6 +58,8 @@ struct Emitter<'thir> {
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
     foreigns: Vec<ForeignDescriptor>,
+    /// Maps binding names to their foreign descriptor index for `FfiCall` emission.
+    foreign_globals: HashMap<Symbol, u16>,
     current_instructions: Vec<Instruction>,
     current_locals: SymbolList,
     current_upvalues: SymbolList,
@@ -74,6 +80,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         methods: Vec::new(),
         globals: Vec::new(),
         foreigns: Vec::new(),
+        foreign_globals: HashMap::new(),
         current_instructions: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
@@ -140,6 +147,11 @@ impl Emitter<'_> {
             return Ok(());
         };
         let name = ident.name;
+
+        if binding.modifiers.foreign_abi.is_some() || binding.modifiers.foreign_alias.is_some() {
+            self.emit_foreign_let(name, binding);
+            return Ok(());
+        }
 
         if let Some(ref sig) = binding.sig {
             if let Some(body) = binding.value {
@@ -317,6 +329,15 @@ impl Emitter<'_> {
             self.push(Instruction::simple(*opcode));
             return Ok(());
         }
+
+        if let Some(foreign_idx) = self.resolve_foreign_callee(callee) {
+            for &arg in args {
+                self.emit_expr(arg)?;
+            }
+            self.push(Instruction::with_u16(Opcode::FfiCall, foreign_idx));
+            return Ok(());
+        }
+
         self.emit_expr(callee)?;
         for &arg in args {
             self.emit_expr(arg)?;
@@ -1043,6 +1064,8 @@ impl Emitter<'_> {
             abi: format::ForeignAbi::Default,
             arity: 0,
             exported: false,
+            param_types: Vec::new(),
+            return_type: format::FfiType::Void,
         });
         self.push(Instruction::with_u16(Opcode::FfiCall, foreign_idx));
     }
@@ -1302,6 +1325,112 @@ impl Emitter<'_> {
             _ => {}
         }
         Ok(())
+    }
+
+    fn emit_foreign_let(&mut self, name: Symbol, binding: &LetBinding) {
+        let name_str = self.thir.db.interner.resolve(name);
+        let name_idx = u32::from(self.pool.add(ConstantEntry::Str(name_str.into())));
+
+        let symbol_idx = if let Some(alias) = binding.modifiers.foreign_alias {
+            let alias_str = self.thir.db.interner.resolve(alias);
+            u32::from(self.pool.add(ConstantEntry::Str(alias_str.into())))
+        } else {
+            name_idx
+        };
+
+        let lib_idx = self.extract_lib_attr(&binding.attrs);
+
+        let abi = match binding.modifiers.foreign_abi {
+            Some(sym) => {
+                let abi_str = self.thir.db.interner.resolve(sym);
+                match abi_str {
+                    "cdecl" | "C" => ForeignAbi::Cdecl,
+                    "stdcall" => ForeignAbi::Stdcall,
+                    "fastcall" => ForeignAbi::Fastcall,
+                    _ => ForeignAbi::Default,
+                }
+            }
+            None => ForeignAbi::Default,
+        };
+
+        let (arity, param_types, return_type) = binding.sig.as_ref().map_or_else(
+            || (0, Vec::new(), FfiType::Void),
+            |sig| {
+                let arity = u8::try_from(sig.params.len()).expect("too many foreign params (>255)");
+                let pts: Vec<FfiType> = sig
+                    .params
+                    .iter()
+                    .map(|p| self.param_to_ffi_type(p))
+                    .collect();
+                let ret = sig.ret_ty.map_or(FfiType::Void, |t| self.ty_to_ffi_type(t));
+                (arity, pts, ret)
+            },
+        );
+
+        let foreign_idx =
+            u16::try_from(self.foreigns.len()).expect("too many foreign descriptors (>65535)");
+        self.foreigns.push(ForeignDescriptor {
+            name_idx,
+            symbol_idx,
+            lib_idx: lib_idx.unwrap_or(u32::MAX),
+            abi,
+            arity,
+            exported: binding.modifiers.exported,
+            param_types,
+            return_type,
+        });
+        let _prev = self.foreign_globals.insert(name, foreign_idx);
+    }
+
+    fn resolve_foreign_callee(&self, callee: ExprId) -> Option<u16> {
+        let kind = &self.thir.db.ast.exprs.get(callee).kind;
+        if let ExprKind::Var(ident) = kind {
+            return self.foreign_globals.get(&ident.name).copied();
+        }
+        None
+    }
+
+    fn ty_to_ffi_type(&self, ty_id: TyId) -> FfiType {
+        let ty_kind = &self.thir.db.ast.types.get(ty_id).kind;
+        if let TyKind::Named { name, .. } = ty_kind {
+            let resolved = self.thir.db.interner.resolve(name.name);
+            match resolved {
+                "Int" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat" | "Nat8" | "Nat16"
+                | "Nat32" | "Nat64" | "Rune" => FfiType::Int,
+                "Float" | "Float32" | "Float64" => FfiType::Float,
+                "Bool" => FfiType::Bool,
+                "Unit" => FfiType::Void,
+                "CString" => FfiType::Str,
+                // CPtr and unknown types default to Ptr
+                _ => FfiType::Ptr,
+            }
+        } else {
+            FfiType::Ptr
+        }
+    }
+
+    fn param_to_ffi_type(&self, param: &Param) -> FfiType {
+        param
+            .ty
+            .map_or(FfiType::Ptr, |ty_id| self.ty_to_ffi_type(ty_id))
+    }
+
+    fn extract_lib_attr(&mut self, attrs: &[music_ast::AttrId]) -> Option<u32> {
+        for &attr_id in attrs {
+            let attr = self.thir.db.ast.attrs.get(attr_id);
+            if self.thir.db.interner.resolve(attr.kind.name.name) != "lib" {
+                continue;
+            }
+            for arg in &attr.kind.args {
+                if let AttrArg::Positional(expr_id) = arg {
+                    let spanned = self.thir.db.ast.exprs.get(*expr_id);
+                    if let ExprKind::Lit(Literal::Str(ref s)) = spanned.kind {
+                        return Some(u32::from(self.pool.add(ConstantEntry::Str(s.clone()))));
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn push(&mut self, instruction: Instruction) {

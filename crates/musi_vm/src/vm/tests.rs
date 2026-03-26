@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::as_conversions)]
 
+use music_il::format::{FfiType, ForeignDescriptor};
 use music_il::opcode::Opcode;
 
 use super::Vm;
@@ -1391,7 +1392,7 @@ fn arr_fill_element_values() {
 }
 
 #[test]
-fn ffi_call_unimplemented() {
+fn ffi_call_out_of_bounds() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::FfiCall),
         0,
@@ -1400,9 +1401,50 @@ fn ffi_call_unimplemented() {
     ]));
     let err = vm.run().unwrap_err();
     assert!(
-        matches!(err, VmError::Unimplemented("FFI calls")),
-        "expected Unimplemented(\"FFI calls\"), got: {err:?}"
+        matches!(err, VmError::FfiForeignIndexOutOfBounds(0)),
+        "expected FfiForeignIndexOutOfBounds(0), got: {err:?}"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn ffi_call_dispatches() {
+    // Build a module with a foreign descriptor for `abs` and code that
+    // pushes -42, calls FfiCall(0), then halts.
+    let module = Module {
+        constants: Vec::new(),
+        strings: vec!["abs".into()],
+        methods: vec![Method {
+            name: ENTRY_POINT_NAME,
+            locals_count: 0,
+            code: vec![
+                op(Opcode::LdSmi),
+                0xD6, // -42 as i16 LE
+                0xFF,
+                op(Opcode::FfiCall),
+                0,
+                0,
+                op(Opcode::Halt),
+            ],
+        }],
+        globals: Vec::new(),
+        types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: vec![ForeignDescriptor {
+            name_idx: 0,
+            symbol_idx: u32::MAX,
+            lib_idx: u32::MAX,
+            abi: music_il::format::ForeignAbi::Default,
+            arity: 1,
+            exported: false,
+            param_types: vec![FfiType::Int],
+            return_type: FfiType::Int,
+        }],
+    };
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
 }
 
 #[test]

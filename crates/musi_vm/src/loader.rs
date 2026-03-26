@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use music_il::format::{
-    self, ClassDescriptor, ClassInstance, ClassMethod, ForeignAbi, ForeignDescriptor,
+    self, ClassDescriptor, ClassInstance, ClassMethod, FfiType, ForeignAbi, ForeignDescriptor,
     TypeDescriptor, TypeKind, HEADER_SIZE,
 };
 use music_il::opcode::Opcode;
@@ -437,6 +437,16 @@ fn decode_frgn(data: &[u8]) -> Result<Vec<ForeignDescriptor>, LoadError> {
         let flags = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
         pos = pos.wrapping_add(1);
 
+        let return_type_byte = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+        pos = pos.wrapping_add(1);
+
+        let mut param_types = Vec::with_capacity(usize::from(arity));
+        for _ in 0..arity {
+            let pt = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+            pos = pos.wrapping_add(1);
+            param_types.push(FfiType::from_byte(pt));
+        }
+
         out.push(ForeignDescriptor {
             name_idx,
             symbol_idx,
@@ -444,6 +454,8 @@ fn decode_frgn(data: &[u8]) -> Result<Vec<ForeignDescriptor>, LoadError> {
             abi: ForeignAbi::from_byte(abi_byte),
             arity,
             exported: (flags & 0x01) != 0,
+            param_types,
+            return_type: FfiType::from_byte(return_type_byte),
         });
     }
 

@@ -100,6 +100,9 @@ pub enum SemaErrorKind {
 
     #[error("resume in handler for operation {op} which returns Empty")]
     ResumeOnNever { op: Symbol },
+
+    #[error("type {type_name} is not FFI-compatible")]
+    IncompatibleFfiType { type_name: String },
 }
 
 impl SemaError {

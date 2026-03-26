@@ -225,10 +225,9 @@ fn display_unused_parameter() {
 #[test]
 fn display_or_pattern_mismatch() {
     let err = make_error(SemaErrorKind::OrPatternMismatch);
-    assert!(
-        err.to_string()
-            .contains("or-pattern alternatives bind different names")
-    );
+    assert!(err
+        .to_string()
+        .contains("or-pattern alternatives bind different names"));
 }
 
 #[test]

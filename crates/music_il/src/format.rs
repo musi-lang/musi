@@ -125,6 +125,33 @@ impl ForeignAbi {
     }
 }
 
+/// Type tag for FFI parameter and return types in the FRGN section.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FfiType {
+    Void = 0,
+    Int = 1,
+    Float = 2,
+    Bool = 3,
+    Ptr = 4,
+    Str = 5,
+}
+
+impl FfiType {
+    /// Decode a byte into an `FfiType`, defaulting to `Void` for unknown values.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Self {
+        match byte {
+            1 => Self::Int,
+            2 => Self::Float,
+            3 => Self::Bool,
+            4 => Self::Ptr,
+            5 => Self::Str,
+            _ => Self::Void,
+        }
+    }
+}
+
 /// An FFI symbol descriptor in the FRGN section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignDescriptor {
@@ -138,6 +165,10 @@ pub struct ForeignDescriptor {
     pub arity: u8,
     /// `export foreign = true`.
     pub exported: bool,
+    /// Type tags for each parameter.
+    pub param_types: Vec<FfiType>,
+    /// Return type tag.
+    pub return_type: FfiType,
 }
 
 #[cfg(test)]

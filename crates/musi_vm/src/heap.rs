@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ffi::c_void;
 use std::rc::Rc;
 
 use crate::effect::EffectHandler;
@@ -35,6 +36,7 @@ pub enum HeapObject {
     Array(VmArray),
     String(String),
     Slice(VmSlice),
+    CPtr(*mut c_void),
 }
 
 #[derive(Default)]
@@ -91,6 +93,10 @@ impl Heap {
 
     pub fn alloc_slice(&mut self, source: usize, start: usize, end: usize) -> usize {
         self.alloc(HeapObject::Slice(VmSlice { source, start, end }))
+    }
+
+    pub fn alloc_cptr(&mut self, ptr: *mut c_void) -> usize {
+        self.alloc(HeapObject::CPtr(ptr))
     }
 
     /// Borrow a heap object immutably and apply `f`.

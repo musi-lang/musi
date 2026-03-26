@@ -293,7 +293,7 @@ fn build_class_table(module: &SeamModule) -> Vec<u8> {
 
 /// Encode the FRGN section.
 ///
-/// Wire format: `u16 count` + 15 bytes per entry.
+/// Wire format: `u16 count` + variable-length entries.
 /// ```text
 /// per entry:
 ///   u32 name_idx
@@ -302,6 +302,8 @@ fn build_class_table(module: &SeamModule) -> Vec<u8> {
 ///   u8  abi
 ///   u8  arity
 ///   u8  flags (bit 0 = exported)
+///   u8  return_type
+///   [u8; arity] param_types
 /// ```
 #[expect(clippy::as_conversions, reason = "repr(u8) enum to u8 is lossless")]
 fn build_foreign_table(module: &SeamModule) -> Vec<u8> {
@@ -321,6 +323,10 @@ fn build_foreign_table(module: &SeamModule) -> Vec<u8> {
         out.push(foreign.arity);
         let flags: u8 = u8::from(foreign.exported);
         out.push(flags);
+        out.push(foreign.return_type as u8);
+        for &pt in &foreign.param_types {
+            out.push(pt as u8);
+        }
     }
     out
 }

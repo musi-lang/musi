@@ -7,6 +7,7 @@ use music_il::opcode::Opcode;
 
 use crate::effect::EffectHandler;
 use crate::errors::{VmError, VmResult};
+use crate::ffi::{self, FfiRuntime};
 use crate::frame::CallFrame;
 use crate::heap::{Heap, HeapObject};
 use crate::module::{ConstantEntry, Module, ENTRY_POINT_NAME};
@@ -21,6 +22,7 @@ pub struct Vm {
     frames: Vec<CallFrame>,
     effect_handlers: Vec<EffectHandler>,
     resolved_constants: Vec<Value>,
+    ffi_runtime: FfiRuntime,
 }
 
 impl Vm {
@@ -50,6 +52,7 @@ impl Vm {
             frames: Vec::new(),
             effect_handlers: Vec::new(),
             resolved_constants,
+            ffi_runtime: FfiRuntime::new(),
         }
     }
 
@@ -141,8 +144,7 @@ impl Vm {
                 }
 
                 Opcode::FfiCall => {
-                    let _ffi_idx = self.read_u16(method_idx, &mut pc)?;
-                    return Err(VmError::Unimplemented("FFI calls"));
+                    self.dispatch_ffi_call(method_idx, &mut pc)?;
                 }
 
                 Opcode::ArrSlice => {
@@ -730,6 +732,60 @@ impl Vm {
         Ok(())
     }
 
+    fn dispatch_ffi_call(&mut self, method_idx: usize, pc: &mut usize) -> VmResult {
+        let ffi_idx = usize::from(self.read_u16(method_idx, pc)?);
+        let foreign = self
+            .module
+            .foreigns
+            .get(ffi_idx)
+            .ok_or(VmError::FfiForeignIndexOutOfBounds(ffi_idx))?;
+
+        let arity = usize::from(foreign.arity);
+        let param_types = foreign.param_types.clone();
+        let return_type = foreign.return_type;
+
+        let symbol_name = if foreign.symbol_idx == u32::MAX {
+            self.module
+                .strings
+                .get(usize::try_from(foreign.name_idx).unwrap_or(usize::MAX))
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            self.module
+                .strings
+                .get(usize::try_from(foreign.symbol_idx).unwrap_or(usize::MAX))
+                .cloned()
+                .unwrap_or_default()
+        };
+
+        let lib_name = if foreign.lib_idx == u32::MAX {
+            String::new()
+        } else {
+            self.module
+                .strings
+                .get(usize::try_from(foreign.lib_idx).unwrap_or(usize::MAX))
+                .cloned()
+                .unwrap_or_default()
+        };
+
+        self.ffi_runtime.load_library(&lib_name)?;
+        let fn_ptr = self.ffi_runtime.resolve_symbol(&lib_name, &symbol_name)?;
+
+        let mut args = Vec::with_capacity(arity);
+        {
+            let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+            for _ in 0..arity {
+                args.push(frame.pop()?);
+            }
+        }
+        args.reverse();
+
+        let result =
+            ffi::execute_ffi_call(fn_ptr, &param_types, return_type, &mut args, &mut self.heap)?;
+        self.push_stack(result)?;
+        Ok(())
+    }
+
     fn exec_arr_slice(&mut self) -> VmResult {
         let end_val = self.pop_stack()?;
         let start_val = self.pop_stack()?;
@@ -963,6 +1019,7 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
                 HeapObject::Slice(sl) => format!("[Slice; len={}]", sl.end - sl.start),
                 HeapObject::Closure(_) => "<closure>".into(),
                 HeapObject::Continuation(_) => "<continuation>".into(),
+                HeapObject::CPtr(_) => "<cptr>".into(),
             };
         }
     }
