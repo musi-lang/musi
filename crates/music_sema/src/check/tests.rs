@@ -461,3 +461,46 @@ fn intrinsic_method_positional_opcode() {
         env.dispatch
     );
 }
+
+#[test]
+fn variant_info_recorded_for_sum() {
+    let (env, errors) = check_source(
+        "let T := data { | A : Int | B };\n\
+         .A(42);",
+    );
+    let real_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| !matches!(e.kind, SemaErrorKind::UnusedBinding { .. }))
+        .collect();
+    assert!(real_errors.is_empty(), "unexpected errors: {real_errors:?}");
+    let has_a = env
+        .variant_info
+        .values()
+        .any(|v| v.tag_index == 0 && v.arity == 1);
+    assert!(
+        has_a,
+        "expected VariantInfo for .A with tag_index=0, arity=1; got {:?}",
+        env.variant_info
+    );
+}
+
+#[test]
+fn variant_info_nullary() {
+    let (env, errors) = check_source(
+        "let T := data { | A : Int | B };\n\
+         .B;",
+    );
+    let real_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| !matches!(e.kind, SemaErrorKind::UnusedBinding { .. }))
+        .collect();
+    assert!(real_errors.is_empty(), "unexpected errors: {real_errors:?}");
+    let has_b = env
+        .variant_info
+        .values()
+        .any(|v| v.tag_index == 1 && v.arity == 0);
+    assert!(
+        has_b,
+        "expected VariantInfo for .B with tag_index=1, arity=0"
+    );
+}

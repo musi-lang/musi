@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use music_ast::common::Param;
 use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, TyRef};
 use music_ast::expr::{
-    BinOp, CaseArm, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef, LetBinding,
-    RecordField, SpliceKind, UnaryOp,
+    BinOp, CaseArm, DataBody, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef,
+    LetBinding, RecordField, SpliceKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
@@ -17,10 +17,19 @@ use music_resolve::queries::ResolutionMap;
 
 use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
-use crate::env::{DispatchInfo, InstanceEntry, TypeEnv};
+use crate::env::{DispatchInfo, InstanceEntry, TypeEnv, VariantInfo};
 use crate::errors::{SemaError, SemaErrorKind};
-use crate::intrinsic::{BuiltinMaps, collect_builtin_methods};
+use crate::intrinsic::{collect_builtin_methods, BuiltinMaps};
 use crate::types::{SemaTypeId, Ty};
+
+/// Tag index and arity for a variant within its parent sum type.
+#[derive(Debug, Clone, Copy)]
+struct VariantDefInfo {
+    tag_index: u16,
+    arity: u8,
+}
+
+type VariantRegistry = HashMap<Symbol, VariantDefInfo>;
 use crate::unify::unify;
 use music_il::opcode::Opcode;
 
@@ -42,6 +51,8 @@ pub struct SemaDb {
     intrinsic_methods: HashMap<Symbol, Opcode>,
     /// Sum variant names with `@builtin(opcode := ...)`: symbol → opcode.
     intrinsic_variants: HashMap<Symbol, Opcode>,
+    /// All variant names → tag index + arity (from pre-scan).
+    variant_registry: VariantRegistry,
 }
 
 impl SemaDb {
@@ -64,6 +75,7 @@ impl SemaDb {
             def_constraints: HashMap::new(),
             intrinsic_methods: HashMap::new(),
             intrinsic_variants: HashMap::new(),
+            variant_registry: VariantRegistry::new(),
         }
     }
 
@@ -167,9 +179,11 @@ impl SemaDb {
                 ref indices,
                 kind,
             } => self.synth_index(expr, indices, kind, span),
-            ExprKind::DataDef(_) | ExprKind::ClassDef { .. } => {
+            ExprKind::DataDef(ref body) => {
+                self.register_data_variants(body);
                 self.env.intern(Ty::Builtin(BuiltinType::Type))
             }
+            ExprKind::ClassDef { .. } => self.env.intern(Ty::Builtin(BuiltinType::Type)),
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
             ExprKind::InstanceDef(ref inst) => self.synth_instance_def(inst, span),
             ExprKind::Handle {
@@ -925,6 +939,18 @@ impl SemaDb {
         })
     }
 
+    fn register_data_variants(&mut self, body: &DataBody) {
+        if let DataBody::Sum(variants) = body {
+            for (i, v) in variants.iter().enumerate() {
+                let tag_index = u16::try_from(i).expect("too many variants (>65535)");
+                let arity = u8::from(v.payload.is_some());
+                let _ = self
+                    .variant_registry
+                    .insert(v.name.name, VariantDefInfo { tag_index, arity });
+            }
+        }
+    }
+
     fn synth_variant_lit(&mut self, tag: &Ident, args: &[ExprId], expr_id: ExprId) -> SemaTypeId {
         for &arg in args {
             let _ = self.synth(arg);
@@ -934,6 +960,17 @@ impl SemaDb {
                 .env
                 .dispatch
                 .insert(expr_id, DispatchInfo::Static { opcode });
+        }
+        if let Some(&vdef) = self.variant_registry.get(&tag.name) {
+            let parent_type = self.env.intern(Ty::Any);
+            let _ = self.env.variant_info.insert(
+                expr_id,
+                VariantInfo {
+                    parent_type,
+                    tag_index: vdef.tag_index,
+                    arity: vdef.arity,
+                },
+            );
         }
         self.env.intern(Ty::Any)
     }

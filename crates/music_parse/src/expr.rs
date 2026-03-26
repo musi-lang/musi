@@ -1145,11 +1145,11 @@ impl Parser<'_> {
 
         if self.at(&TokenKind::Pipe) {
             let _ = self.advance();
-            let variants = if self.at(&TokenKind::RBrace) {
-                Vec::new()
-            } else {
-                self.parse_variant_list()?
-            };
+            let mut variants = Vec::new();
+            if !self.at(&TokenKind::RBrace) {
+                variants.push(self.parse_variant_def()?);
+                variants.extend(self.parse_variant_list()?);
+            }
             let end =
                 self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
             let span = start.to(end);

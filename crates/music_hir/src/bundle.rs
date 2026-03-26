@@ -2,7 +2,7 @@ use music_ast::ExprId;
 use music_db::Db;
 use music_resolve::def::{DefId, DefInfo};
 use music_resolve::queries::ResolutionMap;
-use music_sema::env::{DispatchInfo, TypeEnv};
+use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};
 use music_sema::types::SemaTypeId;
 
 /// Bundles the complete typed IR for a module: the compiler database,
@@ -33,6 +33,11 @@ impl HirBundle {
     #[must_use]
     pub fn dispatch(&self, expr_id: ExprId) -> Option<&DispatchInfo> {
         self.type_env.dispatch.get(&expr_id)
+    }
+
+    #[must_use]
+    pub fn variant_info(&self, expr_id: ExprId) -> Option<&VariantInfo> {
+        self.type_env.variant_info.get(&expr_id)
     }
 
     /// # Panics

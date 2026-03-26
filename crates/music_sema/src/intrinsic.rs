@@ -31,7 +31,6 @@ fn check_attr(ast: &AstData, interner: &Interner, attr_id: AttrId) -> Option<Opc
         return None;
     }
 
-    // Named arg: opcode := 0x14
     for arg in &attr.kind.args {
         if let AttrArg::Named { name: kname, value } = arg {
             if interner.resolve(kname.name) == "opcode" {
@@ -40,7 +39,6 @@ fn check_attr(ast: &AstData, interner: &Interner, attr_id: AttrId) -> Option<Opc
         }
     }
 
-    // Positional: @builtin(0x14)
     let positional: Vec<ExprId> = attr
         .kind
         .args
@@ -70,16 +68,16 @@ fn extract_int_opcode(ast: &AstData, expr_id: ExprId) -> Option<Opcode> {
     None
 }
 
-/// Maps collected from scanning `@builtin` attributes in the AST.
+/// `@builtin` opcode mappings collected from the AST pre-scan.
 pub struct BuiltinMaps {
     /// Class/effect method symbols → opcode.
     pub methods: HashMap<Symbol, Opcode>,
-    /// Sum variant name symbols → opcode.
+    /// Sum variant name symbols → opcode (e.g., `True` → `LdTrue`).
     pub variants: HashMap<Symbol, Opcode>,
 }
 
-/// Scans the AST root for all `ClassDef`/`EffectDef` members and `DataDef(Sum)`
-/// variants bearing `@builtin(opcode := ...)`.
+/// Scans the AST root for `@builtin(opcode := ...)` on class/effect members
+/// and sum type variants.
 #[must_use]
 pub fn collect_builtin_methods(ast: &AstData, interner: &Interner) -> BuiltinMaps {
     let mut maps = BuiltinMaps {

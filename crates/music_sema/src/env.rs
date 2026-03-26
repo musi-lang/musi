@@ -26,6 +26,14 @@ pub enum DispatchInfo {
     Dynamic,
 }
 
+/// Resolved variant constructor info for codegen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariantInfo {
+    pub parent_type: SemaTypeId,
+    pub tag_index: u16,
+    pub arity: u8,
+}
+
 /// Central type-checking environment.
 ///
 /// Owns the type arena, unification variable bindings, and maps from AST
@@ -47,6 +55,8 @@ pub struct TypeEnv {
     pub handle_effects: HashMap<ExprId, u16>,
     /// Need `ExprId` -> effect ID being invoked.
     pub need_effects: HashMap<ExprId, u16>,
+    /// Variant literal `ExprId` -> resolved parent type and tag index.
+    pub variant_info: HashMap<ExprId, VariantInfo>,
     next_var: TyVarId,
     next_effect_idx: u16,
 }
@@ -67,6 +77,7 @@ impl TypeEnv {
             effect_indices: HashMap::new(),
             handle_effects: HashMap::new(),
             need_effects: HashMap::new(),
+            variant_info: HashMap::new(),
             next_var: 0,
             next_effect_idx: 0,
         }
