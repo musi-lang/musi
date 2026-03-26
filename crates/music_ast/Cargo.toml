@@ -10,6 +10,14 @@ publish.workspace = true
 [dependencies]
 music_shared = { path = "../music_shared" }
 music_arena = { path = "../music_arena" }
+smallvec = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "walk"
+harness = false
 
 [lints]
 workspace = true

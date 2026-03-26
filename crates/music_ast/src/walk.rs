@@ -5,8 +5,9 @@ use crate::common::{
 };
 use crate::data::AstData;
 use crate::expr::{
-    CaseArm, CompClause, DataBody, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef,
-    LetBinding, PiecewiseArm, PwGuard, QuoteKind, RecordField, SpliceKind,
+    CaseArm, CaseData, ClassDefData, CompClause, ComprehensionData, DataBody, ExprKind, FStrPart,
+    HandleData, IndexKind, InstanceBody, InstanceDef, LetBinding, PiecewiseArm, PwGuard, QuoteKind,
+    RecordField, SpliceKind,
 };
 use crate::{ExprId, ExprList, ParamList, TyId};
 
@@ -21,17 +22,23 @@ pub fn map_expr_children(
 ) -> ExprId {
     let spanned = ast.exprs.get(expr_id);
     let span = spanned.span;
+
+    if matches!(
+        spanned.kind,
+        ExprKind::Lit(_)
+            | ExprKind::Var(_)
+            | ExprKind::Import { .. }
+            | ExprKind::ForeignImport(_)
+            | ExprKind::Return(None)
+            | ExprKind::Resume(None)
+            | ExprKind::Splice(SpliceKind::Ident(_))
+    ) {
+        return expr_id;
+    }
+
     let kind = spanned.kind.clone();
 
     match kind {
-        ExprKind::Lit(_)
-        | ExprKind::Var(_)
-        | ExprKind::Import { .. }
-        | ExprKind::ForeignImport(_)
-        | ExprKind::Return(None)
-        | ExprKind::Resume(None)
-        | ExprKind::Splice(SpliceKind::Ident(_)) => expr_id,
-
         ExprKind::UnaryOp(..)
         | ExprKind::Need(_)
         | ExprKind::Return(Some(_))
@@ -182,9 +189,9 @@ fn map_structure(
             ref indices,
             kind: k,
         } => map_index(ast, expr_id, expr, indices, k, span, f),
-        ExprKind::Case(s, ref arms) => map_case(ast, expr_id, s, arms, span, f),
-        ExprKind::Comprehension { expr, ref clauses } => {
-            map_comp(ast, expr_id, expr, clauses, span, f)
+        ExprKind::Case(ref data) => map_case(ast, expr_id, data.scrutinee, &data.arms, span, f),
+        ExprKind::Comprehension(ref data) => {
+            map_comp(ast, expr_id, data.expr, &data.clauses, span, f)
         }
         ExprKind::MatrixLit(ref rows) => map_matrix(ast, expr_id, rows, span, f),
         ExprKind::RecordLit(ref fields) => map_rec_lit(ast, expr_id, fields, span, f),
@@ -193,30 +200,31 @@ fn map_structure(
         }
         ExprKind::FStrLit(ref parts) => map_fstr(ast, expr_id, parts, span, f),
         ExprKind::Piecewise(ref arms) => map_pw(ast, expr_id, arms, span, f),
-        ExprKind::Handle {
-            ref effect,
-            ref handlers,
-            body,
-        } => map_handle(ast, expr_id, effect.clone(), handlers, body, span, f),
-        ExprKind::DataDef(DataBody::Sum(ref variants)) => {
-            map_sum_def(ast, expr_id, variants, span, f)
-        }
-        ExprKind::DataDef(DataBody::Product(ref fields)) => {
-            map_rec_def(ast, expr_id, fields, span, f)
-        }
+        ExprKind::Handle(ref data) => map_handle(
+            ast,
+            expr_id,
+            data.effect.clone(),
+            &data.handlers,
+            data.body,
+            span,
+            f,
+        ),
+        ExprKind::DataDef(ref body) => match body.as_ref() {
+            DataBody::Sum(variants) => map_sum_def(ast, expr_id, variants, span, f),
+            DataBody::Product(fields) => map_rec_def(ast, expr_id, fields, span, f),
+        },
         ExprKind::EffectDef(ref m) => {
             map_member_node(ast, expr_id, m, ExprKind::EffectDef, span, f)
         }
-        ExprKind::ClassDef {
-            ref constraints,
-            ref members,
-        } => map_member_node(
+        ExprKind::ClassDef(ref data) => map_member_node(
             ast,
             expr_id,
-            members,
-            |m| ExprKind::ClassDef {
-                constraints: constraints.clone(),
-                members: m,
+            &data.members,
+            |m| {
+                ExprKind::ClassDef(Box::new(ClassDefData {
+                    constraints: data.constraints.clone(),
+                    members: m,
+                }))
             },
             span,
             f,
@@ -478,8 +486,13 @@ fn map_case(
     if !changed {
         return expr_id;
     }
-    ast.exprs
-        .alloc(Spanned::new(ExprKind::Case(new_scrutinee, new_arms), span))
+    ast.exprs.alloc(Spanned::new(
+        ExprKind::Case(Box::new(CaseData {
+            scrutinee: new_scrutinee,
+            arms: new_arms,
+        })),
+        span,
+    ))
 }
 
 fn map_comp(
@@ -518,10 +531,10 @@ fn map_comp(
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
-        ExprKind::Comprehension {
+        ExprKind::Comprehension(Box::new(ComprehensionData {
             expr: new_expr,
             clauses: new_clauses,
-        },
+        })),
         span,
     ))
 }
@@ -703,11 +716,11 @@ fn map_handle(
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
-        ExprKind::Handle {
+        ExprKind::Handle(Box::new(HandleData {
             effect,
             handlers: new_handlers,
             body: new_body,
-        },
+        })),
         span,
     ))
 }
@@ -744,7 +757,7 @@ fn map_sum_def(
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
-        ExprKind::DataDef(DataBody::Sum(new_variants)),
+        ExprKind::DataDef(Box::new(DataBody::Sum(new_variants))),
         span,
     ))
 }
@@ -780,7 +793,7 @@ fn map_rec_def(
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
-        ExprKind::DataDef(DataBody::Product(new_fields)),
+        ExprKind::DataDef(Box::new(DataBody::Product(new_fields))),
         span,
     ))
 }

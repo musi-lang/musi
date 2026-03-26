@@ -4,8 +4,8 @@ use music_ast::common::{AttrArg, MemberDecl, MemberName};
 use music_ast::data::AstData;
 use music_ast::expr::{DataBody, ExprKind};
 use music_ast::{AttrId, AttrList, ExprId, ExprList};
-use music_shared::{Interner, Literal, Symbol};
 use music_il::opcode::Opcode;
+use music_shared::{Interner, Literal, Symbol};
 
 /// Extracts the `opcode` field from `@builtin(opcode := 0x14)` if present.
 ///
@@ -95,13 +95,18 @@ pub fn collect_builtin_methods(ast: &AstData, interner: &Interner) -> BuiltinMap
 
 fn visit_expr(ast: &AstData, interner: &Interner, kind: &ExprKind, maps: &mut BuiltinMaps) {
     match kind {
-        ExprKind::ClassDef { members, .. } | ExprKind::EffectDef(members) => {
+        ExprKind::ClassDef(data) => {
+            collect_members(ast, interner, &data.members, &mut maps.methods);
+        }
+        ExprKind::EffectDef(members) => {
             collect_members(ast, interner, members, &mut maps.methods);
         }
-        ExprKind::DataDef(DataBody::Sum(variants)) => {
-            for v in variants {
-                if let Some(opcode) = extract_builtin_opcode(ast, interner, &v.attrs) {
-                    let _ = maps.variants.insert(v.name.name, opcode);
+        ExprKind::DataDef(body) => {
+            if let DataBody::Sum(variants) = body.as_ref() {
+                for v in variants {
+                    if let Some(opcode) = extract_builtin_opcode(ast, interner, &v.attrs) {
+                        let _ = maps.variants.insert(v.name.name, opcode);
+                    }
                 }
             }
         }

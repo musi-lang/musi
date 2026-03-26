@@ -403,9 +403,9 @@ impl ResolveDb {
             } => {
                 self.resolve_lambda(expr_id, params, ret_ty, body, scope);
             }
-            ExprKind::Case(scrutinee, arms) => self.resolve_case(scrutinee, arms, scope),
-            ExprKind::Comprehension { expr, clauses } => {
-                self.resolve_comprehension(expr, clauses, scope);
+            ExprKind::Case(ref data) => self.resolve_case(data.scrutinee, &data.arms, scope),
+            ExprKind::Comprehension(ref data) => {
+                self.resolve_comprehension(data.expr, &data.clauses, scope);
             }
             ExprKind::BinOp(_, lhs, rhs) | ExprKind::Assign(lhs, rhs) => {
                 self.resolve_expr(lhs, scope);
@@ -480,13 +480,13 @@ impl ResolveDb {
                     }
                 }
             }
-            ExprKind::Handle { handlers, body, .. } => {
-                for handler in handlers {
+            ExprKind::Handle(ref data) => {
+                for handler in &data.handlers {
                     if let Some(handler_body) = handler.body {
                         self.resolve_expr(handler_body, scope);
                     }
                 }
-                self.resolve_expr(body, scope);
+                self.resolve_expr(data.body, scope);
             }
             ExprKind::Quote(qk) => match qk {
                 QuoteKind::Expr(e) => self.resolve_expr(e, scope),
@@ -505,26 +505,31 @@ impl ResolveDb {
                 }
                 SpliceKind::Ident(_) => {}
             },
-            ExprKind::DataDef(DataBody::Product(fields)) => {
-                for field in fields {
-                    self.resolve_ty(field.ty, scope);
-                    if let Some(default) = field.default {
-                        self.resolve_expr(default, scope);
+            ExprKind::DataDef(ref body) => match body.as_ref() {
+                DataBody::Product(fields) => {
+                    for field in fields {
+                        self.resolve_ty(field.ty, scope);
+                        if let Some(default) = field.default {
+                            self.resolve_expr(default, scope);
+                        }
                     }
                 }
-            }
-            ExprKind::DataDef(DataBody::Sum(variants)) => {
-                for variant in variants {
-                    if let Some(payload) = variant.payload {
-                        self.resolve_ty(payload, scope);
-                    }
-                    if let Some(default) = variant.default {
-                        self.resolve_expr(default, scope);
+                DataBody::Sum(variants) => {
+                    for variant in variants {
+                        if let Some(payload) = variant.payload {
+                            self.resolve_ty(payload, scope);
+                        }
+                        if let Some(default) = variant.default {
+                            self.resolve_expr(default, scope);
+                        }
                     }
                 }
-            }
-            ExprKind::EffectDef(ref members) | ExprKind::ClassDef { ref members, .. } => {
+            },
+            ExprKind::EffectDef(ref members) => {
                 self.resolve_member_bodies(members, scope);
+            }
+            ExprKind::ClassDef(ref data) => {
+                self.resolve_member_bodies(&data.members, scope);
             }
             ExprKind::InstanceDef(inst) => {
                 if let InstanceBody::Methods(ref members) = inst.body {
@@ -571,7 +576,7 @@ impl ResolveDb {
         self.current_lambda = saved_lambda;
     }
 
-    fn resolve_case(&mut self, scrutinee: ExprId, arms: Vec<CaseArm>, scope: ScopeId) {
+    fn resolve_case(&mut self, scrutinee: ExprId, arms: &[CaseArm], scope: ScopeId) {
         self.resolve_expr(scrutinee, scope);
         for arm in arms {
             let arm_scope = self.resolution.scopes.push(ScopeKind::CaseArm, Some(scope));
@@ -583,13 +588,13 @@ impl ResolveDb {
         }
     }
 
-    fn resolve_comprehension(&mut self, expr: ExprId, clauses: Vec<CompClause>, scope: ScopeId) {
+    fn resolve_comprehension(&mut self, expr: ExprId, clauses: &[CompClause], scope: ScopeId) {
         let comp_scope = self
             .resolution
             .scopes
             .push(ScopeKind::Comprehension, Some(scope));
         for clause in clauses {
-            match clause {
+            match *clause {
                 CompClause::Generator { pat, iter } => {
                     self.resolve_expr(iter, comp_scope);
                     self.resolve_pat(pat, comp_scope);

@@ -8,19 +8,20 @@
 use music_ast::common::{FnDecl, MemberDecl, MemberName, ModifierSet, Param, Signature, TyRef};
 use music_ast::data::AstData;
 use music_ast::expr::{
-    AccessMode, BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, IndexKind,
-    InstanceBody, InstanceDef, LetBinding, PostfixOp, RecordField, TypeOpKind, UnaryOp,
+    AccessMode, BinOp, CaseArm, CaseData, CompClause, ComprehensionData, ExprKind, FStrPart,
+    FieldTarget, HandleData, IndexKind, InstanceBody, InstanceDef, LetBinding, PostfixOp,
+    RecordField, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_db::Db;
-use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 use music_hir::HirBundle;
 use music_il::format::BUILTIN_TYPE_INT;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::queries::ResolutionMap;
 use music_sema::env::{DispatchInfo, TypeEnv};
+use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
 use music_emit::emitter::emit;
 
@@ -457,14 +458,14 @@ fn emit_handle_with_body() {
             ret_ty: None,
             body: Some(handler_body),
         };
-        ExprKind::Handle {
+        ExprKind::Handle(Box::new(HandleData {
             effect: TyRef {
                 name: Ident::dummy(eff_sym),
                 args: Vec::new(),
             },
             handlers: vec![handler],
             body: body_expr,
-        }
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -515,9 +516,9 @@ fn emit_match_literal_pattern() {
         let body2 = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(20))));
-        ExprKind::Case(
+        ExprKind::Case(Box::new(CaseData {
             scrutinee,
-            vec![
+            arms: vec![
                 CaseArm {
                     attrs: Vec::new(),
                     pat: pat_lit,
@@ -531,7 +532,7 @@ fn emit_match_literal_pattern() {
                     body: body2,
                 },
             ],
-        )
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -567,15 +568,15 @@ fn emit_match_tuple_destructure() {
         let var_a = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(a_sym))));
-        ExprKind::Case(
+        ExprKind::Case(Box::new(CaseData {
             scrutinee,
-            vec![CaseArm {
+            arms: vec![CaseArm {
                 attrs: Vec::new(),
                 pat: tuple_pat,
                 guard: None,
                 body: var_a,
             }],
-        )
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -610,9 +611,9 @@ fn emit_match_with_guard() {
         let body2 = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(20))));
-        ExprKind::Case(
+        ExprKind::Case(Box::new(CaseData {
             scrutinee,
-            vec![
+            arms: vec![
                 CaseArm {
                     attrs: Vec::new(),
                     pat: pat_bind,
@@ -626,7 +627,7 @@ fn emit_match_with_guard() {
                     body: body2,
                 },
             ],
-        )
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -988,13 +989,13 @@ fn emit_comprehension_single_generator() {
             .pats
             .alloc(Spanned::dummy(PatKind::Bind(Ident::dummy(x_sym))));
 
-        ExprKind::Comprehension {
+        ExprKind::Comprehension(Box::new(ComprehensionData {
             expr: body,
             clauses: vec![CompClause::Generator {
                 pat,
                 iter: iter_arr,
             }],
-        }
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -1061,7 +1062,7 @@ fn emit_comprehension_with_filter() {
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
 
-        ExprKind::Comprehension {
+        ExprKind::Comprehension(Box::new(ComprehensionData {
             expr: body,
             clauses: vec![
                 CompClause::Generator {
@@ -1070,7 +1071,7 @@ fn emit_comprehension_with_filter() {
                 },
                 CompClause::Filter(guard),
             ],
-        }
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -1124,9 +1125,9 @@ fn emit_match_or_pattern_literals() {
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(20))));
 
-        ExprKind::Case(
+        ExprKind::Case(Box::new(CaseData {
             scrutinee,
-            vec![
+            arms: vec![
                 CaseArm {
                     attrs: Vec::new(),
                     pat: or_pat,
@@ -1140,7 +1141,7 @@ fn emit_match_or_pattern_literals() {
                     body: body2,
                 },
             ],
-        )
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -1203,9 +1204,9 @@ fn emit_match_as_pattern() {
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(0))));
 
-        ExprKind::Case(
+        ExprKind::Case(Box::new(CaseData {
             scrutinee,
-            vec![
+            arms: vec![
                 CaseArm {
                     attrs: Vec::new(),
                     pat: as_pat,
@@ -1219,7 +1220,7 @@ fn emit_match_as_pattern() {
                     body: body2,
                 },
             ],
-        )
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -1714,7 +1715,10 @@ fn emit_match_record_pattern() {
             guard: None,
             body,
         };
-        ExprKind::Case(scrutinee, vec![arm])
+        ExprKind::Case(Box::new(CaseData {
+            scrutinee,
+            arms: vec![arm],
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
@@ -1749,7 +1753,10 @@ fn emit_match_variant_with_fields() {
             guard: None,
             body,
         };
-        ExprKind::Case(scrutinee, vec![arm])
+        ExprKind::Case(Box::new(CaseData {
+            scrutinee,
+            arms: vec![arm],
+        }))
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;

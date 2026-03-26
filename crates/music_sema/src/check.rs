@@ -11,9 +11,9 @@ use music_ast::ty::TyKind;
 use music_ast::{ExprId, PatId, TyId};
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_shared::{Ident, Literal, Span, Symbol, SymbolList};
 use music_resolve::def::{DefId, DefKind};
 use music_resolve::queries::ResolutionMap;
+use music_shared::{Ident, Literal, Span, Symbol, SymbolList};
 
 use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
@@ -155,7 +155,7 @@ impl SemaDb {
                 ret_ty,
                 body,
             } => self.synth_lambda(params, ret_ty, body),
-            ExprKind::Case(scrutinee, ref arms) => self.synth_case(scrutinee, arms, span),
+            ExprKind::Case(ref data) => self.synth_case(data.scrutinee, &data.arms, span),
             ExprKind::Seq(ref stmts) => self.synth_seq(stmts),
             ExprKind::TupleLit(ref elems) => self.synth_tuple(elems),
             ExprKind::ArrayLit(ref elems) => self.synth_array(elems, span),
@@ -183,18 +183,16 @@ impl SemaDb {
                 self.register_data_variants(body);
                 self.env.intern(Ty::Builtin(BuiltinType::Type))
             }
-            ExprKind::ClassDef { .. } => self.env.intern(Ty::Builtin(BuiltinType::Type)),
+            ExprKind::ClassDef(_) => self.env.intern(Ty::Builtin(BuiltinType::Type)),
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
             ExprKind::InstanceDef(ref inst) => self.synth_instance_def(inst, span),
-            ExprKind::Handle {
-                ref effect,
-                ref handlers,
-                body,
-            } => self.synth_handle(effect, handlers, body, span, expr_id),
+            ExprKind::Handle(ref data) => {
+                self.synth_handle(&data.effect, &data.handlers, data.body, span, expr_id)
+            }
             ExprKind::FStrLit(_) => self.env.builtin(BuiltinType::String),
             ExprKind::RecordUpdate { base, .. } => self.synth(base),
-            ExprKind::Comprehension { expr, .. } => {
-                let elem_ty = self.synth(expr);
+            ExprKind::Comprehension(ref data) => {
+                let elem_ty = self.synth(data.expr);
                 self.env.intern(Ty::Array(elem_ty))
             }
             ExprKind::Quote(_) => self.synth_quote(),
@@ -625,7 +623,7 @@ impl SemaDb {
     fn maybe_assign_class_id(&mut self, binding: &LetBinding) {
         if let Some(value_id) = binding.value {
             let val_kind = &self.db.ast.exprs.get(value_id).kind;
-            if matches!(val_kind, ExprKind::ClassDef { .. }) {
+            if matches!(val_kind, ExprKind::ClassDef(_)) {
                 let pat = self.db.ast.pats.get(binding.pat);
                 if let PatKind::Bind(bind_ident) = &pat.kind {
                     let _ = self.env.assign_class_id(bind_ident.name);
@@ -803,9 +801,9 @@ impl SemaDb {
             | ExprKind::Resume(Some(operand)) => {
                 self.walk_for_needs(*operand, out);
             }
-            ExprKind::Case(scrutinee, arms) => {
-                self.walk_for_needs(*scrutinee, out);
-                for arm in arms {
+            ExprKind::Case(data) => {
+                self.walk_for_needs(data.scrutinee, out);
+                for arm in &data.arms {
                     self.walk_for_needs(arm.body, out);
                 }
             }

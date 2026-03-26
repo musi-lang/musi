@@ -21,12 +21,9 @@ pub enum ExprKind {
     FStrLit(Vec<FStrPart>),
 
     // Def = defines a type
-    DataDef(DataBody),
+    DataDef(Box<DataBody>),
     EffectDef(Vec<MemberDecl>),
-    ClassDef {
-        constraints: Vec<Constraint>,
-        members: Vec<MemberDecl>,
-    },
+    ClassDef(Box<ClassDefData>),
     InstanceDef(Box<InstanceDef>),
 
     // Operations
@@ -54,10 +51,7 @@ pub enum ExprKind {
         op: PostfixOp,
     },
     Seq(ExprList),
-    Comprehension {
-        expr: ExprId,
-        clauses: Vec<CompClause>,
-    },
+    Comprehension(Box<ComprehensionData>),
 
     // Binding
     Let(Box<LetBinding>),
@@ -69,7 +63,7 @@ pub enum ExprKind {
     },
 
     // Control
-    Case(ExprId, Vec<CaseArm>),
+    Case(Box<CaseData>),
     Return(Option<ExprId>),
     Resume(Option<ExprId>),
 
@@ -82,11 +76,7 @@ pub enum ExprKind {
 
     // Effects
     Need(ExprId),
-    Handle {
-        effect: TyRef,
-        handlers: Vec<FnDecl>,
-        body: ExprId,
-    },
+    Handle(Box<HandleData>),
 
     // Metaprogramming
     Quote(QuoteKind),
@@ -191,6 +181,31 @@ pub enum RecordField {
 pub enum DataBody {
     Product(Vec<RecordDefField>),
     Sum(Vec<VariantDef>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassDefData {
+    pub constraints: Vec<Constraint>,
+    pub members: Vec<MemberDecl>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandleData {
+    pub effect: TyRef,
+    pub handlers: Vec<FnDecl>,
+    pub body: ExprId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaseData {
+    pub scrutinee: ExprId,
+    pub arms: Vec<CaseArm>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComprehensionData {
+    pub expr: ExprId,
+    pub clauses: Vec<CompClause>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

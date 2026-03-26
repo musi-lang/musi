@@ -13,5 +13,13 @@ music_arena = { path = "../music_arena" }
 music_ast = { path = "../music_ast" }
 music_lex = { path = "../music_lex" }
 
+[dev-dependencies]
+criterion = { workspace = true }
+music_lex = { path = "../music_lex" }
+
+[[bench]]
+name = "parse"
+harness = false
+
 [lints]
 workspace = true

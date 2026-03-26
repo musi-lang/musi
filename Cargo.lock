@@ -538,8 +538,10 @@ version = "0.1.0-rc1"
 name = "music_ast"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "music_arena",
  "music_shared",
+ "smallvec",
 ]
 
 [[package]]
@@ -610,6 +612,7 @@ dependencies = [
 name = "music_parse"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "music_arena",
  "music_ast",
  "music_lex",

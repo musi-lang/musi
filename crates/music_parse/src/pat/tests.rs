@@ -20,9 +20,9 @@ fn parse_pat_from(source: &str) -> (AstData, Vec<ParseError>) {
 fn extract_pat_kind(ast: &AstData) -> &PatKind {
     assert_eq!(ast.root.len(), 1);
     match &ast.exprs.get(ast.root[0]).kind {
-        ExprKind::Case(_, arms) => {
-            assert!(!arms.is_empty());
-            &ast.pats.get(arms[0].pat).kind
+        ExprKind::Case(data) => {
+            assert!(!data.arms.is_empty());
+            &ast.pats.get(data.arms[0].pat).kind
         }
         other => panic!("expected Case, got {other:?}"),
     }

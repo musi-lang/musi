@@ -10,7 +10,6 @@ use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, ExprList, TyId};
 use music_builtins::types::BuiltinType;
-use music_shared::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
 use music_il::format::{
     self, ClassDescriptor, FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,
@@ -20,6 +19,7 @@ use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
 use music_sema::env::DispatchInfo;
 use music_sema::types::Ty;
+use music_shared::{Ident, Literal, Symbol, SymbolList};
 
 use crate::error::EmitError;
 use crate::pool::{ConstantEntry, ConstantPool};
@@ -255,7 +255,7 @@ impl Emitter<'_> {
                 ref params, body, ..
             } => self.emit_lambda(expr_id, params, body)?,
             ExprKind::Seq(ref stmts) => self.emit_seq(stmts)?,
-            ExprKind::Case(scrutinee, ref arms) => self.emit_case(scrutinee, arms)?,
+            ExprKind::Case(ref data) => self.emit_case(data.scrutinee, &data.arms)?,
             ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields)?,
             ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args)?,
             ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field)?,
@@ -268,9 +268,7 @@ impl Emitter<'_> {
             } => self.emit_index(expr, indices)?,
             ExprKind::FStrLit(ref parts) => self.emit_fstr(parts)?,
             ExprKind::Need(operand) => self.emit_need(expr_id, operand)?,
-            ExprKind::Handle {
-                ref handlers, body, ..
-            } => self.emit_handle(expr_id, handlers, body)?,
+            ExprKind::Handle(ref data) => self.emit_handle(expr_id, &data.handlers, data.body)?,
             ExprKind::Resume(opt) => self.emit_resume(opt)?,
             ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
             ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
@@ -278,14 +276,13 @@ impl Emitter<'_> {
             ExprKind::TypeOp { expr, ty, kind } => self.emit_type_op(expr, ty, kind)?,
             ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst)?,
             ExprKind::ForeignImport(sym) => self.emit_foreign_import(sym),
-            ExprKind::Comprehension {
-                expr: body,
-                ref clauses,
-            } => self.emit_comprehension(body, clauses)?,
+            ExprKind::Comprehension(ref data) => {
+                self.emit_comprehension(data.expr, &data.clauses)?;
+            }
             ExprKind::Quote(ref qk) => self.emit_quote(qk)?,
             ExprKind::Splice(ref sk) => self.emit_splice(sk)?,
             ExprKind::Import { path, ref kind } => self.emit_import(path, kind),
-            ExprKind::DataDef(_) | ExprKind::EffectDef(_) | ExprKind::ClassDef { .. } => {
+            ExprKind::DataDef(_) | ExprKind::EffectDef(_) | ExprKind::ClassDef(_) => {
                 // Type definitions have no runtime representation
             }
             ExprKind::Piecewise(_) => {

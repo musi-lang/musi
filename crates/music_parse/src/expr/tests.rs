@@ -265,7 +265,7 @@ fn let_with_sig() {
 fn case_expr() {
     let (ast, errors) = parse_expr("case x of (.Some(v) => v | .None => 0)");
     assert!(errors.is_empty());
-    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(data) if data.arms.len() == 2));
 }
 
 // ── Return / Resume / Need ────────────────────────────────────
@@ -330,7 +330,7 @@ fn data_product() {
     let (ast, errors) = parse_expr("data { x : Int; y : Int }");
     assert!(errors.is_empty());
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 2)
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Product(fields) if fields.len() == 2))
     );
 }
 
@@ -340,7 +340,7 @@ fn data_sum() {
     let (ast, errors) = parse_expr("data { Some : T | None }");
     assert!(errors.is_empty());
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2)
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Sum(variants) if variants.len() == 2))
     );
 }
 
@@ -377,10 +377,10 @@ fn comprehension_with_filter() {
     let (ast, errors) = parse_expr("[x | x in xs, x > 0]");
     assert!(errors.is_empty(), "errors: {errors:?}");
     match root_kind(&ast) {
-        ExprKind::Comprehension { clauses, .. } => {
-            assert_eq!(clauses.len(), 2);
-            assert!(matches!(clauses[0], CompClause::Generator { .. }));
-            assert!(matches!(clauses[1], CompClause::Filter(_)));
+        ExprKind::Comprehension(data) => {
+            assert_eq!(data.clauses.len(), 2);
+            assert!(matches!(data.clauses[0], CompClause::Generator { .. }));
+            assert!(matches!(data.clauses[1], CompClause::Filter(_)));
         }
         other => panic!("expected Comprehension, got {other:?}"),
     }
@@ -391,9 +391,9 @@ fn comprehension_generator_only() {
     let (ast, errors) = parse_expr("[x * 2 | x in xs]");
     assert!(errors.is_empty(), "errors: {errors:?}");
     match root_kind(&ast) {
-        ExprKind::Comprehension { clauses, .. } => {
-            assert_eq!(clauses.len(), 1);
-            assert!(matches!(clauses[0], CompClause::Generator { .. }));
+        ExprKind::Comprehension(data) => {
+            assert_eq!(data.clauses.len(), 1);
+            assert!(matches!(data.clauses[0], CompClause::Generator { .. }));
         }
         other => panic!("expected Comprehension, got {other:?}"),
     }
@@ -509,7 +509,7 @@ fn data_sum_trailing_pipe() {
     let (ast, errors) = parse_expr("data { A | B | }");
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2)
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Sum(variants) if variants.len() == 2))
     );
 }
 
@@ -519,7 +519,7 @@ fn data_product_leading_semi() {
     let (ast, errors) = parse_expr("data { ; x : Int ; y : Int }");
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 2)
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Product(fields) if fields.len() == 2))
     );
 }
 
@@ -529,7 +529,7 @@ fn data_product_leading_trailing_semi() {
     let (ast, errors) = parse_expr("data { ; x : Int ; }");
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Product(fields)) if fields.len() == 1)
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Product(fields) if fields.len() == 1))
     );
 }
 
@@ -539,7 +539,7 @@ fn data_variant_default() {
     let (ast, errors) = parse_expr("data { A : Int := 0 | B }");
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2 && variants[0].default.is_some())
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Sum(variants) if variants.len() == 2 && variants[0].default.is_some()))
     );
 }
 
@@ -549,7 +549,7 @@ fn data_variant_default_no_payload() {
     let (ast, errors) = parse_expr("data { A := 1 | B }");
     assert!(errors.is_empty(), "errors: {errors:?}");
     assert!(
-        matches!(root_kind(&ast), ExprKind::DataDef(DataBody::Sum(variants)) if variants.len() == 2 && variants[0].default.is_some() && variants[0].payload.is_none())
+        matches!(root_kind(&ast), ExprKind::DataDef(b) if matches!(b.as_ref(), DataBody::Sum(variants) if variants.len() == 2 && variants[0].default.is_some() && variants[0].payload.is_none()))
     );
 }
 
@@ -590,8 +590,8 @@ fn comprehension_trailing_comma() {
     let (ast, errors) = parse_expr("[x | x in xs, x > 0,]");
     assert!(errors.is_empty(), "errors: {errors:?}");
     match root_kind(&ast) {
-        ExprKind::Comprehension { clauses, .. } => {
-            assert_eq!(clauses.len(), 2);
+        ExprKind::Comprehension(data) => {
+            assert_eq!(data.clauses.len(), 2);
         }
         other => panic!("expected Comprehension, got {other:?}"),
     }
@@ -603,21 +603,21 @@ fn comprehension_trailing_comma() {
 fn case_leading_pipe() {
     let (ast, errors) = parse_expr("case x of (| .A => 1 | .B => 2)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(data) if data.arms.len() == 2));
 }
 
 #[test]
 fn case_trailing_pipe() {
     let (ast, errors) = parse_expr("case x of (.A => 1 | .B => 2 |)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(data) if data.arms.len() == 2));
 }
 
 #[test]
 fn case_leading_and_trailing_pipe() {
     let (ast, errors) = parse_expr("case x of (| .A => 1 | .B => 2 |)");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(root_kind(&ast), ExprKind::Case(_, arms) if arms.len() == 2));
+    assert!(matches!(root_kind(&ast), ExprKind::Case(data) if data.arms.len() == 2));
 }
 
 #[test]

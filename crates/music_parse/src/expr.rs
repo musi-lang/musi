@@ -5,9 +5,10 @@ use music_ast::common::{
     OpFixity, Param, RecordDefField, Signature, TyRef, VariantDef,
 };
 use music_ast::expr::{
-    AccessMode, BinOp, CaseArm, CompClause, DataBody, ExprKind, FStrPart, FieldTarget, ImportKind,
-    IndexKind, InstanceBody, InstanceDef, LetBinding, PiecewiseArm, PostfixOp, PwGuard, QuoteKind,
-    RecordField, SpliceKind, TypeOpKind, UnaryOp,
+    AccessMode, BinOp, CaseArm, CaseData, ClassDefData, CompClause, ComprehensionData, DataBody,
+    ExprKind, FStrPart, FieldTarget, HandleData, ImportKind, IndexKind, InstanceBody, InstanceDef,
+    LetBinding, PiecewiseArm, PostfixOp, PwGuard, QuoteKind, RecordField, SpliceKind, TypeOpKind,
+    UnaryOp,
 };
 use music_ast::pat::PatKind;
 use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
@@ -671,7 +672,10 @@ impl Parser<'_> {
         }
         let end = self.expect(&TokenKind::RBracket, "']'")?;
         let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Comprehension { expr, clauses }, span))
+        Ok(self.alloc_expr(
+            ExprKind::Comprehension(Box::new(ComprehensionData { expr, clauses })),
+            span,
+        ))
     }
 
     fn parse_comp_clause(&mut self) -> ParseResult<CompClause> {
@@ -949,7 +953,7 @@ impl Parser<'_> {
         let end =
             self.expect_closing(&TokenKind::RParen, "'('", open_span, "in case expression")?;
         let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::Case(scrutinee, arms), span))
+        Ok(self.alloc_expr(ExprKind::Case(Box::new(CaseData { scrutinee, arms })), span))
     }
 
     fn parse_case_arm(&mut self) -> ParseResult<CaseArm> {
@@ -1153,7 +1157,7 @@ impl Parser<'_> {
             let end =
                 self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
             let span = start.to(end);
-            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Sum(variants)), span));
+            return Ok(self.alloc_expr(ExprKind::DataDef(Box::new(DataBody::Sum(variants))), span));
         }
 
         if self.at(&TokenKind::Semi) {
@@ -1171,14 +1175,16 @@ impl Parser<'_> {
             let end =
                 self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
             let span = start.to(end);
-            return Ok(self.alloc_expr(ExprKind::DataDef(DataBody::Product(fields)), span));
+            return Ok(
+                self.alloc_expr(ExprKind::DataDef(Box::new(DataBody::Product(fields))), span)
+            );
         }
 
         let body = self.parse_data_body()?;
         let end =
             self.expect_closing(&TokenKind::RBrace, "'{'", open_span, "in data definition")?;
         let span = start.to(end);
-        Ok(self.alloc_expr(ExprKind::DataDef(body), span))
+        Ok(self.alloc_expr(ExprKind::DataDef(Box::new(body)), span))
     }
 
     fn parse_data_body(&mut self) -> ParseResult<DataBody> {
@@ -1287,10 +1293,10 @@ impl Parser<'_> {
         let (members, end) = self.parse_braced_members("in class definition")?;
         let span = start.to(end);
         Ok(self.alloc_expr(
-            ExprKind::ClassDef {
+            ExprKind::ClassDef(Box::new(ClassDefData {
                 constraints,
                 members,
-            },
+            })),
             span,
         ))
     }
@@ -1462,11 +1468,11 @@ impl Parser<'_> {
         let body = self.parse_expr(0)?;
         let span = start.to(self.prev_span());
         Ok(self.alloc_expr(
-            ExprKind::Handle {
+            ExprKind::Handle(Box::new(HandleData {
                 effect,
                 handlers,
                 body,
-            },
+            })),
             span,
         ))
     }
