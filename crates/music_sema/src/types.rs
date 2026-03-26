@@ -8,6 +8,8 @@ pub type SemaTypeId = Idx<Ty>;
 /// Identity of a unification variable.
 pub type TyVarId = u32;
 
+pub type SemaTypeList = Vec<SemaTypeId>;
+
 /// Semantic type representation used during type checking.
 ///
 /// Unlike the syntactic `TyKind` from the AST, this IR supports unification
@@ -29,12 +31,12 @@ pub enum Ty {
     EffectArrow {
         param: SemaTypeId,
         ret: SemaTypeId,
-        effects: Vec<SemaTypeId>,
+        effects: SemaTypeList,
     },
-    Tuple(Vec<SemaTypeId>),
+    Tuple(SemaTypeList),
     Array(SemaTypeId),
     List(SemaTypeId),
-    Union(Vec<SemaTypeId>),
+    Union(SemaTypeList),
     Mut(SemaTypeId),
 
     // -- Inference --
@@ -42,7 +44,7 @@ pub enum Ty {
 
     // -- Generics --
     Param(Symbol),
-    App(SemaTypeId, Vec<SemaTypeId>),
+    App(SemaTypeId, SemaTypeList),
 
     // -- Gradual --
     Any,

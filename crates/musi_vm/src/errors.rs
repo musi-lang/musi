@@ -66,3 +66,5 @@ pub enum VmError {
     #[error("invalid heap index {0}")]
     InvalidHeapIndex(HeapIdx),
 }
+
+pub type VmResult<T = ()> = Result<T, VmError>;

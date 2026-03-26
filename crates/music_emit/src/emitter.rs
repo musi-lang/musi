@@ -7,7 +7,7 @@ use music_ast::expr::{
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
-use music_found::{Ident, Literal, Symbol};
+use music_found::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
@@ -16,6 +16,8 @@ use music_sema::env::DispatchInfo;
 
 use crate::error::EmitError;
 use crate::pool::{ConstantEntry, ConstantPool};
+
+type EmitResult<T = ()> = Result<T, EmitError>;
 
 /// A compiled method ready for serialisation.
 ///
@@ -47,8 +49,8 @@ struct Emitter<'thir> {
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
     current_instructions: Vec<Instruction>,
-    current_locals: Vec<Symbol>,
-    current_upvalues: Vec<Symbol>,
+    current_locals: SymbolList,
+    current_upvalues: SymbolList,
     next_anon: u32,
 }
 
@@ -59,7 +61,7 @@ struct Emitter<'thir> {
 /// Returns [`EmitError::Unimplemented`] when the bundle contains a language
 /// feature that has no codegen path yet (e.g. `via` derived instances,
 /// dynamic dispatch, splice-by-name, or named field assignment).
-pub fn emit(thir: &HirBundle) -> Result<SeamModule, EmitError> {
+pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
     let mut emitter = Emitter {
         thir,
         pool: ConstantPool::new(),
@@ -95,7 +97,7 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
               these are compiler ICEs, not recoverable errors that belong in EmitError"
 )]
 impl Emitter<'_> {
-    fn emit_module(&mut self) -> Result<(), EmitError> {
+    fn emit_module(&mut self) -> EmitResult {
         let root = self.thir.db.ast.root.clone();
         for expr_id in root {
             self.emit_top_level(expr_id)?;
@@ -104,7 +106,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_top_level(&mut self, expr_id: ExprId) -> Result<(), EmitError> {
+    fn emit_top_level(&mut self, expr_id: ExprId) -> EmitResult {
         let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
         if let ExprKind::Let(binding) = kind {
             self.emit_top_let(&binding)?;
@@ -114,7 +116,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_top_let(&mut self, binding: &LetBinding) -> Result<(), EmitError> {
+    fn emit_top_let(&mut self, binding: &LetBinding) -> EmitResult {
         let pat_node = self.thir.db.ast.pats.get(binding.pat);
         let PatKind::Bind(ident) = &pat_node.kind else {
             return Ok(());
@@ -139,12 +141,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_function(
-        &mut self,
-        name: Symbol,
-        params: &[Param],
-        body: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_function(&mut self, name: Symbol, params: &[Param], body: ExprId) -> EmitResult {
         let saved_instructions = mem::take(&mut self.current_instructions);
         let saved_locals = mem::take(&mut self.current_locals);
 
@@ -183,7 +180,7 @@ impl Emitter<'_> {
         clippy::panic,
         reason = "Piecewise must be lowered to Branch before emission — reaching this arm is a compiler ICE"
     )]
-    fn emit_expr(&mut self, expr_id: ExprId) -> Result<(), EmitError> {
+    fn emit_expr(&mut self, expr_id: ExprId) -> EmitResult {
         let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
         match kind {
             ExprKind::Lit(ref lit) => self.emit_literal(lit),
@@ -294,7 +291,7 @@ impl Emitter<'_> {
         }
     }
 
-    fn emit_app(&mut self, callee: ExprId, args: &ExprList) -> Result<(), EmitError> {
+    fn emit_app(&mut self, callee: ExprId, args: &ExprList) -> EmitResult {
         if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(callee) {
             for &arg in args {
                 self.emit_expr(arg)?;
@@ -311,13 +308,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_binop(
-        &mut self,
-        op: BinOp,
-        lhs: ExprId,
-        rhs: ExprId,
-        expr_id: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_binop(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, expr_id: ExprId) -> EmitResult {
         if matches!(op, BinOp::Range | BinOp::RangeExcl) {
             return self.emit_range(op, lhs, rhs);
         }
@@ -352,12 +343,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_unary(
-        &mut self,
-        op: UnaryOp,
-        operand: ExprId,
-        expr_id: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_unary(&mut self, op: UnaryOp, operand: ExprId, expr_id: ExprId) -> EmitResult {
         self.emit_expr(operand)?;
         match op {
             UnaryOp::Neg => {
@@ -373,12 +359,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_branch(
-        &mut self,
-        cond: ExprId,
-        then_br: ExprId,
-        else_br: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_branch(&mut self, cond: ExprId, then_br: ExprId, else_br: ExprId) -> EmitResult {
         self.emit_expr(cond)?;
         let false_jump = self.placeholder_jump(Opcode::BrFalse);
         self.emit_expr(then_br)?;
@@ -406,7 +387,7 @@ impl Emitter<'_> {
         self.current_instructions[placeholder_pos] = Instruction::with_i16(old_opcode, offset);
     }
 
-    fn emit_let(&mut self, binding: &LetBinding) -> Result<(), EmitError> {
+    fn emit_let(&mut self, binding: &LetBinding) -> EmitResult {
         let pat_node = self.thir.db.ast.pats.get(binding.pat);
         if let PatKind::Bind(ident) = &pat_node.kind {
             if let Some(value) = binding.value {
@@ -418,12 +399,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_lambda(
-        &mut self,
-        expr_id: ExprId,
-        params: &[Param],
-        body: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_lambda(&mut self, expr_id: ExprId, params: &[Param], body: ExprId) -> EmitResult {
         let captured = self
             .thir
             .resolution
@@ -479,7 +455,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_seq(&mut self, stmts: &ExprList) -> Result<(), EmitError> {
+    fn emit_seq(&mut self, stmts: &ExprList) -> EmitResult {
         if stmts.is_empty() {
             self.push(Instruction::simple(Opcode::LdUnit));
             return Ok(());
@@ -493,7 +469,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_case(&mut self, scrutinee: ExprId, arms: &[CaseArm]) -> Result<(), EmitError> {
+    fn emit_case(&mut self, scrutinee: ExprId, arms: &[CaseArm]) -> EmitResult {
         self.emit_expr(scrutinee)?;
 
         if arms.is_empty() {
@@ -556,7 +532,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         let guard_jump = if let Some(guard) = arm.guard {
             self.emit_expr(guard)?;
             if is_last {
@@ -585,7 +561,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         self.push(Instruction::simple(Opcode::Dup));
         self.emit_literal(literal);
         self.push(Instruction::simple(Opcode::CmpEq));
@@ -611,7 +587,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         for (i, &sub_pat) in pats.iter().enumerate() {
             let sub_pat_node = self.thir.db.ast.pats.get(sub_pat);
             if let PatKind::Bind(ident) = &sub_pat_node.kind {
@@ -634,7 +610,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         for (i, field) in fields.iter().enumerate() {
             let bind_ident = if let Some(pat_id) = field.pat {
                 let pat_node = self.thir.db.ast.pats.get(pat_id);
@@ -668,7 +644,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
 
@@ -704,7 +680,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_record_lit(&mut self, fields: &[RecordField]) -> Result<(), EmitError> {
+    fn emit_record_lit(&mut self, fields: &[RecordField]) -> EmitResult {
         let field_count = u16::try_from(fields.len()).expect("too many fields (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
 
@@ -726,12 +702,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_variant_lit(
-        &mut self,
-        expr_id: ExprId,
-        tag: &Ident,
-        args: &ExprList,
-    ) -> Result<(), EmitError> {
+    fn emit_variant_lit(&mut self, expr_id: ExprId, tag: &Ident, args: &ExprList) -> EmitResult {
         if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(expr_id) {
             self.push(Instruction::simple(*opcode));
             return Ok(());
@@ -750,7 +721,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_access(&mut self, expr: ExprId, field: &FieldTarget) -> Result<(), EmitError> {
+    fn emit_access(&mut self, expr: ExprId, field: &FieldTarget) -> EmitResult {
         self.emit_expr(expr)?;
         match *field {
             FieldTarget::Index(idx) => {
@@ -764,7 +735,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_return(&mut self, value: Option<ExprId>) -> Result<(), EmitError> {
+    fn emit_return(&mut self, value: Option<ExprId>) -> EmitResult {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id)?;
         } else {
@@ -774,7 +745,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_tuple_lit(&mut self, elems: &ExprList) -> Result<(), EmitError> {
+    fn emit_tuple_lit(&mut self, elems: &ExprList) -> EmitResult {
         let len = u16::try_from(elems.len()).expect("too many tuple elements (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, len));
         for (i, &elem) in elems.iter().enumerate() {
@@ -785,7 +756,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_array_lit(&mut self, elems: &ExprList) -> Result<(), EmitError> {
+    fn emit_array_lit(&mut self, elems: &ExprList) -> EmitResult {
         let len = u16::try_from(elems.len()).expect("too many array elements (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, len));
         for (i, &elem) in elems.iter().enumerate() {
@@ -796,7 +767,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_index(&mut self, expr: ExprId, indices: &ExprList) -> Result<(), EmitError> {
+    fn emit_index(&mut self, expr: ExprId, indices: &ExprList) -> EmitResult {
         self.emit_expr(expr)?;
         for &index in indices {
             self.emit_expr(index)?;
@@ -805,7 +776,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_fstr(&mut self, parts: &[FStrPart]) -> Result<(), EmitError> {
+    fn emit_fstr(&mut self, parts: &[FStrPart]) -> EmitResult {
         if parts.is_empty() {
             let idx = self.pool.add(ConstantEntry::Str(String::new()));
             self.push(Instruction::with_u16(Opcode::LdConst, idx));
@@ -838,7 +809,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_range(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId) -> Result<(), EmitError> {
+    fn emit_range(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId) -> EmitResult {
         let tag_str = if op == BinOp::RangeExcl {
             "RangeExcl"
         } else {
@@ -856,7 +827,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_need(&mut self, expr_id: ExprId, operand: ExprId) -> Result<(), EmitError> {
+    fn emit_need(&mut self, expr_id: ExprId, operand: ExprId) -> EmitResult {
         self.emit_expr(operand)?;
         let effect_id = self
             .thir
@@ -869,12 +840,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_handle(
-        &mut self,
-        expr_id: ExprId,
-        handlers: &[FnDecl],
-        body: ExprId,
-    ) -> Result<(), EmitError> {
+    fn emit_handle(&mut self, expr_id: ExprId, handlers: &[FnDecl], body: ExprId) -> EmitResult {
         let effect_id = self
             .thir
             .type_env
@@ -909,7 +875,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_resume(&mut self, value: Option<ExprId>) -> Result<(), EmitError> {
+    fn emit_resume(&mut self, value: Option<ExprId>) -> EmitResult {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id)?;
             self.push(Instruction::with_u8(Opcode::EffCont, 1));
@@ -919,7 +885,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_matrix_lit(&mut self, rows: &[ExprList]) -> Result<(), EmitError> {
+    fn emit_matrix_lit(&mut self, rows: &[ExprList]) -> EmitResult {
         let row_count = u16::try_from(rows.len()).expect("too many matrix rows (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, row_count));
 
@@ -939,11 +905,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_record_update(
-        &mut self,
-        base: ExprId,
-        fields: &[RecordField],
-    ) -> Result<(), EmitError> {
+    fn emit_record_update(&mut self, base: ExprId, fields: &[RecordField]) -> EmitResult {
         self.emit_expr(base)?;
         self.push(Instruction::simple(Opcode::ArrCopy));
 
@@ -965,7 +927,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_postfix(&mut self, expr: ExprId, op: PostfixOp) -> Result<(), EmitError> {
+    fn emit_postfix(&mut self, expr: ExprId, op: PostfixOp) -> EmitResult {
         self.emit_expr(expr)?;
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
@@ -986,7 +948,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) -> Result<(), EmitError> {
+    fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) -> EmitResult {
         self.emit_expr(expr)?;
         match kind {
             TypeOpKind::Test(opt_ident) => {
@@ -1004,7 +966,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_nil_coalesce(&mut self, lhs: ExprId, rhs: ExprId) -> Result<(), EmitError> {
+    fn emit_nil_coalesce(&mut self, lhs: ExprId, rhs: ExprId) -> EmitResult {
         self.emit_expr(lhs)?;
         self.push(Instruction::simple(Opcode::Dup));
         self.push(Instruction::simple(Opcode::ArrTag));
@@ -1022,7 +984,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_instance_def(&mut self, inst: &InstanceDef) -> Result<(), EmitError> {
+    fn emit_instance_def(&mut self, inst: &InstanceDef) -> EmitResult {
         match &inst.body {
             InstanceBody::Methods(members) => {
                 for member in members {
@@ -1060,11 +1022,7 @@ impl Emitter<'_> {
         slot
     }
 
-    fn emit_comprehension(
-        &mut self,
-        body: ExprId,
-        clauses: &[CompClause],
-    ) -> Result<(), EmitError> {
+    fn emit_comprehension(&mut self, body: ExprId, clauses: &[CompClause]) -> EmitResult {
         self.push(Instruction::with_u16(Opcode::ArrNew, 0));
 
         for (clause_idx, clause) in clauses.iter().enumerate() {
@@ -1150,7 +1108,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         let mut body_jumps = Vec::new();
 
         for (si, &sub_pat) in pats.iter().enumerate() {
@@ -1233,7 +1191,7 @@ impl Emitter<'_> {
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         self.push(Instruction::simple(Opcode::Dup));
         let name_slot = self.local_slot(name.name);
         self.emit_st_loc(name_slot);
@@ -1262,7 +1220,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_assign(&mut self, target: ExprId, value: ExprId) -> Result<(), EmitError> {
+    fn emit_assign(&mut self, target: ExprId, value: ExprId) -> EmitResult {
         let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
         match target_kind {
             ExprKind::Var(ident) => {
@@ -1363,7 +1321,7 @@ impl Emitter<'_> {
             .and_then(|p| u16::try_from(p).ok())
     }
 
-    fn emit_quote(&mut self, qk: &QuoteKind) -> Result<(), EmitError> {
+    fn emit_quote(&mut self, qk: &QuoteKind) -> EmitResult {
         match qk {
             QuoteKind::Expr(e) => self.emit_expr(*e)?,
             QuoteKind::Block(stmts) => self.emit_seq(stmts)?,
@@ -1371,7 +1329,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_splice(&mut self, sk: &SpliceKind) -> Result<(), EmitError> {
+    fn emit_splice(&mut self, sk: &SpliceKind) -> EmitResult {
         match sk {
             SpliceKind::Ident(_) => return Err(EmitError::Unimplemented("splice-by-name")),
             SpliceKind::Expr(e) => self.emit_expr(*e)?,

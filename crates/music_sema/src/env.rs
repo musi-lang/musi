@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use music_arena::Arena;
 use music_ast::ExprId;
 use music_builtins::types::BuiltinType;
-use music_found::{Span, Symbol};
+use music_found::{Span, Symbol, SymbolList};
 use music_il::opcode::Opcode;
 
-use crate::types::{SemaTypeId, Ty, TyVarId};
+use crate::types::{SemaTypeId, SemaTypeList, Ty, TyVarId};
 
 /// Tracks a registered type class instance for coherence checking.
 #[derive(Debug, Clone)]
 pub struct InstanceEntry {
     pub span: Span,
-    pub methods: Vec<Symbol>,
+    pub methods: SymbolList,
 }
 
 /// How a call site should be dispatched at codegen.
@@ -42,13 +42,13 @@ pub struct TypeEnv {
     pub types: Arena<Ty>,
     pub vars: Vec<Option<SemaTypeId>>,
     pub type_map: HashMap<ExprId, SemaTypeId>,
-    pub effect_map: HashMap<ExprId, Vec<SemaTypeId>>,
+    pub effect_map: HashMap<ExprId, SemaTypeList>,
     pub dispatch: HashMap<ExprId, DispatchInfo>,
     pub builtin_types: HashMap<BuiltinType, SemaTypeId>,
     /// Registered type class instances: `(class, type) -> entry`.
     pub instances: HashMap<(Symbol, Symbol), InstanceEntry>,
     /// Effect name -> operation names.
-    pub effect_ops: HashMap<Symbol, Vec<Symbol>>,
+    pub effect_ops: HashMap<Symbol, SymbolList>,
     /// Effect name -> stable numeric ID (assigned in declaration order).
     pub effect_indices: HashMap<Symbol, u16>,
     /// Handle `ExprId` -> effect ID for the handler.

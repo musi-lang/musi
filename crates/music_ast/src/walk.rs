@@ -8,7 +8,7 @@ use crate::expr::{
     CaseArm, CompClause, DataBody, ExprKind, FStrPart, IndexKind, InstanceBody, InstanceDef,
     LetBinding, PiecewiseArm, PwGuard, QuoteKind, RecordField, SpliceKind,
 };
-use crate::{ExprId, ParamList, TyId};
+use crate::{ExprId, ExprList, ParamList, TyId};
 
 /// Apply `f` to every direct `ExprId` child of the expression at `expr_id`.
 ///
@@ -264,9 +264,9 @@ fn map_ids(
     ast: &mut AstData,
     ids: &[ExprId],
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
-) -> (Vec<ExprId>, bool) {
+) -> (ExprList, bool) {
     let mut changed = false;
-    let new_ids: Vec<ExprId> = ids
+    let new_ids: ExprList = ids
         .iter()
         .map(|&id| {
             let new_id = f(ast, id);
@@ -283,9 +283,9 @@ fn map_params(
     ast: &mut AstData,
     params: &[Param],
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
-) -> (Vec<Param>, bool) {
+) -> (ParamList, bool) {
     let mut changed = false;
-    let new_params: Vec<Param> = params
+    let new_params: ParamList = params
         .iter()
         .map(|param| {
             let new_default = param.default.map(|d| {
@@ -313,7 +313,7 @@ fn map_list(
     ast: &mut AstData,
     expr_id: ExprId,
     items: &[ExprId],
-    wrap: impl FnOnce(Vec<ExprId>) -> ExprKind,
+    wrap: impl FnOnce(ExprList) -> ExprKind,
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
@@ -529,12 +529,12 @@ fn map_comp(
 fn map_matrix(
     ast: &mut AstData,
     expr_id: ExprId,
-    rows: &[Vec<ExprId>],
+    rows: &[ExprList],
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
     let mut changed = false;
-    let new_rows: Vec<Vec<ExprId>> = rows
+    let new_rows: Vec<ExprList> = rows
         .iter()
         .map(|row| {
             let (new_row, row_changed) = map_ids(ast, row, f);

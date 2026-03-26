@@ -4,7 +4,7 @@ use music_il::opcode::Opcode;
 
 use super::Vm;
 use crate::errors::VmError;
-use crate::module::{ConstantEntry, ENTRY_POINT_NAME, GlobalDef, Method, Module};
+use crate::module::{ConstantEntry, GlobalDef, Method, Module, ENTRY_POINT_NAME};
 use crate::value::Value;
 
 const fn op(o: Opcode) -> u8 {

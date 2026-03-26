@@ -4,6 +4,8 @@ use crate::env::TypeEnv;
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::types::{SemaTypeId, Ty, TyVarId};
 
+type UnifyResult = Result<SemaTypeId, SemaError>;
+
 /// Unifies two types, binding unification variables as needed.
 ///
 /// Returns the unified type on success, or a `SemaError` on failure.
@@ -13,12 +15,7 @@ use crate::types::{SemaTypeId, Ty, TyVarId};
 ///
 /// Returns `SemaError` with `CannotUnify`, `TypeMismatch`, or `OccursCheck`
 /// when the types are incompatible or would create an infinite type.
-pub fn unify(
-    env: &mut TypeEnv,
-    a: SemaTypeId,
-    b: SemaTypeId,
-    span: Span,
-) -> Result<SemaTypeId, SemaError> {
+pub fn unify(env: &mut TypeEnv, a: SemaTypeId, b: SemaTypeId, span: Span) -> UnifyResult {
     let a = env.resolve_var(a);
     let b = env.resolve_var(b);
 
@@ -90,7 +87,7 @@ fn unify_var(
     bind_to: SemaTypeId,
     _var_id: SemaTypeId,
     span: Span,
-) -> Result<SemaTypeId, SemaError> {
+) -> UnifyResult {
     if occurs_check(env, var, bind_to) {
         return Err(SemaError {
             kind: SemaErrorKind::OccursCheck { var },
@@ -108,19 +105,14 @@ fn unify_arrow(
     (p1, r1): (SemaTypeId, SemaTypeId),
     (p2, r2): (SemaTypeId, SemaTypeId),
     span: Span,
-) -> Result<SemaTypeId, SemaError> {
+) -> UnifyResult {
     let param = unify(env, p2, p1, span)?; // contravariant
     let ret = unify(env, r1, r2, span)?; // covariant
     Ok(env.intern(Ty::Arrow { param, ret }))
 }
 
 /// Unifies two tuple types pairwise, requiring equal length.
-fn unify_tuple(
-    env: &mut TypeEnv,
-    xs: &[SemaTypeId],
-    ys: &[SemaTypeId],
-    span: Span,
-) -> Result<SemaTypeId, SemaError> {
+fn unify_tuple(env: &mut TypeEnv, xs: &[SemaTypeId], ys: &[SemaTypeId], span: Span) -> UnifyResult {
     if xs.len() != ys.len() {
         return Err(SemaError {
             kind: SemaErrorKind::ArityMismatch {
@@ -144,7 +136,7 @@ fn unify_record(
     f1: &[(music_found::Symbol, SemaTypeId)],
     f2: &[(music_found::Symbol, SemaTypeId)],
     span: Span,
-) -> Result<SemaTypeId, SemaError> {
+) -> UnifyResult {
     let mut unified_fields = f1.to_vec();
     for &(name, ty_b_field) in f2 {
         if let Some(pos) = unified_fields.iter().position(|(n, _)| *n == name) {

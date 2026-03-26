@@ -5,10 +5,10 @@ use std::rc::Rc;
 use music_il::opcode::Opcode;
 
 use crate::effect::EffectHandler;
-use crate::errors::VmError;
+use crate::errors::{VmError, VmResult};
 use crate::frame::CallFrame;
 use crate::heap::{Heap, HeapObject};
-use crate::module::{ConstantEntry, ENTRY_POINT_NAME, Module};
+use crate::module::{ConstantEntry, Module, ENTRY_POINT_NAME};
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
@@ -55,7 +55,7 @@ impl Vm {
     /// # Errors
     /// Returns a [`VmError`] if no entry point exists, the bytecode is invalid,
     /// a runtime type error occurs, or `Panic` is executed.
-    pub fn run(&mut self) -> Result<Value, VmError> {
+    pub fn run(&mut self) -> VmResult<Value> {
         let entry_idx = self
             .module
             .methods
@@ -73,7 +73,7 @@ impl Vm {
         self.execute()
     }
 
-    fn execute(&mut self) -> Result<Value, VmError> {
+    fn execute(&mut self) -> VmResult<Value> {
         let mut pc: usize = 0;
         loop {
             let method_idx =
@@ -142,12 +142,7 @@ impl Vm {
         }
     }
 
-    fn dispatch_branch(
-        &mut self,
-        op: Opcode,
-        method_idx: usize,
-        pc: &mut usize,
-    ) -> Result<(), VmError> {
+    fn dispatch_branch(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::BrTrue | Opcode::BrFalse => {
                 let offset = self.read_i16(method_idx, pc)?;
@@ -215,7 +210,7 @@ impl Vm {
         op: Opcode,
         method_idx: usize,
         pc: &mut usize,
-    ) -> Result<Option<Value>, VmError> {
+    ) -> VmResult<Option<Value>> {
         match op {
             Opcode::Ret => {
                 let ret_val = self
@@ -287,7 +282,7 @@ impl Vm {
         op: Opcode,
         method_idx: usize,
         pc: &mut usize,
-    ) -> Result<(), VmError> {
+    ) -> VmResult {
         match op {
             Opcode::LdUnit => self.frames.last_mut().unwrap().push(Value::UNIT),
             Opcode::LdTru => self.frames.last_mut().unwrap().push(Value::TRUE),
@@ -376,7 +371,7 @@ impl Vm {
         Ok(())
     }
 
-    fn dispatch_equality(&mut self, op: Opcode) -> Result<(), VmError> {
+    fn dispatch_equality(&mut self, op: Opcode) -> VmResult {
         let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
         let b = frame.pop()?;
         let a = frame.pop()?;
@@ -410,12 +405,7 @@ impl Vm {
         )
     }
 
-    fn dispatch_global_upval(
-        &mut self,
-        op: Opcode,
-        method_idx: usize,
-        pc: &mut usize,
-    ) -> Result<(), VmError> {
+    fn dispatch_global_upval(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::LdGlob => {
                 let idx = usize::from(self.read_u16(method_idx, pc)?);
@@ -475,7 +465,7 @@ impl Vm {
         Ok(())
     }
 
-    fn current_closure_idx(&self) -> Result<usize, VmError> {
+    fn current_closure_idx(&self) -> VmResult<usize> {
         self.frames
             .last()
             .ok_or(VmError::NoClosureContext)?
@@ -483,7 +473,7 @@ impl Vm {
             .ok_or(VmError::NoClosureContext)
     }
 
-    fn pop_call_args(&mut self, arity: usize) -> Result<(Value, Vec<Value>), VmError> {
+    fn pop_call_args(&mut self, arity: usize) -> VmResult<(Value, Vec<Value>)> {
         let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
         let mut args = Vec::with_capacity(arity);
         for _ in 0..arity {
@@ -494,7 +484,7 @@ impl Vm {
         Ok((callee, args))
     }
 
-    fn resolve_callee(&self, callee: Value) -> Result<(usize, Option<usize>), VmError> {
+    fn resolve_callee(&self, callee: Value) -> VmResult<(usize, Option<usize>)> {
         if callee.is_ptr() {
             let cls_idx = callee.as_ptr_idx();
             let obj = self.heap.get(cls_idx).ok_or(VmError::NotCallable)?;
@@ -517,7 +507,7 @@ impl Vm {
         method_idx: usize,
         return_pc: usize,
         closure: Option<usize>,
-    ) -> Result<CallFrame, VmError> {
+    ) -> VmResult<CallFrame> {
         let locals_count = usize::from(
             self.module
                 .methods
@@ -533,12 +523,7 @@ impl Vm {
         ))
     }
 
-    fn dispatch_array(
-        &mut self,
-        op: Opcode,
-        method_idx: usize,
-        pc: &mut usize,
-    ) -> Result<(), VmError> {
+    fn dispatch_array(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::ArrGetI | Opcode::ArrSetI | Opcode::ArrGet | Opcode::ArrSet => {
                 return self.dispatch_arr_rw(op, method_idx, pc);
@@ -634,12 +619,7 @@ impl Vm {
         Ok(())
     }
 
-    fn dispatch_arr_rw(
-        &mut self,
-        op: Opcode,
-        method_idx: usize,
-        pc: &mut usize,
-    ) -> Result<(), VmError> {
+    fn dispatch_arr_rw(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::ArrGetI => {
                 let elem_idx = usize::from(self.read_u8(method_idx, pc)?);
@@ -671,11 +651,11 @@ impl Vm {
         Ok(())
     }
 
-    fn pop_stack(&mut self) -> Result<Value, VmError> {
+    fn pop_stack(&mut self) -> VmResult<Value> {
         self.frames.last_mut().ok_or(VmError::StackUnderflow)?.pop()
     }
 
-    fn push_stack(&mut self, v: Value) -> Result<(), VmError> {
+    fn push_stack(&mut self, v: Value) -> VmResult {
         self.frames
             .last_mut()
             .ok_or(VmError::StackUnderflow)?
@@ -683,14 +663,14 @@ impl Vm {
         Ok(())
     }
 
-    fn peek_stack(&mut self) -> Result<Value, VmError> {
+    fn peek_stack(&mut self) -> VmResult<Value> {
         self.frames
             .last_mut()
             .ok_or(VmError::StackUnderflow)?
             .peek()
     }
 
-    fn read_u8(&self, method_idx: usize, pc: &mut usize) -> Result<u8, VmError> {
+    fn read_u8(&self, method_idx: usize, pc: &mut usize) -> VmResult<u8> {
         let b = *self
             .module
             .methods
@@ -703,24 +683,19 @@ impl Vm {
         Ok(b)
     }
 
-    fn read_u16(&self, method_idx: usize, pc: &mut usize) -> Result<u16, VmError> {
+    fn read_u16(&self, method_idx: usize, pc: &mut usize) -> VmResult<u16> {
         let lo = self.read_u8(method_idx, pc)?;
         let hi = self.read_u8(method_idx, pc)?;
         Ok(u16::from_le_bytes([lo, hi]))
     }
 
-    fn read_i16(&self, method_idx: usize, pc: &mut usize) -> Result<i16, VmError> {
+    fn read_i16(&self, method_idx: usize, pc: &mut usize) -> VmResult<i16> {
         let lo = self.read_u8(method_idx, pc)?;
         let hi = self.read_u8(method_idx, pc)?;
         Ok(i16::from_le_bytes([lo, hi]))
     }
 
-    fn dispatch_effect(
-        &mut self,
-        op: Opcode,
-        method_idx: usize,
-        pc: &mut usize,
-    ) -> Result<(), VmError> {
+    fn dispatch_effect(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::EffPush => {
                 let effect_id = self.read_u16(method_idx, pc)?;
@@ -822,7 +797,7 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
     format!("{val:?}")
 }
 
-fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> Result<Value, VmError> {
+fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> VmResult<Value> {
     if !arr_ptr.is_ptr() {
         return Err(VmError::NotAnArray);
     }
@@ -851,7 +826,7 @@ fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> Result<Value, 
     })
 }
 
-fn exec_arr_seti(heap: &Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> Result<(), VmError> {
+fn exec_arr_seti(heap: &Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> VmResult {
     if !arr_ptr.is_ptr() {
         return Err(VmError::NotAnArray);
     }
@@ -874,7 +849,7 @@ fn exec_arr_seti(heap: &Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> Re
     })
 }
 
-fn exec_arr_get(heap: &Heap, arr_ptr: Value, idx_val: Value) -> Result<Value, VmError> {
+fn exec_arr_get(heap: &Heap, arr_ptr: Value, idx_val: Value) -> VmResult<Value> {
     if !idx_val.is_int() {
         return Err(VmError::TypeError {
             expected: "`Int`",
@@ -889,7 +864,7 @@ fn exec_arr_get(heap: &Heap, arr_ptr: Value, idx_val: Value) -> Result<Value, Vm
     exec_arr_geti(heap, arr_ptr, elem_idx)
 }
 
-fn exec_arr_set(heap: &Heap, arr_ptr: Value, idx_val: Value, val: Value) -> Result<(), VmError> {
+fn exec_arr_set(heap: &Heap, arr_ptr: Value, idx_val: Value, val: Value) -> VmResult {
     if !idx_val.is_int() {
         return Err(VmError::TypeError {
             expected: "`Int`",
@@ -904,7 +879,7 @@ fn exec_arr_set(heap: &Heap, arr_ptr: Value, idx_val: Value, val: Value) -> Resu
     exec_arr_seti(heap, arr_ptr, elem_idx, val)
 }
 
-fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> Result<Value, VmError> {
+fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> VmResult<Value> {
     match (a.is_ptr(), b.is_ptr()) {
         (true, true) => {
             let rc_a = Rc::clone(heap.get(a.as_ptr_idx()).ok_or(VmError::NotAnArray)?);
@@ -964,7 +939,7 @@ fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> Result<Value, VmError
 
 /// Handles scalar arithmetic, bitwise, and comparison opcodes - pure stack
 /// operations with no operand bytes and no PC mutation.
-fn exec_scalar_op(op: Opcode, frame: &mut CallFrame) -> Result<(), VmError> {
+fn exec_scalar_op(op: Opcode, frame: &mut CallFrame) -> VmResult {
     match op {
         Opcode::IAdd => apply_int_binop(frame, i64::wrapping_add)?,
         Opcode::ISub => apply_int_binop(frame, i64::wrapping_sub)?,
@@ -1023,7 +998,7 @@ fn exec_scalar_op(op: Opcode, frame: &mut CallFrame) -> Result<(), VmError> {
     Ok(())
 }
 
-fn pop_int(frame: &mut CallFrame) -> Result<i64, VmError> {
+fn pop_int(frame: &mut CallFrame) -> VmResult<i64> {
     let v = frame.pop()?;
     if !v.is_int() {
         return Err(VmError::TypeError {
@@ -1034,7 +1009,7 @@ fn pop_int(frame: &mut CallFrame) -> Result<i64, VmError> {
     Ok(v.as_int())
 }
 
-fn pop_float(frame: &mut CallFrame) -> Result<f64, VmError> {
+fn pop_float(frame: &mut CallFrame) -> VmResult<f64> {
     let v = frame.pop()?;
     if !v.is_float() {
         return Err(VmError::TypeError {
@@ -1045,25 +1020,25 @@ fn pop_float(frame: &mut CallFrame) -> Result<f64, VmError> {
     Ok(v.as_float())
 }
 
-fn pop_two_ints(frame: &mut CallFrame) -> Result<(i64, i64), VmError> {
+fn pop_two_ints(frame: &mut CallFrame) -> VmResult<(i64, i64)> {
     let b = pop_int(frame)?;
     let a = pop_int(frame)?;
     Ok((a, b))
 }
 
-fn pop_two_floats(frame: &mut CallFrame) -> Result<(f64, f64), VmError> {
+fn pop_two_floats(frame: &mut CallFrame) -> VmResult<(f64, f64)> {
     let b = pop_float(frame)?;
     let a = pop_float(frame)?;
     Ok((a, b))
 }
 
-fn apply_int_binop(frame: &mut CallFrame, f: impl Fn(i64, i64) -> i64) -> Result<(), VmError> {
+fn apply_int_binop(frame: &mut CallFrame, f: impl Fn(i64, i64) -> i64) -> VmResult {
     let (a, b) = pop_two_ints(frame)?;
     frame.push(Value::from_int(f(a, b)));
     Ok(())
 }
 
-fn apply_float_binop(frame: &mut CallFrame, f: impl Fn(f64, f64) -> f64) -> Result<(), VmError> {
+fn apply_float_binop(frame: &mut CallFrame, f: impl Fn(f64, f64) -> f64) -> VmResult {
     let (a, b) = pop_two_floats(frame)?;
     frame.push(Value::from_float(f(a, b)));
     Ok(())
@@ -1073,7 +1048,7 @@ fn apply_cmp(
     frame: &mut CallFrame,
     int_cmp: impl Fn(&i64, &i64) -> bool,
     float_cmp: impl Fn(&f64, &f64) -> bool,
-) -> Result<(), VmError> {
+) -> VmResult {
     let b = frame.pop()?;
     let a = frame.pop()?;
     let result = if a.is_int() && b.is_int() {

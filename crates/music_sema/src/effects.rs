@@ -1,5 +1,5 @@
 use crate::env::TypeEnv;
-use crate::types::{SemaTypeId, Ty};
+use crate::types::{SemaTypeId, SemaTypeList, Ty};
 
 /// Checks whether a function body's effects are compatible with its arrow type.
 ///
@@ -39,7 +39,7 @@ pub fn check_purity(
 /// effect types recorded in the environment's effect map. Effects not
 /// yet recorded are skipped.
 #[must_use]
-pub fn collect_body_effects(_env: &TypeEnv, need_exprs: &[SemaTypeId]) -> Vec<SemaTypeId> {
+pub fn collect_body_effects(_env: &TypeEnv, need_exprs: &[SemaTypeId]) -> SemaTypeList {
     need_exprs.to_vec()
 }
 
@@ -51,7 +51,7 @@ pub fn remove_handled_effect(
     env: &TypeEnv,
     active_effects: &[SemaTypeId],
     handled: SemaTypeId,
-) -> Vec<SemaTypeId> {
+) -> SemaTypeList {
     let handled_resolved = env.resolve_var(handled);
     active_effects
         .iter()

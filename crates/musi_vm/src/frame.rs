@@ -1,4 +1,4 @@
-use crate::errors::VmError;
+use crate::errors::{VmError, VmResult};
 use crate::value::Value;
 
 #[derive(Clone)]
@@ -47,13 +47,13 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `StackUnderflow` if the stack is empty.
-    pub fn pop(&mut self) -> Result<Value, VmError> {
+    pub fn pop(&mut self) -> VmResult<Value> {
         self.stack.pop().ok_or(VmError::StackUnderflow)
     }
 
     /// # Errors
     /// Returns `StackUnderflow` if the stack is empty.
-    pub fn peek(&self) -> Result<Value, VmError> {
+    pub fn peek(&self) -> VmResult<Value> {
         self.stack.last().copied().ok_or(VmError::StackUnderflow)
     }
 
@@ -64,7 +64,7 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `InvalidLocal` if `idx` is out of range.
-    pub fn load_local(&self, idx: usize) -> Result<Value, VmError> {
+    pub fn load_local(&self, idx: usize) -> VmResult<Value> {
         self.locals
             .get(idx)
             .copied()
@@ -73,7 +73,7 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `InvalidLocal` if `idx` is out of range.
-    pub fn store_local(&mut self, idx: usize, v: Value) -> Result<(), VmError> {
+    pub fn store_local(&mut self, idx: usize, v: Value) -> VmResult {
         let slot = self.locals.get_mut(idx).ok_or(VmError::InvalidLocal(idx))?;
         *slot = v;
         Ok(())
@@ -81,7 +81,7 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `StackUnderflow` if the stack has fewer than one element.
-    pub fn dup(&mut self) -> Result<(), VmError> {
+    pub fn dup(&mut self) -> VmResult {
         let top = self.peek()?;
         self.push(top);
         Ok(())
@@ -89,7 +89,7 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `StackUnderflow` if the stack has fewer than two elements.
-    pub fn swap(&mut self) -> Result<(), VmError> {
+    pub fn swap(&mut self) -> VmResult {
         let len = self.stack.len();
         if len < 2 {
             return Err(VmError::StackUnderflow);
@@ -109,7 +109,7 @@ impl CallFrame {
 
     /// # Errors
     /// Returns `StackUnderflow` if the stack has fewer than three elements.
-    pub fn rot(&mut self) -> Result<(), VmError> {
+    pub fn rot(&mut self) -> VmResult {
         // Forth ROT: [a, b, c] (c=TOS) → [b, c, a] (a=TOS)
         let c = self.pop()?;
         let b = self.pop()?;

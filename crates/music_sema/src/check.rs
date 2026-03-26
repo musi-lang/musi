@@ -11,7 +11,7 @@ use music_ast::ty::TyKind;
 use music_ast::{ExprId, PatId, TyId};
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_found::{Ident, Literal, Span, Symbol};
+use music_found::{Ident, Literal, Span, Symbol, SymbolList};
 use music_resolve::def::{DefId, DefKind};
 use music_resolve::queries::ResolutionMap;
 
@@ -20,7 +20,7 @@ use crate::effects;
 use crate::env::{DispatchInfo, InstanceEntry, TypeEnv, VariantInfo};
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::intrinsic::{collect_builtin_methods, BuiltinMaps};
-use crate::types::{SemaTypeId, Ty};
+use crate::types::{SemaTypeId, SemaTypeList, Ty};
 
 /// Tag index and arity for a variant within its parent sum type.
 #[derive(Debug, Clone, Copy)]
@@ -544,7 +544,7 @@ impl SemaDb {
                         None => self.env.fresh_var(),
                     }
                 } else {
-                    let pts: Vec<SemaTypeId> = sig
+                    let pts: SemaTypeList = sig
                         .params
                         .iter()
                         .map(|p| match p.ty {
@@ -636,7 +636,7 @@ impl SemaDb {
         let param_ty = if params.len() == 1 {
             self.env.fresh_var()
         } else {
-            let param_tys: Vec<SemaTypeId> = params.iter().map(|_| self.env.fresh_var()).collect();
+            let param_tys: SemaTypeList = params.iter().map(|_| self.env.fresh_var()).collect();
             self.env.intern(Ty::Tuple(param_tys))
         };
 
@@ -688,13 +688,13 @@ impl SemaDb {
     }
 
     /// Collects `SemaTypeId`s of `Need` expressions found directly in a body.
-    fn collect_need_exprs(&self, expr_id: ExprId) -> Vec<SemaTypeId> {
+    fn collect_need_exprs(&self, expr_id: ExprId) -> SemaTypeList {
         let mut effects = Vec::new();
         self.walk_for_needs(expr_id, &mut effects);
         effects
     }
 
-    fn walk_for_needs(&self, expr_id: ExprId, out: &mut Vec<SemaTypeId>) {
+    fn walk_for_needs(&self, expr_id: ExprId, out: &mut SemaTypeList) {
         let kind = &self.db.ast.exprs.get(expr_id).kind;
         match kind {
             ExprKind::Need(inner) => {
@@ -895,7 +895,7 @@ impl SemaDb {
     }
 
     fn synth_tuple(&mut self, elems: &[ExprId]) -> SemaTypeId {
-        let elem_tys: Vec<SemaTypeId> = elems.iter().map(|&e| self.synth(e)).collect();
+        let elem_tys: SemaTypeList = elems.iter().map(|&e| self.synth(e)).collect();
         self.env.intern(Ty::Tuple(elem_tys))
     }
 
@@ -1178,7 +1178,7 @@ impl SemaDb {
         }
 
         // Collect argument types
-        let arg_tys: Vec<SemaTypeId> = args
+        let arg_tys: SemaTypeList = args
             .iter()
             .map(|&a| {
                 let ty = self
@@ -1246,7 +1246,7 @@ impl SemaDb {
         };
 
         // Collect method names
-        let methods: Vec<Symbol> = match &inst.body {
+        let methods: SymbolList = match &inst.body {
             InstanceBody::Methods(members) => members
                 .iter()
                 .filter_map(|m| match m {
@@ -1286,7 +1286,7 @@ impl SemaDb {
         // the expression being processed. Since we can't easily get the
         // binding name here, we rely on the caller's context.
         // For now, collect op names and try to find the let binding.
-        let op_names: Vec<Symbol> = members
+        let op_names: SymbolList = members
             .iter()
             .filter_map(|m| match m {
                 MemberDecl::Fn(fn_decl) => Some(member_name_symbol(&fn_decl.name)),

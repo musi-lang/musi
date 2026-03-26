@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use music_ast::common::{AttrArg, MemberDecl, MemberName};
 use music_ast::data::AstData;
 use music_ast::expr::{DataBody, ExprKind};
-use music_ast::{AttrId, AttrList, ExprId};
+use music_ast::{AttrId, AttrList, ExprId, ExprList};
 use music_found::{Interner, Literal, Symbol};
 use music_il::opcode::Opcode;
 
@@ -39,7 +39,7 @@ fn check_attr(ast: &AstData, interner: &Interner, attr_id: AttrId) -> Option<Opc
         }
     }
 
-    let positional: Vec<ExprId> = attr
+    let positional: ExprList = attr
         .kind
         .args
         .iter()

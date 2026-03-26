@@ -10,7 +10,7 @@ use music_ast::expr::{
     RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
-use music_ast::{AttrList, ExprId, ExprList, PatId};
+use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
 use music_found::{Ident, Literal, Span};
 use music_lex::TokenKind;
 
@@ -516,7 +516,7 @@ impl Parser<'_> {
 
     // ── Lambda ────────────────────────────────────────────────────
 
-    fn try_lambda(&mut self, params: Vec<Param>, start: Span) -> ParseResult<ExprId> {
+    fn try_lambda(&mut self, params: ParamList, start: Span) -> ParseResult<ExprId> {
         let ret_ty = if self.eat(&TokenKind::Colon) {
             Some(self.parse_ty()?)
         } else {
@@ -541,7 +541,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn reinterpret_as_params(&self, expr: ExprId) -> ParseResult<Vec<Param>> {
+    fn reinterpret_as_params(&self, expr: ExprId) -> ParseResult<ParamList> {
         let spanned = self.ast.exprs.get(expr);
         match &spanned.kind {
             ExprKind::Var(ident) => Ok(vec![Param {
@@ -559,7 +559,7 @@ impl Parser<'_> {
         }
     }
 
-    fn reinterpret_exprs_as_params(&self, exprs: &[ExprId]) -> ParseResult<Vec<Param>> {
+    fn reinterpret_exprs_as_params(&self, exprs: &[ExprId]) -> ParseResult<ParamList> {
         let mut params = Vec::with_capacity(exprs.len());
         for &expr_id in exprs {
             let spanned = self.ast.exprs.get(expr_id);
@@ -778,8 +778,8 @@ impl Parser<'_> {
     }
 
     fn build_signature(
-        params: Option<Vec<Param>>,
-        ty_params: Vec<Ident>,
+        params: Option<ParamList>,
+        ty_params: IdentList,
         constraints: Vec<Constraint>,
         effects: Vec<EffectItem>,
         ret_ty: Option<music_ast::TyId>,
@@ -801,7 +801,7 @@ impl Parser<'_> {
         }))
     }
 
-    fn parse_opt_params(&mut self) -> ParseResult<Option<Vec<Param>>> {
+    fn parse_opt_params(&mut self) -> ParseResult<Option<ParamList>> {
         if !self.at(&TokenKind::LParen) {
             return Ok(None);
         }
@@ -813,7 +813,7 @@ impl Parser<'_> {
         Ok(Some(params))
     }
 
-    fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
+    fn parse_param_list(&mut self) -> ParseResult<ParamList> {
         let mut params = Vec::with_capacity(4);
         while !self.at(&TokenKind::RParen) && !self.at_eof() {
             params.push(self.parse_param()?);
@@ -837,7 +837,7 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_opt_bracket_params(&mut self) -> ParseResult<Vec<Ident>> {
+    fn parse_opt_bracket_params(&mut self) -> ParseResult<IdentList> {
         if !self.eat(&TokenKind::LBracket) {
             return Ok(Vec::new());
         }

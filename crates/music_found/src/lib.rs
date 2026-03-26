@@ -10,3 +10,5 @@ pub use literal::Literal;
 pub use source::{Source, SourceId, SourceMap};
 pub use span::{Span, Spanned};
 pub use symbol::{Interner, Symbol};
+
+pub type SymbolList = Vec<Symbol>;

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use music_found::{Span, Symbol};
+use music_found::{Span, Symbol, SymbolList};
 
 /// A name-resolution error with its source location.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub enum ResolveErrorKind {
     /// An import forms a cycle (module A imports B which imports A).
     CyclicImport(Symbol),
     /// A cyclic import with the full chain of module paths.
-    CyclicImportChain { path: Symbol, chain: Vec<Symbol> },
+    CyclicImportChain { path: Symbol, chain: SymbolList },
     /// The `msr:` registry prefix was used but is not yet available.
     RegistryNotAvailable(Symbol),
     /// A `git:` import failed to resolve.

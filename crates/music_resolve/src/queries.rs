@@ -9,11 +9,11 @@ use music_ast::expr::{
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
-use music_ast::{ExprId, PatId, TyId};
+use music_ast::{ExprId, ExprList, ParamList, PatId, TyId};
 use music_builtins::prelude::PRELUDE_CLASSES;
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_found::{Ident, Span, Symbol};
+use music_found::{Ident, Span, Symbol, SymbolList};
 
 use crate::def::{DefId, DefInfo, DefKind, Visibility};
 use crate::errors::{ResolveError, ResolveErrorKind};
@@ -29,7 +29,7 @@ pub struct ResolutionMap {
     pub ty_res: HashMap<TyId, DefId>,
     pub pat_variant_res: HashMap<PatId, DefId>,
     pub scopes: ScopeArena,
-    pub captures: HashMap<ExprId, Vec<Symbol>>,
+    pub captures: HashMap<ExprId, SymbolList>,
 }
 
 impl ResolutionMap {
@@ -535,7 +535,7 @@ impl ResolveDb {
         }
     }
 
-    fn resolve_seq(&mut self, stmts: Vec<ExprId>, scope: ScopeId) {
+    fn resolve_seq(&mut self, stmts: ExprList, scope: ScopeId) {
         let seq_scope = self.resolution.scopes.push(ScopeKind::Block, Some(scope));
         for stmt in stmts {
             let stmt_kind = self.db.ast.exprs.get(stmt).kind.clone();
@@ -550,7 +550,7 @@ impl ResolveDb {
     fn resolve_lambda(
         &mut self,
         expr_id: ExprId,
-        params: Vec<Param>,
+        params: ParamList,
         ret_ty: Option<TyId>,
         body: ExprId,
         scope: ScopeId,
