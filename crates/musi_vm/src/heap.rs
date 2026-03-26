@@ -1,3 +1,6 @@
+// Performance-critical hot paths use unsafe for unchecked indexing
+#![allow(unsafe_code)]
+
 use std::ffi::c_void;
 use std::mem::size_of;
 
@@ -78,10 +81,38 @@ const fn is_large(addr: usize) -> bool {
 
 // ── Block types ──────────────────────────────────────────────────────────────
 
+const MARK_FLAG: u8 = 1;
+const PIN_FLAG: u8 = 2;
+
 struct CellSlot {
     obj: Option<HeapObject>,
-    mark: bool,
-    pinned: bool,
+    flags: u8,
+}
+
+impl CellSlot {
+    const fn is_marked(&self) -> bool {
+        self.flags & MARK_FLAG != 0
+    }
+
+    const fn set_marked(&mut self, v: bool) {
+        if v {
+            self.flags |= MARK_FLAG;
+        } else {
+            self.flags &= !MARK_FLAG;
+        }
+    }
+
+    const fn is_pinned(&self) -> bool {
+        self.flags & PIN_FLAG != 0
+    }
+
+    const fn set_pinned(&mut self, v: bool) {
+        if v {
+            self.flags |= PIN_FLAG;
+        } else {
+            self.flags &= !PIN_FLAG;
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -108,8 +139,7 @@ impl Block {
         for _ in 0..BLOCK_CAPACITY {
             cells.push(CellSlot {
                 obj: None,
-                mark: false,
-                pinned: false,
+                flags: 0,
             });
         }
         Self {
@@ -125,8 +155,7 @@ impl Block {
     fn write(&mut self, cell_idx: usize, obj: HeapObject) {
         self.cells[cell_idx] = CellSlot {
             obj: Some(obj),
-            mark: false,
-            pinned: false,
+            flags: 0,
         };
     }
 
@@ -143,8 +172,41 @@ impl Block {
 
 struct LargeEntry {
     obj: HeapObject,
-    mark: bool,
-    pinned: bool,
+    flags: u8,
+}
+
+impl LargeEntry {
+    const fn is_marked(&self) -> bool {
+        self.flags & MARK_FLAG != 0
+    }
+
+    const fn set_marked(&mut self, v: bool) {
+        if v {
+            self.flags |= MARK_FLAG;
+        } else {
+            self.flags &= !MARK_FLAG;
+        }
+    }
+
+    const fn is_pinned(&self) -> bool {
+        self.flags & PIN_FLAG != 0
+    }
+
+    const fn set_pinned(&mut self, v: bool) {
+        if v {
+            self.flags |= PIN_FLAG;
+        } else {
+            self.flags &= !PIN_FLAG;
+        }
+    }
+
+    const fn obj_ref(&self) -> &HeapObject {
+        &self.obj
+    }
+
+    const fn obj_mut(&mut self) -> &mut HeapObject {
+        &mut self.obj
+    }
 }
 
 struct LargeObjectSpace {
@@ -162,11 +224,7 @@ impl LargeObjectSpace {
 
     #[cfg(test)]
     fn alloc(&mut self, obj: HeapObject) -> usize {
-        let entry = LargeEntry {
-            obj,
-            mark: false,
-            pinned: false,
-        };
+        let entry = LargeEntry { obj, flags: 0 };
         if let Some(idx) = self.free.pop() {
             self.objects[idx] = Some(entry);
             idx | LARGE_FLAG
@@ -200,6 +258,7 @@ struct BumpState {
 
 struct GcState {
     remembered_set: Vec<usize>,
+    worklist: Vec<usize>,
     allocation_count: usize,
     threshold: usize,
     minor_cycles: u32,
@@ -238,6 +297,7 @@ impl Heap {
             large: LargeObjectSpace::new(),
             gc: GcState {
                 remembered_set: Vec::new(),
+                worklist: Vec::new(),
                 allocation_count: 0,
                 threshold: INITIAL_GC_THRESHOLD,
                 minor_cycles: 0,
@@ -382,6 +442,50 @@ impl Heap {
         self.blocks.get_mut(block_idx)?.get_mut(cell_idx)
     }
 
+    /// # Safety
+    /// `addr` must have been returned by a previous `alloc()` call and the
+    /// object must still be live (not swept).
+    #[must_use]
+    pub unsafe fn get_unchecked(&self, addr: usize) -> &HeapObject {
+        if is_large(addr) {
+            let idx = addr & !LARGE_FLAG;
+            // SAFETY: caller guarantees addr came from alloc(), so idx is in bounds
+            let slot = unsafe { self.large.objects.get_unchecked(idx) };
+            // SAFETY: alloc() always stores Some into the slot
+            let entry = unsafe { slot.as_ref().unwrap_unchecked() };
+            return entry.obj_ref();
+        }
+        let (block_idx, cell_idx) = unpack_addr(addr);
+        // SAFETY: caller guarantees addr came from alloc(), so block_idx is in bounds
+        let block = unsafe { self.blocks.get_unchecked(block_idx) };
+        // SAFETY: cell_idx is in bounds within the block
+        let cell = unsafe { block.cells.get_unchecked(cell_idx) };
+        // SAFETY: the cell contains a live object (addr came from alloc)
+        unsafe { cell.obj.as_ref().unwrap_unchecked() }
+    }
+
+    /// # Safety
+    /// `addr` must have been returned by a previous `alloc()` call and the
+    /// object must still be live (not swept).
+    #[must_use]
+    pub unsafe fn get_mut_unchecked(&mut self, addr: usize) -> &mut HeapObject {
+        if is_large(addr) {
+            let idx = addr & !LARGE_FLAG;
+            // SAFETY: caller guarantees addr came from alloc(), so idx is in bounds
+            let slot = unsafe { self.large.objects.get_unchecked_mut(idx) };
+            // SAFETY: alloc() always stores Some into the slot
+            let entry = unsafe { slot.as_mut().unwrap_unchecked() };
+            return entry.obj_mut();
+        }
+        let (block_idx, cell_idx) = unpack_addr(addr);
+        // SAFETY: caller guarantees addr came from alloc(), so block_idx is in bounds
+        let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
+        // SAFETY: cell_idx is in bounds within the block
+        let cell = unsafe { block.cells.get_unchecked_mut(cell_idx) };
+        // SAFETY: the cell contains a live object (addr came from alloc)
+        unsafe { cell.obj.as_mut().unwrap_unchecked() }
+    }
+
     // ── Cell access for GC ───────────────────────────────────────────────────
 
     fn get_cell(&self, addr: usize) -> Option<&CellSlot> {
@@ -459,18 +563,19 @@ impl Heap {
     }
 
     pub fn mark_object(&mut self, addr: usize) {
-        let mut worklist = vec![addr];
-        while let Some(a) = worklist.pop() {
+        self.gc.worklist.clear();
+        self.gc.worklist.push(addr);
+        while let Some(a) = self.gc.worklist.pop() {
             if is_large(a) {
                 let idx = a & !LARGE_FLAG;
                 let Some(entry) = self.large.objects.get_mut(idx).and_then(|s| s.as_mut()) else {
                     continue;
                 };
-                if entry.mark {
+                if entry.is_marked() {
                     continue;
                 }
-                entry.mark = true;
-                Self::collect_children_into(&entry.obj, &mut worklist);
+                entry.set_marked(true);
+                Self::collect_children_into(&entry.obj, &mut self.gc.worklist);
                 continue;
             }
 
@@ -481,16 +586,17 @@ impl Heap {
             let Some(cell) = block.cells.get_mut(cell_idx) else {
                 continue;
             };
-            let Some(obj) = &cell.obj else { continue };
-            if cell.mark {
+            if cell.obj.is_none() || cell.is_marked() {
                 continue;
             }
-            cell.mark = true;
+            cell.set_marked(true);
             let line = cell_idx / CELLS_PER_LINE + 1;
             if line < LINES_PER_BLOCK {
                 block.meta.line_marks[line] = 1;
             }
-            Self::collect_children_into(obj, &mut worklist);
+            // SAFETY: we checked cell.obj.is_none() above and continued
+            let obj = unsafe { cell.obj.as_ref().unwrap_unchecked() };
+            Self::collect_children_into(obj, &mut self.gc.worklist);
         }
     }
 
@@ -503,18 +609,19 @@ impl Heap {
     }
 
     fn mark_object_minor(&mut self, addr: usize) {
-        let mut worklist = vec![addr];
-        while let Some(a) = worklist.pop() {
+        self.gc.worklist.clear();
+        self.gc.worklist.push(addr);
+        while let Some(a) = self.gc.worklist.pop() {
             if is_large(a) {
                 let idx = a & !LARGE_FLAG;
                 let Some(entry) = self.large.objects.get_mut(idx).and_then(|s| s.as_mut()) else {
                     continue;
                 };
-                if entry.mark {
+                if entry.is_marked() {
                     continue;
                 }
-                entry.mark = true;
-                Self::collect_children_into(&entry.obj, &mut worklist);
+                entry.set_marked(true);
+                Self::collect_children_into(&entry.obj, &mut self.gc.worklist);
                 continue;
             }
 
@@ -525,16 +632,17 @@ impl Heap {
             let Some(cell) = block.cells.get_mut(cell_idx) else {
                 continue;
             };
-            let Some(obj) = &cell.obj else { continue };
-            if cell.mark {
+            if cell.obj.is_none() || cell.is_marked() {
                 continue;
             }
-            cell.mark = true;
+            cell.set_marked(true);
             let line = cell_idx / CELLS_PER_LINE + 1;
             if line < LINES_PER_BLOCK {
                 block.meta.line_marks[line] = 1;
             }
-            Self::collect_children_into(obj, &mut worklist);
+            // SAFETY: we checked cell.obj.is_none() above and continued
+            let obj = unsafe { cell.obj.as_ref().unwrap_unchecked() };
+            Self::collect_children_into(obj, &mut self.gc.worklist);
         }
     }
 
@@ -647,11 +755,11 @@ impl Heap {
         for block in &mut self.blocks {
             block.meta.line_marks = [0; LINES_PER_BLOCK];
             for cell in &mut block.cells {
-                cell.mark = false;
+                cell.set_marked(false);
             }
         }
         for entry in self.large.objects.iter_mut().flatten() {
-            entry.mark = false;
+            entry.set_marked(false);
         }
     }
 
@@ -668,9 +776,9 @@ impl Heap {
                     block.meta.hole_count += 1;
                     for cell_offset in 0..CELLS_PER_LINE {
                         let cell_idx = (line - 1) * CELLS_PER_LINE + cell_offset;
-                        if cell_idx < block.cells.len() && !block.cells[cell_idx].pinned {
+                        if cell_idx < block.cells.len() && !block.cells[cell_idx].is_pinned() {
                             block.cells[cell_idx].obj = None;
-                            block.cells[cell_idx].mark = false;
+                            block.cells[cell_idx].set_marked(false);
                         }
                     }
                 } else {
@@ -690,7 +798,7 @@ impl Heap {
         // Sweep large objects
         for (idx, slot) in self.large.objects.iter_mut().enumerate() {
             if let Some(entry) = slot {
-                if !entry.mark && !entry.pinned {
+                if !entry.is_marked() && !entry.is_pinned() {
                     *slot = None;
                     self.large.free.push(idx);
                 }
@@ -740,10 +848,10 @@ impl Heap {
         if is_large(addr) {
             let idx = addr & !LARGE_FLAG;
             if let Some(entry) = self.large.objects.get_mut(idx).and_then(|s| s.as_mut()) {
-                entry.pinned = true;
+                entry.set_pinned(true);
             }
         } else if let Some(cell) = self.get_cell_mut(addr) {
-            cell.pinned = true;
+            cell.set_pinned(true);
         }
     }
 
@@ -751,10 +859,10 @@ impl Heap {
         if is_large(addr) {
             let idx = addr & !LARGE_FLAG;
             if let Some(entry) = self.large.objects.get_mut(idx).and_then(|s| s.as_mut()) {
-                entry.pinned = false;
+                entry.set_pinned(false);
             }
         } else if let Some(cell) = self.get_cell_mut(addr) {
-            cell.pinned = false;
+            cell.set_pinned(false);
         }
     }
 
@@ -775,9 +883,9 @@ impl Heap {
                 .objects
                 .get(idx)
                 .and_then(|s| s.as_ref())
-                .is_some_and(|e| e.mark);
+                .is_some_and(LargeEntry::is_marked);
         }
-        self.get_cell(addr).is_some_and(|c| c.mark)
+        self.get_cell(addr).is_some_and(CellSlot::is_marked)
     }
 
     // ── Live count ───────────────────────────────────────────────────────────

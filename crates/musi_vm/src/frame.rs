@@ -1,3 +1,6 @@
+// Performance-critical hot paths use unsafe for unchecked indexing
+#![allow(unsafe_code)]
+
 use crate::errors::{VmError, VmResult};
 use crate::value::Value;
 
@@ -77,6 +80,24 @@ impl CallFrame {
         let slot = self.locals.get_mut(idx).ok_or(VmError::InvalidLocal(idx))?;
         *slot = v;
         Ok(())
+    }
+
+    /// # Safety
+    /// `idx` must be less than `self.locals.len()` (i.e. within the frame's
+    /// local count as set at construction time).
+    #[inline]
+    pub unsafe fn load_local_unchecked(&self, idx: usize) -> Value {
+        // SAFETY: caller guarantees idx < self.locals.len()
+        unsafe { *self.locals.get_unchecked(idx) }
+    }
+
+    /// # Safety
+    /// `idx` must be less than `self.locals.len()` (i.e. within the frame's
+    /// local count as set at construction time).
+    #[inline]
+    pub unsafe fn store_local_unchecked(&mut self, idx: usize, val: Value) {
+        // SAFETY: caller guarantees idx < self.locals.len()
+        unsafe { *self.locals.get_unchecked_mut(idx) = val }
     }
 
     /// # Errors

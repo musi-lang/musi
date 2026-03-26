@@ -21,5 +21,9 @@ criterion = { workspace = true }
 name = "gc"
 harness = false
 
+[[bench]]
+name = "dispatch"
+harness = false
+
 [lints]
 workspace = true

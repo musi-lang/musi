@@ -1,4 +1,5 @@
-#![allow(clippy::arithmetic_side_effects, clippy::as_conversions)]
+// Performance-critical hot paths use unsafe for unchecked indexing
+#![allow(clippy::arithmetic_side_effects, clippy::as_conversions, unsafe_code)]
 
 use music_il::format;
 use music_il::opcode::Opcode;
@@ -78,26 +79,25 @@ impl Vm {
     fn execute(&mut self) -> VmResult<Value> {
         let mut pc: usize = 0;
         loop {
-            let method_idx =
-                usize::from(self.frames.last().ok_or(VmError::NoEntryPoint)?.method_idx);
-            let byte = *self
-                .module
-                .methods
-                .get(method_idx)
-                .ok_or(VmError::InvalidMethod(method_idx))?
-                .code
-                .get(pc)
-                .ok_or(VmError::PcOutOfBounds)?;
-            let op = Opcode::from_byte(byte).ok_or(VmError::InvalidOpcode(byte))?;
+            // SAFETY: execute() is only called from run() which pushes an
+            // initial frame, and every Ret that pops the last frame returns
+            // before we reach this point. Frames is therefore non-empty.
+            // SAFETY: as_mut_ptr() is safe; .add() is unsafe but frames is non-empty
+            let frame_ptr = unsafe { self.frames.as_mut_ptr().add(self.frames.len() - 1) };
+            // SAFETY: the pointer is valid because frames is non-empty (see above)
+            let frame = unsafe { &mut *frame_ptr };
+            let method_idx = usize::from(frame.method_idx);
+            // SAFETY: method_idx is set from valid module data during frame
+            // creation; pc is maintained within bounds by the emitter.
+            let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+            let byte = unsafe { *code.get_unchecked(pc) };
+            // SAFETY: emitter only produces valid opcodes
+            let op = unsafe { Opcode::from_byte(byte).unwrap_unchecked() };
             pc = pc.wrapping_add(1);
 
             match op {
                 Opcode::Halt => {
-                    return Ok(self
-                        .frames
-                        .last_mut()
-                        .ok_or(VmError::StackUnderflow)?
-                        .peek_or(Value::UNIT));
+                    return Ok(frame.peek_or(Value::UNIT));
                 }
                 Opcode::Nop => {}
                 Opcode::Panic => return Err(VmError::ExplicitPanic),
@@ -181,7 +181,7 @@ impl Vm {
     fn dispatch_branch(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::BrTrue | Opcode::BrFalse => {
-                let offset = self.read_i16(method_idx, pc)?;
+                let offset = self.read_i16(method_idx, pc);
                 let cond = self
                     .frames
                     .last_mut()
@@ -199,11 +199,11 @@ impl Vm {
                 }
             }
             Opcode::BrJmp | Opcode::BrBack => {
-                let offset = self.read_i16(method_idx, pc)?;
+                let offset = self.read_i16(method_idx, pc);
                 *pc = pc.wrapping_add_signed(isize::from(offset));
             }
             Opcode::BrTbl => {
-                let count = usize::from(self.read_u16(method_idx, pc)?);
+                let count = usize::from(self.read_u16(method_idx, pc));
                 let base_pc = *pc;
                 *pc = pc.wrapping_add(count * 2);
                 let idx_val = self
@@ -221,14 +221,11 @@ impl Vm {
                 if let Ok(i) = usize::try_from(idx) {
                     if i < count {
                         let off_pos = base_pc + i * 2;
-                        let code = &self
-                            .module
-                            .methods
-                            .get(method_idx)
-                            .ok_or(VmError::InvalidMethod(method_idx))?
-                            .code;
-                        let lo = *code.get(off_pos).ok_or(VmError::PcOutOfBounds)?;
-                        let hi = *code.get(off_pos + 1).ok_or(VmError::PcOutOfBounds)?;
+                        // SAFETY: method_idx is valid; off_pos is within the
+                        // BrTbl operand region emitted by the compiler.
+                        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+                        let lo = unsafe { *code.get_unchecked(off_pos) };
+                        let hi = unsafe { *code.get_unchecked(off_pos + 1) };
                         let offset = i16::from_le_bytes([lo, hi]);
                         *pc = pc.wrapping_add_signed(isize::from(offset));
                     }
@@ -263,7 +260,7 @@ impl Vm {
             }
 
             Opcode::Call => {
-                let arity = usize::from(self.read_u8(method_idx, pc)?);
+                let arity = usize::from(self.read_u8(method_idx, pc));
                 let (callee, args) = self.pop_call_args(arity)?;
                 let (new_method_idx, closure_idx) = self.resolve_callee(callee)?;
                 if self.frames.len() >= MAX_CALL_DEPTH {
@@ -279,7 +276,7 @@ impl Vm {
             }
 
             Opcode::CallTail => {
-                let arity = usize::from(self.read_u8(method_idx, pc)?);
+                let arity = usize::from(self.read_u8(method_idx, pc));
                 let (callee, args) = self.pop_call_args(arity)?;
                 let (new_method_idx, closure_idx) = self.resolve_callee(callee)?;
                 let return_pc = self.frames.last().ok_or(VmError::StackUnderflow)?.return_pc;
@@ -292,8 +289,8 @@ impl Vm {
             }
 
             Opcode::ClsNew => {
-                let cls_method_idx = self.read_u16(method_idx, pc)?;
-                let upval_count = usize::from(self.read_u8(method_idx, pc)?);
+                let cls_method_idx = self.read_u16(method_idx, pc);
+                let upval_count = usize::from(self.read_u8(method_idx, pc));
                 let mut upvalues = Vec::with_capacity(upval_count);
                 {
                     let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
@@ -328,47 +325,39 @@ impl Vm {
             Opcode::LdNil => self.frames.last_mut().unwrap().push(Value::ZERO),
             Opcode::LdOne => self.frames.last_mut().unwrap().push(Value::ONE),
             Opcode::LdSmi => {
-                let v = Value::from_int(i64::from(self.read_i16(method_idx, pc)?));
+                let v = Value::from_int(i64::from(self.read_i16(method_idx, pc)));
                 self.frames.last_mut().unwrap().push(v);
             }
             Opcode::LdLoc => {
-                let idx = usize::from(self.read_u8(method_idx, pc)?);
-                let v = self
-                    .frames
-                    .last_mut()
-                    .ok_or(VmError::StackUnderflow)?
-                    .load_local(idx)?;
-                self.frames.last_mut().unwrap().push(v);
+                let idx = usize::from(self.read_u8(method_idx, pc));
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                // SAFETY: the emitter counts locals correctly; idx < locals.len()
+                let v = unsafe { frame.load_local_unchecked(idx) };
+                frame.push(v);
             }
             Opcode::StLoc => {
-                let idx = usize::from(self.read_u8(method_idx, pc)?);
-                let v = self
-                    .frames
-                    .last_mut()
-                    .ok_or(VmError::StackUnderflow)?
-                    .pop()?;
-                self.frames.last_mut().unwrap().store_local(idx, v)?;
+                let idx = usize::from(self.read_u8(method_idx, pc));
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                let v = frame.pop()?;
+                // SAFETY: the emitter counts locals correctly; idx < locals.len()
+                unsafe { frame.store_local_unchecked(idx, v) };
             }
             Opcode::LdLocW => {
-                let idx = usize::from(self.read_u16(method_idx, pc)?);
-                let v = self
-                    .frames
-                    .last_mut()
-                    .ok_or(VmError::StackUnderflow)?
-                    .load_local(idx)?;
-                self.frames.last_mut().unwrap().push(v);
+                let idx = usize::from(self.read_u16(method_idx, pc));
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                // SAFETY: the emitter counts locals correctly; idx < locals.len()
+                let v = unsafe { frame.load_local_unchecked(idx) };
+                frame.push(v);
             }
             Opcode::StLocW => {
-                let idx = usize::from(self.read_u16(method_idx, pc)?);
-                let v = self
-                    .frames
-                    .last_mut()
-                    .ok_or(VmError::StackUnderflow)?
-                    .pop()?;
-                self.frames.last_mut().unwrap().store_local(idx, v)?;
+                let idx = usize::from(self.read_u16(method_idx, pc));
+                let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+                let v = frame.pop()?;
+                // SAFETY: the emitter counts locals correctly; idx < locals.len()
+                unsafe { frame.store_local_unchecked(idx, v) };
             }
             Opcode::LdConst => {
-                let idx = usize::from(self.read_u16(method_idx, pc)?);
+                let idx = usize::from(self.read_u16(method_idx, pc));
                 let v = self
                     .resolved_constants
                     .get(idx)
@@ -444,7 +433,7 @@ impl Vm {
     fn dispatch_global_upval(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::LdGlob => {
-                let idx = usize::from(self.read_u16(method_idx, pc)?);
+                let idx = usize::from(self.read_u16(method_idx, pc));
                 let v = self
                     .globals
                     .get(idx)
@@ -453,7 +442,7 @@ impl Vm {
                 self.frames.last_mut().unwrap().push(v);
             }
             Opcode::StGlob => {
-                let idx = usize::from(self.read_u16(method_idx, pc)?);
+                let idx = usize::from(self.read_u16(method_idx, pc));
                 let v = self
                     .frames
                     .last_mut()
@@ -465,7 +454,7 @@ impl Vm {
                     .ok_or(VmError::InvalidGlobal(idx))? = v;
             }
             Opcode::LdUpv => {
-                let slot = usize::from(self.read_u16(method_idx, pc)?);
+                let slot = usize::from(self.read_u16(method_idx, pc));
                 let closure_idx = self.current_closure_idx()?;
                 let v = match self.heap.get(closure_idx) {
                     Some(HeapObject::Closure(cls)) => cls
@@ -478,7 +467,7 @@ impl Vm {
                 self.frames.last_mut().unwrap().push(v);
             }
             Opcode::StUpv => {
-                let slot = usize::from(self.read_u16(method_idx, pc)?);
+                let slot = usize::from(self.read_u16(method_idx, pc));
                 let v = self
                     .frames
                     .last_mut()
@@ -563,14 +552,14 @@ impl Vm {
                 return self.dispatch_arr_rw(op, method_idx, pc);
             }
             Opcode::ArrNew => {
-                let len = usize::from(self.read_u16(method_idx, pc)?);
+                let len = usize::from(self.read_u16(method_idx, pc));
                 let heap_idx = self.heap.alloc_array(Value::UNIT, vec![Value::UNIT; len]);
                 self.push_stack(Value::from_ptr(heap_idx))?;
                 self.maybe_collect();
             }
             Opcode::ArrNewT => {
-                let tag_pool_idx = usize::from(self.read_u8(method_idx, pc)?);
-                let len = usize::from(self.read_u16(method_idx, pc)?);
+                let tag_pool_idx = usize::from(self.read_u8(method_idx, pc));
+                let len = usize::from(self.read_u16(method_idx, pc));
                 let tag = self
                     .resolved_constants
                     .get(tag_pool_idx)
@@ -633,13 +622,13 @@ impl Vm {
     fn dispatch_arr_rw(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::ArrGetI => {
-                let elem_idx = usize::from(self.read_u8(method_idx, pc)?);
+                let elem_idx = usize::from(self.read_u8(method_idx, pc));
                 let arr_ptr = self.pop_stack()?;
                 let val = exec_arr_geti(&self.heap, arr_ptr, elem_idx)?;
                 self.frames.last_mut().unwrap().push(val);
             }
             Opcode::ArrSetI => {
-                let elem_idx = usize::from(self.read_u8(method_idx, pc)?);
+                let elem_idx = usize::from(self.read_u8(method_idx, pc));
                 let val = self.pop_stack()?;
                 // Array stays on TOS -- peek without popping
                 let arr_ptr = self.peek_stack()?;
@@ -671,13 +660,13 @@ impl Vm {
     fn dispatch_type_op(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::TyChk => {
-                let type_id = self.read_u16(method_idx, pc)?;
+                let type_id = self.read_u16(method_idx, pc);
                 let val = self.pop_stack()?;
                 let matches = value_matches_type(val, type_id);
                 self.push_stack(Value::from_bool(matches))?;
             }
             Opcode::TyCast => {
-                let type_id = self.read_u16(method_idx, pc)?;
+                let type_id = self.read_u16(method_idx, pc);
                 let val = self.pop_stack()?;
                 if value_matches_type(val, type_id) {
                     self.push_stack(val)?;
@@ -697,7 +686,7 @@ impl Vm {
     fn dispatch_tycl(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::TyclDict => {
-                let class_id = self.read_u16(method_idx, pc)?;
+                let class_id = self.read_u16(method_idx, pc);
                 let type_id_val = self.pop_stack()?;
                 let type_id = if type_id_val.is_int() {
                     u16::try_from(type_id_val.as_int()).unwrap_or(u16::MAX)
@@ -721,7 +710,7 @@ impl Vm {
                 self.push_stack(dict)?;
             }
             Opcode::TyclCall => {
-                let method_idx_op = usize::from(self.read_u8(method_idx, pc)?);
+                let method_idx_op = usize::from(self.read_u8(method_idx, pc));
                 let dict = self.pop_stack()?;
                 if !dict.is_int() {
                     return Err(VmError::InvalidDictionary);
@@ -753,7 +742,7 @@ impl Vm {
     }
 
     fn dispatch_ffi_call(&mut self, method_idx: usize, pc: &mut usize) -> VmResult {
-        let ffi_idx = usize::from(self.read_u16(method_idx, pc)?);
+        let ffi_idx = usize::from(self.read_u16(method_idx, pc));
         let foreign = self
             .module
             .foreigns
@@ -918,36 +907,36 @@ impl Vm {
             .peek()
     }
 
-    fn read_u8(&self, method_idx: usize, pc: &mut usize) -> VmResult<u8> {
-        let b = *self
-            .module
-            .methods
-            .get(method_idx)
-            .ok_or(VmError::InvalidMethod(method_idx))?
-            .code
-            .get(*pc)
-            .ok_or(VmError::PcOutOfBounds)?;
+    fn read_u8(&self, method_idx: usize, pc: &mut usize) -> u8 {
+        // SAFETY: method_idx and pc are maintained in bounds by the emitter
+        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+        let b = unsafe { *code.get_unchecked(*pc) };
         *pc = pc.wrapping_add(1);
-        Ok(b)
+        b
     }
 
-    fn read_u16(&self, method_idx: usize, pc: &mut usize) -> VmResult<u16> {
-        let lo = self.read_u8(method_idx, pc)?;
-        let hi = self.read_u8(method_idx, pc)?;
-        Ok(u16::from_le_bytes([lo, hi]))
+    /// Read a little-endian u16 from bytecode in a single pass.
+    fn read_u16(&self, method_idx: usize, pc: &mut usize) -> u16 {
+        // SAFETY: method_idx and pc are maintained in bounds by the emitter;
+        // the emitter always emits complete 2-byte operands.
+        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+        let lo = u16::from(unsafe { *code.get_unchecked(*pc) });
+        let hi = u16::from(unsafe { *code.get_unchecked(*pc + 1) });
+        *pc += 2;
+        lo | (hi << 8)
     }
 
-    fn read_i16(&self, method_idx: usize, pc: &mut usize) -> VmResult<i16> {
-        let lo = self.read_u8(method_idx, pc)?;
-        let hi = self.read_u8(method_idx, pc)?;
-        Ok(i16::from_le_bytes([lo, hi]))
+    fn read_i16(&self, method_idx: usize, pc: &mut usize) -> i16 {
+        let raw = self.read_u16(method_idx, pc);
+        let [lo, hi] = raw.to_le_bytes();
+        i16::from_le_bytes([lo, hi])
     }
 
     fn dispatch_effect(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
             Opcode::EffPush => {
-                let effect_id = self.read_u16(method_idx, pc)?;
-                let skip_offset = self.read_i16(method_idx, pc)?;
+                let effect_id = self.read_u16(method_idx, pc);
+                let skip_offset = self.read_i16(method_idx, pc);
                 let handler_pc = *pc;
                 let saved_stack_depth = self
                     .frames
@@ -967,7 +956,7 @@ impl Vm {
                 let _ = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
             }
             Opcode::EffNeed => {
-                let effect_idx = self.read_u16(method_idx, pc)?;
+                let effect_idx = self.read_u16(method_idx, pc);
                 let handler_pos = self
                     .effect_handlers
                     .iter()
@@ -988,7 +977,7 @@ impl Vm {
                 *pc = handler.handler_pc;
             }
             Opcode::EffCont => {
-                let flag = self.read_u8(method_idx, pc)?;
+                let flag = self.read_u8(method_idx, pc);
                 let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
                 let value = if flag != 0 { frame.pop()? } else { Value::UNIT };
                 let cont_ptr = frame.pop()?;
