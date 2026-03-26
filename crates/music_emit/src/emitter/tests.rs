@@ -853,9 +853,12 @@ fn emit_type_op_cast() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    // LdOne, TyCast
+    // LdOne, TyCast(BUILTIN_TYPE_INT placeholder)
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::TyCast));
+    assert_eq!(
+        instrs[1],
+        Instruction::with_u16(Opcode::TyCast, music_il::format::BUILTIN_TYPE_INT)
+    );
 }
 
 #[test]
@@ -873,9 +876,12 @@ fn emit_type_op_test() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    // LdOne, TyChk
+    // LdOne, TyChk(BUILTIN_TYPE_INT placeholder)
     assert_eq!(instrs[0], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::TyChk));
+    assert_eq!(
+        instrs[1],
+        Instruction::with_u16(Opcode::TyChk, music_il::format::BUILTIN_TYPE_INT)
+    );
 }
 
 #[test]

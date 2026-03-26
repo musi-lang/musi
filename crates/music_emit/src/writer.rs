@@ -20,6 +20,12 @@ pub fn write_seam(module: &SeamModule) -> Vec<u8> {
         section_count = section_count.saturating_add(1);
     }
 
+    let type_data = build_type_table(module);
+    if !type_data.is_empty() {
+        write_section(&mut buf, format::section::TYPE, &type_data);
+        section_count = section_count.saturating_add(1);
+    }
+
     let const_data = build_constant_pool(module);
     if !const_data.is_empty() {
         write_section(&mut buf, format::section::CNST, &const_data);
@@ -71,6 +77,28 @@ fn build_string_table(module: &SeamModule) -> Vec<u8> {
             out.extend_from_slice(s.as_bytes());
             out.push(0);
         }
+    }
+    out
+}
+
+/// Encode the type table: `type_count(u16)` + descriptors.
+///
+/// Each descriptor: `id(u16)` + `kind(u8)` + `member_count(u16)` = 5 bytes.
+fn build_type_table(module: &SeamModule) -> Vec<u8> {
+    if module.types.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    let count = u16::try_from(module.types.len()).expect("too many type descriptors (>65535)");
+    out.extend_from_slice(&count.to_le_bytes());
+
+    for td in &module.types {
+        out.extend_from_slice(&td.id.to_le_bytes());
+        // TypeKind is #[repr(u8)] — cast is lossless by definition (same as Opcode cast below)
+        #[expect(clippy::as_conversions, reason = "repr(u8) enum to u8 is lossless")]
+        out.push(td.kind as u8);
+        out.extend_from_slice(&td.member_count.to_le_bytes());
     }
     out
 }

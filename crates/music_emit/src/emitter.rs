@@ -7,8 +7,10 @@ use music_ast::expr::{
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::{ExprId, ExprList};
+use music_builtins::types::BuiltinType;
 use music_found::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
+use music_il::format::{self, TypeDescriptor, TypeKind};
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
@@ -40,6 +42,7 @@ pub struct SeamModule {
     pub constants: ConstantPool,
     pub methods: Vec<MethodEntry>,
     pub globals: Vec<GlobalEntry>,
+    pub types: Vec<TypeDescriptor>,
 }
 
 /// Lowers THIR expressions to SEAM bytecode instructions.
@@ -73,10 +76,19 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         next_anon: u32::MAX,
     };
     emitter.emit_module()?;
+    let types: Vec<TypeDescriptor> = BuiltinType::ALL
+        .iter()
+        .map(|bt| TypeDescriptor {
+            id: bt.type_id(),
+            kind: TypeKind::Builtin,
+            member_count: 0,
+        })
+        .collect();
     Ok(SeamModule {
         constants: emitter.pool,
         methods: emitter.methods,
         globals: emitter.globals,
+        types,
     })
 }
 
@@ -707,9 +719,15 @@ impl Emitter<'_> {
             self.push(Instruction::simple(*opcode));
             return Ok(());
         }
-        let tag_name = self.thir.db.interner.resolve(tag.name);
-        let tag_idx = self.pool.add(ConstantEntry::Str(tag_name.into()));
-        let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
+
+        let tag_byte = if let Some(info) = self.thir.variant_info(expr_id) {
+            u8::try_from(info.tag_index).expect("variant tag index overflow (>255)")
+        } else {
+            let tag_name = self.thir.db.interner.resolve(tag.name);
+            let tag_idx = self.pool.add(ConstantEntry::Str(tag_name.into()));
+            u8::try_from(tag_idx & 0xFF).expect("tag index overflow")
+        };
+
         let len = u16::try_from(args.len()).expect("too many variant args (>65535)");
         self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, len));
 
@@ -950,9 +968,11 @@ impl Emitter<'_> {
 
     fn emit_type_op(&mut self, expr: ExprId, kind: TypeOpKind) -> EmitResult {
         self.emit_expr(expr)?;
+        // Placeholder: use Int type ID until full type resolution is wired
+        let type_id = format::BUILTIN_TYPE_INT;
         match kind {
             TypeOpKind::Test(opt_ident) => {
-                self.push(Instruction::simple(Opcode::TyChk));
+                self.push(Instruction::with_u16(Opcode::TyChk, type_id));
                 if let Some(ident) = opt_ident {
                     self.push(Instruction::simple(Opcode::Dup));
                     let slot = self.local_slot(ident.name);
@@ -960,7 +980,7 @@ impl Emitter<'_> {
                 }
             }
             TypeOpKind::Cast => {
-                self.push(Instruction::simple(Opcode::TyCast));
+                self.push(Instruction::with_u16(Opcode::TyCast, type_id));
             }
         }
         Ok(())

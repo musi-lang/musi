@@ -21,6 +21,7 @@ fn module_with_code(code: Vec<u8>) -> Module {
             code,
         }],
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -34,6 +35,7 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
             code,
         }],
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -47,6 +49,7 @@ fn module_with_constants_and_code(constants: Vec<ConstantEntry>, code: Vec<u8>) 
             code,
         }],
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -64,6 +67,7 @@ fn module_with_strings_and_code(
             code,
         }],
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -218,6 +222,7 @@ fn no_entry_point_error() {
         strings: Vec::new(),
         methods: Vec::new(),
         globals: Vec::new(),
+        types: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert!(matches!(vm.run(), Err(VmError::NoEntryPoint)));
@@ -284,6 +289,7 @@ fn two_method_module_locals(
             },
         ],
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -360,6 +366,7 @@ fn call_nested() {
             },
         ],
         globals: Vec::new(),
+        types: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 11);
@@ -410,6 +417,7 @@ fn globals_store_load() {
             exported: false,
             opaque: false,
         }],
+        types: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 77);
@@ -784,26 +792,30 @@ fn arr_concat() {
 }
 
 #[test]
-fn tychk_passthrough() {
+fn tychk_int_true() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         42,
         0,
         op(Opcode::TyChk),
+        0xF6,
+        0xFF, // BUILTIN_TYPE_INT
         op(Opcode::Halt),
     ]));
     let result = vm.run().unwrap();
-    assert!(result.is_int());
-    assert_eq!(result.as_int(), 42);
+    assert!(result.is_bool());
+    assert!(result.as_bool());
 }
 
 #[test]
-fn tycast_passthrough() {
+fn tycast_int_success() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         42,
         0,
         op(Opcode::TyCast),
+        0xF6,
+        0xFF, // BUILTIN_TYPE_INT
         op(Opcode::Halt),
     ]));
     let result = vm.run().unwrap();
@@ -1118,4 +1130,112 @@ fn string_arrcopy() {
     let result = vm.run().unwrap();
     assert!(result.is_int());
     assert_eq!(result.as_int(), 4);
+}
+
+// ── Type operations ───────────────────────────────────────────────────────────
+
+#[test]
+fn ty_chk_int_false_for_float() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyChk),
+        0xF7,
+        0xFF, // BUILTIN_TYPE_FLOAT
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(!result.as_bool());
+}
+
+#[test]
+fn ty_chk_bool_true() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdTru),
+        op(Opcode::TyChk),
+        0xF5,
+        0xFF, // BUILTIN_TYPE_BOOL
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
+#[test]
+fn ty_chk_unit() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdUnit),
+        op(Opcode::TyChk),
+        0xF4,
+        0xFF, // BUILTIN_TYPE_UNIT
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
+#[test]
+fn ty_cast_success() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyCast),
+        0xF6,
+        0xFF, // BUILTIN_TYPE_INT
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn ty_cast_failure() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyCast),
+        0xF7,
+        0xFF, // BUILTIN_TYPE_FLOAT
+        op(Opcode::Halt),
+    ]));
+    assert!(matches!(vm.run(), Err(VmError::TypeCastFailed)));
+}
+
+#[test]
+fn ty_tag_int() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::TyTag),
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 1); // NAN_BOX_SMI = 0b001
+}
+
+#[test]
+fn ty_tag_float() {
+    let constants = vec![ConstantEntry::Value(Value::from_float(3.14))];
+    let mut vm = Vm::new(module_with_constants_and_code(
+        constants,
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::TyTag),
+            op(Opcode::Halt),
+        ],
+    ));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 0); // Floats have tag 0
 }

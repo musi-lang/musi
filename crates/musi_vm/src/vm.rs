@@ -2,6 +2,7 @@
 
 use std::rc::Rc;
 
+use music_il::format;
 use music_il::opcode::Opcode;
 
 use crate::effect::EffectHandler;
@@ -127,10 +128,12 @@ impl Vm {
                 | Opcode::ArrLen
                 | Opcode::ArrTag
                 | Opcode::ArrCopy
-                | Opcode::ArrCaten
-                | Opcode::TyChk
-                | Opcode::TyCast => {
+                | Opcode::ArrCaten => {
                     self.dispatch_array(op, method_idx, &mut pc)?;
+                }
+
+                Opcode::TyChk | Opcode::TyCast | Opcode::TyTag => {
+                    self.dispatch_type_op(op, method_idx, &mut pc)?;
                 }
 
                 Opcode::CmpEq | Opcode::CmpNeq => {
@@ -612,8 +615,6 @@ impl Vm {
                 let result = exec_arr_concat(&mut self.heap, a, b)?;
                 self.frames.last_mut().unwrap().push(result);
             }
-            // No-op until the type system provides type-table indices as operands
-            Opcode::TyChk | Opcode::TyCast => {}
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
         Ok(())
@@ -645,6 +646,32 @@ impl Vm {
                 let idx_val = self.pop_stack()?;
                 let arr_ptr = self.pop_stack()?;
                 exec_arr_set(&self.heap, arr_ptr, idx_val, val)?;
+            }
+            _ => return Err(VmError::UnsupportedOpcode(op)),
+        }
+        Ok(())
+    }
+
+    fn dispatch_type_op(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
+        match op {
+            Opcode::TyChk => {
+                let type_id = self.read_u16(method_idx, pc)?;
+                let val = self.pop_stack()?;
+                let matches = value_matches_type(val, type_id);
+                self.push_stack(Value::from_bool(matches))?;
+            }
+            Opcode::TyCast => {
+                let type_id = self.read_u16(method_idx, pc)?;
+                let val = self.pop_stack()?;
+                if value_matches_type(val, type_id) {
+                    self.push_stack(val)?;
+                } else {
+                    return Err(VmError::TypeCastFailed);
+                }
+            }
+            Opcode::TyTag => {
+                let val = self.pop_stack()?;
+                self.push_stack(Value::from_int(i64::from(val.nan_tag())))?;
             }
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
@@ -1063,6 +1090,18 @@ fn apply_cmp(
     };
     frame.push(Value::from_bool(result));
     Ok(())
+}
+
+/// Check whether a NaN-boxed value matches a builtin type ID.
+const fn value_matches_type(val: Value, type_id: u16) -> bool {
+    match type_id {
+        format::BUILTIN_TYPE_INT => val.is_int(),
+        format::BUILTIN_TYPE_BOOL => val.is_bool(),
+        format::BUILTIN_TYPE_UNIT => val.is_unit(),
+        format::BUILTIN_TYPE_FLOAT => val.is_float(),
+        format::BUILTIN_TYPE_STRING => val.is_ptr(),
+        _ => false,
+    }
 }
 
 #[cfg(test)]

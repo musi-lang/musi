@@ -1,3 +1,5 @@
+use music_il::format::TypeDescriptor;
+
 use crate::value::Value;
 
 /// `u32::MAX` marks the module entry point in `Method::name`.
@@ -19,6 +21,7 @@ pub struct Module {
     pub strings: Vec<String>,
     pub methods: Vec<Method>,
     pub globals: Vec<GlobalDef>,
+    pub types: Vec<TypeDescriptor>,
 }
 
 pub struct Method {

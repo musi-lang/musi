@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use music_il::format::{self, HEADER_SIZE};
+use music_il::format::{self, TypeDescriptor, TypeKind, HEADER_SIZE};
 use music_il::opcode::Opcode;
 
 use crate::errors::LoadError;
@@ -37,6 +37,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     let mut constants: Vec<ConstantEntry> = Vec::new();
     let mut methods: Vec<Method> = Vec::new();
     let mut globals: Vec<GlobalDef> = Vec::new();
+    let mut types: Vec<TypeDescriptor> = Vec::new();
 
     let mut pos = HEADER_SIZE;
     for _ in 0..section_count {
@@ -56,6 +57,9 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
                 let (s, m) = decode_strt(section_data);
                 strings = s;
                 offset_map = m;
+            }
+            format::section::TYPE => {
+                types = decode_type(section_data)?;
             }
             format::section::CNST => {
                 constants = decode_cnst(section_data, &offset_map)?;
@@ -79,6 +83,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
         strings,
         methods,
         globals,
+        types,
     })
 }
 
@@ -103,6 +108,40 @@ fn decode_strt(data: &[u8]) -> (Vec<String>, HashMap<u16, u16>) {
         pos += end + 1;
     }
     (strings, offset_map)
+}
+
+fn decode_type(data: &[u8]) -> Result<Vec<TypeDescriptor>, LoadError> {
+    let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
+    let count = usize::from(u16::from_le_bytes(count_bytes));
+    let mut pos = 2usize;
+    let mut out = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let id_bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
+        let id = u16::from_le_bytes(id_bytes);
+        pos = pos.wrapping_add(2);
+
+        let kind_byte = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+        let kind = match kind_byte {
+            0 => TypeKind::Builtin,
+            1 => TypeKind::Record,
+            2 => TypeKind::Choice,
+            other => return Err(LoadError::InvalidConstantTag { tag: other }),
+        };
+        pos = pos.wrapping_add(1);
+
+        let mc_bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
+        let member_count = u16::from_le_bytes(mc_bytes);
+        pos = pos.wrapping_add(2);
+
+        out.push(TypeDescriptor {
+            id,
+            kind,
+            member_count,
+        });
+    }
+
+    Ok(out)
 }
 
 fn decode_cnst(
@@ -264,7 +303,9 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::ArrNew
         | Opcode::EffNeed
         | Opcode::TyclDict
-        | Opcode::FfiCall => Ok(2),
+        | Opcode::FfiCall
+        | Opcode::TyChk
+        | Opcode::TyCast => Ok(2),
 
         // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
         Opcode::ClsNew | Opcode::ArrNewT => Ok(3),

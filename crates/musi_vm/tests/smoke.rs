@@ -7,7 +7,7 @@
 )]
 
 use musi_vm::module::ENTRY_POINT_NAME;
-use musi_vm::{Vm, load};
+use musi_vm::{load, Vm};
 use music_il::opcode::Opcode;
 
 const fn op(o: Opcode) -> u8 {
@@ -240,6 +240,7 @@ fn smoke_effect_basic() {
             ],
         }],
         globals: Vec::new(),
+        types: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 77);

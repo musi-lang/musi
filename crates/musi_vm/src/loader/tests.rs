@@ -243,8 +243,16 @@ fn arrgeti_arrseti_are_one_byte_operand() {
 }
 
 #[test]
-fn tychk_tycast_have_no_operand() {
-    let bytes = [op(Opcode::TyChk), op(Opcode::TyCast), op(Opcode::Halt)];
+fn tychk_tycast_have_u16_operand() {
+    let bytes = [
+        op(Opcode::TyChk),
+        0xF6,
+        0xFF, // type_id = 0xFFF6 (Int)
+        op(Opcode::TyCast),
+        0xF5,
+        0xFF, // type_id = 0xFFF5 (Bool)
+        op(Opcode::Halt),
+    ];
     let seam = minimal_seam(&bytes, 3);
     let module = load(&seam).unwrap();
     assert_eq!(module.methods[0].code, &bytes);

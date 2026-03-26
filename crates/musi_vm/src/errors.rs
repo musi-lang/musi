@@ -65,6 +65,8 @@ pub enum VmError {
     NotAnArray,
     #[error("invalid heap index {0}")]
     InvalidHeapIndex(HeapIdx),
+    #[error("type cast failed: value does not match target type")]
+    TypeCastFailed,
 }
 
 pub type VmResult<T = ()> = Result<T, VmError>;

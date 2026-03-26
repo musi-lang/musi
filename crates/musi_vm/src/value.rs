@@ -125,6 +125,15 @@ impl Value {
         (self.0 & PAYLOAD_MASK) != 0
     }
 
+    /// The 3-bit NaN-box tag, or 0 for floats (no tag bits set).
+    #[must_use]
+    pub(crate) const fn nan_tag(self) -> u8 {
+        if (self.0 & QNAN) != QNAN {
+            return 0;
+        }
+        ((self.0 >> TAG_SHIFT) & 0x7) as u8
+    }
+
     const fn tag(self) -> u8 {
         if (self.0 & QNAN) != QNAN {
             return u8::MAX;

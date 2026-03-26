@@ -53,6 +53,23 @@ pub const BUILTIN_TYPE_INT: u16 = 0xFFF6;
 pub const BUILTIN_TYPE_FLOAT: u16 = 0xFFF7;
 pub const BUILTIN_TYPE_STRING: u16 = 0xFFF8;
 
+/// Discriminator for entries in the TYPE section.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeKind {
+    Builtin = 0,
+    Record = 1,
+    Choice = 2,
+}
+
+/// A single entry in the TYPE section: identifies a type for runtime checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TypeDescriptor {
+    pub id: u16,
+    pub kind: TypeKind,
+    pub member_count: u16,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests;

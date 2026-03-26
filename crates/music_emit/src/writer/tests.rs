@@ -9,6 +9,7 @@ fn empty_module() -> SeamModule {
         constants: ConstantPool::new(),
         methods: Vec::new(),
         globals: Vec::new(),
+        types: Vec::new(),
     }
 }
 
@@ -53,6 +54,7 @@ fn constant_pool_section_present_when_nonempty() {
         constants: pool,
         methods: Vec::new(),
         globals: Vec::new(),
+        types: Vec::new(),
     };
     let bytes = write_seam(&module);
 
@@ -76,6 +78,7 @@ fn roundtrip_string_in_string_table() {
         constants: pool,
         methods: Vec::new(),
         globals: Vec::new(),
+        types: Vec::new(),
     };
     let bytes = write_seam(&module);
 
