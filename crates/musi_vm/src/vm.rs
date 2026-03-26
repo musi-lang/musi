@@ -7,7 +7,7 @@ use crate::effect::EffectHandler;
 use crate::errors::{VmError, VmResult};
 use crate::ffi::{self, FfiRuntime};
 use crate::frame::CallFrame;
-use crate::heap::{is_nursery_idx, Heap, HeapObject};
+use crate::heap::{Heap, HeapObject};
 use crate::module::{ConstantEntry, Module, ENTRY_POINT_NAME};
 use crate::value::Value;
 
@@ -1028,44 +1028,24 @@ impl Vm {
     // ── GC ────────────────────────────────────────────────────────────────────
 
     fn maybe_collect(&mut self) {
-        if self.heap.nursery_full() {
-            self.minor_collect();
-        }
         if self.heap.should_collect() {
-            self.collect_garbage();
+            if self.heap.should_major() {
+                self.collect_major();
+            } else {
+                self.collect_minor();
+            }
         }
     }
 
-    fn minor_collect(&mut self) {
+    fn collect_minor(&mut self) {
         let roots = self.gather_roots();
-        self.heap.minor_collect(&roots);
-        self.fix_forwarded_roots();
-        self.heap.clear_nursery();
+        self.heap.collect_minor(&roots);
+        self.heap.reset_threshold();
     }
 
-    fn collect_garbage(&mut self) {
-        self.heap.promote_all_nursery();
-        self.fix_forwarded_roots();
-        self.heap.clear_nursery();
-
-        for &val in &self.globals {
-            self.heap.mark_value(val);
-        }
-        for &val in &self.resolved_constants {
-            self.heap.mark_value(val);
-        }
-        for frame in &self.frames {
-            for val in frame.locals_iter() {
-                self.heap.mark_value(val);
-            }
-            for val in frame.stack_iter() {
-                self.heap.mark_value(val);
-            }
-            if let Some(idx) = frame.closure {
-                self.heap.mark_object(idx);
-            }
-        }
-        self.heap.sweep();
+    fn collect_major(&mut self) {
+        let roots = self.gather_roots();
+        self.heap.collect_major(&roots);
         self.heap.reset_threshold();
     }
 
@@ -1083,35 +1063,10 @@ impl Vm {
         roots
     }
 
-    fn fix_forwarded_roots(&mut self) {
-        for val in &mut self.globals {
-            *val = self.heap.fix_value(*val);
-        }
-        for val in &mut self.resolved_constants {
-            *val = self.heap.fix_value(*val);
-        }
-        for frame in &mut self.frames {
-            for val in frame.locals_iter_mut() {
-                *val = self.heap.fix_value(*val);
-            }
-            for val in frame.stack_iter_mut() {
-                *val = self.heap.fix_value(*val);
-            }
-            if let Some(idx) = frame.closure {
-                if is_nursery_idx(idx) {
-                    let fixed = self.heap.fix_value(Value::from_ptr(idx));
-                    if fixed.is_ptr() {
-                        frame.closure = Some(fixed.as_ptr_idx());
-                    }
-                }
-            }
-        }
-    }
-
     fn write_barrier(&mut self, target_idx: usize, stored_value: Value) {
         if stored_value.is_ptr()
-            && is_nursery_idx(stored_value.as_ptr_idx())
-            && !is_nursery_idx(target_idx)
+            && self.heap.is_marked(target_idx)
+            && !self.heap.is_marked(stored_value.as_ptr_idx())
         {
             self.heap.remember(target_idx);
         }
@@ -1145,7 +1100,6 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
                 HeapObject::Continuation(_) => "<continuation>".into(),
                 HeapObject::CPtr(_) => "<cptr>".into(),
                 HeapObject::Cell(v) => format!("<cell:{v:?}>"),
-                HeapObject::Forwarded(idx) => format!("<forwarded:{idx}>"),
             };
         }
     }

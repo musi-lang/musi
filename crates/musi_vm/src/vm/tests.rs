@@ -1535,26 +1535,23 @@ fn gc_pin_unpin_opcodes() {
     assert_eq!(result.as_int(), 6);
 }
 
-// ── Minor GC integration tests ───────────────────────────────────────────────
+// ── Immix GC integration tests ───────────────────────────────────────────────
 
 #[test]
-fn minor_gc_triggered_by_full_nursery() {
-    // Allocate many arrays in a loop; nursery will fill and trigger minor GC.
-    // The loop creates 300 arrays (> nursery capacity of 256).
-    // We use a backwards jump to implement the loop.
+fn immix_gc_triggered_by_allocation_loop() {
+    // 300 array allocations exceed the GC threshold, triggering collection.
     let mut vm = Vm::new(module_with_locals(
         2,
         vec![
-            // local 0 = counter, local 1 = last array
             op(Opcode::LdNil),
             op(Opcode::StLoc),
             0, // counter = 0
             // loop start (pc = 3):
             op(Opcode::ArrNew),
             1,
-            0, // alloc array of len 1
+            0,
             op(Opcode::StLoc),
-            1, // store in local 1
+            1,
             op(Opcode::LdLoc),
             0,
             op(Opcode::LdOne),
@@ -1564,16 +1561,12 @@ fn minor_gc_triggered_by_full_nursery() {
             op(Opcode::LdLoc),
             0,
             op(Opcode::LdSmi),
-            0x2C, // 300 as i16 LE
+            0x2C, // 300
             0x01,
             op(Opcode::CmpLt),
             op(Opcode::BrTrue),
-            // Jump offset: need to go back to pc=3 from current pc.
-            // BrTrue operand at pc=21, after reading 2 bytes pc=23.
-            // target=3, so offset = 3 - 23 = -20
-            0xEC_u8, // -20 as i16 LE = 0xFFEC
+            0xEC_u8, // -20
             0xFF_u8,
-            // loop exit:
             op(Opcode::LdLoc),
             0,
             op(Opcode::Halt),
