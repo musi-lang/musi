@@ -112,14 +112,14 @@ impl ScopeArena {
     /// `DefId` matching `name`, or `None` if not found.
     #[must_use]
     pub fn resolve(&self, scope_id: ScopeId, name: Symbol) -> Option<DefId> {
-        let scope = self.get(scope_id);
-        if let Some(def) = scope.lookup(name) {
-            return Some(def);
+        let mut current = scope_id;
+        loop {
+            let scope = self.get(current);
+            if let Some(def) = scope.lookup(name) {
+                return Some(def);
+            }
+            current = scope.parent?;
         }
-        if let Some(parent) = scope.parent {
-            return self.resolve(parent, name);
-        }
-        None
     }
 }
 

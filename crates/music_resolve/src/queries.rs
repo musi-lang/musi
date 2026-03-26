@@ -35,10 +35,18 @@ pub struct ResolutionMap {
 impl ResolutionMap {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    /// Creates a resolution map with pre-sized maps.
+    ///
+    /// `hint` is typically the number of top-level AST root expressions.
+    #[must_use]
+    pub fn with_capacity(hint: usize) -> Self {
         Self {
-            defs: Arena::new(),
-            expr_res: HashMap::new(),
-            ty_res: HashMap::new(),
+            defs: Arena::with_capacity(hint),
+            expr_res: HashMap::with_capacity(hint),
+            ty_res: HashMap::with_capacity(hint / 2),
             pat_variant_res: HashMap::new(),
             scopes: ScopeArena::new(),
             captures: HashMap::new(),
@@ -68,7 +76,8 @@ pub struct ResolveDb {
 impl ResolveDb {
     #[must_use]
     pub fn new(db: Db, root: PathBuf) -> Self {
-        let mut resolution = ResolutionMap::new();
+        let hint = db.ast.root.len();
+        let mut resolution = ResolutionMap::with_capacity(hint);
         let module_scope = resolution.scopes.push(ScopeKind::Module, None);
         let loader = ModuleLoader::new(root);
         Self {
@@ -91,7 +100,8 @@ impl ResolveDb {
         graph: ModuleGraph,
         current_file: PathBuf,
     ) -> Self {
-        let mut resolution = ResolutionMap::new();
+        let hint = db.ast.root.len();
+        let mut resolution = ResolutionMap::with_capacity(hint);
         let module_scope = resolution.scopes.push(ScopeKind::Module, None);
         Self {
             db,

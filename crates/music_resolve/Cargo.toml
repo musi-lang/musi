@@ -19,7 +19,14 @@ dirs = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
+music_hir = { path = "../music_hir" }
+music_shared = { path = "../music_shared" }
 tempfile = { workspace = true }
+
+[[bench]]
+name = "resolve"
+harness = false
 
 [lints]
 workspace = true

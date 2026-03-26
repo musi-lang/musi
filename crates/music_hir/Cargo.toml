@@ -15,8 +15,14 @@ music_resolve = { path = "../music_resolve" }
 music_sema = { path = "../music_sema" }
 
 [dev-dependencies]
+criterion = { workspace = true }
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
+music_shared = { path = "../music_shared" }
+
+[[bench]]
+name = "lower"
+harness = false
 
 [lints]
 workspace = true

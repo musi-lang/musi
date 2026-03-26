@@ -19,9 +19,15 @@ music_resolve = { path = "../music_resolve" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
 music_hir = { path = "../music_hir" }
+music_shared = { path = "../music_shared" }
+
+[[bench]]
+name = "check"
+harness = false
 
 [lints]
 workspace = true

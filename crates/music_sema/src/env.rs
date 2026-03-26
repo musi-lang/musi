@@ -1,11 +1,12 @@
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use music_arena::Arena;
 use music_ast::ExprId;
 use music_builtins::types::BuiltinType;
-use music_shared::{Span, Symbol, SymbolList};
 use music_il::opcode::Opcode;
 use music_resolve::def::DefId;
+use music_shared::{Span, Symbol, SymbolList};
 
 use crate::types::{SemaTypeId, SemaTypeList, Ty, TyVarId};
 
@@ -41,7 +42,7 @@ pub struct VariantInfo {
 /// nodes to their inferred types, effects, and dispatch decisions.
 pub struct TypeEnv {
     pub types: Arena<Ty>,
-    pub vars: Vec<Option<SemaTypeId>>,
+    pub vars: Vec<Cell<Option<SemaTypeId>>>,
     pub type_map: HashMap<ExprId, SemaTypeId>,
     pub effect_map: HashMap<ExprId, SemaTypeList>,
     pub dispatch: HashMap<ExprId, DispatchInfo>,
@@ -75,19 +76,29 @@ impl TypeEnv {
     /// Creates an empty type environment.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    /// Creates a type environment with pre-sized maps.
+    ///
+    /// `hint` is typically the number of AST expressions; maps that track
+    /// per-expression data are sized from it, while smaller maps use
+    /// proportional fractions.
+    #[must_use]
+    pub fn with_capacity(hint: usize) -> Self {
         Self {
-            types: Arena::new(),
+            types: Arena::with_capacity(hint),
             vars: Vec::new(),
-            type_map: HashMap::new(),
+            type_map: HashMap::with_capacity(hint),
             effect_map: HashMap::new(),
-            dispatch: HashMap::new(),
-            builtin_types: HashMap::new(),
+            dispatch: HashMap::with_capacity(hint / 4),
+            builtin_types: HashMap::with_capacity(32),
             instances: HashMap::new(),
             effect_ops: HashMap::new(),
             effect_indices: HashMap::new(),
             handle_effects: HashMap::new(),
             need_effects: HashMap::new(),
-            variant_info: HashMap::new(),
+            variant_info: HashMap::with_capacity(hint / 8),
             class_ids: HashMap::new(),
             variant_tags: HashMap::new(),
             captured_mutables: HashSet::new(),
@@ -114,7 +125,7 @@ impl TypeEnv {
             .next_var
             .checked_add(1)
             .expect("type variable overflow");
-        self.vars.push(None);
+        self.vars.push(Cell::new(None));
         self.intern(Ty::Var(id))
     }
 
@@ -154,8 +165,13 @@ impl TypeEnv {
         let ty = self.types.get(id);
         if let Ty::Var(v) = ty {
             let idx = usize::try_from(*v).expect("TyVarId always fits in usize");
-            if let Some(bound) = self.vars.get(idx).and_then(|slot| *slot) {
-                return self.resolve_var(bound);
+            if let Some(bound) = self.vars.get(idx).and_then(Cell::get) {
+                let resolved = self.resolve_var(bound);
+                // Path compression: point directly to the final target
+                if resolved != bound {
+                    self.vars[idx].set(Some(resolved));
+                }
+                return resolved;
             }
         }
         id
@@ -189,7 +205,7 @@ impl TypeEnv {
     pub fn bind_var(&mut self, var: TyVarId, ty: SemaTypeId) {
         let idx = usize::try_from(var).expect("TyVarId always fits in usize");
         assert!(idx < self.vars.len(), "variable index out of bounds");
-        self.vars[idx] = Some(ty);
+        self.vars[idx].set(Some(ty));
     }
 }
 

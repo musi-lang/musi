@@ -585,6 +585,7 @@ dependencies = [
 name = "music_hir"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "music_ast",
  "music_db",
  "music_lex",
@@ -623,11 +624,13 @@ dependencies = [
 name = "music_resolve"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "dirs",
  "music_arena",
  "music_ast",
  "music_builtins",
  "music_db",
+ "music_hir",
  "music_lex",
  "music_parse",
  "music_shared",
@@ -639,6 +642,7 @@ dependencies = [
 name = "music_sema"
 version = "0.1.0-rc1"
 dependencies = [
+ "criterion",
  "music_arena",
  "music_ast",
  "music_builtins",

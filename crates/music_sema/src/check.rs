@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use music_ast::common::Param;
-use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, TyRef};
+use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, Signature, TyRef};
 use music_ast::expr::{
     BinOp, CaseArm, DataBody, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef,
     LetBinding, RecordField, SpliceKind, UnaryOp,
@@ -33,6 +33,27 @@ type VariantRegistry = HashMap<Symbol, VariantDefInfo>;
 use crate::unify::unify;
 use music_il::opcode::Opcode;
 
+/// Lightweight extraction of common `ExprKind` variants.
+///
+/// Avoids cloning the full `ExprKind` for the most frequent node types
+/// (`Var`, `Lit`, `BinOp`, `UnaryOp`, `Assign`, `Branch`, `Return`, `Need`)
+/// which together account for ~80% of expressions. Only `Other` falls
+/// through to a full clone.
+enum QuickExpr {
+    Var(Ident),
+    Lit(Literal),
+    BinOp(BinOp, ExprId, ExprId),
+    UnaryOp(UnaryOp, ExprId),
+    Assign(ExprId, ExprId),
+    Branch(ExprId, ExprId, ExprId),
+    Return(Option<ExprId>),
+    Need(ExprId),
+    Passthrough(ExprId),
+    FStr,
+    ClassDef,
+    Other,
+}
+
 /// Wraps `Db` with type-checking state. Owns the `Db` during semantic
 /// analysis and returns it via `finish()`.
 pub struct SemaDb {
@@ -53,14 +74,24 @@ pub struct SemaDb {
     intrinsic_variants: HashMap<Symbol, Opcode>,
     /// All variant names → tag index + arity (from pre-scan).
     variant_registry: VariantRegistry,
+    /// Pre-built index: name → `DefId` for O(1) lookup.
+    name_to_def: HashMap<Symbol, DefId>,
+    /// Incrementally populated: let-binding name → value type for O(1) lookup.
+    let_types: HashMap<Symbol, SemaTypeId>,
 }
 
 impl SemaDb {
     /// Creates a new `SemaDb` with a seeded type environment.
     #[must_use]
     pub fn new(db: Db, resolution: ResolutionMap) -> Self {
-        let mut env = TypeEnv::new();
+        let hint = db.ast.exprs.len();
+        let mut env = TypeEnv::with_capacity(hint);
         env.seed_builtins();
+        let name_to_def: HashMap<Symbol, DefId> = resolution
+            .defs
+            .iter()
+            .map(|(id, info)| (info.name, id))
+            .collect();
         Self {
             db,
             resolution,
@@ -76,6 +107,8 @@ impl SemaDb {
             intrinsic_methods: HashMap::new(),
             intrinsic_variants: HashMap::new(),
             variant_registry: VariantRegistry::new(),
+            name_to_def,
+            let_types: HashMap::new(),
         }
     }
 
@@ -134,21 +167,64 @@ impl SemaDb {
             return ty;
         }
 
+        // Extract small Copy data from common variants without cloning.
+        // Only the rare variants (Let, Lambda, Case, etc.) fall through to
+        // a full clone.
         let spanned = self.db.ast.exprs.get(expr_id);
         let span = spanned.span;
-        let kind = spanned.kind.clone();
-
-        let ty = match kind {
-            ExprKind::Lit(ref lit) => self.synth_literal(lit),
-            ExprKind::Var(ident) => self.synth_var(&ident),
-            ExprKind::App(callee, ref args) => self.synth_app(callee, args, span),
-            ExprKind::BinOp(op, lhs, rhs) => self.synth_binop(op, lhs, rhs, span),
-            ExprKind::UnaryOp(op, operand) => self.synth_unary(op, operand, expr_id),
+        let quick = match &spanned.kind {
+            ExprKind::Var(ident) => QuickExpr::Var(*ident),
+            ExprKind::Lit(lit) => QuickExpr::Lit(lit.clone()),
+            ExprKind::BinOp(op, lhs, rhs) => QuickExpr::BinOp(*op, *lhs, *rhs),
+            ExprKind::UnaryOp(op, operand) => QuickExpr::UnaryOp(*op, *operand),
+            ExprKind::Assign(lhs, rhs) => QuickExpr::Assign(*lhs, *rhs),
             ExprKind::Branch {
                 cond,
                 then_br,
                 else_br,
-            } => self.synth_branch(cond, then_br, else_br, span),
+            } => QuickExpr::Branch(*cond, *then_br, *else_br),
+            ExprKind::Return(val) => QuickExpr::Return(*val),
+            ExprKind::Need(e) => QuickExpr::Need(*e),
+            ExprKind::Postfix { expr, .. } | ExprKind::TypeOp { expr, .. } => {
+                QuickExpr::Passthrough(*expr)
+            }
+            ExprKind::FStrLit(_) => QuickExpr::FStr,
+            ExprKind::ClassDef(_) => QuickExpr::ClassDef,
+            ExprKind::RecordUpdate { base, .. } => QuickExpr::Passthrough(*base),
+            _ => QuickExpr::Other,
+        };
+
+        let ty = match quick {
+            QuickExpr::Var(ident) => self.synth_var(&ident),
+            QuickExpr::Lit(ref lit) => self.synth_literal(lit),
+            QuickExpr::BinOp(op, lhs, rhs) => self.synth_binop(op, lhs, rhs, span),
+            QuickExpr::UnaryOp(op, operand) => self.synth_unary(op, operand, expr_id),
+            QuickExpr::Assign(lhs, rhs) => self.synth_assign(lhs, rhs, span),
+            QuickExpr::Branch(cond, then_br, else_br) => {
+                self.synth_branch(cond, then_br, else_br, span)
+            }
+            QuickExpr::Return(val) => {
+                if let Some(v) = val {
+                    let _ = self.synth(v);
+                }
+                self.env.intern(Ty::Empty)
+            }
+            QuickExpr::Need(e) => self.synth_need(e, span, expr_id),
+            QuickExpr::Passthrough(expr) => self.synth(expr),
+            QuickExpr::FStr => self.env.builtin(BuiltinType::String),
+            QuickExpr::ClassDef => self.env.intern(Ty::Builtin(BuiltinType::Type)),
+            QuickExpr::Other => self.synth_full_clone(expr_id, span),
+        };
+
+        let _ = self.env.type_map.insert(expr_id, ty);
+        ty
+    }
+
+    /// Handles the remaining `ExprKind` variants that require a full clone.
+    fn synth_full_clone(&mut self, expr_id: ExprId, span: Span) -> SemaTypeId {
+        let kind = self.db.ast.exprs.get(expr_id).kind.clone();
+        match kind {
+            ExprKind::App(callee, ref args) => self.synth_app(callee, args, span),
             ExprKind::Let(ref binding) => self.synth_let(binding),
             ExprKind::Lambda {
                 ref params,
@@ -164,16 +240,7 @@ impl SemaDb {
             ExprKind::Access {
                 expr, ref field, ..
             } => self.synth_access(expr, field, span),
-            ExprKind::Assign(lhs, rhs) => self.synth_assign(lhs, rhs, span),
-            ExprKind::Return(val) => {
-                if let Some(v) = val {
-                    let _ = self.synth(v);
-                }
-                self.env.intern(Ty::Empty)
-            }
             ExprKind::Resume(val) => self.synth_resume(val, span),
-            ExprKind::Need(e) => self.synth_need(e, span, expr_id),
-            ExprKind::Postfix { expr, .. } | ExprKind::TypeOp { expr, .. } => self.synth(expr),
             ExprKind::Index {
                 expr,
                 ref indices,
@@ -183,28 +250,36 @@ impl SemaDb {
                 self.register_data_variants(body);
                 self.env.intern(Ty::Builtin(BuiltinType::Type))
             }
-            ExprKind::ClassDef(_) => self.env.intern(Ty::Builtin(BuiltinType::Type)),
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
             ExprKind::InstanceDef(ref inst) => self.synth_instance_def(inst, span),
             ExprKind::Handle(ref data) => {
                 self.synth_handle(&data.effect, &data.handlers, data.body, span, expr_id)
             }
-            ExprKind::FStrLit(_) => self.env.builtin(BuiltinType::String),
-            ExprKind::RecordUpdate { base, .. } => self.synth(base),
             ExprKind::Comprehension(ref data) => {
                 let elem_ty = self.synth(data.expr);
                 self.env.intern(Ty::Array(elem_ty))
             }
             ExprKind::Quote(_) => self.synth_quote(),
             ExprKind::Splice(ref sk) => self.synth_splice(sk, span),
-            ExprKind::Import { .. }
+            // Already handled by QuickExpr fast path
+            ExprKind::Var(_)
+            | ExprKind::Lit(_)
+            | ExprKind::BinOp(..)
+            | ExprKind::UnaryOp(..)
+            | ExprKind::Assign(..)
+            | ExprKind::Branch { .. }
+            | ExprKind::Return(_)
+            | ExprKind::Need(_)
+            | ExprKind::Postfix { .. }
+            | ExprKind::TypeOp { .. }
+            | ExprKind::FStrLit(_)
+            | ExprKind::ClassDef(_)
+            | ExprKind::RecordUpdate { .. }
+            | ExprKind::Import { .. }
             | ExprKind::ForeignImport(_)
             | ExprKind::MatrixLit(_)
             | ExprKind::Piecewise(_) => self.env.intern(Ty::Any),
-        };
-
-        let _ = self.env.type_map.insert(expr_id, ty);
-        ty
+        }
     }
 
     /// Checks `expr_id` against `expected`, unifying and reporting mismatches.
@@ -253,29 +328,11 @@ impl SemaDb {
     }
 
     fn find_let_value_type(&self, name: Symbol) -> Option<SemaTypeId> {
-        for eid in self.env.type_map.keys() {
-            let spanned = self.db.ast.exprs.get(*eid);
-            if let ExprKind::Let(binding) = &spanned.kind {
-                let pat = self.db.ast.pats.get(binding.pat);
-                if let PatKind::Bind(bind_ident) = &pat.kind {
-                    if bind_ident.name == name {
-                        if let Some(value_id) = binding.value {
-                            return self.env.type_map.get(&value_id).copied();
-                        }
-                    }
-                }
-            }
-        }
-        None
+        self.let_types.get(&name).copied()
     }
 
     fn find_def_for_name(&self, name: Symbol) -> Option<DefId> {
-        for (def_id, info) in &self.resolution.defs {
-            if info.name == name {
-                return Some(def_id);
-            }
-        }
-        None
+        self.name_to_def.get(&name).copied()
     }
 
     fn synth_app(&mut self, callee: ExprId, args: &[ExprId], span: Span) -> SemaTypeId {
@@ -510,74 +567,93 @@ impl SemaDb {
         let val_ty = binding.value.map(|value| self.synth(value));
 
         if let Some(ref sig) = binding.sig {
-            // #2: Store constraints for later checking at call sites
-            if !sig.constraints.is_empty() {
+            self.process_let_sig(binding, sig, val_ty);
+        }
+
+        // Populate let_types for O(1) lookup in synth_var.
+        // Done after sig handling so function bindings get the Arrow type
+        // (which overwrites type_map[value_id] above).
+        if let Some(vt) = val_ty {
+            if let Some(value_id) = binding.value {
                 let pat = self.db.ast.pats.get(binding.pat);
                 if let PatKind::Bind(bind_ident) = &pat.kind {
-                    if let Some(def_id) = self.find_def_for_name(bind_ident.name) {
-                        let constraints: Vec<(Symbol, Symbol)> = sig
-                            .constraints
-                            .iter()
-                            .filter_map(|c| match c {
-                                Constraint::Implements { ty, class } => {
-                                    Some((ty.name, class.name.name))
-                                }
-                                Constraint::Subtype { .. } => None,
-                            })
-                            .collect();
-                        if !constraints.is_empty() {
-                            let _prev = self.def_constraints.insert(def_id, constraints);
-                        }
-                    }
-                }
-            }
-
-            // Unify body type against declared return type
-            if let Some(ret_ty_id) = sig.ret_ty {
-                let expected = self.lower_ty(ret_ty_id);
-                if let Some(vt) = val_ty {
-                    if let Some(value_id) = binding.value {
-                        let span = self.db.ast.exprs.get(value_id).span;
-                        if let Err(e) = unify(&mut self.env, vt, expected, span) {
-                            self.errors.push(e);
-                        }
-                    }
-                }
-            }
-
-            // For function bindings with params, register an Arrow type
-            if !sig.params.is_empty() {
-                let param_ty = if sig.params.len() == 1 {
-                    match sig.params[0].ty {
-                        Some(t) => self.lower_ty(t),
-                        None => self.env.fresh_var(),
-                    }
-                } else {
-                    let pts: SemaTypeList = sig
-                        .params
-                        .iter()
-                        .map(|p| match p.ty {
-                            Some(t) => self.lower_ty(t),
-                            None => self.env.fresh_var(),
-                        })
-                        .collect();
-                    self.env.intern(Ty::Tuple(pts))
-                };
-                let ret_ty = match sig.ret_ty {
-                    Some(t) => self.lower_ty(t),
-                    None => val_ty.unwrap_or_else(|| self.env.fresh_var()),
-                };
-                let arrow = self.env.intern(Ty::Arrow {
-                    param: param_ty,
-                    ret: ret_ty,
-                });
-                if let Some(value_id) = binding.value {
-                    let _ = self.env.type_map.insert(value_id, arrow);
+                    let ty = self.env.type_map.get(&value_id).copied().unwrap_or(vt);
+                    let _prev = self.let_types.insert(bind_ident.name, ty);
                 }
             }
         }
 
         self.env.intern(Ty::Unit)
+    }
+
+    fn process_let_sig(
+        &mut self,
+        binding: &LetBinding,
+        sig: &Signature,
+        val_ty: Option<SemaTypeId>,
+    ) {
+        if !sig.constraints.is_empty() {
+            let pat = self.db.ast.pats.get(binding.pat);
+            if let PatKind::Bind(bind_ident) = &pat.kind {
+                if let Some(def_id) = self.find_def_for_name(bind_ident.name) {
+                    let constraints: Vec<(Symbol, Symbol)> = sig
+                        .constraints
+                        .iter()
+                        .filter_map(|c| match c {
+                            Constraint::Implements { ty, class } => {
+                                Some((ty.name, class.name.name))
+                            }
+                            Constraint::Subtype { .. } => None,
+                        })
+                        .collect();
+                    if !constraints.is_empty() {
+                        let _prev = self.def_constraints.insert(def_id, constraints);
+                    }
+                }
+            }
+        }
+
+        if let Some(ret_ty_id) = sig.ret_ty {
+            let expected = self.lower_ty(ret_ty_id);
+            if let Some(vt) = val_ty {
+                if let Some(value_id) = binding.value {
+                    let span = self.db.ast.exprs.get(value_id).span;
+                    if let Err(e) = unify(&mut self.env, vt, expected, span) {
+                        self.errors.push(e);
+                    }
+                }
+            }
+        }
+
+        if !sig.params.is_empty() {
+            let param_ty = if sig.params.len() == 1 {
+                match sig.params[0].ty {
+                    Some(t) => self.lower_ty(t),
+                    None => self.env.fresh_var(),
+                }
+            } else {
+                let pts: SemaTypeList = sig
+                    .params
+                    .iter()
+                    .map(|p| match p.ty {
+                        Some(t) => self.lower_ty(t),
+                        None => self.env.fresh_var(),
+                    })
+                    .collect();
+                self.env.intern(Ty::Tuple(pts))
+            };
+            let ret_ty = match sig.ret_ty {
+                Some(t) => self.lower_ty(t),
+                None => val_ty.unwrap_or_else(|| self.env.fresh_var()),
+            };
+            let arrow = self.env.intern(Ty::Arrow {
+                param: param_ty,
+                ret: ret_ty,
+            });
+            if let Some(value_id) = binding.value {
+                let _ = self.env.type_map.insert(value_id, arrow);
+            }
+        }
     }
 
     fn validate_foreign_sig(&mut self, binding: &LetBinding, span: Span) {
