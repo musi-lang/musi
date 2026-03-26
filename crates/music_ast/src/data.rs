@@ -1,5 +1,5 @@
 use music_arena::Arena;
-use music_found::Spanned;
+use music_shared::Spanned;
 
 use crate::ExprList;
 use crate::common::Attr;

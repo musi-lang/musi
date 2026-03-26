@@ -1,7 +1,7 @@
-use music_ast::ty::{Dim, TyKind};
 use music_ast::TyId;
-use music_found::Span;
+use music_ast::ty::{Dim, TyKind};
 use music_lex::TokenKind;
+use music_shared::Span;
 
 use crate::errors::ParseResult;
 use crate::parser::Parser;

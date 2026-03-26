@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use music_arena::Arena;
 use music_ast::ExprId;
 use music_builtins::types::BuiltinType;
-use music_found::{Span, Symbol, SymbolList};
+use music_shared::{Span, Symbol, SymbolList};
 use music_il::opcode::Opcode;
 use music_resolve::def::DefId;
 

@@ -1,4 +1,4 @@
-use music_found::{Interner, Literal, Span, Spanned};
+use music_shared::{Interner, Literal, Span, Spanned};
 
 use super::*;
 
@@ -46,7 +46,7 @@ fn alloc_get_roundtrip_pat() {
 
 #[test]
 fn alloc_get_roundtrip_ty() {
-    use music_found::Ident;
+    use music_shared::Ident;
 
     use crate::ty::TyKind;
 
@@ -67,7 +67,7 @@ fn alloc_get_roundtrip_ty() {
 
 #[test]
 fn alloc_get_roundtrip_attr() {
-    use music_found::Ident;
+    use music_shared::Ident;
 
     let mut interner = Interner::new();
     let sym = interner.intern("inline");

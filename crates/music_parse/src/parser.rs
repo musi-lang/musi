@@ -6,8 +6,8 @@ use music_ast::expr::ExprKind;
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
 use music_ast::{AttrId, ExprId, PatId, TyId};
-use music_found::{Ident, Interner, Span, Spanned, Symbol};
 use music_lex::{Token, TokenKind};
+use music_shared::{Ident, Interner, Span, Spanned, Symbol};
 
 use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
 

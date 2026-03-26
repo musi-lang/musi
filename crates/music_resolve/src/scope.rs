@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use music_found::Symbol;
+use music_shared::Symbol;
 
 use crate::def::DefId;
 

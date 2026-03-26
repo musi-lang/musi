@@ -1,4 +1,4 @@
-use music_found::{Ident, Interner, Literal, Span, Symbol};
+use music_shared::{Ident, Interner, Literal, Span, Symbol};
 
 use super::*;
 use crate::common::{Param, Signature};

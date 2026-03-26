@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use music_db::Db;
-use music_found::{Interner, SourceMap};
 use music_lex::Lexer;
 use music_parse::parse;
+use music_shared::{Interner, SourceMap};
 
 use music_resolve::def::DefKind;
 use music_resolve::errors::{ResolveError, ResolveErrorKind};

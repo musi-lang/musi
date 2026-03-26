@@ -1,4 +1,4 @@
-use music_found::{Ident, Literal};
+use music_shared::{Ident, Literal};
 
 use crate::{PatId, PatList};
 

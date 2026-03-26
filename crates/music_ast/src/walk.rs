@@ -1,4 +1,4 @@
-use music_found::{Span, Spanned};
+use music_shared::{Span, Spanned};
 
 use crate::common::{
     FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef,

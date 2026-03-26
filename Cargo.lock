@@ -509,12 +509,12 @@ dependencies = [
  "musi_vm",
  "music_db",
  "music_emit",
- "music_found",
  "music_hir",
  "music_lex",
  "music_parse",
  "music_resolve",
  "music_sema",
+ "music_shared",
  "tempfile",
 ]
 
@@ -539,7 +539,7 @@ name = "music_ast"
 version = "0.1.0-rc1"
 dependencies = [
  "music_arena",
- "music_found",
+ "music_shared",
 ]
 
 [[package]]
@@ -561,7 +561,7 @@ version = "0.1.0-rc1"
 dependencies = [
  "music_arena",
  "music_ast",
- "music_found",
+ "music_shared",
 ]
 
 [[package]]
@@ -571,20 +571,12 @@ dependencies = [
  "music_ast",
  "music_builtins",
  "music_db",
- "music_found",
  "music_hir",
  "music_il",
  "music_resolve",
  "music_sema",
+ "music_shared",
  "tempfile",
-]
-
-[[package]]
-name = "music_found"
-version = "0.1.0-rc1"
-dependencies = [
- "intaglio",
- "thiserror",
 ]
 
 [[package]]
@@ -593,11 +585,11 @@ version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
  "music_db",
- "music_found",
  "music_lex",
  "music_parse",
  "music_resolve",
  "music_sema",
+ "music_shared",
 ]
 
 [[package]]
@@ -608,7 +600,7 @@ version = "0.1.0-rc1"
 name = "music_lex"
 version = "0.1.0-rc1"
 dependencies = [
- "music_found",
+ "music_shared",
  "thiserror",
 ]
 
@@ -618,8 +610,8 @@ version = "0.1.0-rc1"
 dependencies = [
  "music_arena",
  "music_ast",
- "music_found",
  "music_lex",
+ "music_shared",
 ]
 
 [[package]]
@@ -631,9 +623,9 @@ dependencies = [
  "music_ast",
  "music_builtins",
  "music_db",
- "music_found",
  "music_lex",
  "music_parse",
+ "music_shared",
  "serde_json",
  "tempfile",
 ]
@@ -647,12 +639,20 @@ dependencies = [
  "music_builtins",
  "music_config",
  "music_db",
- "music_found",
  "music_hir",
  "music_il",
  "music_lex",
  "music_parse",
  "music_resolve",
+ "music_shared",
+ "thiserror",
+]
+
+[[package]]
+name = "music_shared"
+version = "0.1.0-rc1"
+dependencies = [
+ "intaglio",
  "thiserror",
 ]
 

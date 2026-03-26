@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use music_found::Symbol;
+use music_shared::Symbol;
 
 use crate::def::DefId;
 

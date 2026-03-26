@@ -1,4 +1,4 @@
-use music_found::Span;
+use music_shared::Span;
 
 use crate::env::TypeEnv;
 use crate::errors::{SemaError, SemaErrorKind};
@@ -133,8 +133,8 @@ fn unify_tuple(env: &mut TypeEnv, xs: &[SemaTypeId], ys: &[SemaTypeId], span: Sp
 /// Unifies two record types with width subtyping (f2's fields must exist in f1).
 fn unify_record(
     env: &mut TypeEnv,
-    f1: &[(music_found::Symbol, SemaTypeId)],
-    f2: &[(music_found::Symbol, SemaTypeId)],
+    f1: &[(music_shared::Symbol, SemaTypeId)],
+    f2: &[(music_shared::Symbol, SemaTypeId)],
     span: Span,
 ) -> UnifyResult {
     let mut unified_fields = f1.to_vec();

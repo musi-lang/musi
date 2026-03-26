@@ -6,7 +6,7 @@ pub mod ty;
 pub mod walk;
 
 use music_arena::Idx;
-use music_found::{Ident, Spanned};
+use music_shared::{Ident, Spanned};
 
 use common::{Attr, Param};
 use expr::ExprKind;

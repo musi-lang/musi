@@ -1,5 +1,5 @@
 [package]
-name = "music_found"
+name = "music_shared"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

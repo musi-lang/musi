@@ -1,8 +1,8 @@
 use core::error::Error;
 use core::fmt;
 
-use music_found::Span;
 use music_lex::TokenKind;
+use music_shared::Span;
 
 /// A parse error with structured kind, location, and optional context.
 #[derive(Debug, Clone, PartialEq, Eq)]

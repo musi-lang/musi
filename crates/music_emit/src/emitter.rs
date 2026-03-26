@@ -10,7 +10,7 @@ use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, ExprList, TyId};
 use music_builtins::types::BuiltinType;
-use music_found::{Ident, Literal, Symbol, SymbolList};
+use music_shared::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
 use music_il::format::{
     self, ClassDescriptor, FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,

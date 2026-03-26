@@ -14,7 +14,7 @@ use music_ast::expr::{
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_db::Db;
-use music_found::{Ident, Interner, Literal, SourceMap, Span, Spanned};
+use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 use music_hir::HirBundle;
 use music_il::format::BUILTIN_TYPE_INT;
 use music_il::instruction::{Instruction, Operand};

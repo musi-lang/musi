@@ -3,8 +3,8 @@ use std::io;
 use std::path::Path;
 
 use music_db::Db;
-use music_found::diag::Diag;
-use music_found::{Interner, SourceMap};
+use music_shared::diag::Diag;
+use music_shared::{Interner, SourceMap};
 use music_hir::lower;
 use music_lex::Lexer;
 use music_parse::parse;

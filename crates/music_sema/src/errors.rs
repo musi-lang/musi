@@ -1,7 +1,7 @@
 use core::error;
 use core::fmt;
 
-use music_found::{Span, Symbol};
+use music_shared::{Span, Symbol};
 use thiserror::Error;
 
 use crate::types::{SemaTypeId, TyVarId};

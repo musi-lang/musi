@@ -13,7 +13,7 @@ use music_ast::{ExprId, ExprList, ParamList, PatId, TyId};
 use music_builtins::prelude::PRELUDE_CLASSES;
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_found::{Ident, Span, Symbol, SymbolList};
+use music_shared::{Ident, Span, Symbol, SymbolList};
 
 use crate::def::{DefId, DefInfo, DefKind, Visibility};
 use crate::errors::{ResolveError, ResolveErrorKind};

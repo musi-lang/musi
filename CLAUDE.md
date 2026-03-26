@@ -6,32 +6,32 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 
 ### Forbidden C-isms
 
-| Wrong (C/JS/Rust)   | Correct (Musi)                       | Notes                                                 |
-| ------------------- | ------------------------------------ | ----------------------------------------------------- |
-| `&&`                | `and`                                | Type-directed: logical on Bool, bitwise on Int        |
-| `\|\|`              | `or`                                 | Type-directed: logical on Bool, bitwise on Int        |
-| `!x`                | `not x`                              | Type-directed: logical on Bool, bitwise on Int        |
-| `&`                 | `and`                                | No separate bitwise operators                         |
-| `\|` (bitwise)      | `or`                                 | No separate bitwise operators                         |
-| `^`                 | `xor`                                | No separate bitwise operators                         |
-| `~`                 | `not`                                | No separate bitwise operators                         |
-| `==`                | `=`                                  | Single equals is comparison                           |
-| `!=`                | `/=`                                 | Slash-equals                                          |
-| `x = 5` (assign)    | `x := 5` (bind) or `x <- 5` (mutate) | `:=` binds, `<-` mutates                              |
-| `if/else`           | `(x if cond \| y if _)`              | Piecewise expressions, no if/else                     |
-| `{ ... }` (blocks)  | `( ... )`                            | Parens for blocks/sequences                           |
-| `fn f()`            | `let f := () => ...`                 | No fn keyword                                         |
-| `null`/`nil`        | `.None`                              | Variant, dot-prefixed                                 |
-| `true`/`false`      | `.True`/`.False`                     | Variants, dot-prefixed, capitalized                   |
-| `enum`              | `data { A \| B : T }`                | `\|` separates variants, `:` for payload              |
-| `struct`            | `data { x : T; y : U }`              | Fields separated by `;`                               |
-| `x.field` (obj lit) | `.{ field := value }`                | Record literals use `.{`                              |
-| `=>` (match arm)    | `=>`                                 | Same, but case uses `\|` separator and `( )` wrapper  |
-| `->` (fn type)      | `->` (pure) / `~>` (effectful)       | Two arrow types                                       |
-| `#[attr]`           | `@attr`                              | Rust-style attributes replaced by `@` prefix          |
-| `'T`                | `T` (declared in `[T]`)              | No tick prefix for type variables                     |
-| `enum { A, B }`     | `data { A \| B }`                    | `\|` separates variants                               |
-| `A \| B` (type sum) | `A + B`                              | `+` for sum types, `*` for product types              |
+| Wrong (C/JS/Rust)   | Correct (Musi)                       | Notes                                                |
+| ------------------- | ------------------------------------ | ---------------------------------------------------- |
+| `&&`                | `and`                                | Type-directed: logical on Bool, bitwise on Int       |
+| `\|\|`              | `or`                                 | Type-directed: logical on Bool, bitwise on Int       |
+| `!x`                | `not x`                              | Type-directed: logical on Bool, bitwise on Int       |
+| `&`                 | `and`                                | No separate bitwise operators                        |
+| `\|` (bitwise)      | `or`                                 | No separate bitwise operators                        |
+| `^`                 | `xor`                                | No separate bitwise operators                        |
+| `~`                 | `not`                                | No separate bitwise operators                        |
+| `==`                | `=`                                  | Single equals is comparison                          |
+| `!=`                | `/=`                                 | Slash-equals                                         |
+| `x = 5` (assign)    | `x := 5` (bind) or `x <- 5` (mutate) | `:=` binds, `<-` mutates                             |
+| `if/else`           | `(x if cond \| y if _)`              | Piecewise expressions, no if/else                    |
+| `{ ... }` (blocks)  | `( ... )`                            | Parens for blocks/sequences                          |
+| `fn f()`            | `let f := () => ...`                 | No fn keyword                                        |
+| `null`/`nil`        | `.None`                              | Variant, dot-prefixed                                |
+| `true`/`false`      | `.True`/`.False`                     | Variants, dot-prefixed, capitalized                  |
+| `enum`              | `data { A \| B : T }`                | `\|` separates variants, `:` for payload             |
+| `struct`            | `data { x : T; y : U }`              | Fields separated by `;`                              |
+| `x.field` (obj lit) | `.{ field := value }`                | Record literals use `.{`                             |
+| `=>` (match arm)    | `=>`                                 | Same, but case uses `\|` separator and `( )` wrapper |
+| `->` (fn type)      | `->` (pure) / `~>` (effectful)       | Two arrow types                                      |
+| `#[attr]`           | `@attr`                              | Rust-style attributes replaced by `@` prefix         |
+| `'T`                | `T` (declared in `[T]`)              | No tick prefix for type variables                    |
+| `enum { A, B }`     | `data { A \| B }`                    | `\|` separates variants                              |
+| `A \| B` (type sum) | `A + B`                              | `+` for sum types, `*` for product types             |
 
 ### Key Syntax Rules
 
@@ -73,7 +73,7 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 
 ```mermaid
 graph TD
-    A["crates/music_found/"] --> B["src/"]
+    A["crates/music_shared/"] --> B["src/"]
     A --> C["tests/"]
     B --> D["lib.rs"]
     B --> E["span.rs"]

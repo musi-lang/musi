@@ -1,6 +1,6 @@
 use music_ast::data::AstData;
 use music_ast::expr::{AccessMode, BinOp, CompClause, ExprKind, ImportKind, PostfixOp, UnaryOp};
-use music_found::{Interner, Literal};
+use music_shared::{Interner, Literal};
 use music_lex::Lexer;
 
 use crate::{ParseError, ParseErrorKind};

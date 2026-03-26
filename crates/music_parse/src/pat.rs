@@ -1,7 +1,7 @@
 use music_ast::PatId;
 use music_ast::pat::{PatKind, RecordPatField};
-use music_found::Literal;
 use music_lex::TokenKind;
+use music_shared::Literal;
 
 use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
 use crate::parser::Parser;

@@ -11,7 +11,7 @@ use music_ast::ty::TyKind;
 use music_ast::{ExprId, PatId, TyId};
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_found::{Ident, Literal, Span, Symbol, SymbolList};
+use music_shared::{Ident, Literal, Span, Symbol, SymbolList};
 use music_resolve::def::{DefId, DefKind};
 use music_resolve::queries::ResolutionMap;
 

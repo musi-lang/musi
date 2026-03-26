@@ -3,7 +3,7 @@ use std::path::Path;
 
 use music_ast::expr::{ExprKind, ImportKind};
 use music_db::Db;
-use music_found::Symbol;
+use music_shared::Symbol;
 use music_hir::{lower, HirBundle};
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;

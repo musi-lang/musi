@@ -1,4 +1,4 @@
-use music_found::Span;
+use music_shared::Span;
 
 use crate::errors::{ParseError, ParseErrorKind};
 

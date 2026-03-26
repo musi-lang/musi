@@ -7,8 +7,8 @@ mod ty;
 pub use errors::{ParseError, ParseErrorKind, ParseResult};
 
 use music_ast::data::AstData;
-use music_found::Interner;
 use music_lex::Token;
+use music_shared::Interner;
 
 use parser::Parser;
 

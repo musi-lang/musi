@@ -7,7 +7,7 @@ use music_emit::{emit, write_seam};
 use music_hir::HirBundle;
 
 use musi::driver::compile;
-use music_found::diag::emit_to_stderr;
+use music_shared::diag::emit_to_stderr;
 
 #[derive(Args)]
 pub struct BuildArgs {

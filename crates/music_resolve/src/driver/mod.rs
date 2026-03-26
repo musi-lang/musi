@@ -5,7 +5,7 @@ use std::{fmt, fs, io, mem};
 
 use music_ast::expr::{ExprKind, ImportKind};
 use music_db::Db;
-use music_found::{Interner, SourceMap};
+use music_shared::{Interner, SourceMap};
 use music_lex::Lexer;
 use music_parse::parse;
 

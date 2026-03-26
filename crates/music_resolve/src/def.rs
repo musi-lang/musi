@@ -1,6 +1,6 @@
 use music_arena::Idx;
 use music_builtins::types::BuiltinType;
-use music_found::{Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::scope::ScopeId;
 

@@ -25,7 +25,7 @@ music_sema = { path = "../music_sema" }
 music_emit = { path = "../music_emit" }
 music_db = { path = "../music_db" }
 musi_vm = { path = "../musi_vm" }
-music_found = { path = "../music_found" }
+music_shared = { path = "../music_shared" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

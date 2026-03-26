@@ -1,5 +1,5 @@
 use music_builtins::types::BuiltinType;
-use music_found::Interner;
+use music_shared::Interner;
 
 use crate::effects::{check_purity, remove_handled_effect};
 use crate::env::TypeEnv;

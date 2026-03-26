@@ -1,4 +1,4 @@
-use music_found::{Literal, Span, Spanned};
+use music_shared::{Literal, Span, Spanned};
 
 use crate::data::AstData;
 use crate::expr::{BinOp, ExprKind};

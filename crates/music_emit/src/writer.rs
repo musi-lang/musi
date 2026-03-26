@@ -1,4 +1,4 @@
-use music_found::Symbol;
+use music_shared::Symbol;
 use music_il::format::{self, HEADER_SIZE};
 use music_il::instruction::{Instruction, Operand};
 

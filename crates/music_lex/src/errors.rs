@@ -1,7 +1,7 @@
 use core::error;
 use core::fmt;
 
-use music_found::Span;
+use music_shared::Span;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

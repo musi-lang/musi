@@ -1,4 +1,4 @@
-use music_found::{Ident, Symbol};
+use music_shared::{Ident, Symbol};
 
 use crate::{AttrList, ExprId, IdentList, ParamList, TyId, TyList};
 

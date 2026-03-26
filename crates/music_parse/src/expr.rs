@@ -11,7 +11,7 @@ use music_ast::expr::{
 };
 use music_ast::pat::PatKind;
 use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
-use music_found::{Ident, Literal, Span};
+use music_shared::{Ident, Literal, Span};
 use music_lex::TokenKind;
 
 use crate::errors::{describe_token, ParseError, ParseErrorKind, ParseResult};

@@ -1,6 +1,6 @@
 use music_ast::ExprId;
 use music_db::Db;
-use music_found::Symbol;
+use music_shared::Symbol;
 use music_resolve::def::{DefId, DefInfo};
 use music_resolve::queries::ResolutionMap;
 use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};

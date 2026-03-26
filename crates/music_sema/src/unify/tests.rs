@@ -1,5 +1,5 @@
 use music_builtins::types::BuiltinType;
-use music_found::{Interner, Span};
+use music_shared::{Interner, Span};
 
 use crate::env::TypeEnv;
 use crate::errors::SemaErrorKind;

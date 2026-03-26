@@ -1,4 +1,4 @@
-use music_found::Ident;
+use music_shared::Ident;
 
 use crate::{TyId, TyList};
 

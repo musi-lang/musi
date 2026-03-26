@@ -1,6 +1,6 @@
 use music_arena::Arena;
 use music_builtins::types::BuiltinType;
-use music_found::Interner;
+use music_shared::Interner;
 
 use crate::types::{SemaTypeId, Ty};
 

@@ -1,4 +1,4 @@
-use music_found::{Interner, Span};
+use music_shared::{Interner, Span};
 
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::types::Ty;

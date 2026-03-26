@@ -1,5 +1,5 @@
 use music_ast::data::AstData;
-use music_found::{Interner, SourceMap};
+use music_shared::{Interner, SourceMap};
 
 /// Central compiler database holding AST, interned strings, and source files.
 ///

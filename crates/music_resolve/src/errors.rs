@@ -1,6 +1,6 @@
 use std::fmt;
 
-use music_found::{Span, Symbol, SymbolList};
+use music_shared::{Span, Symbol, SymbolList};
 
 /// A name-resolution error with its source location.
 #[derive(Debug, Clone, PartialEq, Eq)]

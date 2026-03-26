@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use music_builtins::types::BuiltinType;
 use music_db::Db;
-use music_found::{Interner, SourceMap};
+use music_shared::{Interner, SourceMap};
 use music_hir::lower;
 use music_lex::Lexer;
 use music_parse::parse;

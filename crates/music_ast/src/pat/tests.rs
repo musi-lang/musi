@@ -1,4 +1,4 @@
-use music_found::{Ident, Interner, Literal, Span};
+use music_shared::{Ident, Interner, Literal, Span};
 
 use super::*;
 

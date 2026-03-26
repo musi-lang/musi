@@ -1,4 +1,4 @@
-use music_found::Span;
+use music_shared::Span;
 
 pub struct Cursor<'src> {
     src: &'src str,

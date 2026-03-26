@@ -2,7 +2,7 @@
 
 use music_ast::data::AstData;
 use music_ast::expr::{BinOp, ExprKind};
-use music_found::Interner;
+use music_shared::Interner;
 use music_lex::Lexer;
 use music_parse::parse;
 
@@ -42,11 +42,11 @@ fn piecewise_two_arms() {
         ));
         assert!(matches!(
             ast.exprs.get(*then_br).kind,
-            ExprKind::Lit(music_found::Literal::Int(1))
+            ExprKind::Lit(music_shared::Literal::Int(1))
         ));
         assert!(matches!(
             ast.exprs.get(*else_br).kind,
-            ExprKind::Lit(music_found::Literal::Int(2))
+            ExprKind::Lit(music_shared::Literal::Int(2))
         ));
     }
 }
@@ -72,7 +72,7 @@ fn piecewise_three_arms() {
         {
             assert!(matches!(
                 ast.exprs.get(*inner_else).kind,
-                ExprKind::Lit(music_found::Literal::Int(3))
+                ExprKind::Lit(music_shared::Literal::Int(3))
             ));
         }
     }
@@ -85,7 +85,7 @@ fn piecewise_wildcard_last() {
     if let ExprKind::Branch { else_br, .. } = kind {
         assert!(matches!(
             ast.exprs.get(*else_br).kind,
-            ExprKind::Lit(music_found::Literal::Int(99))
+            ExprKind::Lit(music_shared::Literal::Int(99))
         ));
     } else {
         panic!("expected Branch, got {kind:?}");
@@ -171,7 +171,7 @@ fn piecewise_non_exhaustive_last_guard() {
         {
             assert!(matches!(
                 ast.exprs.get(*then_br).kind,
-                ExprKind::Lit(music_found::Literal::Int(2))
+                ExprKind::Lit(music_shared::Literal::Int(2))
             ));
             assert!(
                 matches!(&ast.exprs.get(*else_br).kind, ExprKind::TupleLit(elems) if elems.is_empty()),

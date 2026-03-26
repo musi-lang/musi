@@ -1,8 +1,8 @@
 use music_ast::data::AstData;
 use music_ast::expr::ExprKind;
 use music_ast::ty::TyKind;
-use music_found::Interner;
 use music_lex::Lexer;
+use music_shared::Interner;
 
 use crate::ParseError;
 

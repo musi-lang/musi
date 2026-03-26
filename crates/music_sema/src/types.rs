@@ -1,6 +1,6 @@
 use music_arena::Idx;
 use music_builtins::types::BuiltinType;
-use music_found::Symbol;
+use music_shared::Symbol;
 
 /// Interned handle for a semantic type in the type arena.
 pub type SemaTypeId = Idx<Ty>;

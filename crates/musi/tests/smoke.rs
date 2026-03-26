@@ -5,8 +5,8 @@ use std::io::Write;
 use std::path::Path;
 
 use musi::driver::compile;
-use music_found::diag::{emit, Diag};
-use music_found::SourceMap;
+use music_shared::diag::{emit, Diag};
+use music_shared::SourceMap;
 
 fn render_diag(diag: &Diag, sources: &SourceMap) -> String {
     let mut buf = Vec::new();

@@ -1,4 +1,4 @@
-use music_found::{Ident, Literal, Symbol};
+use music_shared::{Ident, Literal, Symbol};
 
 use crate::common::{Constraint, FnDecl, MemberDecl, RecordDefField, Signature, TyRef, VariantDef};
 use crate::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId, TyId};

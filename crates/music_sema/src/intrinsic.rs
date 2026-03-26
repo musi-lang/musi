@@ -4,7 +4,7 @@ use music_ast::common::{AttrArg, MemberDecl, MemberName};
 use music_ast::data::AstData;
 use music_ast::expr::{DataBody, ExprKind};
 use music_ast::{AttrId, AttrList, ExprId, ExprList};
-use music_found::{Interner, Literal, Symbol};
+use music_shared::{Interner, Literal, Symbol};
 use music_il::opcode::Opcode;
 
 /// Extracts the `opcode` field from `@builtin(opcode := 0x14)` if present.

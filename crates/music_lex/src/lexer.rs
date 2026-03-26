@@ -1,6 +1,6 @@
 use core::mem;
 
-use music_found::Span;
+use music_shared::Span;
 
 use crate::cursor::Cursor;
 use crate::errors::{LexError, LexErrorKind, LexResult};
