@@ -1,7 +1,17 @@
 use std::iter::{Enumerate, Map};
+use std::ops::{Index, IndexMut};
 use std::slice;
 
 use crate::Idx;
+
+// u32 always fits in usize on 32+ bit platforms.
+const _: () = assert!(size_of::<usize>() >= size_of::<u32>());
+
+/// Widens a `u32` to `usize`. Guaranteed lossless by the compile-time assert above.
+#[allow(clippy::as_conversions)]
+const fn widen(v: u32) -> usize {
+    v as usize
+}
 
 /// Typed arena allocator. All nodes allocated here, referenced by `Idx<T>`.
 ///
@@ -56,7 +66,7 @@ impl<T> Arena<T> {
     #[must_use]
     pub fn get(&self, idx: Idx<T>) -> &T {
         self.data
-            .get(usize::try_from(idx.raw()).expect("u32 always fits in usize"))
+            .get(widen(idx.raw()))
             .expect("Idx out of bounds: used with wrong arena")
     }
 
@@ -68,8 +78,34 @@ impl<T> Arena<T> {
     #[must_use]
     pub fn get_mut(&mut self, idx: Idx<T>) -> &mut T {
         self.data
-            .get_mut(usize::try_from(idx.raw()).expect("u32 always fits in usize"))
+            .get_mut(widen(idx.raw()))
             .expect("Idx out of bounds: used with wrong arena")
+    }
+
+    /// Returns a shared reference without bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// `idx` must have been returned by a previous `alloc` call on this arena.
+    #[inline]
+    #[must_use]
+    #[allow(unsafe_code)]
+    pub unsafe fn get_unchecked(&self, idx: Idx<T>) -> &T {
+        // SAFETY: caller guarantees idx came from a prior alloc on this arena.
+        unsafe { self.data.get_unchecked(widen(idx.raw())) }
+    }
+
+    /// Returns an exclusive reference without bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// `idx` must have been returned by a previous `alloc` call on this arena.
+    #[inline]
+    #[must_use]
+    #[allow(unsafe_code)]
+    pub unsafe fn get_mut_unchecked(&mut self, idx: Idx<T>) -> &mut T {
+        // SAFETY: caller guarantees idx came from a prior alloc on this arena.
+        unsafe { self.data.get_unchecked_mut(widen(idx.raw())) }
     }
 
     /// Returns the number of values stored in the arena.
@@ -85,29 +121,21 @@ impl<T> Arena<T> {
     }
 
     /// Iterates over all `(Idx<T>, &T)` pairs in insertion order.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the arena contains more than `u32::MAX` entries (unreachable
-    /// because `alloc` enforces this limit).
     pub fn iter(&self) -> ArenaIter<'_, T> {
-        fn map_ref<T>((i, val): (usize, &T)) -> (Idx<T>, &T) {
-            let raw = u32::try_from(i).expect("arena iteration: index exceeds u32::MAX");
-            (Idx::new(raw), val)
+        #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+        const fn map_ref<T>((i, val): (usize, &T)) -> (Idx<T>, &T) {
+            // alloc enforces len <= u32::MAX, so iteration indices always fit u32.
+            (Idx::new(i as u32), val)
         }
         self.data.iter().enumerate().map(map_ref)
     }
 
     /// Iterates over all `(Idx<T>, &mut T)` pairs in insertion order.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the arena contains more than `u32::MAX` entries (unreachable
-    /// because `alloc` enforces this limit).
     pub fn iter_mut(&mut self) -> ArenaIterMut<'_, T> {
-        fn map_mut<T>((i, val): (usize, &mut T)) -> (Idx<T>, &mut T) {
-            let raw = u32::try_from(i).expect("arena iteration: index exceeds u32::MAX");
-            (Idx::new(raw), val)
+        #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+        const fn map_mut<T>((i, val): (usize, &mut T)) -> (Idx<T>, &mut T) {
+            // alloc enforces len <= u32::MAX, so iteration indices always fit u32.
+            (Idx::new(i as u32), val)
         }
         self.data.iter_mut().enumerate().map(map_mut)
     }
@@ -134,6 +162,20 @@ impl<'a, T> IntoIterator for &'a mut Arena<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
+    }
+}
+
+impl<T> Index<Idx<T>> for Arena<T> {
+    type Output = T;
+
+    fn index(&self, idx: Idx<T>) -> &T {
+        self.get(idx)
+    }
+}
+
+impl<T> IndexMut<Idx<T>> for Arena<T> {
+    fn index_mut(&mut self, idx: Idx<T>) -> &mut T {
+        self.get_mut(idx)
     }
 }
 

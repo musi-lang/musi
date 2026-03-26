@@ -533,6 +533,9 @@ dependencies = [
 [[package]]
 name = "music_arena"
 version = "0.1.0-rc1"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "music_ast"
