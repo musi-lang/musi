@@ -180,7 +180,37 @@ fn from_int_debug_panic_underflow() {
 #[cfg(debug_assertions)]
 #[should_panic]
 fn as_tag_idx_debug_panic() {
-    // from_ptr with payload > u16::MAX; calling as_tag_idx on it triggers the guard
     let v = Value::from_ptr(0x1_0000);
     let _ = v.as_tag_idx();
+}
+
+#[test]
+fn float_nan_roundtrip() {
+    let v = Value::from_float(f64::NAN);
+    assert!(v.is_float(), "NaN should classify as float");
+    assert!(!v.is_ptr(), "NaN must not classify as ptr");
+    assert!(!v.is_int(), "NaN must not classify as int");
+    assert!(v.as_float().is_nan());
+}
+
+#[test]
+fn float_nan_negative() {
+    let v = Value::from_float(-f64::NAN);
+    assert!(v.is_float());
+    assert!(!v.is_ptr());
+    assert!(v.as_float().is_nan());
+}
+
+#[test]
+fn float_nan_from_arithmetic() {
+    let v = Value::from_float(0.0 / 0.0);
+    assert!(v.is_float());
+    assert!(!v.is_ptr());
+    assert!(v.as_float().is_nan());
+}
+
+#[test]
+fn float_nan_tag_is_zero() {
+    let v = Value::from_float(f64::NAN);
+    assert_eq!(v.nan_tag(), 0);
 }

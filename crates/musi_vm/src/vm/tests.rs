@@ -1461,3 +1461,76 @@ fn tycl_dict_no_class() {
     ]));
     assert!(matches!(vm.run(), Err(VmError::NoInstance { .. })));
 }
+
+// ── GC integration tests ─────────────────────────────────────────────────────
+
+#[test]
+fn gc_triggered_by_threshold() {
+    let module = module_with_strings_and_code(
+        vec!["a".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::ArrCaten),
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::ArrCaten),
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::ArrCaten),
+            op(Opcode::ArrLen),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 4);
+}
+
+#[test]
+fn gc_preserves_closure_upvalues() {
+    let entry_code = vec![
+        op(Opcode::LdSmi),
+        55,
+        0,
+        op(Opcode::ClsNew),
+        1,
+        0,
+        1,
+        op(Opcode::Call),
+        0,
+        op(Opcode::Halt),
+    ];
+    let closure_body = vec![op(Opcode::LdUpv), 0, 0, op(Opcode::Ret)];
+    let mut vm = Vm::new(two_method_module(entry_code, closure_body));
+    assert_eq!(vm.run().unwrap().as_int(), 55);
+}
+
+#[test]
+fn gc_pin_unpin_opcodes() {
+    let module = module_with_strings_and_code(
+        vec!["pinned".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::GcPin),
+            op(Opcode::GcUnpin),
+            op(Opcode::ArrLen),
+            op(Opcode::Halt),
+        ],
+    );
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 6);
+}

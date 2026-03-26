@@ -148,13 +148,18 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
                 });
             }
             let idx = value.as_ptr_idx();
-            let ptr = heap.with_obj(idx, |obj| match obj {
-                HeapObject::CPtr(p) => Ok((*p).cast_const()),
-                _ => Err(VmError::TypeError {
-                    expected: "`CPtr`",
-                    found: "non-CPtr heap object",
-                }),
-            })?;
+            let ptr = match heap.get(idx) {
+                Some(HeapObject::CPtr(p)) => (*p).cast_const(),
+                Some(_) => {
+                    return Err(VmError::TypeError {
+                        expected: "`CPtr`",
+                        found: "non-CPtr heap object",
+                    })
+                }
+                None => {
+                    return Err(VmError::InvalidHeapIndex(idx));
+                }
+            };
             Ok(FfiArg::Ptr(ptr))
         }
         FfiType::Str => {
@@ -165,13 +170,18 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
                 });
             }
             let idx = value.as_ptr_idx();
-            let s = heap.with_obj(idx, |obj| match obj {
-                HeapObject::String(s) => Ok(s.clone()),
-                _ => Err(VmError::TypeError {
-                    expected: "String",
-                    found: "non-String heap object",
-                }),
-            })?;
+            let s = match heap.get(idx) {
+                Some(HeapObject::String(s)) => s.clone(),
+                Some(_) => {
+                    return Err(VmError::TypeError {
+                        expected: "String",
+                        found: "non-String heap object",
+                    })
+                }
+                None => {
+                    return Err(VmError::InvalidHeapIndex(idx));
+                }
+            };
             let cstring = CString::new(s).map_err(|_| VmError::TypeError {
                 expected: "null-free string for FFI",
                 found: "string with interior NUL",

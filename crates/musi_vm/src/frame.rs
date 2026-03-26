@@ -107,6 +107,14 @@ impl CallFrame {
         self.stack.truncate(depth);
     }
 
+    pub fn locals_iter(&self) -> impl Iterator<Item = Value> + '_ {
+        self.locals.iter().copied()
+    }
+
+    pub fn stack_iter(&self) -> impl Iterator<Item = Value> + '_ {
+        self.stack.iter().copied()
+    }
+
     /// # Errors
     /// Returns `StackUnderflow` if the stack has fewer than three elements.
     pub fn rot(&mut self) -> VmResult {

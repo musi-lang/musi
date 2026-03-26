@@ -14,6 +14,8 @@ use music_il::format::{NAN_BOX_BOOL, NAN_BOX_PTR, NAN_BOX_SMI, NAN_BOX_TAG, NAN_
 const QNAN: u64 = 0x7FF8_0000_0000_0000;
 const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 const TAG_SHIFT: u32 = 48;
+/// Sentinel for canonical NaN -- uses tag slot 0b111 (unused by any value kind).
+const NAN_SENTINEL: u64 = QNAN | (0b111 << TAG_SHIFT);
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -41,7 +43,12 @@ impl Value {
 
     #[must_use]
     pub const fn from_float(f: f64) -> Self {
-        Self(f.to_bits())
+        let bits = f.to_bits();
+        if bits & QNAN == QNAN {
+            Self(NAN_SENTINEL)
+        } else {
+            Self(bits)
+        }
     }
 
     #[must_use]
@@ -90,7 +97,7 @@ impl Value {
 
     #[must_use]
     pub const fn is_float(self) -> bool {
-        (self.0 & QNAN) != QNAN
+        (self.0 & QNAN) != QNAN || self.0 == NAN_SENTINEL
     }
 
     #[must_use]
@@ -128,14 +135,14 @@ impl Value {
     /// The 3-bit NaN-box tag, or 0 for floats (no tag bits set).
     #[must_use]
     pub(crate) const fn nan_tag(self) -> u8 {
-        if (self.0 & QNAN) != QNAN {
+        if self.is_float() {
             return 0;
         }
         ((self.0 >> TAG_SHIFT) & 0x7) as u8
     }
 
     const fn tag(self) -> u8 {
-        if (self.0 & QNAN) != QNAN {
+        if self.is_float() {
             return u8::MAX;
         }
         ((self.0 >> TAG_SHIFT) & 0x7) as u8
