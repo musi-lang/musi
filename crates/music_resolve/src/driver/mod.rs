@@ -158,7 +158,3 @@ fn collect_exports(resolution: &ResolutionMap) -> ModuleExports {
     }
     ModuleExports { exports }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic)]
-mod tests;

@@ -1,9 +1,11 @@
+#![allow(clippy::unwrap_used, clippy::panic, clippy::tests_outside_test_module)]
+
 use std::fs;
 use std::path::PathBuf;
 
-use crate::ResolveErrorKind;
-use crate::driver::resolve_project;
-use crate::loader::ModuleLoader;
+use music_resolve::driver::resolve_project;
+use music_resolve::loader::ModuleLoader;
+use music_resolve::ResolveErrorKind;
 
 fn setup_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();

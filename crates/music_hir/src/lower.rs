@@ -1,7 +1,7 @@
-use music_ast::ExprId;
 use music_ast::data::AstData;
 use music_ast::expr::{BinOp, ExprKind, PiecewiseArm, PwGuard};
 use music_ast::walk::map_expr_children;
+use music_ast::ExprId;
 use music_found::{Span, Spanned};
 
 /// Desugar AST-only nodes into HIR-only nodes.
@@ -81,7 +81,3 @@ fn lower_piecewise(ast: &mut AstData, arms: &[PiecewiseArm], span: Span) -> Expr
 
     result
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic)]
-mod tests;

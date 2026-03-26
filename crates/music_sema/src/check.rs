@@ -1465,7 +1465,3 @@ const fn member_name_symbol(name: &MemberName) -> Symbol {
         MemberName::Ident(ident) | MemberName::Op(ident, _) => ident.name,
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic)]
-mod tests;

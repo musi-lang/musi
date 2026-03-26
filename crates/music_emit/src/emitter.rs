@@ -1545,7 +1545,3 @@ fn binop_to_opcode(op: BinOp) -> Opcode {
         }
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic)]
-mod tests;

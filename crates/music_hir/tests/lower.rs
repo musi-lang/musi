@@ -1,10 +1,12 @@
+#![allow(clippy::unwrap_used, clippy::panic, clippy::tests_outside_test_module)]
+
 use music_ast::data::AstData;
 use music_ast::expr::{BinOp, ExprKind};
 use music_found::Interner;
 use music_lex::Lexer;
 use music_parse::parse;
 
-use super::lower;
+use music_hir::lower;
 
 fn parse_and_lower(source: &str) -> AstData {
     let mut interner = Interner::new();

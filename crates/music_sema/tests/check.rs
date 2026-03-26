@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::panic, clippy::tests_outside_test_module)]
+
 use std::path::PathBuf;
 
 use music_builtins::types::BuiltinType;
@@ -8,10 +10,10 @@ use music_lex::Lexer;
 use music_parse::parse;
 use music_resolve::queries::ResolveDb;
 
-use crate::env::TypeEnv;
-use crate::errors::{SemaError, SemaErrorKind};
-use crate::type_check;
-use crate::types::Ty;
+use music_sema::env::TypeEnv;
+use music_sema::errors::{SemaError, SemaErrorKind};
+use music_sema::type_check;
+use music_sema::types::Ty;
 
 fn check_source(source: &str) -> (TypeEnv, Vec<SemaError>) {
     let mut interner = Interner::new();
@@ -420,8 +422,8 @@ fn duplicate_instance_detected() {
 
 #[test]
 fn intrinsic_method_dispatch_recorded() {
-    use crate::env::DispatchInfo;
     use music_il::opcode::Opcode;
+    use music_sema::env::DispatchInfo;
     let (env, _errors) = check_source(
         "let Bits [T] := class { \
              @builtin(opcode := 0x23) \
@@ -442,8 +444,8 @@ fn intrinsic_method_dispatch_recorded() {
 
 #[test]
 fn intrinsic_method_positional_opcode() {
-    use crate::env::DispatchInfo;
     use music_il::opcode::Opcode;
+    use music_sema::env::DispatchInfo;
     let (env, _errors) = check_source(
         "let Bits [T] := class { \
              @builtin(0x24) \

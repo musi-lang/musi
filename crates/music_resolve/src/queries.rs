@@ -734,7 +734,3 @@ const fn visibility_from_modifiers(m: &ModifierSet) -> Visibility {
         Visibility::Private
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic)]
-mod tests;

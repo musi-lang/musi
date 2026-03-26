@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::panic, clippy::tests_outside_test_module)]
+
 use std::path::PathBuf;
 
 use music_db::Db;
@@ -5,9 +7,9 @@ use music_found::{Interner, SourceMap};
 use music_lex::Lexer;
 use music_parse::parse;
 
-use crate::def::DefKind;
-use crate::errors::{ResolveError, ResolveErrorKind};
-use crate::queries::{ResolutionMap, ResolveDb};
+use music_resolve::def::DefKind;
+use music_resolve::errors::{ResolveError, ResolveErrorKind};
+use music_resolve::queries::{ResolutionMap, ResolveDb};
 
 fn parse_and_resolve(source: &str) -> (Db, ResolutionMap, Vec<ResolveError>) {
     let mut interner = Interner::new();
