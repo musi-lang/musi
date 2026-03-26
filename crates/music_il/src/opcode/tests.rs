@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use super::*;
 
 #[test]
-fn all_82_opcodes_have_unique_byte_values() {
+fn all_79_opcodes_have_unique_byte_values() {
     let mut seen = HashSet::new();
     for &op in &ALL_OPCODES {
         let byte = op as u8;
@@ -96,9 +96,6 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::ArrSet.mnemonic(), "arr.set");
     assert_eq!(Opcode::ArrLen.mnemonic(), "arr.len");
     assert_eq!(Opcode::ArrSlice.mnemonic(), "arr.slice");
-    assert_eq!(Opcode::ArrMap.mnemonic(), "arr.map");
-    assert_eq!(Opcode::ArrFold.mnemonic(), "arr.fold");
-    assert_eq!(Opcode::ArrZip.mnemonic(), "arr.zip");
     assert_eq!(Opcode::ArrFill.mnemonic(), "arr.fill");
     assert_eq!(Opcode::ArrCopy.mnemonic(), "arr.copy");
     assert_eq!(Opcode::ArrCaten.mnemonic(), "arr.caten");

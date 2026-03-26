@@ -22,6 +22,8 @@ fn module_with_code(code: Vec<u8>) -> Module {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     }
 }
 
@@ -36,6 +38,8 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     }
 }
 
@@ -50,6 +54,8 @@ fn module_with_constants_and_code(constants: Vec<ConstantEntry>, code: Vec<u8>) 
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     }
 }
 
@@ -68,6 +74,8 @@ fn module_with_strings_and_code(
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     }
 }
 
@@ -223,6 +231,8 @@ fn no_entry_point_error() {
         methods: Vec::new(),
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert!(matches!(vm.run(), Err(VmError::NoEntryPoint)));
@@ -290,6 +300,8 @@ fn two_method_module_locals(
         ],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     }
 }
 
@@ -367,6 +379,8 @@ fn call_nested() {
         ],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 11);
@@ -418,6 +432,8 @@ fn globals_store_load() {
             opaque: false,
         }],
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 77);
@@ -1238,4 +1254,168 @@ fn ty_tag_float() {
     let result = vm.run().unwrap();
     assert!(result.is_int());
     assert_eq!(result.as_int(), 0); // Floats have tag 0
+}
+
+// ── Phase 6+7 tests ──────────────────────────────────────────────────────────
+
+#[test]
+fn arr_slice_basic() {
+    // Create array [10, 20, 30, 40], slice [1..3], verify len=2 and elements
+    let mut vm = Vm::new(module_with_locals(
+        2,
+        vec![
+            // Create array of 4 elements
+            op(Opcode::ArrNew),
+            4,
+            0,
+            op(Opcode::LdSmi),
+            10,
+            0,
+            op(Opcode::ArrSetI),
+            0,
+            op(Opcode::LdSmi),
+            20,
+            0,
+            op(Opcode::ArrSetI),
+            1,
+            op(Opcode::LdSmi),
+            30,
+            0,
+            op(Opcode::ArrSetI),
+            2,
+            op(Opcode::LdSmi),
+            40,
+            0,
+            op(Opcode::ArrSetI),
+            3,
+            // Store array in local 0
+            op(Opcode::StLoc),
+            0,
+            // Push arr, start=1, end=3 for ArrSlice
+            op(Opcode::LdLoc),
+            0,
+            op(Opcode::LdOne), // start = 1
+            op(Opcode::LdSmi),
+            3,
+            0, // end = 3
+            op(Opcode::ArrSlice),
+            // Store slice in local 1
+            op(Opcode::StLoc),
+            1,
+            // Check length = 2
+            op(Opcode::LdLoc),
+            1,
+            op(Opcode::ArrLen),
+            op(Opcode::StLoc),
+            0, // reuse local 0 for len
+            // Get element at index 0 of slice (should be 20)
+            op(Opcode::LdLoc),
+            1,
+            op(Opcode::ArrGetI),
+            0,
+            op(Opcode::Halt),
+        ],
+    ));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 20);
+}
+
+#[test]
+fn arr_slice_out_of_bounds() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        2,
+        0,
+        op(Opcode::LdNil), // start = 0
+        op(Opcode::LdSmi),
+        5,
+        0, // end = 5 (out of bounds for len=2)
+        op(Opcode::ArrSlice),
+        op(Opcode::Halt),
+    ]));
+    assert!(matches!(vm.run(), Err(VmError::IndexOutOfBounds { .. })));
+}
+
+#[test]
+fn arr_fill_basic() {
+    let mut vm = Vm::new(module_with_locals(
+        1,
+        vec![
+            op(Opcode::LdSmi),
+            42,
+            0, // value = 42
+            op(Opcode::LdSmi),
+            5,
+            0, // len = 5
+            op(Opcode::ArrFill),
+            op(Opcode::StLoc),
+            0,
+            // Check length
+            op(Opcode::LdLoc),
+            0,
+            op(Opcode::ArrLen),
+            op(Opcode::Halt),
+        ],
+    ));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 5);
+}
+
+#[test]
+fn arr_fill_element_values() {
+    let mut vm = Vm::new(module_with_locals(
+        1,
+        vec![
+            op(Opcode::LdSmi),
+            42,
+            0, // value = 42
+            op(Opcode::LdSmi),
+            3,
+            0, // len = 3
+            op(Opcode::ArrFill),
+            op(Opcode::StLoc),
+            0,
+            // Get element at index 2
+            op(Opcode::LdLoc),
+            0,
+            op(Opcode::ArrGetI),
+            2,
+            op(Opcode::Halt),
+        ],
+    ));
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn ffi_call_unimplemented() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::FfiCall),
+        0,
+        0,
+        op(Opcode::Halt),
+    ]));
+    let err = vm.run().unwrap_err();
+    assert!(
+        matches!(err, VmError::Unimplemented("FFI calls")),
+        "expected Unimplemented(\"FFI calls\"), got: {err:?}"
+    );
+}
+
+#[test]
+fn tycl_dict_no_class() {
+    // TyclDict with class_id=0 but no classes in module -> NoInstance error
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        1,
+        0, // push type_id
+        op(Opcode::TyclDict),
+        0,
+        0, // class_id = 0
+        op(Opcode::Halt),
+    ]));
+    assert!(matches!(vm.run(), Err(VmError::NoInstance { .. })));
 }

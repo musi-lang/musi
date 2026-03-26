@@ -498,6 +498,8 @@ impl SemaDb {
             }
         }
 
+        self.maybe_assign_class_id(binding);
+
         let val_ty = binding.value.map(|value| self.synth(value));
 
         if let Some(ref sig) = binding.sig {
@@ -569,6 +571,18 @@ impl SemaDb {
         }
 
         self.env.intern(Ty::Unit)
+    }
+
+    fn maybe_assign_class_id(&mut self, binding: &LetBinding) {
+        if let Some(value_id) = binding.value {
+            let val_kind = &self.db.ast.exprs.get(value_id).kind;
+            if matches!(val_kind, ExprKind::ClassDef { .. }) {
+                let pat = self.db.ast.pats.get(binding.pat);
+                if let PatKind::Bind(bind_ident) = &pat.kind {
+                    let _ = self.env.assign_class_id(bind_ident.name);
+                }
+            }
+        }
     }
 
     /// Converts an AST `TyId` to a semantic `SemaTypeId`.

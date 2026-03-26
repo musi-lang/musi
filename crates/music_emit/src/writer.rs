@@ -44,6 +44,18 @@ pub fn write_seam(module: &SeamModule) -> Vec<u8> {
         section_count = section_count.saturating_add(1);
     }
 
+    let class_data = build_class_table(module);
+    if !class_data.is_empty() {
+        write_section(&mut buf, format::section::CLSS, &class_data);
+        section_count = section_count.saturating_add(1);
+    }
+
+    let foreign_data = build_foreign_table(module);
+    if !foreign_data.is_empty() {
+        write_section(&mut buf, format::section::FRGN, &foreign_data);
+        section_count = section_count.saturating_add(1);
+    }
+
     write_header(&mut buf, section_count);
 
     buf
@@ -224,6 +236,90 @@ fn build_globals(module: &SeamModule) -> Vec<u8> {
         if global.opaque {
             flags |= 0x02;
         }
+        out.push(flags);
+    }
+    out
+}
+
+/// Encode the CLSS section.
+///
+/// Wire format:
+/// ```text
+/// u16 class_count
+/// per class:
+///   u16 id
+///   u32 name_idx
+///   u16 method_count
+///   [u32; method_count] method_name_indices
+///   u16 instance_count
+///   per instance:
+///     u16 type_id
+///     u16 method_count (same as class method_count)
+///     [u32 name_idx + u16 method_idx; method_count] method implementations
+/// ```
+fn build_class_table(module: &SeamModule) -> Vec<u8> {
+    if module.classes.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    let count = u16::try_from(module.classes.len()).expect("too many classes (>65535)");
+    out.extend_from_slice(&count.to_le_bytes());
+
+    for class in &module.classes {
+        out.extend_from_slice(&class.id.to_le_bytes());
+        out.extend_from_slice(&class.name_idx.to_le_bytes());
+        out.extend_from_slice(&class.method_count.to_le_bytes());
+
+        for &name_idx in &class.method_names {
+            out.extend_from_slice(&name_idx.to_le_bytes());
+        }
+
+        let inst_count = u16::try_from(class.instances.len()).expect("too many instances (>65535)");
+        out.extend_from_slice(&inst_count.to_le_bytes());
+
+        for instance in &class.instances {
+            out.extend_from_slice(&instance.type_id.to_le_bytes());
+            let m_count = u16::try_from(instance.methods.len()).expect("too many methods (>65535)");
+            out.extend_from_slice(&m_count.to_le_bytes());
+            for method in &instance.methods {
+                out.extend_from_slice(&method.name_idx.to_le_bytes());
+                out.extend_from_slice(&method.method_idx.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
+/// Encode the FRGN section.
+///
+/// Wire format: `u16 count` + 15 bytes per entry.
+/// ```text
+/// per entry:
+///   u32 name_idx
+///   u32 symbol_idx
+///   u32 lib_idx (0xFFFFFFFF = no lib)
+///   u8  abi
+///   u8  arity
+///   u8  flags (bit 0 = exported)
+/// ```
+#[expect(clippy::as_conversions, reason = "repr(u8) enum to u8 is lossless")]
+fn build_foreign_table(module: &SeamModule) -> Vec<u8> {
+    if module.foreigns.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    let count = u16::try_from(module.foreigns.len()).expect("too many foreigns (>65535)");
+    out.extend_from_slice(&count.to_le_bytes());
+
+    for foreign in &module.foreigns {
+        out.extend_from_slice(&foreign.name_idx.to_le_bytes());
+        out.extend_from_slice(&foreign.symbol_idx.to_le_bytes());
+        out.extend_from_slice(&foreign.lib_idx.to_le_bytes());
+        out.push(foreign.abi as u8);
+        out.push(foreign.arity);
+        let flags: u8 = u8::from(foreign.exported);
         out.push(flags);
     }
     out

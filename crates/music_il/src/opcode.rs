@@ -1,4 +1,4 @@
-/// All 82 active opcodes in the SEAM bytecode instruction set.
+/// All 79 active opcodes in the SEAM bytecode instruction set.
 ///
 /// Each variant carries its encoding as a `u8` discriminant via `#[repr(u8)]`.
 /// Gaps in the opcode space are reserved for future use.
@@ -79,9 +79,7 @@ pub enum Opcode {
     ArrSet = 0x39,
     ArrLen = 0x3A,
     ArrSlice = 0x3B,
-    ArrMap = 0x3C,
-    ArrFold = 0x3D,
-    ArrZip = 0x3E,
+    // 0x3C-0x3E reserved (formerly ArrMap, ArrFold, ArrZip -- now emitter-lowered)
     ArrFill = 0x3F,
     ArrCopy = 0x40,
     ArrCaten = 0x41,
@@ -117,7 +115,7 @@ pub enum Opcode {
 }
 
 /// Total number of active opcodes in the instruction set.
-pub const OPCODE_COUNT: usize = 82;
+pub const OPCODE_COUNT: usize = 79;
 
 /// Lookup table for `from_byte`: maps every `u8` to `Some(Opcode)` or `None`.
 const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
@@ -179,9 +177,7 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x39] = Some(Opcode::ArrSet);
     table[0x3A] = Some(Opcode::ArrLen);
     table[0x3B] = Some(Opcode::ArrSlice);
-    table[0x3C] = Some(Opcode::ArrMap);
-    table[0x3D] = Some(Opcode::ArrFold);
-    table[0x3E] = Some(Opcode::ArrZip);
+    // 0x3C-0x3E reserved
     table[0x3F] = Some(Opcode::ArrFill);
     table[0x40] = Some(Opcode::ArrCopy);
     table[0x41] = Some(Opcode::ArrCaten);
@@ -285,9 +281,6 @@ impl Opcode {
             Self::ArrSet => "arr.set",
             Self::ArrLen => "arr.len",
             Self::ArrSlice => "arr.slice",
-            Self::ArrMap => "arr.map",
-            Self::ArrFold => "arr.fold",
-            Self::ArrZip => "arr.zip",
             Self::ArrFill => "arr.fill",
             Self::ArrCopy => "arr.copy",
             Self::ArrCaten => "arr.caten",
@@ -325,7 +318,7 @@ impl Opcode {
     }
 }
 
-/// All 82 active opcodes in declaration order.
+/// All 79 active opcodes in declaration order.
 pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     // Data Movement
     Opcode::LdLoc,
@@ -393,9 +386,6 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::ArrSet,
     Opcode::ArrLen,
     Opcode::ArrSlice,
-    Opcode::ArrMap,
-    Opcode::ArrFold,
-    Opcode::ArrZip,
     Opcode::ArrFill,
     Opcode::ArrCopy,
     Opcode::ArrCaten,

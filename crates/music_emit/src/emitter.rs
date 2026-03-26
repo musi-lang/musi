@@ -10,7 +10,7 @@ use music_ast::{ExprId, ExprList};
 use music_builtins::types::BuiltinType;
 use music_found::{Ident, Literal, Symbol, SymbolList};
 use music_hir::HirBundle;
-use music_il::format::{self, TypeDescriptor, TypeKind};
+use music_il::format::{self, ClassDescriptor, ForeignDescriptor, TypeDescriptor, TypeKind};
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::Visibility;
@@ -43,6 +43,8 @@ pub struct SeamModule {
     pub methods: Vec<MethodEntry>,
     pub globals: Vec<GlobalEntry>,
     pub types: Vec<TypeDescriptor>,
+    pub classes: Vec<ClassDescriptor>,
+    pub foreigns: Vec<ForeignDescriptor>,
 }
 
 /// Lowers THIR expressions to SEAM bytecode instructions.
@@ -51,6 +53,7 @@ struct Emitter<'thir> {
     pool: ConstantPool,
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
+    foreigns: Vec<ForeignDescriptor>,
     current_instructions: Vec<Instruction>,
     current_locals: SymbolList,
     current_upvalues: SymbolList,
@@ -70,6 +73,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         pool: ConstantPool::new(),
         methods: Vec::new(),
         globals: Vec::new(),
+        foreigns: Vec::new(),
         current_instructions: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
@@ -89,6 +93,8 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
         methods: emitter.methods,
         globals: emitter.globals,
         types,
+        classes: Vec::new(),
+        foreigns: emitter.foreigns,
     })
 }
 
@@ -337,11 +343,11 @@ impl Emitter<'_> {
                     self.push(Instruction::simple(*opcode));
                     return Ok(());
                 }
-                DispatchInfo::Dictionary { method_idx, .. } => {
+                DispatchInfo::Dictionary { class, method_idx } => {
                     let method_u8 =
                         u8::try_from(*method_idx).expect("method index overflow (>255)");
-                    // TyclDict takes a u16 dictionary index; 0 is a placeholder until Phase 4
-                    self.push(Instruction::with_u16(Opcode::TyclDict, 0u16));
+                    let class_id = self.thir.class_id(*class).unwrap_or(0);
+                    self.push(Instruction::with_u16(Opcode::TyclDict, class_id));
                     self.push(Instruction::with_u8(Opcode::TyclCall, method_u8));
                     return Ok(());
                 }
@@ -1028,10 +1034,17 @@ impl Emitter<'_> {
 
     fn emit_foreign_import(&mut self, sym: Symbol) {
         let name = self.thir.db.interner.resolve(sym);
-        let idx = self.pool.add(ConstantEntry::Str(name.into()));
-        self.push(Instruction::with_u16(Opcode::LdConst, idx));
-        // FfiCall takes a u16 FFI index; 0 is a placeholder until Phase 4
-        self.push(Instruction::with_u16(Opcode::FfiCall, 0u16));
+        let foreign_idx =
+            u16::try_from(self.foreigns.len()).expect("too many foreign imports (>65535)");
+        self.foreigns.push(ForeignDescriptor {
+            name_idx: self.pool.add(ConstantEntry::Str(name.into())).into(),
+            symbol_idx: u32::MAX,
+            lib_idx: u32::MAX,
+            abi: format::ForeignAbi::Default,
+            arity: 0,
+            exported: false,
+        });
+        self.push(Instruction::with_u16(Opcode::FfiCall, foreign_idx));
     }
 
     fn alloc_anon_slot(&mut self) -> u16 {

@@ -1,5 +1,6 @@
 use music_ast::ExprId;
 use music_db::Db;
+use music_found::Symbol;
 use music_resolve::def::{DefId, DefInfo};
 use music_resolve::queries::ResolutionMap;
 use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};
@@ -38,6 +39,12 @@ impl HirBundle {
     #[must_use]
     pub fn variant_info(&self, expr_id: ExprId) -> Option<&VariantInfo> {
         self.type_env.variant_info.get(&expr_id)
+    }
+
+    /// Returns the stable class ID for a type class by name, if assigned.
+    #[must_use]
+    pub fn class_id(&self, name: Symbol) -> Option<u16> {
+        self.type_env.class_ids.get(&name).copied()
     }
 
     /// # Panics

@@ -1,4 +1,4 @@
-use music_il::format::TypeDescriptor;
+use music_il::format::{ClassDescriptor, ForeignDescriptor, TypeDescriptor};
 
 use crate::value::Value;
 
@@ -22,6 +22,8 @@ pub struct Module {
     pub methods: Vec<Method>,
     pub globals: Vec<GlobalDef>,
     pub types: Vec<TypeDescriptor>,
+    pub classes: Vec<ClassDescriptor>,
+    pub foreigns: Vec<ForeignDescriptor>,
 }
 
 pub struct Method {

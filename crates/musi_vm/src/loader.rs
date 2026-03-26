@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use music_il::format::{self, TypeDescriptor, TypeKind, HEADER_SIZE};
+use music_il::format::{
+    self, ClassDescriptor, ClassInstance, ClassMethod, ForeignAbi, ForeignDescriptor,
+    TypeDescriptor, TypeKind, HEADER_SIZE,
+};
 use music_il::opcode::Opcode;
 
 use crate::errors::LoadError;
@@ -38,6 +41,8 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     let mut methods: Vec<Method> = Vec::new();
     let mut globals: Vec<GlobalDef> = Vec::new();
     let mut types: Vec<TypeDescriptor> = Vec::new();
+    let mut classes: Vec<ClassDescriptor> = Vec::new();
+    let mut foreigns: Vec<ForeignDescriptor> = Vec::new();
 
     let mut pos = HEADER_SIZE;
     for _ in 0..section_count {
@@ -70,6 +75,12 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
             format::section::GLOB => {
                 globals = decode_glob(section_data)?;
             }
+            format::section::CLSS => {
+                classes = decode_clss(section_data)?;
+            }
+            format::section::FRGN => {
+                foreigns = decode_frgn(section_data)?;
+            }
             _ => {
                 // Unknown section: skip for forward-compatibility
             }
@@ -84,6 +95,8 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
         methods,
         globals,
         types,
+        classes,
+        foreigns,
     })
 }
 
@@ -324,6 +337,117 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         // No operand
         _ => Ok(0),
     }
+}
+
+fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
+    let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
+    let count = usize::from(u16::from_le_bytes(count_bytes));
+    let mut pos = 2usize;
+    let mut out = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let id = u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(2);
+
+        let name_idx =
+            u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(4);
+
+        let method_count =
+            u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(2);
+
+        let mut method_names = Vec::with_capacity(usize::from(method_count));
+        for _ in 0..method_count {
+            let mn =
+                u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+            pos = pos.wrapping_add(4);
+            method_names.push(mn);
+        }
+
+        let inst_count =
+            u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(2);
+
+        let mut instances = Vec::with_capacity(usize::from(inst_count));
+        for _ in 0..inst_count {
+            let type_id =
+                u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+            pos = pos.wrapping_add(2);
+
+            let m_count =
+                u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+            pos = pos.wrapping_add(2);
+
+            let mut methods = Vec::with_capacity(usize::from(m_count));
+            for _ in 0..m_count {
+                let mn_idx = u32::from_le_bytes(
+                    read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?,
+                );
+                pos = pos.wrapping_add(4);
+                let mi = u16::from_le_bytes(
+                    read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
+                );
+                pos = pos.wrapping_add(2);
+                methods.push(ClassMethod {
+                    name_idx: mn_idx,
+                    method_idx: mi,
+                });
+            }
+            instances.push(ClassInstance { type_id, methods });
+        }
+
+        out.push(ClassDescriptor {
+            id,
+            name_idx,
+            method_count,
+            method_names,
+            instances,
+        });
+    }
+
+    Ok(out)
+}
+
+fn decode_frgn(data: &[u8]) -> Result<Vec<ForeignDescriptor>, LoadError> {
+    let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
+    let count = usize::from(u16::from_le_bytes(count_bytes));
+    let mut pos = 2usize;
+    let mut out = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let name_idx =
+            u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(4);
+
+        let symbol_idx =
+            u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(4);
+
+        let lib_idx =
+            u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(4);
+
+        let abi_byte = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+        pos = pos.wrapping_add(1);
+
+        let arity = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+        pos = pos.wrapping_add(1);
+
+        let flags = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
+        pos = pos.wrapping_add(1);
+
+        out.push(ForeignDescriptor {
+            name_idx,
+            symbol_idx,
+            lib_idx,
+            abi: ForeignAbi::from_byte(abi_byte),
+            arity,
+            exported: (flags & 0x01) != 0,
+        });
+    }
+
+    Ok(out)
 }
 
 /// Read exactly `N` bytes from `data` at `pos`, returning them as a fixed-size array.

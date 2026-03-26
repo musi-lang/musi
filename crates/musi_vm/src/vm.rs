@@ -136,6 +136,23 @@ impl Vm {
                     self.dispatch_type_op(op, method_idx, &mut pc)?;
                 }
 
+                Opcode::TyclDict | Opcode::TyclCall => {
+                    self.dispatch_tycl(op, method_idx, &mut pc)?;
+                }
+
+                Opcode::FfiCall => {
+                    let _ffi_idx = self.read_u16(method_idx, &mut pc)?;
+                    return Err(VmError::Unimplemented("FFI calls"));
+                }
+
+                Opcode::ArrSlice => {
+                    self.exec_arr_slice()?;
+                }
+
+                Opcode::ArrFill => {
+                    self.exec_arr_fill()?;
+                }
+
                 Opcode::CmpEq | Opcode::CmpNeq => {
                     self.dispatch_equality(op)?;
                 }
@@ -557,6 +574,7 @@ impl Vm {
                 let len = match &*borrow {
                     HeapObject::Array(arr) => arr.elements.len(),
                     HeapObject::String(s) => s.len(),
+                    HeapObject::Slice(sl) => sl.end - sl.start,
                     _ => return Err(VmError::NotAnArray),
                 };
                 drop(borrow);
@@ -579,36 +597,12 @@ impl Vm {
                         let str_idx = self.heap.alloc_string("Str".into());
                         Value::from_ptr(str_idx)
                     }
+                    HeapObject::Slice(_) => Value::UNIT,
                     _ => return Err(VmError::NotAnArray),
                 };
                 self.frames.last_mut().unwrap().push(tag);
             }
-            Opcode::ArrCopy => {
-                let ptr = self.pop_stack()?;
-                if !ptr.is_ptr() {
-                    return Err(VmError::NotAnArray);
-                }
-                let obj = Rc::clone(self.heap.get(ptr.as_ptr_idx()).ok_or(VmError::NotAnArray)?);
-                let borrow = obj.borrow();
-                let new_idx = match &*borrow {
-                    HeapObject::Array(arr) => {
-                        let tag = arr.tag;
-                        let elements = arr.elements.clone();
-                        drop(borrow);
-                        self.heap.alloc_array(tag, elements)
-                    }
-                    HeapObject::String(s) => {
-                        let cloned = s.clone();
-                        drop(borrow);
-                        self.heap.alloc_string(cloned)
-                    }
-                    _ => return Err(VmError::NotAnArray),
-                };
-                self.frames
-                    .last_mut()
-                    .unwrap()
-                    .push(Value::from_ptr(new_idx));
-            }
+            Opcode::ArrCopy => self.exec_arr_copy()?,
             Opcode::ArrCaten => {
                 let b = self.pop_stack()?;
                 let a = self.pop_stack()?;
@@ -675,6 +669,156 @@ impl Vm {
             }
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
+        Ok(())
+    }
+
+    fn dispatch_tycl(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
+        match op {
+            Opcode::TyclDict => {
+                let class_id = self.read_u16(method_idx, pc)?;
+                let type_id_val = self.pop_stack()?;
+                let type_id = if type_id_val.is_int() {
+                    u16::try_from(type_id_val.as_int()).unwrap_or(u16::MAX)
+                } else {
+                    u16::MAX
+                };
+                let class_idx = usize::from(class_id);
+                let class = self
+                    .module
+                    .classes
+                    .get(class_idx)
+                    .ok_or(VmError::NoInstance { class_id, type_id })?;
+                let inst_idx = class
+                    .instances
+                    .iter()
+                    .position(|inst| inst.type_id == type_id)
+                    .ok_or(VmError::NoInstance { class_id, type_id })?;
+                let dict = Value::from_int(
+                    (i64::from(class_id) << 16) | i64::from(u16::try_from(inst_idx).unwrap_or(0)),
+                );
+                self.push_stack(dict)?;
+            }
+            Opcode::TyclCall => {
+                let method_idx_op = usize::from(self.read_u8(method_idx, pc)?);
+                let dict = self.pop_stack()?;
+                if !dict.is_int() {
+                    return Err(VmError::InvalidDictionary);
+                }
+                let packed = dict.as_int();
+                let cls_idx =
+                    usize::try_from(packed >> 16).map_err(|_| VmError::InvalidDictionary)?;
+                let inst_idx =
+                    usize::try_from(packed & 0xFFFF).map_err(|_| VmError::InvalidDictionary)?;
+                let class = self
+                    .module
+                    .classes
+                    .get(cls_idx)
+                    .ok_or(VmError::InvalidDictionary)?;
+                let instance = class
+                    .instances
+                    .get(inst_idx)
+                    .ok_or(VmError::InvalidDictionary)?;
+                let cm = instance
+                    .methods
+                    .get(method_idx_op)
+                    .ok_or(VmError::InvalidDictionary)?;
+                let callee = Value::from_int(i64::from(cm.method_idx));
+                self.push_stack(callee)?;
+            }
+            _ => return Err(VmError::UnsupportedOpcode(op)),
+        }
+        Ok(())
+    }
+
+    fn exec_arr_slice(&mut self) -> VmResult {
+        let end_val = self.pop_stack()?;
+        let start_val = self.pop_stack()?;
+        let arr_ptr = self.pop_stack()?;
+        if !arr_ptr.is_ptr() {
+            return Err(VmError::NotAnArray);
+        }
+        if !start_val.is_int() || !end_val.is_int() {
+            return Err(VmError::TypeError {
+                expected: "`Int`",
+                found: "non-`Int`",
+            });
+        }
+        let start = usize::try_from(start_val.as_int()).map_err(|_| VmError::IndexOutOfBounds {
+            index: 0,
+            length: 0,
+        })?;
+        let end = usize::try_from(end_val.as_int()).map_err(|_| VmError::IndexOutOfBounds {
+            index: 0,
+            length: 0,
+        })?;
+        let source = arr_ptr.as_ptr_idx();
+        let arr_len = self.heap.with_obj(source, |obj| match obj {
+            HeapObject::Array(arr) => Ok(arr.elements.len()),
+            _ => Err(VmError::NotAnArray),
+        })?;
+        if start > end || end > arr_len {
+            return Err(VmError::IndexOutOfBounds {
+                index: end,
+                length: arr_len,
+            });
+        }
+        let slice_idx = self.heap.alloc_slice(source, start, end);
+        self.push_stack(Value::from_ptr(slice_idx))?;
+        Ok(())
+    }
+
+    fn exec_arr_copy(&mut self) -> VmResult {
+        let ptr = self.pop_stack()?;
+        if !ptr.is_ptr() {
+            return Err(VmError::NotAnArray);
+        }
+        let obj = Rc::clone(self.heap.get(ptr.as_ptr_idx()).ok_or(VmError::NotAnArray)?);
+        let borrow = obj.borrow();
+        let new_idx = match &*borrow {
+            HeapObject::Array(arr) => {
+                let tag = arr.tag;
+                let elements = arr.elements.clone();
+                drop(borrow);
+                self.heap.alloc_array(tag, elements)
+            }
+            HeapObject::String(s) => {
+                let cloned = s.clone();
+                drop(borrow);
+                self.heap.alloc_string(cloned)
+            }
+            HeapObject::Slice(sl) => {
+                let source = sl.source;
+                let start = sl.start;
+                let end = sl.end;
+                drop(borrow);
+                let elements = self.heap.with_obj(source, |src_obj| match src_obj {
+                    HeapObject::Array(arr) => Ok(arr.elements[start..end].to_vec()),
+                    _ => Err(VmError::NotAnArray),
+                })?;
+                self.heap.alloc_array(Value::UNIT, elements)
+            }
+            _ => return Err(VmError::NotAnArray),
+        };
+        self.push_stack(Value::from_ptr(new_idx))?;
+        Ok(())
+    }
+
+    fn exec_arr_fill(&mut self) -> VmResult {
+        let len_val = self.pop_stack()?;
+        let value = self.pop_stack()?;
+        if !len_val.is_int() {
+            return Err(VmError::TypeError {
+                expected: "`Int`",
+                found: "non-`Int`",
+            });
+        }
+        let len = usize::try_from(len_val.as_int()).map_err(|_| VmError::TypeError {
+            expected: "non-negative `Int`",
+            found: "negative `Int`",
+        })?;
+        let elements = vec![value; len];
+        let heap_idx = self.heap.alloc_array(Value::UNIT, elements);
+        self.push_stack(Value::from_ptr(heap_idx))?;
         Ok(())
     }
 
@@ -816,6 +960,7 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
             return match &*borrow {
                 HeapObject::String(s) => s.clone(),
                 HeapObject::Array(arr) => format!("[Array; len={}]", arr.elements.len()),
+                HeapObject::Slice(sl) => format!("[Slice; len={}]", sl.end - sl.start),
                 HeapObject::Closure(_) => "<closure>".into(),
                 HeapObject::Continuation(_) => "<continuation>".into(),
             };
@@ -828,7 +973,12 @@ fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> VmResult<Value
     if !arr_ptr.is_ptr() {
         return Err(VmError::NotAnArray);
     }
-    heap.with_obj(arr_ptr.as_ptr_idx(), |obj| match obj {
+    let ptr_idx = arr_ptr.as_ptr_idx();
+    let obj = heap
+        .get(ptr_idx)
+        .ok_or(VmError::InvalidHeapIndex(ptr_idx))?;
+    let borrow = obj.borrow();
+    match &*borrow {
         HeapObject::Array(arr) => {
             let len = arr.elements.len();
             arr.elements
@@ -849,8 +999,32 @@ fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> VmResult<Value
                     length: bytes.len(),
                 })
         }
+        HeapObject::Slice(sl) => {
+            let real_idx = sl.start + elem_idx;
+            let len = sl.end - sl.start;
+            if elem_idx >= len {
+                return Err(VmError::IndexOutOfBounds {
+                    index: elem_idx,
+                    length: len,
+                });
+            }
+            let source = sl.source;
+            drop(borrow);
+            heap.with_obj(source, |src_obj| match src_obj {
+                HeapObject::Array(arr) => {
+                    arr.elements
+                        .get(real_idx)
+                        .copied()
+                        .ok_or(VmError::IndexOutOfBounds {
+                            index: real_idx,
+                            length: arr.elements.len(),
+                        })
+                }
+                _ => Err(VmError::NotAnArray),
+            })
+        }
         _ => Err(VmError::NotAnArray),
-    })
+    }
 }
 
 fn exec_arr_seti(heap: &Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> VmResult {

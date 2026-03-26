@@ -67,6 +67,12 @@ pub enum VmError {
     InvalidHeapIndex(HeapIdx),
     #[error("type cast failed: value does not match target type")]
     TypeCastFailed,
+    #[error("no instance of class {class_id} for type {type_id}")]
+    NoInstance { class_id: u16, type_id: u16 },
+    #[error("invalid dictionary value")]
+    InvalidDictionary,
+    #[error("unimplemented: {0}")]
+    Unimplemented(&'static str),
 }
 
 pub type VmResult<T = ()> = Result<T, VmError>;

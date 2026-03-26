@@ -57,8 +57,11 @@ pub struct TypeEnv {
     pub need_effects: HashMap<ExprId, u16>,
     /// Variant literal `ExprId` -> resolved parent type and tag index.
     pub variant_info: HashMap<ExprId, VariantInfo>,
+    /// Stable class IDs for type class dispatch in the emitter.
+    pub class_ids: HashMap<Symbol, u16>,
     next_var: TyVarId,
     next_effect_idx: u16,
+    next_class_id: u16,
 }
 
 impl TypeEnv {
@@ -78,8 +81,10 @@ impl TypeEnv {
             handle_effects: HashMap::new(),
             need_effects: HashMap::new(),
             variant_info: HashMap::new(),
+            class_ids: HashMap::new(),
             next_var: 0,
             next_effect_idx: 0,
+            next_class_id: 0,
         }
     }
 
@@ -150,6 +155,16 @@ impl TypeEnv {
     pub fn assign_effect_id(&mut self, name: Symbol) -> u16 {
         let next = &mut self.next_effect_idx;
         *self.effect_indices.entry(name).or_insert_with(|| {
+            let id = *next;
+            *next = next.wrapping_add(1);
+            id
+        })
+    }
+
+    /// Returns the stable numeric ID for a type class, assigning one if first seen.
+    pub fn assign_class_id(&mut self, name: Symbol) -> u16 {
+        let next = &mut self.next_class_id;
+        *self.class_ids.entry(name).or_insert_with(|| {
             let id = *next;
             *next = next.wrapping_add(1);
             id

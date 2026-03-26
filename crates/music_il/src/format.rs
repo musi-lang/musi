@@ -70,6 +70,76 @@ pub struct TypeDescriptor {
     pub member_count: u16,
 }
 
+/// A method implementation within a class instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassMethod {
+    /// String table index of the method name.
+    pub name_idx: u32,
+    /// Index into the METH section, or `0xFFFF` for abstract.
+    pub method_idx: u16,
+}
+
+/// A type class instance: which type implements the class and how.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassInstance {
+    /// Which type this instance is for.
+    pub type_id: u16,
+    /// Method implementations for this instance.
+    pub methods: Vec<ClassMethod>,
+}
+
+/// A type class descriptor in the CLSS section.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassDescriptor {
+    pub id: u16,
+    /// String table index of the class name.
+    pub name_idx: u32,
+    /// Number of methods declared by the class.
+    pub method_count: u16,
+    /// String table indices for method names.
+    pub method_names: Vec<u32>,
+    /// Registered instances.
+    pub instances: Vec<ClassInstance>,
+}
+
+/// ABI for foreign function calls.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForeignAbi {
+    Default = 0,
+    Cdecl = 1,
+    Stdcall = 2,
+    Fastcall = 3,
+}
+
+impl ForeignAbi {
+    /// Decode a byte into a `ForeignAbi`, defaulting to `Default` for unknown values.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Self {
+        match byte {
+            1 => Self::Cdecl,
+            2 => Self::Stdcall,
+            3 => Self::Fastcall,
+            _ => Self::Default,
+        }
+    }
+}
+
+/// An FFI symbol descriptor in the FRGN section.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignDescriptor {
+    /// Musi identifier (string table index).
+    pub name_idx: u32,
+    /// C symbol name (string table index), or same as `name_idx` if no `as`.
+    pub symbol_idx: u32,
+    /// Library name (string table index), `0xFFFF_FFFF` if none.
+    pub lib_idx: u32,
+    pub abi: ForeignAbi,
+    pub arity: u8,
+    /// `export foreign = true`.
+    pub exported: bool,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests;

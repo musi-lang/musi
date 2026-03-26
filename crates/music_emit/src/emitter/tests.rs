@@ -983,10 +983,8 @@ fn emit_foreign_import() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    // LdConst("libc.so"), FfiCall
-    assert_eq!(instrs[0].opcode, Opcode::LdConst);
-    assert_eq!(instrs[1], Instruction::with_u16(Opcode::FfiCall, 0));
-    assert_eq!(module.constants.len(), 1);
+    assert_eq!(instrs[0], Instruction::with_u16(Opcode::FfiCall, 0));
+    assert_eq!(module.foreigns.len(), 1);
 }
 
 #[test]

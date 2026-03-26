@@ -23,11 +23,18 @@ pub struct VmArray {
     pub elements: Vec<Value>,
 }
 
+pub struct VmSlice {
+    pub source: usize,
+    pub start: usize,
+    pub end: usize,
+}
+
 pub enum HeapObject {
     Closure(Closure),
     Continuation(Continuation),
     Array(VmArray),
     String(String),
+    Slice(VmSlice),
 }
 
 #[derive(Default)]
@@ -80,6 +87,10 @@ impl Heap {
 
     pub fn alloc_string(&mut self, data: String) -> usize {
         self.alloc(HeapObject::String(data))
+    }
+
+    pub fn alloc_slice(&mut self, source: usize, start: usize, end: usize) -> usize {
+        self.alloc(HeapObject::Slice(VmSlice { source, start, end }))
     }
 
     /// Borrow a heap object immutably and apply `f`.

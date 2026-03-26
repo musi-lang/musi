@@ -241,6 +241,8 @@ fn smoke_effect_basic() {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 77);

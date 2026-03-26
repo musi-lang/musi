@@ -153,3 +153,53 @@ fn type_discrimination() {
         HeapObject::Closure(_)
     ));
 }
+
+#[test]
+fn alloc_slice() {
+    let mut heap = Heap::new();
+    let arr_idx = heap.alloc_array(
+        Value::UNIT,
+        vec![
+            Value::from_int(10),
+            Value::from_int(20),
+            Value::from_int(30),
+        ],
+    );
+    let slice_idx = heap.alloc_slice(arr_idx, 1, 3);
+    let obj = heap.get(slice_idx).unwrap();
+    let borrow = obj.borrow();
+    let HeapObject::Slice(sl) = &*borrow else {
+        panic!("expected Slice");
+    };
+    assert_eq!(sl.source, arr_idx);
+    assert_eq!(sl.start, 1);
+    assert_eq!(sl.end, 3);
+}
+
+#[test]
+fn slice_bounds_access() {
+    let mut heap = Heap::new();
+    let elems = vec![
+        Value::from_int(10),
+        Value::from_int(20),
+        Value::from_int(30),
+        Value::from_int(40),
+    ];
+    let arr_idx = heap.alloc_array(Value::UNIT, elems);
+    let slice_idx = heap.alloc_slice(arr_idx, 1, 3);
+
+    let obj = heap.get(slice_idx).unwrap();
+    let borrow = obj.borrow();
+    let HeapObject::Slice(sl) = &*borrow else {
+        panic!("expected Slice");
+    };
+    assert_eq!(sl.end - sl.start, 2);
+
+    let source_obj = heap.get(sl.source).unwrap();
+    let source_borrow = source_obj.borrow();
+    let HeapObject::Array(arr) = &*source_borrow else {
+        panic!("expected Array");
+    };
+    assert_eq!(arr.elements[sl.start].as_int(), 20);
+    assert_eq!(arr.elements[sl.start + 1].as_int(), 30);
+}
