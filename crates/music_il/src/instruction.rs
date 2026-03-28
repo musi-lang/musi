@@ -24,8 +24,10 @@ pub enum Operand {
     U16(u16),
     /// Two-part operand: `cls.new fn_ref(u16) + upval_count(u8)`.
     Wide(u16, u8),
-    /// Two-part operand: `arr.newt tag(u8) + length(u16)`.
-    Tagged(u8, u16),
+    /// Two-part operand: `arr.new type_id(u16) + length(u16)`.
+    TypeLen(u16, u16),
+    /// Three-part operand: `arr.new.t type_id(u16) + tag(u8) + length(u16)`.
+    TypeTagged(u16, u8, u16),
     /// Two-part operand: `eff.invk effect_id(u16) + op_id(u16)`.
     Effect(u16, u16),
     /// Two-part operand: `eff.hdl.push index(u16) + jump_offset(i16)`.
@@ -82,12 +84,21 @@ impl Instruction {
         }
     }
 
-    /// An instruction with a tagged operand (u8 tag + u16 length).
+    /// An instruction with an object type + length operand.
     #[must_use]
-    pub const fn with_tagged(opcode: Opcode, tag: u8, length: u16) -> Self {
+    pub const fn with_type_len(opcode: Opcode, type_id: u16, length: u16) -> Self {
         Self {
             opcode,
-            operand: Operand::Tagged(tag, length),
+            operand: Operand::TypeLen(type_id, length),
+        }
+    }
+
+    /// An instruction with an object type + tagged length operand.
+    #[must_use]
+    pub const fn with_type_tagged(opcode: Opcode, type_id: u16, tag: u8, length: u16) -> Self {
+        Self {
+            opcode,
+            operand: Operand::TypeTagged(type_id, tag, length),
         }
     }
 

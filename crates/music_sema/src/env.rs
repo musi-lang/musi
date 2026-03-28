@@ -8,13 +8,49 @@ use music_il::opcode::Opcode;
 use music_resolve::def::DefId;
 use music_shared::{Span, Symbol, SymbolList};
 
-use crate::types::{SemaTypeId, SemaTypeList, Ty, TyVarId};
+use crate::types::{NominalKey, SemaTypeId, SemaTypeList, Ty, TyVarId};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TypeKey {
+    Builtin(BuiltinType),
+    Named(NominalKey),
+    Record(Vec<(Symbol, TypeKey)>),
+    Choice(Vec<(Symbol, Option<TypeKey>)>),
+    Arrow {
+        param: Box<TypeKey>,
+        ret: Box<TypeKey>,
+    },
+    EffectArrow {
+        param: Box<TypeKey>,
+        ret: Box<TypeKey>,
+        effects: Vec<TypeKey>,
+    },
+    Tuple(Vec<TypeKey>),
+    Array(Box<TypeKey>),
+    List(Box<TypeKey>),
+    Union(Vec<TypeKey>),
+    Mut(Box<TypeKey>),
+    Param(Symbol),
+    App(Box<TypeKey>, Vec<TypeKey>),
+    Any,
+    Unknown,
+    Empty,
+    Unit,
+    Class(Symbol),
+    Effect(Symbol),
+    EffectOp {
+        effect: Symbol,
+        op: Symbol,
+        ret: Box<TypeKey>,
+    },
+}
 
 /// Tracks a registered type class instance for coherence checking.
 #[derive(Debug, Clone)]
 pub struct InstanceEntry {
     pub span: Span,
     pub methods: SymbolList,
+    pub ty: TypeKey,
 }
 
 /// How a call site should be dispatched at codegen.
@@ -70,7 +106,9 @@ pub struct TypeEnv {
     pub dispatch: HashMap<ExprId, DispatchInfo>,
     pub builtin_types: HashMap<BuiltinType, SemaTypeId>,
     /// Registered type class instances: `(class, type) -> entry`.
-    pub instances: HashMap<(Symbol, Symbol), InstanceEntry>,
+    pub instances: HashMap<(Symbol, TypeKey), InstanceEntry>,
+    /// Instance definition expression -> exact registered type key.
+    pub instance_keys: HashMap<ExprId, TypeKey>,
     /// Effect name -> semantic metadata for the current module.
     pub effect_defs: HashMap<Symbol, EffectDefInfo>,
     /// Effects in deterministic local-ID order.
@@ -117,6 +155,7 @@ impl TypeEnv {
             dispatch: HashMap::with_capacity(hint / 4),
             builtin_types: HashMap::with_capacity(32),
             instances: HashMap::new(),
+            instance_keys: HashMap::new(),
             effect_defs: HashMap::new(),
             effect_order: Vec::new(),
             handle_effects: HashMap::new(),
@@ -344,6 +383,84 @@ impl TypeEnv {
         let idx = usize::try_from(var).expect("TyVarId always fits in usize");
         assert!(idx < self.vars.len(), "variable index out of bounds");
         self.vars[idx].set(Some(ty));
+    }
+
+    #[must_use]
+    pub fn type_key(&self, ty_id: SemaTypeId) -> Option<TypeKey> {
+        let resolved = self.resolve_var(ty_id);
+        let ty = self.types.get(resolved);
+        match ty {
+            Ty::Builtin(bt) => Some(TypeKey::Builtin(*bt)),
+            Ty::Record { fields } => Some(TypeKey::Record(
+                fields
+                    .iter()
+                    .map(|(name, field_ty)| Some((*name, self.type_key(*field_ty)?)))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Ty::Choice { variants } => Some(TypeKey::Choice(
+                variants
+                    .iter()
+                    .map(|(name, payload)| {
+                        let payload = match payload {
+                            Some(ty) => Some(self.type_key(*ty)?),
+                            None => None,
+                        };
+                        Some((*name, payload))
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Ty::Named(name) => Some(TypeKey::Named(name.clone())),
+            Ty::Arrow { param, ret } => Some(TypeKey::Arrow {
+                param: Box::new(self.type_key(*param)?),
+                ret: Box::new(self.type_key(*ret)?),
+            }),
+            Ty::EffectArrow {
+                param,
+                ret,
+                effects,
+            } => Some(TypeKey::EffectArrow {
+                param: Box::new(self.type_key(*param)?),
+                ret: Box::new(self.type_key(*ret)?),
+                effects: effects
+                    .iter()
+                    .map(|effect| self.type_key(*effect))
+                    .collect::<Option<Vec<_>>>()?,
+            }),
+            Ty::Tuple(items) => Some(TypeKey::Tuple(
+                items
+                    .iter()
+                    .map(|item| self.type_key(*item))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Ty::Array(item) => Some(TypeKey::Array(Box::new(self.type_key(*item)?))),
+            Ty::List(item) => Some(TypeKey::List(Box::new(self.type_key(*item)?))),
+            Ty::Union(items) => Some(TypeKey::Union(
+                items
+                    .iter()
+                    .map(|item| self.type_key(*item))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Ty::Mut(inner) => Some(TypeKey::Mut(Box::new(self.type_key(*inner)?))),
+            Ty::Var(_) => None,
+            Ty::Param(name) => Some(TypeKey::Param(*name)),
+            Ty::App(base, args) => Some(TypeKey::App(
+                Box::new(self.type_key(*base)?),
+                args.iter()
+                    .map(|arg| self.type_key(*arg))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Ty::Any => Some(TypeKey::Any),
+            Ty::Unknown => Some(TypeKey::Unknown),
+            Ty::Empty => Some(TypeKey::Empty),
+            Ty::Unit => Some(TypeKey::Unit),
+            Ty::Class(name) => Some(TypeKey::Class(*name)),
+            Ty::Effect(name) => Some(TypeKey::Effect(*name)),
+            Ty::EffectOp { effect, op, ret } => Some(TypeKey::EffectOp {
+                effect: *effect,
+                op: *op,
+                ret: Box::new(self.type_key(*ret)?),
+            }),
+        }
     }
 }
 

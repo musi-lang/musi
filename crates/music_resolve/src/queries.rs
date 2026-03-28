@@ -199,16 +199,36 @@ impl ResolveDb {
         vis: Visibility,
         scope: ScopeId,
     ) -> DefId {
+        self.define_and_bind_with_module(name, span, kind, vis, scope, self.current_module_name())
+    }
+
+    fn define_and_bind_with_module(
+        &mut self,
+        name: Symbol,
+        span: Span,
+        kind: DefKind,
+        vis: Visibility,
+        scope: ScopeId,
+        module_name: Option<String>,
+    ) -> DefId {
         let def_id = self.resolution.defs.alloc(DefInfo {
             name,
             span,
             kind,
             vis,
             scope,
-            module_name: None,
+            module_name,
         });
         let _ = self.resolution.scopes.get_mut(scope).bind(name, def_id);
         def_id
+    }
+
+    fn current_module_name(&self) -> Option<String> {
+        if self.current_file.as_os_str().is_empty() {
+            None
+        } else {
+            Some(infer_module_name(&self.current_file))
+        }
     }
 
     fn define_value(&mut self, ident: &Ident, scope: ScopeId) -> DefId {
@@ -287,7 +307,6 @@ impl ResolveDb {
 
     fn add_imports_to_scope(&mut self, exports: &ModuleExports, kind: &ImportKind, path: &Path) {
         let scope = self.module_scope;
-        let module_name = infer_effect_module_name(path);
         match kind {
             ImportKind::Qualified(name) => {
                 // Bind the module name as an Import def; individual member
@@ -303,18 +322,23 @@ impl ResolveDb {
             ImportKind::Wildcard => {
                 for imported in exports.exports.values() {
                     let name_sym = self.db.interner.intern(&imported.name);
-                    let _ = self.define_and_bind(
+                    let imported_module_name = imported
+                        .module_name
+                        .clone()
+                        .or_else(|| Some(infer_module_name(path)));
+                    let _ = self.define_and_bind_with_module(
                         name_sym,
                         Span::DUMMY,
                         imported.kind,
                         Visibility::Private,
                         scope,
+                        imported_module_name.clone(),
                     );
                     if imported.kind == DefKind::Effect {
                         let _ = self
                             .resolution
                             .imported_effect_modules
-                            .insert(name_sym, module_name.clone());
+                            .insert(name_sym, imported_module_name.unwrap_or_default());
                     }
                 }
             }
@@ -322,18 +346,23 @@ impl ResolveDb {
                 for name in names {
                     let selected = self.db.interner.resolve(name.name);
                     if let Some(imported) = exports.exports.get(selected) {
-                        let _ = self.define_and_bind(
+                        let imported_module_name = imported
+                            .module_name
+                            .clone()
+                            .or_else(|| Some(infer_module_name(path)));
+                        let _ = self.define_and_bind_with_module(
                             name.name,
                             Span::DUMMY,
                             imported.kind,
                             Visibility::Private,
                             scope,
+                            imported_module_name.clone(),
                         );
                         if imported.kind == DefKind::Effect {
                             let _ = self
                                 .resolution
                                 .imported_effect_modules
-                                .insert(name.name, module_name.clone());
+                                .insert(name.name, imported_module_name.unwrap_or_default());
                         }
                     }
                 }
@@ -801,7 +830,7 @@ impl ResolveDb {
     }
 }
 
-fn infer_effect_module_name(path: &Path) -> String {
+fn infer_module_name(path: &Path) -> String {
     if path
         .components()
         .rev()

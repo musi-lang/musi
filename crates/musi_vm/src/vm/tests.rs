@@ -1,6 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::as_conversions)]
 
-use music_il::format::{FfiType, ForeignAbi, ForeignDescriptor};
+use music_il::format::{
+    ClassDescriptor, ClassInstance, ClassMethod, FfiType, ForeignAbi, ForeignDescriptor,
+    TypeDescriptor, TypeKind, BUILTIN_TYPE_INT, BUILTIN_TYPE_STRING, FIRST_EMITTED_TYPE_ID,
+    INTERNAL_TYPE_ARRAY,
+};
 use music_il::opcode::Opcode;
 
 use super::{HostEffectHandler, Vm};
@@ -805,6 +809,8 @@ fn effect_perform_can_be_handled_by_host() {
 fn arr_new_and_geti_seti() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
+        3,
+        0,
         2,
         0,
         op(Opcode::LdSmi),
@@ -825,6 +831,8 @@ fn arr_new_and_geti_seti() {
 fn arr_get_set_dynamic() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
+        3,
+        0,
         1,
         0,
         op(Opcode::Dup),
@@ -848,6 +856,8 @@ fn arr_len() {
         op(Opcode::ArrNew),
         3,
         0,
+        3,
+        0,
         op(Opcode::ArrLen),
         op(Opcode::Halt),
     ]));
@@ -861,6 +871,8 @@ fn arr_tag_variant() {
     let constants = vec![ConstantEntry::Value(Value::from_tag(0))];
     let code = vec![
         op(Opcode::ArrNewT),
+        3,
+        0,
         0,
         1,
         0,
@@ -881,6 +893,8 @@ fn arr_tag_variant() {
 fn arr_copy() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
+        3,
+        0,
         1,
         0,
         op(Opcode::LdSmi),
@@ -902,6 +916,8 @@ fn arr_copy() {
 fn arr_concat() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
+        3,
+        0,
         1,
         0,
         op(Opcode::LdSmi),
@@ -910,6 +926,8 @@ fn arr_concat() {
         op(Opcode::ArrSetI),
         0,
         op(Opcode::ArrNew),
+        3,
+        0,
         1,
         0,
         op(Opcode::LdSmi),
@@ -1314,6 +1332,62 @@ fn ty_chk_unit() {
 }
 
 #[test]
+fn ty_chk_string_true_for_heap_string_only() {
+    let mut vm = Vm::new(module_with_strings_and_code(
+        vec!["hello".into()],
+        vec![ConstantEntry::StringRef(0)],
+        vec![
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::TyChk),
+            (BUILTIN_TYPE_STRING & 0xFF) as u8,
+            (BUILTIN_TYPE_STRING >> 8) as u8,
+            op(Opcode::Halt),
+        ],
+    ));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
+#[test]
+fn ty_chk_string_false_for_array() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        3,
+        0,
+        0,
+        0,
+        op(Opcode::TyChk),
+        (BUILTIN_TYPE_STRING & 0xFF) as u8,
+        (BUILTIN_TYPE_STRING >> 8) as u8,
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(!result.as_bool());
+}
+
+#[test]
+fn ty_chk_array_uses_embedded_heap_type_id() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::ArrNew),
+        3,
+        0,
+        0,
+        0,
+        op(Opcode::TyChk),
+        (INTERNAL_TYPE_ARRAY & 0xFF) as u8,
+        (INTERNAL_TYPE_ARRAY >> 8) as u8,
+        op(Opcode::Halt),
+    ]));
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
+#[test]
 fn ty_cast_success() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
@@ -1385,6 +1459,8 @@ fn arr_slice_basic() {
         vec![
             // Create array of 4 elements
             op(Opcode::ArrNew),
+            3,
+            0,
             4,
             0,
             op(Opcode::LdSmi),
@@ -1444,6 +1520,8 @@ fn arr_slice_basic() {
 fn arr_slice_out_of_bounds() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::ArrNew),
+        3,
+        0,
         2,
         0,
         op(Opcode::LdNil), // start = 0
@@ -1658,6 +1736,115 @@ fn tycl_dict_no_class() {
     assert!(matches!(vm.run(), Err(VmError::NoInstance { .. })));
 }
 
+#[test]
+fn tycl_dispatch_calls_resolved_instance_method() {
+    let type_id_const = ConstantEntry::Value(Value::from_int(i64::from(BUILTIN_TYPE_INT)));
+    let method = Method {
+        name: 0,
+        locals_count: 2,
+        code: vec![
+            op(Opcode::LdLoc),
+            0,
+            op(Opcode::LdLoc),
+            1,
+            op(Opcode::IAdd),
+            op(Opcode::Ret),
+        ],
+    };
+    let entry = Method {
+        name: ENTRY_POINT_NAME,
+        locals_count: 0,
+        code: vec![
+            op(Opcode::LdSmi),
+            40,
+            0,
+            op(Opcode::LdConst),
+            0,
+            0,
+            op(Opcode::TyclDict),
+            0,
+            0,
+            op(Opcode::TyclCall),
+            0,
+            op(Opcode::Swap),
+            op(Opcode::LdSmi),
+            2,
+            0,
+            op(Opcode::Call),
+            2,
+            op(Opcode::Halt),
+        ],
+    };
+    let module = Module {
+        constants: vec![type_id_const],
+        strings: vec!["Num".into(), "add".into()],
+        methods: vec![entry, method],
+        globals: Vec::new(),
+        types: vec![TypeDescriptor {
+            id: BUILTIN_TYPE_INT,
+            key: "Int".into(),
+            kind: TypeKind::Builtin,
+            member_count: 0,
+        }],
+        effects: Vec::new(),
+        classes: vec![ClassDescriptor {
+            id: 0,
+            name_idx: 0,
+            method_count: 1,
+            method_names: vec![1],
+            instances: vec![ClassInstance {
+                type_id: BUILTIN_TYPE_INT,
+                methods: vec![ClassMethod {
+                    name_idx: 1,
+                    method_idx: 1,
+                }],
+            }],
+        }],
+        foreigns: Vec::new(),
+    };
+    let mut vm = Vm::new(module);
+    let result = vm.run().unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn ty_chk_non_builtin_emitted_type_uses_exact_type_id() {
+    let emitted_id = FIRST_EMITTED_TYPE_ID;
+    let mut vm = Vm::new(Module {
+        constants: Vec::new(),
+        strings: Vec::new(),
+        methods: vec![Method {
+            name: ENTRY_POINT_NAME,
+            locals_count: 0,
+            code: vec![
+                op(Opcode::ArrNew),
+                (emitted_id & 0xFF) as u8,
+                (emitted_id >> 8) as u8,
+                0,
+                0,
+                op(Opcode::TyChk),
+                (emitted_id & 0xFF) as u8,
+                (emitted_id >> 8) as u8,
+                op(Opcode::Halt),
+            ],
+        }],
+        globals: Vec::new(),
+        types: vec![TypeDescriptor {
+            id: emitted_id,
+            key: "Box[Int]".into(),
+            kind: TypeKind::Record,
+            member_count: 0,
+        }],
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    });
+    let result = vm.run().unwrap();
+    assert!(result.is_bool());
+    assert!(result.as_bool());
+}
+
 // ── GC integration tests ─────────────────────────────────────────────────────
 
 #[test]
@@ -1744,6 +1931,8 @@ fn immix_gc_triggered_by_allocation_loop() {
             0, // counter = 0
             // loop start (pc = 3):
             op(Opcode::ArrNew),
+            3,
+            0,
             1,
             0,
             op(Opcode::StLoc),
@@ -1761,7 +1950,7 @@ fn immix_gc_triggered_by_allocation_loop() {
             0x01,
             op(Opcode::CmpLt),
             op(Opcode::BrTrue),
-            0xEC_u8, // -20
+            0xEA_u8, // -22
             0xFF_u8,
             op(Opcode::LdLoc),
             0,

@@ -3,7 +3,7 @@ use music_shared::{Interner, Span};
 
 use crate::env::TypeEnv;
 use crate::errors::SemaErrorKind;
-use crate::types::Ty;
+use crate::types::{NominalKey, Ty};
 use crate::unify::unify;
 
 const SPAN: Span = Span::DUMMY;
@@ -267,6 +267,84 @@ fn param_different_name_is_error() {
 
     let err = unify(&mut env, p1, p2, SPAN).unwrap_err();
     assert!(matches!(err.kind, SemaErrorKind::CannotUnify { .. }));
+}
+
+#[test]
+fn named_types_with_same_symbol_unify() {
+    let mut env = seeded_env();
+    let mut interner = Interner::new();
+    let option = interner.intern("Option");
+
+    let lhs = env.intern(Ty::Named(NominalKey {
+        module_name: Some("std/option".to_owned()),
+        name: option,
+    }));
+    let rhs = env.intern(Ty::Named(NominalKey {
+        module_name: Some("std/option".to_owned()),
+        name: option,
+    }));
+
+    let result = unify(&mut env, lhs, rhs, SPAN).unwrap();
+    assert_eq!(
+        *env.types.get(result),
+        Ty::Named(NominalKey {
+            module_name: Some("std/option".to_owned()),
+            name: option,
+        })
+    );
+}
+
+#[test]
+fn named_types_from_different_modules_do_not_unify() {
+    let mut env = seeded_env();
+    let mut interner = Interner::new();
+    let node = interner.intern("Node");
+
+    let lhs = env.intern(Ty::Named(NominalKey {
+        module_name: Some("/tmp/a.ms".to_owned()),
+        name: node,
+    }));
+    let rhs = env.intern(Ty::Named(NominalKey {
+        module_name: Some("/tmp/b.ms".to_owned()),
+        name: node,
+    }));
+
+    let err = unify(&mut env, lhs, rhs, SPAN).unwrap_err();
+    assert!(matches!(err.kind, SemaErrorKind::CannotUnify { .. }));
+}
+
+#[test]
+fn type_applications_unify_pairwise() {
+    let mut env = seeded_env();
+    let mut interner = Interner::new();
+    let result = interner.intern("Result");
+    let base = env.intern(Ty::Named(NominalKey {
+        module_name: Some("std/result".to_owned()),
+        name: result,
+    }));
+    let int = env.builtin(BuiltinType::Int);
+    let err = env.builtin(BuiltinType::String);
+    let var = env.fresh_var();
+
+    let lhs = env.intern(Ty::App(base, vec![int, err]));
+    let rhs = env.intern(Ty::App(base, vec![var, err]));
+
+    let unified = unify(&mut env, lhs, rhs, SPAN).unwrap();
+    match env.types.get(unified) {
+        Ty::App(unified_base, args) => {
+            assert_eq!(
+                *env.types.get(*unified_base),
+                Ty::Named(NominalKey {
+                    module_name: Some("std/result".to_owned()),
+                    name: result,
+                })
+            );
+            assert_eq!(args.len(), 2);
+            assert_eq!(env.resolve_var(args[0]), int);
+            assert_eq!(env.resolve_var(args[1]), err);
+        }
+        other => panic!("expected App, got {other:?}"),
+    }
 }
 
 #[test]

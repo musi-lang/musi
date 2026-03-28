@@ -179,7 +179,7 @@ impl Vm {
             return None;
         }
         match self.heap.get(value.as_ptr_idx())? {
-            HeapObject::String(s) => Some(s.clone()),
+            HeapObject::String(s) => Some(s.data.clone()),
             _ => None,
         }
     }
@@ -702,12 +702,16 @@ impl Vm {
                 return self.dispatch_arr_rw(op, method_idx, pc);
             }
             Opcode::ArrNew => {
+                let type_id = self.read_u16(method_idx, pc);
                 let len = usize::from(self.read_u16(method_idx, pc));
-                let heap_idx = self.heap.alloc_array(Value::UNIT, vec![Value::UNIT; len]);
+                let heap_idx = self
+                    .heap
+                    .alloc_array_t(type_id, Value::UNIT, vec![Value::UNIT; len]);
                 self.push_stack(Value::from_ptr(heap_idx))?;
                 self.maybe_collect();
             }
             Opcode::ArrNewT => {
+                let type_id = self.read_u16(method_idx, pc);
                 let tag_pool_idx = usize::from(self.read_u8(method_idx, pc));
                 let len = usize::from(self.read_u16(method_idx, pc));
                 let tag = self
@@ -715,7 +719,7 @@ impl Vm {
                     .get(tag_pool_idx)
                     .copied()
                     .ok_or(VmError::InvalidConstant(tag_pool_idx))?;
-                let heap_idx = self.heap.alloc_array(tag, vec![Value::UNIT; len]);
+                let heap_idx = self.heap.alloc_array_t(type_id, tag, vec![Value::UNIT; len]);
                 self.push_stack(Value::from_ptr(heap_idx))?;
                 self.maybe_collect();
             }
@@ -812,13 +816,13 @@ impl Vm {
             Opcode::TyChk => {
                 let type_id = self.read_u16(method_idx, pc);
                 let val = self.pop_stack()?;
-                let matches = value_matches_type(val, type_id);
+                let matches = self.value_matches_type(val, type_id);
                 self.push_stack(Value::from_bool(matches))?;
             }
             Opcode::TyCast => {
                 let type_id = self.read_u16(method_idx, pc);
                 let val = self.pop_stack()?;
-                if value_matches_type(val, type_id) {
+                if self.value_matches_type(val, type_id) {
                     self.push_stack(val)?;
                 } else {
                     return Err(VmError::TypeCastFailed);
@@ -831,6 +835,29 @@ impl Vm {
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
         Ok(())
+    }
+
+    fn runtime_type_id_of_value(&self, val: Value) -> Option<u16> {
+        if val.is_int() {
+            return Some(format::BUILTIN_TYPE_INT);
+        }
+        if val.is_bool() {
+            return Some(format::BUILTIN_TYPE_BOOL);
+        }
+        if val.is_unit() {
+            return Some(format::BUILTIN_TYPE_UNIT);
+        }
+        if val.is_float() {
+            return Some(format::BUILTIN_TYPE_FLOAT);
+        }
+        if !val.is_ptr() {
+            return None;
+        }
+        self.heap.get(val.as_ptr_idx()).map(crate::heap::HeapObject::type_id)
+    }
+
+    fn value_matches_type(&self, val: Value, type_id: u16) -> bool {
+        self.runtime_type_id_of_value(val) == Some(type_id)
     }
 
     fn dispatch_tycl(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
@@ -995,7 +1022,7 @@ impl Vm {
                 tag: arr.tag,
                 elements: arr.elements.clone(),
             },
-            HeapObject::String(s) => CopyData::Str(s.clone()),
+            HeapObject::String(s) => CopyData::Str(s.data.clone()),
             HeapObject::Slice(sl) => CopyData::Slice {
                 source: sl.source,
                 start: sl.start,
@@ -1261,13 +1288,13 @@ pub fn display_value(val: Value, heap: &Heap) -> String {
     if val.is_ptr() {
         if let Some(obj) = heap.get(val.as_ptr_idx()) {
             return match obj {
-                HeapObject::String(s) => s.clone(),
+                HeapObject::String(s) => s.data.clone(),
                 HeapObject::Array(arr) => format!("[Array; len={}]", arr.elements.len()),
                 HeapObject::Slice(sl) => format!("[Slice; len={}]", sl.end - sl.start),
                 HeapObject::Closure(_) => "<closure>".into(),
                 HeapObject::Continuation(_) => "<continuation>".into(),
                 HeapObject::CPtr(_) => "<cptr>".into(),
-                HeapObject::Cell(v) => format!("<cell:{v:?}>"),
+                HeapObject::Cell(v) => format!("<cell:{:?}>", v.value),
             };
         }
     }
@@ -1398,8 +1425,8 @@ fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> VmResult<Value> {
                 heap.get(b_idx).ok_or(VmError::NotAnArray)?,
             ) {
                 (HeapObject::String(sa), HeapObject::String(sb)) => {
-                    let mut result = sa.clone();
-                    result.push_str(sb);
+                    let mut result = sa.data.clone();
+                    result.push_str(&sb.data);
                     ConcatData::Str(result)
                 }
                 (HeapObject::Array(arr_a), HeapObject::Array(arr_b)) => {
@@ -1576,18 +1603,6 @@ fn apply_cmp(
     };
     frame.push(Value::from_bool(result));
     Ok(())
-}
-
-/// Check whether a NaN-boxed value matches a builtin type ID.
-const fn value_matches_type(val: Value, type_id: u16) -> bool {
-    match type_id {
-        format::BUILTIN_TYPE_INT => val.is_int(),
-        format::BUILTIN_TYPE_BOOL => val.is_bool(),
-        format::BUILTIN_TYPE_UNIT => val.is_unit(),
-        format::BUILTIN_TYPE_FLOAT => val.is_float(),
-        format::BUILTIN_TYPE_STRING => val.is_ptr(),
-        _ => false,
-    }
 }
 
 #[cfg(test)]

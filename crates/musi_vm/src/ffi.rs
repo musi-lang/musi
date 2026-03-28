@@ -164,7 +164,7 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
             }
             let idx = value.as_ptr_idx();
             let ptr = match heap.get(idx) {
-                Some(HeapObject::CPtr(p)) => (*p).cast_const(),
+                Some(HeapObject::CPtr(p)) => p.ptr.cast_const(),
                 Some(_) => {
                     return Err(VmError::TypeError {
                         expected: "`CPtr`",
@@ -186,7 +186,7 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
             }
             let idx = value.as_ptr_idx();
             let s = match heap.get(idx) {
-                Some(HeapObject::String(s)) => s.clone(),
+                Some(HeapObject::String(s)) => s.data.clone(),
                 Some(_) => {
                     return Err(VmError::TypeError {
                         expected: "String",

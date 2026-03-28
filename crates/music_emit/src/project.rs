@@ -168,21 +168,19 @@ fn merge_into(combined: &mut SeamModule, source: SeamModule, offsets: &ModuleOff
     combined.foreigns.extend(source.foreigns);
 
     let effect_remap = merge_effects(combined, &source.effects);
-
-    // Append types (no index remapping needed -- type IDs are stable).
-    // Deduplicate by type ID to avoid repeated builtin entries.
-    for ty in source.types {
-        if !combined.types.iter().any(|t| t.id == ty.id) {
-            combined.types.push(ty);
-        }
-    }
-
-    // Append classes.
-    combined.classes.extend(source.classes);
+    let type_remap = merge_types(combined, &source.types);
+    let class_remap = merge_classes(combined, source.classes, offsets, &type_remap);
 
     // Rewrite and append methods.
     for mut method in source.methods {
-        rewrite_instructions(&mut method, offsets, &const_remap, &effect_remap);
+        rewrite_instructions(
+            &mut method,
+            offsets,
+            &const_remap,
+            &effect_remap,
+            &type_remap,
+            &class_remap,
+        );
         combined.methods.push(method);
     }
 }
@@ -194,6 +192,8 @@ fn rewrite_instructions(
     offsets: &ModuleOffsets,
     const_remap: &[u16],
     effect_remap: &HashMap<u16, u16>,
+    type_remap: &HashMap<u16, u16>,
+    class_remap: &HashMap<u16, u16>,
 ) {
     for (instr_idx, instr) in method.instructions.iter_mut().enumerate() {
         match instr.opcode {
@@ -203,13 +203,19 @@ fn rewrite_instructions(
                 }
             }
             Opcode::ArrNewT => {
-                if let Operand::Tagged(ref mut tag_idx, _) = instr.operand {
+                if let Operand::TypeTagged(ref mut type_id, ref mut tag_idx, _) = instr.operand {
+                    *type_id = *type_remap.get(type_id).unwrap_or(type_id);
                     let remapped = const_remap
                         .get(usize::from(*tag_idx))
                         .copied()
                         .expect("variant tag constant missing from remap");
                     *tag_idx =
                         u8::try_from(remapped).expect("variant tag constant index overflow (>255)");
+                }
+            }
+            Opcode::ArrNew => {
+                if let Operand::TypeLen(ref mut type_id, _) = instr.operand {
+                    *type_id = *type_remap.get(type_id).unwrap_or(type_id);
                 }
             }
             Opcode::LdGlob | Opcode::StGlob => {
@@ -236,6 +242,16 @@ fn rewrite_instructions(
                         .expect("foreign index overflow");
                 }
             }
+            Opcode::TyChk | Opcode::TyCast => {
+                if let Operand::U16(ref mut type_id) = instr.operand {
+                    *type_id = *type_remap.get(type_id).unwrap_or(type_id);
+                }
+            }
+            Opcode::TyclDict => {
+                if let Operand::U16(ref mut class_id) = instr.operand {
+                    *class_id = *class_remap.get(class_id).unwrap_or(class_id);
+                }
+            }
             Opcode::EffInvk => {
                 if let Operand::Effect(ref mut effect_id, _) = instr.operand {
                     *effect_id = *effect_remap
@@ -253,6 +269,70 @@ fn rewrite_instructions(
             _ => {}
         }
     }
+}
+
+fn merge_types(
+    combined: &mut SeamModule,
+    source_types: &[music_il::format::TypeDescriptor],
+) -> HashMap<u16, u16> {
+    let mut remap = HashMap::new();
+    let mut next_type_id = combined
+        .types
+        .iter()
+        .map(|ty| ty.id)
+        .filter(|id| *id < music_il::format::BUILTIN_TYPE_TYPE)
+        .max()
+        .unwrap_or(music_il::format::FIRST_EMITTED_TYPE_ID.saturating_sub(1))
+        .saturating_add(1);
+
+    for ty in source_types {
+        if let Some(existing) = combined.types.iter().find(|candidate| candidate.key == ty.key) {
+            let _ = remap.insert(ty.id, existing.id);
+            continue;
+        }
+        let new_id = if ty.id >= music_il::format::BUILTIN_TYPE_TYPE {
+            ty.id
+        } else {
+            let fresh = next_type_id;
+            next_type_id = next_type_id.saturating_add(1);
+            fresh
+        };
+        let mut cloned = ty.clone();
+        cloned.id = new_id;
+        let _ = remap.insert(ty.id, new_id);
+        combined.types.push(cloned);
+    }
+
+    remap
+}
+
+fn merge_classes(
+    combined: &mut SeamModule,
+    source_classes: Vec<music_il::format::ClassDescriptor>,
+    offsets: &ModuleOffsets,
+    type_remap: &HashMap<u16, u16>,
+) -> HashMap<u16, u16> {
+    let mut remap = HashMap::new();
+    for mut class in source_classes {
+        let new_id = u16::try_from(combined.classes.len()).expect("combined class table overflow");
+        let _ = remap.insert(class.id, new_id);
+        class.id = new_id;
+        for instance in &mut class.instances {
+            instance.type_id = *type_remap
+                .get(&instance.type_id)
+                .unwrap_or(&instance.type_id);
+            for method in &mut instance.methods {
+                if method.method_idx != u16::MAX {
+                    method.method_idx = method
+                        .method_idx
+                        .checked_add(offsets.methods)
+                        .expect("class method index overflow");
+                }
+            }
+        }
+        combined.classes.push(class);
+    }
+    remap
 }
 
 fn annotate_effect_modules(module: &mut SeamModule, current_path: &Path) {

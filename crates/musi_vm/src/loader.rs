@@ -36,7 +36,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     let section_count = read_u32_le(data, 8).ok_or(LoadError::TruncatedHeader)?;
 
     let mut strings: Vec<String> = Vec::new();
-    let mut offset_map: HashMap<u16, u16> = HashMap::new();
+    let mut offset_map: HashMap<u32, u32> = HashMap::new();
     let mut constants: Vec<ConstantEntry> = Vec::new();
     let mut methods: Vec<Method> = Vec::new();
     let mut globals: Vec<GlobalDef> = Vec::new();
@@ -65,7 +65,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
                 offset_map = m;
             }
             format::section::TYPE => {
-                types = decode_type(section_data)?;
+                types = decode_type(section_data, &strings, &offset_map)?;
             }
             format::section::CNST => {
                 constants = decode_cnst(section_data, &offset_map)?;
@@ -77,13 +77,13 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
                 globals = decode_glob(section_data)?;
             }
             format::section::CLSS => {
-                classes = decode_clss(section_data)?;
+                classes = decode_clss(section_data, &offset_map)?;
             }
             format::section::EFCT => {
-                effects = decode_efct(section_data)?;
+                effects = decode_efct(section_data, &strings, &offset_map)?;
             }
             format::section::FRGN => {
-                foreigns = decode_frgn(section_data)?;
+                foreigns = decode_frgn(section_data, &offset_map)?;
             }
             _ => {
                 // Unknown section: skip for forward-compatibility
@@ -110,13 +110,13 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
 /// STRT is a sequence of null-terminated UTF-8 strings. The map allows
 /// `decode_cnst` to resolve the cumulative byte offsets written by the
 /// emitter back to sequential string indices.
-fn decode_strt(data: &[u8]) -> (Vec<String>, HashMap<u16, u16>) {
+fn decode_strt(data: &[u8]) -> (Vec<String>, HashMap<u32, u32>) {
     let mut strings = Vec::new();
     let mut offset_map = HashMap::new();
     let mut pos = 0usize;
     while pos < data.len() {
-        let idx = u16::try_from(strings.len()).unwrap_or(u16::MAX);
-        let offset = u16::try_from(pos).unwrap_or(u16::MAX);
+        let idx = u32::try_from(strings.len()).unwrap_or(u32::MAX);
+        let offset = u32::try_from(pos).unwrap_or(u32::MAX);
         let _ = offset_map.insert(offset, idx);
         let end = data[pos..]
             .iter()
@@ -128,7 +128,11 @@ fn decode_strt(data: &[u8]) -> (Vec<String>, HashMap<u16, u16>) {
     (strings, offset_map)
 }
 
-fn decode_type(data: &[u8]) -> Result<Vec<TypeDescriptor>, LoadError> {
+fn decode_type(
+    data: &[u8],
+    strings: &[String],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<TypeDescriptor>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -138,6 +142,21 @@ fn decode_type(data: &[u8]) -> Result<Vec<TypeDescriptor>, LoadError> {
         let id_bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
         let id = u16::from_le_bytes(id_bytes);
         pos = pos.wrapping_add(2);
+
+        let key_offset = read_u32_le(data, pos).ok_or(LoadError::TruncatedSection)?;
+        pos = pos.wrapping_add(4);
+        let key_idx = offset_map
+            .get(&key_offset)
+            .copied()
+            .ok_or(LoadError::InvalidStringOffset {
+                offset: u16::try_from(key_offset).unwrap_or(u16::MAX),
+            })?;
+        let key = strings
+            .get(usize::try_from(key_idx).unwrap_or(usize::MAX))
+            .cloned()
+            .ok_or(LoadError::InvalidStringOffset {
+                offset: u16::try_from(key_offset).unwrap_or(u16::MAX),
+            })?;
 
         let kind_byte = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
         let kind = match kind_byte {
@@ -154,6 +173,7 @@ fn decode_type(data: &[u8]) -> Result<Vec<TypeDescriptor>, LoadError> {
 
         out.push(TypeDescriptor {
             id,
+            key,
             kind,
             member_count,
         });
@@ -164,7 +184,7 @@ fn decode_type(data: &[u8]) -> Result<Vec<TypeDescriptor>, LoadError> {
 
 fn decode_cnst(
     data: &[u8],
-    offset_map: &HashMap<u16, u16>,
+    offset_map: &HashMap<u32, u32>,
 ) -> Result<Vec<ConstantEntry>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
@@ -196,12 +216,16 @@ fn decode_cnst(
                 // Str: 2-byte LE byte-offset into STRT → resolve to string index
                 let bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
                 let byte_offset = u16::from_le_bytes(bytes);
-                let str_idx = offset_map.get(&byte_offset).copied().ok_or(
+                let str_idx = offset_map.get(&u32::from(byte_offset)).copied().ok_or(
                     LoadError::InvalidStringOffset {
                         offset: byte_offset,
                     },
                 )?;
-                out.push(ConstantEntry::StringRef(str_idx));
+                out.push(ConstantEntry::StringRef(
+                    u16::try_from(str_idx).map_err(|_| LoadError::InvalidStringOffset {
+                        offset: byte_offset,
+                    })?,
+                ));
                 pos = pos.wrapping_add(2);
             }
             0x04 => {
@@ -325,16 +349,20 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::BrFalse
         | Opcode::BrJmp
         | Opcode::BrBack
-        | Opcode::ArrNew
         | Opcode::TyclDict
         | Opcode::FfiCall
         | Opcode::TyChk
         | Opcode::TyCast => Ok(2),
 
+        Opcode::ArrNew => Ok(4),
+
         Opcode::EffInvk => Ok(4),
 
-        // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
-        Opcode::ClsNew | Opcode::ArrNewT => Ok(3),
+        // Wide (u16 + u8) = 3 bytes
+        Opcode::ClsNew => Ok(3),
+
+        // type_id(u16) + tag(u8) + len(u16) = 5 bytes
+        Opcode::ArrNewT => Ok(5),
 
         // EffectJump (u16 + u16 + i16) = 6 bytes
         Opcode::EffHdlPush => Ok(6),
@@ -352,7 +380,11 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
     }
 }
 
-fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
+fn decode_efct(
+    data: &[u8],
+    strings: &[String],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<EffectDescriptor>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -361,8 +393,9 @@ fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
     for _ in 0..count {
         let id = u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
         pos = pos.wrapping_add(2);
-        let module_name = read_inline_string(data, &mut pos)?;
-        let name = read_inline_string(data, &mut pos)?;
+        let module_name =
+            read_string_ref(data, &mut pos, strings, offset_map)?;
+        let name = read_string_ref(data, &mut pos, strings, offset_map)?;
         let op_count = usize::from(u16::from_le_bytes(
             read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
         ));
@@ -372,7 +405,7 @@ fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
             let op_id =
                 u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
             pos = pos.wrapping_add(2);
-            let op_name = read_inline_string(data, &mut pos)?;
+            let op_name = read_string_ref(data, &mut pos, strings, offset_map)?;
             operations.push(EffectOpDescriptor {
                 id: op_id,
                 name: op_name,
@@ -389,19 +422,32 @@ fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
     Ok(out)
 }
 
-fn read_inline_string(data: &[u8], pos: &mut usize) -> Result<String, LoadError> {
-    let len = usize::from(u16::from_le_bytes(
-        read_bytes::<2>(data, *pos).ok_or(LoadError::TruncatedSection)?,
-    ));
-    *pos = pos.wrapping_add(2);
-    let bytes = data
-        .get(*pos..pos.wrapping_add(len))
-        .ok_or(LoadError::TruncatedSection)?;
-    *pos = pos.wrapping_add(len);
-    Ok(String::from_utf8_lossy(bytes).into_owned())
+fn read_string_ref(
+    data: &[u8],
+    pos: &mut usize,
+    strings: &[String],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<String, LoadError> {
+    let offset = read_u32_le(data, *pos).ok_or(LoadError::TruncatedSection)?;
+    *pos = pos.wrapping_add(4);
+    let string_idx = offset_map
+        .get(&offset)
+        .copied()
+        .ok_or(LoadError::InvalidStringOffset {
+            offset: u16::try_from(offset).unwrap_or(u16::MAX),
+        })?;
+    strings
+        .get(usize::try_from(string_idx).unwrap_or(usize::MAX))
+        .cloned()
+        .ok_or(LoadError::InvalidStringOffset {
+            offset: u16::try_from(offset).unwrap_or(u16::MAX),
+        })
 }
 
-fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
+fn decode_clss(
+    data: &[u8],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<ClassDescriptor>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -411,8 +457,14 @@ fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
         let id = u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
         pos = pos.wrapping_add(2);
 
-        let name_idx =
+        let name_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        let name_idx = offset_map
+            .get(&name_offset)
+            .copied()
+            .ok_or(LoadError::InvalidStringOffset {
+                offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
+            })?;
         pos = pos.wrapping_add(4);
 
         let method_count =
@@ -421,10 +473,16 @@ fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
 
         let mut method_names = Vec::with_capacity(usize::from(method_count));
         for _ in 0..method_count {
-            let mn =
+            let method_offset =
                 u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
             pos = pos.wrapping_add(4);
-            method_names.push(mn);
+            let method_idx = offset_map
+                .get(&method_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(method_offset).unwrap_or(u16::MAX),
+                })?;
+            method_names.push(method_idx);
         }
 
         let inst_count =
@@ -443,10 +501,16 @@ fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
 
             let mut methods = Vec::with_capacity(usize::from(m_count));
             for _ in 0..m_count {
-                let mn_idx = u32::from_le_bytes(
+                let method_offset = u32::from_le_bytes(
                     read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?,
                 );
                 pos = pos.wrapping_add(4);
+                let mn_idx = offset_map
+                    .get(&method_offset)
+                    .copied()
+                    .ok_or(LoadError::InvalidStringOffset {
+                        offset: u16::try_from(method_offset).unwrap_or(u16::MAX),
+                    })?;
                 let mi = u16::from_le_bytes(
                     read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
                 );
@@ -471,23 +535,52 @@ fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {
     Ok(out)
 }
 
-fn decode_frgn(data: &[u8]) -> Result<Vec<ForeignDescriptor>, LoadError> {
+fn decode_frgn(
+    data: &[u8],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<ForeignDescriptor>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
     let mut out = Vec::with_capacity(count);
 
     for _ in 0..count {
-        let name_idx =
+        let name_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        let name_idx = offset_map
+            .get(&name_offset)
+            .copied()
+            .ok_or(LoadError::InvalidStringOffset {
+                offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
+            })?;
         pos = pos.wrapping_add(4);
 
-        let symbol_idx =
+        let symbol_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        let symbol_idx = if symbol_offset == u32::MAX {
+            u32::MAX
+        } else {
+            offset_map
+                .get(&symbol_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(symbol_offset).unwrap_or(u16::MAX),
+                })?
+        };
         pos = pos.wrapping_add(4);
 
-        let lib_idx =
+        let lib_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        let lib_idx = if lib_offset == u32::MAX {
+            u32::MAX
+        } else {
+            offset_map
+                .get(&lib_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(lib_offset).unwrap_or(u16::MAX),
+                })?
+        };
         pos = pos.wrapping_add(4);
 
         let abi_byte = *data.get(pos).ok_or(LoadError::TruncatedSection)?;

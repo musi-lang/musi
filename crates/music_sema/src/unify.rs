@@ -42,9 +42,13 @@ pub fn unify(env: &mut TypeEnv, a: SemaTypeId, b: SemaTypeId, span: Span) -> Uni
         (Ty::Builtin(x), Ty::Builtin(y)) if x == y => Ok(a),
         (Ty::Builtin(_), Ty::Builtin(_)) => Err(mismatch(a, b, span)),
 
+        (Ty::Named(x), Ty::Named(y)) if x == y => Ok(a),
+
         (Ty::Arrow { param: p1, ret: r1 }, Ty::Arrow { param: p2, ret: r2 }) => {
             unify_arrow(env, (*p1, *r1), (*p2, *r2), span)
         }
+
+        (Ty::App(base1, args1), Ty::App(base2, args2)) => unify_app(env, (*base1, args1), (*base2, args2), span),
 
         (Ty::Tuple(xs), Ty::Tuple(ys)) => unify_tuple(env, xs, ys, span),
 
@@ -109,6 +113,31 @@ fn unify_arrow(
     let param = unify(env, p2, p1, span)?; // contravariant
     let ret = unify(env, r1, r2, span)?; // covariant
     Ok(env.intern(Ty::Arrow { param, ret }))
+}
+
+fn unify_app(
+    env: &mut TypeEnv,
+    (base1, args1): (SemaTypeId, &[SemaTypeId]),
+    (base2, args2): (SemaTypeId, &[SemaTypeId]),
+    span: Span,
+) -> UnifyResult {
+    if args1.len() != args2.len() {
+        return Err(SemaError {
+            kind: SemaErrorKind::ArityMismatch {
+                expected: args1.len(),
+                found: args2.len(),
+            },
+            span,
+            context: Some("type application unification"),
+        });
+    }
+
+    let base = unify(env, base1, base2, span)?;
+    let mut args = Vec::with_capacity(args1.len());
+    for (&lhs, &rhs) in args1.iter().zip(args2.iter()) {
+        args.push(unify(env, lhs, rhs, span)?);
+    }
+    Ok(env.intern(Ty::App(base, args)))
 }
 
 /// Unifies two tuple types pairwise, requiring equal length.
@@ -182,6 +211,7 @@ fn occurs_check(env: &TypeEnv, var: TyVarId, ty: SemaTypeId) -> bool {
         }
         Ty::EffectOp { ret, .. } => occurs_check(env, var, *ret),
         Ty::Builtin(_)
+        | Ty::Named(_)
         | Ty::Param(_)
         | Ty::Any
         | Ty::Unknown

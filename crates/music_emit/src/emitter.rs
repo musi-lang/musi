@@ -3,8 +3,9 @@ use std::mem;
 
 use music_ast::common::{AttrArg, FnDecl, MemberDecl, MemberName, Param};
 use music_ast::expr::{
-    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind, InstanceBody,
-    InstanceDef, LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind, TypeOpKind, UnaryOp,
+    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind,
+    InstanceBody, InstanceDef, LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind,
+    TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
@@ -12,14 +13,14 @@ use music_ast::{ExprId, ExprList, TyId};
 use music_builtins::types::BuiltinType;
 use music_hir::HirBundle;
 use music_il::format::{
-    self, ClassDescriptor, EffectDescriptor, EffectOpDescriptor, FfiType, ForeignAbi,
-    ForeignDescriptor, TypeDescriptor, TypeKind,
+    self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
+    FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,
 };
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
-use music_resolve::def::Visibility;
-use music_sema::env::DispatchInfo;
-use music_sema::types::Ty;
+use music_resolve::def::{DefKind, Visibility};
+use music_sema::env::{DispatchInfo, TypeKey};
+use music_sema::types::{NominalKey, Ty};
 use music_shared::{Ident, Literal, Symbol, SymbolList};
 
 use crate::error::EmitError;
@@ -61,6 +62,8 @@ struct Emitter<'thir> {
     pool: ConstantPool,
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
+    types: Vec<TypeDescriptor>,
+    type_ids: HashMap<String, u16>,
     foreigns: Vec<ForeignDescriptor>,
     /// Maps binding names to their foreign descriptor index for `FfiCall` emission.
     foreign_globals: HashMap<Symbol, u16>,
@@ -76,6 +79,7 @@ struct Emitter<'thir> {
     /// Locals that are heap-boxed cells (captured mutable variables).
     cell_locals: HashSet<Symbol>,
     next_anon: u32,
+    next_type_id: u16,
 }
 
 /// Entry point: lower a typed IR bundle into a [`SeamModule`].
@@ -108,6 +112,8 @@ pub fn emit_with_context(
         pool: ConstantPool::new(),
         methods: Vec::new(),
         globals: Vec::new(),
+        types: builtin_type_descriptors(),
+        type_ids: builtin_type_ids(),
         foreigns: Vec::new(),
         foreign_globals: HashMap::new(),
         imported_globals: HashMap::new(),
@@ -118,26 +124,39 @@ pub fn emit_with_context(
         current_upvalues: Vec::new(),
         cell_locals: HashSet::new(),
         next_anon: u32::MAX - 1,
+        next_type_id: format::FIRST_EMITTED_TYPE_ID,
     };
     emitter.emit_module()?;
-    let types: Vec<TypeDescriptor> = BuiltinType::ALL
-        .iter()
-        .map(|bt| TypeDescriptor {
-            id: bt.type_id(),
-            kind: TypeKind::Builtin,
-            member_count: 0,
-        })
-        .collect();
     let effects = emitter.collect_effects();
+    let classes = emitter.collect_classes();
     Ok(SeamModule {
         constants: emitter.pool,
         methods: emitter.methods,
         globals: emitter.globals,
-        types,
+        types: emitter.types,
         effects,
-        classes: Vec::new(),
+        classes,
         foreigns: emitter.foreigns,
     })
+}
+
+fn builtin_type_descriptors() -> Vec<TypeDescriptor> {
+    BuiltinType::ALL
+        .iter()
+        .map(|bt| TypeDescriptor {
+            id: bt.type_id(),
+            key: bt.name().to_owned(),
+            kind: TypeKind::Builtin,
+            member_count: 0,
+        })
+        .collect()
+}
+
+fn builtin_type_ids() -> HashMap<String, u16> {
+    BuiltinType::ALL
+        .iter()
+        .map(|bt| (bt.name().to_owned(), bt.type_id()))
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -151,7 +170,9 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
         Operand::None => 0,
         Operand::U8(_) => 1,
         Operand::I16(_) | Operand::U16(_) => 2,
-        Operand::Wide(_, _) | Operand::Tagged(_, _) => 3,
+        Operand::Wide(_, _) => 3,
+        Operand::TypeLen(_, _) => 4,
+        Operand::TypeTagged(_, _, _) => 5,
         Operand::Effect(_, _) => 4,
         Operand::IndexedJump(_, _) => 4,
         Operand::EffectJump(_, _, _) => 6,
@@ -196,6 +217,318 @@ impl Emitter<'_> {
                     })
             })
             .collect()
+    }
+
+    fn collect_classes(&mut self) -> Vec<ClassDescriptor> {
+        let mut classes = Vec::new();
+        let root = self.thir.db.ast.root.clone();
+        for expr_id in root {
+            let ExprKind::Let(binding) = &self.thir.db.ast.exprs.get(expr_id).kind else {
+                continue;
+            };
+            let Some(value) = binding.value else {
+                continue;
+            };
+            let ExprKind::ClassDef(data) = &self.thir.db.ast.exprs.get(value).kind else {
+                continue;
+            };
+            let PatKind::Bind(ident) = &self.thir.db.ast.pats.get(binding.pat).kind else {
+                continue;
+            };
+            let Some(class_id) = self.thir.class_id(ident.name) else {
+                continue;
+            };
+            let class_name_idx = self
+                .pool
+                .add(ConstantEntry::Str(self.thir.db.interner.resolve(ident.name).to_owned()))
+                .into();
+            let class_methods: Vec<Symbol> = data
+                .members
+                .iter()
+                .filter_map(|member| match member {
+                    MemberDecl::Fn(decl) => Some(member_name_symbol(&decl.name)),
+                    MemberDecl::Law(_) => None,
+                })
+                .collect();
+            let method_names = class_methods
+                .iter()
+                .map(|name| {
+                    self.pool
+                        .add(ConstantEntry::Str(self.thir.db.interner.resolve(*name).to_owned()))
+                        .into()
+                })
+                .collect::<Vec<_>>();
+            let method_count =
+                u16::try_from(class_methods.len()).expect("too many class methods (>65535)");
+            classes.push(ClassDescriptor {
+                id: class_id,
+                name_idx: class_name_idx,
+                method_count,
+                method_names,
+                instances: self.collect_class_instances(ident.name, &class_methods),
+            });
+        }
+        classes.sort_by_key(|class| class.id);
+        classes
+    }
+
+    fn collect_class_instances(
+        &mut self,
+        class_name: Symbol,
+        class_methods: &[Symbol],
+    ) -> Vec<ClassInstance> {
+        let mut instances = Vec::new();
+        let root = self.thir.db.ast.root.clone();
+        for expr_id in root {
+            let ExprKind::InstanceDef(inst) = &self.thir.db.ast.exprs.get(expr_id).kind else {
+                continue;
+            };
+            if inst.ty.name.name != class_name {
+                continue;
+            }
+            let Some(type_key) = self.thir.type_env.instance_keys.get(&expr_id).cloned() else {
+                continue;
+            };
+            let type_id = self.register_type_key(&type_key);
+            let methods = class_methods
+                .iter()
+                .map(|name| ClassMethod {
+                    name_idx: self
+                        .pool
+                        .add(ConstantEntry::Str(self.thir.db.interner.resolve(*name).to_owned()))
+                        .into(),
+                    method_idx: self.method_index_by_name(*name).unwrap_or(u16::MAX),
+                })
+                .collect();
+            instances.push(ClassInstance { type_id, methods });
+        }
+        instances.sort_by_key(|instance| instance.type_id);
+        instances
+    }
+
+    fn method_index_by_name(&self, name: Symbol) -> Option<u16> {
+        self.methods
+            .iter()
+            .position(|method| method.name == Some(name))
+            .and_then(|index| u16::try_from(index).ok())
+    }
+
+    fn expr_runtime_type_id(&mut self, expr_id: ExprId, fallback: u16) -> u16 {
+        let Some(expr_ty) = self.thir.expr_type(expr_id) else {
+            return fallback;
+        };
+        let Some(type_key) = self.thir.type_env.type_key(expr_ty) else {
+            return fallback;
+        };
+        self.register_type_key(&type_key)
+    }
+
+    fn register_type_key(&mut self, type_key: &TypeKey) -> u16 {
+        let key = self.type_key_string(type_key);
+        if let Some(&type_id) = self.type_ids.get(&key) {
+            return type_id;
+        }
+        let type_id = self.next_type_id;
+        self.next_type_id = self
+            .next_type_id
+            .checked_add(1)
+            .expect("runtime type table overflow");
+        let (kind, member_count) = self.type_descriptor_shape(type_key);
+        self.types.push(TypeDescriptor {
+            id: type_id,
+            key: key.clone(),
+            kind,
+            member_count,
+        });
+        let _ = self.type_ids.insert(key, type_id);
+        type_id
+    }
+
+    fn type_descriptor_shape(&self, type_key: &TypeKey) -> (TypeKind, u16) {
+        match type_key {
+            TypeKey::Builtin(_) => (TypeKind::Builtin, 0),
+            TypeKey::Record(fields) => (
+                TypeKind::Record,
+                u16::try_from(fields.len()).expect("record member count overflow"),
+            ),
+            TypeKey::Choice(variants) => (
+                TypeKind::Choice,
+                u16::try_from(variants.len()).expect("choice member count overflow"),
+            ),
+            _ => (TypeKind::Record, 0),
+        }
+    }
+
+    fn type_key_string(&self, type_key: &TypeKey) -> String {
+        match type_key {
+            TypeKey::Builtin(bt) => bt.name().to_owned(),
+            TypeKey::Named(NominalKey { module_name, name }) => module_name
+                .as_ref()
+                .map_or_else(
+                    || self.thir.db.interner.resolve(*name).to_owned(),
+                    |module_name| {
+                        format!(
+                            "{module_name}::{}",
+                            self.thir.db.interner.resolve(*name)
+                        )
+                    },
+                ),
+            TypeKey::Param(name) | TypeKey::Class(name) | TypeKey::Effect(name) => {
+                self.thir.db.interner.resolve(*name).to_owned()
+            }
+            TypeKey::Record(fields) => format!(
+                "{{{}}}",
+                fields
+                    .iter()
+                    .map(|(name, ty)| format!(
+                        "{}:{}",
+                        self.thir.db.interner.resolve(*name),
+                        self.type_key_string(ty)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(";")
+            ),
+            TypeKey::Choice(variants) => format!(
+                "choice({})",
+                variants
+                    .iter()
+                    .map(|(name, payload)| match payload {
+                        Some(ty) => format!(
+                            "{}:{}",
+                            self.thir.db.interner.resolve(*name),
+                            self.type_key_string(ty)
+                        ),
+                        None => self.thir.db.interner.resolve(*name).to_owned(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("|")
+            ),
+            TypeKey::Arrow { param, ret } => {
+                format!("({})->{}", self.type_key_string(param), self.type_key_string(ret))
+            }
+            TypeKey::EffectArrow {
+                param,
+                ret,
+                effects,
+            } => format!(
+                "({})~>{{{}}}{}",
+                self.type_key_string(param),
+                effects
+                    .iter()
+                    .map(|effect| self.type_key_string(effect))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                self.type_key_string(ret)
+            ),
+            TypeKey::Tuple(items) => format!(
+                "({})",
+                items
+                    .iter()
+                    .map(|item| self.type_key_string(item))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            TypeKey::Array(item) => format!("[{}]", self.type_key_string(item)),
+            TypeKey::List(item) => format!("List<{}>", self.type_key_string(item)),
+            TypeKey::Union(items) => items
+                .iter()
+                .map(|item| self.type_key_string(item))
+                .collect::<Vec<_>>()
+                .join("+"),
+            TypeKey::Mut(inner) => format!("mut {}", self.type_key_string(inner)),
+            TypeKey::App(base, args) => format!(
+                "{}[{}]",
+                self.type_key_string(base),
+                args.iter()
+                    .map(|arg| self.type_key_string(arg))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            TypeKey::Any => "Any".to_owned(),
+            TypeKey::Unknown => "Unknown".to_owned(),
+            TypeKey::Empty => "Empty".to_owned(),
+            TypeKey::Unit => "Unit".to_owned(),
+            TypeKey::EffectOp { effect, op, ret } => format!(
+                "{}.{}:{}",
+                self.thir.db.interner.resolve(*effect),
+                self.thir.db.interner.resolve(*op),
+                self.type_key_string(ret)
+            ),
+        }
+    }
+
+    fn ast_type_key(&self, ty_id: TyId) -> Option<TypeKey> {
+        match &self.thir.db.ast.types.get(ty_id).kind {
+            TyKind::Named { name, args } => {
+                let def_kind = self
+                    .thir
+                    .resolution
+                    .ty_res
+                    .get(&ty_id)
+                    .map(|def_id| self.thir.resolution.defs.get(*def_id).kind);
+                match def_kind {
+                    Some(DefKind::Builtin(bt)) => Some(TypeKey::Builtin(bt)),
+                    Some(DefKind::TypeParam) => Some(TypeKey::Param(name.name)),
+                    Some(DefKind::Effect) => Some(TypeKey::Effect(name.name)),
+                    _ => {
+                        let base = TypeKey::Named(NominalKey {
+                            module_name: self
+                                .thir
+                                .resolution
+                                .ty_res
+                                .get(&ty_id)
+                                .and_then(|def_id| {
+                                    self.thir.resolution.defs.get(*def_id).module_name.clone()
+                                }),
+                            name: name.name,
+                        });
+                        if args.is_empty() {
+                            Some(base)
+                        } else {
+                            Some(TypeKey::App(
+                                Box::new(base),
+                                args.iter()
+                                    .map(|arg| self.ast_type_key(*arg))
+                                    .collect::<Option<Vec<_>>>()?,
+                            ))
+                        }
+                    }
+                }
+            }
+            TyKind::Arrow { from, to } => Some(TypeKey::Arrow {
+                param: Box::new(self.ast_type_key(*from)?),
+                ret: Box::new(self.ast_type_key(*to)?),
+            }),
+            TyKind::EffectArrow { from, to } => Some(TypeKey::EffectArrow {
+                param: Box::new(self.ast_type_key(*from)?),
+                ret: Box::new(self.ast_type_key(*to)?),
+                effects: Vec::new(),
+            }),
+            TyKind::Sum(items) => Some(TypeKey::Union(
+                items
+                    .iter()
+                    .map(|item| self.ast_type_key(*item))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            TyKind::Product(items) | TyKind::Tuple(items) => Some(TypeKey::Tuple(
+                items
+                    .iter()
+                    .map(|item| self.ast_type_key(*item))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            TyKind::Mut(inner) => Some(TypeKey::Mut(Box::new(self.ast_type_key(*inner)?))),
+            TyKind::Option(inner) => Some(TypeKey::Union(vec![
+                self.ast_type_key(*inner)?,
+                TypeKey::Unit,
+            ])),
+            TyKind::Pi { ret_ty, .. } => self.ast_type_key(*ret_ty),
+            TyKind::Array { elem, .. } => Some(TypeKey::Array(Box::new(self.ast_type_key(*elem)?))),
+        }
+    }
+
+    fn emit_runtime_type_id(&mut self, type_id: u16) {
+        let const_idx = self.pool.add(ConstantEntry::Int(i64::from(type_id)));
+        self.push(Instruction::with_u16(Opcode::LdConst, const_idx));
     }
 
     fn emit_module(&mut self) -> EmitResult {
@@ -336,12 +669,12 @@ impl Emitter<'_> {
             } => self.emit_lambda(expr_id, params, body)?,
             ExprKind::Seq(ref stmts) => self.emit_seq(stmts)?,
             ExprKind::Case(ref data) => self.emit_case(data.scrutinee, &data.arms)?,
-            ExprKind::RecordLit(ref fields) => self.emit_record_lit(fields)?,
+            ExprKind::RecordLit(ref fields) => self.emit_record_lit(expr_id, fields)?,
             ExprKind::VariantLit(ref tag, ref args) => self.emit_variant_lit(expr_id, tag, args)?,
             ExprKind::Access { expr, field, .. } => self.emit_access(expr, &field)?,
             ExprKind::Return(opt) => self.emit_return(opt)?,
-            ExprKind::TupleLit(ref elems) => self.emit_tuple_lit(elems)?,
-            ExprKind::ArrayLit(ref elems) => self.emit_array_lit(elems)?,
+            ExprKind::TupleLit(ref elems) => self.emit_tuple_lit(expr_id, elems)?,
+            ExprKind::ArrayLit(ref elems) => self.emit_array_lit(expr_id, elems)?,
             ExprKind::Assign(target, value) => self.emit_assign(target, value)?,
             ExprKind::Index {
                 expr, ref indices, ..
@@ -350,11 +683,11 @@ impl Emitter<'_> {
             ExprKind::Perform(operand) => self.emit_perform(expr_id, operand)?,
             ExprKind::Handle(ref data) => self.emit_handle(expr_id, &data.handlers, data.body)?,
             ExprKind::Resume(opt) => self.emit_resume(opt)?,
-            ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
+            ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(expr_id, rows)?,
             ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
             ExprKind::Postfix { expr, op } => self.emit_postfix(expr, op)?,
             ExprKind::TypeOp { expr, ty, kind } => self.emit_type_op(expr, ty, kind)?,
-            ExprKind::InstanceDef(ref inst) => self.emit_instance_def(inst)?,
+            ExprKind::InstanceDef(ref inst) => self.emit_instance_def(expr_id, inst)?,
             ExprKind::ForeignImport(sym) => self.emit_foreign_import(sym),
             ExprKind::Comprehension(ref data) => {
                 self.emit_comprehension(data.expr, &data.clauses)?;
@@ -473,12 +806,11 @@ impl Emitter<'_> {
             return self.emit_nil_coalesce(lhs, rhs);
         }
 
-        self.emit_expr(lhs)?;
-        self.emit_expr(rhs)?;
-
         if let Some(dispatch) = self.thir.dispatch(expr_id) {
             match dispatch {
                 DispatchInfo::Static { opcode } => {
+                    self.emit_expr(lhs)?;
+                    self.emit_expr(rhs)?;
                     self.push(Instruction::simple(*opcode));
                     return Ok(());
                 }
@@ -486,16 +818,26 @@ impl Emitter<'_> {
                     let method_u8 =
                         u8::try_from(*method_idx).expect("method index overflow (>255)");
                     let class_id = self.thir.class_id(*class).unwrap_or(0);
+                    let lhs_type_id = self.expr_runtime_type_id(lhs, format::BUILTIN_TYPE_ANY);
+                    self.emit_expr(lhs)?;
+                    self.emit_runtime_type_id(lhs_type_id);
                     self.push(Instruction::with_u16(Opcode::TyclDict, class_id));
                     self.push(Instruction::with_u8(Opcode::TyclCall, method_u8));
+                    self.push(Instruction::simple(Opcode::Swap));
+                    self.emit_expr(rhs)?;
+                    self.push(Instruction::with_u8(Opcode::Call, 2));
                     return Ok(());
                 }
                 DispatchInfo::Dynamic => {
+                    self.emit_expr(lhs)?;
+                    self.emit_expr(rhs)?;
                     return self.emit_dynamic_binop(op);
                 }
             }
         }
 
+        self.emit_expr(lhs)?;
+        self.emit_expr(rhs)?;
         self.push(Instruction::simple(binop_to_opcode(op)));
         Ok(())
     }
@@ -593,7 +935,7 @@ impl Emitter<'_> {
 
                 if is_captured_mut {
                     // Allocate a heap cell: ArrNew(1) then store value at index 0
-                    self.push(Instruction::with_u16(Opcode::ArrNew, 1));
+                    self.push_arr_new(format::INTERNAL_TYPE_CELL, 1);
                     self.emit_expr(value)?;
                     self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
                     let slot = self.local_slot(ident.name);
@@ -938,9 +1280,10 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_record_lit(&mut self, fields: &[RecordField]) -> EmitResult {
+    fn emit_record_lit(&mut self, expr_id: ExprId, fields: &[RecordField]) -> EmitResult {
         let field_count = u16::try_from(fields.len()).expect("too many fields (>65535)");
-        self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
+        let type_id = self.expr_runtime_type_id(expr_id, format::BUILTIN_TYPE_ANY);
+        self.push_arr_new(type_id, field_count);
 
         for (i, field) in fields.iter().enumerate() {
             match field {
@@ -972,7 +1315,8 @@ impl Emitter<'_> {
         let tag_byte = u8::try_from(tag_idx).expect("variant tag constant index overflow (>255)");
 
         let len = u16::try_from(args.len()).expect("too many variant args (>65535)");
-        self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, len));
+        let type_id = self.expr_runtime_type_id(expr_id, format::BUILTIN_TYPE_ANY);
+        self.push_arr_new_tagged(type_id, tag_byte, len);
 
         for (i, &arg) in args.iter().enumerate() {
             self.emit_expr(arg)?;
@@ -1012,9 +1356,10 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_tuple_lit(&mut self, elems: &ExprList) -> EmitResult {
+    fn emit_tuple_lit(&mut self, expr_id: ExprId, elems: &ExprList) -> EmitResult {
         let len = u16::try_from(elems.len()).expect("too many tuple elements (>65535)");
-        self.push(Instruction::with_u16(Opcode::ArrNew, len));
+        let type_id = self.expr_runtime_type_id(expr_id, format::BUILTIN_TYPE_ANY);
+        self.push_arr_new(type_id, len);
         for (i, &elem) in elems.iter().enumerate() {
             self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many tuple elements (>255)");
@@ -1023,14 +1368,15 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_array_lit(&mut self, elems: &ExprList) -> EmitResult {
+    fn emit_array_lit(&mut self, expr_id: ExprId, elems: &ExprList) -> EmitResult {
+        let type_id = self.expr_runtime_type_id(expr_id, BuiltinType::Array.type_id());
         if elems.iter().any(|&elem| self.is_spread_expr(elem)) {
-            self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+            self.push_arr_new(type_id, 0);
             for &elem in elems {
                 if let Some(inner) = self.spread_expr_operand(elem) {
                     self.emit_expr(inner)?;
                 } else {
-                    self.push(Instruction::with_u16(Opcode::ArrNew, 1));
+                    self.push_arr_new(type_id, 1);
                     self.emit_expr(elem)?;
                     self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
                 }
@@ -1040,7 +1386,7 @@ impl Emitter<'_> {
         }
 
         let len = u16::try_from(elems.len()).expect("too many array elements (>65535)");
-        self.push(Instruction::with_u16(Opcode::ArrNew, len));
+        self.push_arr_new(type_id, len);
         for (i, &elem) in elems.iter().enumerate() {
             self.emit_expr(elem)?;
             let idx = u8::try_from(i).expect("too many array elements (>255)");
@@ -1099,7 +1445,7 @@ impl Emitter<'_> {
         };
         let tag_idx = self.pool.add(ConstantEntry::Str(tag_str.into()));
         let tag_byte = u8::try_from(tag_idx & 0xFF).expect("tag index overflow");
-        self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, 2));
+        self.push_arr_new_tagged(format::BUILTIN_TYPE_ANY, tag_byte, 2);
 
         self.emit_expr(lhs)?;
         self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
@@ -1117,10 +1463,10 @@ impl Emitter<'_> {
                 } else if args.len() == 1 {
                     self.emit_expr(args[0])?;
                 } else {
-                    self.push(Instruction::with_u16(
-                        Opcode::ArrNew,
+                    self.push_arr_new(
+                        BuiltinType::Array.type_id(),
                         u16::try_from(args.len()).expect("too many effect arguments (>65535)"),
-                    ));
+                    );
                     for (i, arg) in args.iter().enumerate() {
                         self.emit_expr(*arg)?;
                         self.push(Instruction::with_u8(
@@ -1202,13 +1548,14 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_matrix_lit(&mut self, rows: &[ExprList]) -> EmitResult {
+    fn emit_matrix_lit(&mut self, expr_id: ExprId, rows: &[ExprList]) -> EmitResult {
         let row_count = u16::try_from(rows.len()).expect("too many matrix rows (>65535)");
-        self.push(Instruction::with_u16(Opcode::ArrNew, row_count));
+        let type_id = self.expr_runtime_type_id(expr_id, BuiltinType::Array.type_id());
+        self.push_arr_new(type_id, row_count);
 
         for (ri, row) in rows.iter().enumerate() {
             let col_count = u16::try_from(row.len()).expect("too many matrix columns (>65535)");
-            self.push(Instruction::with_u16(Opcode::ArrNew, col_count));
+            self.push_arr_new(BuiltinType::Array.type_id(), col_count);
 
             for (ci, &elem) in row.iter().enumerate() {
                 self.emit_expr(elem)?;
@@ -1302,7 +1649,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_instance_def(&mut self, inst: &InstanceDef) -> EmitResult {
+    fn emit_instance_def(&mut self, _expr_id: ExprId, inst: &InstanceDef) -> EmitResult {
         match &inst.body {
             InstanceBody::Methods(members) => {
                 for member in members {
@@ -1390,11 +1737,11 @@ impl Emitter<'_> {
     fn emit_import_record(&mut self, alias: Symbol, globals: &[ImportedGlobal]) {
         if globals.is_empty() {
             // No exports resolved -- emit an empty record.
-            self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+            self.push_arr_new(format::BUILTIN_TYPE_ANY, 0);
         } else {
             let field_count =
                 u16::try_from(globals.len()).expect("too many import exports (>65535)");
-            self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
+            self.push_arr_new(format::BUILTIN_TYPE_ANY, field_count);
             for (i, imported) in globals.iter().enumerate() {
                 self.push_absolute_global_load(imported.index);
                 let field_idx = u8::try_from(i).expect("too many import fields (>255)");
@@ -1419,7 +1766,7 @@ impl Emitter<'_> {
     }
 
     fn emit_comprehension(&mut self, body: ExprId, clauses: &[CompClause]) -> EmitResult {
-        self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+        self.push_arr_new(BuiltinType::Array.type_id(), 0);
 
         for (clause_idx, clause) in clauses.iter().enumerate() {
             match clause {
@@ -1889,16 +2236,24 @@ impl Emitter<'_> {
         pin_count
     }
 
-    fn type_to_table_id(&self, ty_id: TyId) -> u16 {
-        let ty_kind = &self.thir.db.ast.types.get(ty_id).kind;
-        let TyKind::Named { name, .. } = ty_kind else {
+    fn push_arr_new(&mut self, type_id: u16, len: u16) {
+        self.push(Instruction::with_type_len(Opcode::ArrNew, type_id, len));
+    }
+
+    fn push_arr_new_tagged(&mut self, type_id: u16, tag: u8, len: u16) {
+        self.push(Instruction::with_type_tagged(
+            Opcode::ArrNewT,
+            type_id,
+            tag,
+            len,
+        ));
+    }
+
+    fn type_to_table_id(&mut self, ty_id: TyId) -> u16 {
+        let Some(type_key) = self.ast_type_key(ty_id) else {
             return format::BUILTIN_TYPE_ANY;
         };
-        let resolved = self.thir.db.interner.resolve(name.name);
-        BuiltinType::ALL
-            .iter()
-            .find(|bt| bt.name() == resolved)
-            .map_or(format::BUILTIN_TYPE_ANY, |bt| bt.type_id())
+        self.register_type_key(&type_key)
     }
 
     fn resolve_field_index(&self, base_expr: ExprId, field_name: Symbol) -> Option<u8> {
@@ -1943,7 +2298,7 @@ impl Emitter<'_> {
             SpliceKind::Expr(e) => self.emit_expr(*e)?,
             SpliceKind::Array(es) => {
                 let len = u16::try_from(es.len()).expect("too many splice elements (>65535)");
-                self.push(Instruction::with_u16(Opcode::ArrNew, len));
+                self.push_arr_new(BuiltinType::Array.type_id(), len);
                 for (i, &e) in es.iter().enumerate() {
                     self.emit_expr(e)?;
                     let idx = u8::try_from(i).expect("too many splice elements (>255)");

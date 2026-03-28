@@ -10,6 +10,12 @@ pub type TyVarId = u32;
 
 pub type SemaTypeList = Vec<SemaTypeId>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NominalKey {
+    pub module_name: Option<String>,
+    pub name: Symbol,
+}
+
 /// Semantic type representation used during type checking.
 ///
 /// Unlike the syntactic `TyKind` from the AST, this IR supports unification
@@ -24,6 +30,7 @@ pub enum Ty {
     Choice {
         variants: Vec<(Symbol, Option<SemaTypeId>)>,
     },
+    Named(NominalKey),
     Arrow {
         param: SemaTypeId,
         ret: SemaTypeId,

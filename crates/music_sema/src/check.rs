@@ -20,7 +20,7 @@ use crate::effects;
 use crate::env::{DispatchInfo, EffectUse, InstanceEntry, TypeEnv, VariantInfo};
 use crate::errors::{SemaError, SemaErrorKind};
 use crate::intrinsic::{BuiltinMaps, collect_builtin_methods};
-use crate::types::{SemaTypeId, SemaTypeList, Ty};
+use crate::types::{NominalKey, SemaTypeId, SemaTypeList, Ty};
 
 /// Tag index and arity for a variant within its parent sum type.
 #[derive(Debug, Clone, Copy)]
@@ -256,7 +256,7 @@ impl SemaDb {
                 self.env.intern(Ty::Builtin(BuiltinType::Type))
             }
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
-            ExprKind::InstanceDef(ref inst) => self.synth_instance_def(inst, span),
+            ExprKind::InstanceDef(ref inst) => self.synth_instance_def(expr_id, inst, span),
             ExprKind::Handle(ref data) => {
                 self.synth_handle(&data.effect, &data.handlers, data.body, span, expr_id)
             }
@@ -767,12 +767,30 @@ impl SemaDb {
     fn lower_ty(&mut self, ty_id: TyId) -> SemaTypeId {
         let ty_kind = self.db.ast.types.get(ty_id).kind.clone();
         match ty_kind {
-            TyKind::Named { name, .. } => {
+            TyKind::Named { name, args } => {
                 if let Some(&def_id) = self.resolution.ty_res.get(&ty_id) {
                     let def = self.resolution.defs.get(def_id);
                     match def.kind {
                         DefKind::Builtin(bt) => self.env.builtin(bt),
-                        _ => self.env.intern(Ty::Param(name.name)),
+                        DefKind::TypeParam => self.env.intern(Ty::Param(name.name)),
+                        DefKind::Effect => self.env.intern(Ty::Effect(name.name)),
+                        DefKind::Type | DefKind::Import | DefKind::Value | DefKind::Function => {
+                            let base = self.env.intern(Ty::Named(NominalKey {
+                                module_name: def.module_name.clone(),
+                                name: name.name,
+                            }));
+                            if args.is_empty() {
+                                base
+                            } else {
+                                let lowered_args: SemaTypeList =
+                                    args.iter().map(|&arg| self.lower_ty(arg)).collect();
+                                self.env.intern(Ty::App(base, lowered_args))
+                            }
+                        }
+                        _ => self.env.intern(Ty::Named(NominalKey {
+                            module_name: def.module_name.clone(),
+                            name: name.name,
+                        })),
                     }
                 } else {
                     self.env.intern(Ty::Any)
@@ -945,6 +963,7 @@ impl SemaDb {
         let ty = self.env.types.get(resolved);
         match ty {
             Ty::Effect(sym) | Ty::Class(sym) | Ty::Param(sym) => *sym,
+            Ty::Named(name) => name.name,
             _ => self.db.interner.intern("_"),
         }
     }
@@ -1505,30 +1524,33 @@ impl SemaDb {
 
     /// Checks whether a type has an instance for a given class in the registry.
     fn find_instance_for_type(&self, ty_id: SemaTypeId, class: Symbol) -> bool {
-        let ty = self.env.types.get(ty_id);
-        // Extract the type's "name" symbol for registry lookup
-        let ty_sym = match ty {
-            Ty::Builtin(_) => return true, // already handled by builtin_has_instance
-            Ty::Class(s) | Ty::Effect(s) | Ty::Param(s) => *s,
-            _ => return false,
+        let ty = self.env.types.get(self.env.resolve_var(ty_id));
+        if matches!(ty, Ty::Builtin(_)) {
+            return true;
+        }
+        let Some(ty_key) = self.env.type_key(ty_id) else {
+            return false;
         };
-        self.env.instances.contains_key(&(class, ty_sym))
+        self.env.instances.contains_key(&(class, ty_key))
     }
 
     /// #3 + #4: Registers an instance in the environment, checking coherence.
-    fn synth_instance_def(&mut self, inst: &InstanceDef, span: Span) -> SemaTypeId {
+    fn synth_instance_def(&mut self, expr_id: ExprId, inst: &InstanceDef, span: Span) -> SemaTypeId {
         let class_name = inst.ty.name.name;
 
-        // Extract the type name from the first type arg, or fall back to
-        // the class name itself if there are no args.
-        let type_name = if let Some(&first_arg) = inst.ty.args.first() {
-            let ty_kind = &self.db.ast.types.get(first_arg).kind;
-            match ty_kind {
-                TyKind::Named { name, .. } => name.name,
-                _ => class_name,
-            }
+        let (instance_ty, type_name) = if let Some(&first_arg) = inst.ty.args.first() {
+            (
+                self.lower_ty(first_arg),
+                self.type_ctor_name(first_arg).unwrap_or(class_name),
+            )
         } else {
-            class_name
+            (
+                self.env.intern(Ty::Named(NominalKey {
+                    module_name: None,
+                    name: class_name,
+                })),
+                class_name,
+            )
         };
 
         // Collect method names
@@ -1543,7 +1565,16 @@ impl SemaDb {
             InstanceBody::Via(_) => Vec::new(),
         };
 
-        let key = (class_name, type_name);
+        let Some(type_key) = self.env.type_key(instance_ty) else {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::NoInstance { class: class_name },
+                span,
+                context: None,
+            });
+            return self.env.intern(Ty::Builtin(BuiltinType::Type));
+        };
+
+        let key = (class_name, type_key.clone());
 
         // #4: Coherence - check for duplicate instance
         if self.env.instances.contains_key(&key) {
@@ -1560,9 +1591,24 @@ impl SemaDb {
         let _prev = self
             .env
             .instances
-            .insert(key, InstanceEntry { span, methods });
+            .insert(
+                key,
+                InstanceEntry {
+                    span,
+                    methods,
+                    ty: type_key.clone(),
+                },
+            );
+        let _ = self.env.instance_keys.insert(expr_id, type_key);
 
         self.env.intern(Ty::Builtin(BuiltinType::Type))
+    }
+
+    fn type_ctor_name(&self, ty_id: TyId) -> Option<Symbol> {
+        match &self.db.ast.types.get(ty_id).kind {
+            TyKind::Named { name, .. } => Some(name.name),
+            _ => None,
+        }
     }
 
     /// Registers effect operation metadata in the type environment.

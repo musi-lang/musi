@@ -315,6 +315,41 @@ fn same_named_effects_from_different_modules_do_not_merge() {
 }
 
 #[test]
+fn same_named_types_from_different_modules_do_not_merge() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("a.ms"),
+        "export let Node := data { | Node }; export let is_a := (x) => x :? Node",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("b.ms"),
+        "export let Node := data { | Node }; export let is_b := (x) => x :? Node",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "import \"./a.ms\" as A; import \"./b.ms\" as B; export let value := 0",
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+    let node_types: Vec<_> = result
+        .module
+        .types
+        .iter()
+        .filter(|ty| ty.key.ends_with("::Node") || ty.key == "Node")
+        .collect();
+
+    assert_eq!(
+        node_types.len(),
+        2,
+        "expected both Node type descriptors to remain distinct"
+    );
+    assert_ne!(node_types[0].key, node_types[1].key);
+}
+
+#[test]
 fn top_level_typed_value_is_not_emitted_as_callable_global() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("main.ms"), "export let answer : Int := 42").unwrap();

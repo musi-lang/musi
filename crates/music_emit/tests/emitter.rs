@@ -14,6 +14,7 @@ use music_ast::expr::{
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
+use music_builtins::types::BuiltinType;
 use music_db::Db;
 use music_hir::HirBundle;
 use music_il::format::BUILTIN_TYPE_INT;
@@ -248,7 +249,10 @@ fn emit_record_lit() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 1));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, music_il::format::BUILTIN_TYPE_ANY, 1)
+    );
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
 }
@@ -304,7 +308,10 @@ fn emit_array_lit() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 2));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 2)
+    );
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[3], Instruction::with_i16(Opcode::LdSmi, 2));
@@ -403,7 +410,7 @@ fn emit_range_inclusive() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::ArrNewT);
-    assert!(matches!(instrs[0].operand, Operand::Tagged(_, 2)));
+    assert!(matches!(instrs[0].operand, Operand::TypeTagged(_, _, 2)));
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[3], Instruction::with_i16(Opcode::LdSmi, 10));
@@ -424,7 +431,7 @@ fn emit_range_exclusive() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::ArrNewT);
-    assert!(matches!(instrs[0].operand, Operand::Tagged(_, 2)));
+    assert!(matches!(instrs[0].operand, Operand::TypeTagged(_, _, 2)));
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdNil));
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[3], Instruction::with_i16(Opcode::LdSmi, 5));
@@ -749,14 +756,23 @@ fn emit_matrix_lit() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 2));
-    assert_eq!(instrs[1], Instruction::with_u16(Opcode::ArrNew, 2));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 2)
+    );
+    assert_eq!(
+        instrs[1],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 2)
+    );
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[3], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[4], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[5], Instruction::with_u8(Opcode::ArrSetI, 1));
     assert_eq!(instrs[6], Instruction::with_u8(Opcode::ArrSetI, 0));
-    assert_eq!(instrs[7], Instruction::with_u16(Opcode::ArrNew, 2));
+    assert_eq!(
+        instrs[7],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 2)
+    );
     assert_eq!(instrs[8], Instruction::with_i16(Opcode::LdSmi, 3));
     assert_eq!(instrs[9], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[10], Instruction::with_i16(Opcode::LdSmi, 4));
@@ -1028,9 +1044,15 @@ fn emit_comprehension_single_generator() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 0));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 0)
+    );
 
-    assert_eq!(instrs[1], Instruction::with_u16(Opcode::ArrNew, 3));
+    assert_eq!(
+        instrs[1],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 3)
+    );
 
     let iter_store = 8;
     assert_eq!(instrs[iter_store].opcode, Opcode::StLoc);
@@ -1104,7 +1126,10 @@ fn emit_comprehension_with_filter() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 0));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, BuiltinType::Array.type_id(), 0)
+    );
 
     let has_filter_branch = instrs.iter().any(|i| i.opcode == Opcode::BrFalse);
     assert!(
@@ -1626,7 +1651,10 @@ fn emit_tuple_lit() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u16(Opcode::ArrNew, 3));
+    assert_eq!(
+        instrs[0],
+        Instruction::with_type_len(Opcode::ArrNew, music_il::format::BUILTIN_TYPE_ANY, 3)
+    );
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[4], Instruction::with_u8(Opcode::ArrSetI, 1));
     assert_eq!(instrs[6], Instruction::with_u8(Opcode::ArrSetI, 2));

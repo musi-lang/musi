@@ -53,6 +53,15 @@ pub const BUILTIN_TYPE_INT: u16 = 0xFFF6;
 pub const BUILTIN_TYPE_FLOAT: u16 = 0xFFF7;
 pub const BUILTIN_TYPE_STRING: u16 = 0xFFF8;
 
+pub const INTERNAL_TYPE_CLOSURE: u16 = 0x0001;
+pub const INTERNAL_TYPE_CONTINUATION: u16 = 0x0002;
+pub const INTERNAL_TYPE_ARRAY: u16 = 0x0003;
+pub const INTERNAL_TYPE_SLICE: u16 = 0x0004;
+pub const INTERNAL_TYPE_CPTR: u16 = 0x0005;
+pub const INTERNAL_TYPE_CELL: u16 = 0x0006;
+
+pub const FIRST_EMITTED_TYPE_ID: u16 = 0x0100;
+
 /// Discriminator for entries in the TYPE section.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,14 +72,21 @@ pub enum TypeKind {
 }
 
 /// A single entry in the TYPE section: identifies a type for runtime checks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// On the wire, `key` is serialized through STRT as a byte offset. After load,
+/// it is materialized back into this decoded string form.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeDescriptor {
     pub id: u16,
+    pub key: String,
     pub kind: TypeKind,
     pub member_count: u16,
 }
 
 /// A single operation within an effect descriptor.
+///
+/// On the wire, `name` is serialized through STRT as a byte offset. After
+/// load, it is materialized back into this decoded string form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectOpDescriptor {
     pub id: u16,
@@ -78,6 +94,9 @@ pub struct EffectOpDescriptor {
 }
 
 /// An effect descriptor in the EFCT section.
+///
+/// On the wire, `module_name` and `name` are serialized through STRT as byte
+/// offsets. After load, they are materialized back into these decoded strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectDescriptor {
     pub id: u16,
@@ -89,7 +108,7 @@ pub struct EffectDescriptor {
 /// A method implementation within a class instance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassMethod {
-    /// String table index of the method name.
+    /// Index into the decoded module string table.
     pub name_idx: u32,
     /// Index into the METH section, or `0xFFFF` for abstract.
     pub method_idx: u16,
@@ -108,11 +127,11 @@ pub struct ClassInstance {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDescriptor {
     pub id: u16,
-    /// String table index of the class name.
+    /// Index into the decoded module string table.
     pub name_idx: u32,
     /// Number of methods declared by the class.
     pub method_count: u16,
-    /// String table indices for method names.
+    /// Indices into the decoded module string table for method names.
     pub method_names: Vec<u32>,
     /// Registered instances.
     pub instances: Vec<ClassInstance>,
@@ -171,11 +190,11 @@ impl FfiType {
 /// An FFI symbol descriptor in the FRGN section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignDescriptor {
-    /// Musi identifier (string table index).
+    /// Musi identifier in the decoded module string table.
     pub name_idx: u32,
-    /// C symbol name (string table index), or same as `name_idx` if no `as`.
+    /// C symbol name in the decoded module string table, or same as `name_idx` if no `as`.
     pub symbol_idx: u32,
-    /// Library name (string table index), `0xFFFF_FFFF` if none.
+    /// Library name in the decoded module string table, `0xFFFF_FFFF` if none.
     pub lib_idx: u32,
     pub abi: ForeignAbi,
     pub arity: u8,

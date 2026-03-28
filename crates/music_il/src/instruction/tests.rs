@@ -36,10 +36,10 @@ fn with_wide_stores_fn_ref_and_upval_count() {
 }
 
 #[test]
-fn with_tagged_stores_tag_and_length() {
-    let instr = Instruction::with_tagged(Opcode::ArrNewT, 1, 2);
+fn with_type_tagged_stores_type_tag_and_length() {
+    let instr = Instruction::with_type_tagged(Opcode::ArrNewT, 7, 1, 2);
     assert_eq!(instr.opcode, Opcode::ArrNewT);
-    assert_eq!(instr.operand, Operand::Tagged(1, 2));
+    assert_eq!(instr.operand, Operand::TypeTagged(7, 1, 2));
 }
 
 #[test]

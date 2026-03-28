@@ -3,6 +3,9 @@
 
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::ops::{Deref, DerefMut};
+
+use music_il::format;
 
 use crate::effect::EffectHandler;
 use crate::frame::CallFrame;
@@ -10,30 +13,52 @@ use crate::value::Value;
 
 // ── HeapObject types ─────────────────────────────────────────────────────────
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Closure {
+    pub type_id: u16,
     pub method_idx: u16,
     pub upvalues: Vec<Value>,
 }
 
 #[derive(Clone)]
 pub struct Continuation {
+    pub type_id: u16,
     pub frames: Vec<CallFrame>,
     pub resume_pc: usize,
     pub captured_handlers: Vec<EffectHandler>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct VmArray {
+    pub type_id: u16,
     pub tag: Value,
     pub elements: Vec<Value>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VmString {
+    pub type_id: u16,
+    pub data: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct VmSlice {
+    pub type_id: u16,
     pub source: usize,
     pub start: usize,
     pub end: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct VmCPtr {
+    pub type_id: u16,
+    pub ptr: *mut c_void,
+}
+
+#[derive(Clone, Debug)]
+pub struct VmCell {
+    pub type_id: u16,
+    pub value: Value,
 }
 
 #[derive(Clone)]
@@ -41,10 +66,66 @@ pub enum HeapObject {
     Closure(Closure),
     Continuation(Continuation),
     Array(VmArray),
-    String(String),
+    String(VmString),
     Slice(VmSlice),
-    CPtr(*mut c_void),
-    Cell(Value),
+    CPtr(VmCPtr),
+    Cell(VmCell),
+}
+
+impl HeapObject {
+    #[must_use]
+    pub const fn type_id(&self) -> u16 {
+        match self {
+            Self::Closure(v) => v.type_id,
+            Self::Continuation(v) => v.type_id,
+            Self::Array(v) => v.type_id,
+            Self::String(v) => v.type_id,
+            Self::Slice(v) => v.type_id,
+            Self::CPtr(v) => v.type_id,
+            Self::Cell(v) => v.type_id,
+        }
+    }
+}
+
+impl Deref for VmString {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for VmString {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+impl From<String> for VmString {
+    fn from(data: String) -> Self {
+        Self {
+            type_id: format::BUILTIN_TYPE_STRING,
+            data,
+        }
+    }
+}
+
+impl From<&str> for VmString {
+    fn from(data: &str) -> Self {
+        Self::from(data.to_owned())
+    }
+}
+
+impl PartialEq<str> for VmString {
+    fn eq(&self, other: &str) -> bool {
+        self.data == other
+    }
+}
+
+impl PartialEq<&str> for VmString {
+    fn eq(&self, other: &&str) -> bool {
+        self.data == *other
+    }
 }
 
 // ── Immix constants ──────────────────────────────────────────────────────────
@@ -507,7 +588,12 @@ impl Heap {
     // ── Allocation convenience methods ───────────────────────────────────────
 
     pub fn alloc_closure(&mut self, method_idx: u16, upvalues: Vec<Value>) -> usize {
+        self.alloc_closure_t(format::INTERNAL_TYPE_CLOSURE, method_idx, upvalues)
+    }
+
+    pub fn alloc_closure_t(&mut self, type_id: u16, method_idx: u16, upvalues: Vec<Value>) -> usize {
         self.alloc(HeapObject::Closure(Closure {
+            type_id,
             method_idx,
             upvalues,
         }))
@@ -519,7 +605,23 @@ impl Heap {
         resume_pc: usize,
         captured_handlers: Vec<EffectHandler>,
     ) -> usize {
+        self.alloc_continuation_t(
+            format::INTERNAL_TYPE_CONTINUATION,
+            frames,
+            resume_pc,
+            captured_handlers,
+        )
+    }
+
+    pub fn alloc_continuation_t(
+        &mut self,
+        type_id: u16,
+        frames: Vec<CallFrame>,
+        resume_pc: usize,
+        captured_handlers: Vec<EffectHandler>,
+    ) -> usize {
         self.alloc(HeapObject::Continuation(Continuation {
+            type_id,
             frames,
             resume_pc,
             captured_handlers,
@@ -527,23 +629,52 @@ impl Heap {
     }
 
     pub fn alloc_array(&mut self, tag: Value, elements: Vec<Value>) -> usize {
-        self.alloc(HeapObject::Array(VmArray { tag, elements }))
+        self.alloc_array_t(format::INTERNAL_TYPE_ARRAY, tag, elements)
+    }
+
+    pub fn alloc_array_t(&mut self, type_id: u16, tag: Value, elements: Vec<Value>) -> usize {
+        self.alloc(HeapObject::Array(VmArray {
+            type_id,
+            tag,
+            elements,
+        }))
     }
 
     pub fn alloc_string(&mut self, data: String) -> usize {
-        self.alloc(HeapObject::String(data))
+        self.alloc_string_t(format::BUILTIN_TYPE_STRING, data)
+    }
+
+    pub fn alloc_string_t(&mut self, type_id: u16, data: String) -> usize {
+        self.alloc(HeapObject::String(VmString { type_id, data }))
     }
 
     pub fn alloc_slice(&mut self, source: usize, start: usize, end: usize) -> usize {
-        self.alloc(HeapObject::Slice(VmSlice { source, start, end }))
+        self.alloc_slice_t(format::INTERNAL_TYPE_SLICE, source, start, end)
+    }
+
+    pub fn alloc_slice_t(&mut self, type_id: u16, source: usize, start: usize, end: usize) -> usize {
+        self.alloc(HeapObject::Slice(VmSlice {
+            type_id,
+            source,
+            start,
+            end,
+        }))
     }
 
     pub fn alloc_cptr(&mut self, ptr: *mut c_void) -> usize {
-        self.alloc(HeapObject::CPtr(ptr))
+        self.alloc_cptr_t(format::INTERNAL_TYPE_CPTR, ptr)
+    }
+
+    pub fn alloc_cptr_t(&mut self, type_id: u16, ptr: *mut c_void) -> usize {
+        self.alloc(HeapObject::CPtr(VmCPtr { type_id, ptr }))
     }
 
     pub fn alloc_cell(&mut self, value: Value) -> usize {
-        self.alloc(HeapObject::Cell(value))
+        self.alloc_cell_t(format::INTERNAL_TYPE_CELL, value)
+    }
+
+    pub fn alloc_cell_t(&mut self, type_id: u16, value: Value) -> usize {
+        self.alloc(HeapObject::Cell(VmCell { type_id, value }))
     }
 
     /// Allocate directly into the large object space (for objects exceeding
@@ -716,9 +847,9 @@ impl Heap {
             HeapObject::Slice(s) => {
                 worklist.push(s.source);
             }
-            HeapObject::Cell(v) => {
-                if v.is_ptr() {
-                    worklist.push(v.as_ptr_idx());
+            HeapObject::Cell(cell) => {
+                if cell.value.is_ptr() {
+                    worklist.push(cell.value.as_ptr_idx());
                 }
             }
             HeapObject::String(_) | HeapObject::CPtr(_) => {}

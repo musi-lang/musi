@@ -75,6 +75,46 @@ fn seam_with_strt_cnst(strt_data: &[u8], cnst_content: &[u8]) -> Vec<u8> {
     buf
 }
 
+fn seam_with_strt_type(strt_data: &[u8], type_content: &[u8]) -> Vec<u8> {
+    let meth_content: Vec<u8> = {
+        let mut v = Vec::new();
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.extend_from_slice(&u32::MAX.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.push(op(Opcode::Halt));
+        v
+    };
+
+    let strt_len = u32::try_from(strt_data.len()).unwrap();
+    let type_len = u32::try_from(type_content.len()).unwrap();
+    let meth_len = u32::try_from(meth_content.len()).unwrap();
+    let total_size =
+        u32::try_from(16 + 8 + strt_data.len() + 8 + type_content.len() + 8 + meth_content.len())
+            .unwrap();
+
+    let mut buf = vec![0u8; 16];
+    buf[0..4].copy_from_slice(b"SEAM");
+    buf[4] = 0;
+    buf[5] = 1;
+    buf[8..12].copy_from_slice(&3u32.to_le_bytes());
+    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+
+    buf.extend_from_slice(b"STRT");
+    buf.extend_from_slice(&strt_len.to_le_bytes());
+    buf.extend_from_slice(strt_data);
+
+    buf.extend_from_slice(b"TYPE");
+    buf.extend_from_slice(&type_len.to_le_bytes());
+    buf.extend_from_slice(type_content);
+
+    buf.extend_from_slice(b"METH");
+    buf.extend_from_slice(&meth_len.to_le_bytes());
+    buf.extend_from_slice(&meth_content);
+
+    buf
+}
+
 #[test]
 fn load_halt_only() {
     let seam = minimal_seam(&[op(Opcode::Halt)], 1);
@@ -180,6 +220,23 @@ fn load_two_strings_correct_indices() {
     assert!(matches!(module.constants[1], ConstantEntry::StringRef(1)));
     assert_eq!(module.strings[0], "hello");
     assert_eq!(module.strings[1], "world");
+}
+
+#[test]
+fn invalid_type_string_offset_is_rejected() {
+    let strt_data = b"Node\0";
+    let mut type_content = Vec::new();
+    type_content.extend_from_slice(&1u16.to_le_bytes());
+    type_content.extend_from_slice(&0x0100u16.to_le_bytes());
+    type_content.extend_from_slice(&9u32.to_le_bytes());
+    type_content.push(1);
+    type_content.extend_from_slice(&0u16.to_le_bytes());
+
+    let seam = seam_with_strt_type(strt_data, &type_content);
+    assert!(matches!(
+        load(&seam),
+        Err(LoadError::InvalidStringOffset { offset: 9 })
+    ));
 }
 
 #[test]
