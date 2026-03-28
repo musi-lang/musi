@@ -8,8 +8,8 @@ use crate::effect::EffectHandler;
 use crate::errors::{VmError, VmResult};
 use crate::ffi;
 use crate::frame::CallFrame;
-use crate::host::{NativeHost, RuntimeHost};
 use crate::heap::{Heap, HeapObject};
+use crate::host::{NativeHost, RuntimeHost};
 use crate::inspect::{ArrayValue, ValueView};
 use crate::module::{ConstantEntry, ENTRY_POINT_NAME};
 use crate::program::Program;
@@ -102,8 +102,7 @@ impl Vm {
         let mut result = Value::UNIT;
         for entry_idx in entry_indices {
             self.frames.clear();
-            let locals_count =
-                usize::from(self.program.module().methods[entry_idx].locals_count);
+            let locals_count = usize::from(self.program.module().methods[entry_idx].locals_count);
             let frame = CallFrame::new_call(
                 locals_count,
                 0,
@@ -373,7 +372,9 @@ impl Vm {
                         let off_pos = base_pc + i * 2;
                         // SAFETY: method_idx is valid; off_pos is within the
                         // BrTbl operand region emitted by the compiler.
-                        let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
+                        let code = unsafe {
+                            &self.program.module().methods.get_unchecked(method_idx).code
+                        };
                         let lo = unsafe { *code.get_unchecked(off_pos) };
                         let hi = unsafe { *code.get_unchecked(off_pos + 1) };
                         let offset = i16::from_le_bytes([lo, hi]);
@@ -735,9 +736,9 @@ impl Vm {
             Opcode::ArrNew => {
                 let type_id = self.read_u16(method_idx, pc);
                 let len = usize::from(self.read_u16(method_idx, pc));
-                let heap_idx = self
-                    .heap
-                    .alloc_array_t(type_id, Value::UNIT, vec![Value::UNIT; len]);
+                let heap_idx =
+                    self.heap
+                        .alloc_array_t(type_id, Value::UNIT, vec![Value::UNIT; len]);
                 self.push_stack(Value::from_ptr(heap_idx))?;
                 self.maybe_collect();
             }
@@ -750,21 +751,23 @@ impl Vm {
                     .get(tag_pool_idx)
                     .copied()
                     .ok_or(VmError::InvalidConstant(tag_pool_idx))?;
-                let heap_idx = self.heap.alloc_array_t(type_id, tag, vec![Value::UNIT; len]);
+                let heap_idx = self
+                    .heap
+                    .alloc_array_t(type_id, tag, vec![Value::UNIT; len]);
                 self.push_stack(Value::from_ptr(heap_idx))?;
                 self.maybe_collect();
             }
             Opcode::ArrLen => {
                 let ptr = self.pop_stack()?;
                 if !ptr.is_ptr() {
-                    return Err(VmError::NotAnArray);
+                    return Err(VmError::NotArray);
                 }
-                let obj = self.heap.get(ptr.as_ptr_idx()).ok_or(VmError::NotAnArray)?;
+                let obj = self.heap.get(ptr.as_ptr_idx()).ok_or(VmError::NotArray)?;
                 let len = match obj {
                     HeapObject::Array(arr) => arr.elements.len(),
                     HeapObject::String(s) => s.len(),
                     HeapObject::Slice(sl) => sl.end - sl.start,
-                    _ => return Err(VmError::NotAnArray),
+                    _ => return Err(VmError::NotArray),
                 };
                 self.frames
                     .last_mut()
@@ -774,17 +777,17 @@ impl Vm {
             Opcode::ArrTag => {
                 let ptr = self.pop_stack()?;
                 if !ptr.is_ptr() {
-                    return Err(VmError::NotAnArray);
+                    return Err(VmError::NotArray);
                 }
                 let ptr_idx = ptr.as_ptr_idx();
-                let tag = match self.heap.get(ptr_idx).ok_or(VmError::NotAnArray)? {
+                let tag = match self.heap.get(ptr_idx).ok_or(VmError::NotArray)? {
                     HeapObject::Array(arr) => arr.tag,
                     HeapObject::String(_) => {
                         let str_idx = self.heap.alloc_string("Str".into());
                         Value::from_ptr(str_idx)
                     }
                     HeapObject::Slice(_) => Value::UNIT,
-                    _ => return Err(VmError::NotAnArray),
+                    _ => return Err(VmError::NotArray),
                 };
                 self.frames.last_mut().unwrap().push(tag);
             }
@@ -884,7 +887,9 @@ impl Vm {
         if !val.is_ptr() {
             return None;
         }
-        self.heap.get(val.as_ptr_idx()).map(crate::heap::HeapObject::type_id)
+        self.heap
+            .get(val.as_ptr_idx())
+            .map(crate::heap::HeapObject::type_id)
     }
 
     fn value_matches_type(&self, val: Value, type_id: u16) -> bool {
@@ -1017,7 +1022,7 @@ impl Vm {
         let start_val = self.pop_stack()?;
         let arr_ptr = self.pop_stack()?;
         if !arr_ptr.is_ptr() {
-            return Err(VmError::NotAnArray);
+            return Err(VmError::NotArray);
         }
         if !start_val.is_int() || !end_val.is_int() {
             return Err(VmError::TypeError {
@@ -1036,7 +1041,7 @@ impl Vm {
         let source = arr_ptr.as_ptr_idx();
         let arr_len = match self.heap.get(source) {
             Some(HeapObject::Array(arr)) => arr.elements.len(),
-            _ => return Err(VmError::NotAnArray),
+            _ => return Err(VmError::NotArray),
         };
         if start > end || end > arr_len {
             return Err(VmError::IndexOutOfBounds {
@@ -1052,11 +1057,11 @@ impl Vm {
     fn exec_arr_copy(&mut self) -> VmResult {
         let ptr = self.pop_stack()?;
         if !ptr.is_ptr() {
-            return Err(VmError::NotAnArray);
+            return Err(VmError::NotArray);
         }
         let ptr_idx = ptr.as_ptr_idx();
         // Extract the data we need before mutating the heap.
-        let copy_data = match self.heap.get(ptr_idx).ok_or(VmError::NotAnArray)? {
+        let copy_data = match self.heap.get(ptr_idx).ok_or(VmError::NotArray)? {
             HeapObject::Array(arr) => CopyData::Array {
                 tag: arr.tag,
                 elements: arr.elements.clone(),
@@ -1067,7 +1072,7 @@ impl Vm {
                 start: sl.start,
                 end: sl.end,
             },
-            _ => return Err(VmError::NotAnArray),
+            _ => return Err(VmError::NotArray),
         };
         let new_idx = match copy_data {
             CopyData::Array { tag, elements } => self.heap.alloc_array(tag, elements),
@@ -1075,7 +1080,7 @@ impl Vm {
             CopyData::Slice { source, start, end } => {
                 let elements = match self.heap.get(source) {
                     Some(HeapObject::Array(arr)) => arr.elements[start..end].to_vec(),
-                    _ => return Err(VmError::NotAnArray),
+                    _ => return Err(VmError::NotArray),
                 };
                 self.heap.alloc_array(Value::UNIT, elements)
             }
@@ -1125,7 +1130,7 @@ impl Vm {
 
     fn read_u8(&self, method_idx: usize, pc: &mut usize) -> u8 {
         // SAFETY: method_idx and pc are maintained in bounds by the emitter
-            let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
+        let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
         let b = unsafe { *code.get_unchecked(*pc) };
         *pc = pc.wrapping_add(1);
         b
@@ -1344,7 +1349,7 @@ pub(crate) fn display_value(val: Value, heap: &Heap) -> String {
 
 fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> VmResult<Value> {
     if !arr_ptr.is_ptr() {
-        return Err(VmError::NotAnArray);
+        return Err(VmError::NotArray);
     }
     let ptr_idx = arr_ptr.as_ptr_idx();
     let obj = heap
@@ -1391,16 +1396,16 @@ fn exec_arr_geti(heap: &Heap, arr_ptr: Value, elem_idx: usize) -> VmResult<Value
                             length: arr.elements.len(),
                         })
                 }
-                _ => Err(VmError::NotAnArray),
+                _ => Err(VmError::NotArray),
             }
         }
-        _ => Err(VmError::NotAnArray),
+        _ => Err(VmError::NotArray),
     }
 }
 
 fn exec_arr_seti(heap: &mut Heap, arr_ptr: Value, elem_idx: usize, val: Value) -> VmResult {
     if !arr_ptr.is_ptr() {
-        return Err(VmError::NotAnArray);
+        return Err(VmError::NotArray);
     }
     let ptr_idx = arr_ptr.as_ptr_idx();
     match heap
@@ -1421,7 +1426,7 @@ fn exec_arr_seti(heap: &mut Heap, arr_ptr: Value, elem_idx: usize, val: Value) -
             expected: "Array",
             found: "String",
         }),
-        _ => Err(VmError::NotAnArray),
+        _ => Err(VmError::NotArray),
     }
 }
 
@@ -1462,8 +1467,8 @@ fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> VmResult<Value> {
             let b_idx = b.as_ptr_idx();
             // Extract data from both objects before mutating heap.
             let concat_data = match (
-                heap.get(a_idx).ok_or(VmError::NotAnArray)?,
-                heap.get(b_idx).ok_or(VmError::NotAnArray)?,
+                heap.get(a_idx).ok_or(VmError::NotArray)?,
+                heap.get(b_idx).ok_or(VmError::NotArray)?,
             ) {
                 (HeapObject::String(sa), HeapObject::String(sb)) => {
                     let mut result = sa.data.clone();
@@ -1492,18 +1497,18 @@ fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> VmResult<Value> {
         }
         (true, false) => {
             let a_idx = a.as_ptr_idx();
-            let (tag, mut elems) = match heap.get(a_idx).ok_or(VmError::NotAnArray)? {
+            let (tag, mut elems) = match heap.get(a_idx).ok_or(VmError::NotArray)? {
                 HeapObject::Array(arr) => (arr.tag, arr.elements.clone()),
-                _ => return Err(VmError::NotAnArray),
+                _ => return Err(VmError::NotArray),
             };
             elems.push(b);
             Ok(Value::from_ptr(heap.alloc_array(tag, elems)))
         }
         (false, true) => {
             let b_idx = b.as_ptr_idx();
-            let (tag, tail) = match heap.get(b_idx).ok_or(VmError::NotAnArray)? {
+            let (tag, tail) = match heap.get(b_idx).ok_or(VmError::NotArray)? {
                 HeapObject::Array(arr) => (arr.tag, arr.elements.clone()),
-                _ => return Err(VmError::NotAnArray),
+                _ => return Err(VmError::NotArray),
             };
             let mut elems = vec![a];
             elems.extend_from_slice(&tail);

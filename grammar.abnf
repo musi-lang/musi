@@ -338,7 +338,7 @@ ast-resume       = "resume" [ast-expr]
 
 ast-import       = "import" lit-string ["as" (ident / "_" / ident ".{" ident-list [","] "}")]  ; trailing , in selective
 
-ast-foreign-expr = "foreign" [lit-string] ("import" lit-string / "let" foreign-binding / "(" *(foreign-binding ";") ")")
+ast-foreign-expr = "foreign" [lit-string] ("import" lit-string / "let" let-rest / "(" *("let" foreign-binding ";") ")")
 
 ast-perform      = "perform" postfix-expr
 
@@ -413,7 +413,9 @@ pat-list        = ast-pat *("," ast-pat)
 ; §7.1  Attributes
 attrs     = 1*attr
 
-attr      = "@" ident ["(" attr-args ")"]
+attr      = "@" attr-path ["(" attr-args ")"]
+
+attr-path = ident *("." ident)
 
 attr-args = attr-arg *("," attr-arg)
 
@@ -424,9 +426,10 @@ ast-with-attrs = attrs ast-decl
 
 ast-decl       = "export" export-tail
                  / ast-let
+                 / ast-foreign-expr
                  / ast-instance-decl
 ; §7.3  Exports
-export-tail = ["opaque"] ["foreign" [lit-string]] ("let" let-rest / "(" *(foreign-binding ";") ")")
+export-tail = ["opaque"] ["foreign" [lit-string]] ("let" let-rest / "(" *("let" foreign-binding ";") ")")
               / ast-instance-decl
 
 let-rest    = ["mut"] ast-pat [params] [bracket-params] [where-clause] [with-clause] [ty-annot] [":=" ast-expr]
@@ -436,7 +439,7 @@ ast-instance-decl = "instance" [bracket-params] [where-clause] ast-ty-named inst
 instance-body     = "{" *(class-member) "}"
                     / "via" ast-ty-named
 ; §7.5  Foreign
-foreign-binding = [attrs] ident [bracket-params] ["as" lit-string] [where-clause] [":" ast-ty]
+foreign-binding = [attrs] ident [bracket-params] [params] [where-clause] [":" ast-ty]
 ; §7.6  Members
 fn-decl     = "let" op-or-ident [params] [ty-annot] [":=" ast-expr]
 

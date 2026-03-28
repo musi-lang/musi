@@ -200,7 +200,7 @@ impl<'src> Lexer<'src> {
             .eat_while_ascii(|b| is_digit_for_base_byte(b, base) || b == b'_');
         if self.cursor.pos() == before {
             return Err(LexError {
-                kind: LexErrorKind::InvalidNumberPrefix,
+                kind: LexErrorKind::ExpectedDigitsNumberPrefix,
                 span: self.cursor.span_from(start),
             });
         }
@@ -213,7 +213,7 @@ impl<'src> Lexer<'src> {
         let text = raw.get(skip..).unwrap_or_default();
         if text.is_empty() || text == "_" {
             return Err(LexError {
-                kind: LexErrorKind::InvalidNumberPrefix,
+                kind: LexErrorKind::ExpectedDigitsNumberPrefix,
                 span: self.cursor.span_from(start),
             });
         }
@@ -244,7 +244,7 @@ impl<'src> Lexer<'src> {
                 .eat_while_ascii(|b| b.is_ascii_digit() || b == b'_');
             if self.cursor.pos() == before_exp_digits {
                 return Err(LexError {
-                    kind: LexErrorKind::InvalidNumberPrefix,
+                    kind: LexErrorKind::ExpectedDigitsNumberPrefix,
                     span: self.cursor.span_from(start),
                 });
             }
@@ -468,14 +468,14 @@ impl<'src> Lexer<'src> {
                 }
                 _ => {
                     return Err(LexError {
-                        kind: LexErrorKind::InvalidHexEscape { expected: count },
+                        kind: LexErrorKind::ExpectedHexDigits { expected: count },
                         span: self.cursor.span_from(start),
                     });
                 }
             }
         }
         char::from_u32(value).ok_or_else(|| LexError {
-            kind: LexErrorKind::InvalidHexEscape { expected: count },
+            kind: LexErrorKind::ExpectedHexDigits { expected: count },
             span: self.cursor.span_from(start),
         })
     }

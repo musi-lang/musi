@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use music_il::format::{self, HEADER_SIZE};
+use music_il::format::{self, ANON_METHOD_NAME, ENTRY_METHOD_NAME, HEADER_SIZE};
 use music_il::instruction::{Instruction, Operand};
-use music_shared::Symbol;
-
 use crate::emitter::SeamModule;
 use crate::pool::ConstantEntry;
 
@@ -34,13 +32,13 @@ pub fn write_seam(module: &SeamModule) -> Vec<u8> {
         section_count = section_count.saturating_add(1);
     }
 
-    let method_data = build_methods(module);
+    let method_data = build_methods(module, &string_table);
     if !method_data.is_empty() {
         write_section(&mut buf, format::section::METH, &method_data);
         section_count = section_count.saturating_add(1);
     }
 
-    let global_data = build_globals(module);
+    let global_data = build_globals(module, &string_table);
     if !global_data.is_empty() {
         write_section(&mut buf, format::section::GLOB, &global_data);
         section_count = section_count.saturating_add(1);
@@ -118,6 +116,16 @@ fn build_string_table(module: &SeamModule) -> StringTable {
 
     for ty in &module.types {
         let _ = intern_string(&mut table, &ty.key);
+    }
+
+    for method in &module.methods {
+        if let Some(name) = &method.source_name {
+            let _ = intern_string(&mut table, name);
+        }
+    }
+
+    for global in &module.globals {
+        let _ = intern_string(&mut table, &global.source_name);
     }
 
     for effect in &module.effects {
@@ -261,7 +269,7 @@ fn build_constant_pool(module: &SeamModule, string_table: &StringTable) -> Vec<u
 /// Encode method table: `method_count(u16)` + methods.
 ///
 /// Each method: `name_symbol(u32)` + `locals_count(u16)` + `instruction_count(u16)` + encoded instructions.
-fn build_methods(module: &SeamModule) -> Vec<u8> {
+fn build_methods(module: &SeamModule, string_table: &StringTable) -> Vec<u8> {
     if module.methods.is_empty() {
         return Vec::new();
     }
@@ -271,8 +279,12 @@ fn build_methods(module: &SeamModule) -> Vec<u8> {
     out.extend_from_slice(&count.to_le_bytes());
 
     for method in &module.methods {
-        let name_raw = method.name.map_or(u32::MAX, Symbol::raw);
-        out.extend_from_slice(&name_raw.to_le_bytes());
+        let name_ref = match (method.name, method.source_name.as_ref()) {
+            (None, _) => ENTRY_METHOD_NAME,
+            (Some(_), Some(name)) => metadata_offset(string_table, name),
+            (Some(_), None) => ANON_METHOD_NAME,
+        };
+        out.extend_from_slice(&name_ref.to_le_bytes());
         out.extend_from_slice(&method.locals_count.to_le_bytes());
         let instr_count =
             u16::try_from(method.instructions.len()).expect("too many instructions (>65535)");
@@ -336,7 +348,7 @@ fn encode_instruction(out: &mut Vec<u8>, instr: &Instruction) {
 /// Encode global table: `global_count(u16)` + globals.
 ///
 /// Each global: `name_symbol(u32)` + `flags(u8)`.
-fn build_globals(module: &SeamModule) -> Vec<u8> {
+fn build_globals(module: &SeamModule, string_table: &StringTable) -> Vec<u8> {
     if module.globals.is_empty() {
         return Vec::new();
     }
@@ -346,7 +358,8 @@ fn build_globals(module: &SeamModule) -> Vec<u8> {
     out.extend_from_slice(&count.to_le_bytes());
 
     for global in &module.globals {
-        out.extend_from_slice(&global.name.raw().to_le_bytes());
+        let name_offset = metadata_offset(string_table, &global.source_name);
+        out.extend_from_slice(&name_offset.to_le_bytes());
         let mut flags: u8 = 0;
         if global.exported {
             flags |= 0x01;

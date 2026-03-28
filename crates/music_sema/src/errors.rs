@@ -2,8 +2,8 @@ use core::error;
 use core::fmt;
 
 use music_shared::diag::{Diag, DiagCode};
-use music_shared::{Span, Symbol};
 use music_shared::{Interner, SourceId};
+use music_shared::{Span, Symbol};
 use thiserror::Error;
 
 use crate::types::{SemaTypeId, TyVarId};
@@ -79,16 +79,16 @@ pub enum SemaErrorKind {
     #[error("type variable '{var}' occurs in its own binding")]
     OccursCheck { var: TyVarId },
 
-    #[error("export is only allowed at the top level")]
+    #[error("'export' is only allowed at top level")]
     ExportNotTopLevel,
 
-    #[error("opaque requires export")]
+    #[error("'opaque' requires 'export'")]
     OpaqueWithoutExport,
 
-    #[error("foreign declaration is only allowed at the top level")]
+    #[error("'foreign' declaration is only allowed at top level")]
     ForeignNotTopLevel,
 
-    #[error("splice outside quote")]
+    #[error("splice outside 'quote'")]
     SpliceOutsideQuote,
 
     #[error("unreachable pattern after wildcard")]
@@ -103,13 +103,13 @@ pub enum SemaErrorKind {
     #[error("unused parameter '{name}'")]
     UnusedParameter { name: Symbol },
 
-    #[error("or-pattern alternatives bind different names")]
+    #[error("'or'-pattern alternatives bind different names")]
     OrPatternMismatch,
 
     #[error("duplicate instance of '{class}' for '{ty}'")]
     DuplicateInstance { class: Symbol, ty: Symbol },
 
-    #[error("resume in handler for operation '{op}' which returns Empty")]
+    #[error("resume in handler for operation '{op}' which returns 'Empty'")]
     ResumeOnNever { op: Symbol },
 
     #[error("type '{type_name}' is not FFI-compatible")]
@@ -158,7 +158,10 @@ impl SemaError {
             ),
             SemaErrorKind::MissingHandler { op } => (
                 DiagCode::new(4007),
-                format!("missing handler for effect operation '{}'", interner.resolve(*op)),
+                format!(
+                    "missing handler for effect operation '{}'",
+                    interner.resolve(*op)
+                ),
                 None,
             ),
             SemaErrorKind::MissingReturnHandler => (
@@ -173,12 +176,15 @@ impl SemaError {
             ),
             SemaErrorKind::UnknownHandlerOp { op } => (
                 DiagCode::new(4031),
-                format!("'{}' is not an operation of the handled effect", interner.resolve(*op)),
+                format!(
+                    "'{}' is not operation of handled effect",
+                    interner.resolve(*op)
+                ),
                 None,
             ),
             SemaErrorKind::ArityMismatch { expected, found } => (
                 DiagCode::new(4008),
-                format!("expected {expected} arguments, found {found}"),
+                format!("expected {expected} argument(s), found {found}"),
                 None,
             ),
             SemaErrorKind::NoInstance { class } => (
@@ -188,7 +194,7 @@ impl SemaError {
             ),
             SemaErrorKind::MutabilityViolation => (
                 DiagCode::new(4010),
-                String::from("cannot mutate an immutable binding"),
+                String::from("cannot mutate immutable binding"),
                 None,
             ),
             SemaErrorKind::InvalidAssignTarget => (
@@ -208,14 +214,15 @@ impl SemaError {
             ),
             SemaErrorKind::ConstraintNotSatisfied { constraint } => (
                 DiagCode::new(4014),
-                format!("constraint '{}' is not satisfied", interner.resolve(*constraint)),
+                format!(
+                    "constraint '{}' is not satisfied",
+                    interner.resolve(*constraint)
+                ),
                 None,
             ),
-            SemaErrorKind::InfiniteType => (
-                DiagCode::new(4015),
-                String::from("infinite type"),
-                None,
-            ),
+            SemaErrorKind::InfiniteType => {
+                (DiagCode::new(4015), String::from("infinite type"), None)
+            }
             SemaErrorKind::OccursCheck { var } => (
                 DiagCode::new(4016),
                 format!("type variable {var} occurs in its own binding"),
@@ -223,7 +230,7 @@ impl SemaError {
             ),
             SemaErrorKind::ExportNotTopLevel => (
                 DiagCode::new(4017),
-                String::from("export is only allowed at the top level"),
+                String::from("export is only allowed at top level"),
                 None,
             ),
             SemaErrorKind::OpaqueWithoutExport => (
@@ -233,7 +240,7 @@ impl SemaError {
             ),
             SemaErrorKind::ForeignNotTopLevel => (
                 DiagCode::new(4019),
-                String::from("foreign declaration is only allowed at the top level"),
+                String::from("foreign declaration is only allowed at top level"),
                 None,
             ),
             SemaErrorKind::SpliceOutsideQuote => (

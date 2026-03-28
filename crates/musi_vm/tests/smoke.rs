@@ -8,6 +8,7 @@
 
 use musi_vm::internal::ENTRY_POINT_NAME;
 use musi_vm::{Vm, load};
+use music_il::format::ANON_METHOD_NAME;
 use music_il::opcode::Opcode;
 
 const fn op(o: Opcode) -> u8 {
@@ -108,7 +109,7 @@ fn smoke_conditional() {
 
 /// Build a two-method METH section:
 /// - method 0 (`name=u32::MAX`, `locals=0`): entry bytecode
-/// - method 1 (`name=1`, `locals=callee_locals`): callee bytecode
+/// - method 1 (`name=ANON_METHOD_NAME`, `locals=callee_locals`): callee bytecode
 fn two_method_seam(
     entry_bytes: &[u8],
     entry_instr: u16,
@@ -126,7 +127,7 @@ fn two_method_seam(
     content.extend_from_slice(entry_bytes);
 
     // method 1: callee
-    content.extend_from_slice(&1u32.to_le_bytes()); // name
+    content.extend_from_slice(&ANON_METHOD_NAME.to_le_bytes()); // anonymous callee
     content.extend_from_slice(&callee_locals.to_le_bytes());
     content.extend_from_slice(&callee_instr.to_le_bytes());
     content.extend_from_slice(callee_bytes);
@@ -148,7 +149,8 @@ fn two_method_seam(
 
 /// Build a SEAM with one method and one global slot.
 fn seam_with_global(instr_bytes: &[u8], instr_count: u16) -> Vec<u8> {
-    // Two sections: METH + GLOB
+    // Three sections: STRT + METH + GLOB
+    let strt_content = b"g\0";
     let mut meth_content = Vec::new();
     meth_content.extend_from_slice(&1u16.to_le_bytes()); // 1 method
     meth_content.extend_from_slice(&ENTRY_POINT_NAME.to_le_bytes());
@@ -158,19 +160,26 @@ fn seam_with_global(instr_bytes: &[u8], instr_count: u16) -> Vec<u8> {
 
     let mut glob_content = Vec::new();
     glob_content.extend_from_slice(&1u16.to_le_bytes()); // 1 global
-    glob_content.extend_from_slice(&0u32.to_le_bytes()); // name=0
+    glob_content.extend_from_slice(&0u32.to_le_bytes()); // STRT offset for "g"
     glob_content.push(0x01u8); // flags: exported
 
+    let strt_len = u32::try_from(strt_content.len()).unwrap();
     let meth_len = u32::try_from(meth_content.len()).unwrap();
     let glob_len = u32::try_from(glob_content.len()).unwrap();
-    let total_size = u32::try_from(16 + 8 + meth_content.len() + 8 + glob_content.len()).unwrap();
+    let total_size = u32::try_from(
+        16 + 8 + strt_content.len() + 8 + meth_content.len() + 8 + glob_content.len(),
+    )
+    .unwrap();
 
     let mut buf = vec![0u8; 16];
     buf[0..4].copy_from_slice(b"SEAM");
     buf[4] = 0;
     buf[5] = 1;
-    buf[8..12].copy_from_slice(&2u32.to_le_bytes()); // 2 sections
+    buf[8..12].copy_from_slice(&3u32.to_le_bytes()); // 3 sections
     buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+    buf.extend_from_slice(b"STRT");
+    buf.extend_from_slice(&strt_len.to_le_bytes());
+    buf.extend_from_slice(strt_content);
     buf.extend_from_slice(b"METH");
     buf.extend_from_slice(&meth_len.to_le_bytes());
     buf.extend_from_slice(&meth_content);

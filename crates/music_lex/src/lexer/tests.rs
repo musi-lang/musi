@@ -438,7 +438,7 @@ fn underscore_only_after_base_prefix() {
             "{input:?} should produce exactly one error"
         );
         assert!(
-            matches!(errors[0].kind, LexErrorKind::InvalidNumberPrefix),
+            matches!(errors[0].kind, LexErrorKind::ExpectedDigitsNumberPrefix),
             "{input:?} should produce InvalidNumberPrefix, got: {:?}",
             errors[0]
         );
@@ -455,7 +455,7 @@ fn incomplete_exponent() {
             "{input:?} should produce exactly one error"
         );
         assert!(
-            matches!(errors[0].kind, LexErrorKind::InvalidNumberPrefix),
+            matches!(errors[0].kind, LexErrorKind::ExpectedDigitsNumberPrefix),
             "{input:?} should produce InvalidNumberPrefix, got: {:?}",
             errors[0]
         );
@@ -645,7 +645,7 @@ fn invalid_hex_escape_digits() {
     assert!(!errors.is_empty());
     assert!(matches!(
         errors[0].kind,
-        LexErrorKind::InvalidHexEscape { .. }
+        LexErrorKind::ExpectedHexDigits { .. }
     ));
 }
 

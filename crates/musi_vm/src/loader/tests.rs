@@ -115,6 +115,69 @@ fn seam_with_strt_type(strt_data: &[u8], type_content: &[u8]) -> Vec<u8> {
     buf
 }
 
+fn seam_with_strt_glob(strt_data: &[u8], glob_content: &[u8]) -> Vec<u8> {
+    let meth_content: Vec<u8> = {
+        let mut v = Vec::new();
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.extend_from_slice(&u32::MAX.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes());
+        v.push(op(Opcode::Halt));
+        v
+    };
+
+    let strt_len = u32::try_from(strt_data.len()).unwrap();
+    let glob_len = u32::try_from(glob_content.len()).unwrap();
+    let meth_len = u32::try_from(meth_content.len()).unwrap();
+    let total_size =
+        u32::try_from(16 + 8 + strt_data.len() + 8 + glob_content.len() + 8 + meth_content.len())
+            .unwrap();
+
+    let mut buf = vec![0u8; 16];
+    buf[0..4].copy_from_slice(b"SEAM");
+    buf[4] = 0;
+    buf[5] = 1;
+    buf[8..12].copy_from_slice(&3u32.to_le_bytes());
+    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+
+    buf.extend_from_slice(b"STRT");
+    buf.extend_from_slice(&strt_len.to_le_bytes());
+    buf.extend_from_slice(strt_data);
+
+    buf.extend_from_slice(b"GLOB");
+    buf.extend_from_slice(&glob_len.to_le_bytes());
+    buf.extend_from_slice(glob_content);
+
+    buf.extend_from_slice(b"METH");
+    buf.extend_from_slice(&meth_len.to_le_bytes());
+    buf.extend_from_slice(&meth_content);
+
+    buf
+}
+
+fn seam_with_strt_meth(strt_data: &[u8], meth_content: &[u8]) -> Vec<u8> {
+    let strt_len = u32::try_from(strt_data.len()).unwrap();
+    let meth_len = u32::try_from(meth_content.len()).unwrap();
+    let total_size = u32::try_from(16 + 8 + strt_data.len() + 8 + meth_content.len()).unwrap();
+
+    let mut buf = vec![0u8; 16];
+    buf[0..4].copy_from_slice(b"SEAM");
+    buf[4] = 0;
+    buf[5] = 1;
+    buf[8..12].copy_from_slice(&2u32.to_le_bytes());
+    buf[12..16].copy_from_slice(&total_size.to_le_bytes());
+
+    buf.extend_from_slice(b"STRT");
+    buf.extend_from_slice(&strt_len.to_le_bytes());
+    buf.extend_from_slice(strt_data);
+
+    buf.extend_from_slice(b"METH");
+    buf.extend_from_slice(&meth_len.to_le_bytes());
+    buf.extend_from_slice(meth_content);
+
+    buf
+}
+
 #[test]
 fn load_halt_only() {
     let seam = minimal_seam(&[op(Opcode::Halt)], 1);
@@ -242,6 +305,44 @@ fn invalid_type_string_offset_is_rejected() {
         load(&seam),
         Err(LoadError::InvalidStringOffset { offset: 9 })
     ));
+}
+
+#[test]
+fn invalid_global_string_offset_is_rejected() {
+    let strt_data = b"test\0";
+    let mut glob_content = Vec::new();
+    glob_content.extend_from_slice(&1u16.to_le_bytes());
+    glob_content.extend_from_slice(&9u32.to_le_bytes());
+    glob_content.push(0x01);
+
+    let seam = seam_with_strt_glob(strt_data, &glob_content);
+    assert!(matches!(
+        load(&seam),
+        Err(LoadError::InvalidStringOffset { offset: 9 })
+    ));
+}
+
+#[test]
+fn method_name_string_offset_roundtrips_to_string_index() {
+    let strt_data = b"helper\0";
+    let mut meth_content = Vec::new();
+    meth_content.extend_from_slice(&2u16.to_le_bytes());
+    meth_content.extend_from_slice(&0u32.to_le_bytes());
+    meth_content.extend_from_slice(&0u16.to_le_bytes());
+    meth_content.extend_from_slice(&1u16.to_le_bytes());
+    meth_content.push(op(Opcode::Ret));
+    meth_content.extend_from_slice(&u32::MAX.to_le_bytes());
+    meth_content.extend_from_slice(&0u16.to_le_bytes());
+    meth_content.extend_from_slice(&1u16.to_le_bytes());
+    meth_content.push(op(Opcode::Halt));
+
+    let seam = seam_with_strt_meth(strt_data, &meth_content);
+    let program = load(&seam).unwrap();
+    let module = program.module();
+
+    assert_eq!(module.strings[0], "helper");
+    assert_eq!(module.methods[0].name, 0);
+    assert_eq!(module.methods[1].name, u32::MAX);
 }
 
 #[test]

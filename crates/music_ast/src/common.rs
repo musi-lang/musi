@@ -7,12 +7,13 @@ pub struct ModifierSet {
     pub exported: bool,
     pub opaque: bool,
     pub mutable: bool,
+    pub foreign: bool,
     pub foreign_abi: Option<Symbol>,
-    pub foreign_alias: Option<Symbol>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
+    pub has_param_list: bool,
     pub params: ParamList,
     pub ty_params: IdentList,
     pub constraints: Vec<Constraint>,

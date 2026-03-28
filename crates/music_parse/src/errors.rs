@@ -2,9 +2,9 @@ use core::error::Error;
 use core::fmt;
 
 use music_lex::TokenKind;
-use music_shared::diag::{Diag, DiagCode};
 use music_shared::SourceId;
 use music_shared::Span;
+use music_shared::diag::{Diag, DiagCode};
 
 /// A parse error with structured kind, location, and optional context.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +60,9 @@ impl ParseError {
             ParseErrorKind::TypeApplicationUsesBrackets => (
                 DiagCode::new(2009),
                 String::from("type application uses brackets"),
-                Some(String::from("write bracketed type arguments, for example 'Option[Int]'")),
+                Some(String::from(
+                    "write bracketed type argument(s), for example 'Option[Int]'",
+                )),
             ),
             ParseErrorKind::UnexpectedEof { expected } => (
                 DiagCode::new(2002),

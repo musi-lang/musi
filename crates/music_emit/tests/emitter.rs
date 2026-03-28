@@ -1870,6 +1870,7 @@ fn emit_top_level_function() {
             attrs: Vec::new(),
             pat: pat_id,
             sig: Some(Box::new(Signature {
+                has_param_list: true,
                 params: vec![param],
                 ty_params: Vec::new(),
                 constraints: Vec::new(),

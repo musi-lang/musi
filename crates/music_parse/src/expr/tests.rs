@@ -330,6 +330,32 @@ fn handle_expr_with_effect_args() {
 }
 
 #[test]
+fn foreign_let_with_outer_link_attr() {
+    let (ast, errors) = parse_expr("@link(name := \"c\") foreign \"c\" let puts (s : CString) : Int");
+    assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
+    let ExprKind::Let(binding) = root_kind(&ast) else {
+        panic!("expected let binding");
+    };
+    assert!(binding.modifiers.foreign);
+    assert_eq!(binding.attrs.len(), 1);
+}
+
+#[test]
+fn foreign_block_requires_let_bindings() {
+    let (ast, errors) = parse_expr("@link(name := \"c\") foreign \"c\" (let puts (s : CString) : Int)");
+    assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
+    let ExprKind::Seq(items) = root_kind(&ast) else {
+        panic!("expected foreign block sequence");
+    };
+    assert_eq!(items.len(), 1);
+    let ExprKind::Let(binding) = &ast.exprs.get(items[0]).kind else {
+        panic!("expected foreign let binding");
+    };
+    assert!(binding.modifiers.foreign);
+    assert_eq!(binding.attrs.len(), 1);
+}
+
+#[test]
 fn shl_expr() {
     let (ast, errors) = parse_expr("1 shl 2");
     assert!(errors.is_empty());

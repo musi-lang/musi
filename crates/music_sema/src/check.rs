@@ -585,7 +585,7 @@ impl SemaDb {
         }
 
         // #3: foreign only at top level
-        if binding.modifiers.foreign_abi.is_some() && self.depth > 0 {
+        if binding.modifiers.foreign && self.depth > 0 {
             self.errors.push(SemaError {
                 kind: SemaErrorKind::ForeignNotTopLevel,
                 span,
@@ -593,7 +593,7 @@ impl SemaDb {
             });
         }
 
-        if binding.modifiers.foreign_abi.is_some() {
+        if binding.modifiers.foreign {
             self.validate_foreign_sig(binding, span);
         }
 
@@ -670,7 +670,7 @@ impl SemaDb {
             }
         }
 
-        if !sig.params.is_empty() {
+        if sig.has_param_list {
             let param_ty = if sig.params.len() == 1 {
                 match sig.params[0].ty {
                     Some(t) => self.lower_ty(t),

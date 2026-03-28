@@ -86,13 +86,9 @@ fn user_module_rejects_reserved_compiler_attributes() {
 }
 
 #[test]
-fn diagnostic_allow_suppresses_matching_code() {
+fn diag_allow_suppresses_matching_code() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(
-        dir.path().join("main.ms"),
-        "@diagnostic.allow(ms4023) let x := 1;",
-    )
-    .unwrap();
+    fs::write(dir.path().join("main.ms"), "@diag.allow(ms4023) let x := 1;").unwrap();
 
     let entry = dir.path().join("main.ms");
     let loader = ModuleLoader::new(dir.path().to_path_buf());
@@ -111,5 +107,101 @@ fn diagnostic_allow_suppresses_matching_code() {
             .iter()
             .map(|diag| (diag.code.map(|code| code.raw()), diag.message.as_str()))
             .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn diag_warn_demotes_matching_error_code() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "@diag.warn(ms2502) @musi.lang(name := \"Fake\") let Fake := data { | Fake };",
+    )
+    .unwrap();
+
+    let entry = dir.path().join("main.ms");
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let resolved = resolve_project(&entry, &loader).unwrap();
+    let typed = type_project(resolved, loader);
+    let module = typed.modules.values().next().unwrap();
+
+    assert!(
+        module
+            .diagnostics
+            .iter()
+            .any(|diag| diag.code.map(|code| code.raw()) == Some(2502)
+                && matches!(diag.level, music_shared::diag::DiagLevel::Warning)),
+        "expected ms2502 to be demoted to warning"
+    );
+}
+
+#[test]
+fn diag_expect_consumes_matching_diagnostic() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "@diag.expect(ms2502) @musi.lang(name := \"Fake\") let Fake := data { | Fake };",
+    )
+    .unwrap();
+
+    let entry = dir.path().join("main.ms");
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let resolved = resolve_project(&entry, &loader).unwrap();
+    let typed = type_project(resolved, loader);
+    let module = typed.modules.values().next().unwrap();
+
+    assert!(
+        module
+            .diagnostics
+            .iter()
+            .all(|diag| diag.code.map(|code| code.raw()) != Some(2502)),
+        "expected ms2502 to be consumed by @diag.expect"
+    );
+    assert!(
+        module
+            .diagnostics
+            .iter()
+            .all(|diag| diag.code.map(|code| code.raw()) != Some(2510)),
+        "expected no unmet expectation diagnostic"
+    );
+}
+
+#[test]
+fn diag_expect_reports_unmet_code() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("main.ms"), "@diag.expect(ms2502) let x := 1;").unwrap();
+
+    let entry = dir.path().join("main.ms");
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let resolved = resolve_project(&entry, &loader).unwrap();
+    let typed = type_project(resolved, loader);
+    let module = typed.modules.values().next().unwrap();
+
+    assert!(
+        module
+            .diagnostics
+            .iter()
+            .any(|diag| diag.code.map(|code| code.raw()) == Some(2510)),
+        "expected unmet expectation diagnostic"
+    );
+}
+
+#[test]
+fn legacy_public_attr_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("main.ms"), "@diagnostic.allow(ms2502) let x := 1;").unwrap();
+
+    let entry = dir.path().join("main.ms");
+    let loader = ModuleLoader::new(dir.path().to_path_buf());
+    let resolved = resolve_project(&entry, &loader).unwrap();
+    let typed = type_project(resolved, loader);
+    let module = typed.modules.values().next().unwrap();
+
+    assert!(
+        module
+            .diagnostics
+            .iter()
+            .any(|diag| diag.code.map(|code| code.raw()) == Some(2501)),
+        "expected legacy attribute diagnostic"
     );
 }

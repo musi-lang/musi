@@ -196,6 +196,7 @@ fn comp_clause_generator() {
 fn let_binding_with_sig() {
     let (_i, ident) = test_ident();
     let sig = Signature {
+        has_param_list: true,
         params: vec![Param {
             mutable: false,
             name: ident,
@@ -239,8 +240,8 @@ fn let_binding_with_modifiers() {
             exported: true,
             opaque: false,
             mutable: false,
+            foreign: true,
             foreign_abi: Some(sym),
-            foreign_alias: Some(sym),
         },
         attrs: vec![],
         pat: dummy_pat_id(),
@@ -248,6 +249,7 @@ fn let_binding_with_modifiers() {
         value: None,
     };
     assert!(lb.modifiers.exported);
+    assert!(lb.modifiers.foreign);
     assert!(lb.modifiers.foreign_abi.is_some());
     assert!(lb.value.is_none());
 }

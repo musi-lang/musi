@@ -129,7 +129,7 @@ impl Parser<'_> {
             TokenKind::KwReturn => self.parse_return(),
             TokenKind::KwResume => self.parse_resume(),
             TokenKind::KwImport => self.parse_import(),
-            TokenKind::KwForeign => self.parse_foreign(ModifierSet::default()),
+            TokenKind::KwForeign => self.parse_foreign(ModifierSet::default(), Vec::new()),
             TokenKind::KwData => self.parse_data_def(),
             TokenKind::KwEffect => self.parse_effect_def(),
             TokenKind::KwClass => self.parse_class_def(),
@@ -804,6 +804,7 @@ impl Parser<'_> {
         effects: Vec<EffectItem>,
         ret_ty: Option<TyId>,
     ) -> Option<Box<Signature>> {
+        let has_param_list = params.is_some();
         let has_sig = params.is_some()
             || !ty_params.is_empty()
             || !constraints.is_empty()
@@ -813,6 +814,7 @@ impl Parser<'_> {
             return None;
         }
         Some(Box::new(Signature {
+            has_param_list,
             params: params.unwrap_or_default(),
             ty_params,
             constraints,
@@ -1103,8 +1105,13 @@ impl Parser<'_> {
 
     // ── Foreign ───────────────────────────────────────────────────
 
-    fn parse_foreign(&mut self, mut modifiers: ModifierSet) -> ParseResult<ExprId> {
+    fn parse_foreign(
+        &mut self,
+        mut modifiers: ModifierSet,
+        attrs: AttrList,
+    ) -> ParseResult<ExprId> {
         let start = self.expect(&TokenKind::KwForeign, "'foreign'")?;
+        modifiers.foreign = true;
         let abi = if matches!(self.peek_kind(), TokenKind::Str(_)) {
             let s = self.expect_string()?;
             Some(self.intern(&s))
@@ -1116,10 +1123,10 @@ impl Parser<'_> {
             return self.parse_foreign_import(start);
         }
         if self.at(&TokenKind::KwLet) {
-            return self.parse_let(modifiers, Vec::new());
+            return self.parse_let(modifiers, attrs);
         }
         if self.at(&TokenKind::LParen) {
-            return self.parse_foreign_block(start, modifiers);
+            return self.parse_foreign_block(start, modifiers, attrs);
         }
         Err(self.err_expected_token_in("'import', 'let', or '('", Some("in foreign declaration")))
     }
@@ -1132,11 +1139,17 @@ impl Parser<'_> {
         Ok(self.alloc_expr(ExprKind::ForeignImport(path), span))
     }
 
-    fn parse_foreign_block(&mut self, start: Span, modifiers: ModifierSet) -> ParseResult<ExprId> {
+    fn parse_foreign_block(
+        &mut self,
+        start: Span,
+        modifiers: ModifierSet,
+        outer_attrs: AttrList,
+    ) -> ParseResult<ExprId> {
         let _ = self.expect(&TokenKind::LParen, "'('")?;
         let mut stmts = Vec::new();
         while !self.at(&TokenKind::RParen) && !self.at_eof() {
-            let attrs = self.parse_attrs()?;
+            let mut attrs = outer_attrs.clone();
+            attrs.extend(self.parse_attrs()?);
             let binding = self.parse_foreign_binding(modifiers, attrs)?;
             stmts.push(binding);
             let _ = self.eat(&TokenKind::Semi);
@@ -1151,22 +1164,21 @@ impl Parser<'_> {
         modifiers: ModifierSet,
         attrs: AttrList,
     ) -> ParseResult<ExprId> {
-        let start = self.span();
+        let start = self.expect(&TokenKind::KwLet, "'let'")?;
         let name = self.expect_ident()?;
-        let ty_params = self.parse_opt_bracket_params()?;
-        let mut mods = modifiers;
-        if self.eat(&TokenKind::KwAs) {
-            let alias = self.expect_string()?;
-            mods.foreign_alias = Some(self.intern(&alias));
+        let mut ty_params = self.parse_opt_bracket_params()?;
+        let params = self.parse_opt_params()?;
+        if ty_params.is_empty() {
+            ty_params = self.parse_opt_bracket_params()?;
         }
         let constraints = self.parse_opt_where()?;
         let ret_ty = self.parse_opt_ty_annot()?;
         let pat = self.alloc_pat(PatKind::Bind(name), name.span);
-        let sig = Self::build_signature(None, ty_params, constraints, Vec::new(), ret_ty);
+        let sig = Self::build_signature(params, ty_params, constraints, Vec::new(), ret_ty);
         let span = start.to(self.prev_span());
         Ok(self.alloc_expr(
             ExprKind::Let(Box::new(LetBinding {
-                modifiers: mods,
+                modifiers,
                 attrs,
                 pat,
                 sig,
@@ -1626,9 +1638,13 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::KwExport => self.parse_export_with_attrs(attrs),
             TokenKind::KwLet => self.parse_let(ModifierSet::default(), attrs),
+            TokenKind::KwForeign => self.parse_foreign(ModifierSet::default(), attrs),
             TokenKind::KwInstance => self.parse_instance_def(false, attrs),
             _ => Err(self
-                .err_expected_token_in("'export', 'let', or 'instance'", Some("after attribute"))),
+                .err_expected_token_in(
+                    "'export', 'let', 'foreign', or 'instance'",
+                    Some("after attribute"),
+                )),
         }
     }
 
@@ -1708,7 +1724,7 @@ impl Parser<'_> {
             modifiers.opaque = true;
         }
         if self.at(&TokenKind::KwForeign) {
-            return self.parse_foreign(modifiers);
+            return self.parse_foreign(modifiers, attrs);
         }
         self.parse_let(modifiers, attrs)
     }

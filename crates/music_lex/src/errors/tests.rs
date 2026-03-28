@@ -96,10 +96,10 @@ fn display_invalid_escape() {
 #[test]
 fn display_invalid_hex_escape() {
     let err = LexError {
-        kind: LexErrorKind::InvalidHexEscape { expected: 2 },
+        kind: LexErrorKind::ExpectedHexDigits { expected: 2 },
         span: Span::new(0, 4),
     };
-    assert_eq!(err.to_string(), "invalid hex escape; expected 2 hex digit(s)");
+    assert_eq!(err.to_string(), "expected 2 hex digit(s)");
 }
 
 #[test]
@@ -114,13 +114,10 @@ fn display_invalid_unicode_escape() {
 #[test]
 fn display_invalid_number_prefix() {
     let err = LexError {
-        kind: LexErrorKind::InvalidNumberPrefix,
+        kind: LexErrorKind::ExpectedDigitsNumberPrefix,
         span: Span::new(0, 2),
     };
-    assert_eq!(
-        err.to_string(),
-        "invalid number literal; expected digit(s) after base prefix"
-    );
+    assert_eq!(err.to_string(), "expected digit(s) after base prefix");
 }
 
 #[test]
@@ -178,7 +175,7 @@ fn span_returns_correct_span_for_each_variant() {
             span,
         },
         LexError {
-            kind: LexErrorKind::InvalidHexEscape { expected: 2 },
+            kind: LexErrorKind::ExpectedHexDigits { expected: 2 },
             span,
         },
         LexError {
@@ -186,7 +183,7 @@ fn span_returns_correct_span_for_each_variant() {
             span,
         },
         LexError {
-            kind: LexErrorKind::InvalidNumberPrefix,
+            kind: LexErrorKind::ExpectedDigitsNumberPrefix,
             span,
         },
         LexError {

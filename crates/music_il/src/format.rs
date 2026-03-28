@@ -10,6 +10,12 @@ pub const VERSION_MINOR: u8 = 1;
 /// Fixed header size in bytes: `magic(4)` + `version(2)` + `flags(2)` + `section_count(4)` + `total_size(4)`.
 pub const HEADER_SIZE: usize = 16;
 
+/// Wire-level method name sentinel for the synthesized module entrypoint.
+pub const ENTRY_METHOD_NAME: u32 = u32::MAX;
+
+/// Wire-level method name sentinel for anonymous non-entry closures.
+pub const ANON_METHOD_NAME: u32 = u32::MAX - 1;
+
 /// Four-byte section tags identifying each section in a `.seam` file.
 pub mod section {
     /// String table: interned strings, null-separated.
@@ -192,7 +198,8 @@ impl FfiType {
 pub struct ForeignDescriptor {
     /// Musi identifier in the decoded module string table.
     pub name_idx: u32,
-    /// C symbol name in the decoded module string table, or same as `name_idx` if no `as`.
+    /// Native symbol name in the decoded module string table, or same as `name_idx` if no
+    /// `@link(symbol := "...")` override was emitted.
     pub symbol_idx: u32,
     /// Library name in the decoded module string table, `0xFFFF_FFFF` if none.
     pub lib_idx: u32,

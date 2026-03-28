@@ -22,7 +22,7 @@ pub enum LoadError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum VmError {
-    #[error("no entry point (main method) found")]
+    #[error("no entry point found")]
     NoEntryPoint,
     #[error("stack underflow")]
     StackUnderflow,
@@ -30,7 +30,7 @@ pub enum VmError {
     InvalidLocal(usize),
     #[error("invalid constant pool index {0}")]
     InvalidConstant(ConstIdx),
-    #[error("pc out of bounds")]
+    #[error("program counter out of bounds")]
     PcOutOfBounds,
     #[error("division by zero")]
     DivisionByZero,
@@ -66,10 +66,10 @@ pub enum VmError {
     #[error("array index {index} out of bounds (length {length})")]
     IndexOutOfBounds { index: usize, length: usize },
     #[error("expected array")]
-    NotAnArray,
+    NotArray,
     #[error("invalid heap index {0}")]
     InvalidHeapIndex(HeapIdx),
-    #[error("value does not match the target type")]
+    #[error("value does not match target type")]
     TypeCastFailed,
     #[error("no instance of class {class_id} for type {type_id}")]
     NoInstance { class_id: u16, type_id: u16 },
@@ -83,7 +83,7 @@ pub enum VmError {
     FfiSymbolNotFound(String),
     #[error("FFI foreign descriptor index {0} out of bounds")]
     FfiForeignIndexOutOfBounds(usize),
-    #[error("runtime host is missing")]
+    #[error("missing runtime host")]
     MissingHost,
 }
 

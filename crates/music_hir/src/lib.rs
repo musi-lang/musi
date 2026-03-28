@@ -1,3 +1,4 @@
+pub mod attrs;
 mod bundle;
 mod lower;
 mod pipeline;

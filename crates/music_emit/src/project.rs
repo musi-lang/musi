@@ -97,7 +97,7 @@ pub fn emit_project(mut project: TypedProject) -> Result<ProjectEmitResult, Emit
             .enumerate()
             .filter(|(_, g)| g.exported)
             .map(|(i, global)| ImportedGlobal {
-                name: module_result.db.interner.resolve(global.name).to_owned(),
+                name: global.source_name.clone(),
                 index: offsets.globals + u16::try_from(i).expect("module global index overflow"),
             })
             .collect();

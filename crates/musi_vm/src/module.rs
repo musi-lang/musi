@@ -1,9 +1,11 @@
-use music_il::format::{ClassDescriptor, EffectDescriptor, ForeignDescriptor, TypeDescriptor};
+use music_il::format::{
+    ClassDescriptor, EffectDescriptor, ForeignDescriptor, TypeDescriptor, ENTRY_METHOD_NAME,
+};
 
 use crate::value::Value;
 
-/// `u32::MAX` marks the module entry point in `Method::name`.
-pub const ENTRY_POINT_NAME: u32 = u32::MAX;
+/// Marks the module entry point in `Method::name`.
+pub const ENTRY_POINT_NAME: u32 = ENTRY_METHOD_NAME;
 
 /// A constant pool entry as loaded from a `.seam` binary.
 ///
@@ -28,7 +30,8 @@ pub struct Module {
 }
 
 pub struct Method {
-    /// [`ENTRY_POINT_NAME`] marks the entry point.
+    /// [`ENTRY_POINT_NAME`] marks the entry point. Anonymous non-entry
+    /// closures use a separate internal wire sentinel.
     pub name: u32,
     pub locals_count: u16,
     /// Raw instruction bytes; the VM decodes these inline during execution.

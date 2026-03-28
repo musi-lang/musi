@@ -12,10 +12,18 @@ use music_resolve::{ModuleGraph, ModuleId, ModuleLoader, ModuleResult, ProjectRe
 use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};
 use music_sema::type_check;
 use music_sema::types::SemaTypeId;
+use music_shared::diag::DiagLevel;
 use music_shared::diag::{Diag, DiagCode};
 use music_shared::{Interner, Literal, SourceId, Span, Symbol};
 
+use crate::attrs::{AttrBindError, AttrSpec, attr_expr_string, attr_path_matches, bind_attr};
 use crate::lower;
+
+const LINK_ATTR: AttrSpec = AttrSpec {
+    path: &["link"],
+    params: &["name", "symbol"],
+    required: &[],
+};
 
 /// The complete typed state for one module.
 ///
@@ -145,18 +153,17 @@ pub fn type_module(
         diagnostics.extend(validate_attributes(&db, &path, source_id));
     }
 
-    let suppressed_codes = collect_suppressed_codes(&db, &db.interner);
-    if !suppressed_codes.is_empty() {
-        diagnostics.retain(|diag| {
-            diag.code
-                .map(|code| !suppressed_codes.contains(&code))
-                .unwrap_or(true)
-        });
+    let mut diag_policy = collect_diag_policy(&db, &db.interner);
+    if let Some(source_id) = source_id {
+        apply_diag_policy(&mut diagnostics, &mut diag_policy, source_id, false);
     }
 
     let has_errors = has_errors || !diagnostics.is_empty();
 
     if has_errors {
+        if let Some(source_id) = source_id {
+            finalize_diag_policy(&mut diagnostics, &mut diag_policy, source_id);
+        }
         return TypedModule::with_status(
             db,
             resolution,
@@ -179,12 +186,9 @@ pub fn type_module(
         }
     }
 
-    if !suppressed_codes.is_empty() {
-        typed_diagnostics.retain(|diag| {
-            diag.code
-                .map(|code| !suppressed_codes.contains(&code))
-                .unwrap_or(true)
-        });
+    if let Some(source_id) = source_id {
+        apply_diag_policy(&mut typed_diagnostics, &mut diag_policy, source_id, false);
+        finalize_diag_policy(&mut typed_diagnostics, &mut diag_policy, source_id);
     }
 
     TypedModule::with_status(
@@ -198,20 +202,88 @@ pub fn type_module(
     )
 }
 
-fn collect_suppressed_codes(db: &Db, interner: &Interner) -> HashSet<DiagCode> {
-    let mut codes = HashSet::new();
+#[derive(Default)]
+struct DiagPolicy {
+    allow: HashSet<DiagCode>,
+    warn: HashSet<DiagCode>,
+    deny: HashSet<DiagCode>,
+    expect: HashMap<DiagCode, Vec<Span>>,
+}
+
+fn collect_diag_policy(db: &Db, interner: &Interner) -> DiagPolicy {
+    let mut policy = DiagPolicy::default();
     for (_, attr) in &db.ast.attrs {
         let path = attr_path_strings(db, &attr.kind);
-        if path.len() != 2 || path[0] != "diagnostic" || path[1] != "allow" {
+        if path.len() != 2 || path[0] != "diag" {
             continue;
         }
         for arg in &attr.kind.args {
             if let Some(code) = attr_arg_code(db, interner, arg) {
-                let _ = codes.insert(code);
+                match path[1].as_str() {
+                    "allow" => {
+                        let _ = policy.allow.insert(code);
+                    }
+                    "warn" => {
+                        let _ = policy.warn.insert(code);
+                    }
+                    "deny" => {
+                        let _ = policy.deny.insert(code);
+                    }
+                    "expect" => {
+                        policy.expect.entry(code).or_default().push(attr.span);
+                    }
+                    _ => {}
+                }
             }
         }
     }
-    codes
+    policy
+}
+
+fn apply_diag_policy(
+    diagnostics: &mut Vec<Diag>,
+    policy: &mut DiagPolicy,
+    _source_id: SourceId,
+    _finalize: bool,
+) {
+    let mut filtered = Vec::with_capacity(diagnostics.len());
+    for mut diag in diagnostics.drain(..) {
+        let Some(code) = diag.code else {
+            filtered.push(diag);
+            continue;
+        };
+
+        if let Some(pending) = policy.expect.get_mut(&code)
+            && pending.pop().is_some()
+        {
+            continue;
+        }
+
+        if policy.allow.contains(&code) {
+            continue;
+        }
+
+        if policy.deny.contains(&code) {
+            diag.level = DiagLevel::Error;
+        } else if policy.warn.contains(&code) {
+            diag.level = DiagLevel::Warning;
+        }
+
+        filtered.push(diag);
+    }
+    *diagnostics = filtered;
+}
+
+fn finalize_diag_policy(diagnostics: &mut Vec<Diag>, policy: &mut DiagPolicy, source_id: SourceId) {
+    for (code, spans) in std::mem::take(&mut policy.expect) {
+        for span in spans {
+            diagnostics.push(
+                Diag::error(format!("expected diagnostic '{code}' was not produced"))
+                    .with_code(DiagCode::new(2510))
+                    .with_label(span, source_id, ""),
+            );
+        }
+    }
 }
 
 fn validate_attributes(db: &Db, path: &PathBuf, source_id: SourceId) -> Vec<Diag> {
@@ -236,7 +308,7 @@ fn validate_expr_attributes(
                 db,
                 &binding.attrs,
                 AttrTarget::Let {
-                    foreign: binding.modifiers.foreign_abi.is_some(),
+                    foreign: binding.modifiers.foreign,
                 },
                 compiler_owned,
                 source_id,
@@ -336,18 +408,40 @@ fn validate_attr_list(
             "musi" => {
                 validate_compiler_attr(&path, compiler_owned, source_id, diagnostics, attr.span)
             }
-            "ffi" => validate_ffi_attr(&path, target, source_id, diagnostics, attr.span),
-            "diagnostic" => {
-                validate_diagnostic_attr(db, &attr.kind, &path, source_id, diagnostics, attr.span)
+            "link" => {
+                if attr_path_matches(db, &attr.kind, LINK_ATTR.path) {
+                    validate_link_attr(db, &attr.kind, target, source_id, diagnostics, attr.span);
+                } else {
+                    diagnostics.push(
+                        Diag::error(format!(
+                            "unknown public attribute '{}'",
+                            attr_path_display(&path)
+                        ))
+                        .with_code(DiagCode::new(2509))
+                        .with_label(attr.span, source_id, ""),
+                    );
+                }
             }
-            "builtin" | "lib" => diagnostics.push(
+            "diag" => {
+                validate_diag_attr(db, &attr.kind, &path, source_id, diagnostics, attr.span)
+            }
+            "when" | "repr" | "layout" => diagnostics.push(
+                Diag::error(format!(
+                    "attribute '@{}' is reserved but not implemented",
+                    attr_path_display(&path)
+                ))
+                .with_code(DiagCode::new(2508))
+                .with_label(attr.span, source_id, ""),
+            ),
+            "builtin" | "lib" | "ffi" | "diagnostic" => diagnostics.push(
                 Diag::error(format!("legacy attribute '@{root}' is not supported"))
                     .with_code(DiagCode::new(2501))
                     .with_hint(match root {
                         "builtin" => {
                             "use '@musi.lang', '@musi.intrinsic', or '@musi.variant'".to_owned()
                         }
-                        "lib" => "use '@ffi.link(...)'".to_owned(),
+                        "lib" | "ffi" => "use '@link(...)'".to_owned(),
+                        "diagnostic" => "use '@diag.allow(...)', '@diag.warn(...)', '@diag.deny(...)', or '@diag.expect(...)'".to_owned(),
                         _ => String::new(),
                     })
                     .with_label(attr.span, source_id, ""),
@@ -397,38 +491,61 @@ fn validate_compiler_attr(
     }
 }
 
-fn validate_ffi_attr(
-    path: &[String],
+fn validate_link_attr(
+    db: &Db,
+    attr: &Attr,
     target: AttrTarget,
     source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
     span: Span,
 ) {
-    match path {
-        [root, link] if root == "ffi" && link == "link" => {
-            if !matches!(target, AttrTarget::Let { foreign: true }) {
+    if !matches!(target, AttrTarget::Let { foreign: true }) {
+        diagnostics.push(
+            Diag::error("attribute '@link' is only allowed on foreign let declarations")
+                .with_code(DiagCode::new(2504))
+                .with_label(span, source_id, ""),
+        );
+        return;
+    }
+
+    match bind_attr(db, attr, &LINK_ATTR) {
+        Ok(bound) => {
+            if bound.get("name").is_none() && bound.get("symbol").is_none() {
                 diagnostics.push(
-                    Diag::error(
-                        "attribute '@ffi.link' is only allowed on foreign let declarations",
-                    )
-                    .with_code(DiagCode::new(2504))
-                    .with_label(span, source_id, ""),
+                    Diag::error("attribute '@link' requires at least one argument")
+                        .with_code(DiagCode::new(2505))
+                        .with_hint("write '@link(name := \"lib\")', '@link(symbol := \"native_name\")', or both")
+                        .with_label(span, source_id, ""),
+                );
+            }
+            if let Some(expr_id) = bound.get("name")
+                && attr_expr_string(db, expr_id).is_none()
+            {
+                diagnostics.push(
+                    Diag::error("attribute '@link' argument 'name' requires a string literal")
+                        .with_code(DiagCode::new(2511))
+                        .with_label(span, source_id, ""),
+                );
+            }
+            if let Some(expr_id) = bound.get("symbol")
+                && attr_expr_string(db, expr_id).is_none()
+            {
+                diagnostics.push(
+                    Diag::error("attribute '@link' argument 'symbol' requires a string literal")
+                        .with_code(DiagCode::new(2512))
+                        .with_label(span, source_id, ""),
                 );
             }
         }
-        [root, _] if root == "ffi" => diagnostics.push(
-            Diag::error(format!(
-                "unknown FFI attribute '{}'",
-                attr_path_display(path)
-            ))
-            .with_code(DiagCode::new(2505))
-            .with_label(span, source_id, ""),
+        Err(error) => diagnostics.push(
+            Diag::error(link_attr_error_message(error))
+                .with_code(DiagCode::new(2505))
+                .with_label(span, source_id, ""),
         ),
-        _ => {}
     }
 }
 
-fn validate_diagnostic_attr(
+fn validate_diag_attr(
     db: &Db,
     attr: &Attr,
     path: &[String],
@@ -438,13 +555,13 @@ fn validate_diagnostic_attr(
 ) {
     let valid = matches!(
         path,
-        [root, kind] if root == "diagnostic"
+        [root, kind] if root == "diag"
             && matches!(kind.as_str(), "allow" | "warn" | "deny" | "expect")
     );
     if !valid {
         diagnostics.push(
             Diag::error(format!(
-                "unknown diagnostic attribute '{}'",
+                "unknown diagnostic control attribute '{}'",
                 attr_path_display(path)
             ))
             .with_code(DiagCode::new(2506))
@@ -456,7 +573,7 @@ fn validate_diagnostic_attr(
     for arg in &attr.args {
         if attr_arg_code(db, &db.interner, arg).is_none() {
             diagnostics.push(
-                Diag::error("diagnostic attributes require codes like ms1234")
+                Diag::error("diagnostic control attributes require codes like ms1234")
                     .with_code(DiagCode::new(2507))
                     .with_label(span, source_id, ""),
             );
@@ -486,4 +603,21 @@ fn attr_path_strings(db: &Db, attr: &Attr) -> Vec<String> {
 
 fn attr_path_display(path: &[String]) -> String {
     path.join(".")
+}
+
+fn link_attr_error_message(error: AttrBindError) -> String {
+    match error {
+        AttrBindError::UnknownArgument { name } => {
+            format!("unknown argument '{name}' in attribute '@link'")
+        }
+        AttrBindError::DuplicateArgument { name } => {
+            format!("duplicate argument '{name}' in attribute '@link'")
+        }
+        AttrBindError::TooManyArguments { expected, found } => {
+            format!("attribute '@link' accepts {expected} argument(s), found {found}")
+        }
+        AttrBindError::MissingArgument { name } => {
+            format!("missing argument '{name}' in attribute '@link'")
+        }
+    }
 }

@@ -3,8 +3,9 @@
 use std::collections::HashMap;
 
 use music_il::format::{
-    self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
-    FfiType, ForeignAbi, ForeignDescriptor, HEADER_SIZE, TypeDescriptor, TypeKind,
+    self, ANON_METHOD_NAME, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor,
+    EffectOpDescriptor, ENTRY_METHOD_NAME, FfiType, ForeignAbi, ForeignDescriptor, HEADER_SIZE,
+    TypeDescriptor, TypeKind,
 };
 use music_il::opcode::Opcode;
 
@@ -72,10 +73,10 @@ pub fn load(data: &[u8]) -> Result<Program, LoadError> {
                 constants = decode_cnst(section_data, &offset_map)?;
             }
             format::section::METH => {
-                methods = decode_meth(section_data)?;
+                methods = decode_meth(section_data, &offset_map)?;
             }
             format::section::GLOB => {
-                globals = decode_glob(section_data)?;
+                globals = decode_glob(section_data, &offset_map)?;
             }
             format::section::CLSS => {
                 classes = decode_clss(section_data, &offset_map)?;
@@ -244,7 +245,10 @@ fn decode_cnst(
     Ok(out)
 }
 
-fn decode_meth(data: &[u8]) -> Result<Vec<Method>, LoadError> {
+fn decode_meth(
+    data: &[u8],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<Method>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -252,8 +256,18 @@ fn decode_meth(data: &[u8]) -> Result<Vec<Method>, LoadError> {
 
     for _ in 0..count {
         let name_bytes = read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?;
-        let name = u32::from_le_bytes(name_bytes);
+        let encoded_name = u32::from_le_bytes(name_bytes);
         pos = pos.wrapping_add(4);
+        let name = if encoded_name == ENTRY_METHOD_NAME || encoded_name == ANON_METHOD_NAME {
+            encoded_name
+        } else {
+            offset_map
+                .get(&encoded_name)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(encoded_name).unwrap_or(u16::MAX),
+                })?
+        };
 
         let locals_bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
         let locals_count = u16::from_le_bytes(locals_bytes);
@@ -274,7 +288,10 @@ fn decode_meth(data: &[u8]) -> Result<Vec<Method>, LoadError> {
     Ok(out)
 }
 
-fn decode_glob(data: &[u8]) -> Result<Vec<GlobalDef>, LoadError> {
+fn decode_glob(
+    data: &[u8],
+    offset_map: &HashMap<u32, u32>,
+) -> Result<Vec<GlobalDef>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -282,8 +299,14 @@ fn decode_glob(data: &[u8]) -> Result<Vec<GlobalDef>, LoadError> {
 
     for _ in 0..count {
         let name_bytes = read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?;
-        let name = u32::from_le_bytes(name_bytes);
+        let name_offset = u32::from_le_bytes(name_bytes);
         pos = pos.wrapping_add(4);
+        let name = offset_map
+            .get(&name_offset)
+            .copied()
+            .ok_or(LoadError::InvalidStringOffset {
+                offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
+            })?;
 
         let flags = *data.get(pos).ok_or(LoadError::TruncatedSection)?;
         pos = pos.wrapping_add(1);

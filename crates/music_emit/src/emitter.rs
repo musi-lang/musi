@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::mem;
 
-use music_ast::common::{AttrArg, MemberDecl, MemberName, Param};
+use music_ast::common::{MemberDecl, MemberName, Param};
 use music_ast::expr::{
     BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, HandlerClause, ImportKind,
     InstanceBody, InstanceDef, LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind,
@@ -10,6 +10,7 @@ use music_ast::expr::{
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_ast::{AttrId, ExprId, ExprList, PatId, TyId};
+use music_hir::attrs::{AttrSpec, attr_expr_string, attr_path_matches, bind_attr};
 use music_hir::TypedModule;
 use music_il::format::{
     self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
@@ -28,11 +29,18 @@ use crate::pool::{ConstantEntry, ConstantPool};
 
 type EmitResult<T = ()> = Result<T, EmitError>;
 
+const LINK_ATTR: AttrSpec = AttrSpec {
+    path: &["link"],
+    params: &["name", "symbol"],
+    required: &[],
+};
+
 /// A compiled method ready for serialisation.
 ///
 /// `name` is `None` for the implicit module-level main method.
 pub struct MethodEntry {
     pub name: Option<Symbol>,
+    pub source_name: Option<String>,
     pub instructions: Vec<Instruction>,
     pub locals_count: u16,
     pub absolute_global_loads: Vec<usize>,
@@ -41,6 +49,7 @@ pub struct MethodEntry {
 /// A module-level global binding.
 pub struct GlobalEntry {
     pub name: Symbol,
+    pub source_name: String,
     pub exported: bool,
     pub opaque: bool,
 }
@@ -579,7 +588,7 @@ impl Emitter<'_> {
         };
         let name = ident.name;
 
-        if binding.modifiers.foreign_abi.is_some() || binding.modifiers.foreign_alias.is_some() {
+        if binding.modifiers.foreign {
             self.emit_foreign_let(name, binding);
             return Ok(());
         }
@@ -587,12 +596,12 @@ impl Emitter<'_> {
         if let Some(ref sig) = binding.sig {
             if let Some(body) = binding.value {
                 let global_idx = self.alloc_top_level_global(name, resolve_visibility(binding));
-                if sig.params.is_empty() {
-                    self.emit_expr(body)?;
-                    self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
-                } else {
+                if sig.has_param_list {
                     let method_idx = self.compile_function_method(Some(name), &sig.params, body)?;
                     self.push(Instruction::with_wide(Opcode::ClsNew, method_idx, 0));
+                    self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
+                } else {
+                    self.emit_expr(body)?;
                     self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
                 }
             }
@@ -608,6 +617,7 @@ impl Emitter<'_> {
         let global_idx = u16::try_from(self.globals.len()).expect("too many globals (>65535)");
         self.globals.push(GlobalEntry {
             name,
+            source_name: self.typed_module.db.interner.resolve(name).to_owned(),
             exported: vis == Visibility::Exported || vis == Visibility::Opaque,
             opaque: vis == Visibility::Opaque,
         });
@@ -637,6 +647,7 @@ impl Emitter<'_> {
         let method_idx = u16::try_from(self.methods.len()).expect("too many methods (>65535)");
         self.methods.push(MethodEntry {
             name,
+            source_name: name.map(|sym| self.typed_module.db.interner.resolve(sym).to_owned()),
             instructions: mem::replace(&mut self.current_instructions, saved_instructions),
             locals_count,
             absolute_global_loads: mem::replace(
@@ -661,6 +672,7 @@ impl Emitter<'_> {
                 u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
             self.methods.push(MethodEntry {
                 name: None,
+                source_name: None,
                 instructions: mem::take(&mut self.current_instructions),
                 locals_count,
                 absolute_global_loads: mem::take(&mut self.current_absolute_global_loads),
@@ -964,14 +976,14 @@ impl Emitter<'_> {
                     self.emit_st_loc(slot);
                     let _inserted = self.cell_locals.insert(ident.name);
                 } else if let Some(ref sig) = binding.sig {
-                    if sig.params.is_empty() {
-                        self.emit_expr(value)?;
-                        let slot = self.local_slot(ident.name);
-                        self.emit_st_loc(slot);
-                    } else {
+                    if sig.has_param_list {
                         let method_idx =
                             self.compile_function_method(Some(ident.name), &sig.params, value)?;
                         self.push(Instruction::with_wide(Opcode::ClsNew, method_idx, 0));
+                        let slot = self.local_slot(ident.name);
+                        self.emit_st_loc(slot);
+                    } else {
+                        self.emit_expr(value)?;
                         let slot = self.local_slot(ident.name);
                         self.emit_st_loc(slot);
                     }
@@ -1041,6 +1053,7 @@ impl Emitter<'_> {
 
         self.methods.push(MethodEntry {
             name: Some(anon_name),
+            source_name: None,
             instructions: mem::replace(&mut self.current_instructions, saved_instructions),
             locals_count,
             absolute_global_loads: mem::replace(
@@ -2136,15 +2149,8 @@ impl Emitter<'_> {
     fn emit_foreign_let(&mut self, name: Symbol, binding: &LetBinding) {
         let name_str = self.typed_module.db.interner.resolve(name);
         let name_idx = u32::from(self.pool.add(ConstantEntry::Str(name_str.into())));
-
-        let symbol_idx = if let Some(alias) = binding.modifiers.foreign_alias {
-            let alias_str = self.typed_module.db.interner.resolve(alias);
-            u32::from(self.pool.add(ConstantEntry::Str(alias_str.into())))
-        } else {
-            name_idx
-        };
-
-        let lib_idx = self.extract_lib_attr(&binding.attrs);
+        let (lib_idx, symbol_idx) = self.extract_link_attr(&binding.attrs);
+        let symbol_idx = symbol_idx.unwrap_or(name_idx);
 
         let abi = match binding.modifiers.foreign_abi {
             Some(sym) => {
@@ -2221,26 +2227,28 @@ impl Emitter<'_> {
             .map_or(FfiType::Ptr, |ty_id| self.ty_to_ffi_type(ty_id))
     }
 
-    fn extract_lib_attr(&mut self, attrs: &[AttrId]) -> Option<u32> {
+    fn extract_link_attr(&mut self, attrs: &[AttrId]) -> (Option<u32>, Option<u32>) {
         for &attr_id in attrs {
             let attr = self.typed_module.db.ast.attrs.get(attr_id);
-            let path = &attr.kind.path;
-            if path.len() != 2
-                || self.typed_module.db.interner.resolve(path[0].name) != "ffi"
-                || self.typed_module.db.interner.resolve(path[1].name) != "link"
-            {
+            if !attr_path_matches(&self.typed_module.db, &attr.kind, LINK_ATTR.path) {
                 continue;
             }
-            for arg in &attr.kind.args {
-                if let AttrArg::Positional(expr_id) = arg {
-                    let spanned = self.typed_module.db.ast.exprs.get(*expr_id);
-                    if let ExprKind::Lit(Literal::Str(ref s)) = spanned.kind {
-                        return Some(u32::from(self.pool.add(ConstantEntry::Str(s.clone()))));
-                    }
-                }
+            let Ok(bound) = bind_attr(&self.typed_module.db, &attr.kind, &LINK_ATTR) else {
+                continue;
+            };
+            let lib_idx = bound.get("name").and_then(|expr_id| {
+                attr_expr_string(&self.typed_module.db, expr_id)
+                    .map(|value| u32::from(self.pool.add(ConstantEntry::Str(value))))
+            });
+            let symbol_idx = bound.get("symbol").and_then(|expr_id| {
+                attr_expr_string(&self.typed_module.db, expr_id)
+                    .map(|value| u32::from(self.pool.add(ConstantEntry::Str(value))))
+            });
+            if lib_idx.is_some() || symbol_idx.is_some() {
+                return (lib_idx, symbol_idx);
             }
         }
-        None
+        (None, None)
     }
 
     fn push(&mut self, instruction: Instruction) {

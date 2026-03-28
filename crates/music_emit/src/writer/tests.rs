@@ -6,8 +6,9 @@ use music_il::format::{
 };
 use music_il::instruction::Instruction;
 use music_il::opcode::Opcode;
+use music_shared::Symbol;
 
-use crate::emitter::SeamModule;
+use crate::emitter::{GlobalEntry, MethodEntry, SeamModule};
 use crate::pool::{ConstantEntry, ConstantPool};
 use crate::writer::write_seam;
 
@@ -117,6 +118,7 @@ fn roundtrip_tag_constant_supports_arrtag_compare() {
         constants: pool,
         methods: vec![crate::emitter::MethodEntry {
             name: None,
+            source_name: None,
             locals_count: 0,
             absolute_global_loads: Vec::new(),
             instructions: vec![
@@ -263,4 +265,41 @@ fn foreign_metadata_roundtrips_to_loaded_string_indices() {
     assert_eq!(loaded.foreigns()[0].name_idx, 0);
     assert_eq!(loaded.foreigns()[0].symbol_idx, 0);
     assert_eq!(loaded.foreigns()[0].lib_idx, 1);
+}
+
+#[test]
+fn exported_global_name_roundtrips_through_strt_and_vm_export() {
+    let module = SeamModule {
+        constants: ConstantPool::new(),
+        methods: vec![MethodEntry {
+            name: None,
+            source_name: None,
+            locals_count: 0,
+            absolute_global_loads: Vec::new(),
+            instructions: vec![
+                Instruction::with_i16(Opcode::LdSmi, 7),
+                Instruction::with_u16(Opcode::StGlob, 0),
+                Instruction::simple(Opcode::Halt),
+            ],
+        }],
+        globals: vec![GlobalEntry {
+            name: Symbol::synthetic(1),
+            source_name: "test".into(),
+            exported: true,
+            opaque: false,
+        }],
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    };
+
+    let loaded = musi_vm::load(&write_seam(&module)).expect("load");
+    assert_eq!(loaded.strings()[0], "test");
+
+    let mut vm = Vm::new(loaded);
+    let _ = vm.run().expect("run");
+    let value = vm.export("test").expect("exported test");
+    assert!(value.is_int());
+    assert_eq!(value.as_int(), 7);
 }

@@ -22,8 +22,8 @@ fn modifier_set_default() {
     assert!(!m.exported);
     assert!(!m.opaque);
     assert!(!m.mutable);
+    assert!(!m.foreign);
     assert!(m.foreign_abi.is_none());
-    assert!(m.foreign_alias.is_none());
 }
 
 #[test]
@@ -32,8 +32,8 @@ fn modifier_set_is_copy() {
         exported: true,
         opaque: false,
         mutable: true,
+        foreign: false,
         foreign_abi: None,
-        foreign_alias: None,
     };
     let copied = m;
     assert_eq!(m, copied);
@@ -43,6 +43,7 @@ fn modifier_set_is_copy() {
 fn signature_construction() {
     let (_i, ident) = test_ident();
     let sig = Signature {
+        has_param_list: true,
         params: vec![Param {
             mutable: false,
             name: ident,

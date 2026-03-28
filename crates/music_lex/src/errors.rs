@@ -1,9 +1,9 @@
 use core::error;
 use core::fmt;
 
-use music_shared::diag::{Diag, DiagCode};
 use music_shared::SourceId;
 use music_shared::Span;
+use music_shared::diag::{Diag, DiagCode};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,14 +44,14 @@ pub enum LexErrorKind {
     #[error("invalid escape sequence '\\{0}'")]
     InvalidEscape(char),
 
-    #[error("invalid hex escape; expected {expected} hex digit(s)")]
-    InvalidHexEscape { expected: u8 },
+    #[error("expected {expected} hex digit(s)")]
+    ExpectedHexDigits { expected: u8 },
 
     #[error("invalid unicode escape")]
     InvalidUnicodeEscape,
 
-    #[error("invalid number literal; expected digit(s) after base prefix")]
-    InvalidNumberPrefix,
+    #[error("expected digit(s) after base prefix")]
+    ExpectedDigitsNumberPrefix,
 
     #[error("number literal overflow")]
     NumberOverflow,
@@ -66,23 +66,25 @@ impl LexError {
     #[must_use]
     pub fn diagnostic(&self, source_id: SourceId) -> Diag {
         let (code, message) = match self.kind {
-            LexErrorKind::UnexpectedChar(ch) => (
-                DiagCode::new(1001),
-                format!("unexpected character '{ch}'"),
+            LexErrorKind::UnexpectedChar(ch) => {
+                (DiagCode::new(1001), format!("unexpected character '{ch}'"))
+            }
+            LexErrorKind::UnterminatedString => (
+                DiagCode::new(1002),
+                String::from("unterminated string literal"),
             ),
-            LexErrorKind::UnterminatedString => {
-                (DiagCode::new(1002), String::from("unterminated string literal"))
-            }
-            LexErrorKind::UnterminatedFString => {
-                (DiagCode::new(1003), String::from("unterminated f-string literal"))
-            }
+            LexErrorKind::UnterminatedFString => (
+                DiagCode::new(1003),
+                String::from("unterminated f-string literal"),
+            ),
             LexErrorKind::UnterminatedFStringExpr => (
                 DiagCode::new(1004),
                 String::from("unterminated f-string interpolation"),
             ),
-            LexErrorKind::UnterminatedRune => {
-                (DiagCode::new(1005), String::from("unterminated rune literal"))
-            }
+            LexErrorKind::UnterminatedRune => (
+                DiagCode::new(1005),
+                String::from("unterminated rune literal"),
+            ),
             LexErrorKind::UnterminatedEscapedIdent => (
                 DiagCode::new(1006),
                 String::from("unterminated escaped identifier"),
@@ -100,14 +102,14 @@ impl LexError {
                 DiagCode::new(1010),
                 format!("invalid escape sequence '\\{ch}'"),
             ),
-            LexErrorKind::InvalidHexEscape { expected } => (
+            LexErrorKind::ExpectedHexDigits { expected } => (
                 DiagCode::new(1011),
                 format!("invalid hex escape; expected {expected} hex digit(s)"),
             ),
             LexErrorKind::InvalidUnicodeEscape => {
                 (DiagCode::new(1012), String::from("invalid unicode escape"))
             }
-            LexErrorKind::InvalidNumberPrefix => (
+            LexErrorKind::ExpectedDigitsNumberPrefix => (
                 DiagCode::new(1013),
                 String::from("invalid number literal; expected digit(s) after base prefix"),
             ),
