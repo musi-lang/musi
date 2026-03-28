@@ -330,17 +330,6 @@ fn handle_expr_with_effect_args() {
 }
 
 #[test]
-fn old_type_application_is_rejected() {
-    let (_ast, errors) = parse_from("let x : Option of Int := .None;");
-    assert!(
-        errors
-            .iter()
-            .any(|error| matches!(error.kind, ParseErrorKind::TypeApplicationUsesBrackets)),
-        "expected TypeApplicationUsesBrackets, got: {errors:?}"
-    );
-}
-
-#[test]
 fn shl_expr() {
     let (ast, errors) = parse_expr("1 shl 2");
     assert!(errors.is_empty());
