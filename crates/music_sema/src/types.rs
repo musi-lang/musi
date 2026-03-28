@@ -55,6 +55,11 @@ pub enum Ty {
     // -- Class / effect references --
     Class(Symbol),
     Effect(Symbol),
+    EffectOp {
+        effect: Symbol,
+        op: Symbol,
+        ret: SemaTypeId,
+    },
 }
 
 #[cfg(test)]

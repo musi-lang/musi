@@ -180,6 +180,7 @@ fn occurs_check(env: &TypeEnv, var: TyVarId, ty: SemaTypeId) -> bool {
         Ty::App(base, args) => {
             occurs_check(env, var, *base) || args.iter().any(|&a| occurs_check(env, var, a))
         }
+        Ty::EffectOp { ret, .. } => occurs_check(env, var, *ret),
         Ty::Builtin(_)
         | Ty::Param(_)
         | Ty::Any

@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use music_il::format::{
-    self, ClassDescriptor, ClassInstance, ClassMethod, FfiType, ForeignAbi, ForeignDescriptor,
-    TypeDescriptor, TypeKind, HEADER_SIZE,
+    self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
+    FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind, HEADER_SIZE,
 };
 use music_il::opcode::Opcode;
 
@@ -41,6 +41,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
     let mut methods: Vec<Method> = Vec::new();
     let mut globals: Vec<GlobalDef> = Vec::new();
     let mut types: Vec<TypeDescriptor> = Vec::new();
+    let mut effects: Vec<EffectDescriptor> = Vec::new();
     let mut classes: Vec<ClassDescriptor> = Vec::new();
     let mut foreigns: Vec<ForeignDescriptor> = Vec::new();
 
@@ -78,6 +79,9 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
             format::section::CLSS => {
                 classes = decode_clss(section_data)?;
             }
+            format::section::EFCT => {
+                effects = decode_efct(section_data)?;
+            }
             format::section::FRGN => {
                 foreigns = decode_frgn(section_data)?;
             }
@@ -95,6 +99,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
         methods,
         globals,
         types,
+        effects,
         classes,
         foreigns,
     })
@@ -197,6 +202,14 @@ fn decode_cnst(
                     },
                 )?;
                 out.push(ConstantEntry::StringRef(str_idx));
+                pos = pos.wrapping_add(2);
+            }
+            0x04 => {
+                // Tag: 2-byte LE variant tag id
+                let bytes = read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?;
+                out.push(ConstantEntry::Value(Value::from_tag(u16::from_le_bytes(
+                    bytes,
+                ))));
                 pos = pos.wrapping_add(2);
             }
             other => return Err(LoadError::InvalidConstantTag { tag: other }),
@@ -313,17 +326,18 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::BrJmp
         | Opcode::BrBack
         | Opcode::ArrNew
-        | Opcode::EffNeed
         | Opcode::TyclDict
         | Opcode::FfiCall
         | Opcode::TyChk
         | Opcode::TyCast => Ok(2),
 
+        Opcode::EffNeed => Ok(4),
+
         // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
         Opcode::ClsNew | Opcode::ArrNewT => Ok(3),
 
-        // IndexedJump (u16 + i16) = 4 bytes
-        Opcode::EffPush => Ok(4),
+        // EffectJump (u16 + u16 + i16) = 6 bytes
+        Opcode::EffPush => Ok(6),
 
         // Variable: u16 count + count * i16
         Opcode::BrTbl => {
@@ -336,6 +350,54 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         // No operand
         _ => Ok(0),
     }
+}
+
+fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
+    let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
+    let count = usize::from(u16::from_le_bytes(count_bytes));
+    let mut pos = 2usize;
+    let mut out = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let id = u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+        pos = pos.wrapping_add(2);
+        let module_name = read_inline_string(data, &mut pos)?;
+        let name = read_inline_string(data, &mut pos)?;
+        let op_count =
+            usize::from(u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?));
+        pos = pos.wrapping_add(2);
+        let mut operations = Vec::with_capacity(op_count);
+        for _ in 0..op_count {
+            let op_id =
+                u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
+            pos = pos.wrapping_add(2);
+            let op_name = read_inline_string(data, &mut pos)?;
+            operations.push(EffectOpDescriptor {
+                id: op_id,
+                name: op_name,
+            });
+        }
+        out.push(EffectDescriptor {
+            id,
+            module_name,
+            name,
+            operations,
+        });
+    }
+
+    Ok(out)
+}
+
+fn read_inline_string(data: &[u8], pos: &mut usize) -> Result<String, LoadError> {
+    let len = usize::from(u16::from_le_bytes(
+        read_bytes::<2>(data, *pos).ok_or(LoadError::TruncatedSection)?,
+    ));
+    *pos = pos.wrapping_add(2);
+    let bytes = data
+        .get(*pos..pos.wrapping_add(len))
+        .ok_or(LoadError::TruncatedSection)?;
+    *pos = pos.wrapping_add(len);
+    Ok(String::from_utf8_lossy(bytes).into_owned())
 }
 
 fn decode_clss(data: &[u8]) -> Result<Vec<ClassDescriptor>, LoadError> {

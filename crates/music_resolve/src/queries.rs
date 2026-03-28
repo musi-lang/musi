@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use music_arena::Arena;
-use music_ast::common::{MemberDecl, ModifierSet, Param};
+use music_ast::common::{Constraint, MemberDecl, ModifierSet, Param};
 use music_ast::expr::{
     CaseArm, CompClause, DataBody, ExprKind, FStrPart, ImportKind, InstanceBody, LetBinding,
     PwGuard, QuoteKind, RecordField, SpliceKind,
@@ -248,19 +248,6 @@ impl ResolveDb {
                     span,
                 });
             }
-            Some(ResolvedImport::Builtin) => {
-                // musi: prefix -- builtins already seeded in scope.
-                // For qualified imports, bind the alias name.
-                if let ImportKind::Qualified(name) = kind {
-                    let _def = self.define_and_bind(
-                        name.name,
-                        name.span,
-                        DefKind::Import,
-                        Visibility::Private,
-                        self.module_scope,
-                    );
-                }
-            }
             Some(ResolvedImport::ReservedRegistry) => {
                 let span = self.db.ast.exprs.get(expr_id).span;
                 self.errors.push(ResolveError {
@@ -269,9 +256,10 @@ impl ResolveDb {
                 });
             }
             Some(ResolvedImport::File(file_path) | ResolvedImport::Git(file_path)) => {
-                let mod_id = self.graph.add_module(file_path);
+                let existing = self.graph.lookup(&file_path);
+                let mod_id = existing.unwrap_or_else(|| self.graph.add_module(file_path));
 
-                if self.graph.is_loading(mod_id) {
+                if existing.is_some() && self.graph.is_loading(mod_id) {
                     let span = self.db.ast.exprs.get(expr_id).span;
                     self.errors.push(ResolveError {
                         kind: ResolveErrorKind::CyclicImport(path),
@@ -309,18 +297,28 @@ impl ResolveDb {
                 );
             }
             ImportKind::Wildcard => {
-                for (&name_sym, &def_id) in &exports.exports {
-                    let _prev = self.resolution.scopes.get_mut(scope).bind(name_sym, def_id);
+                for imported in exports.exports.values() {
+                    let name_sym = self.db.interner.intern(&imported.name);
+                    let _ = self.define_and_bind(
+                        name_sym,
+                        Span::DUMMY,
+                        imported.kind,
+                        Visibility::Private,
+                        scope,
+                    );
                 }
             }
             ImportKind::Selective(_namespace, names) => {
                 for name in names {
-                    if let Some(&def_id) = exports.exports.get(&name.name) {
-                        let _prev = self
-                            .resolution
-                            .scopes
-                            .get_mut(scope)
-                            .bind(name.name, def_id);
+                    let selected = self.db.interner.resolve(name.name);
+                    if let Some(imported) = exports.exports.get(selected) {
+                        let _ = self.define_and_bind(
+                            name.name,
+                            Span::DUMMY,
+                            imported.kind,
+                            Visibility::Private,
+                            scope,
+                        );
                     }
                 }
             }
@@ -331,11 +329,22 @@ impl ResolveDb {
         let pat_node = self.db.ast.pats.get(binding.pat);
         if let PatKind::Bind(ident) = &pat_node.kind {
             let vis = visibility_from_modifiers(&binding.modifiers);
-            let kind = if binding.sig.is_some() {
-                DefKind::Function
-            } else {
-                DefKind::Value
-            };
+            let kind = binding
+                .value
+                .map(|value_id| match &self.db.ast.exprs.get(value_id).kind {
+                    ExprKind::EffectDef(_) => DefKind::Effect,
+                    ExprKind::ClassDef(_) => DefKind::TypeClass,
+                    ExprKind::DataDef(_) => DefKind::Type,
+                    _ if binding.sig.is_some() => DefKind::Function,
+                    _ => DefKind::Value,
+                })
+                .unwrap_or_else(|| {
+                    if binding.sig.is_some() {
+                        DefKind::Function
+                    } else {
+                        DefKind::Value
+                    }
+                });
             // Bind before resolving value so self-recursion works
             let _ = self.define_and_bind(ident.name, ident.span, kind, vis, scope);
         } else {
@@ -345,27 +354,57 @@ impl ResolveDb {
 
         // Resolve type annotations in the signature
         if let Some(sig) = &binding.sig {
+            let sig_scope = if sig.ty_params.is_empty() {
+                scope
+            } else {
+                let type_scope = self
+                    .resolution
+                    .scopes
+                    .push(ScopeKind::TypeParams, Some(scope));
+                for ty_param in &sig.ty_params {
+                    let _ = self.define_and_bind(
+                        ty_param.name,
+                        ty_param.span,
+                        DefKind::TypeParam,
+                        Visibility::Private,
+                        type_scope,
+                    );
+                }
+                type_scope
+            };
             for param in &sig.params {
                 if let Some(ty) = param.ty {
-                    self.resolve_ty(ty, scope);
+                    self.resolve_ty(ty, sig_scope);
                 }
             }
             if let Some(ret_ty) = sig.ret_ty {
-                self.resolve_ty(ret_ty, scope);
+                self.resolve_ty(ret_ty, sig_scope);
             }
-        }
-
-        if let Some(value) = binding.value {
-            if let Some(sig) = &binding.sig {
+            for constraint in &sig.constraints {
+                match constraint {
+                    Constraint::Implements { class, .. } | Constraint::Subtype { bound: class, .. } => {
+                        for arg in &class.args {
+                            self.resolve_ty(*arg, sig_scope);
+                        }
+                        if self.resolution.scopes.resolve(sig_scope, class.name.name).is_none() {
+                            self.errors.push(ResolveError {
+                                kind: ResolveErrorKind::UndefinedType(class.name.name),
+                                span: class.name.span,
+                            });
+                        }
+                    }
+                }
+            }
+            if let Some(value) = binding.value {
                 let fn_scope = self
                     .resolution
                     .scopes
-                    .push(ScopeKind::Function, Some(scope));
+                    .push(ScopeKind::Function, Some(sig_scope));
                 self.bind_params(&sig.params, fn_scope);
                 self.resolve_expr(value, fn_scope);
-            } else {
-                self.resolve_expr(value, scope);
             }
+        } else if let Some(value) = binding.value {
+            self.resolve_expr(value, scope);
         }
     }
 

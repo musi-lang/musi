@@ -12,6 +12,7 @@ music_shared = { path = "../music_shared" }
 music_arena = { path = "../music_arena" }
 music_ast = { path = "../music_ast" }
 music_builtins = { path = "../music_builtins" }
+music_config = { path = "../music_config" }
 music_db = { path = "../music_db" }
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }

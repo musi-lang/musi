@@ -12,7 +12,8 @@ use music_ast::{ExprId, ExprList, TyId};
 use music_builtins::types::BuiltinType;
 use music_hir::HirBundle;
 use music_il::format::{
-    self, ClassDescriptor, FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,
+    self, ClassDescriptor, EffectDescriptor, EffectOpDescriptor, FfiType, ForeignAbi,
+    ForeignDescriptor, TypeDescriptor, TypeKind,
 };
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
@@ -33,6 +34,7 @@ pub struct MethodEntry {
     pub name: Option<Symbol>,
     pub instructions: Vec<Instruction>,
     pub locals_count: u16,
+    pub absolute_global_loads: Vec<usize>,
 }
 
 /// A module-level global binding.
@@ -48,6 +50,7 @@ pub struct SeamModule {
     pub methods: Vec<MethodEntry>,
     pub globals: Vec<GlobalEntry>,
     pub types: Vec<TypeDescriptor>,
+    pub effects: Vec<EffectDescriptor>,
     pub classes: Vec<ClassDescriptor>,
     pub foreigns: Vec<ForeignDescriptor>,
 }
@@ -61,10 +64,13 @@ struct Emitter<'thir> {
     foreigns: Vec<ForeignDescriptor>,
     /// Maps binding names to their foreign descriptor index for `FfiCall` emission.
     foreign_globals: HashMap<Symbol, u16>,
-    /// Maps import path symbols to the global indices of that module's exports.
+    /// Maps imported binding names to merged global indices from dependency modules.
+    imported_globals: HashMap<String, u16>,
+    /// Maps import path symbols to the exported globals of that module.
     /// Populated by `emit_project` for multi-module compilation.
-    module_exports: HashMap<Symbol, Vec<u16>>,
+    module_exports: HashMap<Symbol, Vec<ImportedGlobal>>,
     current_instructions: Vec<Instruction>,
+    current_absolute_global_loads: Vec<usize>,
     current_locals: SymbolList,
     current_upvalues: SymbolList,
     /// Locals that are heap-boxed cells (captured mutable variables).
@@ -95,7 +101,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
 #[expect(clippy::implicit_hasher, reason = "always called with default HashMap")]
 pub fn emit_with_context(
     thir: &HirBundle,
-    module_exports: HashMap<Symbol, Vec<u16>>,
+    module_exports: HashMap<Symbol, Vec<ImportedGlobal>>,
 ) -> EmitResult<SeamModule> {
     let mut emitter = Emitter {
         thir,
@@ -104,12 +110,14 @@ pub fn emit_with_context(
         globals: Vec::new(),
         foreigns: Vec::new(),
         foreign_globals: HashMap::new(),
+        imported_globals: HashMap::new(),
         module_exports,
         current_instructions: Vec::new(),
+        current_absolute_global_loads: Vec::new(),
         current_locals: Vec::new(),
         current_upvalues: Vec::new(),
         cell_locals: HashSet::new(),
-        next_anon: u32::MAX,
+        next_anon: u32::MAX - 1,
     };
     emitter.emit_module()?;
     let types: Vec<TypeDescriptor> = BuiltinType::ALL
@@ -120,14 +128,22 @@ pub fn emit_with_context(
             member_count: 0,
         })
         .collect();
+    let effects = emitter.collect_effects();
     Ok(SeamModule {
         constants: emitter.pool,
         methods: emitter.methods,
         globals: emitter.globals,
         types,
+        effects,
         classes: Vec::new(),
         foreigns: emitter.foreigns,
     })
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportedGlobal {
+    pub name: String,
+    pub index: u16,
 }
 
 const fn instruction_byte_size(instr: &Instruction) -> usize {
@@ -136,8 +152,16 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
         Operand::U8(_) => 1,
         Operand::I16(_) | Operand::U16(_) => 2,
         Operand::Wide(_, _) | Operand::Tagged(_, _) => 3,
+        Operand::Effect(_, _) => 4,
         Operand::IndexedJump(_, _) => 4,
+        Operand::EffectJump(_, _, _) => 6,
         Operand::Table(offsets) => 2 + offsets.len() * 2,
+    }
+}
+
+const fn member_name_symbol(name: &MemberName) -> Symbol {
+    match name {
+        MemberName::Ident(ident) | MemberName::Op(ident, _) => ident.name,
     }
 }
 
@@ -147,6 +171,38 @@ const fn instruction_byte_size(instr: &Instruction) -> usize {
               these are compiler ICEs, not recoverable errors that belong in EmitError"
 )]
 impl Emitter<'_> {
+    fn collect_effects(&self) -> Vec<EffectDescriptor> {
+        self.thir
+            .type_env
+            .effect_order
+            .iter()
+            .filter_map(|effect_name| {
+                self.thir
+                    .type_env
+                    .effect_defs
+                    .get(effect_name)
+                    .map(|effect| EffectDescriptor {
+                        id: effect.id,
+                        module_name: effect.module_name.clone(),
+                        name: self
+                            .thir
+                            .db
+                            .interner
+                            .resolve(effect.name)
+                            .to_owned(),
+                        operations: effect
+                            .operations
+                            .iter()
+                            .map(|op| EffectOpDescriptor {
+                                id: op.id,
+                                name: self.thir.db.interner.resolve(op.name).to_owned(),
+                            })
+                            .collect(),
+                    })
+            })
+            .collect()
+    }
+
     fn emit_module(&mut self) -> EmitResult {
         let root = self.thir.db.ast.root.clone();
         for expr_id in root {
@@ -180,24 +236,42 @@ impl Emitter<'_> {
 
         if let Some(ref sig) = binding.sig {
             if let Some(body) = binding.value {
-                self.emit_function(name, &sig.params, body)?;
+                let global_idx = self.alloc_top_level_global(name, resolve_visibility(binding));
+                if sig.params.is_empty() {
+                    self.emit_expr(body)?;
+                    self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
+                } else {
+                    let method_idx = self.compile_function_method(Some(name), &sig.params, body)?;
+                    self.push(Instruction::with_wide(Opcode::ClsNew, method_idx, 0));
+                    self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
+                }
             }
         } else if let Some(value) = binding.value {
-            let global_idx = u16::try_from(self.globals.len()).expect("too many globals (>65535)");
-            let vis = resolve_visibility(binding);
-            self.globals.push(GlobalEntry {
-                name,
-                exported: vis == Visibility::Exported || vis == Visibility::Opaque,
-                opaque: vis == Visibility::Opaque,
-            });
+            let global_idx = self.alloc_top_level_global(name, resolve_visibility(binding));
             self.emit_expr(value)?;
             self.push(Instruction::with_u16(Opcode::StGlob, global_idx));
         }
         Ok(())
     }
 
-    fn emit_function(&mut self, name: Symbol, params: &[Param], body: ExprId) -> EmitResult {
+    fn alloc_top_level_global(&mut self, name: Symbol, vis: Visibility) -> u16 {
+        let global_idx = u16::try_from(self.globals.len()).expect("too many globals (>65535)");
+        self.globals.push(GlobalEntry {
+            name,
+            exported: vis == Visibility::Exported || vis == Visibility::Opaque,
+            opaque: vis == Visibility::Opaque,
+        });
+        global_idx
+    }
+
+    fn compile_function_method(
+        &mut self,
+        name: Option<Symbol>,
+        params: &[Param],
+        body: ExprId,
+    ) -> EmitResult<u16> {
         let saved_instructions = mem::take(&mut self.current_instructions);
+        let saved_absolute_global_loads = mem::take(&mut self.current_absolute_global_loads);
         let saved_locals = mem::take(&mut self.current_locals);
         let saved_cells = mem::take(&mut self.cell_locals);
 
@@ -210,13 +284,23 @@ impl Emitter<'_> {
 
         let locals_count =
             u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
+        let method_idx = u16::try_from(self.methods.len()).expect("too many methods (>65535)");
         self.methods.push(MethodEntry {
-            name: Some(name),
+            name,
             instructions: mem::replace(&mut self.current_instructions, saved_instructions),
             locals_count,
+            absolute_global_loads: mem::replace(
+                &mut self.current_absolute_global_loads,
+                saved_absolute_global_loads,
+            ),
         });
         self.current_locals = saved_locals;
         self.cell_locals = saved_cells;
+        Ok(method_idx)
+    }
+
+    fn emit_function(&mut self, name: Symbol, params: &[Param], body: ExprId) -> EmitResult {
+        let _ = self.compile_function_method(Some(name), params, body)?;
         Ok(())
     }
 
@@ -229,6 +313,7 @@ impl Emitter<'_> {
                 name: None,
                 instructions: mem::take(&mut self.current_instructions),
                 locals_count,
+                absolute_global_loads: mem::take(&mut self.current_absolute_global_loads),
             });
         }
     }
@@ -283,7 +368,7 @@ impl Emitter<'_> {
             ExprKind::Splice(ref sk) => self.emit_splice(sk)?,
             ExprKind::Import { path, ref kind } => self.emit_import(path, kind),
             ExprKind::DataDef(_) | ExprKind::EffectDef(_) | ExprKind::ClassDef(_) => {
-                // Type definitions have no runtime representation
+                self.push(Instruction::simple(Opcode::LdUnit));
             }
             ExprKind::Piecewise(_) => {
                 panic!("Piecewise should be lowered to Branch before emission")
@@ -342,6 +427,11 @@ impl Emitter<'_> {
             }
         } else if let Some(idx) = self.find_global(ident.name) {
             self.push(Instruction::with_u16(Opcode::LdGlob, idx));
+        } else if let Some(idx) = self
+            .imported_globals
+            .get(self.thir.db.interner.resolve(ident.name))
+        {
+            self.push_absolute_global_load(*idx);
         } else {
             panic!(
                 "unresolved variable: '{}'",
@@ -514,6 +604,18 @@ impl Emitter<'_> {
                     let slot = self.local_slot(ident.name);
                     self.emit_st_loc(slot);
                     let _inserted = self.cell_locals.insert(ident.name);
+                } else if let Some(ref sig) = binding.sig {
+                    if sig.params.is_empty() {
+                        self.emit_expr(value)?;
+                        let slot = self.local_slot(ident.name);
+                        self.emit_st_loc(slot);
+                    } else {
+                        let method_idx =
+                            self.compile_function_method(Some(ident.name), &sig.params, value)?;
+                        self.push(Instruction::with_wide(Opcode::ClsNew, method_idx, 0));
+                        let slot = self.local_slot(ident.name);
+                        self.emit_st_loc(slot);
+                    }
                 } else {
                     self.emit_expr(value)?;
                     let slot = self.local_slot(ident.name);
@@ -521,6 +623,7 @@ impl Emitter<'_> {
                 }
             }
         }
+        self.push(Instruction::simple(Opcode::LdUnit));
         Ok(())
     }
 
@@ -542,10 +645,16 @@ impl Emitter<'_> {
                 self.push(Instruction::with_u16(Opcode::LdUpv, u16::from(slot)));
             } else if let Some(idx) = self.find_global(cap) {
                 self.push(Instruction::with_u16(Opcode::LdGlob, idx));
+            } else if let Some(idx) = self
+                .imported_globals
+                .get(self.thir.db.interner.resolve(cap))
+            {
+                self.push_absolute_global_load(*idx);
             }
         }
 
         let saved_instructions = mem::take(&mut self.current_instructions);
+        let saved_absolute_global_loads = mem::take(&mut self.current_absolute_global_loads);
         let saved_locals = mem::take(&mut self.current_locals);
         let saved_upvalues = mem::take(&mut self.current_upvalues);
         let saved_cells = mem::take(&mut self.cell_locals);
@@ -569,11 +678,16 @@ impl Emitter<'_> {
             u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         let method_idx = u16::try_from(self.methods.len()).expect("too many methods (>65535)");
         let upval_count = u8::try_from(captured.len()).expect("too many upvalues (>255)");
+        let anon_name = self.alloc_anon_symbol();
 
         self.methods.push(MethodEntry {
-            name: params.first().map(|p| p.name.name),
+            name: Some(anon_name),
             instructions: mem::replace(&mut self.current_instructions, saved_instructions),
             locals_count,
+            absolute_global_loads: mem::replace(
+                &mut self.current_absolute_global_loads,
+                saved_absolute_global_loads,
+            ),
         });
         self.current_locals = saved_locals;
         self.current_upvalues = saved_upvalues;
@@ -665,138 +779,12 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    /// Tries to emit a `BrTbl`-based dispatch for a case expression where all
-    /// arms are variant patterns with known numeric tags and no guards.
-    ///
-    /// Returns `Some(())` if `BrTbl` was emitted, `None` to fall back to chained `BrFalse`.
-    fn collect_brtbl_arms(&self, arms: &[CaseArm]) -> Option<(Vec<(u16, usize)>, usize)> {
-        let mut tag_arms: Vec<(u16, usize)> = Vec::with_capacity(arms.len());
-        for (i, arm) in arms.iter().enumerate() {
-            if arm.guard.is_some() {
-                return None;
-            }
-            let pat_node = self.thir.db.ast.pats.get(arm.pat);
-            match &pat_node.kind {
-                PatKind::Variant { tag, .. } => {
-                    let tag_idx = *self.thir.type_env.variant_tags.get(&tag.name)?;
-                    tag_arms.push((tag_idx, i));
-                }
-                PatKind::Wildcard | PatKind::Bind(_) => {
-                    if i + 1 != arms.len() {
-                        return None;
-                    }
-                }
-                _ => return None,
-            }
-        }
-        if tag_arms.is_empty() {
-            return None;
-        }
-        let max_tag = tag_arms.iter().map(|&(t, _)| t).max().unwrap_or(0);
-        let table_size = usize::from(max_tag) + 1;
-        if table_size > 255 {
-            return None;
-        }
-        Some((tag_arms, table_size))
-    }
-
+    /// Variant branch-table dispatch is disabled until user-defined variants
+    /// have a real numeric tag ABI in the VM. Current runtime matching uses
+    /// string tags, so `BrTbl` would misdispatch.
     fn try_emit_brtbl_case(&mut self, arms: &[CaseArm]) -> EmitResult<Option<()>> {
-        let Some((tag_arms, table_size)) = self.collect_brtbl_arms(arms) else {
-            return Ok(None);
-        };
-
-        // Emit ArrTag to get the numeric tag from the scrutinee (already on stack)
-        self.push(Instruction::simple(Opcode::Dup));
-        self.push(Instruction::simple(Opcode::ArrTag));
-
-        // Emit BrTbl placeholder — offsets will be patched
-        let brtbl_pos = self.current_instructions.len();
-        self.push(Instruction::with_table(
-            Opcode::BrTbl,
-            vec![0i16; table_size],
-        ));
-
-        // Default path (for tags not in the table or wildcard arm): Panic or last arm
-        let has_default = {
-            let last = arms.last().unwrap();
-            let pat = self.thir.db.ast.pats.get(last.pat);
-            matches!(pat.kind, PatKind::Wildcard | PatKind::Bind(_))
-        };
-
-        let default_start = self.current_instructions.len();
-        if has_default {
-            let last_arm = arms.last().unwrap();
-            let pat = self.thir.db.ast.pats.get(last_arm.pat);
-            if let PatKind::Bind(ident) = &pat.kind {
-                let slot = self.local_slot(ident.name);
-                self.emit_st_loc(slot);
-            } else {
-                self.push(Instruction::simple(Opcode::Pop));
-            }
-            self.emit_expr(last_arm.body)?;
-        } else {
-            self.push(Instruction::simple(Opcode::Panic));
-        }
-        let end_jump_default = self.placeholder_jump(Opcode::BrJmp);
-
-        // Emit each variant arm's code and record its start position
-        let mut arm_starts: HashMap<usize, usize> = HashMap::new();
-        let mut end_jumps = Vec::new();
-
-        for &(_, arm_idx) in &tag_arms {
-            let arm = &arms[arm_idx];
-            let _prev = arm_starts.insert(arm_idx, self.current_instructions.len());
-
-            let pat_node = self.thir.db.ast.pats.get(arm.pat);
-            if let PatKind::Variant { fields, .. } = &pat_node.kind {
-                for (fi, &field_pat) in fields.iter().enumerate() {
-                    let field_pat_node = self.thir.db.ast.pats.get(field_pat);
-                    if let PatKind::Bind(field_ident) = &field_pat_node.kind {
-                        self.push(Instruction::simple(Opcode::Dup));
-                        let field_u8 = u8::try_from(fi).expect("too many fields (>255)");
-                        self.push(Instruction::with_u8(Opcode::ArrGetI, field_u8));
-                        let slot = self.local_slot(field_ident.name);
-                        self.emit_st_loc(slot);
-                    }
-                }
-            }
-            self.push(Instruction::simple(Opcode::Pop));
-            self.emit_expr(arm.body)?;
-            end_jumps.push(self.placeholder_jump(Opcode::BrJmp));
-        }
-
-        // Patch BrTbl offsets: each entry points to the arm code or default
-        let mut offsets = vec![0i16; table_size];
-        for &(tag_idx, arm_idx) in &tag_arms {
-            let arm_start = arm_starts[&arm_idx];
-            let byte_offset: usize = self.current_instructions[brtbl_pos + 1..arm_start]
-                .iter()
-                .map(instruction_byte_size)
-                .sum();
-            offsets[usize::from(tag_idx)] =
-                i16::try_from(byte_offset).expect("BrTbl offset too far");
-        }
-        // Default entries point to the default path
-        let default_byte_offset: usize = self.current_instructions[brtbl_pos + 1..default_start]
-            .iter()
-            .map(instruction_byte_size)
-            .sum();
-        let default_offset =
-            i16::try_from(default_byte_offset).expect("BrTbl default offset too far");
-        for (i, offset) in offsets.iter_mut().enumerate() {
-            if !tag_arms.iter().any(|&(t, _)| usize::from(t) == i) {
-                *offset = default_offset;
-            }
-        }
-        self.current_instructions[brtbl_pos] = Instruction::with_table(Opcode::BrTbl, offsets);
-
-        // Patch all end jumps (including default)
-        self.patch_jump(end_jump_default);
-        for ej in end_jumps {
-            self.patch_jump(ej);
-        }
-
-        Ok(Some(()))
+        let _ = arms;
+        Ok(None)
     }
 
     fn emit_guard_and_body(
@@ -918,12 +906,15 @@ impl Emitter<'_> {
         end_jumps: &mut Vec<usize>,
     ) -> EmitResult {
         self.push(Instruction::simple(Opcode::Dup));
-        self.push(Instruction::simple(Opcode::ArrTag));
-
-        let tag_idx = self.pool.add(ConstantEntry::Str(
-            self.thir.db.interner.resolve(tag.name).into(),
-        ));
-        self.push(Instruction::with_u16(Opcode::LdConst, tag_idx));
+        if let Some(opcode) = self.builtin_bool_variant_opcode(tag.name) {
+            self.push(Instruction::simple(opcode));
+        } else {
+            let const_idx = self.pool.add(ConstantEntry::Str(
+                self.thir.db.interner.resolve(tag.name).into(),
+            ));
+            self.push(Instruction::simple(Opcode::ArrTag));
+            self.push(Instruction::with_u16(Opcode::LdConst, const_idx));
+        }
         self.push(Instruction::simple(Opcode::CmpEq));
 
         let next_arm = if is_last {
@@ -980,13 +971,11 @@ impl Emitter<'_> {
             return Ok(());
         }
 
-        let tag_byte = if let Some(info) = self.thir.variant_info(expr_id) {
-            u8::try_from(info.tag_index).expect("variant tag index overflow (>255)")
-        } else {
-            let tag_name = self.thir.db.interner.resolve(tag.name);
-            let tag_idx = self.pool.add(ConstantEntry::Str(tag_name.into()));
-            u8::try_from(tag_idx & 0xFF).expect("tag index overflow")
-        };
+        let tag_idx = self.pool.add(ConstantEntry::Str(
+            self.thir.db.interner.resolve(tag.name).to_owned(),
+        ));
+        let tag_byte =
+            u8::try_from(tag_idx).expect("variant tag constant index overflow (>255)");
 
         let len = u16::try_from(args.len()).expect("too many variant args (>65535)");
         self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, len));
@@ -1009,6 +998,8 @@ impl Emitter<'_> {
             FieldTarget::Name(ref ident) => {
                 if let Some(idx) = self.resolve_field_index(expr, ident.name) {
                     self.push(Instruction::with_u8(Opcode::ArrGetI, idx));
+                } else if self.is_len_access(expr, ident.name) {
+                    self.push(Instruction::simple(Opcode::ArrLen));
                 } else {
                     return Err(EmitError::Unimplemented("named field access on non-record"));
                 }
@@ -1039,6 +1030,21 @@ impl Emitter<'_> {
     }
 
     fn emit_array_lit(&mut self, elems: &ExprList) -> EmitResult {
+        if elems.iter().any(|&elem| self.is_spread_expr(elem)) {
+            self.push(Instruction::with_u16(Opcode::ArrNew, 0));
+            for &elem in elems {
+                if let Some(inner) = self.spread_expr_operand(elem) {
+                    self.emit_expr(inner)?;
+                } else {
+                    self.push(Instruction::with_u16(Opcode::ArrNew, 1));
+                    self.emit_expr(elem)?;
+                    self.push(Instruction::with_u8(Opcode::ArrSetI, 0));
+                }
+                self.push(Instruction::simple(Opcode::ArrCaten));
+            }
+            return Ok(());
+        }
+
         let len = u16::try_from(elems.len()).expect("too many array elements (>65535)");
         self.push(Instruction::with_u16(Opcode::ArrNew, len));
         for (i, &elem) in elems.iter().enumerate() {
@@ -1110,15 +1116,40 @@ impl Emitter<'_> {
     }
 
     fn emit_need(&mut self, expr_id: ExprId, operand: ExprId) -> EmitResult {
-        self.emit_expr(operand)?;
-        let effect_id = self
+        match self.thir.db.ast.exprs.get(operand).kind.clone() {
+            ExprKind::App(_, args) => {
+                if args.is_empty() {
+                    self.push(Instruction::simple(Opcode::LdUnit));
+                } else if args.len() == 1 {
+                    self.emit_expr(args[0])?;
+                } else {
+                    self.push(Instruction::with_u16(
+                        Opcode::ArrNew,
+                        u16::try_from(args.len()).expect("too many effect arguments (>65535)"),
+                    ));
+                    for (i, arg) in args.iter().enumerate() {
+                        self.emit_expr(*arg)?;
+                        self.push(Instruction::with_u8(
+                            Opcode::ArrSetI,
+                            u8::try_from(i).expect("too many effect arguments (>255)"),
+                        ));
+                    }
+                }
+            }
+            _ => self.emit_expr(operand)?,
+        }
+        let effect_use = self
             .thir
             .type_env
             .need_effects
             .get(&expr_id)
             .copied()
-            .unwrap_or(0);
-        self.push(Instruction::with_u16(Opcode::EffNeed, effect_id));
+            .expect("missing effect metadata for need expression");
+        self.push(Instruction::with_effect(
+            Opcode::EffNeed,
+            effect_use.effect_id,
+            effect_use.op_id,
+        ));
         Ok(())
     }
 
@@ -1129,31 +1160,41 @@ impl Emitter<'_> {
             .handle_effects
             .get(&expr_id)
             .copied()
-            .unwrap_or(0);
-        let pos = self.current_instructions.len();
-        self.push(Instruction::with_indexed_jump(
-            Opcode::EffPush,
-            effect_id,
-            0,
-        ));
+            .expect("missing effect metadata for handle expression");
 
         for handler in handlers {
+            let op_name = member_name_symbol(&handler.name);
+            let op_id = self
+                .thir
+                .type_env
+                .effect_by_id(effect_id)
+                .and_then(|effect| effect.operations.iter().find(|op| op.name == op_name))
+                .map(|op| op.id)
+                .expect("missing effect operation metadata for handler");
+            let pos = self.current_instructions.len();
+            self.push(Instruction::with_effect_jump(
+                Opcode::EffPush,
+                effect_id,
+                op_id,
+                0,
+            ));
             if let Some(handler_body) = handler.body {
                 self.emit_expr(handler_body)?;
             }
+            let current = self.current_instructions.len();
+            let byte_offset: usize = self.current_instructions[pos + 1..current]
+                .iter()
+                .map(instruction_byte_size)
+                .sum();
+            let offset = i16::try_from(byte_offset).expect("jump too far");
+            self.current_instructions[pos] =
+                Instruction::with_effect_jump(Opcode::EffPush, effect_id, op_id, offset);
         }
 
-        let current = self.current_instructions.len();
-        let byte_offset: usize = self.current_instructions[pos + 1..current]
-            .iter()
-            .map(instruction_byte_size)
-            .sum();
-        let offset = i16::try_from(byte_offset).expect("jump too far");
-        self.current_instructions[pos] =
-            Instruction::with_indexed_jump(Opcode::EffPush, effect_id, offset);
-
         self.emit_expr(body)?;
-        self.push(Instruction::simple(Opcode::EffPop));
+        for _ in handlers {
+            self.push(Instruction::simple(Opcode::EffPop));
+        }
         Ok(())
     }
 
@@ -1311,41 +1352,60 @@ impl Emitter<'_> {
 
     /// Emit code for an import expression.
     ///
-    /// - `Wildcard`: no-op (resolver already inlined exports into scope)
+    /// - `Wildcard`: register imported globals under their local names
     /// - `Qualified(alias)`: construct a record of the module's exported globals
     /// - `Selective(alias, names)`: same as qualified but only selected names
     fn emit_import(&mut self, path: Symbol, kind: &ImportKind) {
         match kind {
             ImportKind::Wildcard => {
-                // Resolver already inlined all exports into scope. No runtime code.
+                if let Some(imports) = self.module_exports.get(&path) {
+                    for imported in imports {
+                        let _prev = self
+                            .imported_globals
+                            .insert(imported.name.clone(), imported.index);
+                    }
+                }
             }
             ImportKind::Qualified(alias) => {
-                let global_indices = self.module_exports.get(&path).cloned().unwrap_or_default();
+                let global_indices = self
+                    .module_exports
+                    .get(&path)
+                    .cloned()
+                    .unwrap_or_default();
                 self.emit_import_record(alias.name, &global_indices);
             }
-            ImportKind::Selective(alias, _names) => {
-                // For selective imports, we still build a record but only include
-                // the selected names. Since we don't have name-to-index mapping
-                // at the individual name level yet, use all exports if available.
-                // The resolver ensures only the selected names are in scope.
-                let global_indices = self.module_exports.get(&path).cloned().unwrap_or_default();
-                self.emit_import_record(alias.name, &global_indices);
+            ImportKind::Selective(alias, names) => {
+                let selected = self
+                    .module_exports
+                    .get(&path)
+                    .map(|imports| {
+                        imports
+                            .iter()
+                            .filter(|imported| {
+                                names.iter().any(|name| {
+                                    self.thir.db.interner.resolve(name.name) == imported.name
+                                })
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                self.emit_import_record(alias.name, &selected);
             }
         }
     }
 
     /// Emit bytecode to construct a record (array) of imported globals and
     /// store it in the alias's local slot.
-    fn emit_import_record(&mut self, alias: Symbol, global_indices: &[u16]) {
-        if global_indices.is_empty() {
+    fn emit_import_record(&mut self, alias: Symbol, globals: &[ImportedGlobal]) {
+        if globals.is_empty() {
             // No exports resolved -- emit an empty record.
             self.push(Instruction::with_u16(Opcode::ArrNew, 0));
         } else {
-            let field_count =
-                u16::try_from(global_indices.len()).expect("too many import exports (>65535)");
+            let field_count = u16::try_from(globals.len()).expect("too many import exports (>65535)");
             self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
-            for (i, &global_idx) in global_indices.iter().enumerate() {
-                self.push(Instruction::with_u16(Opcode::LdGlob, global_idx));
+            for (i, imported) in globals.iter().enumerate() {
+                self.push_absolute_global_load(imported.index);
                 let field_idx = u8::try_from(i).expect("too many import fields (>255)");
                 self.push(Instruction::with_u8(Opcode::ArrSetI, field_idx));
             }
@@ -1355,11 +1415,16 @@ impl Emitter<'_> {
     }
 
     fn alloc_anon_slot(&mut self) -> u16 {
-        let sym = Symbol::synthetic(self.next_anon);
-        self.next_anon = self.next_anon.wrapping_sub(1);
+        let sym = self.alloc_anon_symbol();
         let slot = u16::try_from(self.current_locals.len()).expect("too many locals (>65535)");
         self.current_locals.push(sym);
         slot
+    }
+
+    fn alloc_anon_symbol(&mut self) -> Symbol {
+        let sym = Symbol::synthetic(self.next_anon);
+        self.next_anon = self.next_anon.wrapping_sub(1);
+        sym
     }
 
     fn emit_comprehension(&mut self, body: ExprId, clauses: &[CompClause]) -> EmitResult {
@@ -1700,7 +1765,7 @@ impl Emitter<'_> {
                 "Float" | "Float32" | "Float64" => FfiType::Float,
                 "Bool" => FfiType::Bool,
                 "Unit" => FfiType::Void,
-                "CString" => FfiType::Str,
+                "String" | "CString" => FfiType::Str,
                 // CPtr and unknown types default to Ptr
                 _ => FfiType::Ptr,
             }
@@ -1737,6 +1802,12 @@ impl Emitter<'_> {
         self.current_instructions.push(instruction);
     }
 
+    fn push_absolute_global_load(&mut self, index: u16) {
+        let position = self.current_instructions.len();
+        self.current_absolute_global_loads.push(position);
+        self.push(Instruction::with_u16(Opcode::LdGlob, index));
+    }
+
     fn local_slot(&mut self, name: Symbol) -> u16 {
         if let Some(slot) = self.find_local(name) {
             return slot;
@@ -1766,6 +1837,42 @@ impl Emitter<'_> {
             self.push(Instruction::with_u8(Opcode::StLoc, s));
         } else {
             self.push(Instruction::with_u16(Opcode::StLocW, slot));
+        }
+    }
+
+    fn is_spread_expr(&self, expr_id: ExprId) -> bool {
+        matches!(
+            self.thir.db.ast.exprs.get(expr_id).kind,
+            ExprKind::UnaryOp(UnaryOp::Spread, _)
+        )
+    }
+
+    fn spread_expr_operand(&self, expr_id: ExprId) -> Option<ExprId> {
+        match self.thir.db.ast.exprs.get(expr_id).kind {
+            ExprKind::UnaryOp(UnaryOp::Spread, inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    fn is_len_access(&self, expr_id: ExprId, field: Symbol) -> bool {
+        if self.thir.db.interner.resolve(field) != "len" {
+            return false;
+        }
+
+        let Some(expr_ty) = self.thir.expr_type(expr_id) else {
+            return true;
+        };
+        matches!(
+            self.thir.type_env.types.get(self.thir.type_env.resolve_var(expr_ty)),
+            Ty::Array(_) | Ty::Builtin(BuiltinType::String) | Ty::Any | Ty::Unknown | Ty::Var(_)
+        )
+    }
+
+    fn builtin_bool_variant_opcode(&self, tag: Symbol) -> Option<Opcode> {
+        match self.thir.db.interner.resolve(tag) {
+            "True" => Some(Opcode::LdTru),
+            "False" => Some(Opcode::LdFls),
+            _ => None,
         }
     }
 

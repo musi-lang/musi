@@ -158,6 +158,12 @@ fn lambda_produces_arrow() {
 }
 
 #[test]
+fn zero_arg_lambda_can_be_called() {
+    let (_, errors) = check_source("let f := () => 1; f()");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+}
+
+#[test]
 fn assign_produces_unit() {
     let (env, errors) = check_source("let mut x := 1; x <- 2");
     assert!(errors.is_empty(), "unexpected errors: {errors:?}");
@@ -518,6 +524,18 @@ fn foreign_let_valid_ffi_types() {
     assert!(
         !has_ffi_error,
         "Int and Float are FFI-compatible, should not error: {errors:?}"
+    );
+}
+
+#[test]
+fn foreign_let_accepts_string_ffi_type() {
+    let (_, errors) = check_source("foreign \"C\" let _f (x : String) : String");
+    let has_ffi_error = errors
+        .iter()
+        .any(|e| matches!(e.kind, SemaErrorKind::IncompatibleFfiType { .. }));
+    assert!(
+        !has_ffi_error,
+        "String should be FFI-compatible for text host bridges: {errors:?}"
     );
 }
 

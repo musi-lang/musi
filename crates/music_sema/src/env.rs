@@ -36,6 +36,28 @@ pub struct VariantInfo {
     pub arity: u8,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectOpInfo {
+    pub id: u16,
+    pub name: Symbol,
+    pub param_ty: Option<SemaTypeId>,
+    pub ret_ty: SemaTypeId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectDefInfo {
+    pub id: u16,
+    pub name: Symbol,
+    pub module_name: String,
+    pub operations: Vec<EffectOpInfo>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectUse {
+    pub effect_id: u16,
+    pub op_id: u16,
+}
+
 /// Central type-checking environment.
 ///
 /// Owns the type arena, unification variable bindings, and maps from AST
@@ -49,14 +71,14 @@ pub struct TypeEnv {
     pub builtin_types: HashMap<BuiltinType, SemaTypeId>,
     /// Registered type class instances: `(class, type) -> entry`.
     pub instances: HashMap<(Symbol, Symbol), InstanceEntry>,
-    /// Effect name -> operation names.
-    pub effect_ops: HashMap<Symbol, SymbolList>,
-    /// Effect name -> stable numeric ID (assigned in declaration order).
-    pub effect_indices: HashMap<Symbol, u16>,
+    /// Effect name -> semantic metadata for the current module.
+    pub effect_defs: HashMap<Symbol, EffectDefInfo>,
+    /// Effects in deterministic local-ID order.
+    pub effect_order: SymbolList,
     /// Handle `ExprId` -> effect ID for the handler.
     pub handle_effects: HashMap<ExprId, u16>,
-    /// Need `ExprId` -> effect ID being invoked.
-    pub need_effects: HashMap<ExprId, u16>,
+    /// Need `ExprId` -> explicit effect operation being invoked.
+    pub need_effects: HashMap<ExprId, EffectUse>,
     /// Variant literal `ExprId` -> resolved parent type and tag index.
     pub variant_info: HashMap<ExprId, VariantInfo>,
     /// Stable class IDs for type class dispatch in the emitter.
@@ -69,6 +91,7 @@ pub struct TypeEnv {
     pub captured_mutable_names: HashSet<Symbol>,
     next_var: TyVarId,
     next_effect_idx: u16,
+    next_effect_op_idx: HashMap<u16, u16>,
     next_class_id: u16,
 }
 
@@ -94,8 +117,8 @@ impl TypeEnv {
             dispatch: HashMap::with_capacity(hint / 4),
             builtin_types: HashMap::with_capacity(32),
             instances: HashMap::new(),
-            effect_ops: HashMap::new(),
-            effect_indices: HashMap::new(),
+            effect_defs: HashMap::new(),
+            effect_order: Vec::new(),
             handle_effects: HashMap::new(),
             need_effects: HashMap::new(),
             variant_info: HashMap::with_capacity(hint / 8),
@@ -105,6 +128,7 @@ impl TypeEnv {
             captured_mutable_names: HashSet::new(),
             next_var: 0,
             next_effect_idx: 0,
+            next_effect_op_idx: HashMap::new(),
             next_class_id: 0,
         }
     }
@@ -179,12 +203,126 @@ impl TypeEnv {
 
     /// Returns the stable numeric ID for an effect, assigning one if first seen.
     pub fn assign_effect_id(&mut self, name: Symbol) -> u16 {
-        let next = &mut self.next_effect_idx;
-        *self.effect_indices.entry(name).or_insert_with(|| {
-            let id = *next;
-            *next = next.wrapping_add(1);
-            id
+        if let Some(effect) = self.effect_defs.get(&name) {
+            return effect.id;
+        }
+        let id = self.next_effect_idx;
+        self.next_effect_idx = self.next_effect_idx.wrapping_add(1);
+        self.effect_order.push(name);
+        let _ = self.effect_defs.insert(
+            name,
+            EffectDefInfo {
+                id,
+                name,
+                module_name: String::new(),
+                operations: Vec::new(),
+            },
+        );
+        id
+    }
+
+    pub fn set_effect_module_name(&mut self, name: Symbol, module_name: String) {
+        let effect_id = self.assign_effect_id(name);
+        let effect = self
+            .effect_defs
+            .entry(name)
+            .or_insert_with(|| EffectDefInfo {
+                id: effect_id,
+                name,
+                module_name: String::new(),
+                operations: Vec::new(),
+            });
+        effect.module_name = module_name;
+    }
+
+    pub fn register_effect_ops(
+        &mut self,
+        effect_name: Symbol,
+        operations: Vec<(Symbol, Option<SemaTypeId>, SemaTypeId)>,
+    ) -> u16 {
+        let effect_id = self.assign_effect_id(effect_name);
+        let next_op = self.next_effect_op_idx.entry(effect_id).or_insert(0);
+        let effect = self
+            .effect_defs
+            .entry(effect_name)
+            .or_insert_with(|| EffectDefInfo {
+                id: effect_id,
+                name: effect_name,
+                module_name: String::new(),
+                operations: Vec::new(),
+            });
+        effect.operations.clear();
+        for (op_name, param_ty, ret_ty) in operations {
+            let op_id = *next_op;
+            *next_op = next_op.wrapping_add(1);
+            effect.operations.push(EffectOpInfo {
+                id: op_id,
+                name: op_name,
+                param_ty,
+                ret_ty,
+            });
+        }
+        effect_id
+    }
+
+    pub fn ensure_effect_op(
+        &mut self,
+        effect_name: Symbol,
+        op_name: Symbol,
+        ret_ty: SemaTypeId,
+    ) -> EffectUse {
+        if let Some(existing) = self.resolve_effect_op(effect_name, op_name) {
+            return existing;
+        }
+        let effect_id = self.assign_effect_id(effect_name);
+        let next_op = self.next_effect_op_idx.entry(effect_id).or_insert(0);
+        let op_id = *next_op;
+        *next_op = next_op.wrapping_add(1);
+        let effect = self
+            .effect_defs
+            .entry(effect_name)
+            .or_insert_with(|| EffectDefInfo {
+                id: effect_id,
+                name: effect_name,
+                module_name: String::new(),
+                operations: Vec::new(),
+            });
+        effect.operations.push(EffectOpInfo {
+            id: op_id,
+            name: op_name,
+            param_ty: None,
+            ret_ty,
+        });
+        EffectUse { effect_id, op_id }
+    }
+
+    #[must_use]
+    pub fn effect_by_id(&self, effect_id: u16) -> Option<&EffectDefInfo> {
+        self.effect_order
+            .iter()
+            .filter_map(|name| self.effect_defs.get(name))
+            .find(|effect| effect.id == effect_id)
+    }
+
+    #[must_use]
+    pub fn resolve_effect_op(&self, effect_name: Symbol, op_name: Symbol) -> Option<EffectUse> {
+        self.effect_defs.get(&effect_name).and_then(|effect| {
+            effect
+                .operations
+                .iter()
+                .find(|op| op.name == op_name)
+                .map(|op| EffectUse {
+                    effect_id: effect.id,
+                    op_id: op.id,
+                })
         })
+    }
+
+    #[must_use]
+    pub fn effect_op_info(&self, effect_name: Symbol, op_name: Symbol) -> Option<&EffectOpInfo> {
+        self.effect_defs
+            .get(&effect_name)
+            .and_then(|effect| effect.operations.iter().find(|op| op.name == op_name))
     }
 
     /// Returns the stable numeric ID for a type class, assigning one if first seen.

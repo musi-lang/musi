@@ -2,7 +2,7 @@ use std::fmt;
 
 /// Primitive types known to the compiler before any user code is parsed.
 ///
-/// Each variant corresponds to a type declared in `std/prelude/mod.ms`.
+/// Each variant corresponds to a type declared in `crates/music_builtins/prelude.ms`.
 /// The compiler erases these to NaN-box tags or heap pointers at codegen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinType {
@@ -20,6 +20,8 @@ pub enum BuiltinType {
     Rune,
     // Collections
     String,
+    CString,
+    CPtr,
     Array,
     List,
     // Sized integers
@@ -51,6 +53,8 @@ impl BuiltinType {
         Self::Float,
         Self::Rune,
         Self::String,
+        Self::CString,
+        Self::CPtr,
         Self::Array,
         Self::List,
         Self::Int8,
@@ -80,6 +84,8 @@ impl BuiltinType {
             Self::Float => "Float",
             Self::Rune => "Rune",
             Self::String => "String",
+            Self::CString => "CString",
+            Self::CPtr => "CPtr",
             Self::Array => "Array",
             Self::List => "List",
             Self::Int8 => "Int8",
@@ -111,6 +117,8 @@ impl BuiltinType {
             Self::Int => 0xFFF6,
             Self::Float => 0xFFF7,
             Self::String => 0xFFF8,
+            Self::CString => 0xFFF9,
+            Self::CPtr => 0xFFFA,
             Self::Nat => 0xFFE0,
             Self::Rune => 0xFFE1,
             Self::Array => 0xFFE2,
@@ -152,8 +160,10 @@ impl BuiltinType {
             Self::Unit => Some(0b011),
             Self::Rune => Some(0b101),
             Self::Float | Self::Float32 | Self::Float64 => None,
-            // Heap-allocated: String, Array, List, Empty, Type, Any, Unknown
+            // Heap-allocated: strings, arrays, lists, opaque pointers, intrinsics
             Self::String
+            | Self::CString
+            | Self::CPtr
             | Self::Array
             | Self::List
             | Self::Empty

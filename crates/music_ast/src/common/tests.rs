@@ -146,11 +146,11 @@ fn ty_ref_clone_eq() {
 #[test]
 fn effect_item_construction() {
     let (_i, ident) = test_ident();
-    let ei = EffectItem {
+    let ei = EffectItem::Named {
         name: ident,
         arg: Some(dummy_ty_id()),
     };
-    assert!(ei.arg.is_some());
+    assert!(matches!(ei, EffectItem::Named { arg: Some(_), .. }));
 }
 
 #[test]

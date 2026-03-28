@@ -3,7 +3,7 @@
 use music_il::format::{FfiType, ForeignDescriptor};
 use music_il::opcode::Opcode;
 
-use super::Vm;
+use super::{HostEffectHandler, Vm};
 use crate::errors::VmError;
 use crate::module::{ConstantEntry, GlobalDef, Method, Module, ENTRY_POINT_NAME};
 use crate::value::Value;
@@ -23,6 +23,7 @@ fn module_with_code(code: Vec<u8>) -> Module {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -39,6 +40,7 @@ fn module_with_locals(locals: u16, code: Vec<u8>) -> Module {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -55,6 +57,7 @@ fn module_with_constants_and_code(constants: Vec<ConstantEntry>, code: Vec<u8>) 
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -75,6 +78,7 @@ fn module_with_strings_and_code(
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -232,6 +236,7 @@ fn no_entry_point_error() {
         methods: Vec::new(),
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };
@@ -301,6 +306,7 @@ fn two_method_module_locals(
         ],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -380,6 +386,7 @@ fn call_nested() {
         ],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };
@@ -433,11 +440,54 @@ fn globals_store_load() {
             opaque: false,
         }],
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };
     let mut vm = Vm::new(module);
     assert_eq!(vm.run().unwrap().as_int(), 77);
+}
+
+#[test]
+fn run_executes_all_entrypoints_in_order() {
+    let first = vec![
+        op(Opcode::LdSmi),
+        10,
+        0,
+        op(Opcode::StGlob),
+        0,
+        0,
+        op(Opcode::Halt),
+    ];
+    let second = vec![op(Opcode::LdGlob), 0, 0, op(Opcode::Halt)];
+    let module = Module {
+        constants: Vec::new(),
+        strings: Vec::new(),
+        methods: vec![
+            Method {
+                name: ENTRY_POINT_NAME,
+                locals_count: 0,
+                code: first,
+            },
+            Method {
+                name: ENTRY_POINT_NAME,
+                locals_count: 0,
+                code: second,
+            },
+        ],
+        globals: vec![GlobalDef {
+            name: 0,
+            exported: false,
+            opaque: false,
+        }],
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    };
+
+    let mut vm = Vm::new(module);
+    assert_eq!(vm.run().unwrap().as_int(), 10);
 }
 
 #[test]
@@ -500,11 +550,13 @@ fn call_stack_overflow() {
 
 #[test]
 fn effect_push_pop() {
-    // EffPush: u16 effect_id=0 + i16 skip=5
+    // EffPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5 bytes (handler body)
         op(Opcode::LdSmi),
@@ -527,6 +579,8 @@ fn effect_need_resume() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -538,6 +592,8 @@ fn effect_need_resume() {
         0,
         0,
         op(Opcode::EffNeed),
+        0,
+        0,
         0,
         0,
         op(Opcode::Halt),
@@ -551,6 +607,8 @@ fn effect_nested() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -561,6 +619,8 @@ fn effect_nested() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -572,6 +632,8 @@ fn effect_nested() {
         0,
         0,
         op(Opcode::EffNeed),
+        0,
+        0,
         0,
         0,
         op(Opcode::EffPop),
@@ -589,6 +651,8 @@ fn effect_dispatch_by_id() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5 (LdSmi + EffCont)
         op(Opcode::LdSmi),
@@ -599,6 +663,8 @@ fn effect_dispatch_by_id() {
         op(Opcode::EffPush),
         1,
         0, // effect_id = 1
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -611,7 +677,9 @@ fn effect_dispatch_by_id() {
         0,
         op(Opcode::EffNeed),
         0,
-        0,                  // effect_id = 0 -> should find Handler A
+        0,
+        0,
+        0,                  // effect_id = 0, op_id = 0 -> should find Handler A
         op(Opcode::EffPop), // clean up Handler B
         op(Opcode::Halt),
     ]));
@@ -627,6 +695,8 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -637,6 +707,8 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::EffPush),
         1,
         0, // effect_id = 1
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -649,7 +721,9 @@ fn effect_dispatch_skips_wrong_handler() {
         0,
         op(Opcode::EffNeed),
         1,
-        0,                  // effect_id = 1 -> should find Handler B
+        0,
+        0,
+        0,                  // effect_id = 1, op_id = 0 -> should find Handler B
         op(Opcode::EffPop), // clean up Handler A
         op(Opcode::Halt),
     ]));
@@ -663,6 +737,8 @@ fn effect_no_matching_handler() {
         op(Opcode::EffPush),
         0,
         0, // effect_id = 0
+        0,
+        0, // op_id = 0
         5,
         0, // skip = 5
         op(Opcode::LdSmi),
@@ -675,10 +751,47 @@ fn effect_no_matching_handler() {
         0,
         op(Opcode::EffNeed),
         99,
-        0, // effect_id = 99 -> no match
+        0,
+        0,
+        0, // effect_id = 99, op_id = 0 -> no match
         op(Opcode::Halt),
     ]));
     assert!(matches!(vm.run(), Err(VmError::NoEffectHandler)));
+}
+
+struct ResumeWithPayload;
+
+impl HostEffectHandler for ResumeWithPayload {
+    fn handle_effect(
+        &mut self,
+        _vm: &Vm,
+        effect_id: u16,
+        _op_id: u16,
+        payload: Value,
+    ) -> Result<Option<Value>, VmError> {
+        if effect_id == 7 {
+            Ok(Some(payload))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[test]
+fn effect_need_can_be_handled_by_host() {
+    let mut vm = Vm::new(module_with_code(vec![
+        op(Opcode::LdSmi),
+        42,
+        0,
+        op(Opcode::EffNeed),
+        7,
+        0,
+        0,
+        0,
+        op(Opcode::Halt),
+    ]));
+    vm.set_host_effect_handler(Box::new(ResumeWithPayload));
+    assert_eq!(vm.run().unwrap().as_int(), 42);
 }
 
 // ── Array opcodes ─────────────────────────────────────────────────────────────
@@ -1429,6 +1542,7 @@ fn ffi_call_dispatches() {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: vec![ForeignDescriptor {
             name_idx: 0,
@@ -1445,6 +1559,83 @@ fn ffi_call_dispatches() {
     let result = vm.run().unwrap();
     assert!(result.is_int());
     assert_eq!(result.as_int(), 42);
+}
+
+#[test]
+fn exported_global_lookup_after_run() {
+    let mut vm = Vm::new(Module {
+        constants: Vec::new(),
+        strings: vec!["suite".into()],
+        methods: vec![Method {
+            name: ENTRY_POINT_NAME,
+            locals_count: 0,
+            code: vec![
+                op(Opcode::LdSmi),
+                7,
+                0,
+                op(Opcode::StGlob),
+                0,
+                0,
+                op(Opcode::Halt),
+            ],
+        }],
+        globals: vec![GlobalDef {
+            name: 0,
+            exported: true,
+            opaque: false,
+        }],
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    });
+
+    assert!(vm.run().unwrap().is_unit());
+    assert_eq!(vm.exported_global("suite").unwrap().as_int(), 7);
+}
+
+#[test]
+fn invoke_exported_closure_after_run() {
+    let mut vm = Vm::new(Module {
+        constants: Vec::new(),
+        strings: vec!["suite".into()],
+        methods: vec![
+            Method {
+                name: 0,
+                locals_count: 1,
+                code: vec![op(Opcode::LdLoc), 0, op(Opcode::Ret)],
+            },
+            Method {
+                name: ENTRY_POINT_NAME,
+                locals_count: 0,
+                code: vec![
+                    op(Opcode::ClsNew),
+                    0,
+                    0,
+                    0,
+                    op(Opcode::StGlob),
+                    0,
+                    0,
+                    op(Opcode::Halt),
+                ],
+            },
+        ],
+        globals: vec![GlobalDef {
+            name: 0,
+            exported: true,
+            opaque: false,
+        }],
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    });
+
+    let _ = vm.run().unwrap();
+    let suite = vm.exported_global("suite").unwrap();
+    let result = vm.invoke(suite, &[Value::from_int(9)]).unwrap();
+    assert!(result.is_int());
+    assert_eq!(result.as_int(), 9);
 }
 
 #[test]

@@ -10,12 +10,14 @@ use std::collections::HashMap;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 
 use libffi::middle::{Arg, Cif, CodePtr, Type};
-#[cfg(unix)]
-use libloading::os::unix::Library as UnixLibrary;
 use libloading::Library;
 use music_il::format::FfiType;
 
 use crate::errors::VmError;
+use crate::host_io::{
+    musi_io_append_text, musi_io_ewrite, musi_io_ewriteln, musi_io_last_error, musi_io_read_text,
+    musi_io_write, musi_io_write_text, musi_io_writeln,
+};
 use crate::heap::{Heap, HeapObject};
 use crate::value::Value;
 
@@ -38,7 +40,7 @@ impl FfiRuntime {
         }
     }
 
-    /// Load a shared library by name. If `name` is empty, loads the current process.
+    /// Load a shared library by name. Empty names are reserved for builtin host symbols.
     ///
     /// # Errors
     /// Returns [`VmError::FfiLibraryNotFound`] if the library cannot be loaded.
@@ -46,20 +48,12 @@ impl FfiRuntime {
         if self.libraries.contains_key(name) {
             return Ok(());
         }
-        let lib = if name.is_empty() {
-            #[cfg(unix)]
-            {
-                Library::from(UnixLibrary::this())
-            }
-            #[cfg(not(unix))]
-            {
-                return Err(VmError::FfiLibraryNotFound(name.into()));
-            }
-        } else {
-            unsafe {
-                Library::new(name)
-                    .map_err(|e| VmError::FfiLibraryNotFound(format!("{name}: {e}")))?
-            }
+        if name.is_empty() {
+            return Ok(());
+        }
+
+        let lib = unsafe {
+            Library::new(name).map_err(|e| VmError::FfiLibraryNotFound(format!("{name}: {e}")))?
         };
         let _prev = self.libraries.insert(name.into(), lib);
         Ok(())
@@ -70,6 +64,12 @@ impl FfiRuntime {
     /// # Errors
     /// Returns [`VmError::FfiSymbolNotFound`] if the symbol cannot be found.
     pub fn resolve_symbol(&self, lib_name: &str, symbol: &str) -> Result<*const (), VmError> {
+        if lib_name.is_empty() {
+            if let Some(ptr) = resolve_builtin_symbol(symbol) {
+                return Ok(ptr);
+            }
+        }
+
         let lib = self
             .libraries
             .get(lib_name)
@@ -80,6 +80,20 @@ impl FfiRuntime {
                 .map_err(|e| VmError::FfiSymbolNotFound(format!("{symbol}: {e}")))?
         };
         Ok(*func)
+    }
+}
+
+fn resolve_builtin_symbol(symbol: &str) -> Option<*const ()> {
+    match symbol {
+        "musi_io_last_error" => Some(musi_io_last_error as *const ()),
+        "musi_io_write" => Some(musi_io_write as *const ()),
+        "musi_io_writeln" => Some(musi_io_writeln as *const ()),
+        "musi_io_ewrite" => Some(musi_io_ewrite as *const ()),
+        "musi_io_ewriteln" => Some(musi_io_ewriteln as *const ()),
+        "musi_io_write_text" => Some(musi_io_write_text as *const ()),
+        "musi_io_append_text" => Some(musi_io_append_text as *const ()),
+        "musi_io_read_text" => Some(musi_io_read_text as *const ()),
+        _ => None,
     }
 }
 

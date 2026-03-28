@@ -6,6 +6,7 @@ pub enum ConstantEntry {
     Int(i64),
     Float(u64),
     Str(String),
+    Tag(u16),
 }
 
 /// De-duplicating constant pool builder.

@@ -1,4 +1,7 @@
 use music_il::format;
+use music_il::instruction::Instruction;
+use music_il::opcode::Opcode;
+use musi_vm::Vm;
 
 use crate::emitter::SeamModule;
 use crate::pool::{ConstantEntry, ConstantPool};
@@ -10,6 +13,7 @@ fn empty_module() -> SeamModule {
         methods: Vec::new(),
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }
@@ -57,6 +61,7 @@ fn constant_pool_section_present_when_nonempty() {
         methods: Vec::new(),
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };
@@ -83,6 +88,7 @@ fn roundtrip_string_in_string_table() {
         methods: Vec::new(),
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };
@@ -96,4 +102,38 @@ fn roundtrip_string_in_string_table() {
     let data_start = tag_pos + 4 + 4;
     let expected = b"hello\0";
     assert_eq!(&bytes[data_start..data_start + expected.len()], expected);
+}
+
+#[test]
+fn roundtrip_tag_constant_supports_arrtag_compare() {
+    let mut pool = ConstantPool::new();
+    let tag_idx = pool.add(ConstantEntry::Tag(7));
+
+    let module = SeamModule {
+        constants: pool,
+        methods: vec![crate::emitter::MethodEntry {
+            name: None,
+            locals_count: 0,
+            absolute_global_loads: Vec::new(),
+            instructions: vec![
+                Instruction::with_tagged(Opcode::ArrNewT, tag_idx as u8, 0),
+                Instruction::simple(Opcode::ArrTag),
+                Instruction::with_u16(Opcode::LdConst, tag_idx),
+                Instruction::simple(Opcode::CmpEq),
+                Instruction::simple(Opcode::Halt),
+            ],
+        }],
+        globals: Vec::new(),
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
+    };
+
+    let bytes = write_seam(&module);
+    let loaded = musi_vm::load(&bytes).expect("load");
+    let mut vm = Vm::new(loaded);
+    let result = vm.run().expect("run");
+    assert!(result.is_bool());
+    assert!(result.as_bool());
 }

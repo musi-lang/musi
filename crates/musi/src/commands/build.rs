@@ -3,11 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Args;
-use music_emit::{emit, write_seam};
-use music_hir::HirBundle;
-
-use musi::driver::compile;
-use music_shared::diag::emit_to_stderr;
+use music_emit::{emit_project, write_seam};
+use musi::driver::{compile_project, emit_project_diagnostics};
 
 #[derive(Args)]
 pub struct BuildArgs {
@@ -19,7 +16,7 @@ pub struct BuildArgs {
 }
 
 pub fn run(args: &BuildArgs) -> ExitCode {
-    let result = match compile(&args.file) {
+    let result = match compile_project(&args.file) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: {e}");
@@ -27,23 +24,20 @@ pub fn run(args: &BuildArgs) -> ExitCode {
         }
     };
 
-    for diag in &result.diagnostics {
-        emit_to_stderr(diag, &result.db.source);
-    }
+    emit_project_diagnostics(&result);
 
     if result.has_errors {
         return ExitCode::FAILURE;
     }
 
-    let bundle = HirBundle::new(result.db, result.resolution, result.type_env);
-    let module = match emit(&bundle) {
+    let module = match emit_project(result.project, &result.loader) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("error: {e}");
             return ExitCode::FAILURE;
         }
     };
-    let seam = write_seam(&module);
+    let seam = write_seam(&module.module);
 
     let out_path = args
         .output

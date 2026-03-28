@@ -761,11 +761,17 @@ impl Parser<'_> {
             modifiers.mutable = true;
         }
         let pat = self.parse_pat()?;
+        let mut ty_params = self.parse_opt_bracket_params()?;
         let params = self.parse_opt_params()?;
-        let ty_params = self.parse_opt_bracket_params()?;
-        let constraints = self.parse_opt_where()?;
+        if ty_params.is_empty() {
+            ty_params = self.parse_opt_bracket_params()?;
+        }
+        let mut constraints = self.parse_opt_where()?;
         let effects = self.parse_opt_with()?;
         let ret_ty = self.parse_opt_ty_annot()?;
+        if constraints.is_empty() {
+            constraints = self.parse_opt_where()?;
+        }
         let sig = Self::build_signature(params, ty_params, constraints, effects, ret_ty);
         let value = self.parse_opt_default()?;
         let span = start.to(self.prev_span());
@@ -894,13 +900,21 @@ impl Parser<'_> {
     fn parse_effect_list(&mut self) -> ParseResult<Vec<EffectItem>> {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            if self.eat(&TokenKind::DotDotDot) {
+                let name = self.expect_ident()?;
+                items.push(EffectItem::Rest(name));
+                if self.eat(&TokenKind::Comma) {
+                    continue;
+                }
+                break;
+            }
             let name = self.expect_ident()?;
             let arg = if self.eat(&TokenKind::KwOf) {
                 Some(self.parse_ty()?)
             } else {
                 None
             };
-            items.push(EffectItem { name, arg });
+            items.push(EffectItem::Named { name, arg });
             if !self.eat(&TokenKind::Comma) {
                 break;
             }

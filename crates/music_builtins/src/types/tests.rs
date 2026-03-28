@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn all_has_expected_entries() {
-    assert_eq!(BuiltinType::ALL.len(), 23);
+    assert_eq!(BuiltinType::ALL.len(), 25);
 }
 
 #[test]
@@ -28,6 +28,8 @@ fn name_returns_correct_string_for_primitives() {
 #[test]
 fn name_returns_correct_string_for_collections() {
     assert_eq!(BuiltinType::String.name(), "String");
+    assert_eq!(BuiltinType::CString.name(), "CString");
+    assert_eq!(BuiltinType::CPtr.name(), "CPtr");
     assert_eq!(BuiltinType::Array.name(), "Array");
     assert_eq!(BuiltinType::List.name(), "List");
 }
@@ -88,6 +90,8 @@ fn intrinsic_type_ids_in_high_range() {
     assert_eq!(BuiltinType::Int.type_id(), 0xFFF6);
     assert_eq!(BuiltinType::Float.type_id(), 0xFFF7);
     assert_eq!(BuiltinType::String.type_id(), 0xFFF8);
+    assert_eq!(BuiltinType::CString.type_id(), 0xFFF9);
+    assert_eq!(BuiltinType::CPtr.type_id(), 0xFFFA);
 }
 
 #[test]
@@ -117,6 +121,8 @@ fn nan_box_tag_none_for_floats() {
 #[test]
 fn nan_box_tag_ptr_for_heap_types() {
     assert_eq!(BuiltinType::String.nan_box_tag(), Some(0b000));
+    assert_eq!(BuiltinType::CString.nan_box_tag(), Some(0b000));
+    assert_eq!(BuiltinType::CPtr.nan_box_tag(), Some(0b000));
     assert_eq!(BuiltinType::Array.nan_box_tag(), Some(0b000));
     assert_eq!(BuiltinType::List.nan_box_tag(), Some(0b000));
     assert_eq!(BuiltinType::Type.nan_box_tag(), Some(0b000));

@@ -3,9 +3,13 @@ use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use music_shared::Symbol;
+use crate::def::DefKind;
 
-use crate::def::DefId;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportInfo {
+    pub name: String,
+    pub kind: DefKind,
+}
 
 /// Opaque identifier for a module in the dependency graph.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,7 +42,7 @@ impl fmt::Debug for ModuleId {
 /// The public names exported by a resolved module.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleExports {
-    pub exports: HashMap<Symbol, DefId>,
+    pub exports: HashMap<String, ExportInfo>,
 }
 
 impl ModuleExports {

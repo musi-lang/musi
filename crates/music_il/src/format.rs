@@ -70,6 +70,22 @@ pub struct TypeDescriptor {
     pub member_count: u16,
 }
 
+/// A single operation within an effect descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectOpDescriptor {
+    pub id: u16,
+    pub name: String,
+}
+
+/// An effect descriptor in the EFCT section.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectDescriptor {
+    pub id: u16,
+    pub module_name: String,
+    pub name: String,
+    pub operations: Vec<EffectOpDescriptor>,
+}
+
 /// A method implementation within a class instance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassMethod {

@@ -111,7 +111,7 @@ pub fn clone_repo(spec: &GitSpecifier, dest: &Path) -> Result<(), GitError> {
 
 /// Find the entry point of a cloned package.
 ///
-/// Reads `musi.json` for the `main` field. Falls back to `mod.ms` or `index.ms`.
+/// Reads `musi.json` for the `main` field. Falls back to `index.ms`.
 #[must_use]
 pub fn find_entry_point(package_root: &Path) -> Option<PathBuf> {
     let config_path = package_root.join("musi.json");
@@ -130,11 +130,6 @@ pub fn find_entry_point(package_root: &Path) -> Option<PathBuf> {
                 }
             }
         }
-    }
-
-    let mod_file = package_root.join("mod.ms");
-    if mod_file.exists() {
-        return Some(mod_file);
     }
 
     let index_file = package_root.join("index.ms");

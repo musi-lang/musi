@@ -206,12 +206,12 @@ fn smoke_function_call() {
 fn smoke_effect_basic() {
     // Direct Module construction (not .seam) verifying EffPush → EffNeed → EffCont round-trip.
     // Byte layout: same as effect_need_resume in vm/tests.rs
-    // [0]  EffPush   [1,2]  5,0     skip 5 bytes → land at main body [8]
-    // [3]  LdSmi     [4,5]  77,0    handler: push resume value
-    // [6]  EffCont   [7]    1       handler: pop value, pop cont_ptr, restore
-    // [8]  LdSmi     [9,10] 0,0     main: dummy arg for need
-    // [11] EffNeed   [12,13] 0,0    main: suspend → resume_pc=14
-    // [14] Halt                      returns 77
+    // [0]  EffPush   [1,2]  0,0 [3,4] 0,0 [5,6] 5,0   skip 5 bytes → land at main body [12]
+    // [7]  LdSmi     [8,9]  77,0                         handler: push resume value
+    // [10] EffCont   [11]   1                            handler: pop value, pop cont_ptr, restore
+    // [12] LdSmi     [13,14] 0,0                         main: dummy arg for need
+    // [15] EffNeed   [16,17] 0,0 [18,19] 0,0            main: suspend → resume_pc=20
+    // [20] Halt                                           returns 77
     use musi_vm::module::{Method, Module};
     let module = Module {
         constants: Vec::new(),
@@ -223,6 +223,8 @@ fn smoke_effect_basic() {
                 op(Opcode::EffPush),
                 0,
                 0, // effect_id = 0
+                0,
+                0, // op_id = 0
                 5,
                 0, // skip = 5
                 op(Opcode::LdSmi),
@@ -236,11 +238,14 @@ fn smoke_effect_basic() {
                 op(Opcode::EffNeed),
                 0,
                 0,
+                0,
+                0,
                 op(Opcode::Halt),
             ],
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     };

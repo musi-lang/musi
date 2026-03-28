@@ -120,6 +120,14 @@ musi fmt                # format source files
 musi lint               # lint source files
 ```
 
+## Import Namespaces
+
+- `@std/...` is the external standard library package namespace. In local development this is usually mapped to the sibling `musi-lang/std` checkout through `musi.json`.
+- `musi:...` is the public compiler-owned intrinsic namespace, analogous to `node:` or `bun:`.
+- Prelude names such as builtin types and core classes are injected by the compiler. They are not loaded from `@std`.
+
+Test files export `test`, not `suite`. `musi test` invokes that exported entrypoint and expects it to return the root suite node.
+
 ## A Taste of the Language
 
 TODO

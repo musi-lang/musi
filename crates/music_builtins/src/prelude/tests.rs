@@ -69,3 +69,23 @@ fn all_methods_have_nonempty_fields() {
         }
     }
 }
+
+#[test]
+fn prelude_source_exports_builtin_surface() {
+    assert!(
+        PRELUDE_SOURCE.contains("export let Bool"),
+        "expected builtin Bool declaration in prelude source"
+    );
+    assert!(
+        PRELUDE_SOURCE.contains("export let Eq [T] := class"),
+        "expected Eq class declaration in prelude source"
+    );
+    assert!(
+        PRELUDE_SOURCE.contains("export opaque let CString"),
+        "expected builtin CString declaration in prelude source"
+    );
+    assert!(
+        PRELUDE_SOURCE.contains("export opaque let CPtr"),
+        "expected builtin CPtr declaration in prelude source"
+    );
+}

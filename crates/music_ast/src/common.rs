@@ -53,9 +53,9 @@ pub enum Constraint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EffectItem {
-    pub name: Ident,
-    pub arg: Option<TyId>,
+pub enum EffectItem {
+    Named { name: Ident, arg: Option<TyId> },
+    Rest(Ident),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

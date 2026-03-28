@@ -92,12 +92,12 @@ fn exports_as_string() {
 
 #[test]
 fn exports_as_map() {
-    let json = r#"{ "exports": { ".": "./mod.ms", "./utils": "./utils.ms" } }"#;
+    let json = r#"{ "exports": { "./utils": "./utils.ms", "./math": "./math/index.ms" } }"#;
     let config = load_config_from_str(json).unwrap();
     match config.exports {
         Some(Exports::Map(ref map)) => {
-            assert_eq!(map["."], "./mod.ms");
             assert_eq!(map["./utils"], "./utils.ms");
+            assert_eq!(map["./math"], "./math/index.ms");
         }
         _ => panic!("expected Exports::Map"),
     }
@@ -137,7 +137,7 @@ fn full_config_all_fields() {
         "version": "2.0.0",
         "description": "A test package",
         "main": "src/app.ms",
-        "exports": { ".": "./mod.ms" },
+        "exports": { "./utils": "./src/utils.ms" },
         "license": "MIT",
         "author": { "name": "Alice", "email": "alice@example.com" },
         "contributors": ["Bob"],
@@ -149,7 +149,7 @@ fn full_config_all_fields() {
         "imports": { "@/": "./src/" },
         "scopes": { "./src/": { "@lib/": "./lib/" } },
         "dependencies": { "@std/bytes": "^0.1.0" },
-        "devDependencies": { "@std/test": "^0.1.0" },
+        "devDependencies": { "@std/testing": "^0.1.0" },
         "peerDependencies": {},
         "optionalDependencies": {},
         "overrides": {},

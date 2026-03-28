@@ -4,8 +4,10 @@ use std::fs;
 
 use music_emit::pool::ConstantEntry;
 use music_emit::project::emit_project;
+use music_emit::write_seam;
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
+use musi_vm::Vm;
 use music_resolve::loader::ModuleLoader;
 use music_resolve::resolve_project;
 
@@ -185,4 +187,147 @@ fn module_exports_tracked_in_result() {
     // Module A should have 2 exported globals.
     let a_exports = result.module_exports.values().find(|v| v.len() == 2);
     assert!(a_exports.is_some(), "expected one module with 2 exports");
+}
+
+#[test]
+fn top_level_function_is_emitted_as_callable_global() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "let helper (x : Int) : Int := x\nexport let value := helper(7)",
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+    let module = &result.module;
+
+    assert_eq!(
+        module.globals.len(),
+        2,
+        "expected helper and value globals, got {}",
+        module.globals.len()
+    );
+
+    let main = module.methods.iter().find(|m| m.name.is_none()).unwrap();
+    let has_ld_glob = main.instructions.iter().any(|i| i.opcode == Opcode::LdGlob);
+    assert!(
+        has_ld_glob,
+        "expected top-level helper call to load a global closure"
+    );
+}
+
+#[test]
+fn imported_function_exports_are_available_to_dependents() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("a.ms"),
+        "export let double (x : Int) : Int := x + x",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "import \"./a.ms\" as _\nexport let value := double(21)",
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+
+    let has_double_export = result
+        .module_exports
+        .values()
+        .any(|exports| exports.iter().any(|export| export.name == "double"));
+    assert!(
+        has_double_export,
+        "expected exported function to be tracked in module exports"
+    );
+
+    let module = &result.module;
+    let main = module.methods.iter().filter(|m| m.name.is_none()).last().unwrap();
+    let has_ld_glob = main.instructions.iter().any(|i| i.opcode == Opcode::LdGlob);
+    assert!(has_ld_glob, "expected imported function call to load a global");
+}
+
+#[test]
+fn zero_arg_lambda_does_not_become_entrypoint() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "let f := () => 7\nexport let value := 1",
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+    let entrypoint_count = result
+        .module
+        .methods
+        .iter()
+        .filter(|method| method.name.is_none())
+        .count();
+
+    assert_eq!(
+        entrypoint_count, 1,
+        "expected exactly one entrypoint method, got {entrypoint_count}"
+    );
+}
+
+#[test]
+fn top_level_typed_value_is_not_emitted_as_callable_global() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "export let answer : Int := 42",
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+    let module = &result.module;
+    let main = module.methods.iter().find(|method| method.name.is_none()).unwrap();
+    let has_cls_new = main
+        .instructions
+        .iter()
+        .any(|instruction| instruction.opcode == Opcode::ClsNew);
+
+    assert!(
+        !has_cls_new,
+        "expected typed top-level value binding to store a value, not a closure"
+    );
+}
+
+#[test]
+fn variant_case_roundtrips_through_vm() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        r#"
+let _State := data {
+  | A
+  | B
+};
+
+let branch_local (value) :=
+  case value of (
+    | .A => .True
+    | _ => .False
+  );
+
+export let x := branch_local(.A)
+"#,
+    )
+    .unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
+    let bytes = write_seam(&result.module);
+    let module = musi_vm::load(&bytes).unwrap();
+    let mut vm = Vm::new(module);
+    let _ = vm.run().unwrap();
+
+    let exported = result
+        .module_exports
+        .values()
+        .flat_map(|exports| exports.iter())
+        .find(|export| export.name == "x")
+        .unwrap();
+    let value = vm.global_value(exported.index).unwrap();
+    assert!(value.is_bool(), "expected Bool, got {value:?}");
+    assert!(value.as_bool(), "expected .True");
 }

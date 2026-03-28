@@ -134,14 +134,20 @@ fn missing_file_returns_error() {
 }
 
 #[test]
-fn musi_builtin_import_resolves() {
-    let (dir, entry) = setup_project(&[("main.ms", "import \"musi:core\" as Core; let x := 1")]);
+fn musi_intrinsic_import_resolves() {
+    let (dir, entry) = setup_project(&[("main.ms", "import \"musi:test\" as Test; let x := 1")]);
     let loader = ModuleLoader::new(dir.path().to_path_buf());
 
     let result = resolve_project(&entry, &loader).unwrap();
 
-    // Only 1 module in graph (musi: doesn't create a file module)
-    assert_eq!(result.graph.len(), 1);
+    assert!(
+        result
+            .order
+            .iter()
+            .map(|&id| result.graph.path(id))
+            .any(|path| path.ends_with("crates/music_builtins/modules/test.ms")),
+        "expected musi:test intrinsic module in project graph"
+    );
 
     let mod_id = result.order[0];
     let module = &result.modules[&mod_id];
@@ -152,6 +158,6 @@ fn musi_builtin_import_resolves() {
         .collect();
     assert!(
         import_errors.is_empty(),
-        "musi:core should not produce ImportNotFound: {import_errors:?}"
+        "musi:test should not produce ImportNotFound: {import_errors:?}"
     );
 }

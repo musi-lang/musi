@@ -507,6 +507,7 @@ version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_vm",
+ "music_config",
  "music_db",
  "music_emit",
  "music_hir",
@@ -573,6 +574,7 @@ dependencies = [
 name = "music_emit"
 version = "0.1.0-rc1"
 dependencies = [
+ "musi_vm",
  "music_ast",
  "music_builtins",
  "music_db",
@@ -632,6 +634,7 @@ dependencies = [
  "music_arena",
  "music_ast",
  "music_builtins",
+ "music_config",
  "music_db",
  "music_hir",
  "music_lex",

@@ -1,10 +1,11 @@
 #![allow(clippy::tests_outside_test_module, clippy::panic, clippy::unwrap_used)]
 
+use std::fs;
 use std::io::ErrorKind;
 use std::io::Write;
 use std::path::Path;
 
-use musi::driver::compile;
+use musi::driver::{analyze_project, compile};
 use music_shared::diag::{emit, Diag};
 use music_shared::SourceMap;
 
@@ -83,4 +84,46 @@ fn build_produces_seam_bytes() {
     let module = emit(&bundle).expect("emit failed");
     let seam = write_seam(&module);
     assert!(!seam.is_empty(), "seam output should not be empty");
+}
+
+#[test]
+fn analyze_project_resolves_workspace_package_names() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        dir.path().join("musi.json"),
+        r#"{ "name": "@std", "main": "./index.ms", "exports": { "./testing": "./testing/index.ms", "./option": "./option/index.ms" } }"#,
+    )
+    .expect("workspace config");
+    fs::write(dir.path().join("index.ms"), "export let version := \"0.1.0\";").expect("root source");
+
+    fs::create_dir_all(dir.path().join("testing")).expect("testing dir");
+    fs::write(
+        dir.path().join("testing/index.ms"),
+        r#"export let pass := 1;
+export let describe := (_name, _body) => _body();
+export let it := (_name, _body) => _body();
+"#,
+    )
+    .expect("testing source");
+
+    fs::create_dir_all(dir.path().join("option")).expect("option dir");
+    fs::write(
+        dir.path().join("option/index.ms"),
+        "export let some := 1;",
+    )
+    .expect("option source");
+    fs::write(
+        dir.path().join("option/index.test.ms"),
+        r#"import "@std/testing" as _;
+import "@std/option" as _;
+
+export let test := () => describe("option", () => (
+    it("loads package root", () => some)
+));
+"#,
+    )
+    .expect("option test");
+
+    let result = analyze_project(&dir.path().join("option/index.test.ms")).expect("analyze");
+    assert!(!result.has_errors, "expected no errors");
 }

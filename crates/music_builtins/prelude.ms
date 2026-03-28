@@ -66,7 +66,14 @@ export opaque let Float64 := data { ; };
 @builtin
 export opaque let Rune := data { ; };
 /// A sequence of byte values representing UTF-8 encoded text.
-export let String := Array of Nat8;
+@builtin
+export opaque let String := data { ; };
+/// A NUL-terminated C string used for FFI boundaries.
+@builtin
+export opaque let CString := data { ; };
+/// An opaque C pointer used for FFI boundaries.
+@builtin
+export opaque let CPtr := data { ; };
 
 // --- Collection types ---
 /// A fixed-size array of elements of type `T`.
@@ -94,7 +101,7 @@ export let Eq [T] := class {
     @builtin(opcode := 0x25)  // CmpEq
     let (_ = _) (a : T, b : T) : Bool;
     /// Inequality operator: returns `True` if values are not equal.
-    let (_ /= _) (a : T, b : T) : Bool := not (a = b);
+    let (_ /= _) (a : T, b : T) : Bool;
 };
 
 /// Ordering type class for types that have a total order.

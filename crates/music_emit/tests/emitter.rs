@@ -429,21 +429,36 @@ fn emit_range_exclusive() {
 
 #[test]
 fn emit_need() {
-    let thir = build_thir_single(|ast, _int| {
+    let mut thir = build_thir_single(|ast, _int| {
         let operand = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(7))));
         ExprKind::Need(operand)
     });
+    let effect_name = thir.db.interner.intern("Test");
+    let effect_id = thir.type_env.assign_effect_id(effect_name);
+    let unit_ty = thir.type_env.intern(music_sema::Ty::Unit);
+    let _ = thir.type_env.register_effect_ops(
+        effect_name,
+        vec![(thir.db.interner.intern("emit"), None, unit_ty)],
+    );
+    let need_expr = thir.db.ast.root[0];
+    let _ = thir.type_env.need_effects.insert(
+        need_expr,
+        music_sema::env::EffectUse {
+            effect_id,
+            op_id: 0,
+        },
+    );
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 7));
-    assert_eq!(instrs[1], Instruction::with_u16(Opcode::EffNeed, 0));
+    assert_eq!(instrs[1], Instruction::with_effect(Opcode::EffNeed, 0, 0));
 }
 
 #[test]
 fn emit_handle_with_body() {
-    let thir = build_thir_single(|ast, interner| {
+    let mut thir = build_thir_single(|ast, interner| {
         let body_expr = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
@@ -467,11 +482,19 @@ fn emit_handle_with_body() {
             body: body_expr,
         }))
     });
+    let eff_sym = thir.db.interner.intern("MyEff");
+    let ret_ty = thir.type_env.intern(music_sema::Ty::Unit);
+    let effect_id = thir.type_env.assign_effect_id(eff_sym);
+    let _ = thir
+        .type_env
+        .register_effect_ops(eff_sym, vec![(eff_sym, None, ret_ty)]);
+    let handle_expr = thir.db.ast.root[0];
+    let _ = thir.type_env.handle_effects.insert(handle_expr, effect_id);
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_indexed_jump(Opcode::EffPush, 0, 3)
+        Instruction::with_effect_jump(Opcode::EffPush, 0, 0, 3)
     );
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));

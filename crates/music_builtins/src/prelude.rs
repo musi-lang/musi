@@ -5,6 +5,9 @@ pub struct PreludeClass {
     pub methods: &'static [PreludeMethod],
 }
 
+/// Canonical Musi source for the compiler-owned injected prelude.
+pub const PRELUDE_SOURCE: &str = include_str!("../prelude.ms");
+
 /// A method within a prelude class, used for name resolution seeding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreludeMethod {

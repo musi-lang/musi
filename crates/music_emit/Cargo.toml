@@ -19,6 +19,7 @@ music_builtins = { path = "../music_builtins" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+musi_vm = { path = "../musi_vm" }
 
 [lints]
 workspace = true

@@ -5,13 +5,14 @@ use std::{fmt, fs, io, mem};
 
 use music_ast::expr::{ExprKind, ImportKind};
 use music_db::Db;
+use music_shared::diag::Diag;
 use music_shared::{Interner, SourceMap};
 use music_lex::Lexer;
 use music_parse::parse;
 
 use crate::def::Visibility;
 use crate::errors::ResolveError;
-use crate::graph::{ModuleExports, ModuleGraph, ModuleId};
+use crate::graph::{ExportInfo, ModuleExports, ModuleGraph, ModuleId};
 use crate::loader::{ModuleLoader, ResolvedImport};
 use crate::queries::{ResolutionMap, ResolveDb};
 
@@ -27,6 +28,8 @@ pub struct ModuleResult {
     pub db: Db,
     pub resolution: ResolutionMap,
     pub errors: Vec<ResolveError>,
+    pub diagnostics: Vec<Diag>,
+    pub has_errors: bool,
 }
 
 /// Errors that can occur during project-level resolution.
@@ -92,10 +95,12 @@ fn resolve_module_recursive(
         source: e,
     })?;
 
-    let (tokens, _lex_errors) = Lexer::new(&source).lex();
+    let (tokens, lex_errors) = Lexer::new(&source).lex();
     let mut interner = Interner::new();
-    let (ast, _parse_errors) = parse(&tokens, &source, &mut interner);
-    let db = Db::new(ast, interner, SourceMap::default());
+    let (ast, parse_errors) = parse(&tokens, &source, &mut interner);
+    let mut source_map = SourceMap::default();
+    let source_id = source_map.add(&canonical, &source);
+    let db = Db::new(ast, interner, source_map);
 
     let import_paths = extract_imports(&db);
     for (import_str, _kind) in &import_paths {
@@ -111,16 +116,27 @@ fn resolve_module_recursive(
     // ResolveDb needs ownership for resolve_import to check/update module state.
     let owned_graph = mem::take(graph);
 
-    let resolve_loader = ModuleLoader::new(loader.root().to_path_buf());
-    let mut resolve_db = ResolveDb::with_graph(db, resolve_loader, owned_graph, canonical);
+    let mut resolve_db = ResolveDb::with_graph(db, loader.clone(), owned_graph, canonical);
     resolve_db.seed_builtins();
     resolve_db.resolve_module();
 
     let (db, resolution, errors, returned_graph) = resolve_db.finish_with_graph();
 
+    let has_errors = !lex_errors.is_empty() || !parse_errors.is_empty() || !errors.is_empty();
+    let mut diagnostics = Vec::new();
+    for e in lex_errors {
+        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+    }
+    for e in parse_errors {
+        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+    }
+    for e in &errors {
+        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+    }
+
     *graph = returned_graph;
 
-    let exports = collect_exports(&resolution);
+    let exports = collect_exports(&db.interner, &resolution);
     graph.set_exports(mod_id, exports);
 
     let _prev = modules.insert(
@@ -129,6 +145,8 @@ fn resolve_module_recursive(
             db,
             resolution,
             errors,
+            diagnostics,
+            has_errors,
         },
     );
 
@@ -149,11 +167,18 @@ fn extract_imports(db: &Db) -> Vec<(String, ImportKind)> {
 }
 
 /// Collect exported definitions from a resolved module.
-fn collect_exports(resolution: &ResolutionMap) -> ModuleExports {
+fn collect_exports(interner: &Interner, resolution: &ResolutionMap) -> ModuleExports {
     let mut exports = HashMap::new();
-    for (idx, def) in &resolution.defs {
+    for (_idx, def) in &resolution.defs {
         if matches!(def.vis, Visibility::Exported | Visibility::Opaque) {
-            let _prev = exports.insert(def.name, idx);
+            let name = interner.resolve(def.name).to_owned();
+            let _prev = exports.insert(
+                name.clone(),
+                ExportInfo {
+                    name,
+                    kind: def.kind,
+                },
+            );
         }
     }
     ModuleExports { exports }

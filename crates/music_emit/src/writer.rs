@@ -1,6 +1,6 @@
-use music_shared::Symbol;
 use music_il::format::{self, HEADER_SIZE};
 use music_il::instruction::{Instruction, Operand};
+use music_shared::Symbol;
 
 use crate::emitter::SeamModule;
 use crate::pool::ConstantEntry;
@@ -47,6 +47,12 @@ pub fn write_seam(module: &SeamModule) -> Vec<u8> {
     let class_data = build_class_table(module);
     if !class_data.is_empty() {
         write_section(&mut buf, format::section::CLSS, &class_data);
+        section_count = section_count.saturating_add(1);
+    }
+
+    let effect_data = build_effect_table(module);
+    if !effect_data.is_empty() {
+        write_section(&mut buf, format::section::EFCT, &effect_data);
         section_count = section_count.saturating_add(1);
     }
 
@@ -121,6 +127,7 @@ fn build_type_table(module: &SeamModule) -> Vec<u8> {
 ///   - Int:   `tag=0x01` + `i64` LE (8 bytes)
 ///   - Float: `tag=0x02` + `u64` LE (8 bytes, IEEE 754 bits)
 ///   - Str:   `tag=0x03` + `u16` LE string-table offset
+///   - Tag:   `tag=0x04` + `u16` LE variant tag id
 fn build_constant_pool(module: &SeamModule) -> Vec<u8> {
     let entries = module.constants.entries();
     if entries.is_empty() {
@@ -148,6 +155,10 @@ fn build_constant_pool(module: &SeamModule) -> Vec<u8> {
                 let str_len =
                     u16::try_from(s.len().saturating_add(1)).expect("string too long (>65535)");
                 string_offset = string_offset.saturating_add(str_len);
+            }
+            ConstantEntry::Tag(tag) => {
+                out.push(0x04);
+                out.extend_from_slice(&tag.to_le_bytes());
             }
         }
     }
@@ -201,8 +212,17 @@ fn encode_instruction(out: &mut Vec<u8>, instr: &Instruction) {
             out.push(*tag);
             out.extend_from_slice(&length.to_le_bytes());
         }
+        Operand::Effect(effect_id, op_id) => {
+            out.extend_from_slice(&effect_id.to_le_bytes());
+            out.extend_from_slice(&op_id.to_le_bytes());
+        }
         Operand::IndexedJump(idx, jump) => {
             out.extend_from_slice(&idx.to_le_bytes());
+            out.extend_from_slice(&jump.to_le_bytes());
+        }
+        Operand::EffectJump(effect_id, op_id, jump) => {
+            out.extend_from_slice(&effect_id.to_le_bytes());
+            out.extend_from_slice(&op_id.to_le_bytes());
             out.extend_from_slice(&jump.to_le_bytes());
         }
         Operand::Table(offsets) => {
@@ -289,6 +309,51 @@ fn build_class_table(module: &SeamModule) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Encode the EFCT section.
+///
+/// Wire format:
+/// ```text
+/// u16 effect_count
+/// per effect:
+///   u16 effect_id
+///   u16 module_name_len + [u8; len]
+///   u16 effect_name_len + [u8; len]
+///   u16 op_count
+///   per op:
+///     u16 op_id
+///     u16 op_name_len + [u8; len]
+/// ```
+fn build_effect_table(module: &SeamModule) -> Vec<u8> {
+    if module.effects.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    let count = u16::try_from(module.effects.len()).expect("too many effects (>65535)");
+    out.extend_from_slice(&count.to_le_bytes());
+
+    for effect in &module.effects {
+        out.extend_from_slice(&effect.id.to_le_bytes());
+        write_inline_string(&mut out, &effect.module_name);
+        write_inline_string(&mut out, &effect.name);
+        let op_count =
+            u16::try_from(effect.operations.len()).expect("too many effect operations (>65535)");
+        out.extend_from_slice(&op_count.to_le_bytes());
+        for op in &effect.operations {
+            out.extend_from_slice(&op.id.to_le_bytes());
+            write_inline_string(&mut out, &op.name);
+        }
+    }
+
+    out
+}
+
+fn write_inline_string(out: &mut Vec<u8>, value: &str) {
+    let len = u16::try_from(value.len()).expect("inline string too long (>65535)");
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(value.as_bytes());
 }
 
 /// Encode the FRGN section.

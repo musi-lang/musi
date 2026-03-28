@@ -567,6 +567,13 @@ fn bracket_params_trailing_comma() {
 }
 
 #[test]
+fn generic_function_type_params_before_params() {
+    let (ast, errors) = parse_expr("let f [T] (x : T) : T := x");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(matches!(root_kind(&ast), ExprKind::Let(_)));
+}
+
+#[test]
 fn where_trailing_comma() {
     let (_, errors) = parse_expr("let f [T] where T : Eq, := 42");
     assert!(errors.is_empty(), "errors: {errors:?}");

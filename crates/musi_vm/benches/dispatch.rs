@@ -22,6 +22,7 @@ fn module_with_method(locals: u16, code: Vec<u8>) -> Module {
         }],
         globals: Vec::new(),
         types: Vec::new(),
+        effects: Vec::new(),
         classes: Vec::new(),
         foreigns: Vec::new(),
     }

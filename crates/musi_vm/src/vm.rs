@@ -20,8 +20,19 @@ pub struct Vm {
     heap: Heap,
     frames: Vec<CallFrame>,
     effect_handlers: Vec<EffectHandler>,
+    host_effect_handler: Option<Box<dyn HostEffectHandler>>,
     resolved_constants: Vec<Value>,
     ffi_runtime: FfiRuntime,
+}
+
+pub trait HostEffectHandler {
+    fn handle_effect(
+        &mut self,
+        vm: &Vm,
+        effect_id: u16,
+        op_id: u16,
+        payload: Value,
+    ) -> VmResult<Option<Value>>;
 }
 
 impl Vm {
@@ -50,30 +61,154 @@ impl Vm {
             heap,
             frames: Vec::new(),
             effect_handlers: Vec::new(),
+            host_effect_handler: None,
             resolved_constants,
             ffi_runtime: FfiRuntime::new(),
         }
+    }
+
+    pub fn set_host_effect_handler(&mut self, handler: Box<dyn HostEffectHandler>) {
+        self.host_effect_handler = Some(handler);
+    }
+
+    pub fn clear_host_effect_handler(&mut self) {
+        self.host_effect_handler = None;
     }
 
     /// # Errors
     /// Returns a [`VmError`] if no entry point exists, the bytecode is invalid,
     /// a runtime type error occurs, or `Panic` is executed.
     pub fn run(&mut self) -> VmResult<Value> {
-        let entry_idx = self
+        let entry_indices: Vec<_> = self
             .module
             .methods
             .iter()
-            .position(|m| m.name == ENTRY_POINT_NAME)
-            .ok_or(VmError::NoEntryPoint)?;
-        let locals_count = usize::from(self.module.methods[entry_idx].locals_count);
-        let frame = CallFrame::new_call(
-            locals_count,
-            0,
-            u16::try_from(entry_idx).map_err(|_| VmError::InvalidMethod(entry_idx))?,
-            None,
-        );
+            .enumerate()
+            .filter_map(|(idx, method)| (method.name == ENTRY_POINT_NAME).then_some(idx))
+            .collect();
+        if entry_indices.is_empty() {
+            return Err(VmError::NoEntryPoint);
+        }
+
+        let mut result = Value::UNIT;
+        for entry_idx in entry_indices {
+            self.frames.clear();
+            let locals_count = usize::from(self.module.methods[entry_idx].locals_count);
+            let frame = CallFrame::new_call(
+                locals_count,
+                0,
+                u16::try_from(entry_idx).map_err(|_| VmError::InvalidMethod(entry_idx))?,
+                None,
+            );
+            self.frames.push(frame);
+            result = self.execute()?;
+        }
+        self.frames.clear();
+        Ok(result)
+    }
+
+    /// Execute a callable value already stored in the VM.
+    ///
+    /// The module entrypoint must have been run first if the callee depends on
+    /// initialized globals.
+    pub fn invoke(&mut self, callee: Value, args: &[Value]) -> VmResult<Value> {
+        self.frames.clear();
+        let (method_idx, closure_idx) = self.resolve_callee(callee)?;
+        let mut frame = self.make_call_frame(method_idx, 0, closure_idx)?;
+        for (i, arg) in args.iter().enumerate() {
+            frame.store_local(i, *arg)?;
+        }
         self.frames.push(frame);
-        self.execute()
+        let result = self.execute();
+        self.frames.clear();
+        result
+    }
+
+    /// Look up an exported global by source name after module initialization.
+    #[must_use]
+    pub fn exported_global(&self, name: &str) -> Option<Value> {
+        self.module
+            .globals
+            .iter()
+            .enumerate()
+            .find(|(_, global)| {
+                global.exported
+                    && self
+                        .module
+                        .strings
+                        .get(usize::try_from(global.name).ok().unwrap_or(usize::MAX))
+                        .is_some_and(|global_name| global_name == name)
+            })
+            .and_then(|(idx, _)| self.globals.get(idx).copied())
+    }
+
+    /// Look up a global by merged-module index after module initialization.
+    #[must_use]
+    pub fn global_value(&self, index: u16) -> Option<Value> {
+        self.globals.get(usize::from(index)).copied()
+    }
+
+    #[must_use]
+    pub fn effect_id(&self, module_name: &str, effect_name: &str) -> Option<u16> {
+        self.module
+            .effects
+            .iter()
+            .find(|effect| effect.module_name == module_name && effect.name == effect_name)
+            .map(|effect| effect.id)
+    }
+
+    #[must_use]
+    pub fn effect_id_by_name(&self, effect_name: &str) -> Option<u16> {
+        let mut matches = self
+            .module
+            .effects
+            .iter()
+            .filter(|effect| effect.name == effect_name)
+            .map(|effect| effect.id);
+        let first = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        Some(first)
+    }
+
+    #[must_use]
+    pub fn effect_op_id(&self, effect_id: u16, op_name: &str) -> Option<u16> {
+        self.module
+            .effects
+            .iter()
+            .find(|effect| effect.id == effect_id)
+            .and_then(|effect| {
+                effect
+                    .operations
+                    .iter()
+                    .find(|op| op.name == op_name)
+                    .map(|op| op.id)
+            })
+    }
+
+    /// Clone a heap string into host-owned memory.
+    #[must_use]
+    pub fn string_value(&self, value: Value) -> Option<String> {
+        if !value.is_ptr() {
+            return None;
+        }
+        match self.heap.get(value.as_ptr_idx())? {
+            HeapObject::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    /// Clone an array's tag and elements into host-owned memory.
+    #[must_use]
+    pub fn array_value(&self, value: Value) -> Option<(Value, Vec<Value>)> {
+        if !value.is_ptr() {
+            return None;
+        }
+        match self.heap.get(value.as_ptr_idx())? {
+            HeapObject::Array(arr) => Some((arr.tag, arr.elements.clone())),
+            _ => None,
+        }
     }
 
     fn execute(&mut self) -> VmResult<Value> {
@@ -411,23 +546,53 @@ impl Vm {
         Ok(())
     }
 
-    /// Structural equality for strings, bitwise equality for everything else.
+    /// Structural equality for strings and arrays, bitwise equality for everything else.
     fn values_equal(&self, a: Value, b: Value) -> bool {
+        let mut seen = Vec::new();
+        self.values_equal_inner(a, b, &mut seen)
+    }
+
+    fn values_equal_inner(&self, a: Value, b: Value, seen: &mut Vec<(usize, usize)>) -> bool {
         if a == b {
             return true;
         }
         if !a.is_ptr() || !b.is_ptr() {
             return false;
         }
+        let pair = (a.as_ptr_idx(), b.as_ptr_idx());
+        if seen.contains(&pair) {
+            return true;
+        }
+        seen.push(pair);
         let (Some(obj_a), Some(obj_b)) =
             (self.heap.get(a.as_ptr_idx()), self.heap.get(b.as_ptr_idx()))
         else {
             return false;
         };
-        matches!(
-            (obj_a, obj_b),
-            (HeapObject::String(sa), HeapObject::String(sb)) if sa == sb
-        )
+
+        match (obj_a, obj_b) {
+            (HeapObject::String(sa), HeapObject::String(sb)) => sa == sb,
+            (HeapObject::Array(arr_a), HeapObject::Array(arr_b)) => {
+                arr_a.tag == arr_b.tag
+                    && arr_a.elements.len() == arr_b.elements.len()
+                    && arr_a
+                        .elements
+                        .iter()
+                        .zip(&arr_b.elements)
+                        .all(|(&lhs, &rhs)| self.values_equal_inner(lhs, rhs, seen))
+            }
+            (HeapObject::Slice(slice_a), HeapObject::Slice(slice_b)) => {
+                let len_a = slice_a.end.saturating_sub(slice_a.start);
+                let len_b = slice_b.end.saturating_sub(slice_b.start);
+                len_a == len_b
+                    && (0..len_a).all(|i| {
+                        let lhs = exec_arr_geti(&self.heap, a, i).ok();
+                        let rhs = exec_arr_geti(&self.heap, b, i).ok();
+                        matches!((lhs, rhs), (Some(lhs), Some(rhs)) if self.values_equal_inner(lhs, rhs, seen))
+                    })
+            }
+            _ => false,
+        }
     }
 
     fn dispatch_global_upval(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
@@ -936,6 +1101,7 @@ impl Vm {
         match op {
             Opcode::EffPush => {
                 let effect_id = self.read_u16(method_idx, pc);
+                let op_id = self.read_u16(method_idx, pc);
                 let skip_offset = self.read_i16(method_idx, pc);
                 let handler_pc = *pc;
                 let saved_stack_depth = self
@@ -946,6 +1112,7 @@ impl Vm {
                 let handler_frame_depth = self.frames.len() - 1;
                 self.effect_handlers.push(EffectHandler {
                     effect_id,
+                    op_id,
                     handler_frame_depth,
                     handler_pc,
                     saved_stack_depth,
@@ -957,10 +1124,19 @@ impl Vm {
             }
             Opcode::EffNeed => {
                 let effect_idx = self.read_u16(method_idx, pc);
+                let op_id = self.read_u16(method_idx, pc);
+                let payload = self.frames.last_mut().ok_or(VmError::StackUnderflow)?.pop()?;
+                if let Some(resume_value) = self.dispatch_host_effect(effect_idx, op_id, payload)? {
+                    self.frames
+                        .last_mut()
+                        .ok_or(VmError::StackUnderflow)?
+                        .push(resume_value);
+                    return Ok(());
+                }
                 let handler_pos = self
                     .effect_handlers
                     .iter()
-                    .rposition(|h| h.effect_id == effect_idx)
+                    .rposition(|h| h.effect_id == effect_idx && h.op_id == op_id)
                     .ok_or(VmError::NoEffectHandler)?;
                 let handler = self.effect_handlers.remove(handler_pos);
                 let captured_handlers: Vec<EffectHandler> =
@@ -1012,6 +1188,20 @@ impl Vm {
             _ => return Err(VmError::UnsupportedOpcode(op)),
         }
         Ok(())
+    }
+
+    fn dispatch_host_effect(
+        &mut self,
+        effect_id: u16,
+        op_id: u16,
+        payload: Value,
+    ) -> VmResult<Option<Value>> {
+        let Some(mut handler) = self.host_effect_handler.take() else {
+            return Ok(None);
+        };
+        let result = handler.handle_effect(self, effect_id, op_id, payload);
+        self.host_effect_handler = Some(handler);
+        result
     }
 
     // ── GC ────────────────────────────────────────────────────────────────────

@@ -107,6 +107,17 @@ fn function_params_resolve_in_body() {
 }
 
 #[test]
+fn generic_function_type_params_resolve_in_signature() {
+    let (_db, res, errors) = parse_and_resolve("let id [T] (x : T) : T := x");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    let has_type_param = res
+        .ty_res
+        .values()
+        .any(|&def_id| matches!(res.defs.get(def_id).kind, DefKind::TypeParam));
+    assert!(has_type_param, "expected T to resolve as a type parameter");
+}
+
+#[test]
 fn prelude_classes_seeded() {
     let (_db, res, _errors) = parse_and_resolve("");
     // Verify Eq, Ord, Num, Bits, Show are all defined

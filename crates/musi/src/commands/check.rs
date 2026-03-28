@@ -3,8 +3,7 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use musi::driver::compile;
-use music_shared::diag::emit_to_stderr;
+use musi::driver::{compile_project, emit_project_diagnostics};
 
 #[derive(Args)]
 pub struct CheckArgs {
@@ -13,7 +12,7 @@ pub struct CheckArgs {
 }
 
 pub fn run(args: &CheckArgs) -> ExitCode {
-    let result = match compile(&args.file) {
+    let result = match compile_project(&args.file) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: {e}");
@@ -21,9 +20,7 @@ pub fn run(args: &CheckArgs) -> ExitCode {
         }
     };
 
-    for diag in &result.diagnostics {
-        emit_to_stderr(diag, &result.db.source);
-    }
+    emit_project_diagnostics(&result);
 
     if result.has_errors {
         ExitCode::FAILURE

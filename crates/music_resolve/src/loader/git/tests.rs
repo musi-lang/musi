@@ -108,15 +108,6 @@ fn find_entry_point_with_main_no_extension() {
 }
 
 #[test]
-fn find_entry_point_fallback_mod_ms() {
-    let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("mod.ms"), "// mod").unwrap();
-
-    let entry = find_entry_point(dir.path()).unwrap();
-    assert_eq!(entry, dir.path().join("mod.ms"));
-}
-
-#[test]
 fn find_entry_point_fallback_index_ms() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("index.ms"), "// index").unwrap();
