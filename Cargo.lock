@@ -590,8 +590,8 @@ dependencies = [
  "music_ast",
  "music_db",
  "music_lex",
- "music_parse",
  "music_owned",
+ "music_parse",
  "music_resolve",
  "music_sema",
  "music_shared",
@@ -613,17 +613,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "music_parse"
-version = "0.1.0-rc1"
-dependencies = [
- "criterion",
- "music_arena",
- "music_ast",
- "music_lex",
- "music_shared",
-]
-
-[[package]]
 name = "music_owned"
 version = "0.1.0-rc1"
 dependencies = [
@@ -631,6 +620,17 @@ dependencies = [
  "music_il",
  "music_lex",
  "music_parse",
+ "music_shared",
+]
+
+[[package]]
+name = "music_parse"
+version = "0.1.0-rc1"
+dependencies = [
+ "criterion",
+ "music_arena",
+ "music_ast",
+ "music_lex",
  "music_shared",
 ]
 
@@ -646,8 +646,8 @@ dependencies = [
  "music_db",
  "music_hir",
  "music_lex",
- "music_parse",
  "music_owned",
+ "music_parse",
  "music_shared",
  "serde_json",
  "tempfile",
@@ -665,8 +665,8 @@ dependencies = [
  "music_hir",
  "music_il",
  "music_lex",
- "music_parse",
  "music_owned",
+ "music_parse",
  "music_resolve",
  "music_shared",
  "thiserror",
