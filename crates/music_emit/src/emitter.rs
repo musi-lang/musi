@@ -56,9 +56,9 @@ pub struct SeamModule {
     pub foreigns: Vec<ForeignDescriptor>,
 }
 
-/// Lowers THIR expressions to SEAM bytecode instructions.
-struct Emitter<'thir> {
-    thir: &'thir TypedModule,
+/// Lowers typed frontend expressions to SEAM bytecode instructions.
+struct Emitter<'module> {
+    typed_module: &'module TypedModule,
     pool: ConstantPool,
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
@@ -89,8 +89,8 @@ struct Emitter<'thir> {
 /// Returns [`EmitError::Unimplemented`] when the bundle contains a language
 /// feature that has no codegen path yet (e.g. `via` derived instances,
 /// dynamic dispatch, splice-by-name, or named field assignment).
-pub fn emit(thir: &TypedModule) -> EmitResult<SeamModule> {
-    emit_with_context(thir, HashMap::new())
+pub fn emit(typed_module: &TypedModule) -> EmitResult<SeamModule> {
+    emit_with_context(typed_module, HashMap::new())
 }
 
 /// Emit a module with import context from a multi-module project.
@@ -104,11 +104,11 @@ pub fn emit(thir: &TypedModule) -> EmitResult<SeamModule> {
 /// Returns [`EmitError`] on emission failure.
 #[expect(clippy::implicit_hasher, reason = "always called with default HashMap")]
 pub fn emit_with_context(
-    thir: &TypedModule,
+    typed_module: &TypedModule,
     module_exports: HashMap<Symbol, Vec<ImportedGlobal>>,
 ) -> EmitResult<SeamModule> {
     let mut emitter = Emitter {
-        thir,
+        typed_module,
         pool: ConstantPool::new(),
         methods: Vec::new(),
         globals: Vec::new(),
@@ -193,25 +193,25 @@ const fn member_name_symbol(name: &MemberName) -> Symbol {
 )]
 impl Emitter<'_> {
     fn collect_effects(&self) -> Vec<EffectDescriptor> {
-        self.thir
+        self.typed_module
             .type_env
             .effect_order
             .iter()
             .filter_map(|effect_name| {
-                self.thir
+                self.typed_module
                     .type_env
                     .effect_defs
                     .get(effect_name)
                     .map(|effect| EffectDescriptor {
                         id: effect.id,
                         module_name: effect.module_name.clone(),
-                        name: self.thir.db.interner.resolve(effect.name).to_owned(),
+                        name: self.typed_module.db.interner.resolve(effect.name).to_owned(),
                         operations: effect
                             .operations
                             .iter()
                             .map(|op| EffectOpDescriptor {
                                 id: op.id,
-                                name: self.thir.db.interner.resolve(op.name).to_owned(),
+                                name: self.typed_module.db.interner.resolve(op.name).to_owned(),
                             })
                             .collect(),
                     })
@@ -221,26 +221,26 @@ impl Emitter<'_> {
 
     fn collect_classes(&mut self) -> Vec<ClassDescriptor> {
         let mut classes = Vec::new();
-        let root = self.thir.db.ast.root.clone();
+        let root = self.typed_module.db.ast.root.clone();
         for expr_id in root {
-            let ExprKind::Let(binding) = &self.thir.db.ast.exprs.get(expr_id).kind else {
+            let ExprKind::Let(binding) = &self.typed_module.db.ast.exprs.get(expr_id).kind else {
                 continue;
             };
             let Some(value) = binding.value else {
                 continue;
             };
-            let ExprKind::ClassDef(data) = &self.thir.db.ast.exprs.get(value).kind else {
+            let ExprKind::ClassDef(data) = &self.typed_module.db.ast.exprs.get(value).kind else {
                 continue;
             };
-            let PatKind::Bind(ident) = &self.thir.db.ast.pats.get(binding.pat).kind else {
+            let PatKind::Bind(ident) = &self.typed_module.db.ast.pats.get(binding.pat).kind else {
                 continue;
             };
-            let Some(class_id) = self.thir.class_id(ident.name) else {
+            let Some(class_id) = self.typed_module.class_id(ident.name) else {
                 continue;
             };
             let class_name_idx = self
                 .pool
-                .add(ConstantEntry::Str(self.thir.db.interner.resolve(ident.name).to_owned()))
+                .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(ident.name).to_owned()))
                 .into();
             let class_methods: Vec<Symbol> = data
                 .members
@@ -254,7 +254,7 @@ impl Emitter<'_> {
                 .iter()
                 .map(|name| {
                     self.pool
-                        .add(ConstantEntry::Str(self.thir.db.interner.resolve(*name).to_owned()))
+                        .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(*name).to_owned()))
                         .into()
                 })
                 .collect::<Vec<_>>();
@@ -278,15 +278,15 @@ impl Emitter<'_> {
         class_methods: &[Symbol],
     ) -> Vec<ClassInstance> {
         let mut instances = Vec::new();
-        let root = self.thir.db.ast.root.clone();
+        let root = self.typed_module.db.ast.root.clone();
         for expr_id in root {
-            let ExprKind::InstanceDef(inst) = &self.thir.db.ast.exprs.get(expr_id).kind else {
+            let ExprKind::InstanceDef(inst) = &self.typed_module.db.ast.exprs.get(expr_id).kind else {
                 continue;
             };
             if inst.ty.name.name != class_name {
                 continue;
             }
-            let Some(type_key) = self.thir.type_env.instance_keys.get(&expr_id).cloned() else {
+            let Some(type_key) = self.typed_module.type_env.instance_keys.get(&expr_id).cloned() else {
                 continue;
             };
             let type_id = self.register_type_key(&type_key);
@@ -295,7 +295,7 @@ impl Emitter<'_> {
                 .map(|name| ClassMethod {
                     name_idx: self
                         .pool
-                        .add(ConstantEntry::Str(self.thir.db.interner.resolve(*name).to_owned()))
+                        .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(*name).to_owned()))
                         .into(),
                     method_idx: self.method_index_by_name(*name).unwrap_or(u16::MAX),
                 })
@@ -314,10 +314,10 @@ impl Emitter<'_> {
     }
 
     fn expr_runtime_type_id(&mut self, expr_id: ExprId, fallback: u16) -> u16 {
-        let Some(expr_ty) = self.thir.expr_type(expr_id) else {
+        let Some(expr_ty) = self.typed_module.expr_type(expr_id) else {
             return fallback;
         };
-        let Some(type_key) = self.thir.type_env.type_key(expr_ty) else {
+        let Some(type_key) = self.typed_module.type_env.type_key(expr_ty) else {
             return fallback;
         };
         self.register_type_key(&type_key)
@@ -365,16 +365,16 @@ impl Emitter<'_> {
             TypeKey::Named(NominalKey { module_name, name }) => module_name
                 .as_ref()
                 .map_or_else(
-                    || self.thir.db.interner.resolve(*name).to_owned(),
+                    || self.typed_module.db.interner.resolve(*name).to_owned(),
                     |module_name| {
                         format!(
                             "{module_name}::{}",
-                            self.thir.db.interner.resolve(*name)
+                            self.typed_module.db.interner.resolve(*name)
                         )
                     },
                 ),
             TypeKey::Param(name) | TypeKey::Class(name) | TypeKey::Effect(name) => {
-                self.thir.db.interner.resolve(*name).to_owned()
+                self.typed_module.db.interner.resolve(*name).to_owned()
             }
             TypeKey::Record(fields) => format!(
                 "{{{}}}",
@@ -382,7 +382,7 @@ impl Emitter<'_> {
                     .iter()
                     .map(|(name, ty)| format!(
                         "{}:{}",
-                        self.thir.db.interner.resolve(*name),
+                        self.typed_module.db.interner.resolve(*name),
                         self.type_key_string(ty)
                     ))
                     .collect::<Vec<_>>()
@@ -395,10 +395,10 @@ impl Emitter<'_> {
                     .map(|(name, payload)| match payload {
                         Some(ty) => format!(
                             "{}:{}",
-                            self.thir.db.interner.resolve(*name),
+                            self.typed_module.db.interner.resolve(*name),
                             self.type_key_string(ty)
                         ),
-                        None => self.thir.db.interner.resolve(*name).to_owned(),
+                        None => self.typed_module.db.interner.resolve(*name).to_owned(),
                     })
                     .collect::<Vec<_>>()
                     .join("|")
@@ -450,22 +450,22 @@ impl Emitter<'_> {
             TypeKey::Unit => "Unit".to_owned(),
             TypeKey::EffectOp { effect, op, ret } => format!(
                 "{}.{}:{}",
-                self.thir.db.interner.resolve(*effect),
-                self.thir.db.interner.resolve(*op),
+                self.typed_module.db.interner.resolve(*effect),
+                self.typed_module.db.interner.resolve(*op),
                 self.type_key_string(ret)
             ),
         }
     }
 
     fn ast_type_key(&self, ty_id: TyId) -> Option<TypeKey> {
-        match &self.thir.db.ast.types.get(ty_id).kind {
+        match &self.typed_module.db.ast.types.get(ty_id).kind {
             TyKind::Named { name, args } => {
                 let def_kind = self
-                    .thir
+                    .typed_module
                     .resolution
                     .ty_res
                     .get(&ty_id)
-                    .map(|def_id| self.thir.resolution.defs.get(*def_id).kind);
+                    .map(|def_id| self.typed_module.resolution.defs.get(*def_id).kind);
                 match def_kind {
                     Some(DefKind::Builtin(bt)) => Some(TypeKey::Builtin(bt)),
                     Some(DefKind::TypeParam) => Some(TypeKey::Param(name.name)),
@@ -473,12 +473,12 @@ impl Emitter<'_> {
                     _ => {
                         let base = TypeKey::Named(NominalKey {
                             module_name: self
-                                .thir
+                                .typed_module
                                 .resolution
                                 .ty_res
                                 .get(&ty_id)
                                 .and_then(|def_id| {
-                                    self.thir.resolution.defs.get(*def_id).module_name.clone()
+                                    self.typed_module.resolution.defs.get(*def_id).module_name.clone()
                                 }),
                             name: name.name,
                         });
@@ -532,7 +532,7 @@ impl Emitter<'_> {
     }
 
     fn emit_module(&mut self) -> EmitResult {
-        let root = self.thir.db.ast.root.clone();
+        let root = self.typed_module.db.ast.root.clone();
         for expr_id in root {
             self.emit_top_level(expr_id)?;
         }
@@ -541,7 +541,7 @@ impl Emitter<'_> {
     }
 
     fn emit_top_level(&mut self, expr_id: ExprId) -> EmitResult {
-        let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
+        let kind = self.typed_module.db.ast.exprs.get(expr_id).kind.clone();
         if let ExprKind::Let(binding) = kind {
             self.emit_top_let(&binding)?;
         } else {
@@ -551,7 +551,7 @@ impl Emitter<'_> {
     }
 
     fn emit_top_let(&mut self, binding: &LetBinding) -> EmitResult {
-        let pat_node = self.thir.db.ast.pats.get(binding.pat);
+        let pat_node = self.typed_module.db.ast.pats.get(binding.pat);
         let PatKind::Bind(ident) = &pat_node.kind else {
             return Ok(());
         };
@@ -651,7 +651,7 @@ impl Emitter<'_> {
         reason = "Piecewise must be lowered to Branch before emission — reaching this arm is a compiler ICE"
     )]
     fn emit_expr(&mut self, expr_id: ExprId) -> EmitResult {
-        let kind = self.thir.db.ast.exprs.get(expr_id).kind.clone();
+        let kind = self.typed_module.db.ast.exprs.get(expr_id).kind.clone();
         match kind {
             ExprKind::Lit(ref lit) => self.emit_literal(lit),
             ExprKind::Var(ref ident) => self.emit_var(ident),
@@ -757,19 +757,19 @@ impl Emitter<'_> {
             self.push(Instruction::with_u16(Opcode::LdGlob, idx));
         } else if let Some(idx) = self
             .imported_globals
-            .get(self.thir.db.interner.resolve(ident.name))
+            .get(self.typed_module.db.interner.resolve(ident.name))
         {
             self.push_absolute_global_load(*idx);
         } else {
             panic!(
                 "unresolved variable: '{}'",
-                self.thir.db.interner.resolve(ident.name)
+                self.typed_module.db.interner.resolve(ident.name)
             )
         }
     }
 
     fn emit_app(&mut self, callee: ExprId, args: &ExprList) -> EmitResult {
-        if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(callee) {
+        if let Some(DispatchInfo::Static { opcode }) = self.typed_module.dispatch(callee) {
             for &arg in args {
                 self.emit_expr(arg)?;
             }
@@ -806,7 +806,7 @@ impl Emitter<'_> {
             return self.emit_nil_coalesce(lhs, rhs);
         }
 
-        if let Some(dispatch) = self.thir.dispatch(expr_id) {
+        if let Some(dispatch) = self.typed_module.dispatch(expr_id) {
             match dispatch {
                 DispatchInfo::Static { opcode } => {
                     self.emit_expr(lhs)?;
@@ -817,7 +817,7 @@ impl Emitter<'_> {
                 DispatchInfo::Dictionary { class, method_idx } => {
                     let method_u8 =
                         u8::try_from(*method_idx).expect("method index overflow (>255)");
-                    let class_id = self.thir.class_id(*class).unwrap_or(0);
+                    let class_id = self.typed_module.class_id(*class).unwrap_or(0);
                     let lhs_type_id = self.expr_runtime_type_id(lhs, format::BUILTIN_TYPE_ANY);
                     self.emit_expr(lhs)?;
                     self.emit_runtime_type_id(lhs_type_id);
@@ -882,7 +882,7 @@ impl Emitter<'_> {
         self.emit_expr(operand)?;
         match op {
             UnaryOp::Neg => {
-                if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(expr_id) {
+                if let Some(DispatchInfo::Static { opcode }) = self.typed_module.dispatch(expr_id) {
                     self.push(Instruction::simple(*opcode));
                     return Ok(());
                 }
@@ -923,12 +923,12 @@ impl Emitter<'_> {
     }
 
     fn emit_let(&mut self, binding: &LetBinding) -> EmitResult {
-        let pat_node = self.thir.db.ast.pats.get(binding.pat);
+        let pat_node = self.typed_module.db.ast.pats.get(binding.pat);
         if let PatKind::Bind(ident) = &pat_node.kind {
             if let Some(value) = binding.value {
                 let is_captured_mut = binding.modifiers.mutable
                     && self
-                        .thir
+                        .typed_module
                         .type_env
                         .captured_mutable_names
                         .contains(&ident.name);
@@ -966,7 +966,7 @@ impl Emitter<'_> {
 
     fn emit_lambda(&mut self, expr_id: ExprId, params: &[Param], body: ExprId) -> EmitResult {
         let captured = self
-            .thir
+            .typed_module
             .resolution
             .captures
             .get(&expr_id)
@@ -984,7 +984,7 @@ impl Emitter<'_> {
                 self.push(Instruction::with_u16(Opcode::LdGlob, idx));
             } else if let Some(idx) = self
                 .imported_globals
-                .get(self.thir.db.interner.resolve(cap))
+                .get(self.typed_module.db.interner.resolve(cap))
             {
                 self.push_absolute_global_load(*idx);
             }
@@ -1069,7 +1069,7 @@ impl Emitter<'_> {
 
         for (i, arm) in arms.iter().enumerate() {
             let is_last = i + 1 == arms.len();
-            let pat_node = self.thir.db.ast.pats.get(arm.pat);
+            let pat_node = self.typed_module.db.ast.pats.get(arm.pat);
 
             match &pat_node.kind {
                 PatKind::Variant { tag, fields } => {
@@ -1186,7 +1186,7 @@ impl Emitter<'_> {
         end_jumps: &mut Vec<usize>,
     ) -> EmitResult {
         for (i, &sub_pat) in pats.iter().enumerate() {
-            let sub_pat_node = self.thir.db.ast.pats.get(sub_pat);
+            let sub_pat_node = self.typed_module.db.ast.pats.get(sub_pat);
             if let PatKind::Bind(ident) = &sub_pat_node.kind {
                 self.push(Instruction::simple(Opcode::Dup));
                 let idx = u8::try_from(i).expect("too many tuple/array elements (>255)");
@@ -1210,7 +1210,7 @@ impl Emitter<'_> {
     ) -> EmitResult {
         for (i, field) in fields.iter().enumerate() {
             let bind_ident = if let Some(pat_id) = field.pat {
-                let pat_node = self.thir.db.ast.pats.get(pat_id);
+                let pat_node = self.typed_module.db.ast.pats.get(pat_id);
                 if let PatKind::Bind(ident) = &pat_node.kind {
                     Some(*ident)
                 } else {
@@ -1247,7 +1247,7 @@ impl Emitter<'_> {
             self.push(Instruction::simple(opcode));
         } else {
             let const_idx = self.pool.add(ConstantEntry::Str(
-                self.thir.db.interner.resolve(tag.name).into(),
+                self.typed_module.db.interner.resolve(tag.name).into(),
             ));
             self.push(Instruction::simple(Opcode::ArrTag));
             self.push(Instruction::with_u16(Opcode::LdConst, const_idx));
@@ -1261,7 +1261,7 @@ impl Emitter<'_> {
         };
 
         for (fi, &field_pat) in fields.iter().enumerate() {
-            let field_pat_node = self.thir.db.ast.pats.get(field_pat);
+            let field_pat_node = self.typed_module.db.ast.pats.get(field_pat);
             if let PatKind::Bind(field_ident) = &field_pat_node.kind {
                 self.push(Instruction::simple(Opcode::Dup));
                 let field_u8 = u8::try_from(fi).expect("too many fields (>255)");
@@ -1304,13 +1304,13 @@ impl Emitter<'_> {
     }
 
     fn emit_variant_lit(&mut self, expr_id: ExprId, tag: &Ident, args: &ExprList) -> EmitResult {
-        if let Some(DispatchInfo::Static { opcode }) = self.thir.dispatch(expr_id) {
+        if let Some(DispatchInfo::Static { opcode }) = self.typed_module.dispatch(expr_id) {
             self.push(Instruction::simple(*opcode));
             return Ok(());
         }
 
         let tag_idx = self.pool.add(ConstantEntry::Str(
-            self.thir.db.interner.resolve(tag.name).to_owned(),
+            self.typed_module.db.interner.resolve(tag.name).to_owned(),
         ));
         let tag_byte = u8::try_from(tag_idx).expect("variant tag constant index overflow (>255)");
 
@@ -1456,7 +1456,7 @@ impl Emitter<'_> {
     }
 
     fn emit_perform(&mut self, expr_id: ExprId, operand: ExprId) -> EmitResult {
-        match self.thir.db.ast.exprs.get(operand).kind.clone() {
+        match self.typed_module.db.ast.exprs.get(operand).kind.clone() {
             ExprKind::App(_, args) => {
                 if args.is_empty() {
                     self.push(Instruction::simple(Opcode::LdUnit));
@@ -1479,7 +1479,7 @@ impl Emitter<'_> {
             _ => self.emit_expr(operand)?,
         }
         let effect_use = self
-            .thir
+            .typed_module
             .type_env
             .perform_effects
             .get(&expr_id)
@@ -1500,7 +1500,7 @@ impl Emitter<'_> {
         body: ExprId,
     ) -> EmitResult {
         let effect_id = self
-            .thir
+            .typed_module
             .type_env
             .handle_effects
             .get(&expr_id)
@@ -1519,7 +1519,7 @@ impl Emitter<'_> {
             };
             let op_name = name.name;
             let op_id = self
-                .thir
+                .typed_module
                 .type_env
                 .effect_by_id(effect_id)
                 .and_then(|effect| effect.operations.iter().find(|op| op.name == op_name))
@@ -1571,7 +1571,7 @@ impl Emitter<'_> {
     ) {
         let cont_slot = self.local_slot(cont.name);
         self.emit_st_loc(cont_slot);
-        let Some(op_info) = self.thir.type_env.effect_by_id(effect_id).and_then(|effect| {
+        let Some(op_info) = self.typed_module.type_env.effect_by_id(effect_id).and_then(|effect| {
             effect.operations.iter().find(|op| op.name == op_name)
         }) else {
             return;
@@ -1607,8 +1607,8 @@ impl Emitter<'_> {
         let Some(param_ty) = param_ty else {
             return 0;
         };
-        let resolved = self.thir.type_env.resolve_var(param_ty);
-        match self.thir.type_env.types.get(resolved) {
+        let resolved = self.typed_module.type_env.resolve_var(param_ty);
+        match self.typed_module.type_env.types.get(resolved) {
             Ty::Unit => 0,
             Ty::Tuple(elems) => elems.len(),
             _ => 1,
@@ -1752,7 +1752,7 @@ impl Emitter<'_> {
     }
 
     fn emit_foreign_import(&mut self, sym: Symbol) {
-        let name = self.thir.db.interner.resolve(sym);
+        let name = self.typed_module.db.interner.resolve(sym);
         let foreign_idx =
             u16::try_from(self.foreigns.len()).expect("too many foreign imports (>65535)");
         self.foreigns.push(ForeignDescriptor {
@@ -1797,7 +1797,7 @@ impl Emitter<'_> {
                             .iter()
                             .filter(|imported| {
                                 names.iter().any(|name| {
-                                    self.thir.db.interner.resolve(name.name) == imported.name
+                                    self.typed_module.db.interner.resolve(name.name) == imported.name
                                 })
                             })
                             .cloned()
@@ -1871,7 +1871,7 @@ impl Emitter<'_> {
                     self.emit_ld_loc(counter_slot);
                     self.push(Instruction::simple(Opcode::ArrGet));
 
-                    let pat_node = self.thir.db.ast.pats.get(pat_id);
+                    let pat_node = self.typed_module.db.ast.pats.get(pat_id);
                     if let PatKind::Bind(ident) = &pat_node.kind {
                         let slot = self.local_slot(ident.name);
                         self.emit_st_loc(slot);
@@ -1932,7 +1932,7 @@ impl Emitter<'_> {
         let mut body_jumps = Vec::new();
 
         for (si, &sub_pat) in pats.iter().enumerate() {
-            let sub_pat_node = self.thir.db.ast.pats.get(sub_pat);
+            let sub_pat_node = self.typed_module.db.ast.pats.get(sub_pat);
             let is_last_sub = si + 1 == pats.len();
 
             match &sub_pat_node.kind {
@@ -1966,7 +1966,7 @@ impl Emitter<'_> {
                     self.push(Instruction::simple(Opcode::Dup));
                     self.push(Instruction::simple(Opcode::ArrTag));
                     let tag_idx = self.pool.add(ConstantEntry::Str(
-                        self.thir.db.interner.resolve(tag.name).into(),
+                        self.typed_module.db.interner.resolve(tag.name).into(),
                     ));
                     self.push(Instruction::with_u16(Opcode::LdConst, tag_idx));
                     self.push(Instruction::simple(Opcode::CmpEq));
@@ -2016,7 +2016,7 @@ impl Emitter<'_> {
         let name_slot = self.local_slot(name.name);
         self.emit_st_loc(name_slot);
 
-        let inner_node = self.thir.db.ast.pats.get(inner_pat);
+        let inner_node = self.typed_module.db.ast.pats.get(inner_pat);
         match &inner_node.kind {
             PatKind::Variant { tag, fields } => {
                 let tag = *tag;
@@ -2041,7 +2041,7 @@ impl Emitter<'_> {
     }
 
     fn emit_assign(&mut self, target: ExprId, value: ExprId) -> EmitResult {
-        let target_kind = self.thir.db.ast.exprs.get(target).kind.clone();
+        let target_kind = self.typed_module.db.ast.exprs.get(target).kind.clone();
         match target_kind {
             ExprKind::Var(ident) => {
                 if self.cell_locals.contains(&ident.name) {
@@ -2108,11 +2108,11 @@ impl Emitter<'_> {
     }
 
     fn emit_foreign_let(&mut self, name: Symbol, binding: &LetBinding) {
-        let name_str = self.thir.db.interner.resolve(name);
+        let name_str = self.typed_module.db.interner.resolve(name);
         let name_idx = u32::from(self.pool.add(ConstantEntry::Str(name_str.into())));
 
         let symbol_idx = if let Some(alias) = binding.modifiers.foreign_alias {
-            let alias_str = self.thir.db.interner.resolve(alias);
+            let alias_str = self.typed_module.db.interner.resolve(alias);
             u32::from(self.pool.add(ConstantEntry::Str(alias_str.into())))
         } else {
             name_idx
@@ -2122,7 +2122,7 @@ impl Emitter<'_> {
 
         let abi = match binding.modifiers.foreign_abi {
             Some(sym) => {
-                let abi_str = self.thir.db.interner.resolve(sym);
+                let abi_str = self.typed_module.db.interner.resolve(sym);
                 match abi_str {
                     "cdecl" | "C" => ForeignAbi::Cdecl,
                     "stdcall" => ForeignAbi::Stdcall,
@@ -2163,7 +2163,7 @@ impl Emitter<'_> {
     }
 
     fn resolve_foreign_callee(&self, callee: ExprId) -> Option<u16> {
-        let kind = &self.thir.db.ast.exprs.get(callee).kind;
+        let kind = &self.typed_module.db.ast.exprs.get(callee).kind;
         if let ExprKind::Var(ident) = kind {
             return self.foreign_globals.get(&ident.name).copied();
         }
@@ -2171,9 +2171,9 @@ impl Emitter<'_> {
     }
 
     fn ty_to_ffi_type(&self, ty_id: TyId) -> FfiType {
-        let ty_kind = &self.thir.db.ast.types.get(ty_id).kind;
+        let ty_kind = &self.typed_module.db.ast.types.get(ty_id).kind;
         if let TyKind::Named { name, .. } = ty_kind {
-            let resolved = self.thir.db.interner.resolve(name.name);
+            let resolved = self.typed_module.db.interner.resolve(name.name);
             match resolved {
                 "Int" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat" | "Nat8" | "Nat16"
                 | "Nat32" | "Nat64" | "Rune" => FfiType::Int,
@@ -2197,17 +2197,17 @@ impl Emitter<'_> {
 
     fn extract_lib_attr(&mut self, attrs: &[music_ast::AttrId]) -> Option<u32> {
         for &attr_id in attrs {
-            let attr = self.thir.db.ast.attrs.get(attr_id);
+            let attr = self.typed_module.db.ast.attrs.get(attr_id);
             let path = &attr.kind.path;
             if path.len() != 2
-                || self.thir.db.interner.resolve(path[0].name) != "ffi"
-                || self.thir.db.interner.resolve(path[1].name) != "link"
+                || self.typed_module.db.interner.resolve(path[0].name) != "ffi"
+                || self.typed_module.db.interner.resolve(path[1].name) != "link"
             {
                 continue;
             }
             for arg in &attr.kind.args {
                 if let AttrArg::Positional(expr_id) = arg {
-                    let spanned = self.thir.db.ast.exprs.get(*expr_id);
+                    let spanned = self.typed_module.db.ast.exprs.get(*expr_id);
                     if let ExprKind::Lit(Literal::Str(ref s)) = spanned.kind {
                         return Some(u32::from(self.pool.add(ConstantEntry::Str(s.clone()))));
                     }
@@ -2261,37 +2261,37 @@ impl Emitter<'_> {
 
     fn is_spread_expr(&self, expr_id: ExprId) -> bool {
         matches!(
-            self.thir.db.ast.exprs.get(expr_id).kind,
+            self.typed_module.db.ast.exprs.get(expr_id).kind,
             ExprKind::UnaryOp(UnaryOp::Spread, _)
         )
     }
 
     fn spread_expr_operand(&self, expr_id: ExprId) -> Option<ExprId> {
-        match self.thir.db.ast.exprs.get(expr_id).kind {
+        match self.typed_module.db.ast.exprs.get(expr_id).kind {
             ExprKind::UnaryOp(UnaryOp::Spread, inner) => Some(inner),
             _ => None,
         }
     }
 
     fn is_len_access(&self, expr_id: ExprId, field: Symbol) -> bool {
-        if self.thir.db.interner.resolve(field) != "len" {
+        if self.typed_module.db.interner.resolve(field) != "len" {
             return false;
         }
 
-        let Some(expr_ty) = self.thir.expr_type(expr_id) else {
+        let Some(expr_ty) = self.typed_module.expr_type(expr_id) else {
             return true;
         };
         matches!(
-            self.thir
+            self.typed_module
                 .type_env
                 .types
-                .get(self.thir.type_env.resolve_var(expr_ty)),
+                .get(self.typed_module.type_env.resolve_var(expr_ty)),
             Ty::Array(_) | Ty::Builtin(BuiltinType::String) | Ty::Any | Ty::Unknown | Ty::Var(_)
         )
     }
 
     fn builtin_bool_variant_opcode(&self, tag: Symbol) -> Option<Opcode> {
-        match self.thir.db.interner.resolve(tag) {
+        match self.typed_module.db.interner.resolve(tag) {
             "True" => Some(Opcode::LdTru),
             "False" => Some(Opcode::LdFls),
             _ => None,
@@ -2338,9 +2338,9 @@ impl Emitter<'_> {
     }
 
     fn resolve_field_index(&self, base_expr: ExprId, field_name: Symbol) -> Option<u8> {
-        let ty_id = self.thir.expr_type(base_expr)?;
-        let resolved = self.thir.type_env.resolve_var(ty_id);
-        let ty = self.thir.type_env.types.get(resolved);
+        let ty_id = self.typed_module.expr_type(base_expr)?;
+        let resolved = self.typed_module.type_env.resolve_var(ty_id);
+        let ty = self.typed_module.type_env.types.get(resolved);
         if let Ty::Record { fields } = ty {
             for (i, &(name, _)) in fields.iter().enumerate() {
                 if name == field_name {

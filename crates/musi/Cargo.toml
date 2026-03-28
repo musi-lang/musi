@@ -17,14 +17,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
-music_lex = { path = "../music_lex" }
-music_parse = { path = "../music_parse" }
-music_config = { path = "../music_config" }
 music_hir = { path = "../music_hir" }
-music_resolve = { path = "../music_resolve" }
-music_sema = { path = "../music_sema" }
 music_emit = { path = "../music_emit" }
-music_db = { path = "../music_db" }
 musi_vm = { path = "../musi_vm" }
 music_shared = { path = "../music_shared" }
 

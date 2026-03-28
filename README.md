@@ -1,20 +1,17 @@
 # Musi
 
-A programming language with a type system, functional features, and a stack-based bytecode VM.
+A programming language with a type system, effect handling, and a stack-based bytecode VM.
 
 > [!WARNING]
 > Musi is `v0.1.0-rc1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
 
 ## What Musi Is
 
-Musi source files use the `.ms` extension. The toolchain has two binaries:
+Musi source files use the `.ms` extension. The current toolchain ships one binary:
 
-| Binary | What it does                                                              |
-| ------ | ------------------------------------------------------------------------- |
-| `musi` | Universal driver - run, check, build, test, format, lint, manage projects |
-| `msc`  | Standalone compiler - type-check and compile without the VM               |
-
-You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.seam` bytecode without running it).
+| Binary | What it does |
+| ------ | ------------ |
+| `musi` | Check, build, run, and test Musi projects |
 
 ## Prerequisites
 
@@ -69,9 +66,7 @@ cargo build --release
 
 Binaries land in `./target/release/`:
 
-- `musi` (toolchain driver)
-- `msc` (standalone compiler)
-- `msc_lsp` (LSP server)
+- `musi`
 
 Add to your PATH:
 
@@ -95,29 +90,19 @@ hello/
   .gitignore
 ```
 
-Look at the generated `index.ms`:
-
-```musi
-import "@std/rt" as rt;
-
-rt.writeln("hello, world!");
-```
-
 Run it:
 
 ```bash
 musi run
 ```
 
-Other commands:
+Current commands:
 
 ```bash
 musi check              # type-check without running
 musi build              # compile to .seam bytecode
-musi exec index.seam    # run compiled bytecode directly
+musi run index.seam     # run compiled bytecode directly
 musi test               # discover and run *.test.ms files
-musi fmt                # format source files
-musi lint               # lint source files
 ```
 
 ## Import Namespaces
@@ -126,7 +111,7 @@ musi lint               # lint source files
 - `musi:...` is the public compiler-owned intrinsic namespace, analogous to `node:` or `bun:`.
 - Prelude names such as builtin types and core classes are injected by the compiler. They are not loaded from `@std`.
 
-Test files export `test`, not `suite`. `musi test` invokes that exported entrypoint and expects it to return the root suite node.
+Test files export `test`, not `suite`. `musi test` invokes that exported entrypoint and collects test events through `musi:test`.
 
 ## A Taste of the Language
 
@@ -134,33 +119,32 @@ TODO
 
 ## Project Structure
 
-| Crate          | Role                                          |
-| -------------- | --------------------------------------------- |
-| `msc`          | Compiler library + CLI                        |
-| `musi`         | Toolchain driver CLI                          |
-| `msc_lsp`      | LSP server                                    |
-| `msc_shared`   | Spans, source database, interner, diagnostics |
-| `msc_lex`      | Lexer                                         |
-| `msc_ast`      | AST node types                                |
-| `msc_parse`    | Parser                                        |
-| `msc_sema`     | Semantic analysis / type-checker              |
-| `msc_resolve`  | Module resolution                             |
-| `msc_emit`     | Bytecode emitter                              |
-| `msc_bc`       | Bytecode format definitions                   |
-| `msc_vm`       | Bytecode interpreter / VM                     |
-| `msc_builtins` | Standard library runtime + FFI                |
-| `msc_manifest` | `musi.json` parser                            |
+| Crate | Role |
+| ----- | ---- |
+| `musi` | CLI |
+| `music_shared` | spans, sources, diagnostics, interner |
+| `music_lex` | lexer |
+| `music_ast` | AST |
+| `music_parse` | parser |
+| `music_resolve` | module/name resolution |
+| `music_hir` | typed frontend facade (`TypedModule` / `TypedProject`) |
+| `music_sema` | semantic analysis |
+| `music_emit` | bytecode emission and `.seam` writing |
+| `music_il` | bytecode and format contract |
+| `musi_vm` | loader and VM |
+| `music_owned` | compiler-owned prelude, builtin descriptors, `musi:` modules |
+| `music_config` | `musi.json` parsing |
 
 ## Editor Support
 
-The `msc_lsp` binary is built alongside the compiler. Point your editor's LSP client at it. A VS Code extension is in development at `tools/vscode/`.
+VS Code syntax support lives under `tools/vscode/`.
 
 ## Testing
 
 ```bash
-cargo test -p msc_parse        # test a specific crate
-cargo clippy -p msc_parse      # lint a specific crate
-musi test                      # run Musi stdlib tests
+cargo test -p music_parse      # test a specific crate
+cargo clippy -p music_parse    # lint a specific crate
+musi test                      # run Musi tests
 ```
 
 Avoid `cargo test --workspace` on machines with less than 16 GB of free RAM.

@@ -192,7 +192,7 @@ fn invalid_number_prefix() {
     assert!(
         errors[0]
             .to_string()
-            .contains("expected digits after base prefix"),
+            .contains("expected digit(s) after base prefix"),
         "got: {}",
         errors[0]
     );

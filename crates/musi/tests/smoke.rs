@@ -6,7 +6,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use musi::driver::{analyze_project, compile};
+use music_hir::{TypedModule, analyze_project, compile};
 use music_shared::diag::{emit, Diag};
 use music_shared::SourceMap;
 
@@ -68,7 +68,6 @@ fn diagnostic_has_line_col() {
 #[test]
 fn build_produces_seam_bytes() {
     use music_emit::{emit, write_seam};
-    use music_hir::TypedModule;
 
     let mut file = tempfile::NamedTempFile::with_suffix(".ms").expect("tempfile");
     write!(file, "let _x := 42;").expect("write");

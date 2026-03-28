@@ -99,7 +99,7 @@ fn display_invalid_hex_escape() {
         kind: LexErrorKind::InvalidHexEscape { expected: 2 },
         span: Span::new(0, 4),
     };
-    assert_eq!(err.to_string(), "invalid hex escape: expected 2 hex digits");
+    assert_eq!(err.to_string(), "invalid hex escape; expected 2 hex digit(s)");
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn display_invalid_number_prefix() {
     };
     assert_eq!(
         err.to_string(),
-        "invalid number literal: expected digits after base prefix"
+        "invalid number literal; expected digit(s) after base prefix"
     );
 }
 

@@ -507,14 +507,8 @@ version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_vm",
- "music_config",
- "music_db",
  "music_emit",
  "music_hir",
- "music_lex",
- "music_parse",
- "music_resolve",
- "music_sema",
  "music_shared",
  "tempfile",
 ]
@@ -588,6 +582,7 @@ version = "0.1.0-rc1"
 dependencies = [
  "criterion",
  "music_ast",
+ "music_config",
  "music_db",
  "music_lex",
  "music_owned",
