@@ -5,20 +5,30 @@ use crate::errors::VmError;
 use crate::heap::Heap;
 use crate::value::Value;
 
+#[cfg(target_os = "macos")]
+const LIBC_NAME: &str = "libSystem.dylib";
+#[cfg(target_os = "macos")]
+const LIBM_NAME: &str = "libSystem.dylib";
+#[cfg(all(unix, not(target_os = "macos")))]
+const LIBC_NAME: &str = "libc.so.6";
+#[cfg(all(unix, not(target_os = "macos")))]
+const LIBM_NAME: &str = "libm.so.6";
+
 // ── FfiRuntime: library loading ──────────────────────────────────────────────
 
 #[test]
 #[cfg(unix)]
-fn load_process_itself() {
+fn builtin_host_symbols_do_not_require_library_load() {
     let mut rt = FfiRuntime::new();
     rt.load_library("").unwrap();
+    assert!(!rt.resolve_symbol("", "musi_io_read_text").unwrap().is_null());
 }
 
 #[test]
-#[cfg(target_os = "macos")]
-fn load_libsystem() {
+#[cfg(unix)]
+fn load_native_library() {
     let mut rt = FfiRuntime::new();
-    rt.load_library("libSystem.dylib").unwrap();
+    rt.load_library(LIBC_NAME).unwrap();
 }
 
 #[test]
@@ -32,10 +42,10 @@ fn unknown_library_errors() {
 
 #[test]
 #[cfg(unix)]
-fn resolve_abs_from_process() {
+fn resolve_abs_from_native_library() {
     let mut rt = FfiRuntime::new();
-    rt.load_library("").unwrap();
-    let ptr = rt.resolve_symbol("", "abs").unwrap();
+    rt.load_library(LIBC_NAME).unwrap();
+    let ptr = rt.resolve_symbol(LIBC_NAME, "abs").unwrap();
     assert!(!ptr.is_null());
 }
 
@@ -50,7 +60,7 @@ fn unknown_symbol_errors() {
 
 #[test]
 #[cfg(unix)]
-fn resolve_musi_io_read_text_from_process() {
+fn resolve_musi_io_read_text_from_builtin_host_symbols() {
     let mut rt = FfiRuntime::new();
     rt.load_library("").unwrap();
     let ptr = rt.resolve_symbol("", "musi_io_read_text").unwrap();
@@ -63,8 +73,8 @@ fn resolve_musi_io_read_text_from_process() {
 #[cfg(unix)]
 fn call_abs() {
     let mut rt = FfiRuntime::new();
-    rt.load_library("").unwrap();
-    let fn_ptr = rt.resolve_symbol("", "abs").unwrap();
+    rt.load_library(LIBC_NAME).unwrap();
+    let fn_ptr = rt.resolve_symbol(LIBC_NAME, "abs").unwrap();
 
     let mut heap = Heap::new();
     let mut args = vec![Value::from_int(-42)];
@@ -78,8 +88,8 @@ fn call_abs() {
 #[cfg(unix)]
 fn call_sin() {
     let mut rt = FfiRuntime::new();
-    rt.load_library("").unwrap();
-    let fn_ptr = rt.resolve_symbol("", "sin").unwrap();
+    rt.load_library(LIBM_NAME).unwrap();
+    let fn_ptr = rt.resolve_symbol(LIBM_NAME, "sin").unwrap();
 
     let mut heap = Heap::new();
     let mut args = vec![Value::from_float(0.0)];
@@ -100,8 +110,8 @@ fn call_sin() {
 #[cfg(unix)]
 fn marshal_string_strlen() {
     let mut rt = FfiRuntime::new();
-    rt.load_library("").unwrap();
-    let fn_ptr = rt.resolve_symbol("", "strlen").unwrap();
+    rt.load_library(LIBC_NAME).unwrap();
+    let fn_ptr = rt.resolve_symbol(LIBC_NAME, "strlen").unwrap();
 
     let mut heap = Heap::new();
     let str_idx = heap.alloc_string("hello".into());
@@ -114,7 +124,7 @@ fn marshal_string_strlen() {
 
 #[test]
 #[cfg(unix)]
-fn resolve_musi_io_symbols_from_process() {
+fn resolve_musi_io_symbols_from_builtin_host_symbols() {
     let mut rt = FfiRuntime::new();
     rt.load_library("").unwrap();
     assert!(!rt.resolve_symbol("", "musi_io_read_text").unwrap().is_null());

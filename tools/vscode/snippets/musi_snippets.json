@@ -233,36 +233,32 @@
 	"Describe Block": {
 		"prefix": "describe",
 		"body": [
-			"describe(\"${1:module}\", () => {",
-			"\tit(\"${2:should do something}\", () => {",
-			"\t\t$0",
-			"\t});",
-			"});"
+			"describe(\"${1:module}\", () => (",
+			"\tit(\"${2:should do something}\", () => ${0:pass})",
+			"));"
 		],
 		"description": "Test describe block"
 	},
 	"It Block": {
 		"prefix": "it",
 		"body": [
-			"it(\"${1:should do something}\", () => {",
-			"\t$0",
-			"});"
+			"it(\"${1:should do something}\", () => ${0:pass});"
 		],
 		"description": "Test it block"
 	},
 	"Expect": {
 		"prefix": "expect",
 		"body": [
-			"expect(${1:actual}).${2:to_equal}(${0:expected});"
+			"to_be(${1:actual}, ${0:expected});"
 		],
-		"description": "Test expectation"
+		"description": "Integer equality matcher"
 	},
 	"Handle Effect": {
 		"prefix": "handle",
 		"body": [
-			"handle ${1:expr} {",
-			"\t.${2:Op}(${3:arg}, resume) => resume(${0:result})",
-			"};"
+			"handle ${1:expr} with ${2:Effect} {",
+			"\tlet ${3:op}(${4:arg}) := resume ${0:result};",
+			"}"
 		],
 		"description": "Effect handler with resume"
 	}

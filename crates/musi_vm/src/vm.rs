@@ -9,7 +9,7 @@ use crate::errors::{VmError, VmResult};
 use crate::ffi::{self, FfiRuntime};
 use crate::frame::CallFrame;
 use crate::heap::{Heap, HeapObject};
-use crate::module::{ConstantEntry, Module, ENTRY_POINT_NAME};
+use crate::module::{ConstantEntry, ENTRY_POINT_NAME, Module};
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
@@ -236,7 +236,7 @@ impl Vm {
                     }
                 }
 
-                Opcode::HndlPush | Opcode::HndlPop | Opcode::Perf | Opcode::Res => {
+                Opcode::EffHdlPush | Opcode::EffHdlPop | Opcode::EffInvk | Opcode::EffCont => {
                     self.dispatch_effect(op, method_idx, &mut pc)?;
                 }
 
@@ -1084,7 +1084,7 @@ impl Vm {
 
     fn dispatch_effect(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
-            Opcode::HndlPush => {
+            Opcode::EffHdlPush => {
                 let effect_id = self.read_u16(method_idx, pc);
                 let op_id = self.read_u16(method_idx, pc);
                 let skip_offset = self.read_i16(method_idx, pc);
@@ -1104,10 +1104,10 @@ impl Vm {
                 });
                 *pc = pc.wrapping_add_signed(isize::from(skip_offset));
             }
-            Opcode::HndlPop => {
+            Opcode::EffHdlPop => {
                 let _ = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
             }
-            Opcode::Perf => {
+            Opcode::EffInvk => {
                 let effect_idx = self.read_u16(method_idx, pc);
                 let op_id = self.read_u16(method_idx, pc);
                 let payload = self
@@ -1141,7 +1141,7 @@ impl Vm {
                 frame.push(Value::from_ptr(cont_idx));
                 *pc = handler.handler_pc;
             }
-            Opcode::Res => {
+            Opcode::EffCont => {
                 let flag = self.read_u8(method_idx, pc);
                 let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
                 let value = if flag != 0 { frame.pop()? } else { Value::UNIT };

@@ -26,11 +26,11 @@ pub enum Operand {
     Wide(u16, u8),
     /// Two-part operand: `arr.newt tag(u8) + length(u16)`.
     Tagged(u8, u16),
-    /// Two-part operand: `perf effect_id(u16) + op_id(u16)`.
+    /// Two-part operand: `eff.invk effect_id(u16) + op_id(u16)`.
     Effect(u16, u16),
-    /// Two-part operand: `hndl.push index(u16) + jump_offset(i16)`.
+    /// Two-part operand: `eff.hdl.push index(u16) + jump_offset(i16)`.
     IndexedJump(u16, i16),
-    /// Three-part operand: `hndl.push effect_id(u16) + op_id(u16) + jump_offset(i16)`.
+    /// Three-part operand: `eff.hdl.push effect_id(u16) + op_id(u16) + jump_offset(i16)`.
     EffectJump(u16, u16, i16),
     /// Variable-length: `br.tbl` offset table.
     Table(Vec<i16>),

@@ -5,8 +5,13 @@ use music_il::opcode::Opcode;
 
 use super::{HostEffectHandler, Vm};
 use crate::errors::VmError;
-use crate::module::{ConstantEntry, GlobalDef, Method, Module, ENTRY_POINT_NAME};
+use crate::module::{ConstantEntry, ENTRY_POINT_NAME, GlobalDef, Method, Module};
 use crate::value::Value;
+
+#[cfg(target_os = "macos")]
+const LIBC_NAME: &str = "libSystem.dylib";
+#[cfg(all(unix, not(target_os = "macos")))]
+const LIBC_NAME: &str = "libc.so.6";
 
 const fn op(o: Opcode) -> u8 {
     o as u8
@@ -550,9 +555,9 @@ fn call_stack_overflow() {
 
 #[test]
 fn effect_push_pop() {
-    // HndlPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
+    // EffHdlPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -562,12 +567,12 @@ fn effect_push_pop() {
         op(Opcode::LdSmi),
         99,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         0,
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::HndlPop),
+        op(Opcode::EffHdlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 42);
@@ -576,7 +581,7 @@ fn effect_push_pop() {
 #[test]
 fn effect_perform_resume() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -586,12 +591,12 @@ fn effect_perform_resume() {
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         0,
         0,
         0,
@@ -604,7 +609,7 @@ fn effect_perform_resume() {
 #[test]
 fn effect_nested() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -614,9 +619,9 @@ fn effect_nested() {
         op(Opcode::LdSmi),
         88,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -626,17 +631,17 @@ fn effect_nested() {
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         0,
         0,
         0,
         0,
-        op(Opcode::HndlPop),
+        op(Opcode::EffHdlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 77);
@@ -646,21 +651,21 @@ fn effect_nested() {
 fn effect_dispatch_by_id() {
     // Handler A (effect=0): resume with 10
     // Handler B (effect=1): resume with 20
-    // Perf(effect=0) should hit Handler A, not B
+    // EffInvk(effect=0) should hit Handler A, not B
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
         0, // op_id = 0
         5,
-        0, // skip = 5 (LdSmi + Res)
+        0, // skip = 5 (LdSmi + EffCont)
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         1,
         0, // effect_id = 1
         0,
@@ -670,17 +675,17 @@ fn effect_dispatch_by_id() {
         op(Opcode::LdSmi),
         20,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         0,
         0,
         0,
-        0,                   // effect_id = 0, op_id = 0 -> should find Handler A
-        op(Opcode::HndlPop), // clean up Handler B
+        0,                     // effect_id = 0, op_id = 0 -> should find Handler A
+        op(Opcode::EffHdlPop), // clean up Handler B
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 10);
@@ -690,9 +695,9 @@ fn effect_dispatch_by_id() {
 fn effect_dispatch_skips_wrong_handler() {
     // Handler A (effect=0): resume with 10
     // Handler B (effect=1): resume with 20
-    // Perf(effect=1) should hit Handler B (topmost matching)
+    // EffInvk(effect=1) should hit Handler B (topmost matching)
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -702,9 +707,9 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         1,
         0, // effect_id = 1
         0,
@@ -714,17 +719,17 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::LdSmi),
         20,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         1,
         0,
         0,
-        0,                   // effect_id = 1, op_id = 0 -> should find Handler B
-        op(Opcode::HndlPop), // clean up Handler A
+        0,                     // effect_id = 1, op_id = 0 -> should find Handler B
+        op(Opcode::EffHdlPop), // clean up Handler A
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 20);
@@ -734,7 +739,7 @@ fn effect_dispatch_skips_wrong_handler() {
 fn effect_no_matching_handler() {
     // Only handler is for effect=0, but the performed effect is 99
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::HndlPush),
+        op(Opcode::EffHdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -744,12 +749,12 @@ fn effect_no_matching_handler() {
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::Res),
+        op(Opcode::EffCont),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         99,
         0,
         0,
@@ -783,7 +788,7 @@ fn effect_perform_can_be_handled_by_host() {
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::Perf),
+        op(Opcode::EffInvk),
         7,
         0,
         0,
@@ -1526,7 +1531,7 @@ fn ffi_call_dispatches() {
     // pushes -42, calls FfiCall(0), then halts.
     let module = Module {
         constants: Vec::new(),
-        strings: vec!["abs".into()],
+        strings: vec!["abs".into(), LIBC_NAME.into()],
         methods: vec![Method {
             name: ENTRY_POINT_NAME,
             locals_count: 0,
@@ -1547,7 +1552,7 @@ fn ffi_call_dispatches() {
         foreigns: vec![ForeignDescriptor {
             name_idx: 0,
             symbol_idx: u32::MAX,
-            lib_idx: u32::MAX,
+            lib_idx: 1,
             abi: ForeignAbi::Default,
             arity: 1,
             exported: false,

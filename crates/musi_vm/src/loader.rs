@@ -307,7 +307,7 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::StLoc
         | Opcode::Call
         | Opcode::CallTail
-        | Opcode::Res
+        | Opcode::EffCont
         | Opcode::TyclCall
         | Opcode::ArrGetI
         | Opcode::ArrSetI => Ok(1),
@@ -331,13 +331,13 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::TyChk
         | Opcode::TyCast => Ok(2),
 
-        Opcode::Perf => Ok(4),
+        Opcode::EffInvk => Ok(4),
 
         // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
         Opcode::ClsNew | Opcode::ArrNewT => Ok(3),
 
         // EffectJump (u16 + u16 + i16) = 6 bytes
-        Opcode::HndlPush => Ok(6),
+        Opcode::EffHdlPush => Ok(6),
 
         // Variable: u16 count + count * i16
         Opcode::BrTbl => {

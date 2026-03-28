@@ -3,7 +3,7 @@ use std::path::Path;
 
 use music_ast::expr::ExprKind;
 use music_db::Db;
-use music_hir::{lower, HirBundle};
+use music_hir::{HirBundle, lower};
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
 use music_resolve::graph::ModuleId;
@@ -12,7 +12,7 @@ use music_resolve::{ModuleGraph, ProjectResolution};
 use music_sema::type_check;
 use music_shared::Symbol;
 
-use crate::emitter::{emit_with_context, ImportedGlobal, MethodEntry, SeamModule};
+use crate::emitter::{ImportedGlobal, MethodEntry, SeamModule, emit_with_context};
 use crate::error::EmitError;
 use crate::pool::ConstantPool;
 
@@ -236,18 +236,18 @@ fn rewrite_instructions(
                         .expect("foreign index overflow");
                 }
             }
-            Opcode::Perf => {
+            Opcode::EffInvk => {
                 if let Operand::Effect(ref mut effect_id, _) = instr.operand {
                     *effect_id = *effect_remap
                         .get(effect_id)
                         .expect("effect remap missing for perf");
                 }
             }
-            Opcode::HndlPush => {
+            Opcode::EffHdlPush => {
                 if let Operand::EffectJump(ref mut effect_id, _, _) = instr.operand {
                     *effect_id = *effect_remap
                         .get(effect_id)
-                        .expect("effect remap missing for hndl.push");
+                        .expect("effect remap missing for hdl.push");
                 }
             }
             _ => {}

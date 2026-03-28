@@ -204,14 +204,14 @@ fn smoke_function_call() {
 
 #[test]
 fn smoke_effect_basic() {
-    // Direct Module construction (not .seam) verifying HndlPush → Perf → Res round-trip.
+    // Direct Module construction (not .seam) verifying EffHdlPush → EffInvk → EffCont round-trip.
     // Byte layout: same as effect_perform_resume in vm/tests.rs
-    // [0]  HndlPush   [1,2]  0,0 [3,4] 0,0 [5,6] 5,0   skip 5 bytes → land at main body [12]
-    // [7]  LdSmi     [8,9]  77,0                         handler: push resume value
-    // [10] Res   [11]   1                            handler: pop value, pop cont_ptr, restore
-    // [12] LdSmi     [13,14] 0,0                         main: dummy arg for perform
-    // [15] Perf   [16,17] 0,0 [18,19] 0,0            main: suspend → resume_pc=20
-    // [20] Halt                                           returns 77
+    // [0]  EffHdlPush   [1,2]  0,0 [3,4] 0,0 [5,6] 5,0      skip 5 bytes → land at main body [12]
+    // [7]  LdSmi        [8,9]  77,0                         handler: push resume value
+    // [10] EffCont      [11]   1                            handler: pop value, pop cont_ptr, restore
+    // [12] LdSmi        [13,14] 0,0                         main: dummy arg for perform
+    // [15] EffInvk      [16,17] 0,0 [18,19] 0,0             main: suspend → resume_pc=20
+    // [20] Halt                                             returns 77
     use musi_vm::module::{Method, Module};
     let module = Module {
         constants: Vec::new(),
@@ -220,7 +220,7 @@ fn smoke_effect_basic() {
             name: ENTRY_POINT_NAME,
             locals_count: 0,
             code: vec![
-                op(Opcode::HndlPush),
+                op(Opcode::EffHdlPush),
                 0,
                 0, // effect_id = 0
                 0,
@@ -230,12 +230,12 @@ fn smoke_effect_basic() {
                 op(Opcode::LdSmi),
                 77,
                 0,
-                op(Opcode::Res),
+                op(Opcode::EffCont),
                 1,
                 op(Opcode::LdSmi),
                 0,
                 0,
-                op(Opcode::Perf),
+                op(Opcode::EffInvk),
                 0,
                 0,
                 0,

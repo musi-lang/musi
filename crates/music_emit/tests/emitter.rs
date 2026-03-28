@@ -20,8 +20,8 @@ use music_il::format::BUILTIN_TYPE_INT;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::queries::ResolutionMap;
-use music_sema::env::{DispatchInfo, EffectUse, TypeEnv};
 use music_sema::Ty;
+use music_sema::env::{DispatchInfo, EffectUse, TypeEnv};
 use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
 use music_emit::emitter::emit;
@@ -457,7 +457,7 @@ fn emit_perform() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 7));
-    assert_eq!(instrs[1], Instruction::with_effect(Opcode::Perf, 0, 0));
+    assert_eq!(instrs[1], Instruction::with_effect(Opcode::EffInvk, 0, 0));
 }
 
 #[test]
@@ -498,11 +498,11 @@ fn emit_handle_with_body() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_effect_jump(Opcode::HndlPush, 0, 0, 3)
+        Instruction::with_effect_jump(Opcode::EffHdlPush, 0, 0, 3)
     );
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[3], Instruction::simple(Opcode::HndlPop));
+    assert_eq!(instrs[3], Instruction::simple(Opcode::EffHdlPop));
 }
 
 #[test]
@@ -516,7 +516,7 @@ fn emit_resume_with_value() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 3));
-    assert_eq!(instrs[1], Instruction::with_u8(Opcode::Res, 1));
+    assert_eq!(instrs[1], Instruction::with_u8(Opcode::EffCont, 1));
 }
 
 #[test]
@@ -524,7 +524,7 @@ fn emit_resume_unit() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Resume(None));
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u8(Opcode::Res, 0));
+    assert_eq!(instrs[0], Instruction::with_u8(Opcode::EffCont, 0));
 }
 
 #[test]

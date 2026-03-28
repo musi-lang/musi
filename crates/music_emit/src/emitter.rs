@@ -1140,7 +1140,7 @@ impl Emitter<'_> {
             .copied()
             .expect("missing effect metadata for perform expression");
         self.push(Instruction::with_effect(
-            Opcode::Perf,
+            Opcode::EffInvk,
             effect_use.effect_id,
             effect_use.op_id,
         ));
@@ -1167,7 +1167,7 @@ impl Emitter<'_> {
                 .expect("missing effect operation metadata for handler");
             let pos = self.current_instructions.len();
             self.push(Instruction::with_effect_jump(
-                Opcode::HndlPush,
+                Opcode::EffHdlPush,
                 effect_id,
                 op_id,
                 0,
@@ -1182,12 +1182,12 @@ impl Emitter<'_> {
                 .sum();
             let offset = i16::try_from(byte_offset).expect("jump too far");
             self.current_instructions[pos] =
-                Instruction::with_effect_jump(Opcode::HndlPush, effect_id, op_id, offset);
+                Instruction::with_effect_jump(Opcode::EffHdlPush, effect_id, op_id, offset);
         }
 
         self.emit_expr(body)?;
         for _ in handlers {
-            self.push(Instruction::simple(Opcode::HndlPop));
+            self.push(Instruction::simple(Opcode::EffHdlPop));
         }
         Ok(())
     }
@@ -1195,9 +1195,9 @@ impl Emitter<'_> {
     fn emit_resume(&mut self, value: Option<ExprId>) -> EmitResult {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id)?;
-            self.push(Instruction::with_u8(Opcode::Res, 1));
+            self.push(Instruction::with_u8(Opcode::EffCont, 1));
         } else {
-            self.push(Instruction::with_u8(Opcode::Res, 0));
+            self.push(Instruction::with_u8(Opcode::EffCont, 0));
         }
         Ok(())
     }

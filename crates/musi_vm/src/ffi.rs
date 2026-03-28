@@ -68,6 +68,7 @@ impl FfiRuntime {
             if let Some(ptr) = resolve_builtin_symbol(symbol) {
                 return Ok(ptr);
             }
+            return Err(VmError::FfiSymbolNotFound(symbol.into()));
         }
 
         let lib = self
