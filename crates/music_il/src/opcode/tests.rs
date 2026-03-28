@@ -105,10 +105,10 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::TyChk.mnemonic(), "ty.chk");
     assert_eq!(Opcode::TyCast.mnemonic(), "ty.cast");
     assert_eq!(Opcode::TyTag.mnemonic(), "ty.tag");
-    assert_eq!(Opcode::EffPush.mnemonic(), "eff.push");
-    assert_eq!(Opcode::EffPop.mnemonic(), "eff.pop");
-    assert_eq!(Opcode::EffNeed.mnemonic(), "eff.need");
-    assert_eq!(Opcode::EffCont.mnemonic(), "eff.cont");
+    assert_eq!(Opcode::HndlPush.mnemonic(), "hndl.push");
+    assert_eq!(Opcode::HndlPop.mnemonic(), "hndl.pop");
+    assert_eq!(Opcode::Perf.mnemonic(), "perf");
+    assert_eq!(Opcode::Res.mnemonic(), "res");
     assert_eq!(Opcode::TyclDict.mnemonic(), "tycl.dict");
     assert_eq!(Opcode::TyclCall.mnemonic(), "tycl.call");
     assert_eq!(Opcode::GcPin.mnemonic(), "gc.pin");

@@ -75,7 +75,7 @@ pub enum ExprKind {
     ForeignImport(Symbol),
 
     // Effects
-    Need(ExprId),
+    Perform(ExprId),
     Handle(Box<HandleData>),
 
     // Metaprogramming

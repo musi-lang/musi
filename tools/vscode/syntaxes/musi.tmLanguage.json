@@ -219,7 +219,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.musi",
-                    "match": "\\b(if|match|in|return|defer|where|try|need|handle|resume|fatal)\\b"
+                    "match": "\\b(if|match|in|return|defer|where|try|perform|handle|resume|fatal)\\b"
                 },
                 {
                     "name": "keyword.control.import.musi",

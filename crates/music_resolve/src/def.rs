@@ -15,6 +15,7 @@ pub struct DefInfo {
     pub kind: DefKind,
     pub vis: Visibility,
     pub scope: ScopeId,
+    pub module_name: Option<String>,
 }
 
 /// What kind of entity a definition represents.

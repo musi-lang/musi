@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use music_il::format::{
     self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
-    FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind, HEADER_SIZE,
+    FfiType, ForeignAbi, ForeignDescriptor, HEADER_SIZE, TypeDescriptor, TypeKind,
 };
 use music_il::opcode::Opcode;
 
@@ -307,7 +307,7 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::StLoc
         | Opcode::Call
         | Opcode::CallTail
-        | Opcode::EffCont
+        | Opcode::Res
         | Opcode::TyclCall
         | Opcode::ArrGetI
         | Opcode::ArrSetI => Ok(1),
@@ -331,13 +331,13 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         | Opcode::TyChk
         | Opcode::TyCast => Ok(2),
 
-        Opcode::EffNeed => Ok(4),
+        Opcode::Perf => Ok(4),
 
         // Wide (u16 + u8) and Tagged (u8 + u16) operands are both 3 bytes
         Opcode::ClsNew | Opcode::ArrNewT => Ok(3),
 
         // EffectJump (u16 + u16 + i16) = 6 bytes
-        Opcode::EffPush => Ok(6),
+        Opcode::HndlPush => Ok(6),
 
         // Variable: u16 count + count * i16
         Opcode::BrTbl => {
@@ -363,8 +363,9 @@ fn decode_efct(data: &[u8]) -> Result<Vec<EffectDescriptor>, LoadError> {
         pos = pos.wrapping_add(2);
         let module_name = read_inline_string(data, &mut pos)?;
         let name = read_inline_string(data, &mut pos)?;
-        let op_count =
-            usize::from(u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?));
+        let op_count = usize::from(u16::from_le_bytes(
+            read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
+        ));
         pos = pos.wrapping_add(2);
         let mut operations = Vec::with_capacity(op_count);
         for _ in 0..op_count {

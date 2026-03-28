@@ -77,8 +77,8 @@ pub struct TypeEnv {
     pub effect_order: SymbolList,
     /// Handle `ExprId` -> effect ID for the handler.
     pub handle_effects: HashMap<ExprId, u16>,
-    /// Need `ExprId` -> explicit effect operation being invoked.
-    pub need_effects: HashMap<ExprId, EffectUse>,
+    /// Perform `ExprId` -> explicit effect operation being invoked.
+    pub perform_effects: HashMap<ExprId, EffectUse>,
     /// Variant literal `ExprId` -> resolved parent type and tag index.
     pub variant_info: HashMap<ExprId, VariantInfo>,
     /// Stable class IDs for type class dispatch in the emitter.
@@ -120,7 +120,7 @@ impl TypeEnv {
             effect_defs: HashMap::new(),
             effect_order: Vec::new(),
             handle_effects: HashMap::new(),
-            need_effects: HashMap::new(),
+            perform_effects: HashMap::new(),
             variant_info: HashMap::with_capacity(hint / 8),
             class_ids: HashMap::new(),
             variant_tags: HashMap::new(),

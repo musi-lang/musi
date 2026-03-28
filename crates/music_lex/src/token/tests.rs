@@ -19,7 +19,7 @@ fn keyword_from_str_all() {
         ("law", TokenKind::KwLaw),
         ("let", TokenKind::KwLet),
         ("mut", TokenKind::KwMut),
-        ("need", TokenKind::KwNeed),
+        ("perform", TokenKind::KwPerform),
         ("not", TokenKind::KwNot),
         ("of", TokenKind::KwOf),
         ("opaque", TokenKind::KwOpaque),

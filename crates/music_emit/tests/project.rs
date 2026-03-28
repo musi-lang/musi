@@ -1,17 +1,18 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::tests_outside_test_module)]
 
 use std::fs;
+use std::path::Path;
 
+use musi_vm::Vm;
 use music_emit::pool::ConstantEntry;
 use music_emit::project::emit_project;
 use music_emit::write_seam;
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
-use musi_vm::Vm;
 use music_resolve::loader::ModuleLoader;
 use music_resolve::resolve_project;
 
-fn resolve_and_emit(dir: &std::path::Path, entry: &str) -> music_emit::project::ProjectEmitResult {
+fn resolve_and_emit(dir: &Path, entry: &str) -> music_emit::project::ProjectEmitResult {
     let entry_path = dir.join(entry);
     let loader = ModuleLoader::new(dir.to_path_buf());
     let resolution = resolve_project(&entry_path, &loader).unwrap();
@@ -242,9 +243,17 @@ fn imported_function_exports_are_available_to_dependents() {
     );
 
     let module = &result.module;
-    let main = module.methods.iter().filter(|m| m.name.is_none()).last().unwrap();
+    let main = module
+        .methods
+        .iter()
+        .filter(|m| m.name.is_none())
+        .last()
+        .unwrap();
     let has_ld_glob = main.instructions.iter().any(|i| i.opcode == Opcode::LdGlob);
-    assert!(has_ld_glob, "expected imported function call to load a global");
+    assert!(
+        has_ld_glob,
+        "expected imported function call to load a global"
+    );
 }
 
 #[test]
@@ -271,17 +280,52 @@ fn zero_arg_lambda_does_not_become_entrypoint() {
 }
 
 #[test]
-fn top_level_typed_value_is_not_emitted_as_callable_global() {
+fn same_named_effects_from_different_modules_do_not_merge() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(
+        dir.path().join("a.ms"),
+        "export let Test := effect { let emit (value : Int) : Int }; export let a := 1",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("b.ms"),
+        "export let Test := effect { let emit (value : Int) : Int }; export let b := 2",
+    )
+    .unwrap();
+    fs::write(
         dir.path().join("main.ms"),
-        "export let answer : Int := 42",
+        "import \"./a.ms\" as _; import \"./b.ms\" as _; export let value := 0",
     )
     .unwrap();
 
     let result = resolve_and_emit(dir.path(), "main.ms");
+    let test_effects: Vec<_> = result
+        .module
+        .effects
+        .iter()
+        .filter(|effect| effect.name == "Test")
+        .collect();
+
+    assert_eq!(
+        test_effects.len(),
+        2,
+        "expected both Test effects to remain distinct"
+    );
+    assert_ne!(test_effects[0].module_name, test_effects[1].module_name);
+}
+
+#[test]
+fn top_level_typed_value_is_not_emitted_as_callable_global() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("main.ms"), "export let answer : Int := 42").unwrap();
+
+    let result = resolve_and_emit(dir.path(), "main.ms");
     let module = &result.module;
-    let main = module.methods.iter().find(|method| method.name.is_none()).unwrap();
+    let main = module
+        .methods
+        .iter()
+        .find(|method| method.name.is_none())
+        .unwrap();
     let has_cls_new = main
         .instructions
         .iter()

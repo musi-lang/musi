@@ -26,11 +26,11 @@ pub enum Operand {
     Wide(u16, u8),
     /// Two-part operand: `arr.newt tag(u8) + length(u16)`.
     Tagged(u8, u16),
-    /// Two-part operand: `eff.need effect_id(u16) + op_id(u16)`.
+    /// Two-part operand: `perf effect_id(u16) + op_id(u16)`.
     Effect(u16, u16),
-    /// Two-part operand: `eff.push index(u16) + jump_offset(i16)`.
+    /// Two-part operand: `hndl.push index(u16) + jump_offset(i16)`.
     IndexedJump(u16, i16),
-    /// Three-part operand: `eff.push effect_id(u16) + op_id(u16) + jump_offset(i16)`.
+    /// Three-part operand: `hndl.push effect_id(u16) + op_id(u16) + jump_offset(i16)`.
     EffectJump(u16, u16, i16),
     /// Variable-length: `br.tbl` offset table.
     Table(Vec<i16>),
@@ -111,12 +111,7 @@ impl Instruction {
 
     /// An instruction with an effect jump operand (u16 + u16 + i16).
     #[must_use]
-    pub const fn with_effect_jump(
-        opcode: Opcode,
-        effect_id: u16,
-        op_id: u16,
-        jump: i16,
-    ) -> Self {
+    pub const fn with_effect_jump(opcode: Opcode, effect_id: u16, op_id: u16, jump: i16) -> Self {
         Self {
             opcode,
             operand: Operand::EffectJump(effect_id, op_id, jump),

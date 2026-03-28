@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use music_arena::Arena;
 use music_ast::common::{Constraint, MemberDecl, ModifierSet, Param};
@@ -28,6 +28,7 @@ pub struct ResolutionMap {
     pub expr_res: HashMap<ExprId, DefId>,
     pub ty_res: HashMap<TyId, DefId>,
     pub pat_variant_res: HashMap<PatId, DefId>,
+    pub imported_effect_modules: HashMap<Symbol, String>,
     pub scopes: ScopeArena,
     pub captures: HashMap<ExprId, SymbolList>,
 }
@@ -48,6 +49,7 @@ impl ResolutionMap {
             expr_res: HashMap::with_capacity(hint),
             ty_res: HashMap::with_capacity(hint / 2),
             pat_variant_res: HashMap::new(),
+            imported_effect_modules: HashMap::new(),
             scopes: ScopeArena::new(),
             captures: HashMap::new(),
         }
@@ -203,6 +205,7 @@ impl ResolveDb {
             kind,
             vis,
             scope,
+            module_name: None,
         });
         let _ = self.resolution.scopes.get_mut(scope).bind(name, def_id);
         def_id
@@ -257,7 +260,7 @@ impl ResolveDb {
             }
             Some(ResolvedImport::File(file_path) | ResolvedImport::Git(file_path)) => {
                 let existing = self.graph.lookup(&file_path);
-                let mod_id = existing.unwrap_or_else(|| self.graph.add_module(file_path));
+                let mod_id = existing.unwrap_or_else(|| self.graph.add_module(file_path.clone()));
 
                 if existing.is_some() && self.graph.is_loading(mod_id) {
                     let span = self.db.ast.exprs.get(expr_id).span;
@@ -270,7 +273,7 @@ impl ResolveDb {
 
                 if let Some(exports) = self.graph.get_exports(mod_id) {
                     let exports_clone = exports.clone();
-                    self.add_imports_to_scope(&exports_clone, kind);
+                    self.add_imports_to_scope(&exports_clone, kind, &file_path);
                     return;
                 }
 
@@ -282,8 +285,9 @@ impl ResolveDb {
         }
     }
 
-    fn add_imports_to_scope(&mut self, exports: &ModuleExports, kind: &ImportKind) {
+    fn add_imports_to_scope(&mut self, exports: &ModuleExports, kind: &ImportKind, path: &Path) {
         let scope = self.module_scope;
+        let module_name = infer_effect_module_name(path);
         match kind {
             ImportKind::Qualified(name) => {
                 // Bind the module name as an Import def; individual member
@@ -306,6 +310,12 @@ impl ResolveDb {
                         Visibility::Private,
                         scope,
                     );
+                    if imported.kind == DefKind::Effect {
+                        let _ = self
+                            .resolution
+                            .imported_effect_modules
+                            .insert(name_sym, module_name.clone());
+                    }
                 }
             }
             ImportKind::Selective(_namespace, names) => {
@@ -319,6 +329,12 @@ impl ResolveDb {
                             Visibility::Private,
                             scope,
                         );
+                        if imported.kind == DefKind::Effect {
+                            let _ = self
+                                .resolution
+                                .imported_effect_modules
+                                .insert(name.name, module_name.clone());
+                        }
                     }
                 }
             }
@@ -382,11 +398,17 @@ impl ResolveDb {
             }
             for constraint in &sig.constraints {
                 match constraint {
-                    Constraint::Implements { class, .. } | Constraint::Subtype { bound: class, .. } => {
+                    Constraint::Implements { class, .. }
+                    | Constraint::Subtype { bound: class, .. } => {
                         for arg in &class.args {
                             self.resolve_ty(*arg, sig_scope);
                         }
-                        if self.resolution.scopes.resolve(sig_scope, class.name.name).is_none() {
+                        if self
+                            .resolution
+                            .scopes
+                            .resolve(sig_scope, class.name.name)
+                            .is_none()
+                        {
                             self.errors.push(ResolveError {
                                 kind: ResolveErrorKind::UndefinedType(class.name.name),
                                 span: class.name.span,
@@ -461,7 +483,7 @@ impl ResolveDb {
                 self.resolve_expr(rhs, scope);
             }
             ExprKind::UnaryOp(_, operand)
-            | ExprKind::Need(operand)
+            | ExprKind::Perform(operand)
             | ExprKind::Postfix { expr: operand, .. }
             | ExprKind::Access { expr: operand, .. } => {
                 self.resolve_expr(operand, scope);
@@ -777,6 +799,20 @@ impl ResolveDb {
             }
         }
     }
+}
+
+fn infer_effect_module_name(path: &Path) -> String {
+    if path
+        .components()
+        .rev()
+        .take(3)
+        .any(|component| component.as_os_str() == "modules")
+    {
+        if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+            return format!("musi:{stem}");
+        }
+    }
+    path.to_string_lossy().into_owned()
 }
 
 const fn visibility_from_modifiers(m: &ModifierSet) -> Visibility {

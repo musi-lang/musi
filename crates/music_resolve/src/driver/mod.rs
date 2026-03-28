@@ -177,6 +177,7 @@ fn collect_exports(interner: &Interner, resolution: &ResolutionMap) -> ModuleExp
                 ExportInfo {
                     name,
                     kind: def.kind,
+                    module_name: def.module_name.clone(),
                 },
             );
         }

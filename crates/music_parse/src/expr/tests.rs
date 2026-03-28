@@ -268,7 +268,7 @@ fn case_expr() {
     assert!(matches!(root_kind(&ast), ExprKind::Case(data) if data.arms.len() == 2));
 }
 
-// ── Return / Resume / Need ────────────────────────────────────
+// ── Return / Resume / Perform ─────────────────────────────────
 
 #[test]
 fn return_expr() {
@@ -285,10 +285,17 @@ fn resume_expr() {
 }
 
 #[test]
-fn need_expr() {
-    let (ast, errors) = parse_expr("need x");
+fn perform_expr() {
+    let (ast, errors) = parse_expr("perform x");
     assert!(errors.is_empty());
-    assert!(matches!(root_kind(&ast), ExprKind::Need(_)));
+    assert!(matches!(root_kind(&ast), ExprKind::Perform(_)));
+}
+
+#[test]
+fn handle_expr() {
+    let (ast, errors) = parse_expr("handle value with Test { let emit(arg) := resume arg }");
+    assert!(errors.is_empty());
+    assert!(matches!(root_kind(&ast), ExprKind::Handle(_)));
 }
 
 // ── Import ────────────────────────────────────────────────────

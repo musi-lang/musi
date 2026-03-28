@@ -4,6 +4,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 
 use musi::driver::{analyze_project, compile};
 use music_shared::diag::{emit, Diag};
@@ -94,7 +95,11 @@ fn analyze_project_resolves_workspace_package_names() {
         r#"{ "name": "@std", "main": "./index.ms", "exports": { "./testing": "./testing/index.ms", "./option": "./option/index.ms" } }"#,
     )
     .expect("workspace config");
-    fs::write(dir.path().join("index.ms"), "export let version := \"0.1.0\";").expect("root source");
+    fs::write(
+        dir.path().join("index.ms"),
+        "export let version := \"0.1.0\";",
+    )
+    .expect("root source");
 
     fs::create_dir_all(dir.path().join("testing")).expect("testing dir");
     fs::write(
@@ -107,11 +112,7 @@ export let it := (_name, _body) => _body();
     .expect("testing source");
 
     fs::create_dir_all(dir.path().join("option")).expect("option dir");
-    fs::write(
-        dir.path().join("option/index.ms"),
-        "export let some := 1;",
-    )
-    .expect("option source");
+    fs::write(dir.path().join("option/index.ms"), "export let some := 1;").expect("option source");
     fs::write(
         dir.path().join("option/index.test.ms"),
         r#"import "@std/testing" as _;
@@ -126,4 +127,33 @@ export let test := () => describe("option", () => (
 
     let result = analyze_project(&dir.path().join("option/index.test.ms")).expect("analyze");
     assert!(!result.has_errors, "expected no errors");
+}
+
+#[test]
+fn test_command_requires_canonical_musi_test_effect_metadata() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let test_file = dir.path().join("local_effect.test.ms");
+    fs::write(
+        &test_file,
+        r#"export let Test := effect {
+    let emit(payload : Int) : Unit
+};
+
+export let test := () : Unit ~> Unit => perform Test.emit(0);
+"#,
+    )
+    .expect("write test file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_musi"))
+        .arg("test")
+        .arg(&test_file)
+        .output()
+        .expect("run musi test");
+
+    assert!(!output.status.success(), "expected musi test to fail");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("missing emitted `musi:test::Test` effect metadata"),
+        "unexpected stderr: {stderr}"
+    );
 }

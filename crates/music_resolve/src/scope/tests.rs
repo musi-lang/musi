@@ -12,6 +12,7 @@ fn make_def(defs: &mut Arena<DefInfo>, interner: &mut Interner, name: &str) -> s
         kind: DefKind::Value,
         vis: Visibility::Private,
         scope: 0,
+        module_name: None,
     })
 }
 

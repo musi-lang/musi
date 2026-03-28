@@ -9,6 +9,7 @@ use crate::def::DefKind;
 pub struct ExportInfo {
     pub name: String,
     pub kind: DefKind,
+    pub module_name: Option<String>,
 }
 
 /// Opaque identifier for a module in the dependency graph.

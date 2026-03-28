@@ -336,9 +336,9 @@ fn import_selective() {
 }
 
 #[test]
-fn need() {
-    let e = ExprKind::Need(dummy_expr_id());
-    assert!(matches!(e, ExprKind::Need(_)));
+fn perform() {
+    let e = ExprKind::Perform(dummy_expr_id());
+    assert!(matches!(e, ExprKind::Perform(_)));
 }
 
 #[test]

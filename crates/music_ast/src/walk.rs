@@ -40,7 +40,7 @@ pub fn map_expr_children(
 
     match kind {
         ExprKind::UnaryOp(..)
-        | ExprKind::Need(_)
+        | ExprKind::Perform(_)
         | ExprKind::Return(Some(_))
         | ExprKind::Resume(Some(_))
         | ExprKind::Postfix { .. }
@@ -69,7 +69,7 @@ fn map_ops(
 ) -> ExprId {
     match *kind {
         ExprKind::UnaryOp(op, e) => map1(ast, expr_id, e, |e| ExprKind::UnaryOp(op, e), span, f),
-        ExprKind::Need(e) => map1(ast, expr_id, e, ExprKind::Need, span, f),
+        ExprKind::Perform(e) => map1(ast, expr_id, e, ExprKind::Perform, span, f),
         ExprKind::Return(Some(e)) => map1(ast, expr_id, e, |e| ExprKind::Return(Some(e)), span, f),
         ExprKind::Resume(Some(e)) => map1(ast, expr_id, e, |e| ExprKind::Resume(Some(e)), span, f),
         ExprKind::Postfix { expr: e, op } => map1(

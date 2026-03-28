@@ -95,7 +95,7 @@ keyword = "and"
           / "law"
           / "let"
           / "mut"
-          / "need"
+          / "perform"
           / "not"
           / "of"
           / "opaque"
@@ -220,8 +220,8 @@ ast-expr-atom = lit  ; INT / FLOAT / STRING / FSTRING / RUNE
                 / ast-data  ; KW_DATA
                 / ast-effect  ; KW_EFFECT
                 / ast-class  ; KW_CLASS
-                / ast-need  ; KW_NEED
-                / ast-handle  ; KW_WITH
+                / ast-perform  ; KW_PERFORM
+                / ast-handle  ; KW_HANDLE
                 / ast-foreign-expr  ; KW_FOREIGN
                 / ast-quote  ; KW_QUOTE
                 / ast-with-attrs  ; AT
@@ -338,9 +338,9 @@ ast-import       = "import" lit-string ["as" (ident / "_" / ident ".{" ident-lis
 
 ast-foreign-expr = "foreign" [lit-string] ("import" lit-string / "let" foreign-binding / "(" *(foreign-binding ";") ")")
 
-ast-need         = "need" postfix-expr
+ast-perform      = "perform" postfix-expr
 
-ast-handle       = "with" ast-ty-named "{" *(fn-decl [";"]) "}" "handle" ast-expr
+ast-handle       = "handle" ast-expr "with" ast-ty-named "{" *(fn-decl [";"]) "}"
 ; §4.11  Quote and splice - metaprogramming
 ast-quote = "quote" ("(" ast-expr ")" / "{" *(ast-stmt) "}")
 

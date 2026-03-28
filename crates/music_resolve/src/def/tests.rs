@@ -13,6 +13,7 @@ fn def_info_construction() {
         kind: DefKind::Value,
         vis: Visibility::Private,
         scope: 0,
+        module_name: None,
     };
     assert_eq!(def.name, name);
     assert_eq!(def.span, Span::new(0, 1));

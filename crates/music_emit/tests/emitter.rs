@@ -20,7 +20,8 @@ use music_il::format::BUILTIN_TYPE_INT;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::queries::ResolutionMap;
-use music_sema::env::{DispatchInfo, TypeEnv};
+use music_sema::env::{DispatchInfo, EffectUse, TypeEnv};
+use music_sema::Ty;
 use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
 use music_emit::emitter::emit;
@@ -150,9 +151,12 @@ fn emit_let_binding() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    // [ld.smi 42, st.loc 0, pop, ld.loc 0, halt]
+    // [ld.smi 42, st.loc 0, ld.unit, pop, ld.loc 0, halt]
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 42));
     assert_eq!(instrs[1], Instruction::with_u8(Opcode::StLoc, 0));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::LdUnit));
+    assert_eq!(instrs[3], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[4], Instruction::with_u8(Opcode::LdLoc, 0));
 }
 
 #[test]
@@ -428,24 +432,24 @@ fn emit_range_exclusive() {
 }
 
 #[test]
-fn emit_need() {
+fn emit_perform() {
     let mut thir = build_thir_single(|ast, _int| {
         let operand = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(7))));
-        ExprKind::Need(operand)
+        ExprKind::Perform(operand)
     });
     let effect_name = thir.db.interner.intern("Test");
     let effect_id = thir.type_env.assign_effect_id(effect_name);
-    let unit_ty = thir.type_env.intern(music_sema::Ty::Unit);
+    let unit_ty = thir.type_env.intern(Ty::Unit);
     let _ = thir.type_env.register_effect_ops(
         effect_name,
         vec![(thir.db.interner.intern("emit"), None, unit_ty)],
     );
-    let need_expr = thir.db.ast.root[0];
-    let _ = thir.type_env.need_effects.insert(
-        need_expr,
-        music_sema::env::EffectUse {
+    let perform_expr = thir.db.ast.root[0];
+    let _ = thir.type_env.perform_effects.insert(
+        perform_expr,
+        EffectUse {
             effect_id,
             op_id: 0,
         },
@@ -453,7 +457,7 @@ fn emit_need() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 7));
-    assert_eq!(instrs[1], Instruction::with_effect(Opcode::EffNeed, 0, 0));
+    assert_eq!(instrs[1], Instruction::with_effect(Opcode::Perf, 0, 0));
 }
 
 #[test]
@@ -483,7 +487,7 @@ fn emit_handle_with_body() {
         }))
     });
     let eff_sym = thir.db.interner.intern("MyEff");
-    let ret_ty = thir.type_env.intern(music_sema::Ty::Unit);
+    let ret_ty = thir.type_env.intern(Ty::Unit);
     let effect_id = thir.type_env.assign_effect_id(eff_sym);
     let _ = thir
         .type_env
@@ -494,11 +498,11 @@ fn emit_handle_with_body() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_effect_jump(Opcode::EffPush, 0, 0, 3)
+        Instruction::with_effect_jump(Opcode::HndlPush, 0, 0, 3)
     );
     assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
     assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[3], Instruction::simple(Opcode::EffPop));
+    assert_eq!(instrs[3], Instruction::simple(Opcode::HndlPop));
 }
 
 #[test]
@@ -512,7 +516,7 @@ fn emit_resume_with_value() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 3));
-    assert_eq!(instrs[1], Instruction::with_u8(Opcode::EffCont, 1));
+    assert_eq!(instrs[1], Instruction::with_u8(Opcode::Res, 1));
 }
 
 #[test]
@@ -520,7 +524,7 @@ fn emit_resume_unit() {
     let thir = build_thir_single(|_ast, _int| ExprKind::Resume(None));
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u8(Opcode::EffCont, 0));
+    assert_eq!(instrs[0], Instruction::with_u8(Opcode::Res, 0));
 }
 
 #[test]
@@ -715,9 +719,10 @@ fn emit_lambda_with_upvalue_capture() {
 
     assert_eq!(instrs[0], Instruction::with_i16(Opcode::LdSmi, 42));
     assert_eq!(instrs[1], Instruction::with_u8(Opcode::StLoc, 0));
-    assert_eq!(instrs[2], Instruction::simple(Opcode::Pop));
-    assert_eq!(instrs[3], Instruction::with_u8(Opcode::LdLoc, 0));
-    assert_eq!(instrs[4], Instruction::with_wide(Opcode::ClsNew, 0, 1));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::LdUnit));
+    assert_eq!(instrs[3], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[4], Instruction::with_u8(Opcode::LdLoc, 0));
+    assert_eq!(instrs[5], Instruction::with_wide(Opcode::ClsNew, 0, 1));
 
     let lambda_method = &module.methods[0];
     let lambda_instrs = &lambda_method.instructions;
@@ -1306,10 +1311,22 @@ fn emit_wide_locals_above_255() {
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
 
-    assert_eq!(instrs[769].opcode, Opcode::StLocW);
-    assert_eq!(instrs[769].operand, Operand::U16(256));
-    assert_eq!(instrs[771].opcode, Opcode::LdLocW);
-    assert_eq!(instrs[771].operand, Operand::U16(256));
+    let st_loc_w = instrs
+        .iter()
+        .find(|instr| instr.opcode == Opcode::StLocW && instr.operand == Operand::U16(256));
+    assert!(
+        st_loc_w.is_some(),
+        "expected StLocW for slot 256 in {instrs:?}"
+    );
+
+    let ld_loc_w = instrs
+        .iter()
+        .find(|instr| instr.opcode == Opcode::LdLocW && instr.operand == Operand::U16(256));
+    assert!(
+        ld_loc_w.is_some(),
+        "expected LdLocW for slot 256 in {instrs:?}"
+    );
+
     assert_eq!(instrs[1].opcode, Opcode::StLoc);
     assert_eq!(instrs[1].operand, Operand::U8(0));
 }
@@ -1394,11 +1411,13 @@ fn emit_index_assign_uses_arr_set() {
     });
     let module = emit(&thir).unwrap();
     let instrs = &module.methods[0].instructions;
+    let tail = &instrs[instrs.len() - 5..];
 
-    assert_eq!(instrs[11].opcode, Opcode::LdLoc);
-    assert_eq!(instrs[12].opcode, Opcode::LdLoc);
-    assert_eq!(instrs[13].opcode, Opcode::LdLoc);
-    assert_eq!(instrs[14], Instruction::simple(Opcode::ArrSet));
+    assert_eq!(tail[0], Instruction::with_u8(Opcode::LdLoc, 0));
+    assert_eq!(tail[1], Instruction::with_u8(Opcode::LdLoc, 1));
+    assert_eq!(tail[2], Instruction::with_u8(Opcode::LdLoc, 2));
+    assert_eq!(tail[3], Instruction::simple(Opcode::ArrSet));
+    assert_eq!(tail[4], Instruction::simple(Opcode::Halt));
 }
 
 #[test]
@@ -1821,9 +1840,36 @@ fn emit_top_level_function() {
         }))
     }]);
     let module = emit(&thir).unwrap();
-    assert_eq!(module.methods.len(), 1);
-    assert!(module.methods[0].name.is_some());
-    let instrs = &module.methods[0].instructions;
-    assert_eq!(instrs[0], Instruction::with_u8(Opcode::LdLoc, 0));
-    assert_eq!(instrs[1], Instruction::simple(Opcode::Ret));
+    assert_eq!(module.methods.len(), 2);
+
+    let fn_method = module
+        .methods
+        .iter()
+        .find(|method| method.name.is_some())
+        .unwrap();
+    assert_eq!(
+        fn_method.instructions[0],
+        Instruction::with_u8(Opcode::LdLoc, 0)
+    );
+    assert_eq!(fn_method.instructions[1], Instruction::simple(Opcode::Ret));
+
+    let main = module
+        .methods
+        .iter()
+        .find(|method| method.name.is_none())
+        .unwrap();
+    assert!(main.instructions.iter().any(|instr| matches!(
+        instr,
+        Instruction {
+            opcode: Opcode::ClsNew,
+            ..
+        }
+    )));
+    assert!(main.instructions.iter().any(|instr| matches!(
+        instr,
+        Instruction {
+            opcode: Opcode::StGlob,
+            operand: Operand::U16(0),
+        }
+    )));
 }

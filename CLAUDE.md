@@ -38,7 +38,7 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 - **Comments**: `//`, `///` (doc), `/** */` (doc), `/* */`
 - **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
 - **Runes**: `'a'` (single character)
-- **Keywords** (28): `let`, `mut`, `return`, `case`, `if`, `in`, `and`, `or`, `xor`, `not`, `data`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
+- **Keywords** (28): `let`, `mut`, `return`, `case`, `if`, `in`, `and`, `or`, `xor`, `not`, `data`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `perform`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
 - **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `match`, `while`, `for`, `loop`, `fatal`, `defer`, `try`, `record`, `choice`
 - **Semicolons** separate statements in sequences; trailing `;` makes value `Unit`
 - **Variants** are dot-prefixed: `.Some(x)`, `.None`, `.Ok(v)`, `.Err(e)`

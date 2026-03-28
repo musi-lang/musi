@@ -119,7 +119,7 @@ pub const fn describe_token(kind: &TokenKind) -> &'static str {
         TokenKind::KwLaw => "'law'",
         TokenKind::KwLet => "'let'",
         TokenKind::KwMut => "'mut'",
-        TokenKind::KwNeed => "'need'",
+        TokenKind::KwPerform => "'perform'",
         TokenKind::KwNot => "'not'",
         TokenKind::KwOf => "'of'",
         TokenKind::KwOpaque => "'opaque'",

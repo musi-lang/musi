@@ -15,7 +15,7 @@ use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
 use music_lex::{TokenKind, TriviaList};
 use music_shared::{Ident, Literal, Span};
 
-use crate::errors::{describe_token, ParseError, ParseErrorKind, ParseResult};
+use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
 use crate::parser::Parser;
 
 // Prefix binding power for unary operators.
@@ -134,8 +134,8 @@ impl Parser<'_> {
             TokenKind::KwEffect => self.parse_effect_def(),
             TokenKind::KwClass => self.parse_class_def(),
             TokenKind::KwInstance => self.parse_instance_def(false, Vec::new()),
-            TokenKind::KwNeed => self.parse_need(),
-            TokenKind::KwWith => self.parse_handle(),
+            TokenKind::KwPerform => self.parse_perform(),
+            TokenKind::KwHandle => self.parse_handle(),
             TokenKind::KwQuote => self.parse_quote(),
             TokenKind::Hash | TokenKind::HashLParen | TokenKind::HashLBracket => {
                 self.parse_splice()
@@ -988,7 +988,7 @@ impl Parser<'_> {
         })
     }
 
-    // ── Return / Resume / Need ────────────────────────────────────
+    // ── Return / Resume / Perform ─────────────────────────────────
 
     fn parse_return(&mut self) -> ParseResult<ExprId> {
         self.parse_keyword_expr(&TokenKind::KwReturn, "'return'", ExprKind::Return)
@@ -1014,11 +1014,11 @@ impl Parser<'_> {
         Ok(self.alloc_expr(make(value), span))
     }
 
-    fn parse_need(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwNeed, "'need'")?;
+    fn parse_perform(&mut self) -> ParseResult<ExprId> {
+        let start = self.expect(&TokenKind::KwPerform, "'perform'")?;
         let expr = self.parse_expr(POSTFIX_BP)?;
         let span = start.to(self.prev_span());
-        Ok(self.alloc_expr(ExprKind::Need(expr), span))
+        Ok(self.alloc_expr(ExprKind::Perform(expr), span))
     }
 
     fn can_start_expr(&self) -> bool {
@@ -1468,7 +1468,9 @@ impl Parser<'_> {
     // ── Handle ────────────────────────────────────────────────────
 
     fn parse_handle(&mut self) -> ParseResult<ExprId> {
-        let start = self.expect(&TokenKind::KwWith, "'with'")?;
+        let start = self.expect(&TokenKind::KwHandle, "'handle'")?;
+        let body = self.parse_expr(0)?;
+        let _ = self.expect(&TokenKind::KwWith, "'with'")?;
         let effect = self.parse_ty_ref()?;
         let _ = self.expect(&TokenKind::LBrace, "'{'")?;
         let mut handlers = Vec::new();
@@ -1477,10 +1479,8 @@ impl Parser<'_> {
             handlers.push(self.parse_fn_decl(attrs)?);
             let _ = self.eat(&TokenKind::Semi);
         }
-        let _ = self.expect(&TokenKind::RBrace, "'}'")?;
-        let _ = self.expect(&TokenKind::KwHandle, "'handle'")?;
-        let body = self.parse_expr(0)?;
-        let span = start.to(self.prev_span());
+        let end = self.expect(&TokenKind::RBrace, "'}'")?;
+        let span = start.to(end);
         Ok(self.alloc_expr(
             ExprKind::Handle(Box::new(HandleData {
                 effect,

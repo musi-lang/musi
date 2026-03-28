@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::as_conversions)]
 
-use music_il::format::{FfiType, ForeignDescriptor};
+use music_il::format::{FfiType, ForeignAbi, ForeignDescriptor};
 use music_il::opcode::Opcode;
 
 use super::{HostEffectHandler, Vm};
@@ -550,9 +550,9 @@ fn call_stack_overflow() {
 
 #[test]
 fn effect_push_pop() {
-    // EffPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
+    // HndlPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -562,21 +562,21 @@ fn effect_push_pop() {
         op(Opcode::LdSmi),
         99,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         0,
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::EffPop),
+        op(Opcode::HndlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 42);
 }
 
 #[test]
-fn effect_need_resume() {
+fn effect_perform_resume() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -586,12 +586,12 @@ fn effect_need_resume() {
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         0,
         0,
         0,
@@ -604,7 +604,7 @@ fn effect_need_resume() {
 #[test]
 fn effect_nested() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -614,9 +614,9 @@ fn effect_nested() {
         op(Opcode::LdSmi),
         88,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -626,17 +626,17 @@ fn effect_nested() {
         op(Opcode::LdSmi),
         77,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         0,
         0,
         0,
         0,
-        op(Opcode::EffPop),
+        op(Opcode::HndlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 77);
@@ -646,21 +646,21 @@ fn effect_nested() {
 fn effect_dispatch_by_id() {
     // Handler A (effect=0): resume with 10
     // Handler B (effect=1): resume with 20
-    // EffNeed(effect=0) should hit Handler A, not B
+    // Perf(effect=0) should hit Handler A, not B
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
         0, // op_id = 0
         5,
-        0, // skip = 5 (LdSmi + EffCont)
+        0, // skip = 5 (LdSmi + Res)
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         1,
         0, // effect_id = 1
         0,
@@ -670,17 +670,17 @@ fn effect_dispatch_by_id() {
         op(Opcode::LdSmi),
         20,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         0,
         0,
         0,
-        0,                  // effect_id = 0, op_id = 0 -> should find Handler A
-        op(Opcode::EffPop), // clean up Handler B
+        0,                   // effect_id = 0, op_id = 0 -> should find Handler A
+        op(Opcode::HndlPop), // clean up Handler B
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 10);
@@ -690,9 +690,9 @@ fn effect_dispatch_by_id() {
 fn effect_dispatch_skips_wrong_handler() {
     // Handler A (effect=0): resume with 10
     // Handler B (effect=1): resume with 20
-    // EffNeed(effect=1) should hit Handler B (topmost matching)
+    // Perf(effect=1) should hit Handler B (topmost matching)
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -702,9 +702,9 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         1,
         0, // effect_id = 1
         0,
@@ -714,17 +714,17 @@ fn effect_dispatch_skips_wrong_handler() {
         op(Opcode::LdSmi),
         20,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         1,
         0,
         0,
-        0,                  // effect_id = 1, op_id = 0 -> should find Handler B
-        op(Opcode::EffPop), // clean up Handler A
+        0,                   // effect_id = 1, op_id = 0 -> should find Handler B
+        op(Opcode::HndlPop), // clean up Handler A
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 20);
@@ -732,9 +732,9 @@ fn effect_dispatch_skips_wrong_handler() {
 
 #[test]
 fn effect_no_matching_handler() {
-    // Only handler is for effect=0, but we need effect=99
+    // Only handler is for effect=0, but the performed effect is 99
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffPush),
+        op(Opcode::HndlPush),
         0,
         0, // effect_id = 0
         0,
@@ -744,12 +744,12 @@ fn effect_no_matching_handler() {
         op(Opcode::LdSmi),
         10,
         0,
-        op(Opcode::EffCont),
+        op(Opcode::Res),
         1,
         op(Opcode::LdSmi),
         0,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         99,
         0,
         0,
@@ -778,12 +778,12 @@ impl HostEffectHandler for ResumeWithPayload {
 }
 
 #[test]
-fn effect_need_can_be_handled_by_host() {
+fn effect_perform_can_be_handled_by_host() {
     let mut vm = Vm::new(module_with_code(vec![
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::EffNeed),
+        op(Opcode::Perf),
         7,
         0,
         0,
@@ -1548,7 +1548,7 @@ fn ffi_call_dispatches() {
             name_idx: 0,
             symbol_idx: u32::MAX,
             lib_idx: u32::MAX,
-            abi: music_il::format::ForeignAbi::Default,
+            abi: ForeignAbi::Default,
             arity: 1,
             exported: false,
             param_types: vec![FfiType::Int],

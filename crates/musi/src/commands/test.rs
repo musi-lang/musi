@@ -5,9 +5,9 @@ use std::process::ExitCode;
 use std::rc::Rc;
 
 use clap::Args;
-use music_emit::{emit_project, write_seam};
-use musi_vm::{HostEffectHandler, Value, Vm, VmError};
 use musi::driver::{compile_project, emit_project_diagnostics};
+use musi_vm::{HostEffectHandler, Value, Vm, VmError};
+use music_emit::{emit_project, write_seam};
 
 #[derive(Args)]
 pub struct TestArgs {
@@ -138,7 +138,6 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
         .ok_or_else(|| "missing exported `test` function".to_owned())?;
     let effect_id = vm
         .effect_id("musi:test", "Test")
-        .or_else(|| vm.effect_id_by_name("Test"))
         .ok_or_else(|| "missing emitted `musi:test::Test` effect metadata".to_owned())?;
     let emit_op_id = vm
         .effect_op_id(effect_id, "emit")
@@ -151,12 +150,10 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
     }));
     if let Err(error) = vm.invoke(test_value, &[]) {
         let collector = collector.borrow();
-        return Err(
-            collector
-                .error
-                .clone()
-                .unwrap_or_else(|| format!("failed to invoke exported `test`: {error}")),
-        );
+        return Err(collector
+            .error
+            .clone()
+            .unwrap_or_else(|| format!("failed to invoke exported `test`: {error}")));
     }
     let suite = collector.borrow_mut().finish()?;
 
@@ -279,8 +276,7 @@ fn run_case(
 
     let result = vm.invoke(case.body, &[]);
     let outcome = match result {
-        Ok(value) => interpret_outcome(vm, value)
-            .unwrap_or_else(|message| Outcome::Fail(message)),
+        Ok(value) => interpret_outcome(vm, value).unwrap_or_else(|message| Outcome::Fail(message)),
         Err(error) => Outcome::Fail(error.to_string()),
     };
 
@@ -302,7 +298,10 @@ fn run_case(
             stats.passed += 1;
         }
         Outcome::Fail(message) => {
-            println!("{prefix}FAIL  {} ({message})", joined_name(names, &case.name));
+            println!(
+                "{prefix}FAIL  {} ({message})",
+                joined_name(names, &case.name)
+            );
             stats.failed += 1;
         }
     }
@@ -385,10 +384,9 @@ impl TestCollector {
                 self.current_suite()?.children.push(TestNode::Suite(suite));
             }
             TestEvent::Case(name, body) => {
-                self.current_suite()?.children.push(TestNode::Case(TestCase {
-                    name,
-                    body,
-                }));
+                self.current_suite()?
+                    .children
+                    .push(TestNode::Case(TestCase { name, body }));
             }
             TestEvent::Hook(kind, body) => {
                 self.current_suite()?

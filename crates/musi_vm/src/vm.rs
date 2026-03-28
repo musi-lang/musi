@@ -158,21 +158,6 @@ impl Vm {
     }
 
     #[must_use]
-    pub fn effect_id_by_name(&self, effect_name: &str) -> Option<u16> {
-        let mut matches = self
-            .module
-            .effects
-            .iter()
-            .filter(|effect| effect.name == effect_name)
-            .map(|effect| effect.id);
-        let first = matches.next()?;
-        if matches.next().is_some() {
-            return None;
-        }
-        Some(first)
-    }
-
-    #[must_use]
     pub fn effect_op_id(&self, effect_id: u16, op_name: &str) -> Option<u16> {
         self.module
             .effects
@@ -251,7 +236,7 @@ impl Vm {
                     }
                 }
 
-                Opcode::EffPush | Opcode::EffPop | Opcode::EffNeed | Opcode::EffCont => {
+                Opcode::HndlPush | Opcode::HndlPop | Opcode::Perf | Opcode::Res => {
                     self.dispatch_effect(op, method_idx, &mut pc)?;
                 }
 
@@ -1099,7 +1084,7 @@ impl Vm {
 
     fn dispatch_effect(&mut self, op: Opcode, method_idx: usize, pc: &mut usize) -> VmResult {
         match op {
-            Opcode::EffPush => {
+            Opcode::HndlPush => {
                 let effect_id = self.read_u16(method_idx, pc);
                 let op_id = self.read_u16(method_idx, pc);
                 let skip_offset = self.read_i16(method_idx, pc);
@@ -1119,13 +1104,17 @@ impl Vm {
                 });
                 *pc = pc.wrapping_add_signed(isize::from(skip_offset));
             }
-            Opcode::EffPop => {
+            Opcode::HndlPop => {
                 let _ = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
             }
-            Opcode::EffNeed => {
+            Opcode::Perf => {
                 let effect_idx = self.read_u16(method_idx, pc);
                 let op_id = self.read_u16(method_idx, pc);
-                let payload = self.frames.last_mut().ok_or(VmError::StackUnderflow)?.pop()?;
+                let payload = self
+                    .frames
+                    .last_mut()
+                    .ok_or(VmError::StackUnderflow)?
+                    .pop()?;
                 if let Some(resume_value) = self.dispatch_host_effect(effect_idx, op_id, payload)? {
                     self.frames
                         .last_mut()
@@ -1152,7 +1141,7 @@ impl Vm {
                 frame.push(Value::from_ptr(cont_idx));
                 *pc = handler.handler_pc;
             }
-            Opcode::EffCont => {
+            Opcode::Res => {
                 let flag = self.read_u8(method_idx, pc);
                 let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
                 let value = if flag != 0 { frame.pop()? } else { Value::UNIT };

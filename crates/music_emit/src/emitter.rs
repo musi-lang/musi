@@ -184,12 +184,7 @@ impl Emitter<'_> {
                     .map(|effect| EffectDescriptor {
                         id: effect.id,
                         module_name: effect.module_name.clone(),
-                        name: self
-                            .thir
-                            .db
-                            .interner
-                            .resolve(effect.name)
-                            .to_owned(),
+                        name: self.thir.db.interner.resolve(effect.name).to_owned(),
                         operations: effect
                             .operations
                             .iter()
@@ -352,7 +347,7 @@ impl Emitter<'_> {
                 expr, ref indices, ..
             } => self.emit_index(expr, indices)?,
             ExprKind::FStrLit(ref parts) => self.emit_fstr(parts)?,
-            ExprKind::Need(operand) => self.emit_need(expr_id, operand)?,
+            ExprKind::Perform(operand) => self.emit_perform(expr_id, operand)?,
             ExprKind::Handle(ref data) => self.emit_handle(expr_id, &data.handlers, data.body)?,
             ExprKind::Resume(opt) => self.emit_resume(opt)?,
             ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(rows)?,
@@ -974,8 +969,7 @@ impl Emitter<'_> {
         let tag_idx = self.pool.add(ConstantEntry::Str(
             self.thir.db.interner.resolve(tag.name).to_owned(),
         ));
-        let tag_byte =
-            u8::try_from(tag_idx).expect("variant tag constant index overflow (>255)");
+        let tag_byte = u8::try_from(tag_idx).expect("variant tag constant index overflow (>255)");
 
         let len = u16::try_from(args.len()).expect("too many variant args (>65535)");
         self.push(Instruction::with_tagged(Opcode::ArrNewT, tag_byte, len));
@@ -1115,7 +1109,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_need(&mut self, expr_id: ExprId, operand: ExprId) -> EmitResult {
+    fn emit_perform(&mut self, expr_id: ExprId, operand: ExprId) -> EmitResult {
         match self.thir.db.ast.exprs.get(operand).kind.clone() {
             ExprKind::App(_, args) => {
                 if args.is_empty() {
@@ -1141,12 +1135,12 @@ impl Emitter<'_> {
         let effect_use = self
             .thir
             .type_env
-            .need_effects
+            .perform_effects
             .get(&expr_id)
             .copied()
-            .expect("missing effect metadata for need expression");
+            .expect("missing effect metadata for perform expression");
         self.push(Instruction::with_effect(
-            Opcode::EffNeed,
+            Opcode::Perf,
             effect_use.effect_id,
             effect_use.op_id,
         ));
@@ -1173,7 +1167,7 @@ impl Emitter<'_> {
                 .expect("missing effect operation metadata for handler");
             let pos = self.current_instructions.len();
             self.push(Instruction::with_effect_jump(
-                Opcode::EffPush,
+                Opcode::HndlPush,
                 effect_id,
                 op_id,
                 0,
@@ -1188,12 +1182,12 @@ impl Emitter<'_> {
                 .sum();
             let offset = i16::try_from(byte_offset).expect("jump too far");
             self.current_instructions[pos] =
-                Instruction::with_effect_jump(Opcode::EffPush, effect_id, op_id, offset);
+                Instruction::with_effect_jump(Opcode::HndlPush, effect_id, op_id, offset);
         }
 
         self.emit_expr(body)?;
         for _ in handlers {
-            self.push(Instruction::simple(Opcode::EffPop));
+            self.push(Instruction::simple(Opcode::HndlPop));
         }
         Ok(())
     }
@@ -1201,9 +1195,9 @@ impl Emitter<'_> {
     fn emit_resume(&mut self, value: Option<ExprId>) -> EmitResult {
         if let Some(expr_id) = value {
             self.emit_expr(expr_id)?;
-            self.push(Instruction::with_u8(Opcode::EffCont, 1));
+            self.push(Instruction::with_u8(Opcode::Res, 1));
         } else {
-            self.push(Instruction::with_u8(Opcode::EffCont, 0));
+            self.push(Instruction::with_u8(Opcode::Res, 0));
         }
         Ok(())
     }
@@ -1367,11 +1361,7 @@ impl Emitter<'_> {
                 }
             }
             ImportKind::Qualified(alias) => {
-                let global_indices = self
-                    .module_exports
-                    .get(&path)
-                    .cloned()
-                    .unwrap_or_default();
+                let global_indices = self.module_exports.get(&path).cloned().unwrap_or_default();
                 self.emit_import_record(alias.name, &global_indices);
             }
             ImportKind::Selective(alias, names) => {
@@ -1402,7 +1392,8 @@ impl Emitter<'_> {
             // No exports resolved -- emit an empty record.
             self.push(Instruction::with_u16(Opcode::ArrNew, 0));
         } else {
-            let field_count = u16::try_from(globals.len()).expect("too many import exports (>65535)");
+            let field_count =
+                u16::try_from(globals.len()).expect("too many import exports (>65535)");
             self.push(Instruction::with_u16(Opcode::ArrNew, field_count));
             for (i, imported) in globals.iter().enumerate() {
                 self.push_absolute_global_load(imported.index);
@@ -1863,7 +1854,10 @@ impl Emitter<'_> {
             return true;
         };
         matches!(
-            self.thir.type_env.types.get(self.thir.type_env.resolve_var(expr_ty)),
+            self.thir
+                .type_env
+                .types
+                .get(self.thir.type_env.resolve_var(expr_ty)),
             Ty::Array(_) | Ty::Builtin(BuiltinType::String) | Ty::Any | Ty::Unknown | Ty::Var(_)
         )
     }

@@ -3,7 +3,6 @@ use std::path::Path;
 
 use music_ast::expr::ExprKind;
 use music_db::Db;
-use music_shared::Symbol;
 use music_hir::{lower, HirBundle};
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
@@ -11,8 +10,9 @@ use music_resolve::graph::ModuleId;
 use music_resolve::loader::{ModuleLoader, ResolvedImport};
 use music_resolve::{ModuleGraph, ProjectResolution};
 use music_sema::type_check;
+use music_shared::Symbol;
 
-use crate::emitter::{ImportedGlobal, MethodEntry, SeamModule, emit_with_context};
+use crate::emitter::{emit_with_context, ImportedGlobal, MethodEntry, SeamModule};
 use crate::error::EmitError;
 use crate::pool::ConstantPool;
 
@@ -236,18 +236,18 @@ fn rewrite_instructions(
                         .expect("foreign index overflow");
                 }
             }
-            Opcode::EffNeed => {
+            Opcode::Perf => {
                 if let Operand::Effect(ref mut effect_id, _) = instr.operand {
                     *effect_id = *effect_remap
                         .get(effect_id)
-                        .expect("effect remap missing for eff.need");
+                        .expect("effect remap missing for perf");
                 }
             }
-            Opcode::EffPush => {
+            Opcode::HndlPush => {
                 if let Operand::EffectJump(ref mut effect_id, _, _) = instr.operand {
                     *effect_id = *effect_remap
                         .get(effect_id)
-                        .expect("effect remap missing for eff.push");
+                        .expect("effect remap missing for hndl.push");
                 }
             }
             _ => {}
@@ -280,22 +280,15 @@ fn infer_module_name(current_path: &Path) -> String {
     current_path.to_string_lossy().into_owned()
 }
 
-fn merge_effects(combined: &mut SeamModule, source_effects: &[music_il::format::EffectDescriptor]) -> HashMap<u16, u16> {
+fn merge_effects(
+    combined: &mut SeamModule,
+    source_effects: &[music_il::format::EffectDescriptor],
+) -> HashMap<u16, u16> {
     let mut remap = HashMap::new();
     for effect in source_effects {
-        if let Some(existing) = combined
-            .effects
-            .iter()
-            .find(|candidate| {
-                (candidate.module_name == effect.module_name && candidate.name == effect.name)
-                    || (candidate.name == effect.name
-                        && candidate
-                            .operations
-                            .iter()
-                            .map(|op| op.name.as_str())
-                            .eq(effect.operations.iter().map(|op| op.name.as_str())))
-            })
-        {
+        if let Some(existing) = combined.effects.iter().find(|candidate| {
+            candidate.module_name == effect.module_name && candidate.name == effect.name
+        }) {
             let _ = remap.insert(effect.id, existing.id);
             continue;
         }
