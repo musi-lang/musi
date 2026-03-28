@@ -9,8 +9,8 @@ A programming language with a type system, effect handling, and a stack-based by
 
 Musi source files use the `.ms` extension. The current toolchain ships one binary:
 
-| Binary | What it does |
-| ------ | ------------ |
+| Binary | What it does                              |
+| ------ | ----------------------------------------- |
 | `musi` | Check, build, run, and test Musi projects |
 
 ## Prerequisites
@@ -115,25 +115,42 @@ Test files export `test`, not `suite`. `musi test` invokes that exported entrypo
 
 ## A Taste of the Language
 
-TODO
+```musi
+let Maybe[T] := data { Some : T | None };
+
+let unwrap_or[T] (value : Maybe[T], fallback : T) : T :=
+  case value of (
+  | .Some(x) => x
+  | .None => fallback
+  );
+
+let main : Int := (
+  let xs := [1, 2, 3];
+  let doubled := xs |> map((x) => x * 2);
+  unwrap_or(.Some(41), 0) + 1
+);
+main();
+```
+
+The canonical grammar lives in `grammar.abnf`. Historical pre-reduction docs live under `docs/legacy/`.
 
 ## Project Structure
 
-| Crate | Role |
-| ----- | ---- |
-| `musi` | CLI |
-| `music_shared` | spans, sources, diagnostics, interner |
-| `music_lex` | lexer |
-| `music_ast` | AST |
-| `music_parse` | parser |
-| `music_resolve` | module/name resolution |
-| `music_hir` | typed frontend facade (`TypedModule` / `TypedProject`) |
-| `music_sema` | semantic analysis |
-| `music_emit` | bytecode emission and `.seam` writing |
-| `music_il` | bytecode and format contract |
-| `musi_vm` | loader and VM |
-| `music_owned` | compiler-owned prelude, builtin descriptors, `musi:` modules |
-| `music_config` | `musi.json` parsing |
+| Crate           | Role                                                         |
+| --------------- | ------------------------------------------------------------ |
+| `musi`          | CLI                                                          |
+| `music_shared`  | spans, sources, diagnostics, interner                        |
+| `music_lex`     | lexer                                                        |
+| `music_ast`     | AST                                                          |
+| `music_parse`   | parser                                                       |
+| `music_resolve` | module/name resolution                                       |
+| `music_hir`     | typed frontend facade (`TypedModule` / `TypedProject`)       |
+| `music_sema`    | semantic analysis                                            |
+| `music_codegen` | bytecode emission and `.seam` writing                        |
+| `music_il`      | bytecode and format contract                                 |
+| `musi_vm`       | loader and VM                                                |
+| `music_owned`   | compiler-owned prelude, builtin descriptors, `musi:` modules |
+| `music_config`  | `musi.json` parsing                                          |
 
 ## Editor Support
 
