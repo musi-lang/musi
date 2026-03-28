@@ -6,7 +6,8 @@ use smallvec::SmallVec;
 use crate::cursor::Cursor;
 use crate::errors::{LexError, LexErrorKind, LexResult};
 use crate::token::{
-    keyword_from_str, single_char_token, FStrPart, Token, TokenKind, Trivia, TriviaKind, TriviaList,
+    StringFragment, Token, TokenKind, Trivia, TriviaKind, TriviaList, keyword_from_str,
+    single_char_token,
 };
 
 // Compound tables grouped by first byte, longest-first for maximal munch.
@@ -302,17 +303,17 @@ impl<'src> Lexer<'src> {
                 Some('"') => {
                     let _ = self.cursor.advance();
                     if !lit_buf.is_empty() {
-                        parts.push(FStrPart::Lit(lit_buf));
+                        parts.push(StringFragment::Lit(lit_buf));
                     }
                     return Ok(TokenKind::FStr(parts));
                 }
                 Some('{') => {
                     let _ = self.cursor.advance();
                     if !lit_buf.is_empty() {
-                        parts.push(FStrPart::Lit(mem::take(&mut lit_buf)));
+                        parts.push(StringFragment::Lit(mem::take(&mut lit_buf)));
                     }
                     let expr_tokens = self.scan_fstring_expr(start)?;
-                    parts.push(FStrPart::Expr(expr_tokens));
+                    parts.push(StringFragment::Expr(expr_tokens));
                 }
                 Some('\\') => {
                     let _ = self.cursor.advance();

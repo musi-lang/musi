@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use musi_vm::heap::Heap;
+use musi_vm::internal::Heap;
 use musi_vm::value::Value;
 
 fn bench_alloc_throughput(c: &mut Criterion) {

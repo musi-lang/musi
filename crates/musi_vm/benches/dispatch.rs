@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use musi_vm::module::{Method, Module};
+use musi_vm::internal::{Method, Module};
 use musi_vm::Vm;
 use music_il::opcode::Opcode;
 

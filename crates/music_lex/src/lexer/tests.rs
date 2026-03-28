@@ -1,8 +1,8 @@
 use music_shared::Span;
 
-use crate::errors::LexErrorKind;
-use crate::token::{FStrPart, TokenKind, TriviaKind};
 use crate::Lexer;
+use crate::errors::LexErrorKind;
+use crate::token::{StringFragment, TokenKind, TriviaKind};
 
 fn lex_kinds(src: &str) -> Vec<TokenKind> {
     let (tokens, errors) = Lexer::new(src).lex();
@@ -238,7 +238,7 @@ fn fstring_literal_only() {
     let kind = lex_first_kind("f\"hello\"");
     assert_eq!(
         kind,
-        TokenKind::FStr(vec![FStrPart::Lit(String::from("hello"))])
+        TokenKind::FStr(vec![StringFragment::Lit(String::from("hello"))])
     );
 }
 
@@ -249,16 +249,16 @@ fn fstring_with_expr() {
     match kind {
         TokenKind::FStr(parts) => {
             assert_eq!(parts.len(), 2);
-            assert_eq!(parts[0], FStrPart::Lit(String::from("hello ")));
+            assert_eq!(parts[0], StringFragment::Lit(String::from("hello ")));
             match &parts[1] {
-                FStrPart::Expr(tokens) => {
+                StringFragment::Expr(tokens) => {
                     assert_eq!(tokens.len(), 1);
                     assert_eq!(tokens[0].kind, TokenKind::Ident);
                     let start = usize::try_from(tokens[0].span.start).unwrap();
                     let end = usize::try_from(tokens[0].span.end).unwrap();
                     assert_eq!(source.get(start..end).unwrap(), "name");
                 }
-                other @ FStrPart::Lit(_) => panic!("expected Expr, got {other:?}"),
+                other @ StringFragment::Lit(_) => panic!("expected Expr, got {other:?}"),
             }
         }
         other => panic!("expected FStr, got {other:?}"),
@@ -305,9 +305,11 @@ fn escaped_ident() {
 fn unterminated_escaped_ident() {
     let (_, errors) = Lexer::new("`hello").lex();
     assert_eq!(errors.len(), 1);
-    assert!(errors[0]
-        .to_string()
-        .contains("unterminated escaped identifier"));
+    assert!(
+        errors[0]
+            .to_string()
+            .contains("unterminated escaped identifier")
+    );
 }
 
 #[test]
@@ -316,20 +318,24 @@ fn line_comment_trivia() {
     assert!(errors.is_empty());
     assert_eq!(tokens.len(), 2); // Int + Eof
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0]
-        .leading_trivia
-        .iter()
-        .any(|t| t.kind == TriviaKind::LineComment { doc: false }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::LineComment { doc: false })
+    );
 }
 
 #[test]
 fn doc_line_comment_trivia() {
     let (tokens, errors) = Lexer::new("/// doc\n42").lex();
     assert!(errors.is_empty());
-    assert!(tokens[0]
-        .leading_trivia
-        .iter()
-        .any(|t| t.kind == TriviaKind::LineComment { doc: true }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::LineComment { doc: true })
+    );
 }
 
 #[test]
@@ -337,20 +343,24 @@ fn block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/* block */42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0]
-        .leading_trivia
-        .iter()
-        .any(|t| t.kind == TriviaKind::BlockComment { doc: false }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::BlockComment { doc: false })
+    );
 }
 
 #[test]
 fn doc_block_comment_trivia() {
     let (tokens, errors) = Lexer::new("/** doc */42").lex();
     assert!(errors.is_empty());
-    assert!(tokens[0]
-        .leading_trivia
-        .iter()
-        .any(|t| t.kind == TriviaKind::BlockComment { doc: true }));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::BlockComment { doc: true })
+    );
 }
 
 #[test]
@@ -365,10 +375,12 @@ fn leading_whitespace_trivia() {
     let (tokens, errors) = Lexer::new("  42").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0]
-        .leading_trivia
-        .iter()
-        .any(|t| t.kind == TriviaKind::Whitespace));
+    assert!(
+        tokens[0]
+            .leading_trivia
+            .iter()
+            .any(|t| t.kind == TriviaKind::Whitespace)
+    );
 }
 
 #[test]
@@ -376,10 +388,12 @@ fn trailing_comment_trivia() {
     let (tokens, errors) = Lexer::new("42 // trailing").lex();
     assert!(errors.is_empty());
     assert_eq!(tokens[0].kind, TokenKind::Int(42));
-    assert!(tokens[0]
-        .trailing_trivia
-        .iter()
-        .any(|t| matches!(t.kind, TriviaKind::LineComment { doc: false })));
+    assert!(
+        tokens[0]
+            .trailing_trivia
+            .iter()
+            .any(|t| matches!(t.kind, TriviaKind::LineComment { doc: false }))
+    );
 }
 
 #[test]
@@ -478,7 +492,7 @@ fn fstring_nested_braces() {
         TokenKind::FStr(parts) => {
             assert_eq!(parts.len(), 1);
             match &parts[0] {
-                FStrPart::Expr(tokens) => {
+                StringFragment::Expr(tokens) => {
                     let inner_kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
                     assert!(
                         inner_kinds.contains(&&TokenKind::LBrace),
@@ -489,7 +503,7 @@ fn fstring_nested_braces() {
                         "should contain inner RBrace"
                     );
                 }
-                other @ FStrPart::Lit(_) => panic!("expected Expr, got {other:?}"),
+                other @ StringFragment::Lit(_) => panic!("expected Expr, got {other:?}"),
             }
         }
         other => panic!("expected FStr, got {other:?}"),
@@ -503,16 +517,16 @@ fn fstring_with_escapes() {
     match kind {
         TokenKind::FStr(parts) => {
             assert_eq!(parts.len(), 2);
-            assert_eq!(parts[0], FStrPart::Lit(String::from("hello\n")));
+            assert_eq!(parts[0], StringFragment::Lit(String::from("hello\n")));
             match &parts[1] {
-                FStrPart::Expr(tokens) => {
+                StringFragment::Expr(tokens) => {
                     assert_eq!(tokens.len(), 1);
                     assert_eq!(tokens[0].kind, TokenKind::Ident);
                     let start = usize::try_from(tokens[0].span.start).unwrap();
                     let end = usize::try_from(tokens[0].span.end).unwrap();
                     assert_eq!(source.get(start..end).unwrap(), "x");
                 }
-                other @ FStrPart::Lit(_) => panic!("expected Expr, got {other:?}"),
+                other @ StringFragment::Lit(_) => panic!("expected Expr, got {other:?}"),
             }
         }
         other => panic!("expected FStr, got {other:?}"),

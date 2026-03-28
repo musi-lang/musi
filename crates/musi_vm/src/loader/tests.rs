@@ -118,7 +118,8 @@ fn seam_with_strt_type(strt_data: &[u8], type_content: &[u8]) -> Vec<u8> {
 #[test]
 fn load_halt_only() {
     let seam = minimal_seam(&[op(Opcode::Halt)], 1);
-    let module = load(&seam).unwrap();
+    let program = load(&seam).unwrap();
+    let module = program.module();
     assert_eq!(module.methods.len(), 1);
     assert_eq!(module.methods[0].name, u32::MAX);
     assert_eq!(module.methods[0].locals_count, 0);
@@ -128,7 +129,8 @@ fn load_halt_only() {
 #[test]
 fn load_ldsmi_halt() {
     let seam = minimal_seam(&[op(Opcode::LdSmi), 42, 0, op(Opcode::Halt)], 2);
-    let module = load(&seam).unwrap();
+    let program = load(&seam).unwrap();
+    let module = program.module();
     assert_eq!(
         module.methods[0].code,
         &[op(Opcode::LdSmi), 42, 0, op(Opcode::Halt)]
@@ -169,7 +171,8 @@ fn load_constants_int() {
     buf.extend_from_slice(&meth_len.to_le_bytes());
     buf.extend_from_slice(&meth_content);
 
-    let module = load(&buf).unwrap();
+    let program = load(&buf).unwrap();
+    let module = program.module();
     assert_eq!(module.constants.len(), 1);
     let ConstantEntry::Value(v) = &module.constants[0] else {
         panic!("expected Value");
@@ -188,7 +191,8 @@ fn load_constants_str_as_string_ref() {
     cnst_content.extend_from_slice(&0u16.to_le_bytes()); // byte offset 0
 
     let buf = seam_with_strt_cnst(strt_data, &cnst_content);
-    let module = load(&buf).unwrap();
+    let program = load(&buf).unwrap();
+    let module = program.module();
 
     assert_eq!(module.constants.len(), 1);
     assert!(
@@ -213,7 +217,8 @@ fn load_two_strings_correct_indices() {
     cnst_content.extend_from_slice(&6u16.to_le_bytes());
 
     let buf = seam_with_strt_cnst(strt_data, &cnst_content);
-    let module = load(&buf).unwrap();
+    let program = load(&buf).unwrap();
+    let module = program.module();
 
     assert_eq!(module.constants.len(), 2);
     assert!(matches!(module.constants[0], ConstantEntry::StringRef(0)));
@@ -281,7 +286,8 @@ fn invalid_opcode_in_method() {
 fn arrtag_tytag_have_no_operand() {
     let bytes = [op(Opcode::ArrTag), op(Opcode::TyTag), op(Opcode::Halt)];
     let seam = minimal_seam(&bytes, 3);
-    let module = load(&seam).unwrap();
+    let program = load(&seam).unwrap();
+    let module = program.module();
     assert_eq!(module.methods[0].code, &bytes);
 }
 
@@ -295,7 +301,8 @@ fn arrgeti_arrseti_are_one_byte_operand() {
         op(Opcode::Halt),
     ];
     let seam = minimal_seam(&bytes, 3);
-    let module = load(&seam).unwrap();
+    let program = load(&seam).unwrap();
+    let module = program.module();
     assert_eq!(module.methods[0].code, &bytes);
 }
 
@@ -311,6 +318,7 @@ fn tychk_tycast_have_u16_operand() {
         op(Opcode::Halt),
     ];
     let seam = minimal_seam(&bytes, 3);
-    let module = load(&seam).unwrap();
+    let program = load(&seam).unwrap();
+    let module = program.module();
     assert_eq!(module.methods[0].code, &bytes);
 }

@@ -1,12 +1,15 @@
 use super::*;
+use crate::types::BuiltinType;
+use music_ast::ExprId;
 use music_ast::common::{MemberDecl, MemberName, OpFixity};
+use music_ast::data::AstData;
 use music_ast::expr::{ClassDefData, DataBody, ExprKind};
 use music_ast::pat::PatKind;
 use music_lex::Lexer;
 use music_parse::parse;
 use music_shared::Interner;
 
-fn parse_prelude() -> (music_ast::data::AstData, Interner) {
+fn parse_prelude() -> (AstData, Interner) {
     let (tokens, lex_errors) = Lexer::new(PRELUDE_SOURCE).lex();
     assert!(lex_errors.is_empty(), "prelude lex errors: {lex_errors:?}");
     let mut interner = Interner::new();
@@ -18,11 +21,7 @@ fn parse_prelude() -> (music_ast::data::AstData, Interner) {
     (ast, interner)
 }
 
-fn top_level_name(
-    ast: &music_ast::data::AstData,
-    interner: &Interner,
-    expr_id: music_ast::ExprId,
-) -> Option<String> {
+fn top_level_name(ast: &AstData, interner: &Interner, expr_id: ExprId) -> Option<String> {
     let expr = ast.exprs.get(expr_id);
     let ExprKind::Let(binding) = &expr.kind else {
         return None;
@@ -35,7 +34,7 @@ fn top_level_name(
 }
 
 fn top_level_class<'a>(
-    ast: &'a music_ast::data::AstData,
+    ast: &'a AstData,
     interner: &Interner,
     name: &str,
 ) -> Option<&'a ClassDefData> {
@@ -161,7 +160,7 @@ fn prelude_source_exports_builtin_types_and_classes() {
         .filter_map(|&expr_id| top_level_name(&ast, &interner, expr_id))
         .collect();
 
-    for builtin in crate::types::BuiltinType::ALL {
+    for builtin in BuiltinType::ALL {
         assert!(
             top_level.iter().any(|name| name == builtin.name()),
             "expected builtin {} in prelude source",
@@ -204,7 +203,10 @@ fn prelude_source_bool_variants_match_builtin_variants() {
         .iter()
         .map(|variant| interner.resolve(variant.name.name).to_owned())
         .collect();
-    let spec_variant_names: Vec<_> = BUILTIN_VARIANTS.iter().map(|variant| variant.name).collect();
+    let spec_variant_names: Vec<_> = BUILTIN_VARIANTS
+        .iter()
+        .map(|variant| variant.name)
+        .collect();
 
     assert_eq!(parsed_variant_names.len(), BUILTIN_VARIANTS.len());
     for name in spec_variant_names {

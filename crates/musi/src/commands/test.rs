@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use clap::Args;
 use musi::driver::{compile_project, emit_project_diagnostics};
-use musi_vm::{HostEffectHandler, Value, Vm, VmError};
+use musi_vm::{ArrayValue, RuntimeHost, Value, ValueView, Vm, VmError};
 use music_emit::{emit_project, write_seam};
 
 #[derive(Args)]
@@ -115,40 +115,30 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
     }
 
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let module_id = analysis
+    let _module_id = analysis
         .project
         .graph
         .lookup(&canonical)
         .ok_or_else(|| "entry test module missing from project graph".to_owned())?;
 
     let emitted = emit_project(analysis.project).map_err(|e| e.to_string())?;
-    let test_index = emitted
-        .module_exports
-        .get(&module_id)
-        .and_then(|exports| exports.iter().find(|export| export.name == "test"))
-        .map(|export| export.index)
-        .ok_or_else(|| "missing exported `test` function".to_owned())?;
     let bytes = write_seam(&emitted.module);
-    let module = musi_vm::load(&bytes).map_err(|e| format!("load failed; {e}"))?;
+    let program = musi_vm::load(&bytes).map_err(|e| format!("load failed; {e}"))?;
 
-    let mut vm = Vm::new(module);
-    let _ = vm.run().map_err(|e| e.to_string())?;
-    let test_value = vm
-        .global_value(test_index)
-        .ok_or_else(|| "missing exported `test` function".to_owned())?;
-    let effect_id = vm
+    let effect_id = program
         .effect_id("musi:test", "Test")
         .ok_or_else(|| "missing emitted `musi:test::Test` effect metadata".to_owned())?;
-    let emit_op_id = vm
+    let emit_op_id = program
         .effect_op_id(effect_id, "emit")
         .ok_or_else(|| "missing emitted `musi:test::Test.emit` operation metadata".to_owned())?;
     let collector = Rc::new(RefCell::new(TestCollector::new(default_suite_name(path))));
-    vm.set_host_effect_handler(Box::new(TestCollectorHandler {
+    let mut vm = Vm::with_host(program, Box::new(TestCollectorHandler {
         collector: Rc::clone(&collector),
         effect_id,
         emit_op_id,
     }));
-    if let Err(error) = vm.invoke(test_value, &[]) {
+    vm.initialize().map_err(|e| e.to_string())?;
+    if let Err(error) = vm.invoke_export("test", &[]) {
         let collector = collector.borrow();
         return Err(collector
             .error
@@ -426,7 +416,7 @@ struct TestCollectorHandler {
     emit_op_id: u16,
 }
 
-impl HostEffectHandler for TestCollectorHandler {
+impl RuntimeHost for TestCollectorHandler {
     fn handle_effect(
         &mut self,
         vm: &Vm,
@@ -456,14 +446,12 @@ enum TestEvent {
 }
 
 fn parse_event(vm: &Vm, value: Value) -> Result<TestEvent, String> {
-    let (_, elements) = vm
-        .array_value(value)
+    let ArrayValue { elements, .. } = decode_array(vm, value)
         .ok_or_else(|| "test event is not an array".to_owned())?;
     if elements.is_empty() {
         return Err("test event must have at least a kind field".into());
     }
-    let kind = vm
-        .string_value(elements[0])
+    let kind = decode_string(vm, elements[0])
         .ok_or_else(|| "test event kind must be a string".to_owned())?;
 
     match kind.as_str() {
@@ -471,8 +459,7 @@ fn parse_event(vm: &Vm, value: Value) -> Result<TestEvent, String> {
             if elements.len() != 2 {
                 return Err("suite_start event must have 2 fields".into());
             }
-            let name = vm
-                .string_value(elements[1])
+            let name = decode_string(vm, elements[1])
                 .ok_or_else(|| "suite_start name must be a string".to_owned())?;
             Ok(TestEvent::SuiteStart(name))
         }
@@ -486,8 +473,7 @@ fn parse_event(vm: &Vm, value: Value) -> Result<TestEvent, String> {
             if elements.len() != 3 {
                 return Err("case event must have 3 fields".into());
             }
-            let name = vm
-                .string_value(elements[1])
+            let name = decode_string(vm, elements[1])
                 .ok_or_else(|| "case name must be a string".to_owned())?;
             Ok(TestEvent::Case(name, elements[2]))
         }
@@ -509,21 +495,18 @@ fn parse_event(vm: &Vm, value: Value) -> Result<TestEvent, String> {
 }
 
 fn interpret_outcome(vm: &Vm, value: Value) -> Result<Outcome, String> {
-    let (_, elements) = vm
-        .array_value(value)
+    let ArrayValue { elements, .. } = decode_array(vm, value)
         .ok_or_else(|| "test result must be an outcome record".to_owned())?;
     if elements.len() != 2 {
         return Err("outcome record must have 2 fields".into());
     }
 
     let (passed, message) = if let Some(passed) = decode_bool(vm, elements[0]) {
-        let message = vm
-            .string_value(elements[1])
+        let message = decode_string(vm, elements[1])
             .ok_or_else(|| "outcome `message` field must be String".to_owned())?;
         (passed, message)
     } else if let Some(passed) = decode_bool(vm, elements[1]) {
-        let message = vm
-            .string_value(elements[0])
+        let message = decode_string(vm, elements[0])
             .ok_or_else(|| "outcome `message` field must be String".to_owned())?;
         (passed, message)
     } else {
@@ -541,14 +524,28 @@ fn decode_bool(vm: &Vm, value: Value) -> Option<bool> {
         return Some(value.as_bool());
     }
 
-    let (tag, fields) = vm.array_value(value)?;
+    let ArrayValue { tag, elements: fields } = decode_array(vm, value)?;
     if !fields.is_empty() {
         return None;
     }
 
-    match vm.string_value(tag)?.as_str() {
+    match decode_string(vm, tag)?.as_str() {
         "True" => Some(true),
         "False" => Some(false),
+        _ => None,
+    }
+}
+
+fn decode_array(vm: &Vm, value: Value) -> Option<ArrayValue> {
+    match vm.inspect(value)? {
+        ValueView::Array(array) => Some(array),
+        _ => None,
+    }
+}
+
+fn decode_string(vm: &Vm, value: Value) -> Option<String> {
+    match vm.inspect(value)? {
+        ValueView::String(s) => Some(s),
         _ => None,
     }
 }

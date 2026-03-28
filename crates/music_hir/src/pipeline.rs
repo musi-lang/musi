@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use music_config::MusiConfig;
 use music_config::{Workspace, load_config};
 use music_db::Db;
 use music_lex::Lexer;
@@ -99,16 +100,20 @@ pub fn compile(path: &Path) -> Result<CompileResult, io::Error> {
 pub fn analyze_project(path: &Path) -> Result<ProjectCheckResult, io::Error> {
     let (project_root, imports) = load_project_loader_config(path)?;
     let loader = ModuleLoader::new(project_root).with_config_imports(imports);
-    let project = resolve_project(path, &loader).map_err(|error| io::Error::other(error.to_string()))?;
+    let project =
+        resolve_project(path, &loader).map_err(|error| io::Error::other(error.to_string()))?;
     let project = type_project(project, loader);
     let modules = project
         .order
         .iter()
         .filter_map(|module_id| {
-            project.modules.get(module_id).map(|module| ProjectModuleCheck {
-                module_id: *module_id,
-                has_errors: module.has_errors,
-            })
+            project
+                .modules
+                .get(module_id)
+                .map(|module| ProjectModuleCheck {
+                    module_id: *module_id,
+                    has_errors: module.has_errors,
+                })
         })
         .collect();
     let has_errors = project
@@ -138,7 +143,9 @@ pub fn emit_project_diagnostics(result: &ProjectCheckResult) {
     }
 }
 
-fn load_project_loader_config(entry: &Path) -> Result<(PathBuf, HashMap<String, String>), io::Error> {
+fn load_project_loader_config(
+    entry: &Path,
+) -> Result<(PathBuf, HashMap<String, String>), io::Error> {
     let configs = find_project_configs(entry);
     let root = select_loader_root(&configs).unwrap_or_else(|| {
         entry
@@ -164,7 +171,7 @@ fn load_project_loader_config(entry: &Path) -> Result<(PathBuf, HashMap<String, 
 fn collect_local_package_imports(
     root: &Path,
     config_dir: &Path,
-    config: &music_config::MusiConfig,
+    config: &MusiConfig,
     imports: &mut HashMap<String, String>,
 ) -> Result<(), io::Error> {
     if let Some(name) = &config.name {
@@ -196,14 +203,14 @@ fn collect_local_package_imports(
     Ok(())
 }
 
-fn workspace_members(config: &music_config::MusiConfig) -> Option<&[String]> {
+fn workspace_members(config: &MusiConfig) -> Option<&[String]> {
     match config.workspace.as_ref()? {
         Workspace::Members(members) => Some(members.as_slice()),
         Workspace::Object(obj) => obj.members.as_deref(),
     }
 }
 
-fn find_project_configs(entry: &Path) -> Vec<(PathBuf, music_config::MusiConfig)> {
+fn find_project_configs(entry: &Path) -> Vec<(PathBuf, MusiConfig)> {
     let start = if entry.is_dir() {
         entry
     } else {
@@ -223,7 +230,7 @@ fn find_project_configs(entry: &Path) -> Vec<(PathBuf, music_config::MusiConfig)
         .collect()
 }
 
-fn select_loader_root(configs: &[(PathBuf, music_config::MusiConfig)]) -> Option<PathBuf> {
+fn select_loader_root(configs: &[(PathBuf, MusiConfig)]) -> Option<PathBuf> {
     configs
         .iter()
         .rev()

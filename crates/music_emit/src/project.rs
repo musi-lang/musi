@@ -3,11 +3,12 @@ use std::path::Path;
 
 use music_ast::expr::ExprKind;
 use music_hir::{TypedModule, TypedProject};
+use music_il::format::{self, ClassDescriptor, EffectDescriptor, TypeDescriptor};
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
+use music_resolve::ModuleGraph;
 use music_resolve::graph::ModuleId;
 use music_resolve::loader::{ModuleLoader, ResolvedImport};
-use music_resolve::ModuleGraph;
 use music_shared::Symbol;
 
 use crate::emitter::{ImportedGlobal, MethodEntry, SeamModule, emit_with_context};
@@ -51,9 +52,7 @@ pub struct ProjectEmitResult {
     reason = "capacity overflow `expect`s guard structural invariants (>65535 tables) — \
               these are compiler ICEs, not recoverable errors that belong in EmitError"
 )]
-pub fn emit_project(
-    mut project: TypedProject,
-) -> Result<ProjectEmitResult, EmitError> {
+pub fn emit_project(mut project: TypedProject) -> Result<ProjectEmitResult, EmitError> {
     let order = project.order.clone();
     let mut combined = SeamModule {
         constants: ConstantPool::new(),
@@ -263,26 +262,27 @@ fn rewrite_instructions(
     }
 }
 
-fn merge_types(
-    combined: &mut SeamModule,
-    source_types: &[music_il::format::TypeDescriptor],
-) -> HashMap<u16, u16> {
+fn merge_types(combined: &mut SeamModule, source_types: &[TypeDescriptor]) -> HashMap<u16, u16> {
     let mut remap = HashMap::new();
     let mut next_type_id = combined
         .types
         .iter()
         .map(|ty| ty.id)
-        .filter(|id| *id < music_il::format::BUILTIN_TYPE_TYPE)
+        .filter(|id| *id < format::BUILTIN_TYPE_TYPE)
         .max()
-        .unwrap_or(music_il::format::FIRST_EMITTED_TYPE_ID.saturating_sub(1))
+        .unwrap_or(format::FIRST_EMITTED_TYPE_ID.saturating_sub(1))
         .saturating_add(1);
 
     for ty in source_types {
-        if let Some(existing) = combined.types.iter().find(|candidate| candidate.key == ty.key) {
+        if let Some(existing) = combined
+            .types
+            .iter()
+            .find(|candidate| candidate.key == ty.key)
+        {
             let _ = remap.insert(ty.id, existing.id);
             continue;
         }
-        let new_id = if ty.id >= music_il::format::BUILTIN_TYPE_TYPE {
+        let new_id = if ty.id >= format::BUILTIN_TYPE_TYPE {
             ty.id
         } else {
             let fresh = next_type_id;
@@ -300,7 +300,7 @@ fn merge_types(
 
 fn merge_classes(
     combined: &mut SeamModule,
-    source_classes: Vec<music_il::format::ClassDescriptor>,
+    source_classes: Vec<ClassDescriptor>,
     offsets: &ModuleOffsets,
     type_remap: &HashMap<u16, u16>,
 ) -> HashMap<u16, u16> {
@@ -354,7 +354,7 @@ fn infer_module_name(current_path: &Path) -> String {
 
 fn merge_effects(
     combined: &mut SeamModule,
-    source_effects: &[music_il::format::EffectDescriptor],
+    source_effects: &[EffectDescriptor],
 ) -> HashMap<u16, u16> {
     let mut remap = HashMap::new();
     for effect in source_effects {

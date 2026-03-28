@@ -3,8 +3,8 @@ pub mod git;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use music_config::{Exports, MusiConfig, load_config};
 use music_owned::modules;
-use music_config::{Exports, load_config};
 
 /// Result of resolving an import specifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,7 +307,7 @@ impl ModuleLoader {
         }
     }
 
-    fn load_package_config(package_root: &Path) -> Option<music_config::MusiConfig> {
+    fn load_package_config(package_root: &Path) -> Option<MusiConfig> {
         let config_path = package_root.join("musi.json");
         if !config_path.exists() {
             return None;

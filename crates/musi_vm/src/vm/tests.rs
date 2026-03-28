@@ -7,8 +7,9 @@ use music_il::format::{
 };
 use music_il::opcode::Opcode;
 
-use super::{HostEffectHandler, Vm};
+use super::Vm;
 use crate::errors::VmError;
+use crate::host::RuntimeHost;
 use crate::module::{ConstantEntry, ENTRY_POINT_NAME, GlobalDef, Method, Module};
 use crate::value::Value;
 
@@ -770,7 +771,7 @@ fn effect_no_matching_handler() {
 
 struct ResumeWithPayload;
 
-impl HostEffectHandler for ResumeWithPayload {
+impl RuntimeHost for ResumeWithPayload {
     fn handle_effect(
         &mut self,
         _vm: &Vm,
@@ -788,7 +789,8 @@ impl HostEffectHandler for ResumeWithPayload {
 
 #[test]
 fn effect_perform_can_be_handled_by_host() {
-    let mut vm = Vm::new(module_with_code(vec![
+    let mut vm = Vm::with_host(
+        module_with_code(vec![
         op(Opcode::LdSmi),
         42,
         0,
@@ -798,8 +800,9 @@ fn effect_perform_can_be_handled_by_host() {
         0,
         0,
         op(Opcode::Halt),
-    ]));
-    vm.set_host_effect_handler(Box::new(ResumeWithPayload));
+    ]),
+        Box::new(ResumeWithPayload),
+    );
     assert_eq!(vm.run().unwrap().as_int(), 42);
 }
 
@@ -1674,7 +1677,7 @@ fn exported_global_lookup_after_run() {
     });
 
     assert!(vm.run().unwrap().is_unit());
-    assert_eq!(vm.exported_global("suite").unwrap().as_int(), 7);
+    assert_eq!(vm.export("suite").unwrap().as_int(), 7);
 }
 
 #[test]
@@ -1715,7 +1718,7 @@ fn invoke_exported_closure_after_run() {
     });
 
     let _ = vm.run().unwrap();
-    let suite = vm.exported_global("suite").unwrap();
+    let suite = vm.export("suite").unwrap();
     let result = vm.invoke(suite, &[Value::from_int(9)]).unwrap();
     assert!(result.is_int());
     assert_eq!(result.as_int(), 9);

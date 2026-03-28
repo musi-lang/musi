@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Args;
-use music_emit::{emit_project, write_seam};
 use musi::driver::{compile_project, emit_project_diagnostics};
+use musi_vm::Vm;
+use music_emit::{emit_project, write_seam};
 
 #[derive(Args)]
 pub struct RunArgs {
@@ -61,7 +62,7 @@ fn run_seam_bytes(bytes: &[u8]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut vm = musi_vm::Vm::new(module);
+    let mut vm = Vm::new(module);
     match vm.run() {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {

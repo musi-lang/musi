@@ -6,38 +6,39 @@ use music_il::opcode::Opcode;
 
 use crate::effect::EffectHandler;
 use crate::errors::{VmError, VmResult};
-use crate::ffi::{self, FfiRuntime};
+use crate::ffi;
 use crate::frame::CallFrame;
+use crate::host::{NativeHost, RuntimeHost};
 use crate::heap::{Heap, HeapObject};
-use crate::module::{ConstantEntry, ENTRY_POINT_NAME, Module};
+use crate::inspect::{ArrayValue, ValueView};
+use crate::module::{ConstantEntry, ENTRY_POINT_NAME};
+use crate::program::Program;
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
 
 pub struct Vm {
-    module: Module,
+    program: Program,
     globals: Vec<Value>,
     heap: Heap,
     frames: Vec<CallFrame>,
     effect_handlers: Vec<EffectHandler>,
-    host_effect_handler: Option<Box<dyn HostEffectHandler>>,
+    host: Option<Box<dyn RuntimeHost>>,
     resolved_constants: Vec<Value>,
-    ffi_runtime: FfiRuntime,
-}
-
-pub trait HostEffectHandler {
-    fn handle_effect(
-        &mut self,
-        vm: &Vm,
-        effect_id: u16,
-        op_id: u16,
-        payload: Value,
-    ) -> VmResult<Option<Value>>;
+    initialized: bool,
+    last_init_result: Value,
 }
 
 impl Vm {
     #[must_use]
-    pub fn new(module: Module) -> Self {
+    pub fn new(program: impl Into<Program>) -> Self {
+        Self::with_host(program, Box::new(NativeHost::new()))
+    }
+
+    #[must_use]
+    pub fn with_host(program: impl Into<Program>, host: Box<dyn RuntimeHost>) -> Self {
+        let program = program.into();
+        let module = program.module();
         let globals_count = module.globals.len();
         let mut heap = Heap::new();
         let resolved_constants = module
@@ -56,31 +57,39 @@ impl Vm {
             })
             .collect();
         Self {
-            module,
+            program,
             globals: vec![Value::UNIT; globals_count],
             heap,
             frames: Vec::new(),
             effect_handlers: Vec::new(),
-            host_effect_handler: None,
+            host: Some(host),
             resolved_constants,
-            ffi_runtime: FfiRuntime::new(),
+            initialized: false,
+            last_init_result: Value::UNIT,
         }
     }
 
-    pub fn set_host_effect_handler(&mut self, handler: Box<dyn HostEffectHandler>) {
-        self.host_effect_handler = Some(handler);
+    #[must_use]
+    pub const fn program(&self) -> &Program {
+        &self.program
     }
 
-    pub fn clear_host_effect_handler(&mut self) {
-        self.host_effect_handler = None;
+    #[must_use]
+    pub const fn is_initialized(&self) -> bool {
+        self.initialized
     }
 
     /// # Errors
     /// Returns a [`VmError`] if no entry point exists, the bytecode is invalid,
     /// a runtime type error occurs, or `Panic` is executed.
-    pub fn run(&mut self) -> VmResult<Value> {
+    pub fn initialize(&mut self) -> VmResult {
+        if self.initialized {
+            return Ok(());
+        }
+
         let entry_indices: Vec<_> = self
-            .module
+            .program
+            .module()
             .methods
             .iter()
             .enumerate()
@@ -93,7 +102,8 @@ impl Vm {
         let mut result = Value::UNIT;
         for entry_idx in entry_indices {
             self.frames.clear();
-            let locals_count = usize::from(self.module.methods[entry_idx].locals_count);
+            let locals_count =
+                usize::from(self.program.module().methods[entry_idx].locals_count);
             let frame = CallFrame::new_call(
                 locals_count,
                 0,
@@ -104,7 +114,17 @@ impl Vm {
             result = self.execute()?;
         }
         self.frames.clear();
-        Ok(result)
+        self.last_init_result = result;
+        self.initialized = true;
+        Ok(())
+    }
+
+    /// # Errors
+    /// Returns a [`VmError`] if no entry point exists, the bytecode is invalid,
+    /// a runtime type error occurs, or `Panic` is executed.
+    pub fn run(&mut self) -> VmResult<Value> {
+        self.initialize()?;
+        Ok(self.last_init_result)
     }
 
     /// Execute a callable value already stored in the VM.
@@ -112,6 +132,9 @@ impl Vm {
     /// The module entrypoint must have been run first if the callee depends on
     /// initialized globals.
     pub fn invoke(&mut self, callee: Value, args: &[Value]) -> VmResult<Value> {
+        if !self.initialized {
+            return Err(VmError::ProgramNotInitialized);
+        }
         self.frames.clear();
         let (method_idx, closure_idx) = self.resolve_callee(callee)?;
         let mut frame = self.make_call_frame(method_idx, 0, closure_idx)?;
@@ -126,15 +149,21 @@ impl Vm {
 
     /// Look up an exported global by source name after module initialization.
     #[must_use]
-    pub fn exported_global(&self, name: &str) -> Option<Value> {
-        self.module
+    pub fn export(&self, name: &str) -> Option<Value> {
+        if !self.initialized {
+            return None;
+        }
+
+        self.program
+            .module()
             .globals
             .iter()
             .enumerate()
             .find(|(_, global)| {
                 global.exported
                     && self
-                        .module
+                        .program
+                        .module()
                         .strings
                         .get(usize::try_from(global.name).ok().unwrap_or(usize::MAX))
                         .is_some_and(|global_name| global_name == name)
@@ -142,57 +171,58 @@ impl Vm {
             .and_then(|(idx, _)| self.globals.get(idx).copied())
     }
 
-    /// Look up a global by merged-module index after module initialization.
+    #[doc(hidden)]
     #[must_use]
     pub fn global_value(&self, index: u16) -> Option<Value> {
+        if !self.initialized {
+            return None;
+        }
         self.globals.get(usize::from(index)).copied()
     }
 
-    #[must_use]
-    pub fn effect_id(&self, module_name: &str, effect_name: &str) -> Option<u16> {
-        self.module
-            .effects
-            .iter()
-            .find(|effect| effect.module_name == module_name && effect.name == effect_name)
-            .map(|effect| effect.id)
+    /// Invoke an exported callable by name after initialization.
+    pub fn invoke_export(&mut self, name: &str, args: &[Value]) -> VmResult<Value> {
+        let callee = self
+            .export(name)
+            .ok_or_else(|| VmError::MissingExport(name.into()))?;
+        self.invoke(callee, args)
     }
 
+    /// Decode a runtime value into a host-owned view.
     #[must_use]
-    pub fn effect_op_id(&self, effect_id: u16, op_name: &str) -> Option<u16> {
-        self.module
-            .effects
-            .iter()
-            .find(|effect| effect.id == effect_id)
-            .and_then(|effect| {
-                effect
-                    .operations
-                    .iter()
-                    .find(|op| op.name == op_name)
-                    .map(|op| op.id)
-            })
-    }
-
-    /// Clone a heap string into host-owned memory.
-    #[must_use]
-    pub fn string_value(&self, value: Value) -> Option<String> {
+    pub fn inspect(&self, value: Value) -> Option<ValueView> {
+        if value.is_unit() {
+            return Some(ValueView::Unit);
+        }
+        if value.is_bool() {
+            return Some(ValueView::Bool(value.as_bool()));
+        }
+        if value.is_int() {
+            return Some(ValueView::Int(value.as_int()));
+        }
+        if value.is_float() {
+            return Some(ValueView::Float(value.as_float()));
+        }
+        if value.is_tag() {
+            return Some(ValueView::Tag(value.as_tag_idx()));
+        }
         if !value.is_ptr() {
             return None;
         }
-        match self.heap.get(value.as_ptr_idx())? {
-            HeapObject::String(s) => Some(s.data.clone()),
-            _ => None,
-        }
-    }
 
-    /// Clone an array's tag and elements into host-owned memory.
-    #[must_use]
-    pub fn array_value(&self, value: Value) -> Option<(Value, Vec<Value>)> {
-        if !value.is_ptr() {
-            return None;
-        }
         match self.heap.get(value.as_ptr_idx())? {
-            HeapObject::Array(arr) => Some((arr.tag, arr.elements.clone())),
-            _ => None,
+            HeapObject::String(s) => Some(ValueView::String(s.data.clone())),
+            HeapObject::Array(arr) => Some(ValueView::Array(ArrayValue {
+                tag: arr.tag,
+                elements: arr.elements.clone(),
+            })),
+            HeapObject::Slice(sl) => Some(ValueView::Slice {
+                length: sl.end - sl.start,
+            }),
+            HeapObject::Cell(cell) => Some(ValueView::Cell(cell.value)),
+            HeapObject::CPtr(_) => Some(ValueView::CPtr),
+            HeapObject::Closure(_) => Some(ValueView::Closure),
+            HeapObject::Continuation(_) => Some(ValueView::Continuation),
         }
     }
 
@@ -209,7 +239,7 @@ impl Vm {
             let method_idx = usize::from(frame.method_idx);
             // SAFETY: method_idx is set from valid module data during frame
             // creation; pc is maintained within bounds by the emitter.
-            let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+            let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
             let byte = unsafe { *code.get_unchecked(pc) };
             // SAFETY: emitter only produces valid opcodes
             let op = unsafe { Opcode::from_byte(byte).unwrap_unchecked() };
@@ -343,7 +373,7 @@ impl Vm {
                         let off_pos = base_pc + i * 2;
                         // SAFETY: method_idx is valid; off_pos is within the
                         // BrTbl operand region emitted by the compiler.
-                        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+                        let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
                         let lo = unsafe { *code.get_unchecked(off_pos) };
                         let hi = unsafe { *code.get_unchecked(off_pos + 1) };
                         let offset = i16::from_le_bytes([lo, hi]);
@@ -682,7 +712,8 @@ impl Vm {
         closure: Option<usize>,
     ) -> VmResult<CallFrame> {
         let locals_count = usize::from(
-            self.module
+            self.program
+                .module()
                 .methods
                 .get(method_idx)
                 .ok_or(VmError::InvalidMethod(method_idx))?
@@ -872,7 +903,8 @@ impl Vm {
                 };
                 let class_idx = usize::from(class_id);
                 let class = self
-                    .module
+                    .program
+                    .module()
                     .classes
                     .get(class_idx)
                     .ok_or(VmError::NoInstance { class_id, type_id })?;
@@ -898,7 +930,8 @@ impl Vm {
                 let inst_idx =
                     usize::try_from(packed & 0xFFFF).map_err(|_| VmError::InvalidDictionary)?;
                 let class = self
-                    .module
+                    .program
+                    .module()
                     .classes
                     .get(cls_idx)
                     .ok_or(VmError::InvalidDictionary)?;
@@ -921,7 +954,8 @@ impl Vm {
     fn dispatch_ffi_call(&mut self, method_idx: usize, pc: &mut usize) -> VmResult {
         let ffi_idx = usize::from(self.read_u16(method_idx, pc));
         let foreign = self
-            .module
+            .program
+            .module()
             .foreigns
             .get(ffi_idx)
             .ok_or(VmError::FfiForeignIndexOutOfBounds(ffi_idx))?;
@@ -931,13 +965,15 @@ impl Vm {
         let return_type = foreign.return_type;
 
         let symbol_name = if foreign.symbol_idx == u32::MAX {
-            self.module
+            self.program
+                .module()
                 .strings
                 .get(usize::try_from(foreign.name_idx).unwrap_or(usize::MAX))
                 .cloned()
                 .unwrap_or_default()
         } else {
-            self.module
+            self.program
+                .module()
                 .strings
                 .get(usize::try_from(foreign.symbol_idx).unwrap_or(usize::MAX))
                 .cloned()
@@ -947,15 +983,18 @@ impl Vm {
         let lib_name = if foreign.lib_idx == u32::MAX {
             String::new()
         } else {
-            self.module
+            self.program
+                .module()
                 .strings
                 .get(usize::try_from(foreign.lib_idx).unwrap_or(usize::MAX))
                 .cloned()
                 .unwrap_or_default()
         };
 
-        self.ffi_runtime.load_library(&lib_name)?;
-        let fn_ptr = self.ffi_runtime.resolve_symbol(&lib_name, &symbol_name)?;
+        let mut host = self.host.take().ok_or(VmError::MissingHost)?;
+        host.load_library(&lib_name)?;
+        let fn_ptr = host.resolve_symbol(&lib_name, &symbol_name)?;
+        self.host = Some(host);
 
         let mut args = Vec::with_capacity(arity);
         {
@@ -1086,7 +1125,7 @@ impl Vm {
 
     fn read_u8(&self, method_idx: usize, pc: &mut usize) -> u8 {
         // SAFETY: method_idx and pc are maintained in bounds by the emitter
-        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+            let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
         let b = unsafe { *code.get_unchecked(*pc) };
         *pc = pc.wrapping_add(1);
         b
@@ -1096,7 +1135,7 @@ impl Vm {
     fn read_u16(&self, method_idx: usize, pc: &mut usize) -> u16 {
         // SAFETY: method_idx and pc are maintained in bounds by the emitter;
         // the emitter always emits complete 2-byte operands.
-        let code = unsafe { &self.module.methods.get_unchecked(method_idx).code };
+        let code = unsafe { &self.program.module().methods.get_unchecked(method_idx).code };
         let lo = u16::from(unsafe { *code.get_unchecked(*pc) });
         let hi = u16::from(unsafe { *code.get_unchecked(*pc + 1) });
         *pc += 2;
@@ -1213,11 +1252,11 @@ impl Vm {
         op_id: u16,
         payload: Value,
     ) -> VmResult<Option<Value>> {
-        let Some(mut handler) = self.host_effect_handler.take() else {
-            return Ok(None);
+        let Some(mut host) = self.host.take() else {
+            return Err(VmError::MissingHost);
         };
-        let result = handler.handle_effect(self, effect_id, op_id, payload);
-        self.host_effect_handler = Some(handler);
+        let result = host.handle_effect(self, effect_id, op_id, payload);
+        self.host = Some(host);
         result
     }
 
@@ -1285,7 +1324,8 @@ enum CopyData {
 
 /// Format a value for display, resolving heap pointers to their contents.
 #[must_use]
-pub fn display_value(val: Value, heap: &Heap) -> String {
+#[cfg(test)]
+pub(crate) fn display_value(val: Value, heap: &Heap) -> String {
     if val.is_ptr() {
         if let Some(obj) = heap.get(val.as_ptr_idx()) {
             return match obj {

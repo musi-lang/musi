@@ -9,8 +9,7 @@ use music_ast::expr::{
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
-use music_ast::{ExprId, ExprList, TyId};
-use music_owned::types::BuiltinType;
+use music_ast::{AttrId, ExprId, ExprList, PatId, TyId};
 use music_hir::TypedModule;
 use music_il::format::{
     self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
@@ -18,6 +17,7 @@ use music_il::format::{
 };
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
+use music_owned::types::BuiltinType;
 use music_resolve::def::{DefKind, Visibility};
 use music_sema::env::{DispatchInfo, TypeKey};
 use music_sema::types::{NominalKey, SemaTypeId, Ty};
@@ -205,7 +205,12 @@ impl Emitter<'_> {
                     .map(|effect| EffectDescriptor {
                         id: effect.id,
                         module_name: effect.module_name.clone(),
-                        name: self.typed_module.db.interner.resolve(effect.name).to_owned(),
+                        name: self
+                            .typed_module
+                            .db
+                            .interner
+                            .resolve(effect.name)
+                            .to_owned(),
                         operations: effect
                             .operations
                             .iter()
@@ -240,7 +245,9 @@ impl Emitter<'_> {
             };
             let class_name_idx = self
                 .pool
-                .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(ident.name).to_owned()))
+                .add(ConstantEntry::Str(
+                    self.typed_module.db.interner.resolve(ident.name).to_owned(),
+                ))
                 .into();
             let class_methods: Vec<Symbol> = data
                 .members
@@ -254,7 +261,9 @@ impl Emitter<'_> {
                 .iter()
                 .map(|name| {
                     self.pool
-                        .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(*name).to_owned()))
+                        .add(ConstantEntry::Str(
+                            self.typed_module.db.interner.resolve(*name).to_owned(),
+                        ))
                         .into()
                 })
                 .collect::<Vec<_>>();
@@ -280,13 +289,20 @@ impl Emitter<'_> {
         let mut instances = Vec::new();
         let root = self.typed_module.db.ast.root.clone();
         for expr_id in root {
-            let ExprKind::InstanceDef(inst) = &self.typed_module.db.ast.exprs.get(expr_id).kind else {
+            let ExprKind::InstanceDef(inst) = &self.typed_module.db.ast.exprs.get(expr_id).kind
+            else {
                 continue;
             };
             if inst.ty.name.name != class_name {
                 continue;
             }
-            let Some(type_key) = self.typed_module.type_env.instance_keys.get(&expr_id).cloned() else {
+            let Some(type_key) = self
+                .typed_module
+                .type_env
+                .instance_keys
+                .get(&expr_id)
+                .cloned()
+            else {
                 continue;
             };
             let type_id = self.register_type_key(&type_key);
@@ -295,7 +311,9 @@ impl Emitter<'_> {
                 .map(|name| ClassMethod {
                     name_idx: self
                         .pool
-                        .add(ConstantEntry::Str(self.typed_module.db.interner.resolve(*name).to_owned()))
+                        .add(ConstantEntry::Str(
+                            self.typed_module.db.interner.resolve(*name).to_owned(),
+                        ))
                         .into(),
                     method_idx: self.method_index_by_name(*name).unwrap_or(u16::MAX),
                 })
@@ -362,17 +380,15 @@ impl Emitter<'_> {
     fn type_key_string(&self, type_key: &TypeKey) -> String {
         match type_key {
             TypeKey::Builtin(bt) => bt.name().to_owned(),
-            TypeKey::Named(NominalKey { module_name, name }) => module_name
-                .as_ref()
-                .map_or_else(
-                    || self.typed_module.db.interner.resolve(*name).to_owned(),
-                    |module_name| {
-                        format!(
-                            "{module_name}::{}",
-                            self.typed_module.db.interner.resolve(*name)
-                        )
-                    },
-                ),
+            TypeKey::Named(NominalKey { module_name, name }) => module_name.as_ref().map_or_else(
+                || self.typed_module.db.interner.resolve(*name).to_owned(),
+                |module_name| {
+                    format!(
+                        "{module_name}::{}",
+                        self.typed_module.db.interner.resolve(*name)
+                    )
+                },
+            ),
             TypeKey::Param(name) | TypeKey::Class(name) | TypeKey::Effect(name) => {
                 self.typed_module.db.interner.resolve(*name).to_owned()
             }
@@ -404,7 +420,11 @@ impl Emitter<'_> {
                     .join("|")
             ),
             TypeKey::Arrow { param, ret } => {
-                format!("({})->{}", self.type_key_string(param), self.type_key_string(ret))
+                format!(
+                    "({})->{}",
+                    self.type_key_string(param),
+                    self.type_key_string(ret)
+                )
             }
             TypeKey::EffectArrow {
                 param,
@@ -472,14 +492,16 @@ impl Emitter<'_> {
                     Some(DefKind::Effect) => Some(TypeKey::Effect(name.name)),
                     _ => {
                         let base = TypeKey::Named(NominalKey {
-                            module_name: self
-                                .typed_module
-                                .resolution
-                                .ty_res
-                                .get(&ty_id)
-                                .and_then(|def_id| {
-                                    self.typed_module.resolution.defs.get(*def_id).module_name.clone()
-                                }),
+                            module_name: self.typed_module.resolution.ty_res.get(&ty_id).and_then(
+                                |def_id| {
+                                    self.typed_module
+                                        .resolution
+                                        .defs
+                                        .get(*def_id)
+                                        .module_name
+                                        .clone()
+                                },
+                            ),
                             name: name.name,
                         });
                         if args.is_empty() {
@@ -1180,7 +1202,7 @@ impl Emitter<'_> {
 
     fn emit_match_tuple_or_array(
         &mut self,
-        pats: &[music_ast::PatId],
+        pats: &[PatId],
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
@@ -1237,7 +1259,7 @@ impl Emitter<'_> {
     fn emit_match_variant(
         &mut self,
         tag: &Ident,
-        fields: &[music_ast::PatId],
+        fields: &[PatId],
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
@@ -1571,9 +1593,12 @@ impl Emitter<'_> {
     ) {
         let cont_slot = self.local_slot(cont.name);
         self.emit_st_loc(cont_slot);
-        let Some(op_info) = self.typed_module.type_env.effect_by_id(effect_id).and_then(|effect| {
-            effect.operations.iter().find(|op| op.name == op_name)
-        }) else {
+        let Some(op_info) = self
+            .typed_module
+            .type_env
+            .effect_by_id(effect_id)
+            .and_then(|effect| effect.operations.iter().find(|op| op.name == op_name))
+        else {
             return;
         };
         match self.effect_payload_arity(op_info.param_ty) {
@@ -1797,7 +1822,8 @@ impl Emitter<'_> {
                             .iter()
                             .filter(|imported| {
                                 names.iter().any(|name| {
-                                    self.typed_module.db.interner.resolve(name.name) == imported.name
+                                    self.typed_module.db.interner.resolve(name.name)
+                                        == imported.name
                                 })
                             })
                             .cloned()
@@ -1924,7 +1950,7 @@ impl Emitter<'_> {
 
     fn emit_match_or(
         &mut self,
-        pats: &[music_ast::PatId],
+        pats: &[PatId],
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
@@ -2007,7 +2033,7 @@ impl Emitter<'_> {
     fn emit_match_as(
         &mut self,
         name: Ident,
-        inner_pat: music_ast::PatId,
+        inner_pat: PatId,
         arm: &CaseArm,
         is_last: bool,
         end_jumps: &mut Vec<usize>,
@@ -2195,7 +2221,7 @@ impl Emitter<'_> {
             .map_or(FfiType::Ptr, |ty_id| self.ty_to_ffi_type(ty_id))
     }
 
-    fn extract_lib_attr(&mut self, attrs: &[music_ast::AttrId]) -> Option<u32> {
+    fn extract_lib_attr(&mut self, attrs: &[AttrId]) -> Option<u32> {
         for &attr_id in attrs {
             let attr = self.typed_module.db.ast.attrs.get(attr_id);
             let path = &attr.kind.path;

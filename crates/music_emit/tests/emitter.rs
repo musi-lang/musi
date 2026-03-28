@@ -14,12 +14,12 @@ use music_ast::expr::{
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
-use music_owned::types::BuiltinType;
 use music_db::Db;
 use music_hir::TypedModule;
-use music_il::format::BUILTIN_TYPE_INT;
+use music_il::format::{self, BUILTIN_TYPE_INT};
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
+use music_owned::types::BuiltinType;
 use music_resolve::queries::ResolutionMap;
 use music_sema::Ty;
 use music_sema::env::{DispatchInfo, EffectUse, TypeEnv};
@@ -84,7 +84,8 @@ fn emit_literal_large_int_uses_constant_pool() {
 
 #[test]
 fn emit_literal_float() {
-    let typed_module = build_typed_module_single(|_ast, _int| ExprKind::Lit(Literal::Float(1.234_567_89)));
+    let typed_module =
+        build_typed_module_single(|_ast, _int| ExprKind::Lit(Literal::Float(1.234_567_89)));
     let module = emit(&typed_module).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdConst);
@@ -93,7 +94,8 @@ fn emit_literal_float() {
 
 #[test]
 fn emit_literal_string() {
-    let typed_module = build_typed_module_single(|_ast, _int| ExprKind::Lit(Literal::Str(String::from("hi"))));
+    let typed_module =
+        build_typed_module_single(|_ast, _int| ExprKind::Lit(Literal::Str(String::from("hi"))));
     let module = emit(&typed_module).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(instrs[0].opcode, Opcode::LdConst);
@@ -251,7 +253,7 @@ fn emit_record_lit() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_type_len(Opcode::ArrNew, music_il::format::BUILTIN_TYPE_ANY, 1)
+        Instruction::with_type_len(Opcode::ArrNew, format::BUILTIN_TYPE_ANY, 1)
     );
     assert_eq!(instrs[1], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
@@ -504,7 +506,10 @@ fn emit_handle_with_body() {
         .type_env
         .register_effect_ops(eff_sym, vec![(eff_sym, None, ret_ty)]);
     let handle_expr = typed_module.db.ast.root[0];
-    let _ = typed_module.type_env.handle_effects.insert(handle_expr, effect_id);
+    let _ = typed_module
+        .type_env
+        .handle_effects
+        .insert(handle_expr, effect_id);
     let module = emit(&typed_module).unwrap();
     let instrs = &module.methods[0].instructions;
     assert_eq!(
@@ -1660,7 +1665,7 @@ fn emit_tuple_lit() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_type_len(Opcode::ArrNew, music_il::format::BUILTIN_TYPE_ANY, 3)
+        Instruction::with_type_len(Opcode::ArrNew, format::BUILTIN_TYPE_ANY, 3)
     );
     assert_eq!(instrs[2], Instruction::with_u8(Opcode::ArrSetI, 0));
     assert_eq!(instrs[4], Instruction::with_u8(Opcode::ArrSetI, 1));

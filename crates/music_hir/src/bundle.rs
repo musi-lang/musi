@@ -2,18 +2,18 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use music_ast::common::{Attr, AttrArg, MemberDecl};
-use music_ast::ExprId;
 use music_ast::expr::{DataBody, ExprKind, InstanceBody};
+use music_ast::{AttrId, ExprId};
 use music_db::Db;
 use music_owned::modules::is_compiler_owned_path;
 use music_resolve::def::{DefId, DefInfo};
 use music_resolve::queries::ResolutionMap;
 use music_resolve::{ModuleGraph, ModuleId, ModuleLoader, ModuleResult, ProjectResolution};
 use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};
-use music_sema::types::SemaTypeId;
 use music_sema::type_check;
+use music_sema::types::SemaTypeId;
 use music_shared::diag::{Diag, DiagCode};
-use music_shared::Interner;
+use music_shared::{Interner, Literal, SourceId, Span, Symbol};
 
 use crate::lower;
 
@@ -88,7 +88,7 @@ impl TypedModule {
 
     /// Returns the stable class ID for a type class by name, if assigned.
     #[must_use]
-    pub fn class_id(&self, name: music_shared::Symbol) -> Option<u16> {
+    pub fn class_id(&self, name: Symbol) -> Option<u16> {
         self.type_env.class_ids.get(&name).copied()
     }
 
@@ -127,7 +127,11 @@ pub fn type_project(project: ProjectResolution, loader: ModuleLoader) -> TypedPr
 
 /// Convert one resolved module into the canonical typed-module artifact.
 #[must_use]
-pub fn type_module(module: ModuleResult, module_id: Option<ModuleId>, path: PathBuf) -> TypedModule {
+pub fn type_module(
+    module: ModuleResult,
+    module_id: Option<ModuleId>,
+    path: PathBuf,
+) -> TypedModule {
     let ModuleResult {
         mut db,
         resolution,
@@ -210,17 +214,11 @@ fn collect_suppressed_codes(db: &Db, interner: &Interner) -> HashSet<DiagCode> {
     codes
 }
 
-fn validate_attributes(db: &Db, path: &PathBuf, source_id: music_shared::SourceId) -> Vec<Diag> {
+fn validate_attributes(db: &Db, path: &PathBuf, source_id: SourceId) -> Vec<Diag> {
     let mut diagnostics = Vec::new();
     let compiler_owned = is_compiler_owned_path(path);
     for &expr_id in &db.ast.root {
-        validate_expr_attributes(
-            db,
-            expr_id,
-            compiler_owned,
-            source_id,
-            &mut diagnostics,
-        );
+        validate_expr_attributes(db, expr_id, compiler_owned, source_id, &mut diagnostics);
     }
     diagnostics
 }
@@ -229,7 +227,7 @@ fn validate_expr_attributes(
     db: &Db,
     expr_id: ExprId,
     compiler_owned: bool,
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
 ) {
     match &db.ast.exprs.get(expr_id).kind {
@@ -263,13 +261,7 @@ fn validate_expr_attributes(
             }
         }
         ExprKind::ClassDef(data) => {
-            validate_member_attributes(
-                db,
-                &data.members,
-                compiler_owned,
-                source_id,
-                diagnostics,
-            );
+            validate_member_attributes(db, &data.members, compiler_owned, source_id, diagnostics);
         }
         ExprKind::EffectDef(members) => {
             validate_member_attributes(db, members, compiler_owned, source_id, diagnostics);
@@ -300,7 +292,7 @@ fn validate_member_attributes(
     db: &Db,
     members: &[MemberDecl],
     compiler_owned: bool,
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
 ) {
     for member in members {
@@ -327,10 +319,10 @@ enum AttrTarget {
 
 fn validate_attr_list(
     db: &Db,
-    attrs: &[music_ast::AttrId],
+    attrs: &[AttrId],
     target: AttrTarget,
     compiler_owned: bool,
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
 ) {
     for &attr_id in attrs {
@@ -341,27 +333,20 @@ fn validate_attr_list(
         };
 
         match root {
-            "musi" => validate_compiler_attr(
-                &path,
-                compiler_owned,
-                source_id,
-                diagnostics,
-                attr.span,
-            ),
+            "musi" => {
+                validate_compiler_attr(&path, compiler_owned, source_id, diagnostics, attr.span)
+            }
             "ffi" => validate_ffi_attr(&path, target, source_id, diagnostics, attr.span),
-            "diagnostic" => validate_diagnostic_attr(
-                db,
-                &attr.kind,
-                &path,
-                source_id,
-                diagnostics,
-                attr.span,
-            ),
+            "diagnostic" => {
+                validate_diagnostic_attr(db, &attr.kind, &path, source_id, diagnostics, attr.span)
+            }
             "builtin" | "lib" => diagnostics.push(
                 Diag::error(format!("legacy attribute '@{root}' is not supported"))
                     .with_code(DiagCode::new(2501))
                     .with_hint(match root {
-                        "builtin" => "use '@musi.lang', '@musi.intrinsic', or '@musi.variant'".to_owned(),
+                        "builtin" => {
+                            "use '@musi.lang', '@musi.intrinsic', or '@musi.variant'".to_owned()
+                        }
                         "lib" => "use '@ffi.link(...)'".to_owned(),
                         _ => String::new(),
                     })
@@ -375,9 +360,9 @@ fn validate_attr_list(
 fn validate_compiler_attr(
     path: &[String],
     compiler_owned: bool,
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
-    span: music_shared::Span,
+    span: Span,
 ) {
     if !compiler_owned {
         diagnostics.push(
@@ -415,24 +400,29 @@ fn validate_compiler_attr(
 fn validate_ffi_attr(
     path: &[String],
     target: AttrTarget,
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
-    span: music_shared::Span,
+    span: Span,
 ) {
     match path {
         [root, link] if root == "ffi" && link == "link" => {
             if !matches!(target, AttrTarget::Let { foreign: true }) {
                 diagnostics.push(
-                    Diag::error("attribute '@ffi.link' is only allowed on foreign let declarations")
-                        .with_code(DiagCode::new(2504))
-                        .with_label(span, source_id, ""),
+                    Diag::error(
+                        "attribute '@ffi.link' is only allowed on foreign let declarations",
+                    )
+                    .with_code(DiagCode::new(2504))
+                    .with_label(span, source_id, ""),
                 );
             }
         }
         [root, _] if root == "ffi" => diagnostics.push(
-            Diag::error(format!("unknown FFI attribute '{}'", attr_path_display(path)))
-                .with_code(DiagCode::new(2505))
-                .with_label(span, source_id, ""),
+            Diag::error(format!(
+                "unknown FFI attribute '{}'",
+                attr_path_display(path)
+            ))
+            .with_code(DiagCode::new(2505))
+            .with_label(span, source_id, ""),
         ),
         _ => {}
     }
@@ -442,9 +432,9 @@ fn validate_diagnostic_attr(
     db: &Db,
     attr: &Attr,
     path: &[String],
-    source_id: music_shared::SourceId,
+    source_id: SourceId,
     diagnostics: &mut Vec<Diag>,
-    span: music_shared::Span,
+    span: Span,
 ) {
     let valid = matches!(
         path,
@@ -482,7 +472,7 @@ fn attr_arg_code(db: &Db, interner: &Interner, arg: &AttrArg) -> Option<DiagCode
     };
     match &db.ast.exprs.get(expr_id).kind {
         ExprKind::Var(ident) => DiagCode::parse(interner.resolve(ident.name)),
-        ExprKind::Lit(music_shared::Literal::Str(code)) => DiagCode::parse(code),
+        ExprKind::Lit(Literal::Str(code)) => DiagCode::parse(code),
         _ => None,
     }
 }

@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 pub type TriviaList = SmallVec<[Trivia; 2]>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FStrPart {
+pub enum StringFragment {
     Lit(String),
     Expr(Vec<Token>),
 }
@@ -37,7 +37,7 @@ pub enum TokenKind {
     Int(i64),
     Float(f64),
     Str(String),
-    FStr(Vec<FStrPart>),
+    FStr(Vec<StringFragment>),
     Rune(char),
 
     // Identifiers

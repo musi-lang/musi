@@ -6,7 +6,7 @@
     clippy::tests_outside_test_module
 )]
 
-use musi_vm::module::ENTRY_POINT_NAME;
+use musi_vm::internal::ENTRY_POINT_NAME;
 use musi_vm::{Vm, load};
 use music_il::opcode::Opcode;
 
@@ -212,7 +212,7 @@ fn smoke_effect_basic() {
     // [12] LdSmi        [13,14] 0,0                         main: dummy arg for perform
     // [15] EffInvk      [16,17] 0,0 [18,19] 0,0             main: suspend → resume_pc=20
     // [20] Halt                                             returns 77
-    use musi_vm::module::{Method, Module};
+    use musi_vm::internal::{Method, Module};
     let module = Module {
         constants: Vec::new(),
         strings: Vec::new(),

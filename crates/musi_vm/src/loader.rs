@@ -10,14 +10,15 @@ use music_il::opcode::Opcode;
 
 use crate::errors::LoadError;
 use crate::module::{ConstantEntry, GlobalDef, Method, Module};
+use crate::program::Program;
 use crate::value::Value;
 
-/// Decode a `.seam` binary slice into a [`Module`].
+/// Decode a `.seam` binary slice into a validated [`Program`].
 ///
 /// # Errors
 /// Returns a [`LoadError`] if the binary is malformed, has an unsupported
 /// version, contains an invalid opcode, or is truncated.
-pub fn load(data: &[u8]) -> Result<Module, LoadError> {
+pub fn load(data: &[u8]) -> Result<Program, LoadError> {
     if data.len() < HEADER_SIZE {
         return Err(LoadError::TruncatedHeader);
     }
@@ -93,7 +94,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
         pos = pos.wrapping_add(length);
     }
 
-    Ok(Module {
+    Ok(Program::new(Module {
         constants,
         strings,
         methods,
@@ -102,7 +103,7 @@ pub fn load(data: &[u8]) -> Result<Module, LoadError> {
         effects,
         classes,
         foreigns,
-    })
+    }))
 }
 
 /// Decode the STRT section into strings and a byte-offset→index map.

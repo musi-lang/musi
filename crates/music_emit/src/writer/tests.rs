@@ -1,3 +1,4 @@
+use musi_vm::Vm;
 use music_il::format;
 use music_il::format::{
     ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor, FfiType,
@@ -5,7 +6,6 @@ use music_il::format::{
 };
 use music_il::instruction::Instruction;
 use music_il::opcode::Opcode;
-use musi_vm::Vm;
 
 use crate::emitter::SeamModule;
 use crate::pool::{ConstantEntry, ConstantPool};
@@ -122,7 +122,7 @@ fn roundtrip_tag_constant_supports_arrtag_compare() {
             instructions: vec![
                 Instruction::with_type_tagged(
                     Opcode::ArrNewT,
-                    music_il::format::BUILTIN_TYPE_ANY,
+                    format::BUILTIN_TYPE_ANY,
                     tag_idx as u8,
                     0,
                 ),
@@ -165,9 +165,9 @@ fn type_metadata_roundtrips_through_strt() {
     };
 
     let loaded = musi_vm::load(&write_seam(&module)).expect("load");
-    assert_eq!(loaded.types.len(), 1);
-    assert_eq!(loaded.types[0].key, "/tmp/a.ms::Node");
-    assert_eq!(loaded.types[0].kind, TypeKind::Choice);
+    assert_eq!(loaded.types().len(), 1);
+    assert_eq!(loaded.types()[0].key, "/tmp/a.ms::Node");
+    assert_eq!(loaded.types()[0].kind, TypeKind::Choice);
 }
 
 #[test]
@@ -191,10 +191,10 @@ fn effect_metadata_roundtrips_through_strt() {
     };
 
     let loaded = musi_vm::load(&write_seam(&module)).expect("load");
-    assert_eq!(loaded.effects.len(), 1);
-    assert_eq!(loaded.effects[0].module_name, "musi:test");
-    assert_eq!(loaded.effects[0].name, "Test");
-    assert_eq!(loaded.effects[0].operations[0].name, "emit");
+    assert_eq!(loaded.effects().len(), 1);
+    assert_eq!(loaded.effects()[0].module_name, "musi:test");
+    assert_eq!(loaded.effects()[0].name, "Test");
+    assert_eq!(loaded.effects()[0].operations[0].name, "emit");
 }
 
 #[test]
@@ -225,11 +225,11 @@ fn class_metadata_roundtrips_to_loaded_string_indices() {
     };
 
     let loaded = musi_vm::load(&write_seam(&module)).expect("load");
-    assert_eq!(loaded.strings[0], "Num");
-    assert_eq!(loaded.strings[1], "add");
-    assert_eq!(loaded.classes[0].name_idx, 0);
-    assert_eq!(loaded.classes[0].method_names, vec![1]);
-    assert_eq!(loaded.classes[0].instances[0].methods[0].name_idx, 1);
+    assert_eq!(loaded.strings()[0], "Num");
+    assert_eq!(loaded.strings()[1], "add");
+    assert_eq!(loaded.classes()[0].name_idx, 0);
+    assert_eq!(loaded.classes()[0].method_names, vec![1]);
+    assert_eq!(loaded.classes()[0].instances[0].methods[0].name_idx, 1);
 }
 
 #[test]
@@ -258,9 +258,9 @@ fn foreign_metadata_roundtrips_to_loaded_string_indices() {
     };
 
     let loaded = musi_vm::load(&write_seam(&module)).expect("load");
-    assert_eq!(loaded.strings[0], "puts");
-    assert_eq!(loaded.strings[1], "libc.so.6");
-    assert_eq!(loaded.foreigns[0].name_idx, 0);
-    assert_eq!(loaded.foreigns[0].symbol_idx, 0);
-    assert_eq!(loaded.foreigns[0].lib_idx, 1);
+    assert_eq!(loaded.strings()[0], "puts");
+    assert_eq!(loaded.strings()[1], "libc.so.6");
+    assert_eq!(loaded.foreigns()[0].name_idx, 0);
+    assert_eq!(loaded.foreigns()[0].symbol_idx, 0);
+    assert_eq!(loaded.foreigns()[0].lib_idx, 1);
 }

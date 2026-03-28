@@ -6,14 +6,14 @@ use std::path::Path;
 use musi_vm::Vm;
 use music_emit::pool::ConstantEntry;
 use music_emit::project::emit_project;
-use music_emit::write_seam;
+use music_emit::{ProjectEmitResult, write_seam};
 use music_hir::type_project;
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
 use music_resolve::loader::ModuleLoader;
 use music_resolve::resolve_project;
 
-fn resolve_and_emit(dir: &Path, entry: &str) -> music_emit::project::ProjectEmitResult {
+fn resolve_and_emit(dir: &Path, entry: &str) -> ProjectEmitResult {
     let entry_path = dir.join(entry);
     let loader = ModuleLoader::new(dir.to_path_buf());
     let resolution = resolve_project(&entry_path, &loader).unwrap();

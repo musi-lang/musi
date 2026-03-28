@@ -49,6 +49,10 @@ pub enum VmError {
     InvalidGlobal(GlobalSlot),
     #[error("not callable")]
     NotCallable,
+    #[error("program has not been initialized")]
+    ProgramNotInitialized,
+    #[error("missing exported binding '{0}'")]
+    MissingExport(String),
     #[error("invalid upvalue slot {0}")]
     InvalidUpvalue(usize),
     #[error("no closure context for upvalue access")]
@@ -79,6 +83,8 @@ pub enum VmError {
     FfiSymbolNotFound(String),
     #[error("FFI foreign descriptor index {0} out of bounds")]
     FfiForeignIndexOutOfBounds(usize),
+    #[error("runtime host is missing")]
+    MissingHost,
 }
 
 pub type VmResult<T = ()> = Result<T, VmError>;

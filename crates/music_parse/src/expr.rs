@@ -11,8 +11,8 @@ use music_ast::expr::{
     RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
-use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
-use music_lex::{TokenKind, TriviaList};
+use music_ast::{AttrId, AttrList, ExprId, ExprList, IdentList, ParamList, PatId, TyId};
+use music_lex::{StringFragment, Token, TokenKind, TriviaList};
 use music_shared::{Ident, Literal, Span};
 
 use crate::errors::{ParseError, ParseErrorKind, ParseResult, describe_token};
@@ -339,15 +339,12 @@ impl Parser<'_> {
         Ok(self.alloc_expr(ExprKind::FStrLit(ast_parts), span))
     }
 
-    fn convert_fstr_parts(
-        &mut self,
-        lex_parts: Vec<music_lex::FStrPart>,
-    ) -> ParseResult<Vec<FStrPart>> {
+    fn convert_fstr_parts(&mut self, lex_parts: Vec<StringFragment>) -> ParseResult<Vec<FStrPart>> {
         let mut out = Vec::with_capacity(lex_parts.len());
         for part in lex_parts {
             match part {
-                music_lex::FStrPart::Lit(s) => out.push(FStrPart::Lit(s)),
-                music_lex::FStrPart::Expr(tokens) => {
+                StringFragment::Lit(s) => out.push(FStrPart::Lit(s)),
+                StringFragment::Expr(tokens) => {
                     let expr_id = self.parse_owned_sub_tokens(tokens)?;
                     out.push(FStrPart::Expr(expr_id));
                 }
@@ -356,13 +353,13 @@ impl Parser<'_> {
         Ok(out)
     }
 
-    fn parse_owned_sub_tokens(&mut self, tokens: Vec<music_lex::Token>) -> ParseResult<ExprId> {
+    fn parse_owned_sub_tokens(&mut self, tokens: Vec<Token>) -> ParseResult<ExprId> {
         let mut sub_tokens = Vec::with_capacity(tokens.len() + 1);
         sub_tokens.extend(tokens);
         let eof_span = sub_tokens
             .last()
             .map_or(Span::DUMMY, |t| Span::new(t.span.end, t.span.end));
-        sub_tokens.push(music_lex::Token {
+        sub_tokens.push(Token {
             kind: TokenKind::Eof,
             span: eof_span,
             leading_trivia: TriviaList::new(),
@@ -805,7 +802,7 @@ impl Parser<'_> {
         ty_params: IdentList,
         constraints: Vec<Constraint>,
         effects: Vec<EffectItem>,
-        ret_ty: Option<music_ast::TyId>,
+        ret_ty: Option<TyId>,
     ) -> Option<Box<Signature>> {
         let has_sig = params.is_some()
             || !ty_params.is_empty()
@@ -955,7 +952,7 @@ impl Parser<'_> {
         Ok(items)
     }
 
-    pub(crate) fn parse_opt_ty_annot(&mut self) -> ParseResult<Option<music_ast::TyId>> {
+    pub(crate) fn parse_opt_ty_annot(&mut self) -> ParseResult<Option<TyId>> {
         if !self.eat(&TokenKind::Colon) {
             return Ok(None);
         }
@@ -1643,7 +1640,7 @@ impl Parser<'_> {
         Ok(attrs)
     }
 
-    fn parse_attr(&mut self) -> ParseResult<music_ast::AttrId> {
+    fn parse_attr(&mut self) -> ParseResult<AttrId> {
         let start = self.expect(&TokenKind::At, "'@'")?;
         let path = self.parse_attr_path()?;
         let args = if self.eat(&TokenKind::LParen) {

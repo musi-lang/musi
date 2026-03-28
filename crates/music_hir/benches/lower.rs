@@ -1,11 +1,12 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
+use music_ast::data::AstData;
 use music_lex::Lexer;
 use music_parse::parse;
 use music_shared::Interner;
 
 use music_hir::lower;
 
-fn parse_source(source: &str) -> (music_ast::data::AstData, Interner) {
+fn parse_source(source: &str) -> (AstData, Interner) {
     let mut interner = Interner::new();
     let (tokens, _) = Lexer::new(source).lex();
     let (ast, _) = parse(&tokens, source, &mut interner);

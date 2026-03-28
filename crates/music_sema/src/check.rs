@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use music_ast::common::Param;
 use music_ast::common::{Constraint, MemberDecl, MemberName, Signature, TyRef};
+use music_ast::common::{EffectItem, Param};
 use music_ast::expr::{
     BinOp, CaseArm, DataBody, ExprKind, FieldTarget, HandlerClause, IndexKind, InstanceBody,
     InstanceDef, LetBinding, PiecewiseArm, PwGuard, RecordField, SpliceKind, UnaryOp,
@@ -9,9 +9,9 @@ use music_ast::expr::{
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, PatId, TyId};
+use music_db::Db;
 use music_owned::prelude::{BUILTIN_VARIANTS, PRELUDE_CLASSES, PRELUDE_MODULE_NAME};
 use music_owned::types::BuiltinType;
-use music_db::Db;
 use music_resolve::def::{DefId, DefKind, Visibility};
 use music_resolve::queries::ResolutionMap;
 use music_shared::{Ident, Literal, Span, Symbol, SymbolList};
@@ -716,10 +716,8 @@ impl SemaDb {
         sig.effects
             .iter()
             .filter_map(|item| match item {
-                music_ast::common::EffectItem::Named { name, .. } => {
-                    Some(self.env.intern(Ty::Effect(name.name)))
-                }
-                music_ast::common::EffectItem::Rest(_) => None,
+                EffectItem::Named { name, .. } => Some(self.env.intern(Ty::Effect(name.name))),
+                EffectItem::Rest(_) => None,
             })
             .collect()
     }
@@ -1357,7 +1355,10 @@ impl SemaDb {
             Ty::Effect(effect_name) => *effect_name,
             _ => return None,
         };
-        if let Some(module_name) = self.resolution.imported_effect_modules.get(&effect_ident.name)
+        if let Some(module_name) = self
+            .resolution
+            .imported_effect_modules
+            .get(&effect_ident.name)
         {
             self.env
                 .set_effect_module_name(effect_name, module_name.clone());
@@ -1550,7 +1551,12 @@ impl SemaDb {
     }
 
     /// #3 + #4: Registers an instance in the environment, checking coherence.
-    fn synth_instance_def(&mut self, expr_id: ExprId, inst: &InstanceDef, span: Span) -> SemaTypeId {
+    fn synth_instance_def(
+        &mut self,
+        expr_id: ExprId,
+        inst: &InstanceDef,
+        span: Span,
+    ) -> SemaTypeId {
         let class_name = inst.ty.name.name;
 
         let (instance_ty, type_name) = if let Some(&first_arg) = inst.ty.args.first() {
@@ -1603,17 +1609,14 @@ impl SemaDb {
             });
         }
 
-        let _prev = self
-            .env
-            .instances
-            .insert(
-                key,
-                InstanceEntry {
-                    span,
-                    methods,
-                    ty: type_key.clone(),
-                },
-            );
+        let _prev = self.env.instances.insert(
+            key,
+            InstanceEntry {
+                span,
+                methods,
+                ty: type_key.clone(),
+            },
+        );
         let _ = self.env.instance_keys.insert(expr_id, type_key);
 
         self.env.intern(Ty::Builtin(BuiltinType::Type))
@@ -1734,7 +1737,8 @@ impl SemaDb {
                             context: None,
                         });
                     }
-                    let Some(op_info) = self.env.effect_op_info(effect_name, name.name).cloned() else {
+                    let Some(op_info) = self.env.effect_op_info(effect_name, name.name).cloned()
+                    else {
                         self.errors.push(SemaError {
                             kind: SemaErrorKind::UnknownHandlerOp { op: name.name },
                             span,

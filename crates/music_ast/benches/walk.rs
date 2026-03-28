@@ -1,14 +1,15 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
+use music_ast::ExprId;
 use music_ast::data::AstData;
 use music_ast::expr::{BinOp, ExprKind};
 use music_ast::walk::map_expr_children;
 use music_shared::{Literal, Span, Spanned};
 
-fn alloc(ast: &mut AstData, kind: ExprKind) -> music_ast::ExprId {
+fn alloc(ast: &mut AstData, kind: ExprKind) -> ExprId {
     ast.exprs.alloc(Spanned::new(kind, Span::DUMMY))
 }
 
-fn build_flat_seq(n: usize) -> (AstData, music_ast::ExprId) {
+fn build_flat_seq(n: usize) -> (AstData, ExprId) {
     let mut ast = AstData::new();
     let items: Vec<_> = (0..n)
         .map(|i| {
@@ -20,7 +21,7 @@ fn build_flat_seq(n: usize) -> (AstData, music_ast::ExprId) {
     (ast, seq)
 }
 
-fn build_deep_binop(depth: usize) -> (AstData, music_ast::ExprId) {
+fn build_deep_binop(depth: usize) -> (AstData, ExprId) {
     let mut ast = AstData::new();
     let mut current = alloc(&mut ast, ExprKind::Lit(Literal::Int(0)));
     for i in 1..=depth {
