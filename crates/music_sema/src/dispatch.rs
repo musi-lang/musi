@@ -1,5 +1,5 @@
 use music_ast::expr::BinOp;
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_il::opcode::Opcode;
 
 use crate::env::{DispatchInfo, TypeEnv};
@@ -22,6 +22,8 @@ const fn binop_class_method(op: BinOp) -> Option<(&'static str, Opcode, Option<O
         BinOp::Mul => Some(("Num", Opcode::IMul, Some(Opcode::FMul), 2)),
         BinOp::Div => Some(("Num", Opcode::IDiv, Some(Opcode::FDiv), 3)),
         BinOp::Rem => Some(("Num", Opcode::IRem, None, 4)),
+        BinOp::Shl => Some(("Bits", Opcode::Shl, None, 0)),
+        BinOp::Shr => Some(("Bits", Opcode::Shr, None, 1)),
         BinOp::Eq => Some(("Eq", Opcode::CmpEq, None, 0)),
         BinOp::NotEq => Some(("Eq", Opcode::CmpNeq, None, 1)),
         BinOp::Lt => Some(("Ord", Opcode::CmpLt, None, 0)),
@@ -95,6 +97,19 @@ pub(crate) fn builtin_has_instance(bt: BuiltinType, class: &str) -> bool {
                 | BuiltinType::Nat64
                 | BuiltinType::Float32
                 | BuiltinType::Float64
+        ),
+        "Bits" => matches!(
+            bt,
+            BuiltinType::Int
+                | BuiltinType::Nat
+                | BuiltinType::Int8
+                | BuiltinType::Int16
+                | BuiltinType::Int32
+                | BuiltinType::Int64
+                | BuiltinType::Nat8
+                | BuiltinType::Nat16
+                | BuiltinType::Nat32
+                | BuiltinType::Nat64
         ),
         _ => false,
     }

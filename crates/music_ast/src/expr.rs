@@ -1,6 +1,6 @@
 use music_shared::{Ident, Literal, Symbol};
 
-use crate::common::{Constraint, FnDecl, MemberDecl, RecordDefField, Signature, TyRef, VariantDef};
+use crate::common::{Constraint, MemberDecl, RecordDefField, Signature, TyRef, VariantDef};
 use crate::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId, TyId};
 
 use super::common::ModifierSet;
@@ -111,6 +111,8 @@ pub enum BinOp {
     Cons,
     Add,
     Sub,
+    Shl,
+    Shr,
     Mul,
     Div,
     Rem,
@@ -192,8 +194,22 @@ pub struct ClassDefData {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HandleData {
     pub effect: TyRef,
-    pub handlers: Vec<FnDecl>,
     pub body: ExprId,
+    pub clauses: Vec<HandlerClause>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HandlerClause {
+    Return {
+        binder: Ident,
+        body: ExprId,
+    },
+    Op {
+        name: Ident,
+        args: IdentList,
+        cont: Ident,
+        body: ExprId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

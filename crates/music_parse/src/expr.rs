@@ -6,9 +6,9 @@ use music_ast::common::{
 };
 use music_ast::expr::{
     AccessMode, BinOp, CaseArm, CaseData, ClassDefData, CompClause, ComprehensionData, DataBody,
-    ExprKind, FStrPart, FieldTarget, HandleData, ImportKind, IndexKind, InstanceBody, InstanceDef,
-    LetBinding, PiecewiseArm, PostfixOp, PwGuard, QuoteKind, RecordField, SpliceKind, TypeOpKind,
-    UnaryOp,
+    ExprKind, FStrPart, FieldTarget, HandleData, HandlerClause, ImportKind, IndexKind,
+    InstanceBody, InstanceDef, LetBinding, PiecewiseArm, PostfixOp, PwGuard, QuoteKind,
+    RecordField, SpliceKind, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
 use music_ast::{AttrList, ExprId, ExprList, IdentList, ParamList, PatId};
@@ -166,6 +166,8 @@ impl Parser<'_> {
             TokenKind::ColonColon => Some((BinOp::Cons, 17, 16)),
             TokenKind::Plus => Some((BinOp::Add, 18, 19)),
             TokenKind::Minus => Some((BinOp::Sub, 18, 19)),
+            TokenKind::KwShl => Some((BinOp::Shl, 17, 18)),
+            TokenKind::KwShr => Some((BinOp::Shr, 17, 18)),
             TokenKind::Star => Some((BinOp::Mul, 20, 21)),
             TokenKind::Slash => Some((BinOp::Div, 20, 21)),
             TokenKind::Percent => Some((BinOp::Rem, 20, 21)),
@@ -394,6 +396,17 @@ impl Parser<'_> {
                 context: None,
             }),
             _ => Err(self.err_expected_token("identifier")),
+        }
+    }
+
+    fn expect_ident_or_kw_op(&mut self) -> ParseResult<Ident> {
+        match self.peek_kind() {
+            TokenKind::KwShl | TokenKind::KwShr => {
+                let span = self.span();
+                let _ = self.advance();
+                Ok(self.make_ident_from_span(span))
+            }
+            _ => self.expect_ident(),
         }
     }
 
@@ -909,8 +922,28 @@ impl Parser<'_> {
                 break;
             }
             let name = self.expect_ident()?;
-            let arg = if self.eat(&TokenKind::KwOf) {
-                Some(self.parse_ty()?)
+            let arg = if self.at(&TokenKind::LBracket) {
+                let args = self.parse_ty_bracket_args()?;
+                match args.as_slice() {
+                    [] => None,
+                    [arg] => Some(*arg),
+                    _ => {
+                        return Err(ParseError {
+                            kind: ParseErrorKind::ExpectedToken {
+                                expected: "at most one effect type argument",
+                                found: "'['",
+                            },
+                            span: self.prev_span(),
+                            context: Some("in effect row"),
+                        });
+                    }
+                }
+            } else if self.at(&TokenKind::KwOf) {
+                return Err(ParseError {
+                    kind: ParseErrorKind::TypeApplicationUsesBrackets,
+                    span: self.span(),
+                    context: Some("in effect row"),
+                });
             } else {
                 None
             };
@@ -933,20 +966,18 @@ impl Parser<'_> {
 
     pub(crate) fn parse_ty_ref(&mut self) -> ParseResult<TyRef> {
         let name = self.expect_ident()?;
-        let args = if self.eat(&TokenKind::KwOf) {
-            self.parse_ty_arg_list()?
+        let args = if self.at(&TokenKind::LBracket) {
+            self.parse_ty_bracket_args()?
+        } else if self.at(&TokenKind::KwOf) {
+            return Err(ParseError {
+                kind: ParseErrorKind::TypeApplicationUsesBrackets,
+                span: self.span(),
+                context: Some("in type reference"),
+            });
         } else {
             Vec::new()
         };
         Ok(TyRef { name, args })
-    }
-
-    fn parse_ty_arg_list(&mut self) -> ParseResult<Vec<music_ast::TyId>> {
-        let mut args = vec![self.parse_ty()?];
-        while self.eat(&TokenKind::Comma) {
-            args.push(self.parse_ty()?);
-        }
-        Ok(args)
     }
 
     // ── Case ──────────────────────────────────────────────────────
@@ -1404,6 +1435,8 @@ impl Parser<'_> {
                 | TokenKind::LtEq
                 | TokenKind::GtEq
                 | TokenKind::ColonColon
+                | TokenKind::KwShl
+                | TokenKind::KwShr
         )
     }
 
@@ -1411,7 +1444,7 @@ impl Parser<'_> {
         if !self.is_op_token() {
             return Err(ParseError {
                 kind: ParseErrorKind::ExpectedToken {
-                    expected: "operator symbol",
+                    expected: "operator name",
                     found: describe_token(&self.peek().kind),
                 },
                 span: self.span(),
@@ -1471,24 +1504,72 @@ impl Parser<'_> {
         let start = self.expect(&TokenKind::KwHandle, "'handle'")?;
         let body = self.parse_expr(0)?;
         let _ = self.expect(&TokenKind::KwWith, "'with'")?;
-        let effect = self.parse_ty_ref()?;
-        let _ = self.expect(&TokenKind::LBrace, "'{'")?;
-        let mut handlers = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            let attrs = self.parse_attrs()?;
-            handlers.push(self.parse_fn_decl(attrs)?);
-            let _ = self.eat(&TokenKind::Semi);
+        let name = self.expect_ident()?;
+        let args = if self.at(&TokenKind::LBracket) {
+            self.parse_ty_bracket_args()?
+        } else {
+            Vec::new()
+        };
+        let effect = TyRef { name, args };
+        let _ = self.expect(&TokenKind::KwOf, "'of'")?;
+        let open = self.expect(&TokenKind::LParen, "'('")?;
+        let mut clauses = Vec::new();
+        let _ = self.eat(&TokenKind::Pipe);
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            clauses.push(self.parse_handle_clause()?);
+            if !self.eat(&TokenKind::Pipe) {
+                break;
+            }
         }
-        let end = self.expect(&TokenKind::RBrace, "'}'")?;
+        let end = self.expect_closing(&TokenKind::RParen, "'('", open, "in handle expression")?;
         let span = start.to(end);
         Ok(self.alloc_expr(
             ExprKind::Handle(Box::new(HandleData {
                 effect,
-                handlers,
                 body,
+                clauses,
             })),
             span,
         ))
+    }
+
+    fn parse_handle_clause(&mut self) -> ParseResult<HandlerClause> {
+        if self.at(&TokenKind::KwReturn) {
+            let _ = self.advance();
+            let binder = self.expect_ident()?;
+            let _ = self.expect(&TokenKind::EqGt, "'=>'")?;
+            let body = self.parse_expr(0)?;
+            return Ok(HandlerClause::Return { binder, body });
+        }
+
+        let name = self.expect_ident_or_kw_op()?;
+        let _ = self.expect(&TokenKind::LParen, "'('")?;
+        let mut binders = Vec::new();
+        if !self.at(&TokenKind::RParen) {
+            binders.push(self.expect_ident()?);
+            while self.eat(&TokenKind::Comma) {
+                binders.push(self.expect_ident()?);
+            }
+        }
+        let _ = self.expect(&TokenKind::RParen, "')'")?;
+        let _ = self.expect(&TokenKind::EqGt, "'=>'")?;
+        let body = self.parse_expr(0)?;
+        let Some(cont) = binders.pop() else {
+            return Err(ParseError {
+                kind: ParseErrorKind::ExpectedToken {
+                    expected: "handler continuation binder",
+                    found: "')'",
+                },
+                span: name.span,
+                context: Some("handler operation clauses require at least a continuation binder"),
+            });
+        };
+        Ok(HandlerClause::Op {
+            name,
+            args: binders,
+            cont,
+            body,
+        })
     }
 
     // ── Quote / Splice ────────────────────────────────────────────
@@ -1564,7 +1645,7 @@ impl Parser<'_> {
 
     fn parse_attr(&mut self) -> ParseResult<music_ast::AttrId> {
         let start = self.expect(&TokenKind::At, "'@'")?;
-        let name = self.expect_ident()?;
+        let path = self.parse_attr_path()?;
         let args = if self.eat(&TokenKind::LParen) {
             let a = self.parse_attr_args()?;
             let _ = self.expect(&TokenKind::RParen, "')'")?;
@@ -1573,7 +1654,15 @@ impl Parser<'_> {
             Vec::new()
         };
         let span = start.to(self.prev_span());
-        Ok(self.alloc_attr(Attr { name, args }, span))
+        Ok(self.alloc_attr(Attr { path, args }, span))
+    }
+
+    fn parse_attr_path(&mut self) -> ParseResult<IdentList> {
+        let mut path = vec![self.expect_ident()?];
+        while self.eat(&TokenKind::Dot) {
+            path.push(self.expect_ident()?);
+        }
+        Ok(path)
     }
 
     fn parse_attr_args(&mut self) -> ParseResult<Vec<AttrArg>> {

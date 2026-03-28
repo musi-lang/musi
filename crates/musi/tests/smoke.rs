@@ -56,8 +56,8 @@ fn diagnostic_has_line_col() {
     assert!(!result.diagnostics.is_empty());
     let rendered = render_diag(&result.diagnostics[0], &result.db.source);
     assert!(
-        rendered.contains("error:"),
-        "expected 'error:' in rendered diagnostic: {rendered}"
+        rendered.contains("error[ms"),
+        "expected diagnostic code in rendered diagnostic: {rendered}"
     );
     assert!(
         rendered.contains(':'),
@@ -68,7 +68,7 @@ fn diagnostic_has_line_col() {
 #[test]
 fn build_produces_seam_bytes() {
     use music_emit::{emit, write_seam};
-    use music_hir::HirBundle;
+    use music_hir::TypedModule;
 
     let mut file = tempfile::NamedTempFile::with_suffix(".ms").expect("tempfile");
     write!(file, "let _x := 42;").expect("write");
@@ -81,7 +81,7 @@ fn build_produces_seam_bytes() {
             .collect::<Vec<_>>()
     });
 
-    let bundle = HirBundle::new(result.db, result.resolution, result.type_env);
+    let bundle = TypedModule::new(result.db, result.resolution, result.type_env);
     let module = emit(&bundle).expect("emit failed");
     let seam = write_seam(&module);
     assert!(!seam.is_empty(), "seam output should not be empty");

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use music_db::Db;
 use music_lex::Lexer;
 use music_parse::parse;
+use music_owned::prelude::PRELUDE_MODULE_NAME;
 use music_shared::{Interner, SourceMap};
 
 use music_resolve::def::DefKind;
@@ -129,6 +130,27 @@ fn prelude_classes_seeded() {
     assert!(
         class_count >= 5,
         "expected at least 5 prelude classes, got {class_count}"
+    );
+}
+
+#[test]
+fn seeded_prelude_defs_keep_compiler_owned_module_identity() {
+    let (_db, res, errors) = parse_and_resolve("");
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+    let eq = res
+        .defs
+        .iter()
+        .find(|(_, d)| d.kind == DefKind::TypeClass && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME));
+    assert!(eq.is_some(), "expected prelude class defs to keep compiler-owned module identity");
+
+    let shl = res.defs.iter().find(|(_, d)| {
+        d.kind == DefKind::Method
+            && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME)
+    });
+    assert!(
+        shl.is_some(),
+        "expected prelude method defs to keep compiler-owned module identity"
     );
 }
 

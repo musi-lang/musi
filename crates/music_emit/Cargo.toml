@@ -15,7 +15,7 @@ music_il = { path = "../music_il" }
 music_hir = { path = "../music_hir" }
 music_sema = { path = "../music_sema" }
 music_resolve = { path = "../music_resolve" }
-music_builtins = { path = "../music_builtins" }
+music_owned = { path = "../music_owned" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

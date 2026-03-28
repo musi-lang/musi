@@ -42,7 +42,7 @@ impl fmt::Display for ProjectError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io { path, source } => {
-                write!(f, "failed to read `{}`: {source}", path.display())
+                write!(f, "failed to read `{}`; {source}", path.display())
             }
         }
     }
@@ -125,13 +125,13 @@ fn resolve_module_recursive(
     let has_errors = !lex_errors.is_empty() || !parse_errors.is_empty() || !errors.is_empty();
     let mut diagnostics = Vec::new();
     for e in lex_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(source_id));
     }
     for e in parse_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(source_id));
     }
     for e in &errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(&db.interner, source_id));
     }
 
     *graph = returned_graph;

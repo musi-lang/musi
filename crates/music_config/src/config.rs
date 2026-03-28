@@ -8,9 +8,9 @@ use serde::Deserialize;
 /// Error returned when loading or parsing a `musi.json` configuration file.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("I/O error: {0}")]
+    #[error("I/O error; {0}")]
     Io(#[from] io::Error),
-    #[error("JSON parse error: {0}")]
+    #[error("JSON parse error; {0}")]
     Parse(#[from] serde_json::Error),
 }
 

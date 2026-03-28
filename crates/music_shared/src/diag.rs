@@ -36,6 +36,34 @@ impl DiagLevel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DiagCode(u16);
+
+impl DiagCode {
+    #[must_use]
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn raw(self) -> u16 {
+        self.0
+    }
+
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        let digits = raw.strip_prefix("ms")?;
+        let value = digits.parse::<u16>().ok()?;
+        Some(Self(value))
+    }
+}
+
+impl std::fmt::Display for DiagCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ms{:04}", self.0)
+    }
+}
+
 /// Terminal colors used for diagnostic rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
@@ -74,7 +102,9 @@ pub struct Label {
 #[derive(Debug)]
 pub struct Diag {
     pub level: DiagLevel,
+    pub code: Option<DiagCode>,
     pub message: String,
+    pub hint: Option<String>,
     pub labels: Vec<Label>,
     pub notes: Vec<String>,
 }
@@ -83,7 +113,9 @@ impl Diag {
     fn with_level(level: DiagLevel, message: impl Into<String>) -> Self {
         Self {
             level,
+            code: None,
             message: message.into(),
+            hint: None,
             labels: Vec::new(),
             notes: Vec::new(),
         }
@@ -129,6 +161,20 @@ impl Diag {
         self
     }
 
+    /// Attach a stable diagnostic code.
+    #[must_use]
+    pub fn with_code(mut self, code: DiagCode) -> Self {
+        self.code = Some(code);
+        self
+    }
+
+    /// Attach a short fix-it hint.
+    #[must_use]
+    pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
+        self.hint = Some(hint.into());
+        self
+    }
+
     /// Attach a note to this diagnostic.
     #[must_use]
     pub fn with_note(mut self, message: impl Into<String>) -> Self {
@@ -170,12 +216,20 @@ pub fn emit<W: Write>(
 
             // Header: path:line:col: level: message
             let loc = format!("{path_display}:{line}:{col}:");
+            let level = match diag.code {
+                Some(code) => format!("{}[{code}]", diag.level.label()),
+                None => String::from(diag.level.label()),
+            };
+            let message = match &diag.hint {
+                Some(hint) => format!("{}; {hint}", diag.message),
+                None => diag.message.clone(),
+            };
             writeln!(
                 writer,
                 "{} {}: {}",
                 paint(Color::Bold, &loc),
-                paint(diag.level.color(), diag.level.label()),
-                paint(Color::Bold, &diag.message),
+                paint(diag.level.color(), &level),
+                paint(Color::Bold, &message),
             )?;
 
             // Source line
@@ -215,11 +269,19 @@ pub fn emit<W: Write>(
 
     // If no labels, just print the header without source context.
     if diag.labels.is_empty() {
+        let level = match diag.code {
+            Some(code) => format!("{}[{code}]", diag.level.label()),
+            None => String::from(diag.level.label()),
+        };
+        let message = match &diag.hint {
+            Some(hint) => format!("{}; {hint}", diag.message),
+            None => diag.message.clone(),
+        };
         writeln!(
             writer,
             "{}: {}",
-            paint(diag.level.color(), diag.level.label()),
-            paint(Color::Bold, &diag.message),
+            paint(diag.level.color(), &level),
+            paint(Color::Bold, &message),
         )?;
     }
 

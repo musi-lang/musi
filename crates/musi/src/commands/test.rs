@@ -121,7 +121,7 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
         .lookup(&canonical)
         .ok_or_else(|| "entry test module missing from project graph".to_owned())?;
 
-    let emitted = emit_project(analysis.project, &analysis.loader).map_err(|e| e.to_string())?;
+    let emitted = emit_project(analysis.project).map_err(|e| e.to_string())?;
     let test_index = emitted
         .module_exports
         .get(&module_id)
@@ -129,7 +129,7 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
         .map(|export| export.index)
         .ok_or_else(|| "missing exported `test` function".to_owned())?;
     let bytes = write_seam(&emitted.module);
-    let module = musi_vm::load(&bytes).map_err(|e| format!("load failed: {e}"))?;
+    let module = musi_vm::load(&bytes).map_err(|e| format!("load failed; {e}"))?;
 
     let mut vm = Vm::new(module);
     let _ = vm.run().map_err(|e| e.to_string())?;
@@ -153,7 +153,7 @@ fn run_test_file(path: &Path, grep: Option<&str>) -> Result<TestStats, String> {
         return Err(collector
             .error
             .clone()
-            .unwrap_or_else(|| format!("failed to invoke exported `test`: {error}")));
+            .unwrap_or_else(|| format!("failed to invoke exported `test`; {error}")));
     }
     let suite = collector.borrow_mut().finish()?;
 

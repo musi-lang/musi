@@ -56,11 +56,11 @@ let Point := data { ; x : Float ; y : Float };
 let Shape := data { | Circle : Float | Rect : Point | Empty };
 
 let Functor := class {
-    let map[A, B](self : F of A, f : A -> B) : F of B
+    let map[A, B](self : F[A], f : A -> B) : F[B]
 };
 
-instance Functor of Option {
-    let map[A, B](self : Option of A, f : A -> B) : Option of B :=
+instance Functor[Option] {
+    let map[A, B](self : Option[A], f : A -> B) : Option[B] :=
         case self of (
             | .Some(x) => .Some(f(x))
             | .None => .None

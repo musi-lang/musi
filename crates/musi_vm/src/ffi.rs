@@ -53,7 +53,7 @@ impl FfiRuntime {
         }
 
         let lib = unsafe {
-            Library::new(name).map_err(|e| VmError::FfiLibraryNotFound(format!("{name}: {e}")))?
+            Library::new(name).map_err(|e| VmError::FfiLibraryNotFound(format!("{name}; {e}")))?
         };
         let _prev = self.libraries.insert(name.into(), lib);
         Ok(())
@@ -78,7 +78,7 @@ impl FfiRuntime {
         let sym_bytes = symbol.as_bytes();
         let func: libloading::Symbol<'_, *const ()> = unsafe {
             lib.get(sym_bytes)
-                .map_err(|e| VmError::FfiSymbolNotFound(format!("{symbol}: {e}")))?
+                .map_err(|e| VmError::FfiSymbolNotFound(format!("{symbol}; {e}")))?
         };
         Ok(*func)
     }

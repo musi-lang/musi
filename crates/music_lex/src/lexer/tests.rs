@@ -123,6 +123,8 @@ fn keywords() {
     assert_eq!(lex_first_kind("let"), TokenKind::KwLet);
     assert_eq!(lex_first_kind("return"), TokenKind::KwReturn);
     assert_eq!(lex_first_kind("case"), TokenKind::KwCase);
+    assert_eq!(lex_first_kind("shl"), TokenKind::KwShl);
+    assert_eq!(lex_first_kind("shr"), TokenKind::KwShr);
 }
 
 #[test]

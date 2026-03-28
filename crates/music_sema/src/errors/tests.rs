@@ -33,7 +33,6 @@ fn display_type_mismatch() {
     let found = arena.alloc(Ty::Empty);
     let err = make_error(SemaErrorKind::TypeMismatch { expected, found });
     let msg = err.to_string();
-    assert!(msg.contains("type mismatch"));
     assert!(msg.contains("expected"));
     assert!(msg.contains("found"));
 }
@@ -73,7 +72,7 @@ fn display_purity_violation() {
     let mut interner = Interner::new();
     let effect = interner.intern("Console");
     let err = make_error(SemaErrorKind::PurityViolation { effect });
-    assert!(err.to_string().contains("purity violation"));
+    assert!(err.to_string().contains("unhandled effect"));
 }
 
 #[test]
@@ -91,7 +90,7 @@ fn display_arity_mismatch() {
         found: 3,
     });
     let msg = err.to_string();
-    assert!(msg.contains("arity mismatch"));
+    assert!(msg.contains("expected"));
     assert!(msg.contains('2'));
     assert!(msg.contains('3'));
 }
@@ -145,7 +144,7 @@ fn display_infinite_type() {
 #[test]
 fn display_occurs_check() {
     let err = make_error(SemaErrorKind::OccursCheck { var: 7 });
-    assert!(err.to_string().contains("occurs check"));
+    assert!(err.to_string().contains("occurs in its own binding"));
 }
 
 #[test]

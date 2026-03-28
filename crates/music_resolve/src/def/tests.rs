@@ -1,4 +1,4 @@
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_shared::{Interner, Span};
 
 use crate::def::{DefInfo, DefKind, Visibility};

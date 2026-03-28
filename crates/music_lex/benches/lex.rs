@@ -22,7 +22,7 @@ let Point := data { ; x : Float ; y : Float };
 let origin := .{ x := 0.0, y := 0.0 };
 let dist := (p : Point) : Float => (p.x * p.x + p.y * p.y);
 let Option [T] := data { | Some : T | None };
-let map [A, B] := (opt : Option of A, f : A -> B) : Option of B =>
+let map [A, B] := (opt : Option[A], f : A -> B) : Option[B] =>
     case opt of (
         | .Some(x) => .Some(f(x))
         | .None => .None

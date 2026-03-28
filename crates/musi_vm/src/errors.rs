@@ -34,7 +34,7 @@ pub enum VmError {
     PcOutOfBounds,
     #[error("division by zero")]
     DivisionByZero,
-    #[error("type error: expected {expected}, found {found}")]
+    #[error("expected type '{expected}', found '{found}'")]
     TypeError {
         expected: &'static str,
         found: &'static str,
@@ -65,17 +65,17 @@ pub enum VmError {
     NotAnArray,
     #[error("invalid heap index {0}")]
     InvalidHeapIndex(HeapIdx),
-    #[error("type cast failed: value does not match target type")]
+    #[error("value does not match the target type")]
     TypeCastFailed,
     #[error("no instance of class {class_id} for type {type_id}")]
     NoInstance { class_id: u16, type_id: u16 },
     #[error("invalid dictionary value")]
     InvalidDictionary,
-    #[error("unimplemented: {0}")]
+    #[error("not implemented; {0}")]
     Unimplemented(&'static str),
-    #[error("FFI library not found: {0}")]
+    #[error("FFI library '{0}' was not found")]
     FfiLibraryNotFound(String),
-    #[error("FFI symbol not found: {0}")]
+    #[error("FFI symbol '{0}' was not found")]
     FfiSymbolNotFound(String),
     #[error("FFI foreign descriptor index {0} out of bounds")]
     FfiForeignIndexOutOfBounds(usize),

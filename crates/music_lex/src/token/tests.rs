@@ -27,12 +27,14 @@ fn keyword_from_str_all() {
         ("quote", TokenKind::KwQuote),
         ("resume", TokenKind::KwResume),
         ("return", TokenKind::KwReturn),
+        ("shl", TokenKind::KwShl),
+        ("shr", TokenKind::KwShr),
         ("via", TokenKind::KwVia),
         ("where", TokenKind::KwWhere),
         ("with", TokenKind::KwWith),
         ("xor", TokenKind::KwXor),
     ];
-    assert_eq!(keywords.len(), 28);
+    assert_eq!(keywords.len(), 30);
     for (s, expected) in &keywords {
         assert_eq!(
             keyword_from_str(s),

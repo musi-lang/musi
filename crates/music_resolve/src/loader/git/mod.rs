@@ -150,9 +150,9 @@ pub enum GitError {
 impl fmt::Display for GitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Io(msg) => write!(f, "git I/O error: {msg}"),
+            Self::Io(msg) => write!(f, "git I/O error; {msg}"),
             Self::CloneFailed { url, stderr } => {
-                write!(f, "failed to clone `{url}`: {stderr}")
+                write!(f, "failed to clone `{url}`; {stderr}")
             }
         }
     }

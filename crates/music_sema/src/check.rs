@@ -1,15 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
 use music_ast::common::Param;
-use music_ast::common::{Constraint, FnDecl, MemberDecl, MemberName, Signature, TyRef};
+use music_ast::common::{Constraint, MemberDecl, MemberName, Signature, TyRef};
 use music_ast::expr::{
-    BinOp, CaseArm, DataBody, ExprKind, FieldTarget, IndexKind, InstanceBody, InstanceDef,
-    LetBinding, PiecewiseArm, PwGuard, RecordField, SpliceKind, UnaryOp,
+    BinOp, CaseArm, DataBody, ExprKind, FieldTarget, HandlerClause, IndexKind, InstanceBody,
+    InstanceDef, LetBinding, PiecewiseArm, PwGuard, RecordField, SpliceKind, UnaryOp,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, PatId, TyId};
-use music_builtins::types::BuiltinType;
+use music_owned::prelude::{BUILTIN_VARIANTS, PRELUDE_CLASSES, PRELUDE_MODULE_NAME};
+use music_owned::types::BuiltinType;
 use music_db::Db;
 use music_resolve::def::{DefId, DefKind, Visibility};
 use music_resolve::queries::ResolutionMap;
@@ -19,7 +20,6 @@ use crate::dispatch::{builtin_has_instance, method_index_for_op, resolve_binop};
 use crate::effects;
 use crate::env::{DispatchInfo, EffectUse, InstanceEntry, TypeEnv, VariantInfo};
 use crate::errors::{SemaError, SemaErrorKind};
-use crate::intrinsic::{BuiltinMaps, collect_builtin_methods};
 use crate::types::{NominalKey, SemaTypeId, SemaTypeList, Ty};
 
 /// Tag index and arity for a variant within its parent sum type.
@@ -67,9 +67,9 @@ pub struct SemaDb {
     used_defs: HashSet<DefId>,
     current_handler_ret: Option<SemaTypeId>,
     def_constraints: HashMap<DefId, Vec<(Symbol, Symbol)>>,
-    /// Class methods with `@builtin(opcode := ...)`: symbol → opcode.
+    /// Compiler-owned intrinsic methods: symbol → opcode.
     intrinsic_methods: HashMap<Symbol, Opcode>,
-    /// Sum variant names with `@builtin(opcode := ...)`: symbol → opcode.
+    /// Compiler-owned intrinsic variants: symbol → opcode.
     intrinsic_variants: HashMap<Symbol, Opcode>,
     /// All variant names → tag index + arity (from pre-scan).
     variant_registry: VariantRegistry,
@@ -112,11 +112,7 @@ impl SemaDb {
 
     /// Type-checks all top-level expressions in the module.
     pub fn check_module(&mut self) {
-        let BuiltinMaps { methods, variants } =
-            collect_builtin_methods(&self.db.ast, &self.db.interner);
-        self.intrinsic_methods = methods;
-        self.intrinsic_variants = variants;
-        self.seed_builtin_variants();
+        self.seed_prelude_intrinsics();
         let root = self.db.ast.root.clone();
         for &expr_id in &root {
             let _ = self.synth(expr_id);
@@ -258,7 +254,7 @@ impl SemaDb {
             ExprKind::EffectDef(ref members) => self.synth_effect_def(members),
             ExprKind::InstanceDef(ref inst) => self.synth_instance_def(expr_id, inst, span),
             ExprKind::Handle(ref data) => {
-                self.synth_handle(&data.effect, &data.handlers, data.body, span, expr_id)
+                self.synth_handle(&data.effect, &data.clauses, data.body, span, expr_id)
             }
             ExprKind::Comprehension(ref data) => {
                 let elem_ty = self.synth(data.expr);
@@ -361,10 +357,21 @@ impl SemaDb {
         self.name_to_def.get(&name).copied()
     }
 
+    fn builtin_method_opcode(&self, name: Symbol) -> Option<Opcode> {
+        let def_id = self.find_def_for_name(name)?;
+        let def = self.resolution.defs.get(def_id);
+        if !matches!(def.kind, DefKind::Method)
+            || def.module_name.as_deref() != Some(PRELUDE_MODULE_NAME)
+        {
+            return None;
+        }
+        self.intrinsic_methods.get(&name).copied()
+    }
+
     fn synth_app(&mut self, callee: ExprId, args: &[ExprId], span: Span) -> SemaTypeId {
         let callee_kind = self.db.ast.exprs.get(callee).kind.clone();
         if let ExprKind::Var(ref ident) = callee_kind {
-            if let Some(&opcode) = self.intrinsic_methods.get(&ident.name) {
+            if let Some(opcode) = self.builtin_method_opcode(ident.name) {
                 let _ = self
                     .env
                     .dispatch
@@ -479,6 +486,12 @@ impl SemaDb {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem
         ) {
             if let Err(e) = unify(&mut self.env, lhs_ty, rhs_ty, span) {
+                self.errors.push(e);
+            }
+        }
+        if matches!(op, BinOp::Shl | BinOp::Shr) {
+            let int_ty = self.env.builtin(BuiltinType::Int);
+            if let Err(e) = unify(&mut self.env, rhs_ty, int_ty, span) {
                 self.errors.push(e);
             }
         }
@@ -1159,27 +1172,29 @@ impl SemaDb {
         }
     }
 
-    fn seed_builtin_variants(&mut self) {
-        let false_sym = self.db.interner.intern("False");
-        let true_sym = self.db.interner.intern("True");
-        let _ = self.intrinsic_variants.insert(false_sym, Opcode::LdFls);
-        let _ = self.intrinsic_variants.insert(true_sym, Opcode::LdTru);
-        let _ = self.env.variant_tags.insert(false_sym, 0);
-        let _ = self.env.variant_tags.insert(true_sym, 1);
-        let _ = self.variant_registry.insert(
-            false_sym,
-            VariantDefInfo {
-                tag_index: 0,
-                arity: 0,
-            },
-        );
-        let _ = self.variant_registry.insert(
-            true_sym,
-            VariantDefInfo {
-                tag_index: 1,
-                arity: 0,
-            },
-        );
+    fn seed_prelude_intrinsics(&mut self) {
+        for class in PRELUDE_CLASSES {
+            for method in class.methods {
+                let Some(opcode) = method.opcode else {
+                    continue;
+                };
+                let symbol = self.db.interner.intern(method.op_name);
+                let _ = self.intrinsic_methods.insert(symbol, opcode);
+            }
+        }
+
+        for variant in BUILTIN_VARIANTS {
+            let symbol = self.db.interner.intern(variant.name);
+            let _ = self.intrinsic_variants.insert(symbol, variant.opcode);
+            let _ = self.env.variant_tags.insert(symbol, variant.tag_index);
+            let _ = self.variant_registry.insert(
+                symbol,
+                VariantDefInfo {
+                    tag_index: variant.tag_index,
+                    arity: variant.arity,
+                },
+            );
+        }
     }
 
     fn synth_variant_lit(&mut self, tag: &Ident, args: &[ExprId], expr_id: ExprId) -> SemaTypeId {
@@ -1672,7 +1687,7 @@ impl SemaDb {
     fn synth_handle(
         &mut self,
         effect: &TyRef,
-        handlers: &[FnDecl],
+        clauses: &[HandlerClause],
         body: ExprId,
         span: Span,
         expr_id: ExprId,
@@ -1685,51 +1700,108 @@ impl SemaDb {
         let effect_id = self.env.assign_effect_id(effect_name);
         let _prev = self.env.handle_effects.insert(expr_id, effect_id);
 
-        // Check handler completeness against registered effect ops
-        if let Some(required_ops) = self
+        let mut saw_return = false;
+        let mut seen_ops = HashSet::new();
+        let required_ops = self
             .env
             .effect_defs
             .get(&effect_name)
             .map(|effect| effect.operations.clone())
-        {
-            let handler_names: HashSet<Symbol> = handlers
-                .iter()
-                .map(|h| member_name_symbol(&h.name))
-                .collect();
+            .unwrap_or_default();
 
-            for required_op in &required_ops {
-                if !handler_names.contains(&required_op.name) {
-                    self.errors.push(SemaError {
-                        kind: SemaErrorKind::MissingHandler {
-                            op: required_op.name,
-                        },
-                        span,
-                        context: None,
-                    });
+        for clause in clauses {
+            match clause {
+                HandlerClause::Return { body, .. } => {
+                    if saw_return {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::DuplicateHandler {
+                                op: self.db.interner.intern("return"),
+                            },
+                            span,
+                            context: None,
+                        });
+                    }
+                    saw_return = true;
+                    let _ = self.synth(*body);
+                }
+                HandlerClause::Op {
+                    name, args, body, ..
+                } => {
+                    if !seen_ops.insert(name.name) {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::DuplicateHandler { op: name.name },
+                            span,
+                            context: None,
+                        });
+                    }
+                    let Some(op_info) = self.env.effect_op_info(effect_name, name.name).cloned() else {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::UnknownHandlerOp { op: name.name },
+                            span,
+                            context: None,
+                        });
+                        let _ = self.synth(*body);
+                        continue;
+                    };
+                    let expected = self.effect_op_arity(op_info.param_ty);
+                    if expected != args.len() {
+                        self.errors.push(SemaError {
+                            kind: SemaErrorKind::ArityMismatch {
+                                expected,
+                                found: args.len(),
+                            },
+                            span,
+                            context: Some("handler operation payload arity"),
+                        });
+                    }
+                    let prev_handler_ret = self.current_handler_ret;
+                    self.current_handler_ret = matches!(
+                        self.env.types.get(self.env.resolve_var(op_info.ret_ty)),
+                        Ty::Empty
+                    )
+                    .then_some(op_info.ret_ty);
+                    let _ = self.synth(*body);
+                    self.current_handler_ret = prev_handler_ret;
                 }
             }
         }
 
-        // #6: Check Resume on Empty - synth each handler body with
-        // current_handler_ret set if the op returns Empty
-        let prev_handler_ret = self.current_handler_ret;
-        for handler in handlers {
-            let handler_name = member_name_symbol(&handler.name);
-            self.current_handler_ret = self
-                .env
-                .effect_op_info(effect_name, handler_name)
-                .map(|op| op.ret_ty)
-                .filter(|ret_ty| {
-                    matches!(self.env.types.get(self.env.resolve_var(*ret_ty)), Ty::Empty)
-                });
+        if !saw_return {
+            self.errors.push(SemaError {
+                kind: SemaErrorKind::MissingReturnHandler,
+                span,
+                context: None,
+            });
+        }
 
-            if let Some(handler_body) = handler.body {
-                let _ = self.synth(handler_body);
+        for required_op in &required_ops {
+            if !seen_ops.contains(&required_op.name) {
+                self.errors.push(SemaError {
+                    kind: SemaErrorKind::MissingHandler {
+                        op: required_op.name,
+                    },
+                    span,
+                    context: None,
+                });
             }
         }
+
+        let prev_handler_ret = self.current_handler_ret;
         self.current_handler_ret = prev_handler_ret;
 
         self.synth(body)
+    }
+
+    fn effect_op_arity(&self, param_ty: Option<SemaTypeId>) -> usize {
+        let Some(param_ty) = param_ty else {
+            return 0;
+        };
+        let resolved = self.env.resolve_var(param_ty);
+        match self.env.types.get(resolved) {
+            Ty::Unit => 0,
+            Ty::Tuple(elems) => elems.len(),
+            _ => 1,
+        }
     }
 
     /// #6: Checks Resume usage - emits `ResumeOnNever` if we're in a handler

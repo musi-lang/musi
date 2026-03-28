@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use music_ast::expr::ExprKind;
-use music_db::Db;
-use music_hir::{HirBundle, lower};
+use music_hir::{TypedModule, TypedProject};
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
 use music_resolve::graph::ModuleId;
 use music_resolve::loader::{ModuleLoader, ResolvedImport};
-use music_resolve::{ModuleGraph, ProjectResolution};
-use music_sema::type_check;
+use music_resolve::ModuleGraph;
 use music_shared::Symbol;
 
 use crate::emitter::{ImportedGlobal, MethodEntry, SeamModule, emit_with_context};
@@ -54,8 +52,7 @@ pub struct ProjectEmitResult {
               these are compiler ICEs, not recoverable errors that belong in EmitError"
 )]
 pub fn emit_project(
-    mut project: ProjectResolution,
-    loader: &ModuleLoader,
+    mut project: TypedProject,
 ) -> Result<ProjectEmitResult, EmitError> {
     let order = project.order.clone();
     let mut combined = SeamModule {
@@ -70,26 +67,22 @@ pub fn emit_project(
     let mut module_exports: HashMap<ModuleId, Vec<ImportedGlobal>> = HashMap::new();
 
     for &mod_id in &order {
-        let mut module_result = project
+        let module_result = project
             .modules
             .remove(&mod_id)
             .expect("module missing from project resolution");
 
-        let current_path = project.graph.path(mod_id).to_path_buf();
-
-        lower(&mut module_result.db.ast);
-
-        let (db, resolution, type_env, _sema_errors) =
-            type_check(module_result.db, module_result.resolution, None);
-
         // Build the import context: map each import path Symbol to the
         // already-computed global indices of the dependency module.
-        let import_context =
-            build_import_context(&db, &current_path, loader, &project.graph, &module_exports);
+        let import_context = build_import_context(
+            &module_result,
+            &project.loader,
+            &project.graph,
+            &module_exports,
+        );
 
-        let bundle = HirBundle::new(db, resolution, type_env);
-        let mut emitted = emit_with_context(&bundle, import_context)?;
-        annotate_effect_modules(&mut emitted, &current_path);
+        let mut emitted = emit_with_context(&module_result, import_context)?;
+        annotate_effect_modules(&mut emitted, &module_result.path);
 
         let offsets = ModuleOffsets {
             methods: u16::try_from(combined.methods.len()).expect("combined method table overflow"),
@@ -105,7 +98,7 @@ pub fn emit_project(
             .enumerate()
             .filter(|(_, g)| g.exported)
             .map(|(i, global)| ImportedGlobal {
-                name: bundle.db.interner.resolve(global.name).to_owned(),
+                name: module_result.db.interner.resolve(global.name).to_owned(),
                 index: offsets.globals + u16::try_from(i).expect("module global index overflow"),
             })
             .collect();
@@ -123,19 +116,18 @@ pub fn emit_project(
 /// Build the import context for a module: maps import path Symbols to the
 /// global indices of the corresponding dependency module's exports.
 fn build_import_context(
-    db: &Db,
-    current_path: &Path,
+    module: &TypedModule,
     loader: &ModuleLoader,
     graph: &ModuleGraph,
     module_exports: &HashMap<ModuleId, Vec<ImportedGlobal>>,
 ) -> HashMap<Symbol, Vec<ImportedGlobal>> {
     let mut context = HashMap::new();
 
-    for &expr_id in &db.ast.root {
-        let expr = db.ast.exprs.get(expr_id);
+    for &expr_id in &module.db.ast.root {
+        let expr = module.db.ast.exprs.get(expr_id);
         if let ExprKind::Import { path, kind: _ } = &expr.kind {
-            let path_str = db.interner.resolve(*path);
-            let resolved = loader.resolve(path_str, current_path);
+            let path_str = module.db.interner.resolve(*path);
+            let resolved = loader.resolve(path_str, &module.path);
             if let Some(ResolvedImport::File(dep_path) | ResolvedImport::Git(dep_path)) = resolved {
                 let canonical = dep_path.canonicalize().unwrap_or(dep_path);
                 if let Some(dep_id) = graph.lookup(&canonical) {

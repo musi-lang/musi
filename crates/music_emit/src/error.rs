@@ -11,7 +11,7 @@ pub enum EmitError {
 impl fmt::Display for EmitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unimplemented(feature) => write!(f, "unimplemented: {feature}"),
+            Self::Unimplemented(feature) => write!(f, "not implemented; {feature}"),
         }
     }
 }

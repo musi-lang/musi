@@ -1,0 +1,20 @@
+[package]
+name = "music_owned"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Built-in types and prelude for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_il = { path = "../music_il" }
+
+[dev-dependencies]
+music_ast = { path = "../music_ast" }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_shared = { path = "../music_shared" }
+
+[lints]
+workspace = true

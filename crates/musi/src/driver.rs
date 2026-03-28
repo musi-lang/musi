@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use music_config::{Workspace, load_config};
 use music_db::Db;
-use music_hir::lower;
+use music_hir::{TypedProject, type_module, type_project};
 use music_lex::Lexer;
 use music_parse::parse;
 use music_resolve::queries::{ResolutionMap, ResolveDb};
-use music_resolve::{ModuleId, ModuleLoader, ProjectResolution, resolve_project};
-use music_sema::{TypeEnv, type_check};
+use music_resolve::{ModuleId, ModuleLoader, ModuleResult, resolve_project};
+use music_sema::TypeEnv;
 use music_shared::diag::Diag;
 use music_shared::diag::emit_to_stderr;
 use music_shared::{Interner, SourceMap};
@@ -29,8 +29,7 @@ pub struct ProjectModuleCheck {
 }
 
 pub struct ProjectCheckResult {
-    pub loader: ModuleLoader,
-    pub project: ProjectResolution,
+    pub project: TypedProject,
     pub modules: Vec<ProjectModuleCheck>,
     pub has_errors: bool,
 }
@@ -47,8 +46,7 @@ pub fn compile(path: &Path) -> Result<CompileResult, io::Error> {
     let mut interner = Interner::new();
 
     let (tokens, lex_errors) = Lexer::new(&source).lex();
-    let (mut ast, parse_errors) = parse(&tokens, &source, &mut interner);
-    lower(&mut ast);
+    let (ast, parse_errors) = parse(&tokens, &source, &mut interner);
 
     let db = Db::new(ast, interner, source_map);
 
@@ -62,33 +60,36 @@ pub fn compile(path: &Path) -> Result<CompileResult, io::Error> {
     rdb.resolve_module();
     let (db, resolution, resolve_errors) = rdb.finish();
 
-    let (db, resolution, type_env, sema_errors) = type_check(db, resolution, None);
-
-    let has_errors = !lex_errors.is_empty()
-        || !parse_errors.is_empty()
-        || !resolve_errors.is_empty()
-        || !sema_errors.is_empty();
-
     let mut diagnostics: Vec<Diag> = Vec::new();
     for e in lex_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(source_id));
     }
     for e in parse_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(source_id));
     }
     for e in resolve_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
-    }
-    for e in sema_errors {
-        diagnostics.push(Diag::error(e.to_string()).with_label(e.span, source_id, ""));
+        diagnostics.push(e.diagnostic(&db.interner, source_id));
     }
 
+    let has_errors = !diagnostics.is_empty();
+    let module = type_module(
+        ModuleResult {
+            db,
+            resolution,
+            errors: Vec::new(),
+            diagnostics,
+            has_errors,
+        },
+        None,
+        path.to_path_buf(),
+    );
+
     Ok(CompileResult {
-        db,
-        resolution,
-        type_env,
-        diagnostics,
-        has_errors,
+        db: module.db,
+        resolution: module.resolution,
+        type_env: module.type_env,
+        diagnostics: module.diagnostics,
+        has_errors: module.has_errors,
     })
 }
 
@@ -101,55 +102,22 @@ pub fn compile(path: &Path) -> Result<CompileResult, io::Error> {
 pub fn analyze_project(path: &Path) -> Result<ProjectCheckResult, io::Error> {
     let (project_root, imports) = load_project_loader_config(path)?;
     let loader = ModuleLoader::new(project_root).with_config_imports(imports);
-    let mut project =
+    let project =
         resolve_project(path, &loader).map_err(|e| io::Error::other(e.to_string()))?;
-    let order = project.order.clone();
-    let mut modules = Vec::with_capacity(order.len());
-    let mut has_errors = false;
-
-    for mod_id in order {
-        let module = project
-            .modules
-            .remove(&mod_id)
-            .ok_or_else(|| io::Error::other("module missing from project resolution"))?;
-        let mut diagnostics = module.diagnostics;
-        let source_id = module.db.source.iter().next().map(|source| source.id());
-
-        let (db, resolution, module_has_errors) = if module.has_errors {
-            (module.db, module.resolution, true)
-        } else {
-            let mut db = module.db;
-            lower(&mut db.ast);
-            let (db, resolution, _type_env, sema_errors) =
-                type_check(db, module.resolution, None);
-            if let Some(source_id) = source_id {
-                for err in &sema_errors {
-                    diagnostics
-                        .push(Diag::error(err.to_string()).with_label(err.span, source_id, ""));
-                }
-            }
-            (db, resolution, !sema_errors.is_empty())
-        };
-
-        has_errors |= module_has_errors;
-        let _prev = project.modules.insert(
-            mod_id,
-            music_resolve::ModuleResult {
-                db,
-                resolution,
-                errors: module.errors,
-                diagnostics,
-                has_errors: module_has_errors,
-            },
-        );
-        modules.push(ProjectModuleCheck {
-            module_id: mod_id,
-            has_errors: module_has_errors,
-        });
-    }
+    let project = type_project(project, loader);
+    let modules: Vec<ProjectModuleCheck> = project
+        .order
+        .iter()
+        .filter_map(|module_id| {
+            project.modules.get(module_id).map(|module| ProjectModuleCheck {
+                module_id: *module_id,
+                has_errors: module.has_errors,
+            })
+        })
+        .collect();
+    let has_errors = modules.iter().any(|module| module.has_errors);
 
     Ok(ProjectCheckResult {
-        loader,
         project,
         modules,
         has_errors,

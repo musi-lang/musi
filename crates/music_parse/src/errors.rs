@@ -2,6 +2,8 @@ use core::error::Error;
 use core::fmt;
 
 use music_lex::TokenKind;
+use music_shared::diag::{Diag, DiagCode};
+use music_shared::SourceId;
 use music_shared::Span;
 
 /// A parse error with structured kind, location, and optional context.
@@ -19,6 +21,7 @@ pub enum ParseErrorKind {
         expected: &'static str,
         found: &'static str,
     },
+    TypeApplicationUsesBrackets,
     UnexpectedEof {
         expected: &'static str,
     },
@@ -45,6 +48,68 @@ impl ParseError {
     pub const fn span(&self) -> Span {
         self.span
     }
+
+    #[must_use]
+    pub fn diagnostic(&self, source_id: SourceId) -> Diag {
+        let (code, message, hint): (DiagCode, String, Option<String>) = match &self.kind {
+            ParseErrorKind::ExpectedToken { expected, found } => (
+                DiagCode::new(2001),
+                format!("expected {expected}, found {found}"),
+                None,
+            ),
+            ParseErrorKind::TypeApplicationUsesBrackets => (
+                DiagCode::new(2009),
+                String::from("type application uses brackets"),
+                Some(String::from("write bracketed type arguments, for example 'Option[Int]'")),
+            ),
+            ParseErrorKind::UnexpectedEof { expected } => (
+                DiagCode::new(2002),
+                format!("expected {expected}, found end of file"),
+                None,
+            ),
+            ParseErrorKind::ExpectedExpr { found } => (
+                DiagCode::new(2003),
+                format!("expected expression, found {found}"),
+                None,
+            ),
+            ParseErrorKind::ExpectedPat { found } => (
+                DiagCode::new(2004),
+                format!("expected pattern, found {found}"),
+                None,
+            ),
+            ParseErrorKind::ExpectedType { found } => (
+                DiagCode::new(2005),
+                format!("expected type, found {found}"),
+                None,
+            ),
+            ParseErrorKind::UnclosedDelimiter { open, .. } => (
+                DiagCode::new(2006),
+                format!("unclosed delimiter {open}"),
+                None,
+            ),
+            ParseErrorKind::InvalidParenForm => (
+                DiagCode::new(2007),
+                String::from("invalid parenthesized form"),
+                None,
+            ),
+            ParseErrorKind::NonAssociativeChain => (
+                DiagCode::new(2008),
+                String::from("non-associative operator chain is not allowed"),
+                None,
+            ),
+        };
+
+        let mut diag = Diag::error(message)
+            .with_code(code)
+            .with_label(self.span, source_id, "");
+        if let Some(hint) = hint {
+            diag = diag.with_hint(hint);
+        }
+        if let Some(ctx) = self.context {
+            diag = diag.with_note(format!("while parsing {ctx}"));
+        }
+        diag
+    }
 }
 
 impl fmt::Display for ParseError {
@@ -62,6 +127,9 @@ impl fmt::Display for ParseErrorKind {
         match self {
             Self::ExpectedToken { expected, found } => {
                 write!(f, "expected {expected}, found {found}")
+            }
+            Self::TypeApplicationUsesBrackets => {
+                write!(f, "type application uses brackets")
             }
             Self::UnexpectedEof { expected } => {
                 write!(f, "unexpected end of input, expected {expected}")
@@ -127,6 +195,8 @@ pub const fn describe_token(kind: &TokenKind) -> &'static str {
         TokenKind::KwQuote => "'quote'",
         TokenKind::KwResume => "'resume'",
         TokenKind::KwReturn => "'return'",
+        TokenKind::KwShl => "'shl'",
+        TokenKind::KwShr => "'shr'",
         TokenKind::KwVia => "'via'",
         TokenKind::KwWhere => "'where'",
         TokenKind::KwWith => "'with'",

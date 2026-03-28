@@ -1165,6 +1165,7 @@ impl Vm {
                 self.frames.truncate(handler.handler_frame_depth + 1);
                 let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
                 frame.truncate_stack(handler.saved_stack_depth);
+                frame.push(payload);
                 frame.push(Value::from_ptr(cont_idx));
                 *pc = handler.handler_pc;
             }

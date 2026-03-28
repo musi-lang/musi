@@ -11,6 +11,7 @@ publish.workspace = true
 music_shared = { path = "../music_shared" }
 music_ast = { path = "../music_ast" }
 music_db = { path = "../music_db" }
+music_owned = { path = "../music_owned" }
 music_resolve = { path = "../music_resolve" }
 music_sema = { path = "../music_sema" }
 
@@ -19,6 +20,7 @@ criterion = { workspace = true }
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
 music_shared = { path = "../music_shared" }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "lower"

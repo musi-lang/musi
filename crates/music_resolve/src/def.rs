@@ -1,5 +1,5 @@
 use music_arena::Idx;
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_shared::{Span, Symbol};
 
 use crate::scope::ScopeId;

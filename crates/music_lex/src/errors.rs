@@ -1,6 +1,8 @@
 use core::error;
 use core::fmt;
 
+use music_shared::diag::{Diag, DiagCode};
+use music_shared::SourceId;
 use music_shared::Span;
 use thiserror::Error;
 
@@ -42,13 +44,13 @@ pub enum LexErrorKind {
     #[error("invalid escape sequence '\\{0}'")]
     InvalidEscape(char),
 
-    #[error("invalid hex escape: expected {expected} hex digits")]
+    #[error("invalid hex escape; expected {expected} hex digit(s)")]
     InvalidHexEscape { expected: u8 },
 
     #[error("invalid unicode escape")]
     InvalidUnicodeEscape,
 
-    #[error("invalid number literal: expected digits after base prefix")]
+    #[error("invalid number literal; expected digit(s) after base prefix")]
     InvalidNumberPrefix,
 
     #[error("number literal overflow")]
@@ -59,6 +61,64 @@ impl LexError {
     #[must_use]
     pub const fn span(&self) -> Span {
         self.span
+    }
+
+    #[must_use]
+    pub fn diagnostic(&self, source_id: SourceId) -> Diag {
+        let (code, message) = match self.kind {
+            LexErrorKind::UnexpectedChar(ch) => (
+                DiagCode::new(1001),
+                format!("unexpected character '{ch}'"),
+            ),
+            LexErrorKind::UnterminatedString => {
+                (DiagCode::new(1002), String::from("unterminated string literal"))
+            }
+            LexErrorKind::UnterminatedFString => {
+                (DiagCode::new(1003), String::from("unterminated f-string literal"))
+            }
+            LexErrorKind::UnterminatedFStringExpr => (
+                DiagCode::new(1004),
+                String::from("unterminated f-string interpolation"),
+            ),
+            LexErrorKind::UnterminatedRune => {
+                (DiagCode::new(1005), String::from("unterminated rune literal"))
+            }
+            LexErrorKind::UnterminatedEscapedIdent => (
+                DiagCode::new(1006),
+                String::from("unterminated escaped identifier"),
+            ),
+            LexErrorKind::UnterminatedBlockComment => (
+                DiagCode::new(1007),
+                String::from("unterminated block comment"),
+            ),
+            LexErrorKind::EmptyRune => (DiagCode::new(1008), String::from("empty rune literal")),
+            LexErrorKind::MultiCharRune => (
+                DiagCode::new(1009),
+                String::from("rune literal contains more than one character"),
+            ),
+            LexErrorKind::InvalidEscape(ch) => (
+                DiagCode::new(1010),
+                format!("invalid escape sequence '\\{ch}'"),
+            ),
+            LexErrorKind::InvalidHexEscape { expected } => (
+                DiagCode::new(1011),
+                format!("invalid hex escape; expected {expected} hex digit(s)"),
+            ),
+            LexErrorKind::InvalidUnicodeEscape => {
+                (DiagCode::new(1012), String::from("invalid unicode escape"))
+            }
+            LexErrorKind::InvalidNumberPrefix => (
+                DiagCode::new(1013),
+                String::from("invalid number literal; expected digit(s) after base prefix"),
+            ),
+            LexErrorKind::NumberOverflow => {
+                (DiagCode::new(1014), String::from("number literal overflow"))
+            }
+        };
+
+        Diag::error(message)
+            .with_code(code)
+            .with_label(self.span, source_id, "")
     }
 }
 

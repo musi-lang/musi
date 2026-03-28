@@ -1,6 +1,7 @@
 use std::fmt;
 
-use music_shared::{Span, Symbol, SymbolList};
+use music_shared::diag::{Diag, DiagCode};
+use music_shared::{Interner, SourceId, Span, Symbol, SymbolList};
 
 /// A name-resolution error with its source location.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +40,83 @@ impl ResolveError {
     pub const fn span(&self) -> Span {
         self.span
     }
+
+    #[must_use]
+    pub fn diagnostic(&self, interner: &Interner, source_id: SourceId) -> Diag {
+        let (code, message, hint): (DiagCode, String, Option<String>) = match &self.kind {
+            ResolveErrorKind::UndefinedName(sym) => (
+                DiagCode::new(3001),
+                format!("undefined binding '{}'", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::UndefinedType(sym) => (
+                DiagCode::new(3002),
+                format!("undefined type '{}'", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::UndefinedVariant(sym) => (
+                DiagCode::new(3003),
+                format!("undefined variant '{}'", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::DuplicateDefinition { name, .. } => (
+                DiagCode::new(3004),
+                format!("duplicate definition '{}'", interner.resolve(*name)),
+                Some(String::from("remove or rename one of the definitions")),
+            ),
+            ResolveErrorKind::NotYetDefined(sym) => (
+                DiagCode::new(3005),
+                format!("binding '{}' is used before its definition", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::ImportNotFound(sym) => (
+                DiagCode::new(3006),
+                format!("import '{}' was not found", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::CyclicImport(sym) => (
+                DiagCode::new(3007),
+                format!("cyclic import detected for '{}'", interner.resolve(*sym)),
+                None,
+            ),
+            ResolveErrorKind::CyclicImportChain { path, chain } => (
+                DiagCode::new(3008),
+                format!(
+                    "cyclic import detected for '{}'",
+                    interner.resolve(*path)
+                ),
+                Some(format!(
+                    "cycle: {}",
+                    chain
+                        .iter()
+                        .map(|module| interner.resolve(*module))
+                        .collect::<Vec<_>>()
+                        .join(" -> ")
+                )),
+            ),
+            ResolveErrorKind::RegistryNotAvailable(sym) => (
+                DiagCode::new(3009),
+                format!(
+                    "registry import '{}' is not available",
+                    interner.resolve(*sym)
+                ),
+                Some(String::from("use a local path or git import instead")),
+            ),
+            ResolveErrorKind::GitResolutionFailed { path, reason } => (
+                DiagCode::new(3010),
+                format!("failed to resolve git import '{}'", interner.resolve(*path)),
+                Some(reason.clone()),
+            ),
+        };
+
+        let mut diag = Diag::error(message)
+            .with_code(code)
+            .with_label(self.span, source_id, "");
+        if let Some(hint) = hint {
+            diag = diag.with_hint(hint);
+        }
+        diag
+    }
 }
 
 impl fmt::Display for ResolveError {
@@ -69,7 +147,7 @@ impl fmt::Display for ResolveError {
                 write!(f, "cyclic import detected for `{sym}`")
             }
             ResolveErrorKind::CyclicImportChain { path, chain } => {
-                write!(f, "cyclic import for `{path}`: ")?;
+                write!(f, "cyclic import for `{path}`; ")?;
                 for (i, module) in chain.iter().enumerate() {
                     if i > 0 {
                         write!(f, " -> ")?;
@@ -85,7 +163,7 @@ impl fmt::Display for ResolveError {
                 )
             }
             ResolveErrorKind::GitResolutionFailed { path, reason } => {
-                write!(f, "failed to resolve git import `{path}`: {reason}")
+                write!(f, "failed to resolve git import `{path}`; {reason}")
             }
         }
     }

@@ -38,7 +38,7 @@ fn named_type() {
 
 #[test]
 fn named_with_args() {
-    let (ast, errors) = parse_ty_from("Option of Int");
+    let (ast, errors) = parse_ty_from("Option[Int]");
     assert!(errors.is_empty());
     assert!(matches!(extract_ty_kind(&ast), TyKind::Named { args, .. } if args.len() == 1));
 }
@@ -101,7 +101,7 @@ fn array_type() {
 
 #[test]
 fn ty_args_trailing_comma() {
-    let (ast, errors) = parse_ty_from("Map of (Int, String,)");
+    let (ast, errors) = parse_ty_from("Map[Int, String,]");
     assert!(errors.is_empty(), "errors: {errors:?}");
-    assert!(matches!(extract_ty_kind(&ast), TyKind::Named { args, .. } if args.len() == 1));
+    assert!(matches!(extract_ty_kind(&ast), TyKind::Named { args, .. } if args.len() == 2));
 }

@@ -30,7 +30,7 @@ pub fn run(args: &BuildArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let module = match emit_project(result.project, &result.loader) {
+    let module = match emit_project(result.project) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("error: {e}");

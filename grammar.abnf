@@ -78,7 +78,7 @@ comment = "///" *(<any except newline>)  ; line doc (doc=true)
           / "//" *(<any except newline>)  ; line (doc=false)
           / "/**" *(<any except "*/">) "*/"  ; block doc (doc=true)
           / "/*" *(<any except "*/">) "*/"  ; block (doc=false)
-; §1.5  Keywords (28)
+; §1.5  Keywords (30)
 keyword = "and"
           / "as"
           / "case"
@@ -103,6 +103,8 @@ keyword = "and"
           / "quote"
           / "resume"
           / "return"
+          / "shl"
+          / "shr"
           / "via"
           / "where"
           / "with"
@@ -340,7 +342,10 @@ ast-foreign-expr = "foreign" [lit-string] ("import" lit-string / "let" foreign-b
 
 ast-perform      = "perform" postfix-expr
 
-ast-handle       = "handle" ast-expr "with" ast-ty-named "{" *(fn-decl [";"]) "}"
+ast-handle       = "handle" ast-expr "with" ident "of" "(" ["|"] handle-clause *("|" handle-clause) ["|"] ")"
+
+handle-clause    = "return" ident "=>" ast-expr
+                   / ident "(" ident-list ")" "=>" ast-expr
 ; §4.11  Quote and splice - metaprogramming
 ast-quote = "quote" ("(" ast-expr ")" / "{" *(ast-stmt) "}")
 
@@ -359,7 +364,7 @@ ast-ty-sum     = ast-ty-product *("+" ast-ty-product)
 ast-ty-product = ast-ty-base *("*" ast-ty-base)
 ; §5.2  Base types
 ast-ty-base = "mut" ast-ty-base  ; mut T - mutable type (mut T <: T)
-              / ident ["of" ty-arg-list]  ; Named, Named of T
+              / ident ["[" ty-arg-list "]"]  ; Named, Named[T]
               / "?" ast-ty-base  ; ?T - option sugar
               / "(" ident ":" ast-ty ")" "->" ast-ty  ; pi type
               / "(" [ast-ty *("," ast-ty)] ")"  ; grouped or tuple type
@@ -369,7 +374,7 @@ ty-arg-list  = ast-ty *("," ast-ty) [","]  ; trailing , allowed
 
 ty-annot     = ":" ast-ty
 
-ast-ty-named = ident ["of" ty-arg-list]
+ast-ty-named = ident ["[" ty-arg-list "]"]
 
 dim-list     = dim *("," dim)
 
@@ -381,7 +386,7 @@ effect-set   = "{" effect-list "}"
 
 effect-list  = effect-item *("," effect-item)
 
-effect-item  = ident ["of" ast-ty]
+effect-item  = ident ["[" ast-ty "]"]
                / ident
 
 where-clause = "where" constraint *("," constraint) [","]  ; trailing , allowed

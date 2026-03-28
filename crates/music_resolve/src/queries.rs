@@ -4,14 +4,14 @@ use std::path::{Path, PathBuf};
 use music_arena::Arena;
 use music_ast::common::{Constraint, MemberDecl, ModifierSet, Param};
 use music_ast::expr::{
-    CaseArm, CompClause, DataBody, ExprKind, FStrPart, ImportKind, InstanceBody, LetBinding,
-    PwGuard, QuoteKind, RecordField, SpliceKind,
+    CaseArm, CompClause, DataBody, ExprKind, FStrPart, HandlerClause, ImportKind, InstanceBody,
+    LetBinding, PwGuard, QuoteKind, RecordField, SpliceKind,
 };
 use music_ast::pat::PatKind;
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, ExprList, ParamList, PatId, TyId};
-use music_builtins::prelude::PRELUDE_CLASSES;
-use music_builtins::types::BuiltinType;
+use music_owned::prelude::{PRELUDE_CLASSES, PRELUDE_MODULE_NAME};
+use music_owned::types::BuiltinType;
 use music_db::Db;
 use music_shared::{Ident, Span, Symbol, SymbolList};
 
@@ -139,33 +139,36 @@ impl ResolveDb {
         let scope = self.module_scope;
         for builtin in BuiltinType::ALL {
             let name = self.db.interner.intern(builtin.name());
-            let _ = self.define_and_bind(
+            let _ = self.define_and_bind_with_module(
                 name,
                 Span::DUMMY,
                 DefKind::Builtin(*builtin),
                 Visibility::Exported,
                 scope,
+                Some(PRELUDE_MODULE_NAME.to_owned()),
             );
         }
 
         for class in PRELUDE_CLASSES {
             let name = self.db.interner.intern(class.name);
-            let _ = self.define_and_bind(
+            let _ = self.define_and_bind_with_module(
                 name,
                 Span::DUMMY,
                 DefKind::TypeClass,
                 Visibility::Exported,
                 scope,
+                Some(PRELUDE_MODULE_NAME.to_owned()),
             );
 
             for method in class.methods {
                 let op_name = self.db.interner.intern(method.op_name);
-                let _ = self.define_and_bind(
+                let _ = self.define_and_bind_with_module(
                     op_name,
                     Span::DUMMY,
                     DefKind::Method,
                     Visibility::Exported,
                     scope,
+                    Some(PRELUDE_MODULE_NAME.to_owned()),
                 );
             }
         }
@@ -581,9 +584,22 @@ impl ResolveDb {
                 }
             }
             ExprKind::Handle(ref data) => {
-                for handler in &data.handlers {
-                    if let Some(handler_body) = handler.body {
-                        self.resolve_expr(handler_body, scope);
+                for clause in &data.clauses {
+                    let handler_scope = self.resolution.scopes.push(ScopeKind::Function, Some(scope));
+                    match clause {
+                        HandlerClause::Return { binder, body } => {
+                            let _ = self.define_value(binder, handler_scope);
+                            self.resolve_expr(*body, handler_scope);
+                        }
+                        HandlerClause::Op {
+                            args, cont, body, ..
+                        } => {
+                            for arg in args {
+                                let _ = self.define_value(arg, handler_scope);
+                            }
+                            let _ = self.define_value(cont, handler_scope);
+                            self.resolve_expr(*body, handler_scope);
+                        }
                     }
                 }
                 self.resolve_expr(data.body, scope);

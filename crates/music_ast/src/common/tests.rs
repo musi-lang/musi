@@ -90,9 +90,10 @@ fn param_clone_eq() {
 fn attr_construction() {
     let (_i, ident) = test_ident();
     let attr = Attr {
-        name: ident,
+        path: vec![ident],
         args: vec![AttrArg::Positional(dummy_expr_id())],
     };
+    assert_eq!(attr.path, vec![ident]);
     assert_eq!(attr.args.len(), 1);
 }
 

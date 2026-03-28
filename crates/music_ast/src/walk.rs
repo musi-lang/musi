@@ -1,13 +1,11 @@
 use music_shared::{Span, Spanned};
 
-use crate::common::{
-    FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef,
-};
+use crate::common::{FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef};
 use crate::data::AstData;
 use crate::expr::{
     CaseArm, CaseData, ClassDefData, CompClause, ComprehensionData, DataBody, ExprKind, FStrPart,
-    HandleData, IndexKind, InstanceBody, InstanceDef, LetBinding, PiecewiseArm, PwGuard, QuoteKind,
-    RecordField, SpliceKind,
+    HandleData, HandlerClause, IndexKind, InstanceBody, InstanceDef, LetBinding, PiecewiseArm,
+    PwGuard, QuoteKind, RecordField, SpliceKind,
 };
 use crate::{ExprId, ExprList, ParamList, TyId};
 
@@ -204,8 +202,8 @@ fn map_structure(
             ast,
             expr_id,
             data.effect.clone(),
-            &data.handlers,
             data.body,
+            &data.clauses,
             span,
             f,
         ),
@@ -705,24 +703,65 @@ fn map_handle(
     ast: &mut AstData,
     expr_id: ExprId,
     effect: TyRef,
-    handlers: &[FnDecl],
     body: ExprId,
+    clauses: &[HandlerClause],
     span: Span,
     f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
 ) -> ExprId {
     let new_body = f(ast, body);
-    let (new_handlers, handlers_changed) = map_fn_decls(ast, handlers, f);
-    if new_body == body && !handlers_changed {
+    let (new_clauses, clauses_changed) = map_handler_clauses(ast, clauses, f);
+    if new_body == body && !clauses_changed {
         return expr_id;
     }
     ast.exprs.alloc(Spanned::new(
         ExprKind::Handle(Box::new(HandleData {
             effect,
-            handlers: new_handlers,
             body: new_body,
+            clauses: new_clauses,
         })),
         span,
     ))
+}
+
+fn map_handler_clauses(
+    ast: &mut AstData,
+    clauses: &[HandlerClause],
+    f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
+) -> (Vec<HandlerClause>, bool) {
+    let mut changed = false;
+    let mapped = clauses
+        .iter()
+        .map(|clause| match clause {
+            HandlerClause::Return { binder, body } => {
+                let new_body = f(ast, *body);
+                if new_body != *body {
+                    changed = true;
+                }
+                HandlerClause::Return {
+                    binder: *binder,
+                    body: new_body,
+                }
+            }
+            HandlerClause::Op {
+                name,
+                args,
+                cont,
+                body,
+            } => {
+                let new_body = f(ast, *body);
+                if new_body != *body {
+                    changed = true;
+                }
+                HandlerClause::Op {
+                    name: *name,
+                    args: args.clone(),
+                    cont: *cont,
+                    body: new_body,
+                }
+            }
+        })
+        .collect();
+    (mapped, changed)
 }
 
 fn map_sum_def(
@@ -796,41 +835,6 @@ fn map_rec_def(
         ExprKind::DataDef(Box::new(DataBody::Product(new_fields))),
         span,
     ))
-}
-
-fn map_fn_decls(
-    ast: &mut AstData,
-    decls: &[FnDecl],
-    f: &mut impl FnMut(&mut AstData, ExprId) -> ExprId,
-) -> (Vec<FnDecl>, bool) {
-    let mut changed = false;
-    let new_decls: Vec<FnDecl> = decls
-        .iter()
-        .map(|decl| {
-            let new_body = decl.body.map(|b| {
-                let new_b = f(ast, b);
-                if new_b != b {
-                    changed = true;
-                }
-                new_b
-            });
-            let new_params = decl.params.as_ref().map(|params| {
-                let (new_p, p_changed) = map_params(ast, params, f);
-                if p_changed {
-                    changed = true;
-                }
-                new_p
-            });
-            FnDecl {
-                attrs: decl.attrs.clone(),
-                name: decl.name.clone(),
-                params: new_params,
-                ret_ty: decl.ret_ty,
-                body: new_body,
-            }
-        })
-        .collect();
-    (new_decls, changed)
 }
 
 fn map_member_decls(

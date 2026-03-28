@@ -3,7 +3,7 @@ pub mod git;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use music_builtins::modules;
+use music_owned::modules;
 use music_config::{Exports, load_config};
 
 /// Result of resolving an import specifier.

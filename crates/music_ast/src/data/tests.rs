@@ -73,7 +73,7 @@ fn alloc_get_roundtrip_attr() {
     let sym = interner.intern("inline");
     let mut data = AstData::new();
     let attr = Attr {
-        name: Ident::new(sym, Span::DUMMY),
+        path: vec![Ident::new(sym, Span::DUMMY)],
         args: vec![],
     };
     let id = data.attrs.alloc(Spanned::new(attr, Span::new(0, 7)));

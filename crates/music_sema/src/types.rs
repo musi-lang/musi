@@ -1,5 +1,5 @@
 use music_arena::Idx;
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_shared::Symbol;
 
 /// Interned handle for a semantic type in the type arena.

@@ -7,6 +7,7 @@ use musi_vm::Vm;
 use music_emit::pool::ConstantEntry;
 use music_emit::project::emit_project;
 use music_emit::write_seam;
+use music_hir::type_project;
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
 use music_resolve::loader::ModuleLoader;
@@ -16,7 +17,8 @@ fn resolve_and_emit(dir: &Path, entry: &str) -> music_emit::project::ProjectEmit
     let entry_path = dir.join(entry);
     let loader = ModuleLoader::new(dir.to_path_buf());
     let resolution = resolve_project(&entry_path, &loader).unwrap();
-    emit_project(resolution, &loader).unwrap()
+    let typed = type_project(resolution, loader);
+    emit_project(typed).unwrap()
 }
 
 #[test]
@@ -284,17 +286,17 @@ fn same_named_effects_from_different_modules_do_not_merge() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(
         dir.path().join("a.ms"),
-        "export let Test := effect { let emit (value : Int) : Int }; export let a := 1",
+        "export let Test := effect { let emit (value : Int) : Int };\nexport let a := 1;",
     )
     .unwrap();
     fs::write(
         dir.path().join("b.ms"),
-        "export let Test := effect { let emit (value : Int) : Int }; export let b := 2",
+        "export let Test := effect { let emit (value : Int) : Int };\nexport let b := 2;",
     )
     .unwrap();
     fs::write(
         dir.path().join("main.ms"),
-        "import \"./a.ms\" as _; import \"./b.ms\" as _; export let value := 0",
+        "import \"./a.ms\" as _;\nimport \"./b.ms\" as _;\nexport let value := 0;",
     )
     .unwrap();
 
@@ -390,6 +392,7 @@ let branch_local (value) :=
   );
 
 export let x := branch_local(.A)
+;
 "#,
     )
     .unwrap();

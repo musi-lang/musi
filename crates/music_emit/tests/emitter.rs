@@ -9,14 +9,14 @@ use music_ast::common::{FnDecl, MemberDecl, MemberName, ModifierSet, Param, Sign
 use music_ast::data::AstData;
 use music_ast::expr::{
     AccessMode, BinOp, CaseArm, CaseData, CompClause, ComprehensionData, ExprKind, FStrPart,
-    FieldTarget, HandleData, IndexKind, InstanceBody, InstanceDef, LetBinding, PostfixOp,
-    RecordField, TypeOpKind, UnaryOp,
+    FieldTarget, HandleData, HandlerClause, IndexKind, InstanceBody, InstanceDef, LetBinding,
+    PostfixOp, RecordField, TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_db::Db;
-use music_hir::HirBundle;
+use music_hir::TypedModule;
 use music_il::format::BUILTIN_TYPE_INT;
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
@@ -27,7 +27,7 @@ use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
 use music_emit::emitter::emit;
 
-fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> HirBundle {
+fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> TypedModule {
     let mut interner = Interner::new();
     let mut ast = AstData::new();
 
@@ -40,10 +40,10 @@ fn build_thir(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> HirBu
     let db = Db::new(ast, interner, SourceMap::default());
     let resolution = ResolutionMap::new();
     let type_env = TypeEnv::new();
-    HirBundle::new(db, resolution, type_env)
+    TypedModule::new(db, resolution, type_env)
 }
 
-fn build_thir_single(builder: fn(&mut AstData, &mut Interner) -> ExprKind) -> HirBundle {
+fn build_thir_single(builder: fn(&mut AstData, &mut Interner) -> ExprKind) -> TypedModule {
     build_thir(&[builder])
 }
 
@@ -477,20 +477,24 @@ fn emit_handle_with_body() {
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
         let eff_sym = interner.intern("MyEff");
-        let handler = FnDecl {
-            attrs: vec![],
-            name: MemberName::Ident(Ident::dummy(eff_sym)),
-            params: None,
-            ret_ty: None,
-            body: Some(handler_body),
-        };
         ExprKind::Handle(Box::new(HandleData {
             effect: TyRef {
                 name: Ident::dummy(eff_sym),
                 args: Vec::new(),
             },
-            handlers: vec![handler],
             body: body_expr,
+            clauses: vec![
+                HandlerClause::Op {
+                    name: Ident::dummy(eff_sym),
+                    args: vec![],
+                    cont: Ident::dummy(interner.intern("k")),
+                    body: handler_body,
+                },
+                HandlerClause::Return {
+                    binder: Ident::dummy(interner.intern("x")),
+                    body: body_expr,
+                },
+            ],
         }))
     });
     let eff_sym = thir.db.interner.intern("MyEff");
@@ -505,11 +509,15 @@ fn emit_handle_with_body() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_effect_jump(Opcode::EffHdlPush, 0, 0, 3)
+        Instruction::with_effect_jump(Opcode::EffHdlPush, 0, 0, 6)
     );
-    assert_eq!(instrs[1], Instruction::with_i16(Opcode::LdSmi, 2));
-    assert_eq!(instrs[2], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[3], Instruction::simple(Opcode::EffHdlPop));
+    assert_eq!(instrs[1], Instruction::with_u8(Opcode::StLoc, 0));
+    assert_eq!(instrs[2], Instruction::simple(Opcode::Pop));
+    assert_eq!(instrs[3], Instruction::with_i16(Opcode::LdSmi, 2));
+    assert_eq!(instrs[4], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[5], Instruction::with_u8(Opcode::StLoc, 1));
+    assert_eq!(instrs[6], Instruction::simple(Opcode::LdOne));
+    assert_eq!(instrs[7], Instruction::simple(Opcode::EffHdlPop));
 }
 
 #[test]
@@ -717,7 +725,7 @@ fn emit_lambda_with_upvalue_capture() {
     let mut resolution = ResolutionMap::new();
     let _ = resolution.captures.insert(lambda_expr, vec![x_sym]);
     let type_env = TypeEnv::new();
-    let thir = HirBundle::new(db, resolution, type_env);
+    let thir = TypedModule::new(db, resolution, type_env);
 
     let module = emit(&thir).unwrap();
 
@@ -1483,17 +1491,16 @@ fn emit_false_variant_emits_ld_false() {
 
 #[test]
 fn emit_intrinsic_call_emits_opcode() {
-    let mut thir = build_thir_single(|ast, int| {
-        let shl_sym = int.intern("shl");
-        let callee = ast
-            .exprs
-            .alloc(Spanned::dummy(ExprKind::Var(Ident::dummy(shl_sym))));
-        let arg = ast
+    let mut thir = build_thir_single(|ast, _| {
+        let lhs = ast
             .exprs
             .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(1))));
-        ExprKind::App(callee, vec![arg])
+        let rhs = ast
+            .exprs
+            .alloc(Spanned::dummy(ExprKind::Lit(Literal::Int(2))));
+        ExprKind::BinOp(BinOp::Shl, lhs, rhs)
     });
-    let callee_id = thir.db.ast.exprs.iter().next().unwrap().0;
+    let callee_id = thir.db.ast.root[0];
     let _ = thir.type_env.dispatch.insert(
         callee_id,
         DispatchInfo::Static {

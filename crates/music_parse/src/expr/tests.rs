@@ -199,6 +199,29 @@ fn unit() {
 }
 
 #[test]
+fn attr_path_on_let() {
+    let source = "@musi.lang(name := \"Bool\") let Bool := data { | True | False };";
+    let (tokens, lex_errors) = Lexer::new(source).lex();
+    assert!(lex_errors.is_empty(), "unexpected lex errors: {lex_errors:?}");
+    let mut interner = Interner::new();
+    let (ast, errors) = crate::parse(&tokens, source, &mut interner);
+    assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
+    let ExprKind::Let(binding) = root_kind(&ast) else {
+        panic!("expected let binding");
+    };
+    let attrs = &binding.attrs;
+    assert_eq!(attrs.len(), 1);
+    let attr = ast.attrs.get(attrs[0]);
+    let path: Vec<_> = attr
+        .kind
+        .path
+        .iter()
+        .map(|ident| interner.resolve(ident.name).to_owned())
+        .collect();
+    assert_eq!(path, ["musi", "lang"]);
+}
+
+#[test]
 fn tuple() {
     let (ast, errors) = parse_expr("(a, b)");
     assert!(errors.is_empty());
@@ -293,9 +316,42 @@ fn perform_expr() {
 
 #[test]
 fn handle_expr() {
-    let (ast, errors) = parse_expr("handle value with Test { let emit(arg) := resume arg }");
+    let (ast, errors) = parse_expr("handle value with Test of (| return x => x | emit(arg, k) => resume k)");
     assert!(errors.is_empty());
     assert!(matches!(root_kind(&ast), ExprKind::Handle(_)));
+}
+
+#[test]
+fn handle_expr_with_effect_args() {
+    let (ast, errors) =
+        parse_expr("handle value with State[Int] of (| return x => x | get(arg, k) => resume k)");
+    assert!(errors.is_empty());
+    assert!(matches!(root_kind(&ast), ExprKind::Handle(_)));
+}
+
+#[test]
+fn old_type_application_is_rejected() {
+    let (_ast, errors) = parse_from("let x : Option of Int := .None;");
+    assert!(
+        errors
+            .iter()
+            .any(|error| matches!(error.kind, ParseErrorKind::TypeApplicationUsesBrackets)),
+        "expected TypeApplicationUsesBrackets, got: {errors:?}"
+    );
+}
+
+#[test]
+fn shl_expr() {
+    let (ast, errors) = parse_expr("1 shl 2");
+    assert!(errors.is_empty());
+    assert!(matches!(root_kind(&ast), ExprKind::BinOp(BinOp::Shl, _, _)));
+}
+
+#[test]
+fn shr_expr() {
+    let (ast, errors) = parse_expr("1 shr 2");
+    assert!(errors.is_empty());
+    assert!(matches!(root_kind(&ast), ExprKind::BinOp(BinOp::Shr, _, _)));
 }
 
 // ── Import ────────────────────────────────────────────────────

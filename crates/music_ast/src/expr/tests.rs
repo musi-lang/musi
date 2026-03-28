@@ -532,11 +532,13 @@ fn all_bin_ops() {
         BinOp::Cons,
         BinOp::Add,
         BinOp::Sub,
+        BinOp::Shl,
+        BinOp::Shr,
         BinOp::Mul,
         BinOp::Div,
         BinOp::Rem,
     ];
-    assert_eq!(ops.len(), 19);
+    assert_eq!(ops.len(), 21);
 }
 
 #[test]
@@ -562,21 +564,18 @@ fn expr_kind_clone_eq() {
 
 #[test]
 fn handle_expr() {
-    use crate::common::{FnDecl, MemberName, TyRef};
+    use crate::common::TyRef;
     let (_i, ident) = test_ident();
     let e = ExprKind::Handle(Box::new(HandleData {
         effect: TyRef {
             name: ident,
             args: vec![],
         },
-        handlers: vec![FnDecl {
-            attrs: vec![],
-            name: MemberName::Ident(ident),
-            params: None,
-            ret_ty: None,
-            body: Some(dummy_expr_id()),
-        }],
         body: dummy_expr_id(),
+        clauses: vec![HandlerClause::Return {
+            binder: ident,
+            body: dummy_expr_id(),
+        }],
     }));
     assert!(matches!(e, ExprKind::Handle(_)));
 }

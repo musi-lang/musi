@@ -30,7 +30,7 @@ pub struct Param {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attr {
-    pub name: Ident,
+    pub path: IdentList,
     pub args: Vec<AttrArg>,
 }
 

@@ -145,7 +145,7 @@ fn musi_intrinsic_import_resolves() {
             .order
             .iter()
             .map(|&id| result.graph.path(id))
-            .any(|path| path.ends_with("crates/music_builtins/modules/test.ms")),
+            .any(|path| path.ends_with("crates/music_owned/modules/test.ms")),
         "expected musi:test intrinsic module in project graph"
     );
 

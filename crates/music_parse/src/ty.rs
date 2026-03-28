@@ -4,6 +4,7 @@ use music_lex::TokenKind;
 use music_shared::Span;
 
 use crate::errors::ParseResult;
+use crate::errors::{ParseError, ParseErrorKind};
 use crate::parser::Parser;
 
 impl Parser<'_> {
@@ -102,8 +103,14 @@ impl Parser<'_> {
     fn parse_ty_named(&mut self) -> ParseResult<TyId> {
         let start = self.span();
         let name = self.expect_ident()?;
-        let args = if self.eat(&TokenKind::KwOf) {
-            self.parse_ty_of_args()?
+        let args = if self.at(&TokenKind::LBracket) {
+            self.parse_ty_bracket_args()?
+        } else if self.at(&TokenKind::KwOf) {
+            return Err(ParseError {
+                kind: ParseErrorKind::TypeApplicationUsesBrackets,
+                span: self.span(),
+                context: Some("in type annotation"),
+            });
         } else {
             Vec::new()
         };
@@ -111,22 +118,21 @@ impl Parser<'_> {
         Ok(self.alloc_ty(TyKind::Named { name, args }, span))
     }
 
-    fn parse_ty_of_args(&mut self) -> ParseResult<Vec<TyId>> {
-        let mut args = vec![self.parse_ty()?];
+    pub(crate) fn parse_ty_bracket_args(&mut self) -> ParseResult<Vec<TyId>> {
+        let _ = self.expect(&TokenKind::LBracket, "'['")?;
+        let mut args = Vec::new();
+        if self.at(&TokenKind::RBracket) {
+            let _ = self.expect(&TokenKind::RBracket, "']'")?;
+            return Ok(args);
+        }
+        args.push(self.parse_ty()?);
         while self.eat(&TokenKind::Comma) {
-            if !matches!(
-                self.peek_kind(),
-                TokenKind::KwMut
-                    | TokenKind::Question
-                    | TokenKind::LParen
-                    | TokenKind::LBracket
-                    | TokenKind::Ident
-                    | TokenKind::EscapedIdent
-            ) {
+            if self.at(&TokenKind::RBracket) {
                 break;
             }
             args.push(self.parse_ty()?);
         }
+        let _ = self.expect(&TokenKind::RBracket, "']'")?;
         Ok(args)
     }
 

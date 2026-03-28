@@ -2,7 +2,7 @@ use std::fmt;
 
 /// Primitive types known to the compiler before any user code is parsed.
 ///
-/// Each variant corresponds to a type declared in `crates/music_builtins/prelude.ms`.
+/// Each variant corresponds to a type declared in `crates/music_owned/prelude.ms`.
 /// The compiler erases these to NaN-box tags or heap pointers at codegen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinType {

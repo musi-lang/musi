@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use music_builtins::types::BuiltinType;
+use music_owned::types::BuiltinType;
 use music_db::Db;
 use music_shared::{Interner, SourceMap};
 use music_hir::lower;
@@ -417,8 +417,8 @@ fn exhaustive_match_with_bind() {
 fn duplicate_instance_detected() {
     let (_, errors) = check_source(
         "let Eq := class { let eq (a : Int, b : Int) : Bool }; \
-         let _i1 := instance Eq of Int { let eq (a, b) := .True }; \
-         let _i2 := instance Eq of Int { let eq (a, b) := .False }",
+         let _i1 := instance Eq[Int] { let eq (a, b) := .True }; \
+         let _i2 := instance Eq[Int] { let eq (a, b) := .False }",
     );
     let has_dup = errors
         .iter()
@@ -430,13 +430,7 @@ fn duplicate_instance_detected() {
 fn intrinsic_method_dispatch_recorded() {
     use music_il::opcode::Opcode;
     use music_sema::env::DispatchInfo;
-    let (env, _errors) = check_source(
-        "let Bits [T] := class { \
-             @builtin(opcode := 0x23) \
-             let shl (a : T, n : Int) : T \
-         }; \
-         shl(1, 2)",
-    );
+    let (env, _errors) = check_source("1 shl 2");
     let has_static = env
         .dispatch
         .values()
@@ -452,13 +446,7 @@ fn intrinsic_method_dispatch_recorded() {
 fn intrinsic_method_positional_opcode() {
     use music_il::opcode::Opcode;
     use music_sema::env::DispatchInfo;
-    let (env, _errors) = check_source(
-        "let Bits [T] := class { \
-             @builtin(0x24) \
-             let shr (a : T, n : Int) : T \
-         }; \
-         shr(1, 1)",
-    );
+    let (env, _errors) = check_source("1 shr 1");
     let has_static = env
         .dispatch
         .values()
@@ -466,6 +454,22 @@ fn intrinsic_method_positional_opcode() {
     assert!(
         has_static,
         "expected Static dispatch for shr, got: {:?}",
+        env.dispatch
+    );
+}
+
+#[test]
+fn user_defined_compiler_attr_does_not_register_intrinsic_dispatch() {
+    let (env, _errors) = check_source(
+        "let Weird [T] := class { \
+             @musi.intrinsic(opcode := 0x23) \
+             let frob (a : T, n : Int) : T \
+         }; \
+         frob(1, 2)",
+    );
+    assert!(
+        env.dispatch.is_empty(),
+        "expected user-defined compiler attrs to have no compiler effect, got: {:?}",
         env.dispatch
     );
 }
@@ -541,7 +545,7 @@ fn foreign_let_accepts_string_ffi_type() {
 
 #[test]
 fn foreign_let_incompatible_param_type() {
-    let (_, errors) = check_source("foreign \"C\" let _f (x : Array of Int) : Int");
+    let (_, errors) = check_source("foreign \"C\" let _f (x : Array[Int]) : Int");
     let has_ffi_error = errors
         .iter()
         .any(|e| matches!(e.kind, SemaErrorKind::IncompatibleFfiType { .. }));

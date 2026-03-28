@@ -1,17 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::mem;
 
-use music_ast::common::{AttrArg, FnDecl, MemberDecl, MemberName, Param};
+use music_ast::common::{AttrArg, MemberDecl, MemberName, Param};
 use music_ast::expr::{
-    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, ImportKind,
+    BinOp, CaseArm, CompClause, ExprKind, FStrPart, FieldTarget, HandlerClause, ImportKind,
     InstanceBody, InstanceDef, LetBinding, PostfixOp, QuoteKind, RecordField, SpliceKind,
     TypeOpKind, UnaryOp,
 };
 use music_ast::pat::{PatKind, RecordPatField};
 use music_ast::ty::TyKind;
 use music_ast::{ExprId, ExprList, TyId};
-use music_builtins::types::BuiltinType;
-use music_hir::HirBundle;
+use music_owned::types::BuiltinType;
+use music_hir::TypedModule;
 use music_il::format::{
     self, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor, EffectOpDescriptor,
     FfiType, ForeignAbi, ForeignDescriptor, TypeDescriptor, TypeKind,
@@ -20,7 +20,7 @@ use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_resolve::def::{DefKind, Visibility};
 use music_sema::env::{DispatchInfo, TypeKey};
-use music_sema::types::{NominalKey, Ty};
+use music_sema::types::{NominalKey, SemaTypeId, Ty};
 use music_shared::{Ident, Literal, Symbol, SymbolList};
 
 use crate::error::EmitError;
@@ -58,7 +58,7 @@ pub struct SeamModule {
 
 /// Lowers THIR expressions to SEAM bytecode instructions.
 struct Emitter<'thir> {
-    thir: &'thir HirBundle,
+    thir: &'thir TypedModule,
     pool: ConstantPool,
     methods: Vec<MethodEntry>,
     globals: Vec<GlobalEntry>,
@@ -89,7 +89,7 @@ struct Emitter<'thir> {
 /// Returns [`EmitError::Unimplemented`] when the bundle contains a language
 /// feature that has no codegen path yet (e.g. `via` derived instances,
 /// dynamic dispatch, splice-by-name, or named field assignment).
-pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
+pub fn emit(thir: &TypedModule) -> EmitResult<SeamModule> {
     emit_with_context(thir, HashMap::new())
 }
 
@@ -104,7 +104,7 @@ pub fn emit(thir: &HirBundle) -> EmitResult<SeamModule> {
 /// Returns [`EmitError`] on emission failure.
 #[expect(clippy::implicit_hasher, reason = "always called with default HashMap")]
 pub fn emit_with_context(
-    thir: &HirBundle,
+    thir: &TypedModule,
     module_exports: HashMap<Symbol, Vec<ImportedGlobal>>,
 ) -> EmitResult<SeamModule> {
     let mut emitter = Emitter {
@@ -681,7 +681,7 @@ impl Emitter<'_> {
             } => self.emit_index(expr, indices)?,
             ExprKind::FStrLit(ref parts) => self.emit_fstr(parts)?,
             ExprKind::Perform(operand) => self.emit_perform(expr_id, operand)?,
-            ExprKind::Handle(ref data) => self.emit_handle(expr_id, &data.handlers, data.body)?,
+            ExprKind::Handle(ref data) => self.emit_handle(expr_id, &data.clauses, data.body)?,
             ExprKind::Resume(opt) => self.emit_resume(opt)?,
             ExprKind::MatrixLit(ref rows) => self.emit_matrix_lit(expr_id, rows)?,
             ExprKind::RecordUpdate { base, ref fields } => self.emit_record_update(base, fields)?,
@@ -1493,7 +1493,12 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn emit_handle(&mut self, expr_id: ExprId, handlers: &[FnDecl], body: ExprId) -> EmitResult {
+    fn emit_handle(
+        &mut self,
+        expr_id: ExprId,
+        clauses: &[HandlerClause],
+        body: ExprId,
+    ) -> EmitResult {
         let effect_id = self
             .thir
             .type_env
@@ -1502,8 +1507,17 @@ impl Emitter<'_> {
             .copied()
             .expect("missing effect metadata for handle expression");
 
-        for handler in handlers {
-            let op_name = member_name_symbol(&handler.name);
+        for clause in clauses {
+            let HandlerClause::Op {
+                name,
+                args,
+                cont,
+                body: handler_body,
+            } = clause
+            else {
+                continue;
+            };
+            let op_name = name.name;
             let op_id = self
                 .thir
                 .type_env
@@ -1518,9 +1532,8 @@ impl Emitter<'_> {
                 op_id,
                 0,
             ));
-            if let Some(handler_body) = handler.body {
-                self.emit_expr(handler_body)?;
-            }
+            self.emit_handler_clause_prologue(effect_id, op_name, args, *cont);
+            self.emit_expr(*handler_body)?;
             let current = self.current_instructions.len();
             let byte_offset: usize = self.current_instructions[pos + 1..current]
                 .iter()
@@ -1531,11 +1544,75 @@ impl Emitter<'_> {
                 Instruction::with_effect_jump(Opcode::EffHdlPush, effect_id, op_id, offset);
         }
 
+        let return_clause = clauses.iter().find_map(|clause| match clause {
+            HandlerClause::Return { binder, body } => Some((*binder, *body)),
+            HandlerClause::Op { .. } => None,
+        });
         self.emit_expr(body)?;
-        for _ in handlers {
-            self.push(Instruction::simple(Opcode::EffHdlPop));
+        if let Some((binder, return_body)) = return_clause {
+            let slot = self.local_slot(binder.name);
+            self.emit_st_loc(slot);
+            self.emit_expr(return_body)?;
+        }
+        for clause in clauses {
+            if matches!(clause, HandlerClause::Op { .. }) {
+                self.push(Instruction::simple(Opcode::EffHdlPop));
+            }
         }
         Ok(())
+    }
+
+    fn emit_handler_clause_prologue(
+        &mut self,
+        effect_id: u16,
+        op_name: Symbol,
+        args: &[Ident],
+        cont: Ident,
+    ) {
+        let cont_slot = self.local_slot(cont.name);
+        self.emit_st_loc(cont_slot);
+        let Some(op_info) = self.thir.type_env.effect_by_id(effect_id).and_then(|effect| {
+            effect.operations.iter().find(|op| op.name == op_name)
+        }) else {
+            return;
+        };
+        match self.effect_payload_arity(op_info.param_ty) {
+            0 => self.push(Instruction::simple(Opcode::Pop)),
+            1 => {
+                if let Some(arg) = args.first() {
+                    let arg_slot = self.local_slot(arg.name);
+                    self.emit_st_loc(arg_slot);
+                } else {
+                    self.push(Instruction::simple(Opcode::Pop));
+                }
+            }
+            _ => {
+                let payload_sym = self.alloc_anon_symbol();
+                let payload_slot = self.local_slot(payload_sym);
+                self.emit_st_loc(payload_slot);
+                for (idx, arg) in args.iter().enumerate() {
+                    self.emit_ld_loc(payload_slot);
+                    self.push(Instruction::with_u8(
+                        Opcode::ArrGetI,
+                        u8::try_from(idx).expect("too many handler payload arguments (>255)"),
+                    ));
+                    let arg_slot = self.local_slot(arg.name);
+                    self.emit_st_loc(arg_slot);
+                }
+            }
+        }
+    }
+
+    fn effect_payload_arity(&self, param_ty: Option<SemaTypeId>) -> usize {
+        let Some(param_ty) = param_ty else {
+            return 0;
+        };
+        let resolved = self.thir.type_env.resolve_var(param_ty);
+        match self.thir.type_env.types.get(resolved) {
+            Ty::Unit => 0,
+            Ty::Tuple(elems) => elems.len(),
+            _ => 1,
+        }
     }
 
     fn emit_resume(&mut self, value: Option<ExprId>) -> EmitResult {
@@ -2121,7 +2198,11 @@ impl Emitter<'_> {
     fn extract_lib_attr(&mut self, attrs: &[music_ast::AttrId]) -> Option<u32> {
         for &attr_id in attrs {
             let attr = self.thir.db.ast.attrs.get(attr_id);
-            if self.thir.db.interner.resolve(attr.kind.name.name) != "lib" {
+            let path = &attr.kind.path;
+            if path.len() != 2
+                || self.thir.db.interner.resolve(path[0].name) != "ffi"
+                || self.thir.db.interner.resolve(path[1].name) != "link"
+            {
                 continue;
             }
             for arg in &attr.kind.args {
@@ -2327,6 +2408,8 @@ const fn dynamic_binop_opcodes(op: BinOp) -> Option<(Opcode, Opcode)> {
     match op {
         BinOp::Add => Some((Opcode::IAdd, Opcode::FAdd)),
         BinOp::Sub => Some((Opcode::ISub, Opcode::FSub)),
+        BinOp::Shl => Some((Opcode::Shl, Opcode::Shl)),
+        BinOp::Shr => Some((Opcode::Shr, Opcode::Shr)),
         BinOp::Mul => Some((Opcode::IMul, Opcode::FMul)),
         BinOp::Div => Some((Opcode::IDiv, Opcode::FDiv)),
         BinOp::Rem => Some((Opcode::IRem, Opcode::IRem)),
@@ -2355,6 +2438,8 @@ fn binop_to_opcode(op: BinOp) -> Opcode {
     match op {
         BinOp::Add => Opcode::IAdd,
         BinOp::Sub => Opcode::ISub,
+        BinOp::Shl => Opcode::Shl,
+        BinOp::Shr => Opcode::Shr,
         BinOp::Mul => Opcode::IMul,
         BinOp::Div => Opcode::IDiv,
         BinOp::Rem => Opcode::IRem,

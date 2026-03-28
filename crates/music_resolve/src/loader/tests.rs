@@ -88,7 +88,7 @@ fn resolve_musi_intrinsic_module() {
     let current_file = PathBuf::from("/project/main.ms");
 
     let resolved = loader.resolve("musi:test", &current_file);
-    assert!(matches!(resolved, Some(ResolvedImport::File(path)) if path.ends_with("crates/music_builtins/modules/test.ms")));
+    assert!(matches!(resolved, Some(ResolvedImport::File(path)) if path.ends_with("crates/music_owned/modules/test.ms")));
     assert!(loader.resolve("musi:core", &current_file).is_none());
 }
 
