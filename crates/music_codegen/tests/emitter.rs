@@ -25,7 +25,7 @@ use music_sema::Ty;
 use music_sema::{DispatchInfo, EffectUse, TypeEnv};
 use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
-use music_emit::emit;
+use music_codegen::emit;
 
 fn build_typed_module(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> TypedModule {
     let mut interner = Interner::new();

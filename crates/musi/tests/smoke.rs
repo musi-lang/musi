@@ -67,7 +67,7 @@ fn diagnostic_has_line_col() {
 
 #[test]
 fn build_produces_seam_bytes() {
-    use music_emit::{emit, write_seam};
+    use music_codegen::{emit, write_seam};
 
     let mut file = tempfile::NamedTempFile::with_suffix(".ms").expect("tempfile");
     write!(file, "let _x := 42;").expect("write");

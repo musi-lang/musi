@@ -4,9 +4,9 @@ use std::rc::Rc;
 
 use musi::driver::{compile_project, emit_project_diagnostics};
 use musi_vm::Vm;
-use music_emit::{emit_project, write_seam};
+use music_codegen::{emit_project, write_seam};
 
-use super::collector::{new_handler, TestCollector};
+use super::collector::{TestCollector, new_handler};
 use super::discovery::{default_suite_name, is_test_file};
 use super::model::TestSuite;
 

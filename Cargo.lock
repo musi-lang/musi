@@ -507,7 +507,7 @@ version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_vm",
- "music_emit",
+ "music_codegen",
  "music_hir",
  "music_shared",
  "tempfile",
@@ -543,6 +543,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_codegen"
+version = "0.1.0-rc1"
+dependencies = [
+ "musi_vm",
+ "music_ast",
+ "music_db",
+ "music_hir",
+ "music_il",
+ "music_owned",
+ "music_resolve",
+ "music_sema",
+ "music_shared",
+ "tempfile",
+]
+
+[[package]]
 name = "music_config"
 version = "0.1.0-rc1"
 dependencies = [
@@ -558,22 +574,6 @@ dependencies = [
  "music_arena",
  "music_ast",
  "music_shared",
-]
-
-[[package]]
-name = "music_emit"
-version = "0.1.0-rc1"
-dependencies = [
- "musi_vm",
- "music_ast",
- "music_db",
- "music_hir",
- "music_il",
- "music_owned",
- "music_resolve",
- "music_sema",
- "music_shared",
- "tempfile",
 ]
 
 [[package]]

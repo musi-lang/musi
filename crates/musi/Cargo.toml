@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 music_hir = { path = "../music_hir" }
-music_emit = { path = "../music_emit" }
+music_codegen = { path = "../music_codegen" }
 musi_vm = { path = "../musi_vm" }
 music_shared = { path = "../music_shared" }
 

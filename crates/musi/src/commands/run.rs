@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use clap::Args;
 use musi::driver::{compile_project, emit_project_diagnostics};
 use musi_vm::Vm;
-use music_emit::{emit_project, write_seam};
+use music_codegen::{emit_project, write_seam};
 
 #[derive(Args)]
 pub struct RunArgs {

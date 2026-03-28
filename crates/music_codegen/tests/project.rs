@@ -4,9 +4,9 @@ use std::fs;
 use std::path::Path;
 
 use musi_vm::Vm;
-use music_emit::pool::ConstantEntry;
-use music_emit::project::emit_project;
-use music_emit::{ProjectEmitResult, write_seam};
+use music_codegen::pool::ConstantEntry;
+use music_codegen::project::emit_project;
+use music_codegen::{ProjectEmitResult, write_seam};
 use music_hir::type_project;
 use music_il::instruction::Operand;
 use music_il::opcode::Opcode;
