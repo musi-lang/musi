@@ -8,8 +8,9 @@ use music_config::{Workspace, load_config};
 use music_db::Db;
 use music_lex::Lexer;
 use music_parse::parse;
-use music_resolve::queries::{ResolutionMap, ResolveDb};
-use music_resolve::{ModuleId, ModuleLoader, ModuleResult, resolve_project};
+use music_resolve::{
+    ModuleId, ModuleLoader, ModuleResult, ResolutionMap, ResolveDb, resolve_project,
+};
 use music_sema::TypeEnv;
 use music_shared::diag::Diag;
 use music_shared::diag::emit_to_stderr;

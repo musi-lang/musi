@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use music_db::Db;
 use music_hir::lower;
 use music_lex::Lexer;
 use music_parse::parse;
-use music_resolve::queries::ResolveDb;
+use music_resolve::ResolveDb;
 use music_shared::{Interner, SourceMap};
 
 fn build_resolve_db(source: &str) -> ResolveDb {

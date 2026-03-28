@@ -1,7 +1,7 @@
+use music_ast::ExprId;
 use music_ast::data::AstData;
 use music_ast::expr::{BinOp, ExprKind, PiecewiseArm, PwGuard};
 use music_ast::walk::map_expr_children;
-use music_ast::ExprId;
 use music_shared::{Span, Spanned};
 
 /// Desugar AST-only nodes into HIR-only nodes.

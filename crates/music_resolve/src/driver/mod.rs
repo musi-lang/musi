@@ -5,16 +5,16 @@ use std::{fmt, fs, io, mem};
 
 use music_ast::expr::{ExprKind, ImportKind};
 use music_db::Db;
-use music_shared::diag::Diag;
-use music_shared::{Interner, SourceMap};
 use music_lex::Lexer;
 use music_parse::parse;
+use music_shared::diag::Diag;
+use music_shared::{Interner, SourceMap};
 
 use crate::def::Visibility;
 use crate::errors::ResolveError;
 use crate::graph::{ExportInfo, ModuleExports, ModuleGraph, ModuleId};
 use crate::loader::{ModuleLoader, ResolvedImport};
-use crate::queries::{ResolutionMap, ResolveDb};
+use crate::{ResolutionMap, ResolveDb};
 
 /// The result of resolving an entire project starting from an entrypoint.
 pub struct ProjectResolution {

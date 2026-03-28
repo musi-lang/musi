@@ -88,7 +88,9 @@ fn resolve_musi_intrinsic_module() {
     let current_file = PathBuf::from("/project/main.ms");
 
     let resolved = loader.resolve("musi:test", &current_file);
-    assert!(matches!(resolved, Some(ResolvedImport::File(path)) if path.ends_with("crates/music_owned/modules/test.ms")));
+    assert!(
+        matches!(resolved, Some(ResolvedImport::File(path)) if path.ends_with("crates/music_owned/modules/test.ms"))
+    );
     assert!(loader.resolve("musi:core", &current_file).is_none());
 }
 
@@ -177,7 +179,9 @@ fn resolve_directory_root_uses_manifest_main() {
     let resolved = loader.resolve("./pkg", &current_file);
     assert_eq!(
         resolved,
-        Some(ResolvedImport::File(canon(&dir.path().join("pkg/src/app.ms"))))
+        Some(ResolvedImport::File(canon(
+            &dir.path().join("pkg/src/app.ms")
+        )))
     );
 }
 
@@ -199,7 +203,9 @@ fn resolve_directory_subpath_uses_manifest_exports() {
     let resolved = loader.resolve("./pkg/math", &current_file);
     assert_eq!(
         resolved,
-        Some(ResolvedImport::File(canon(&dir.path().join("pkg/src/math.ms"))))
+        Some(ResolvedImport::File(canon(
+            &dir.path().join("pkg/src/math.ms")
+        )))
     );
 }
 
@@ -218,7 +224,12 @@ fn reject_explicit_package_entry_import() {
     let loader = ModuleLoader::new(dir.path().to_path_buf());
     let current_file = dir.path().join("main.ms");
 
-    assert_eq!(loader.resolve("./pkg", &current_file), Some(ResolvedImport::File(canon(&dir.path().join("pkg/index.ms")))));
+    assert_eq!(
+        loader.resolve("./pkg", &current_file),
+        Some(ResolvedImport::File(canon(
+            &dir.path().join("pkg/index.ms")
+        )))
+    );
     assert!(loader.resolve("./pkg/index", &current_file).is_none());
     assert!(loader.resolve("./pkg/index.ms", &current_file).is_none());
 }

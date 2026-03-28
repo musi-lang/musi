@@ -78,11 +78,7 @@ impl Value {
 
     #[must_use]
     pub const fn from_bool(b: bool) -> Self {
-        if b {
-            Self::TRUE
-        } else {
-            Self::FALSE
-        }
+        if b { Self::TRUE } else { Self::FALSE }
     }
 
     #[must_use]

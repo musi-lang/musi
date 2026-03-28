@@ -1,19 +1,19 @@
-pub mod check;
-pub mod dispatch;
-pub mod effects;
-pub mod env;
-pub mod errors;
-pub mod types;
-pub mod unify;
+mod check;
+mod dispatch;
+mod effects;
+mod env;
+mod errors;
+mod types;
+mod unify;
 
 pub use check::SemaDb;
-pub use env::TypeEnv;
+pub use env::{DispatchInfo, EffectUse, TypeEnv, TypeKey, VariantInfo};
 pub use errors::{SemaError, SemaErrorKind};
-pub use types::{SemaTypeId, Ty, TyVarId};
+pub use types::{NominalKey, SemaTypeId, Ty, TyVarId};
 
 use music_config::CompilerOptions;
 use music_db::Db;
-use music_resolve::queries::ResolutionMap;
+use music_resolve::ResolutionMap;
 
 /// Runs bidirectional type checking on a resolved module.
 ///

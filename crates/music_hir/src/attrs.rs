@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use music_ast::ExprId;
 use music_ast::common::{Attr, AttrArg};
 use music_ast::expr::ExprKind;
-use music_ast::ExprId;
 use music_db::Db;
 use music_shared::Literal;
 

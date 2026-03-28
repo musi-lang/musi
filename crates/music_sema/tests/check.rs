@@ -2,18 +2,15 @@
 
 use std::path::PathBuf;
 
-use music_owned::types::BuiltinType;
 use music_db::Db;
-use music_shared::{Interner, SourceMap};
 use music_hir::lower;
 use music_lex::Lexer;
+use music_owned::types::BuiltinType;
 use music_parse::parse;
-use music_resolve::queries::ResolveDb;
+use music_resolve::ResolveDb;
+use music_shared::{Interner, SourceMap};
 
-use music_sema::env::TypeEnv;
-use music_sema::errors::{SemaError, SemaErrorKind};
-use music_sema::type_check;
-use music_sema::types::Ty;
+use music_sema::{SemaError, SemaErrorKind, Ty, TypeEnv, type_check};
 
 fn check_source(source: &str) -> (TypeEnv, Vec<SemaError>) {
     let mut interner = Interner::new();
@@ -429,7 +426,7 @@ fn duplicate_instance_detected() {
 #[test]
 fn intrinsic_method_dispatch_recorded() {
     use music_il::opcode::Opcode;
-    use music_sema::env::DispatchInfo;
+    use music_sema::DispatchInfo;
     let (env, _errors) = check_source("1 shl 2");
     let has_static = env
         .dispatch
@@ -445,7 +442,7 @@ fn intrinsic_method_dispatch_recorded() {
 #[test]
 fn intrinsic_method_positional_opcode() {
     use music_il::opcode::Opcode;
-    use music_sema::env::DispatchInfo;
+    use music_sema::DispatchInfo;
     let (env, _errors) = check_source("1 shr 1");
     let has_static = env
         .dispatch

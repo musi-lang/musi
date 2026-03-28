@@ -5,6 +5,7 @@ use std::fs;
 use music_hir::type_project;
 use music_resolve::loader::ModuleLoader;
 use music_resolve::resolve_project;
+use music_shared::diag::DiagLevel;
 
 #[test]
 fn typed_project_contains_typed_modules_for_project_order() {
@@ -28,7 +29,10 @@ fn typed_project_contains_typed_modules_for_project_order() {
         "expected dependency order to remain intact"
     );
     assert!(
-        typed.order.iter().all(|module_id| typed.modules.contains_key(module_id)),
+        typed
+            .order
+            .iter()
+            .all(|module_id| typed.modules.contains_key(module_id)),
         "expected every ordered module to have typed state"
     );
     assert!(
@@ -40,7 +44,11 @@ fn typed_project_contains_typed_modules_for_project_order() {
 #[test]
 fn typed_project_preserves_sema_diagnostics() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("main.ms"), "export let x : Int := \"nope\";").unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "export let x : Int := \"nope\";",
+    )
+    .unwrap();
 
     let entry = dir.path().join("main.ms");
     let loader = ModuleLoader::new(dir.path().to_path_buf());
@@ -88,7 +96,11 @@ fn user_module_rejects_reserved_compiler_attributes() {
 #[test]
 fn diag_allow_suppresses_matching_code() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("main.ms"), "@diag.allow(ms4023) let x := 1;").unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "@diag.allow(ms4023) let x := 1;",
+    )
+    .unwrap();
 
     let entry = dir.path().join("main.ms");
     let loader = ModuleLoader::new(dir.path().to_path_buf());
@@ -130,7 +142,7 @@ fn diag_warn_demotes_matching_error_code() {
             .diagnostics
             .iter()
             .any(|diag| diag.code.map(|code| code.raw()) == Some(2502)
-                && matches!(diag.level, music_shared::diag::DiagLevel::Warning)),
+                && matches!(diag.level, DiagLevel::Warning)),
         "expected ms2502 to be demoted to warning"
     );
 }
@@ -169,7 +181,11 @@ fn diag_expect_consumes_matching_diagnostic() {
 #[test]
 fn diag_expect_reports_unmet_code() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("main.ms"), "@diag.expect(ms2502) let x := 1;").unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "@diag.expect(ms2502) let x := 1;",
+    )
+    .unwrap();
 
     let entry = dir.path().join("main.ms");
     let loader = ModuleLoader::new(dir.path().to_path_buf());
@@ -189,7 +205,11 @@ fn diag_expect_reports_unmet_code() {
 #[test]
 fn legacy_public_attr_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("main.ms"), "@diagnostic.allow(ms2502) let x := 1;").unwrap();
+    fs::write(
+        dir.path().join("main.ms"),
+        "@diagnostic.allow(ms2502) let x := 1;",
+    )
+    .unwrap();
 
     let entry = dir.path().join("main.ms");
     let loader = ModuleLoader::new(dir.path().to_path_buf());

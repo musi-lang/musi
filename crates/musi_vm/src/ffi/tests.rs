@@ -21,7 +21,11 @@ const LIBM_NAME: &str = "libm.so.6";
 fn builtin_host_symbols_do_not_require_library_load() {
     let mut rt = FfiRuntime::new();
     rt.load_library("").unwrap();
-    assert!(!rt.resolve_symbol("", "musi_io_read_text").unwrap().is_null());
+    assert!(
+        !rt.resolve_symbol("", "musi_io_read_text")
+            .unwrap()
+            .is_null()
+    );
 }
 
 #[test]
@@ -127,9 +131,21 @@ fn marshal_string_strlen() {
 fn resolve_musi_io_symbols_from_builtin_host_symbols() {
     let mut rt = FfiRuntime::new();
     rt.load_library("").unwrap();
-    assert!(!rt.resolve_symbol("", "musi_io_read_text").unwrap().is_null());
-    assert!(!rt.resolve_symbol("", "musi_io_write_text").unwrap().is_null());
-    assert!(!rt.resolve_symbol("", "musi_io_last_error").unwrap().is_null());
+    assert!(
+        !rt.resolve_symbol("", "musi_io_read_text")
+            .unwrap()
+            .is_null()
+    );
+    assert!(
+        !rt.resolve_symbol("", "musi_io_write_text")
+            .unwrap()
+            .is_null()
+    );
+    assert!(
+        !rt.resolve_symbol("", "musi_io_last_error")
+            .unwrap()
+            .is_null()
+    );
 }
 
 #[test]

@@ -66,7 +66,10 @@ impl ResolveError {
             ),
             ResolveErrorKind::NotYetDefined(sym) => (
                 DiagCode::new(3005),
-                format!("binding '{}' is used before its definition", interner.resolve(*sym)),
+                format!(
+                    "binding '{}' is used before its definition",
+                    interner.resolve(*sym)
+                ),
                 None,
             ),
             ResolveErrorKind::ImportNotFound(sym) => (
@@ -81,10 +84,7 @@ impl ResolveError {
             ),
             ResolveErrorKind::CyclicImportChain { path, chain } => (
                 DiagCode::new(3008),
-                format!(
-                    "cyclic import detected for '{}'",
-                    interner.resolve(*path)
-                ),
+                format!("cyclic import detected for '{}'", interner.resolve(*path)),
                 Some(format!(
                     "cycle: {}",
                     chain

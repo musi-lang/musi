@@ -7,18 +7,18 @@
 )]
 
 use std::collections::HashMap;
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_int, c_void};
 
 use libffi::middle::{Arg, Cif, CodePtr, Type};
 use libloading::Library;
 use music_il::format::FfiType;
 
 use crate::errors::VmError;
+use crate::heap::{Heap, HeapObject};
 use crate::host_io::{
     musi_io_append_text, musi_io_ewrite, musi_io_ewriteln, musi_io_last_error, musi_io_read_text,
     musi_io_write, musi_io_write_text, musi_io_writeln,
 };
-use crate::heap::{Heap, HeapObject};
 use crate::value::Value;
 
 /// Holds loaded shared libraries and resolves symbols at runtime.
@@ -169,7 +169,7 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
                     return Err(VmError::TypeError {
                         expected: "`CPtr`",
                         found: "non-CPtr heap object",
-                    })
+                    });
                 }
                 None => {
                     return Err(VmError::InvalidHeapIndex(idx));
@@ -191,7 +191,7 @@ pub fn value_to_ffi_arg(value: Value, ty: FfiType, heap: &Heap) -> Result<FfiArg
                     return Err(VmError::TypeError {
                         expected: "String",
                         found: "non-String heap object",
-                    })
+                    });
                 }
                 None => {
                     return Err(VmError::InvalidHeapIndex(idx));

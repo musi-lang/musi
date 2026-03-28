@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal, Write};
 
-use crate::source::{SourceId, SourceMap};
 use crate::Span;
+use crate::source::{SourceId, SourceMap};
 
 /// Severity level for a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

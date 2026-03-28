@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use music_il::format::{self, ANON_METHOD_NAME, ENTRY_METHOD_NAME, HEADER_SIZE};
-use music_il::instruction::{Instruction, Operand};
 use crate::emitter::SeamModule;
 use crate::pool::ConstantEntry;
+use music_il::format::{self, ANON_METHOD_NAME, ENTRY_METHOD_NAME, HEADER_SIZE};
+use music_il::instruction::{Instruction, Operand};
 
 /// Serialize a [`SeamModule`] into `.seam` binary format bytes.
 #[must_use]
@@ -399,12 +399,14 @@ fn build_class_table(module: &SeamModule, string_table: &StringTable) -> Vec<u8>
 
     for class in &module.classes {
         out.extend_from_slice(&class.id.to_le_bytes());
-        let class_name_offset = metadata_offset(string_table, constant_string(module, class.name_idx));
+        let class_name_offset =
+            metadata_offset(string_table, constant_string(module, class.name_idx));
         out.extend_from_slice(&class_name_offset.to_le_bytes());
         out.extend_from_slice(&class.method_count.to_le_bytes());
 
         for &name_idx in &class.method_names {
-            let method_name_offset = metadata_offset(string_table, constant_string(module, name_idx));
+            let method_name_offset =
+                metadata_offset(string_table, constant_string(module, name_idx));
             out.extend_from_slice(&method_name_offset.to_le_bytes());
         }
 

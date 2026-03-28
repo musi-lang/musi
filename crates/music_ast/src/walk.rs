@@ -1,6 +1,8 @@
 use music_shared::{Span, Spanned};
 
-use crate::common::{FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef};
+use crate::common::{
+    FnDecl, LawDecl, MemberDecl, Param, RecordDefField, Signature, TyRef, VariantDef,
+};
 use crate::data::AstData;
 use crate::expr::{
     CaseArm, CaseData, ClassDefData, CompClause, ComprehensionData, DataBody, ExprKind, FStrPart,

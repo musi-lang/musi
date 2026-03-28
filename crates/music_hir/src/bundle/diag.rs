@@ -1,23 +1,14 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 use music_ast::common::{Attr, AttrArg, MemberDecl};
 use music_ast::expr::{DataBody, ExprKind, InstanceBody};
 use music_ast::{AttrId, ExprId};
 use music_db::Db;
-use music_owned::modules::is_compiler_owned_path;
-use music_resolve::def::{DefId, DefInfo};
-use music_resolve::queries::ResolutionMap;
-use music_resolve::{ModuleGraph, ModuleId, ModuleLoader, ModuleResult, ProjectResolution};
-use music_sema::env::{DispatchInfo, TypeEnv, VariantInfo};
-use music_sema::type_check;
-use music_sema::types::SemaTypeId;
 use music_shared::diag::DiagLevel;
 use music_shared::diag::{Diag, DiagCode};
-use music_shared::{Interner, Literal, SourceId, Span, Symbol};
+use music_shared::{Interner, Literal, SourceId, Span};
 
-use crate::attrs::{AttrBindError, AttrSpec, attr_expr_string, attr_path_matches, bind_attr};
-use crate::lower;
+use crate::{AttrBindError, AttrSpec, attr_expr_string, attr_path_matches, bind_attr};
 
 const LINK_ATTR: AttrSpec = AttrSpec {
     path: &["link"],
@@ -25,192 +16,15 @@ const LINK_ATTR: AttrSpec = AttrSpec {
     required: &[],
 };
 
-/// The complete typed state for one module.
-///
-/// This is the canonical handoff from resolution/sema into later compiler
-/// stages. It owns the module database, resolution results, and type facts.
-pub struct TypedModule {
-    pub db: Db,
-    pub resolution: ResolutionMap,
-    pub type_env: TypeEnv,
-    pub diagnostics: Vec<Diag>,
-    pub has_errors: bool,
-    pub module_id: Option<ModuleId>,
-    pub path: PathBuf,
-}
-
-/// The complete typed state for a resolved project.
-pub struct TypedProject {
-    pub loader: ModuleLoader,
-    pub graph: ModuleGraph,
-    pub modules: HashMap<ModuleId, TypedModule>,
-    pub order: Vec<ModuleId>,
-}
-
-impl TypedModule {
-    #[must_use]
-    pub fn new(db: Db, resolution: ResolutionMap, type_env: TypeEnv) -> Self {
-        Self {
-            db,
-            resolution,
-            type_env,
-            diagnostics: Vec::new(),
-            has_errors: false,
-            module_id: None,
-            path: PathBuf::new(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_status(
-        db: Db,
-        resolution: ResolutionMap,
-        type_env: TypeEnv,
-        diagnostics: Vec<Diag>,
-        has_errors: bool,
-        module_id: Option<ModuleId>,
-        path: PathBuf,
-    ) -> Self {
-        let mut module = Self::new(db, resolution, type_env);
-        module.diagnostics = diagnostics;
-        module.has_errors = has_errors;
-        module.module_id = module_id;
-        module.path = path;
-        module
-    }
-
-    #[must_use]
-    pub fn expr_type(&self, expr_id: ExprId) -> Option<SemaTypeId> {
-        self.type_env.type_map.get(&expr_id).copied()
-    }
-
-    #[must_use]
-    pub fn dispatch(&self, expr_id: ExprId) -> Option<&DispatchInfo> {
-        self.type_env.dispatch.get(&expr_id)
-    }
-
-    #[must_use]
-    pub fn variant_info(&self, expr_id: ExprId) -> Option<&VariantInfo> {
-        self.type_env.variant_info.get(&expr_id)
-    }
-
-    /// Returns the stable class ID for a type class by name, if assigned.
-    #[must_use]
-    pub fn class_id(&self, name: Symbol) -> Option<u16> {
-        self.type_env.class_ids.get(&name).copied()
-    }
-
-    /// # Panics
-    ///
-    /// Panics if `def_id` is not present in the resolution arena.
-    #[must_use]
-    pub fn def_info(&self, def_id: DefId) -> &DefInfo {
-        self.resolution.defs.get(def_id)
-    }
-}
-
-/// Convert a resolved project into the canonical typed-project artifact.
-#[must_use]
-pub fn type_project(project: ProjectResolution, loader: ModuleLoader) -> TypedProject {
-    let ProjectResolution {
-        graph,
-        modules,
-        order,
-    } = project;
-    let mut typed_modules = HashMap::with_capacity(modules.len());
-
-    for (module_id, module) in modules {
-        let path = graph.path(module_id).to_path_buf();
-        let typed = type_module(module, Some(module_id), path);
-        let _ = typed_modules.insert(module_id, typed);
-    }
-
-    TypedProject {
-        loader,
-        graph,
-        modules: typed_modules,
-        order,
-    }
-}
-
-/// Convert one resolved module into the canonical typed-module artifact.
-#[must_use]
-pub fn type_module(
-    module: ModuleResult,
-    module_id: Option<ModuleId>,
-    path: PathBuf,
-) -> TypedModule {
-    let ModuleResult {
-        mut db,
-        resolution,
-        errors: _,
-        mut diagnostics,
-        has_errors,
-    } = module;
-
-    let source_id = db.source.iter().next().map(|source| source.id());
-    if let Some(source_id) = source_id {
-        diagnostics.extend(validate_attributes(&db, &path, source_id));
-    }
-
-    let mut diag_policy = collect_diag_policy(&db, &db.interner);
-    if let Some(source_id) = source_id {
-        apply_diag_policy(&mut diagnostics, &mut diag_policy, source_id, false);
-    }
-
-    let has_errors = has_errors || !diagnostics.is_empty();
-
-    if has_errors {
-        if let Some(source_id) = source_id {
-            finalize_diag_policy(&mut diagnostics, &mut diag_policy, source_id);
-        }
-        return TypedModule::with_status(
-            db,
-            resolution,
-            TypeEnv::new(),
-            diagnostics,
-            true,
-            module_id,
-            path,
-        );
-    }
-
-    lower(&mut db.ast);
-    let (db, resolution, type_env, sema_errors) = type_check(db, resolution, None);
-    let has_sema_errors = !sema_errors.is_empty();
-    let mut typed_diagnostics = diagnostics;
-    let source_id = db.source.iter().next().map(|source| source.id());
-    if let Some(source_id) = source_id {
-        for err in &sema_errors {
-            typed_diagnostics.push(err.diagnostic(&db.interner, source_id));
-        }
-    }
-
-    if let Some(source_id) = source_id {
-        apply_diag_policy(&mut typed_diagnostics, &mut diag_policy, source_id, false);
-        finalize_diag_policy(&mut typed_diagnostics, &mut diag_policy, source_id);
-    }
-
-    TypedModule::with_status(
-        db,
-        resolution,
-        type_env,
-        typed_diagnostics,
-        has_sema_errors,
-        module_id,
-        path,
-    )
-}
-
 #[derive(Default)]
-struct DiagPolicy {
+pub(super) struct DiagPolicy {
     allow: HashSet<DiagCode>,
     warn: HashSet<DiagCode>,
     deny: HashSet<DiagCode>,
     expect: HashMap<DiagCode, Vec<Span>>,
 }
 
-fn collect_diag_policy(db: &Db, interner: &Interner) -> DiagPolicy {
+pub(super) fn collect_diag_policy(db: &Db, interner: &Interner) -> DiagPolicy {
     let mut policy = DiagPolicy::default();
     for (_, attr) in &db.ast.attrs {
         let path = attr_path_strings(db, &attr.kind);
@@ -240,11 +54,10 @@ fn collect_diag_policy(db: &Db, interner: &Interner) -> DiagPolicy {
     policy
 }
 
-fn apply_diag_policy(
+pub(super) fn apply_diag_policy(
     diagnostics: &mut Vec<Diag>,
     policy: &mut DiagPolicy,
     _source_id: SourceId,
-    _finalize: bool,
 ) {
     let mut filtered = Vec::with_capacity(diagnostics.len());
     for mut diag in diagnostics.drain(..) {
@@ -274,7 +87,11 @@ fn apply_diag_policy(
     *diagnostics = filtered;
 }
 
-fn finalize_diag_policy(diagnostics: &mut Vec<Diag>, policy: &mut DiagPolicy, source_id: SourceId) {
+pub(super) fn finalize_diag_policy(
+    diagnostics: &mut Vec<Diag>,
+    policy: &mut DiagPolicy,
+    source_id: SourceId,
+) {
     for (code, spans) in std::mem::take(&mut policy.expect) {
         for span in spans {
             diagnostics.push(
@@ -286,9 +103,8 @@ fn finalize_diag_policy(diagnostics: &mut Vec<Diag>, policy: &mut DiagPolicy, so
     }
 }
 
-fn validate_attributes(db: &Db, path: &PathBuf, source_id: SourceId) -> Vec<Diag> {
+pub(super) fn validate_attributes(db: &Db, compiler_owned: bool, source_id: SourceId) -> Vec<Diag> {
     let mut diagnostics = Vec::new();
-    let compiler_owned = is_compiler_owned_path(path);
     for &expr_id in &db.ast.root {
         validate_expr_attributes(db, expr_id, compiler_owned, source_id, &mut diagnostics);
     }

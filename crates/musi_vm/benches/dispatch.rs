@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use musi_vm::internal::{Method, Module};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use musi_vm::Vm;
+use musi_vm::internal::{Method, Module};
 use music_il::opcode::Opcode;
 
 const ENTRY_POINT_NAME: u32 = u32::MAX;

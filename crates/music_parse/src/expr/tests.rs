@@ -202,7 +202,10 @@ fn unit() {
 fn attr_path_on_let() {
     let source = "@musi.lang(name := \"Bool\") let Bool := data { | True | False };";
     let (tokens, lex_errors) = Lexer::new(source).lex();
-    assert!(lex_errors.is_empty(), "unexpected lex errors: {lex_errors:?}");
+    assert!(
+        lex_errors.is_empty(),
+        "unexpected lex errors: {lex_errors:?}"
+    );
     let mut interner = Interner::new();
     let (ast, errors) = crate::parse(&tokens, source, &mut interner);
     assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
@@ -316,7 +319,8 @@ fn perform_expr() {
 
 #[test]
 fn handle_expr() {
-    let (ast, errors) = parse_expr("handle value with Test of (| return x => x | emit(arg, k) => resume k)");
+    let (ast, errors) =
+        parse_expr("handle value with Test of (| return x => x | emit(arg, k) => resume k)");
     assert!(errors.is_empty());
     assert!(matches!(root_kind(&ast), ExprKind::Handle(_)));
 }
@@ -331,7 +335,8 @@ fn handle_expr_with_effect_args() {
 
 #[test]
 fn foreign_let_with_outer_link_attr() {
-    let (ast, errors) = parse_expr("@link(name := \"c\") foreign \"c\" let puts (s : CString) : Int");
+    let (ast, errors) =
+        parse_expr("@link(name := \"c\") foreign \"c\" let puts (s : CString) : Int");
     assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
     let ExprKind::Let(binding) = root_kind(&ast) else {
         panic!("expected let binding");
@@ -342,7 +347,8 @@ fn foreign_let_with_outer_link_attr() {
 
 #[test]
 fn foreign_block_requires_let_bindings() {
-    let (ast, errors) = parse_expr("@link(name := \"c\") foreign \"c\" (let puts (s : CString) : Int)");
+    let (ast, errors) =
+        parse_expr("@link(name := \"c\") foreign \"c\" (let puts (s : CString) : Int)");
     assert!(errors.is_empty(), "unexpected parse errors: {errors:?}");
     let ExprKind::Seq(items) = root_kind(&ast) else {
         panic!("expected foreign block sequence");

@@ -3,9 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+use music_resolve::ResolveErrorKind;
 use music_resolve::driver::resolve_project;
 use music_resolve::loader::ModuleLoader;
-use music_resolve::ResolveErrorKind;
 
 fn setup_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();

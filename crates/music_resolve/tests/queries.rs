@@ -4,13 +4,13 @@ use std::path::PathBuf;
 
 use music_db::Db;
 use music_lex::Lexer;
-use music_parse::parse;
 use music_owned::prelude::PRELUDE_MODULE_NAME;
+use music_parse::parse;
 use music_shared::{Interner, SourceMap};
 
 use music_resolve::def::DefKind;
 use music_resolve::errors::{ResolveError, ResolveErrorKind};
-use music_resolve::queries::{ResolutionMap, ResolveDb};
+use music_resolve::{ResolutionMap, ResolveDb};
 
 fn parse_and_resolve(source: &str) -> (Db, ResolutionMap, Vec<ResolveError>) {
     let mut interner = Interner::new();
@@ -138,15 +138,16 @@ fn seeded_prelude_defs_keep_compiler_owned_module_identity() {
     let (_db, res, errors) = parse_and_resolve("");
     assert!(errors.is_empty(), "unexpected errors: {errors:?}");
 
-    let eq = res
-        .defs
-        .iter()
-        .find(|(_, d)| d.kind == DefKind::TypeClass && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME));
-    assert!(eq.is_some(), "expected prelude class defs to keep compiler-owned module identity");
+    let eq = res.defs.iter().find(|(_, d)| {
+        d.kind == DefKind::TypeClass && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME)
+    });
+    assert!(
+        eq.is_some(),
+        "expected prelude class defs to keep compiler-owned module identity"
+    );
 
     let shl = res.defs.iter().find(|(_, d)| {
-        d.kind == DefKind::Method
-            && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME)
+        d.kind == DefKind::Method && d.module_name.as_deref() == Some(PRELUDE_MODULE_NAME)
     });
     assert!(
         shl.is_some(),

@@ -1,5 +1,5 @@
 use music_il::format::{
-    ClassDescriptor, EffectDescriptor, ForeignDescriptor, TypeDescriptor, ENTRY_METHOD_NAME,
+    ClassDescriptor, ENTRY_METHOD_NAME, EffectDescriptor, ForeignDescriptor, TypeDescriptor,
 };
 
 use crate::value::Value;

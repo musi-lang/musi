@@ -1,5 +1,5 @@
-use crate::source::SourceMap;
 use crate::Span;
+use crate::source::SourceMap;
 
 use super::*;
 

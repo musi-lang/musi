@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use music_arena::{Arena, Idx};
 use std::hint::black_box;
 

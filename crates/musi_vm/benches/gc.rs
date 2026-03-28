@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use musi_vm::internal::Heap;
 use musi_vm::value::Value;
 

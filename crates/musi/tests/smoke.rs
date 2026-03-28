@@ -7,8 +7,8 @@ use std::path::Path;
 use std::process::Command;
 
 use music_hir::{TypedModule, analyze_project, compile};
-use music_shared::diag::{emit, Diag};
 use music_shared::SourceMap;
+use music_shared::diag::{Diag, emit};
 
 fn render_diag(diag: &Diag, sources: &SourceMap) -> String {
     let mut buf = Vec::new();

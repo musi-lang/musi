@@ -1,7 +1,7 @@
 use music_ast::expr::BinOp;
+use music_il::opcode::Opcode;
 use music_owned::types::BuiltinType;
 use music_shared::Interner;
-use music_il::opcode::Opcode;
 
 use crate::dispatch::resolve_binop;
 use crate::env::{DispatchInfo, TypeEnv};

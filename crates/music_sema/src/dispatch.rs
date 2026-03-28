@@ -1,6 +1,6 @@
 use music_ast::expr::BinOp;
-use music_owned::types::BuiltinType;
 use music_il::opcode::Opcode;
+use music_owned::types::BuiltinType;
 
 use crate::env::{DispatchInfo, TypeEnv};
 use crate::types::{SemaTypeId, Ty};

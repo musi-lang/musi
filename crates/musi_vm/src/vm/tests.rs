@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::as_conversions)]
 
 use music_il::format::{
-    ClassDescriptor, ClassInstance, ClassMethod, FfiType, ForeignAbi, ForeignDescriptor,
-    TypeDescriptor, TypeKind, BUILTIN_TYPE_INT, BUILTIN_TYPE_STRING, FIRST_EMITTED_TYPE_ID,
-    INTERNAL_TYPE_ARRAY,
+    BUILTIN_TYPE_INT, BUILTIN_TYPE_STRING, ClassDescriptor, ClassInstance, ClassMethod,
+    FIRST_EMITTED_TYPE_ID, FfiType, ForeignAbi, ForeignDescriptor, INTERNAL_TYPE_ARRAY,
+    TypeDescriptor, TypeKind,
 };
 use music_il::opcode::Opcode;
 
@@ -791,16 +791,16 @@ impl RuntimeHost for ResumeWithPayload {
 fn effect_perform_can_be_handled_by_host() {
     let mut vm = Vm::with_host(
         module_with_code(vec![
-        op(Opcode::LdSmi),
-        42,
-        0,
-        op(Opcode::EffInvk),
-        7,
-        0,
-        0,
-        0,
-        op(Opcode::Halt),
-    ]),
+            op(Opcode::LdSmi),
+            42,
+            0,
+            op(Opcode::EffInvk),
+            7,
+            0,
+            0,
+            0,
+            op(Opcode::Halt),
+        ]),
         Box::new(ResumeWithPayload),
     );
     assert_eq!(vm.run().unwrap().as_int(), 42);

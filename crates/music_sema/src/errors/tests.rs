@@ -178,7 +178,10 @@ fn display_opaque_without_export() {
 #[test]
 fn display_foreign_not_top_level() {
     let err = make_error(SemaErrorKind::ForeignNotTopLevel);
-    assert_eq!(err.to_string(), "'foreign' declaration is only allowed at top level");
+    assert_eq!(
+        err.to_string(),
+        "'foreign' declaration is only allowed at top level"
+    );
 }
 
 #[test]
@@ -221,7 +224,10 @@ fn display_unused_parameter() {
 #[test]
 fn display_or_pattern_mismatch() {
     let err = make_error(SemaErrorKind::OrPatternMismatch);
-    assert_eq!(err.to_string(), "'or'-pattern alternatives bind different names");
+    assert_eq!(
+        err.to_string(),
+        "'or'-pattern alternatives bind different names"
+    );
 }
 
 #[test]

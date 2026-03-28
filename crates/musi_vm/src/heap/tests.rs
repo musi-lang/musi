@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use super::{unpack_addr, Heap, HeapObject, BLOCK_CAPACITY};
+use super::layout::{unpack_addr, BLOCK_CAPACITY, CELLS_PER_LINE};
+use super::{Heap, HeapObject};
 use crate::value::Value;
 
 #[test]
@@ -204,7 +205,6 @@ fn gc_mark_and_sweep() {
 
 #[test]
 fn sweep_drops_unmarked_objects() {
-    use super::CELLS_PER_LINE;
     let mut heap = Heap::new();
     let a = heap.alloc_string("keep".into());
     for _ in 1..CELLS_PER_LINE {

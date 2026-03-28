@@ -12,7 +12,9 @@ fn read_text_roundtrip() {
     let ptr = musi_io_read_text(path_c.as_ptr());
     assert!(!ptr.is_null());
 
-    let value = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned();
+    let value = unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
     assert_eq!(value, "hello");
 }
 
@@ -39,6 +41,8 @@ fn read_text_failure_sets_last_error() {
 
     let err_ptr = musi_io_last_error();
     assert!(!err_ptr.is_null());
-    let err = unsafe { CStr::from_ptr(err_ptr) }.to_string_lossy().into_owned();
+    let err = unsafe { CStr::from_ptr(err_ptr) }
+        .to_string_lossy()
+        .into_owned();
     assert!(!err.is_empty());
 }

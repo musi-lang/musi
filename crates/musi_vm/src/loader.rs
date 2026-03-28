@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use music_il::format::{
-    self, ANON_METHOD_NAME, ClassDescriptor, ClassInstance, ClassMethod, EffectDescriptor,
-    EffectOpDescriptor, ENTRY_METHOD_NAME, FfiType, ForeignAbi, ForeignDescriptor, HEADER_SIZE,
+    self, ANON_METHOD_NAME, ClassDescriptor, ClassInstance, ClassMethod, ENTRY_METHOD_NAME,
+    EffectDescriptor, EffectOpDescriptor, FfiType, ForeignAbi, ForeignDescriptor, HEADER_SIZE,
     TypeDescriptor, TypeKind,
 };
 use music_il::opcode::Opcode;
@@ -147,12 +147,13 @@ fn decode_type(
 
         let key_offset = read_u32_le(data, pos).ok_or(LoadError::TruncatedSection)?;
         pos = pos.wrapping_add(4);
-        let key_idx = offset_map
-            .get(&key_offset)
-            .copied()
-            .ok_or(LoadError::InvalidStringOffset {
-                offset: u16::try_from(key_offset).unwrap_or(u16::MAX),
-            })?;
+        let key_idx =
+            offset_map
+                .get(&key_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(key_offset).unwrap_or(u16::MAX),
+                })?;
         let key = strings
             .get(usize::try_from(key_idx).unwrap_or(usize::MAX))
             .cloned()
@@ -223,11 +224,11 @@ fn decode_cnst(
                         offset: byte_offset,
                     },
                 )?;
-                out.push(ConstantEntry::StringRef(
-                    u16::try_from(str_idx).map_err(|_| LoadError::InvalidStringOffset {
+                out.push(ConstantEntry::StringRef(u16::try_from(str_idx).map_err(
+                    |_| LoadError::InvalidStringOffset {
                         offset: byte_offset,
-                    })?,
-                ));
+                    },
+                )?));
                 pos = pos.wrapping_add(2);
             }
             0x04 => {
@@ -245,10 +246,7 @@ fn decode_cnst(
     Ok(out)
 }
 
-fn decode_meth(
-    data: &[u8],
-    offset_map: &HashMap<u32, u32>,
-) -> Result<Vec<Method>, LoadError> {
+fn decode_meth(data: &[u8], offset_map: &HashMap<u32, u32>) -> Result<Vec<Method>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -288,10 +286,7 @@ fn decode_meth(
     Ok(out)
 }
 
-fn decode_glob(
-    data: &[u8],
-    offset_map: &HashMap<u32, u32>,
-) -> Result<Vec<GlobalDef>, LoadError> {
+fn decode_glob(data: &[u8], offset_map: &HashMap<u32, u32>) -> Result<Vec<GlobalDef>, LoadError> {
     let count_bytes = read_bytes::<2>(data, 0).ok_or(LoadError::TruncatedSection)?;
     let count = usize::from(u16::from_le_bytes(count_bytes));
     let mut pos = 2usize;
@@ -417,8 +412,7 @@ fn decode_efct(
     for _ in 0..count {
         let id = u16::from_le_bytes(read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?);
         pos = pos.wrapping_add(2);
-        let module_name =
-            read_string_ref(data, &mut pos, strings, offset_map)?;
+        let module_name = read_string_ref(data, &mut pos, strings, offset_map)?;
         let name = read_string_ref(data, &mut pos, strings, offset_map)?;
         let op_count = usize::from(u16::from_le_bytes(
             read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
@@ -483,12 +477,13 @@ fn decode_clss(
 
         let name_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
-        let name_idx = offset_map
-            .get(&name_offset)
-            .copied()
-            .ok_or(LoadError::InvalidStringOffset {
-                offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
-            })?;
+        let name_idx =
+            offset_map
+                .get(&name_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
+                })?;
         pos = pos.wrapping_add(4);
 
         let method_count =
@@ -500,12 +495,13 @@ fn decode_clss(
             let method_offset =
                 u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
             pos = pos.wrapping_add(4);
-            let method_idx = offset_map
-                .get(&method_offset)
-                .copied()
-                .ok_or(LoadError::InvalidStringOffset {
-                    offset: u16::try_from(method_offset).unwrap_or(u16::MAX),
-                })?;
+            let method_idx =
+                offset_map
+                    .get(&method_offset)
+                    .copied()
+                    .ok_or(LoadError::InvalidStringOffset {
+                        offset: u16::try_from(method_offset).unwrap_or(u16::MAX),
+                    })?;
             method_names.push(method_idx);
         }
 
@@ -529,12 +525,11 @@ fn decode_clss(
                     read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?,
                 );
                 pos = pos.wrapping_add(4);
-                let mn_idx = offset_map
-                    .get(&method_offset)
-                    .copied()
-                    .ok_or(LoadError::InvalidStringOffset {
+                let mn_idx = offset_map.get(&method_offset).copied().ok_or(
+                    LoadError::InvalidStringOffset {
                         offset: u16::try_from(method_offset).unwrap_or(u16::MAX),
-                    })?;
+                    },
+                )?;
                 let mi = u16::from_le_bytes(
                     read_bytes::<2>(data, pos).ok_or(LoadError::TruncatedSection)?,
                 );
@@ -571,12 +566,13 @@ fn decode_frgn(
     for _ in 0..count {
         let name_offset =
             u32::from_le_bytes(read_bytes::<4>(data, pos).ok_or(LoadError::TruncatedSection)?);
-        let name_idx = offset_map
-            .get(&name_offset)
-            .copied()
-            .ok_or(LoadError::InvalidStringOffset {
-                offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
-            })?;
+        let name_idx =
+            offset_map
+                .get(&name_offset)
+                .copied()
+                .ok_or(LoadError::InvalidStringOffset {
+                    offset: u16::try_from(name_offset).unwrap_or(u16::MAX),
+                })?;
         pos = pos.wrapping_add(4);
 
         let symbol_offset =

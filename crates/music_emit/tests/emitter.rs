@@ -20,12 +20,12 @@ use music_il::format::{self, BUILTIN_TYPE_INT};
 use music_il::instruction::{Instruction, Operand};
 use music_il::opcode::Opcode;
 use music_owned::types::BuiltinType;
-use music_resolve::queries::ResolutionMap;
+use music_resolve::ResolutionMap;
 use music_sema::Ty;
-use music_sema::env::{DispatchInfo, EffectUse, TypeEnv};
+use music_sema::{DispatchInfo, EffectUse, TypeEnv};
 use music_shared::{Ident, Interner, Literal, SourceMap, Span, Spanned};
 
-use music_emit::emitter::emit;
+use music_emit::emit;
 
 fn build_typed_module(builders: &[fn(&mut AstData, &mut Interner) -> ExprKind]) -> TypedModule {
     let mut interner = Interner::new();

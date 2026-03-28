@@ -61,7 +61,7 @@ impl ParseError {
                 DiagCode::new(2009),
                 String::from("type application uses brackets"),
                 Some(String::from(
-                    "write bracketed type argument(s), for example 'Option[Int]'",
+                    "write bracketed type argument(s) (e.g. 'Option[Int]')",
                 )),
             ),
             ParseErrorKind::UnexpectedEof { expected } => (
@@ -96,7 +96,7 @@ impl ParseError {
             ),
             ParseErrorKind::NonAssociativeChain => (
                 DiagCode::new(2008),
-                String::from("non-associative operator chain is not allowed"),
+                String::from("non-associative operator chain not allowed"),
                 None,
             ),
         };
@@ -143,7 +143,7 @@ impl fmt::Display for ParseErrorKind {
                 write!(f, "expected pattern, found {found}")
             }
             Self::ExpectedType { found } => {
-                write!(f, "expected type, found `{found}`")
+                write!(f, "expected type, found {found}")
             }
             Self::UnclosedDelimiter { open, .. } => {
                 write!(f, "unclosed delimiter {open}")

@@ -24,7 +24,8 @@ pub fn resolve_module(specifier: &str) -> Option<PathBuf> {
 
 #[must_use]
 pub fn is_compiler_owned_path(path: &Path) -> bool {
-    path == prelude_source_path() || path.starts_with(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(BUILTIN_MODULES_DIR))
+    path == prelude_source_path()
+        || path.starts_with(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(BUILTIN_MODULES_DIR))
 }
 
 #[cfg(test)]

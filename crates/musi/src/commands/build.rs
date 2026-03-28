@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Args;
-use music_emit::{emit_project, write_seam};
 use musi::driver::{compile_project, emit_project_diagnostics};
+use music_emit::{emit_project, write_seam};
 
 #[derive(Args)]
 pub struct BuildArgs {

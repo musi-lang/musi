@@ -33,16 +33,6 @@ pub fn check_purity(
     }
 }
 
-/// Collects effect types from `perform` expressions in a function body.
-///
-/// Given a list of expression IDs that are `Perform` nodes, returns the
-/// effect types recorded in the environment's effect map. Effects not
-/// yet recorded are skipped.
-#[must_use]
-pub fn collect_body_effects(_env: &TypeEnv, perform_exprs: &[SemaTypeId]) -> SemaTypeList {
-    perform_exprs.to_vec()
-}
-
 /// Removes an effect from the active set, modeling `handle ... with`.
 ///
 /// Returns the filtered set with the handled effect removed.

@@ -1,7 +1,7 @@
 use music_owned::types::BuiltinType;
 use music_shared::Interner;
 
-use crate::effects::{check_purity, remove_handled_effect};
+use crate::effects::{self, check_purity};
 use crate::env::TypeEnv;
 use crate::types::Ty;
 
@@ -64,7 +64,7 @@ fn remove_handled_effect_filters_correctly() {
     let eff_state = env.intern(Ty::Effect(state));
 
     let active = vec![eff_console, eff_state];
-    let remaining = remove_handled_effect(&env, &active, eff_console);
+    let remaining = effects::remove_handled_effect(&env, &active, eff_console);
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0], eff_state);
 }
@@ -81,7 +81,7 @@ fn remove_handled_effect_no_match_keeps_all() {
     let eff_io = env.intern(Ty::Effect(io));
 
     let active = vec![eff_console, eff_state];
-    let remaining = remove_handled_effect(&env, &active, eff_io);
+    let remaining = effects::remove_handled_effect(&env, &active, eff_io);
     assert_eq!(remaining.len(), 2);
 }
 
