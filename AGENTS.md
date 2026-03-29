@@ -93,6 +93,7 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 - Avoid std-like or generic exported names such as `Color`, `Label`, `List`, `Map`, `Table`, `Pool`, or `Result` when a bounded-context name is clearer
 - Keep established compiler-domain names like `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
 - Apply the same rule to internal helpers when the generic name obscures ownership
+- Benchmarks (`/benches`) use `bench_` prefix on functions, while tests of any kind (`/tests` and/or `tests.rs`) use `test_` prefix on functions.
 
 ## Clean-Room Boundary Rule (HARD)
 

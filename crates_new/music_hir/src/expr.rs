@@ -35,9 +35,9 @@ pub enum HirExprKind {
         path: HirStringLit,
         target: Option<HirImportTarget>,
     },
-    Foreign {
+    ForeignBlock {
         abi: Option<HirStringLit>,
-        bindings: Box<[HirForeignBinding]>,
+        items: HirExprIds,
     },
     Data {
         variants: Option<Box<[HirVariantDef]>>,
@@ -167,7 +167,7 @@ pub enum HirBinaryOp {
     Mul,
     Div,
     Mod,
-    Symbolic,
+    Symbolic(Ident),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,17 +283,6 @@ pub enum HirImportTarget {
     Selective { module: Ident, items: HirIdents },
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct HirForeignBinding {
-    pub origin: HirOrigin,
-    pub attrs: HirAttrIds,
-    pub name: Ident,
-    pub type_params: HirTypeParams,
-    pub params: HirParams,
-    pub where_: HirConstraints,
-    pub ret: Option<HirTyId>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirCallableName {
     pub name: Ident,
@@ -383,16 +372,10 @@ pub enum HirLitKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HirFStringPartKind {
-    Literal,
-    Interpolation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HirFStringPart {
-    pub kind: HirFStringPartKind,
-    pub span: Span,
+#[derive(Debug, Clone, PartialEq)]
+pub enum HirFStringPart {
+    Literal { span: Span },
+    Expr { origin: HirOrigin, expr: HirExprId },
 }
 
 #[cfg(test)]

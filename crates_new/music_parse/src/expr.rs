@@ -442,11 +442,12 @@ impl Parser<'_, '_> {
         match self.peek_kind() {
             TokenKind::Hash => {
                 let hash = self.advance_element();
-                let target = self.expect_ident_element().map_err(|_| self.expected_splice_target())?;
-                Ok(self.builder.push_node_from_children(
-                    SyntaxNodeKind::SpliceExpr,
-                    [hash, target],
-                ))
+                let target = self
+                    .expect_ident_element()
+                    .map_err(|_| self.expected_splice_target())?;
+                Ok(self
+                    .builder
+                    .push_node_from_children(SyntaxNodeKind::SpliceExpr, [hash, target]))
             }
             TokenKind::SpliceLParen => {
                 let open = self.advance_element();

@@ -104,10 +104,9 @@ impl LexError {
                 DiagCode::new(1014),
                 String::from("expected digit(s) after exponent"),
             ),
-            LexErrorKind::InvalidDigitSeparator => (
-                DiagCode::new(1015),
-                String::from("invalid digit separator"),
-            ),
+            LexErrorKind::InvalidDigitSeparator => {
+                (DiagCode::new(1015), String::from("invalid digit separator"))
+            }
         };
 
         Diag::error(message)
