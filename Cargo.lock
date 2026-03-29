@@ -869,6 +869,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "seam_codec"
+version = "0.1.0-rc1"
+dependencies = [
+ "seam_ir",
+ "thiserror",
+]
+
+[[package]]
+name = "seam_ir"
+version = "0.1.0-rc1"
+
+[[package]]
 name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
