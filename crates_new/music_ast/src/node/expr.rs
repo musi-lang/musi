@@ -302,6 +302,10 @@ fn binary_token(node: SyntaxNode<'_>) -> Option<SyntaxToken<'_>> {
                 | TokenKind::Star
                 | TokenKind::Slash
                 | TokenKind::Percent
+                | TokenKind::SymOp
+                | TokenKind::Amp
+                | TokenKind::Caret
+                | TokenKind::Tilde
         )
     })
 }

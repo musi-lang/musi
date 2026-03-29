@@ -43,10 +43,12 @@ pub struct Parser<'lex, 'src> {
     pub(super) builder: SyntaxTreeBuilder,
     pub(super) errors: Vec<ParseError>,
     pub(super) comparison_exprs: Vec<SyntaxNodeId>,
+    pub(super) lparen_match: Vec<Option<usize>>,
 }
 
 impl<'lex, 'src> Parser<'lex, 'src> {
     pub(crate) fn new(source_id: SourceId, lexed: &'lex LexedSource<'src>) -> Self {
+        let lparen_match = compute_lparen_matches(lexed.tokens());
         Self {
             source_id,
             lexed,
@@ -58,6 +60,7 @@ impl<'lex, 'src> Parser<'lex, 'src> {
             ),
             errors: Vec::new(),
             comparison_exprs: Vec::new(),
+            lparen_match,
         }
     }
 
@@ -470,15 +473,23 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         }
 
         let mut children = vec![self.advance_element()];
-        let mut saw_op = false;
-        while is_symbolic_op_token(self.peek_kind()) {
-            if saw_op && !self.peek().leading_trivia.is_empty() {
-                break;
-            }
-            saw_op = true;
+        if matches!(
+            self.peek_kind(),
+            TokenKind::SymOp
+                | TokenKind::Plus
+                | TokenKind::Minus
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Percent
+                | TokenKind::Eq
+                | TokenKind::Lt
+                | TokenKind::Gt
+                | TokenKind::Amp
+                | TokenKind::Caret
+                | TokenKind::Tilde
+        ) {
             children.push(self.advance_element());
-        }
-        if !saw_op {
+        } else {
             return Err(self.expected_operator_member_name());
         }
         children.push(self.expect_token(&TokenKind::RParen)?);
@@ -490,25 +501,23 @@ fn same_kind(left: &TokenKind, right: &TokenKind) -> bool {
     mem::discriminant(left) == mem::discriminant(right)
 }
 
-pub const fn is_symbolic_op_token(kind: &TokenKind) -> bool {
-    matches!(
-        kind,
-        TokenKind::Plus
-            | TokenKind::Minus
-            | TokenKind::Star
-            | TokenKind::Slash
-            | TokenKind::Percent
-            | TokenKind::Eq
-            | TokenKind::Lt
-            | TokenKind::Gt
-            | TokenKind::Bang
-            | TokenKind::Question
-            | TokenKind::Colon
-            | TokenKind::Pipe
-            | TokenKind::Amp
-            | TokenKind::Caret
-            | TokenKind::Tilde
-    )
+fn compute_lparen_matches(tokens: &[Token]) -> Vec<Option<usize>> {
+    let mut matches = vec![None; tokens.len()];
+    let mut stack = Vec::new();
+
+    for (index, token) in tokens.iter().enumerate() {
+        match token.kind {
+            TokenKind::LParen => stack.push(index),
+            TokenKind::RParen => {
+                if let Some(open) = stack.pop() {
+                    matches[open] = Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    matches
 }
 
 #[cfg(test)]

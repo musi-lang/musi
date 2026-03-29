@@ -16,6 +16,16 @@ const fn is_ident_start(ch: char) -> bool {
     ch.is_ascii_alphabetic() || ch == '_'
 }
 
+const fn is_symop_byte(byte: u8) -> bool {
+    // Operator-runs are intentionally conservative: they must not swallow syntax
+    // separators like `:` or `|`, and must not re-introduce removed compounds
+    // like `::` or `??`.
+    matches!(
+        byte,
+        b'+' | b'-' | b'*' | b'/' | b'%' | b'<' | b'>' | b'=' | b'&' | b'^' | b'~'
+    )
+}
+
 const fn is_digit_for_base(byte: u8, base: u32) -> bool {
     match base {
         2 => matches!(byte, b'0' | b'1'),
@@ -132,6 +142,23 @@ impl<'src> Lexer<'src> {
             '"' => self.scan_string(start),
             '\'' => self.scan_rune(start),
             '`' => self.scan_escaped_ident(start),
+            _ if ch.is_ascii() => {
+                let first = ch as u8;
+                if is_symop_byte(first)
+                    && self
+                        .cursor
+                        .peek()
+                        .is_some_and(|next| next.is_ascii() && is_symop_byte(next as u8))
+                {
+                    let _ = self.cursor.eat_while_ascii(is_symop_byte);
+                    return Ok(TokenKind::SymOp);
+                }
+
+                single_char_token(ch).ok_or_else(|| LexError {
+                    kind: LexErrorKind::UnexpectedChar(ch),
+                    span: self.cursor.span_from(start),
+                })
+            }
             _ => single_char_token(ch).ok_or_else(|| LexError {
                 kind: LexErrorKind::UnexpectedChar(ch),
                 span: self.cursor.span_from(start),

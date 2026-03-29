@@ -23,11 +23,13 @@ plain-ident   = letter *(letter / digit / "_")
 
 escaped-ident = %x60 *(<any except backtick>) %x60  ; `...`
 
-op-ident      = "(" symbolic-op ")"
+op-ident      = "(" (symbolic-op / op-single) ")"
 
-symbolic-op   = 1*op-char  ; excluding reserved compound tokens and keywords
+; Symbolic operators are for user-defined operators, and are intentionally
+; conservative to avoid colliding with structural separators and removed compounds.
+symbolic-op   = 2*sym-char  ; excluding reserved compound tokens and keywords
 
-op-char       = "+"
+op-single     = "+"
                 / "-"
                 / "*"
                 / "/"
@@ -35,13 +37,21 @@ op-char       = "+"
                 / "="
                 / "<"
                 / ">"
-                / "!"
-                / "?"
-                / ":"
-                / "|"
                 / "&"
                 / "^"
                 / "~"
+
+sym-char      = "+"
+	                / "-"
+	                / "*"
+	                / "/"
+	                / "%"
+	                / "="
+	                / "<"
+	                / ">"
+	                / "&"
+	                / "^"
+	                / "~"
 ; §1.3  Literals
 lit         = lit-int
               / lit-float

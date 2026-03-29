@@ -3,13 +3,12 @@ use core::mem;
 use music_ast::{SyntaxElementId, SyntaxNodeId, SyntaxNodeKind};
 use music_lex::TokenKind;
 
-use crate::parser::{Parser, is_symbolic_op_token};
+use crate::parser::Parser;
 
 use super::*;
 
 const PREFIX_BP: u8 = 24;
 const ASSIGN_BP: u8 = 2;
-const SYMBOLIC_BP: u8 = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum InfixClass {
@@ -23,11 +22,6 @@ impl Parser<'_, '_> {
 
         loop {
             if let Some(next_left) = self.try_postfix(left)? {
-                left = next_left;
-                continue;
-            }
-
-            if let Some(next_left) = self.try_symbolic_infix(left, min_bp)? {
                 left = next_left;
                 continue;
             }
@@ -617,66 +611,18 @@ impl Parser<'_, '_> {
         ))
     }
 
-    fn try_symbolic_infix(
-        &mut self,
-        left: SyntaxNodeId,
-        min_bp: u8,
-    ) -> ParseResult<Option<SyntaxNodeId>> {
-        if !self.starts_symbolic_infix() || SYMBOLIC_BP < min_bp {
-            return Ok(None);
-        }
-
-        let mut children = vec![SyntaxElementId::Node(left)];
-        let mut saw_first = false;
-        while is_symbolic_op_token(self.peek_kind()) {
-            if saw_first && !self.peek().leading_trivia.is_empty() {
-                break;
-            }
-            saw_first = true;
-            children.push(self.advance_element());
-        }
-        let right = self.parse_expr(SYMBOLIC_BP + 1)?;
-        children.push(SyntaxElementId::Node(right));
-
-        Ok(Some(
-            self.builder
-                .push_node_from_children(SyntaxNodeKind::BinaryExpr, children),
-        ))
-    }
-
-    fn starts_symbolic_infix(&self) -> bool {
-        match self.peek_kind() {
-            TokenKind::Amp | TokenKind::Caret | TokenKind::Tilde => true,
-            kind if is_symbolic_op_token(kind) => {
-                is_symbolic_op_token(self.nth_kind(1)) && self.nth(1).leading_trivia.is_empty()
-            }
-            _ => false,
-        }
-    }
-
     fn is_lambda_paren(&self) -> bool {
         if !self.at(&TokenKind::LParen) {
             return false;
         }
 
-        let mut depth = 0_u32;
-        for (index, token) in self.tokens()[self.pos..].iter().enumerate() {
-            match token.kind {
-                TokenKind::LParen => depth += 1,
-                TokenKind::RParen => {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        let next = self.tokens().get(self.pos + index + 1);
-                        return next.is_some_and(|token| {
-                            same_kind(&token.kind, &TokenKind::EqGt)
-                                || same_kind(&token.kind, &TokenKind::Colon)
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-        false
+        let Some(close) = self.lparen_match.get(self.pos).copied().flatten() else {
+            return false;
+        };
+        let next = self.tokens().get(close + 1);
+        next.is_some_and(|token| {
+            same_kind(&token.kind, &TokenKind::EqGt) || same_kind(&token.kind, &TokenKind::Colon)
+        })
     }
 
     fn rewrap_node(
@@ -710,6 +656,9 @@ const fn infix_binding_power(kind: &TokenKind) -> Option<(u8, u8, InfixClass)> {
         TokenKind::Plus | TokenKind::Minus => Some((16, 17, InfixClass::Other)),
         TokenKind::Star | TokenKind::Slash | TokenKind::Percent => {
             Some((18, 19, InfixClass::Other))
+        }
+        TokenKind::SymOp | TokenKind::Amp | TokenKind::Caret | TokenKind::Tilde => {
+            Some((20, 21, InfixClass::Other))
         }
         _ => None,
     }

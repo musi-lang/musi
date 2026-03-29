@@ -50,6 +50,7 @@ pub enum TokenKind {
 
     Ident,
     EscapedIdent,
+    SymOp,
 
     KwAnd,
     KwAs,
@@ -148,6 +149,7 @@ impl Display for TokenKindDisplay<'_> {
             TokenKind::RuneLit => write!(f, "rune literal"),
             TokenKind::Ident => write!(f, "identifier"),
             TokenKind::EscapedIdent => write!(f, "escaped identifier"),
+            TokenKind::SymOp => write!(f, "symbolic operator"),
             TokenKind::KwAnd => write!(f, "'and'"),
             TokenKind::KwAs => write!(f, "'as'"),
             TokenKind::KwCase => write!(f, "'case'"),
