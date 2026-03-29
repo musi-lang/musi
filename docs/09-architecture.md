@@ -21,26 +21,26 @@ The clean-room workspace in `crates_new/` uses bounded-context crate names and t
 
 Compiler and IL crates stay under `music_*`:
 
-- `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
-- `music_storage`: arena/index storage and related typed storage mechanics
-- `music_lex`: lossless lexing and token/trivia production
-- `music_parse`: parsing token streams into syntax structures
+- `music_assembly`: text/binary IL encoding, decoding, printing, and validation
 - `music_ast`: full-fidelity green/red syntax tree, syntax only, with top-level expression sequences
-- `music_intrins`: compiler-known builtins and intrinsic surface
-- `music_session`: compiler session state, loaded sources, and shared compile context
-- `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
-- `music_sema`: type/effect/class semantic analysis and validation
-- `music_hir`: typed high-level IR after semantic analysis
+- `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
 - `music_codegen`: lowering from typed IR into `music_il`
 - `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
+- `music_hir`: typed high-level IR after semantic analysis
 - `music_il`: VM-facing bytecode / intermediate language contract
-- `music_assembly`: text/binary IL encoding, decoding, printing, and validation
+- `music_intrins`: compiler-known builtins and intrinsic surface
+- `music_lex`: lossless lexing and token/trivia production
+- `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
+- `music_parse`: parsing token streams into syntax structures
+- `music_sema`: type/effect/class semantic analysis and validation
+- `music_session`: compiler session state, loaded sources, and shared compile context
+- `music_storage`: arena/index storage and related typed storage mechanics
 
 Project, tooling, and runtime crates stay under `musi_*`:
 
 - `musi_project`: manifests, package/workspace model, dependency config, and task metadata
-- `musi_tooling`: operator, editor, and higher-level tooling integration over project/compiler crates
 - `musi_rt`: runtime, VM, loading, and embedding boundary
+- `musi_tooling`: operator, editor, and higher-level tooling integration over project/compiler crates
 
 This naming is part of the architecture contract:
 
