@@ -15,6 +15,51 @@ The architecture stays honest when:
 - SEAM owns runtime contracts, not source sugar
 - the runtime owns execution and embedding, not compile-time language decisions
 
+## Locked Crate Structure
+
+The clean-room workspace in `crates_new/` uses bounded-context crate names and this structure is locked.
+
+Compiler and IL crates stay under `music_*`:
+
+- `music_basic`
+- `music_storage`
+- `music_lex`
+- `music_parse`
+- `music_ast`
+- `music_intrinsics`
+- `music_session`
+- `music_names`
+- `music_sema`
+- `music_ir`
+- `music_codegen`
+- `music_frontend`
+- `music_il`
+- `music_assembly`
+
+Project, tooling, and runtime crates stay under `musi_*`:
+
+- `musi_project`
+- `musi_tooling`
+- `musi_rt`
+
+This naming is part of the architecture contract:
+
+- domain nouns define the subsystem boundaries
+- `music_*` owns the compiler and IL boundary
+- `musi_*` owns project loading, tooling, and runtime embedding
+- diagnostics stay inside `music_basic`
+- `music_names` and `music_sema` stay separate
+- `music_il` and `music_assembly` are the locked SEAM pair
+
+The clean-room crate layout is also locked:
+
+- `src/` is production code only
+- `benches/` is Criterion-only
+- `module.rs` or `module/mod.rs` owns the module surface
+- `module/tests.rs` owns unit tests and close test helpers
+- `tests/` is for integration and e2e only
+- no Rust file may exceed 2000 LOC, including tests and benches
+
 ## Ownership Chain
 
 ### 1. Source Language

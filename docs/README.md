@@ -19,3 +19,5 @@ Canonical docs are ordered from language, to runtime, to tooling:
 Historical pre-reduction material lives in `docs/legacy/`.
 
 Anything under `docs/legacy/` is archived, not normative.
+
+The clean-room crate structure in `crates_new/` is also locked. The canonical subsystem names are documented in `09-architecture.md`.

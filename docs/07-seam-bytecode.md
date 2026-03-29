@@ -2,8 +2,8 @@
 
 SEAM bytecode is the binary execution contract for the clean-room SEAM layer in `crates_new/`.
 
-- `seam_ir` owns the neutral ISA, metadata descriptors, and artifact model.
-- `seam_codec` owns binary encoding/decoding, text IL transport, wire constants, and validation.
+- `music_il` owns the SEAM ISA, metadata descriptors, and artifact model.
+- `music_assembly` owns binary encoding/decoding, text IL transport, wire constants, and validation.
 
 SEAM is:
 
@@ -31,13 +31,13 @@ The text IL is the readable contract. The `.seam` binary is the execution artifa
 
 ## Crate Boundaries
 
-`seam_ir` is the core domain crate.
+`music_il` is the core domain crate.
 
 - `isa/` owns opcodes, families, operands, and instructions
 - `descriptors/` owns runtime-visible SEAM descriptors
 - `artifact/` owns the single SEAM artifact model used by both encode and decode
 
-`seam_codec` is the transport boundary crate.
+`music_assembly` is the transport boundary crate.
 
 - `binary/` owns binary encode/decode, section tags, versioning, and binary validation
 - `text/` owns text IL formatting, parsing, assembly, and text validation
@@ -99,7 +99,7 @@ Additional directive families should cover:
 - `.effect`
 - `.foreign`
 
-The text form is readable first. `seam_codec` lowers symbolic references to numeric indices in the binary format.
+The text form is readable first. `music_assembly` lowers symbolic references to numeric indices in the binary format.
 
 ## Operand Model
 
@@ -213,7 +213,7 @@ Pinning is not a public opcode. If the runtime needs to pin values for FFI, that
 
 ## Removed From The Clean-Room ISA
 
-These are intentionally absent from `crates_new/seam_ir`:
+These are intentionally absent from `crates_new/music_il`:
 
 - `ld.nil`
 - `ld.one`

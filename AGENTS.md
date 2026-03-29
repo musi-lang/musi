@@ -78,6 +78,15 @@ Unit tests are NEVER inside source files. No `#[cfg(test)] mod tests { }` blocks
 
 Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/` alongside `src/`. This applies to ALL Rust crates in this project.
 
+## Rust Crate Layout Rule (HARD)
+
+- `src/` is production code only
+- `benches/` is Criterion-only
+- `module.rs` or `module/mod.rs` owns the module surface
+- `module/tests.rs` owns unit tests and closely related test helpers
+- `tests/` is for integration and e2e only
+- No Rust file may exceed 2000 LOC, including tests and benches
+
 ```mermaid
 graph TD
     A["crates/music_shared/"] --> B["src/"]

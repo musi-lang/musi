@@ -4,20 +4,20 @@ SEAM is a typed runtime IR executed by a stack-based virtual machine. It is not 
 
 The clean-room SEAM layer is split deliberately:
 
-- `seam_ir` defines the runtime contract
-- `seam_codec` moves that contract between binary and text forms
+- `music_il` defines the runtime contract
+- `music_assembly` moves that contract between binary and text forms
 
 The VM that eventually executes SEAM is downstream of that boundary. The SEAM docs define what the machine must honor, not which crate currently happens to execute it.
 
 ## Identity
 
-| Property            | Value                              |
-| ------------------- | ---------------------------------- |
-| Execution model     | stack machine                      |
-| IR level            | typed runtime IR                   |
-| Binary artifact     | `.seam`                            |
-| Human-readable form | SEAM text IL                       |
-| Contract crates     | `crates_new/seam_ir`, `seam_codec` |
+| Property            | Value                                   |
+| ------------------- | --------------------------------------- |
+| Execution model     | stack machine                           |
+| IR level            | typed runtime IR                        |
+| Binary artifact     | `.seam`                                 |
+| Human-readable form | SEAM text IL                            |
+| Contract crates     | `crates_new/music_il`, `music_assembly` |
 
 SEAM stays small by lowering source sugar away. It stays expressive by keeping explicit operations for the runtime concepts the VM actually owns.
 
