@@ -21,26 +21,26 @@ The clean-room workspace in `crates_new/` uses bounded-context crate names and t
 
 Compiler and IL crates stay under `music_*`:
 
-- `music_basic`
-- `music_storage`
-- `music_lex`
-- `music_parse`
-- `music_ast` - (typed) AST
-- `music_intrinsics`
-- `music_session`
-- `music_names`
-- `music_sema`
-- `music_ir` - (typed) high-level intermediate representation
-- `music_codegen`
-- `music_fe` - frontend
-- `music_il` - bytecode (intermediate language)
-- `music_assembly`
+- `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
+- `music_storage`: arena/index storage and related typed storage mechanics
+- `music_lex`: lossless lexing and token/trivia production
+- `music_parse`: parsing token streams into syntax structures
+- `music_ast`: syntax-level AST, not typed semantic output
+- `music_intrins`: compiler-known builtins and intrinsic surface
+- `music_session`: compiler session state, loaded sources, and shared compile context
+- `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
+- `music_sema`: type/effect/class semantic analysis and validation
+- `music_hir`: typed high-level IR after semantic analysis
+- `music_codegen`: lowering from typed IR into `music_il`
+- `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
+- `music_il`: VM-facing bytecode / intermediate language contract
+- `music_assembly`: text/binary IL encoding, decoding, printing, and validation
 
 Project, tooling, and runtime crates stay under `musi_*`:
 
-- `musi_project`
-- `musi_tooling`
-- `musi_rt`
+- `musi_project`: manifests, package/workspace model, dependency config, and task metadata
+- `musi_tooling`: operator, editor, and higher-level tooling integration over project/compiler crates
+- `musi_rt`: runtime, VM, loading, and embedding boundary
 
 This naming is part of the architecture contract:
 
