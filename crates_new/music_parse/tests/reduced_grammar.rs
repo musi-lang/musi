@@ -9,7 +9,7 @@ mod tests {
     fn test_parse_representative_module() {
         let source = r"
 let id[T] (x : T) := x;
-data { | Some : Int | None };
+let Maybe := data { | Some : Int | None };
 instance Foo { law x := x };
 ";
         let mut sources = SourceMap::default();
