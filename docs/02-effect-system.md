@@ -1,0 +1,182 @@
+# Effect System
+
+Normative effect-system reference for the reduced core language. Historical pre-reduction material lives in `docs/legacy/02-effect-system.md`.
+
+## Core Model
+
+Musi uses resumable algebraic effects as a first-class language feature.
+
+The core surface is:
+
+- `effect`
+- `perform`
+- `handle`
+- `with`
+- `resume`
+
+Effects are not an exception-only subsystem and they are not library sugar over ordinary functions.
+
+## Effect Declarations
+
+Effects are declared as expressions bound through `let`.
+
+```musi
+let Console := effect {
+  let writeln (msg : String) : Unit;
+  let readln () : String;
+};
+
+let Abort := effect {
+  let abort (msg : String) : Empty;
+};
+
+let State[S] := effect {
+  let get () : S;
+  let put (s : S) : Unit;
+};
+```
+
+Effect members describe operations. Laws may also be attached as named propositions.
+
+## Performing Effects
+
+`perform` invokes an effect operation.
+
+```musi
+perform Console.writeln("hello");
+let line := perform Console.readln();
+perform Abort.abort("bad state");
+```
+
+The operation signature determines the value expected back from the handler continuation.
+
+## Handling Effects
+
+Handlers use dedicated clause syntax.
+
+```musi
+handle work() with Console of (
+| value => value
+| writeln(msg, k) => (
+    foreign_print(msg);
+    resume ()
+  )
+| readln(k) => resume foreign_readline()
+)
+```
+
+The clauses are:
+
+- one value clause: `value => ...`
+- one clause per handled operation: `op(args, k) => ...`
+
+There is no `return x => ...` handler syntax in the reduced language.
+
+## `resume`
+
+`resume` continues the suspended computation captured by an operation clause.
+
+That makes handlers resumable, not merely exception-like.
+
+Typical meanings:
+
+- zero resumes: abort or replace the computation
+- one resume: ordinary continuation
+- multiple resumes: backtracking, nondeterminism, or replay-style behavior
+
+`resume` is part of the effect language because Musi keeps resumable handlers as a first-class control model.
+
+## Open Effect Rows
+
+Effect rows are open immediately, not deferred to a later design phase.
+
+Rows live on signatures through `with { ... }`.
+
+```musi
+let f (x : Int) with { Console } : Int := ...;
+let g[T] (x : T) with { State[T], ...r } : T := ...;
+```
+
+### Reading Rows
+
+| Form                           | Meaning                                                |
+| ------------------------------ | ------------------------------------------------------ |
+| `with { Console }`             | exactly the named visible effect row in this signature |
+| `with { State[Int], Console }` | multiple named effects                                 |
+| `with { State[Int], ...r }`    | `State[Int]` plus a named remainder row                |
+
+Named remainder syntax uses `...r`.
+
+This is row openness, not “open class”/“sealed class” terminology from OOP languages.
+
+## Pure And Effectful Functions
+
+The language distinguishes:
+
+- pure arrows: `->`
+- effectful arrows: `~>`
+
+Signatures then refine effectful computations with `with { ... }`.
+
+The current documentation model is:
+
+- purity is part of function-kind syntax
+- effect rows are part of signature syntax
+
+This keeps the source surface consistent with the current grammar direction.
+
+## Effect Handling And Rows
+
+Handling removes named effects from the active row of the handled computation.
+
+Conceptually:
+
+- a computation may perform `E`
+- `handle ... with E of (...)` interprets `E`
+- outside the handler, `E` no longer appears in the active row unless reintroduced
+
+Open rows matter because generic code can say:
+
+- “I require `State[T]`”
+- “and I preserve the caller’s remaining effects as `...r`”
+
+That is the main reason Musi documents open effects immediately instead of using closed sets only.
+
+## Laws On Effects
+
+Effects may also carry `law` declarations when the effect interface has meaningful algebraic obligations.
+
+Those laws are:
+
+- named propositions over operations
+- consumed by docs, tooling, and generated property checks
+
+They are not runtime enforcement and they do not change handler dispatch.
+
+## Control Model
+
+The effect system sits inside the reduced control model:
+
+- no loops
+- no `return`
+- no piecewise conditional syntax
+- `if` is guard-only
+- `case` remains the eliminator for branching
+
+That means non-local control belongs to resumable handlers, not to statement-like escape constructs.
+
+## What The Effect Core Does Not Include
+
+The reduced effect language does not include:
+
+- exception-only effects as the only model
+- closed-only effect sets
+- loop-specific control effects baked into syntax
+- `return`-based handler clauses
+
+The current design is explicitly:
+
+- algebraic
+- resumable
+- open-row
+- expression-oriented
