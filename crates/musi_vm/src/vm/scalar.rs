@@ -3,9 +3,9 @@ use music_il::opcode::Opcode;
 use super::Vm;
 use crate::errors::{VmError, VmResult};
 use crate::frame::CallFrame;
-use crate::heap::HeapObject;
 #[cfg(test)]
 use crate::heap::Heap;
+use crate::heap::HeapObject;
 use crate::value::Value;
 use crate::vm::array::exec_arr_geti;
 

@@ -105,8 +105,8 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::TyChk.mnemonic(), "ty.chk");
     assert_eq!(Opcode::TyCast.mnemonic(), "ty.cast");
     assert_eq!(Opcode::TyTag.mnemonic(), "ty.tag");
-    assert_eq!(Opcode::EffHdlPush.mnemonic(), "eff.hdl.push");
-    assert_eq!(Opcode::EffHdlPop.mnemonic(), "eff.hdl.pop");
+    assert_eq!(Opcode::HdlPush.mnemonic(), "hdl.push");
+    assert_eq!(Opcode::HdlPop.mnemonic(), "hdl.pop");
     assert_eq!(Opcode::EffInvk.mnemonic(), "eff.invk");
     assert_eq!(Opcode::EffCont.mnemonic(), "eff.cont");
     assert_eq!(Opcode::TyclDict.mnemonic(), "tycl.dict");

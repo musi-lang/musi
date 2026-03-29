@@ -1,5 +1,5 @@
-use super::*;
 use super::scalar::exec_scalar_op;
+use super::*;
 
 impl Vm {
     pub(super) fn dispatch_call(

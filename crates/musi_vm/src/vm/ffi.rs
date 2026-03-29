@@ -56,7 +56,8 @@ impl Vm {
         }
         args.reverse();
 
-        let result = execute_ffi_call(fn_ptr, &param_types, return_type, &mut args, &mut self.heap)?;
+        let result =
+            execute_ffi_call(fn_ptr, &param_types, return_type, &mut args, &mut self.heap)?;
         self.push_stack(result)?;
         self.maybe_collect();
         Ok(())

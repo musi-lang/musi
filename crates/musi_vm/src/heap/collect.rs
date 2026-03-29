@@ -1,5 +1,8 @@
-use super::layout::{is_large, BlockState, CellSlot, LargeEntry, INITIAL_GC_THRESHOLD, LARGE_FLAG, LINES_PER_BLOCK, CELLS_PER_LINE};
 use super::Heap;
+use super::layout::{
+    BlockState, CELLS_PER_LINE, CellSlot, INITIAL_GC_THRESHOLD, LARGE_FLAG, LINES_PER_BLOCK,
+    LargeEntry, is_large,
+};
 use crate::value::Value;
 
 impl Heap {

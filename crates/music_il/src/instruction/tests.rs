@@ -52,8 +52,8 @@ fn with_table_stores_offset_vec() {
 
 #[test]
 fn with_indexed_jump_stores_both_values() {
-    let instr = Instruction::with_indexed_jump(Opcode::EffHdlPush, 7, -42);
-    assert_eq!(instr.opcode, Opcode::EffHdlPush);
+    let instr = Instruction::with_indexed_jump(Opcode::HdlPush, 7, -42);
+    assert_eq!(instr.opcode, Opcode::HdlPush);
     assert_eq!(instr.operand, Operand::IndexedJump(7, -42));
 }
 

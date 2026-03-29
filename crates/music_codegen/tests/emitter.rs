@@ -514,7 +514,7 @@ fn emit_handle_with_body() {
     let instrs = &module.methods[0].instructions;
     assert_eq!(
         instrs[0],
-        Instruction::with_effect_jump(Opcode::EffHdlPush, 0, 0, 6)
+        Instruction::with_effect_jump(Opcode::HdlPush, 0, 0, 6)
     );
     assert_eq!(instrs[1], Instruction::with_u8(Opcode::StLoc, 0));
     assert_eq!(instrs[2], Instruction::simple(Opcode::Pop));
@@ -522,7 +522,7 @@ fn emit_handle_with_body() {
     assert_eq!(instrs[4], Instruction::simple(Opcode::LdOne));
     assert_eq!(instrs[5], Instruction::with_u8(Opcode::StLoc, 1));
     assert_eq!(instrs[6], Instruction::simple(Opcode::LdOne));
-    assert_eq!(instrs[7], Instruction::simple(Opcode::EffHdlPop));
+    assert_eq!(instrs[7], Instruction::simple(Opcode::HdlPop));
 }
 
 #[test]

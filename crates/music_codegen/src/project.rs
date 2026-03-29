@@ -250,7 +250,7 @@ fn rewrite_instructions(
                         .expect("effect remap missing for perf");
                 }
             }
-            Opcode::EffHdlPush => {
+            Opcode::HdlPush => {
                 if let Operand::EffectJump(ref mut effect_id, _, _) = instr.operand {
                     *effect_id = *effect_remap
                         .get(effect_id)

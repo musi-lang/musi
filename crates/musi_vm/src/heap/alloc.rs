@@ -3,8 +3,8 @@ use std::ffi::c_void;
 use music_il::format;
 
 use super::layout::{
-    is_large, pack_addr, unpack_addr, Block, BumpState, CellSlot, GcState, LargeObjectSpace,
-    BLOCK_CAPACITY, CELLS_PER_LINE, INITIAL_GC_THRESHOLD, LARGE_FLAG, LINES_PER_BLOCK,
+    BLOCK_CAPACITY, Block, BumpState, CELLS_PER_LINE, CellSlot, GcState, INITIAL_GC_THRESHOLD,
+    LARGE_FLAG, LINES_PER_BLOCK, LargeObjectSpace, is_large, pack_addr, unpack_addr,
 };
 use super::{Closure, Continuation, Heap, HeapObject, VmArray, VmCPtr, VmCell, VmSlice, VmString};
 use crate::effect::EffectHandler;
@@ -207,7 +207,12 @@ impl Heap {
         self.alloc_closure_t(format::INTERNAL_TYPE_CLOSURE, method_idx, upvalues)
     }
 
-    pub fn alloc_closure_t(&mut self, type_id: u16, method_idx: u16, upvalues: Vec<Value>) -> usize {
+    pub fn alloc_closure_t(
+        &mut self,
+        type_id: u16,
+        method_idx: u16,
+        upvalues: Vec<Value>,
+    ) -> usize {
         self.alloc(HeapObject::Closure(Closure {
             type_id,
             method_idx,

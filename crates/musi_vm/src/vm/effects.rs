@@ -8,7 +8,7 @@ impl Vm {
         pc: &mut usize,
     ) -> VmResult {
         match op {
-            Opcode::EffHdlPush => {
+            Opcode::HdlPush => {
                 let effect_id = self.read_u16(method_idx, pc);
                 let op_id = self.read_u16(method_idx, pc);
                 let skip_offset = self.read_i16(method_idx, pc);
@@ -28,7 +28,7 @@ impl Vm {
                 });
                 *pc = pc.wrapping_add_signed(isize::from(skip_offset));
             }
-            Opcode::EffHdlPop => {
+            Opcode::HdlPop => {
                 let _ = self.effect_handlers.pop().ok_or(VmError::NoEffectHandler)?;
             }
             Opcode::EffInvk => {

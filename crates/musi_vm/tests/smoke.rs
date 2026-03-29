@@ -213,9 +213,9 @@ fn smoke_function_call() {
 
 #[test]
 fn smoke_effect_basic() {
-    // Direct Module construction (not .seam) verifying EffHdlPush → EffInvk → EffCont round-trip.
+    // Direct Module construction (not .seam) verifying HdlPush → EffInvk → EffCont round-trip.
     // Byte layout: same as effect_perform_resume in vm/tests.rs
-    // [0]  EffHdlPush   [1,2]  0,0 [3,4] 0,0 [5,6] 5,0      skip 5 bytes → land at main body [12]
+    // [0]  HdlPush   [1,2]  0,0 [3,4] 0,0 [5,6] 5,0      skip 5 bytes → land at main body [12]
     // [7]  LdSmi        [8,9]  77,0                         handler: push resume value
     // [10] EffCont      [11]   1                            handler: pop value, pop cont_ptr, restore
     // [12] LdSmi        [13,14] 0,0                         main: dummy arg for perform
@@ -229,7 +229,7 @@ fn smoke_effect_basic() {
             name: ENTRY_POINT_NAME,
             locals_count: 0,
             code: vec![
-                op(Opcode::EffHdlPush),
+                op(Opcode::HdlPush),
                 0,
                 0, // effect_id = 0
                 0,

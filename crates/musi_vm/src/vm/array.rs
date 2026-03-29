@@ -394,7 +394,9 @@ pub(super) fn exec_arr_concat(heap: &mut Heap, a: Value, b: Value) -> VmResult<V
             };
             match concat_data {
                 ConcatData::Str(s) => Ok(Value::from_ptr(heap.alloc_string(s))),
-                ConcatData::Array { tag, elems } => Ok(Value::from_ptr(heap.alloc_array(tag, elems))),
+                ConcatData::Array { tag, elems } => {
+                    Ok(Value::from_ptr(heap.alloc_array(tag, elems)))
+                }
             }
         }
         (true, false) => {

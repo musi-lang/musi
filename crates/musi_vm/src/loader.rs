@@ -384,7 +384,7 @@ fn operand_extra_bytes(op: Opcode, data: &[u8], pos: usize) -> Result<usize, Loa
         Opcode::ArrNewT => Ok(5),
 
         // EffectJump (u16 + u16 + i16) = 6 bytes
-        Opcode::EffHdlPush => Ok(6),
+        Opcode::HdlPush => Ok(6),
 
         // Variable: u16 count + count * i16
         Opcode::BrTbl => {

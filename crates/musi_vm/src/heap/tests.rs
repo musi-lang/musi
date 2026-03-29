@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use super::layout::{unpack_addr, BLOCK_CAPACITY, CELLS_PER_LINE};
+use super::layout::{BLOCK_CAPACITY, CELLS_PER_LINE, unpack_addr};
 use super::{Heap, HeapObject};
 use crate::value::Value;
 

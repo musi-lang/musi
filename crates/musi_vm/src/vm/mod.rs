@@ -1,8 +1,8 @@
 // Performance-critical hot paths use unsafe for unchecked indexing
 #![allow(clippy::arithmetic_side_effects, clippy::as_conversions, unsafe_code)]
 
-mod branch;
 mod array;
+mod branch;
 mod call;
 mod effects;
 mod ffi;
@@ -276,7 +276,7 @@ impl Vm {
                     }
                 }
 
-                Opcode::EffHdlPush | Opcode::EffHdlPop | Opcode::EffInvk | Opcode::EffCont => {
+                Opcode::HdlPush | Opcode::HdlPop | Opcode::EffInvk | Opcode::EffCont => {
                     self.dispatch_effect(op, method_idx, &mut pc)?;
                 }
 
@@ -337,7 +337,6 @@ impl Vm {
             }
         }
     }
-
 }
 
 #[cfg(test)]

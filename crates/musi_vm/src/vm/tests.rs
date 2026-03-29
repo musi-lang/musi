@@ -560,9 +560,9 @@ fn call_stack_overflow() {
 
 #[test]
 fn effect_push_pop() {
-    // EffHdlPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
+    // HdlPush: u16 effect_id=0 + u16 op_id=0 + i16 skip=5
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -577,7 +577,7 @@ fn effect_push_pop() {
         op(Opcode::LdSmi),
         42,
         0,
-        op(Opcode::EffHdlPop),
+        op(Opcode::HdlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 42);
@@ -586,7 +586,7 @@ fn effect_push_pop() {
 #[test]
 fn effect_perform_resume() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -614,7 +614,7 @@ fn effect_perform_resume() {
 #[test]
 fn effect_nested() {
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -626,7 +626,7 @@ fn effect_nested() {
         0,
         op(Opcode::EffCont),
         1,
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -646,7 +646,7 @@ fn effect_nested() {
         0,
         0,
         0,
-        op(Opcode::EffHdlPop),
+        op(Opcode::HdlPop),
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 77);
@@ -658,7 +658,7 @@ fn effect_dispatch_by_id() {
     // Handler B (effect=1): resume with 20
     // EffInvk(effect=0) should hit Handler A, not B
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -670,7 +670,7 @@ fn effect_dispatch_by_id() {
         0,
         op(Opcode::EffCont),
         1,
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         1,
         0, // effect_id = 1
         0,
@@ -689,8 +689,8 @@ fn effect_dispatch_by_id() {
         0,
         0,
         0,
-        0,                     // effect_id = 0, op_id = 0 -> should find Handler A
-        op(Opcode::EffHdlPop), // clean up Handler B
+        0,                  // effect_id = 0, op_id = 0 -> should find Handler A
+        op(Opcode::HdlPop), // clean up Handler B
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 10);
@@ -702,7 +702,7 @@ fn effect_dispatch_skips_wrong_handler() {
     // Handler B (effect=1): resume with 20
     // EffInvk(effect=1) should hit Handler B (topmost matching)
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,
@@ -714,7 +714,7 @@ fn effect_dispatch_skips_wrong_handler() {
         0,
         op(Opcode::EffCont),
         1,
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         1,
         0, // effect_id = 1
         0,
@@ -733,8 +733,8 @@ fn effect_dispatch_skips_wrong_handler() {
         1,
         0,
         0,
-        0,                     // effect_id = 1, op_id = 0 -> should find Handler B
-        op(Opcode::EffHdlPop), // clean up Handler A
+        0,                  // effect_id = 1, op_id = 0 -> should find Handler B
+        op(Opcode::HdlPop), // clean up Handler A
         op(Opcode::Halt),
     ]));
     assert_eq!(vm.run().unwrap().as_int(), 20);
@@ -744,7 +744,7 @@ fn effect_dispatch_skips_wrong_handler() {
 fn effect_no_matching_handler() {
     // Only handler is for effect=0, but the performed effect is 99
     let mut vm = Vm::new(module_with_code(vec![
-        op(Opcode::EffHdlPush),
+        op(Opcode::HdlPush),
         0,
         0, // effect_id = 0
         0,

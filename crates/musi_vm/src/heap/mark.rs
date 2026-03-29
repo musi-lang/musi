@@ -1,4 +1,4 @@
-use super::layout::{is_large, unpack_addr, CELLS_PER_LINE, LARGE_FLAG, LINES_PER_BLOCK};
+use super::layout::{CELLS_PER_LINE, LARGE_FLAG, LINES_PER_BLOCK, is_large, unpack_addr};
 use super::{Heap, HeapObject};
 use crate::value::Value;
 

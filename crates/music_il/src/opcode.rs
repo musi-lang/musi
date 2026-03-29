@@ -102,8 +102,8 @@ pub enum Opcode {
     TyTag = 0x4C,
 
     // -- Effect Operations (0x4E-0x51) --
-    EffHdlPush = 0x4E,
-    EffHdlPop = 0x4F,
+    HdlPush = 0x4E,
+    HdlPop = 0x4F,
     EffInvk = 0x50,
     EffCont = 0x51,
 
@@ -212,8 +212,8 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
     table[0x4A] = Some(Opcode::TyChk);
     table[0x4B] = Some(Opcode::TyCast);
     table[0x4C] = Some(Opcode::TyTag);
-    table[0x4E] = Some(Opcode::EffHdlPush);
-    table[0x4F] = Some(Opcode::EffHdlPop);
+    table[0x4E] = Some(Opcode::HdlPush);
+    table[0x4F] = Some(Opcode::HdlPop);
     table[0x50] = Some(Opcode::EffInvk);
     table[0x51] = Some(Opcode::EffCont);
     table[0x52] = Some(Opcode::TyclDict);
@@ -293,9 +293,7 @@ impl Opcode {
 
             Self::TyChk | Self::TyCast | Self::TyTag => OpcodeFamily::Type,
 
-            Self::EffHdlPush | Self::EffHdlPop | Self::EffInvk | Self::EffCont => {
-                OpcodeFamily::Effect
-            }
+            Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffCont => OpcodeFamily::Effect,
 
             Self::TyclDict | Self::TyclCall => OpcodeFamily::Typeclass,
 
@@ -394,8 +392,8 @@ impl Opcode {
             Self::TyCast => "ty.cast",
             Self::TyTag => "ty.tag",
 
-            Self::EffHdlPush => "eff.hdl.push",
-            Self::EffHdlPop => "eff.hdl.pop",
+            Self::HdlPush => "hdl.push",
+            Self::HdlPop => "hdl.pop",
             Self::EffInvk => "eff.invk",
             Self::EffCont => "eff.cont",
 
@@ -498,8 +496,8 @@ pub const ALL_OPCODES: [Opcode; OPCODE_COUNT] = [
     Opcode::TyCast,
     Opcode::TyTag,
     // Effect Operations
-    Opcode::EffHdlPush,
-    Opcode::EffHdlPop,
+    Opcode::HdlPush,
+    Opcode::HdlPop,
     Opcode::EffInvk,
     Opcode::EffCont,
     // Class Dispatch
