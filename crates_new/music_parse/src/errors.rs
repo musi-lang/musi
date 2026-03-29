@@ -29,8 +29,14 @@ pub enum ParseErrorKind {
     ExpectedIdentifier { found: Box<TokenKind> },
     #[error("expected string literal, found {}", display_token_kind(.found.as_ref()))]
     ExpectedStringLiteral { found: Box<TokenKind> },
-    #[error("expected external binding, found {}", display_token_kind(.found.as_ref()))]
-    ExpectedExternalBinding { found: Box<TokenKind> },
+    #[error("expected splice target, found {}", display_token_kind(.found.as_ref()))]
+    ExpectedSpliceTarget { found: Box<TokenKind> },
+    #[error("expected operator member name, found {}", display_token_kind(.found.as_ref()))]
+    ExpectedOperatorMemberName { found: Box<TokenKind> },
+    #[error("expected effect item, found {}", display_token_kind(.found.as_ref()))]
+    ExpectedEffectItem { found: Box<TokenKind> },
+    #[error("expected foreign binding, found {}", display_token_kind(.found.as_ref()))]
+    ExpectedForeignBinding { found: Box<TokenKind> },
     #[error("expected data member, found {}", display_token_kind(.found.as_ref()))]
     ExpectedDataMember { found: Box<TokenKind> },
     #[error("expected array dimension, found {}", display_token_kind(.found.as_ref()))]
@@ -39,15 +45,6 @@ pub enum ParseErrorKind {
     ExpectedFieldTarget { found: Box<TokenKind> },
     #[error("expected constraint operator '<:' or ':', found {}", display_token_kind(.found.as_ref()))]
     ExpectedConstraintOperator { found: Box<TokenKind> },
-    #[error("unclosed delimiter {} without matching {}", display_token_kind(.open.as_ref()), display_token_kind(.close.as_ref()))]
-    UnclosedDelimiter {
-        open: Box<TokenKind>,
-        close: Box<TokenKind>,
-    },
-    #[error("invalid parenthesized form")]
-    InvalidParenthesizedForm,
-    #[error("invalid lambda parameter")]
-    InvalidLambdaParam,
     #[error("invalid attribute target before {}", display_token_kind(.found.as_ref()))]
     InvalidAttributeTarget { found: Box<TokenKind> },
     #[error("non-associative comparison chain")]

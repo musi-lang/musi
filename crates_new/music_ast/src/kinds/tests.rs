@@ -9,6 +9,7 @@ fn test_expr_kinds_include_decl_forms() {
     assert!(SyntaxNodeKind::RecordUpdateExpr.is_expr());
     assert!(SyntaxNodeKind::TypeTestExpr.is_expr());
     assert!(SyntaxNodeKind::TypeCastExpr.is_expr());
+    assert!(SyntaxNodeKind::SpliceExpr.is_expr());
 }
 
 #[test]

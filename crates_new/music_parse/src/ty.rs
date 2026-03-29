@@ -12,7 +12,7 @@ impl Parser<'_, '_> {
     }
 
     pub(crate) fn parse_named_ty(&mut self) -> ParseResult<SyntaxNodeId> {
-        self.parse_named_or_mut_ty()
+        self.parse_named_ty_base()
     }
 
     fn parse_function_ty(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -54,20 +54,22 @@ impl Parser<'_, '_> {
 
     fn parse_ty_atom(&mut self) -> ParseResult<SyntaxNodeId> {
         match self.peek_kind() {
-            TokenKind::KwMut | TokenKind::Ident | TokenKind::EscapedIdent => {
-                self.parse_named_or_mut_ty()
-            }
+            TokenKind::KwMut => self.parse_mut_ty(),
+            TokenKind::Ident | TokenKind::EscapedIdent => self.parse_named_ty_base(),
             TokenKind::LParen => self.parse_paren_ty(),
             TokenKind::LBracket => self.parse_array_ty(),
             _ => Err(self.expected_type()),
         }
     }
 
-    fn parse_named_or_mut_ty(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_mut_ty(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut_kw = self.expect_token(&TokenKind::KwMut)?;
+        let inner = self.parse_ty_atom()?;
+        Ok(self.rewrap_ty(inner, [mut_kw, SyntaxElementId::Node(inner)]))
+    }
+
+    fn parse_named_ty_base(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = vec![];
-        if let Some(mut_kw) = self.eat(&TokenKind::KwMut) {
-            children.push(mut_kw);
-        }
         children.push(self.expect_ident_element()?);
         if self.at(&TokenKind::LBracket) {
             let open = self.advance_element();

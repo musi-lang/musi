@@ -45,6 +45,7 @@ fn token_can_carry_structured_fstring_parts() {
 fn token_display_uses_source_spelling_and_classes() {
     assert_eq!(display_token_kind(&TokenKind::LBrace).to_string(), "'{'");
     assert_eq!(display_token_kind(&TokenKind::KwLet).to_string(), "'let'");
+    assert_eq!(display_token_kind(&TokenKind::Hash).to_string(), "'#'");
     assert_eq!(
         display_token_kind(&TokenKind::StringLit).to_string(),
         "string literal"

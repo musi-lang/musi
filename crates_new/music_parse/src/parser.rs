@@ -117,9 +117,13 @@ impl<'lex, 'src> Parser<'lex, 'src> {
     }
 
     pub(crate) fn nth_kind(&self, offset: usize) -> &TokenKind {
+        &self.nth(offset).kind
+    }
+
+    pub(crate) fn nth(&self, offset: usize) -> &Token {
         self.tokens()
             .get(self.pos + offset)
-            .map_or_else(|| self.peek_kind(), |token| &token.kind)
+            .unwrap_or_else(|| self.tokens().last().expect("lexer emits EOF token"))
     }
 
     pub(crate) fn peek_kind(&self) -> &TokenKind {
@@ -232,9 +236,36 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         }
     }
 
-    pub(crate) fn expected_external_binding(&self) -> ParseError {
+    pub(crate) fn expected_splice_target(&self) -> ParseError {
         ParseError {
-            kind: ParseErrorKind::ExpectedExternalBinding {
+            kind: ParseErrorKind::ExpectedSpliceTarget {
+                found: Box::new(self.found_token()),
+            },
+            span: self.span(),
+        }
+    }
+
+    pub(crate) fn expected_operator_member_name(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedOperatorMemberName {
+                found: Box::new(self.found_token()),
+            },
+            span: self.span(),
+        }
+    }
+
+    pub(crate) fn expected_effect_item(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedEffectItem {
+                found: Box::new(self.found_token()),
+            },
+            span: self.span(),
+        }
+    }
+
+    pub(crate) fn expected_foreign_binding(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedForeignBinding {
                 found: Box::new(self.found_token()),
             },
             span: self.span(),
@@ -352,10 +383,56 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         children.push(close);
         self.builder.push_node_from_children(kind, children)
     }
+
+    pub(crate) fn parse_op_or_ident_name(&mut self) -> ParseResult<SyntaxElementIds> {
+        if matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+            return Ok(vec![self.advance_element()]);
+        }
+
+        if !self.at(&TokenKind::LParen) {
+            return Err(self.expected_operator_member_name());
+        }
+
+        let mut children = vec![self.advance_element()];
+        let mut saw_op = false;
+        while is_symbolic_op_token(self.peek_kind()) {
+            if saw_op && !self.peek().leading_trivia.is_empty() {
+                break;
+            }
+            saw_op = true;
+            children.push(self.advance_element());
+        }
+        if !saw_op {
+            return Err(self.expected_operator_member_name());
+        }
+        children.push(self.expect_token(&TokenKind::RParen)?);
+        Ok(children)
+    }
 }
 
 fn same_kind(left: &TokenKind, right: &TokenKind) -> bool {
     mem::discriminant(left) == mem::discriminant(right)
+}
+
+pub const fn is_symbolic_op_token(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Eq
+            | TokenKind::Lt
+            | TokenKind::Gt
+            | TokenKind::Bang
+            | TokenKind::Question
+            | TokenKind::Colon
+            | TokenKind::Pipe
+            | TokenKind::Amp
+            | TokenKind::Caret
+            | TokenKind::Tilde
+    )
 }
 
 #[cfg(test)]

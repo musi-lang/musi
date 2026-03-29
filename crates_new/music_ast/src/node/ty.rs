@@ -56,7 +56,7 @@ impl<'tree> Ty<'tree> {
 
     #[must_use]
     pub fn is_mutable(self) -> bool {
-        self.kind() == TyKindView::Named && has_token(self.syntax, &TokenKind::KwMut)
+        has_token(self.syntax, &TokenKind::KwMut)
     }
 
     #[must_use]

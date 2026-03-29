@@ -34,6 +34,7 @@ pub enum ExprKindView {
     Handle,
     Resume,
     Quote,
+    Splice,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +258,7 @@ impl ExprKindView {
             SyntaxNodeKind::HandleExpr => Some(Self::Handle),
             SyntaxNodeKind::ResumeExpr => Some(Self::Resume),
             SyntaxNodeKind::QuoteExpr => Some(Self::Quote),
+            SyntaxNodeKind::SpliceExpr => Some(Self::Splice),
             _ => None,
         }
     }

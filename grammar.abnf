@@ -250,7 +250,7 @@ ast-case = "case" ast-expr "of" "(" ["|"] case-arm *("|" case-arm) ["|"] ")"  ; 
 
 case-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
 ; §4.3  Arrays
-ast-array   = "[" [array-items] [","] "]"
+ast-array   = "[" *(",") [array-items] *(",") "]"
 
 array-items = array-item *("," array-item)
 
@@ -259,7 +259,7 @@ array-item  = spread
 ; §4.4  Record literals
 ast-rec-lit    = ".{" [rec-lit-fields] "}"
 
-rec-lit-fields = rec-lit-field *("," rec-lit-field)
+rec-lit-fields = *(",") [rec-lit-field *("," rec-lit-field)] *(",")
 
 rec-lit-field  = ident [":=" ast-expr]
                  / spread

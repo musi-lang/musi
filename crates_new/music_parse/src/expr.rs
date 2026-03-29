@@ -3,12 +3,13 @@ use core::mem;
 use music_ast::{SyntaxElementId, SyntaxNodeId, SyntaxNodeKind};
 use music_lex::TokenKind;
 
-use crate::parser::Parser;
+use crate::parser::{Parser, is_symbolic_op_token};
 
 use super::*;
 
 const PREFIX_BP: u8 = 24;
 const ASSIGN_BP: u8 = 2;
+const SYMBOLIC_BP: u8 = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum InfixClass {
@@ -22,6 +23,11 @@ impl Parser<'_, '_> {
 
         loop {
             if let Some(next_left) = self.try_postfix(left)? {
+                left = next_left;
+                continue;
+            }
+
+            if let Some(next_left) = self.try_symbolic_infix(left, min_bp)? {
                 left = next_left;
                 continue;
             }
@@ -84,7 +90,7 @@ impl Parser<'_, '_> {
             TokenKind::DotLBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
             TokenKind::KwCase => self.parse_case_expr(),
-            TokenKind::KwLet => self.parse_let_expr(vec![]),
+            TokenKind::KwLet => self.parse_let_expr_required_body(vec![]),
             TokenKind::KwResume => self.parse_resume_expr(),
             TokenKind::KwImport => self.parse_import_expr(),
             TokenKind::KwData => self.parse_data_expr(),
@@ -95,6 +101,9 @@ impl Parser<'_, '_> {
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(vec![]),
             TokenKind::KwQuote => self.parse_quote_expr(),
+            TokenKind::Hash | TokenKind::SpliceLParen | TokenKind::SpliceLBracket => {
+                self.parse_splice_expr()
+            }
             TokenKind::At => self.parse_with_attrs_expr(),
             TokenKind::KwExport => self.parse_export_expr(),
             _ => Err(self.expected_expression()),
@@ -203,19 +212,13 @@ impl Parser<'_, '_> {
     fn parse_array_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::LBracket)?;
         let mut children = vec![open];
-        if !self.at(&TokenKind::RBracket) {
-            loop {
-                let item = self.parse_array_item()?;
-                children.push(SyntaxElementId::Node(item));
-                if let Some(comma) = self.eat(&TokenKind::Comma) {
-                    children.push(comma);
-                    if self.at(&TokenKind::RBracket) {
-                        break;
-                    }
-                    continue;
-                }
-                break;
+        while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+            if let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+                continue;
             }
+            let item = self.parse_array_item()?;
+            children.push(SyntaxElementId::Node(item));
         }
         let close = self.expect_token(&TokenKind::RBracket)?;
         children.push(close);
@@ -239,19 +242,13 @@ impl Parser<'_, '_> {
     fn parse_record_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::DotLBrace)?;
         let mut children = vec![open];
-        if !self.at(&TokenKind::RBrace) {
-            loop {
-                let item = self.parse_record_item()?;
-                children.push(SyntaxElementId::Node(item));
-                if let Some(comma) = self.eat(&TokenKind::Comma) {
-                    children.push(comma);
-                    if self.at(&TokenKind::RBrace) {
-                        break;
-                    }
-                    continue;
-                }
-                break;
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+                continue;
             }
+            let item = self.parse_record_item()?;
+            children.push(SyntaxElementId::Node(item));
         }
         let close = self.expect_token(&TokenKind::RBrace)?;
         children.push(close);
@@ -447,6 +444,43 @@ impl Parser<'_, '_> {
             .push_node_from_children(SyntaxNodeKind::QuoteExpr, children))
     }
 
+    fn parse_splice_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        match self.peek_kind() {
+            TokenKind::Hash => {
+                let hash = self.advance_element();
+                let target = self.expect_ident_element().map_err(|_| self.expected_splice_target())?;
+                Ok(self.builder.push_node_from_children(
+                    SyntaxNodeKind::SpliceExpr,
+                    [hash, target],
+                ))
+            }
+            TokenKind::SpliceLParen => {
+                let open = self.advance_element();
+                let expr = self.parse_expr(0)?;
+                let close = self.expect_token(&TokenKind::RParen)?;
+                Ok(self.builder.push_node_from_children(
+                    SyntaxNodeKind::SpliceExpr,
+                    [open, SyntaxElementId::Node(expr), close],
+                ))
+            }
+            TokenKind::SpliceLBracket => {
+                let open = self.advance_element();
+                let mut children = vec![open];
+                if self.at(&TokenKind::RBracket) {
+                    self.error(self.expected_expression());
+                } else {
+                    children.extend(self.parse_expr_list(&TokenKind::RBracket)?);
+                }
+                let close = self.expect_token(&TokenKind::RBracket)?;
+                children.push(close);
+                Ok(self
+                    .builder
+                    .push_node_from_children(SyntaxNodeKind::SpliceExpr, children))
+            }
+            _ => Err(self.expected_splice_target()),
+        }
+    }
+
     fn try_postfix(&mut self, left: SyntaxNodeId) -> ParseResult<Option<SyntaxNodeId>> {
         let kind = self.peek_kind();
         if same_kind(kind, &TokenKind::LParen) {
@@ -473,7 +507,7 @@ impl Parser<'_, '_> {
     fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::LParen)?;
         let mut children = vec![SyntaxElementId::Node(callee), open];
-        children.extend(self.parse_expr_list(&TokenKind::RParen)?);
+        children.extend(self.parse_arg_list()?);
         let close = self.expect_token(&TokenKind::RParen)?;
         children.push(close);
         Ok(self
@@ -495,25 +529,56 @@ impl Parser<'_, '_> {
     fn parse_record_update_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::DotLBrace)?;
         let mut children = vec![SyntaxElementId::Node(base), open];
-        if !self.at(&TokenKind::RBrace) {
-            loop {
-                let field = self.parse_record_item()?;
-                children.push(SyntaxElementId::Node(field));
-                if let Some(comma) = self.eat(&TokenKind::Comma) {
-                    children.push(comma);
-                    if self.at(&TokenKind::RBrace) {
-                        break;
-                    }
-                    continue;
-                }
-                break;
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+                continue;
             }
+            let field = self.parse_record_item()?;
+            children.push(SyntaxElementId::Node(field));
         }
         let close = self.expect_token(&TokenKind::RBrace)?;
         children.push(close);
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::RecordUpdateExpr, children))
+    }
+
+    fn parse_arg_list(&mut self) -> ParseResult<Vec<SyntaxElementId>> {
+        let mut children = vec![];
+        if self.at(&TokenKind::RParen) {
+            return Ok(children);
+        }
+
+        let arg = self.parse_arg()?;
+        children.push(SyntaxElementId::Node(arg));
+        while let Some(comma) = self.eat(&TokenKind::Comma) {
+            children.push(comma);
+            if self.at(&TokenKind::RParen) {
+                return Err(self.expected_expression());
+            }
+            let next = self.parse_arg()?;
+            children.push(SyntaxElementId::Node(next));
+        }
+        Ok(children)
+    }
+
+    fn parse_arg(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = vec![];
+        if let Some(spread) = self.eat(&TokenKind::DotDotDot) {
+            children.push(spread);
+            let expr = self.parse_expr(0)?;
+            children.push(SyntaxElementId::Node(expr));
+            return Ok(self
+                .builder
+                .push_node_from_children(SyntaxNodeKind::Arg, children));
+        }
+
+        let expr = self.parse_expr(0)?;
+        children.push(SyntaxElementId::Node(expr));
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::Arg, children))
     }
 
     fn parse_field_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
@@ -550,6 +615,43 @@ impl Parser<'_, '_> {
             SyntaxNodeKind::TypeCastExpr,
             [SyntaxElementId::Node(base), op, SyntaxElementId::Node(ty)],
         ))
+    }
+
+    fn try_symbolic_infix(
+        &mut self,
+        left: SyntaxNodeId,
+        min_bp: u8,
+    ) -> ParseResult<Option<SyntaxNodeId>> {
+        if !self.starts_symbolic_infix() || SYMBOLIC_BP < min_bp {
+            return Ok(None);
+        }
+
+        let mut children = vec![SyntaxElementId::Node(left)];
+        let mut saw_first = false;
+        while is_symbolic_op_token(self.peek_kind()) {
+            if saw_first && !self.peek().leading_trivia.is_empty() {
+                break;
+            }
+            saw_first = true;
+            children.push(self.advance_element());
+        }
+        let right = self.parse_expr(SYMBOLIC_BP + 1)?;
+        children.push(SyntaxElementId::Node(right));
+
+        Ok(Some(
+            self.builder
+                .push_node_from_children(SyntaxNodeKind::BinaryExpr, children),
+        ))
+    }
+
+    fn starts_symbolic_infix(&self) -> bool {
+        match self.peek_kind() {
+            TokenKind::Amp | TokenKind::Caret | TokenKind::Tilde => true,
+            kind if is_symbolic_op_token(kind) => {
+                is_symbolic_op_token(self.nth_kind(1)) && self.nth(1).leading_trivia.is_empty()
+            }
+            _ => false,
+        }
     }
 
     fn is_lambda_paren(&self) -> bool {

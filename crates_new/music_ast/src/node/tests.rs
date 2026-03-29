@@ -111,68 +111,42 @@ fn test_support_wrappers_cast_exact_kinds() {
         trailing_trivia: Trivias::new(),
     });
 
-    let ids = [
+    let alloc_node = |nodes: &mut Arena<SyntaxNodeData>, kind: SyntaxNodeKind| {
         nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Attr,
-            span: Span::new(0, 1),
-            children: iter::once(SyntaxElementId::Token(token_id)).collect(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Param,
+            kind,
             span: Span::new(0, 1),
             children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Field,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Variant,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::TypeParam,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Constraint,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::ArrayItem,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::RecordItem,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::ImportTarget,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::HandlerClause,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-        nodes.alloc(SyntaxNodeData {
-            kind: SyntaxNodeKind::Member,
-            span: Span::new(0, 1),
-            children: SmallVec::default(),
-        }),
-    ];
+        })
+    };
+
+    let mut ids = vec![];
+    ids.push(nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::Attr,
+        span: Span::new(0, 1),
+        children: iter::once(SyntaxElementId::Token(token_id)).collect(),
+    }));
+    for kind in [
+        SyntaxNodeKind::Param,
+        SyntaxNodeKind::Field,
+        SyntaxNodeKind::Variant,
+        SyntaxNodeKind::TypeParam,
+        SyntaxNodeKind::Constraint,
+        SyntaxNodeKind::ArrayItem,
+        SyntaxNodeKind::RecordItem,
+        SyntaxNodeKind::ImportTarget,
+        SyntaxNodeKind::EffectSet,
+        SyntaxNodeKind::EffectItem,
+        SyntaxNodeKind::Arg,
+        SyntaxNodeKind::HandlerClause,
+        SyntaxNodeKind::Member,
+    ] {
+        ids.push(alloc_node(&mut nodes, kind));
+    }
 
     let root_id = nodes.alloc(SyntaxNodeData {
         kind: SyntaxNodeKind::SourceFile,
         span: Span::new(0, 1),
-        children: ids.iter().copied().map(SyntaxElementId::Node).collect(),
+        children: ids.into_iter().map(SyntaxElementId::Node).collect(),
     });
     let tree = SyntaxTree::new(source_id, nodes, tokens, root_id);
     let mut nodes = tree.root().child_nodes();
@@ -186,6 +160,9 @@ fn test_support_wrappers_cast_exact_kinds() {
     assert!(ArrayItem::cast(nodes.next().expect("array item")).is_some());
     assert!(RecordItem::cast(nodes.next().expect("record item")).is_some());
     assert!(ImportTarget::cast(nodes.next().expect("import target")).is_some());
+    assert!(EffectSet::cast(nodes.next().expect("effect set")).is_some());
+    assert!(EffectItem::cast(nodes.next().expect("effect item")).is_some());
+    assert!(Arg::cast(nodes.next().expect("arg")).is_some());
     assert!(HandlerClause::cast(nodes.next().expect("handler clause")).is_some());
     assert!(Member::cast(nodes.next().expect("member")).is_some());
 }

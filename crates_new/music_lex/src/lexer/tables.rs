@@ -88,6 +88,10 @@ pub(super) const fn single_char_token(ch: char) -> Option<TokenKind> {
         '/' => Some(TokenKind::Slash),
         '%' => Some(TokenKind::Percent),
         '@' => Some(TokenKind::At),
+        '#' => Some(TokenKind::Hash),
+        '&' => Some(TokenKind::Amp),
+        '^' => Some(TokenKind::Caret),
+        '~' => Some(TokenKind::Tilde),
         _ => None,
     }
 }

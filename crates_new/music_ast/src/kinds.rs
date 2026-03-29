@@ -31,6 +31,7 @@ pub enum SyntaxNodeKind {
     HandleExpr,
     ResumeExpr,
     QuoteExpr,
+    SpliceExpr,
 
     WildcardPat,
     BindPat,
@@ -53,6 +54,9 @@ pub enum SyntaxNodeKind {
     ArrayItem,
     RecordItem,
     ImportTarget,
+    EffectSet,
+    EffectItem,
+    Arg,
     ParamList,
     Param,
     FieldList,
@@ -102,6 +106,7 @@ impl SyntaxNodeKind {
                 | Self::HandleExpr
                 | Self::ResumeExpr
                 | Self::QuoteExpr
+                | Self::SpliceExpr
         )
     }
 

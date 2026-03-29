@@ -4,7 +4,7 @@ use music_lex::Lexer;
 use crate::parse;
 
 #[test]
-fn test_parse_pattern_in_let() {
+fn test_parse_pat_in_let() {
     let mut sources = SourceMap::default();
     let source_id = sources.add("test.ms", "let x as y := z;");
     let lexed = Lexer::new("let x as y := z;").lex();

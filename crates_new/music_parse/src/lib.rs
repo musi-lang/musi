@@ -2,7 +2,7 @@ mod decl;
 pub mod errors;
 mod expr;
 mod member;
-mod parser;
+pub(crate) mod parser;
 mod pat;
 mod ty;
 

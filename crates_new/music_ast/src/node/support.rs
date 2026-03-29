@@ -35,6 +35,9 @@ support_wrapper!(Member, Member);
 support_wrapper!(ArrayItem, ArrayItem);
 support_wrapper!(RecordItem, RecordItem);
 support_wrapper!(ImportTarget, ImportTarget);
+support_wrapper!(EffectSet, EffectSet);
+support_wrapper!(EffectItem, EffectItem);
+support_wrapper!(Arg, Arg);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemberKind {
@@ -93,5 +96,14 @@ impl ImportTarget<'_> {
         self.syntax
             .child_tokens()
             .any(|token| matches!(token.kind(), TokenKind::DotLBrace))
+    }
+}
+
+impl Arg<'_> {
+    #[must_use]
+    pub fn is_spread(self) -> bool {
+        self.syntax
+            .child_tokens()
+            .any(|token| matches!(token.kind(), TokenKind::DotDotDot))
     }
 }

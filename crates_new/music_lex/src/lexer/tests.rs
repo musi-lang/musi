@@ -72,7 +72,7 @@ fn test_removed_keywords_fall_back_to_identifiers() {
 #[test]
 fn test_current_compounds_are_lexed() {
     assert_eq!(
-        token_kinds(":= :? :?> ... .{ .[ ?. !. |> #("),
+        token_kinds(":= :? :?> ... .{ .[ ?. !. |> #( #["),
         vec![
             TokenKind::ColonEq,
             TokenKind::ColonQuestion,
@@ -84,6 +84,22 @@ fn test_current_compounds_are_lexed() {
             TokenKind::BangDot,
             TokenKind::PipeGt,
             TokenKind::SpliceLParen,
+            TokenKind::SpliceLBracket,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_splice_prefix_and_operator_chars_lex_as_single_tokens() {
+    assert_eq!(
+        token_kinds("#foo & ^ ~"),
+        vec![
+            TokenKind::Hash,
+            TokenKind::Ident,
+            TokenKind::Amp,
+            TokenKind::Caret,
+            TokenKind::Tilde,
             TokenKind::Eof,
         ]
     );

@@ -15,7 +15,8 @@ impl Parser<'_, '_> {
 
     fn parse_let_member(&mut self) -> ParseResult<SyntaxNodeId> {
         let let_kw = self.expect_token(&TokenKind::KwLet)?;
-        let mut children = vec![let_kw, self.expect_ident_element()?];
+        let mut children = vec![let_kw];
+        children.extend(self.parse_op_or_ident_name()?);
         if self.at(&TokenKind::LParen) {
             let open = self.advance_element();
             let params = self.parse_param_list_contents(&TokenKind::RParen)?;

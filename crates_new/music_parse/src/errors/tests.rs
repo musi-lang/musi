@@ -32,3 +32,12 @@ fn test_token_expectation_renders_source_spelling() {
 
     assert_eq!(error.to_string(), "expected token '{', found ')'");
 }
+
+#[test]
+fn test_splice_target_expectation_uses_token_display() {
+    let error = ParseErrorKind::ExpectedSpliceTarget {
+        found: Box::new(TokenKind::Semi),
+    };
+
+    assert_eq!(error.to_string(), "expected splice target, found ';'");
+}

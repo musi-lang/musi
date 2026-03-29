@@ -5,12 +5,18 @@ use crate::parser::Parser;
 
 use super::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LetBody {
+    Required,
+    Optional,
+}
+
 impl Parser<'_, '_> {
     pub(crate) fn parse_with_attrs_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let attrs = self.parse_attrs()?;
         match self.peek_kind() {
             TokenKind::KwExport => self.parse_export_expr_with_attrs(attrs),
-            TokenKind::KwLet => self.parse_let_expr(attrs),
+            TokenKind::KwLet => self.parse_let_expr_required_body(attrs),
             TokenKind::KwForeign => self.parse_foreign_expr(attrs),
             TokenKind::KwInstance => self.parse_instance_expr(attrs),
             _ => Err(ParseError {
@@ -121,7 +127,7 @@ impl Parser<'_, '_> {
         if self.at(&TokenKind::LParen) {
             return self.parse_foreign_block_expr(attrs);
         }
-        Err(self.expected_external_binding())
+        Err(self.expected_foreign_binding())
     }
 
     fn parse_foreign_block_expr(
@@ -130,8 +136,7 @@ impl Parser<'_, '_> {
     ) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(&TokenKind::LParen)?);
         while !self.at(&TokenKind::RParen) && !self.at(&TokenKind::Eof) {
-            let binding_attrs = self.parse_attrs()?;
-            let binding = self.parse_let_expr(binding_attrs)?;
+            let binding = self.parse_foreign_binding()?;
             attrs.push(SyntaxElementId::Node(binding));
             let semi = self.expect_token(&TokenKind::Semi)?;
             attrs.push(semi);
@@ -147,6 +152,27 @@ impl Parser<'_, '_> {
         &mut self,
         mut attrs: Vec<SyntaxElementId>,
     ) -> ParseResult<SyntaxNodeId> {
+        self.parse_let_expr_inner(&mut attrs, LetBody::Optional)?;
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::LetExpr, attrs))
+    }
+
+    pub(crate) fn parse_let_expr_required_body(
+        &mut self,
+        mut attrs: Vec<SyntaxElementId>,
+    ) -> ParseResult<SyntaxNodeId> {
+        self.parse_let_expr_inner(&mut attrs, LetBody::Required)?;
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::LetExpr, attrs))
+    }
+
+    fn parse_let_expr_inner(
+        &mut self,
+        attrs: &mut Vec<SyntaxElementId>,
+        body: LetBody,
+    ) -> ParseResult<()> {
         attrs.push(self.expect_token(&TokenKind::KwLet)?);
         if let Some(mut_kw) = self.eat(&TokenKind::KwMut) {
             attrs.push(mut_kw);
@@ -175,14 +201,7 @@ impl Parser<'_, '_> {
         }
         if self.at(&TokenKind::KwWith) {
             attrs.push(self.advance_element());
-            let open = self.expect_token(&TokenKind::LBrace)?;
-            let mut children = vec![open];
-            children.extend(self.parse_ident_list(&TokenKind::RBrace)?);
-            let close = self.expect_token(&TokenKind::RBrace)?;
-            children.push(close);
-            let effect_set = self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::ConstraintList, children);
+            let effect_set = self.parse_effect_set()?;
             attrs.push(SyntaxElementId::Node(effect_set));
         }
         if let Some(colon) = self.eat(&TokenKind::Colon) {
@@ -190,15 +209,61 @@ impl Parser<'_, '_> {
             let ty = self.parse_ty()?;
             attrs.push(SyntaxElementId::Node(ty));
         }
-        if let Some(bind) = self.eat(&TokenKind::ColonEq) {
-            attrs.push(bind);
-            let expr = self.parse_expr(0)?;
-            attrs.push(SyntaxElementId::Node(expr));
+
+        match body {
+            LetBody::Required => {
+                let bind = self.expect_token(&TokenKind::ColonEq)?;
+                attrs.push(bind);
+                let expr = self.parse_expr(0)?;
+                attrs.push(SyntaxElementId::Node(expr));
+            }
+            LetBody::Optional => {
+                if let Some(bind) = self.eat(&TokenKind::ColonEq) {
+                    attrs.push(bind);
+                    let expr = self.parse_expr(0)?;
+                    attrs.push(SyntaxElementId::Node(expr));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn parse_foreign_binding(&mut self) -> ParseResult<SyntaxNodeId> {
+        if !self.at(&TokenKind::KwLet) {
+            return Err(self.expected_foreign_binding());
+        }
+
+        let mut children = vec![self.advance_element()];
+        children.extend(self.parse_attrs()?);
+        children.push(self.expect_ident_element()?);
+
+        if self.at(&TokenKind::LBracket) {
+            let open = self.advance_element();
+            let params = self.parse_type_param_list_contents(&TokenKind::RBracket)?;
+            let close = self.expect_token(&TokenKind::RBracket)?;
+            let list = self.wrap_list(SyntaxNodeKind::TypeParamList, open, params, close);
+            children.push(SyntaxElementId::Node(list));
+        }
+        if self.at(&TokenKind::LParen) {
+            let open = self.advance_element();
+            let params = self.parse_param_list_contents(&TokenKind::RParen)?;
+            let close = self.expect_token(&TokenKind::RParen)?;
+            let list = self.wrap_list(SyntaxNodeKind::ParamList, open, params, close);
+            children.push(SyntaxElementId::Node(list));
+        }
+        if self.at(&TokenKind::KwWhere) {
+            children.push(self.advance_element());
+            children.push(SyntaxElementId::Node(self.parse_constraint_list()?));
+        }
+        if let Some(colon) = self.eat(&TokenKind::Colon) {
+            children.push(colon);
+            children.push(SyntaxElementId::Node(self.parse_ty()?));
         }
 
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::LetExpr, attrs))
+            .push_node_from_children(SyntaxNodeKind::LetExpr, children))
     }
 
     pub(crate) fn parse_import_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -211,7 +276,16 @@ impl Parser<'_, '_> {
             if self.at(&TokenKind::DotLBrace) {
                 let open = self.advance_element();
                 target_children.push(open);
-                target_children.extend(self.parse_ident_list(&TokenKind::RBrace)?);
+                if self.at(&TokenKind::RBrace) {
+                    self.error(ParseError {
+                        kind: ParseErrorKind::ExpectedIdentifier {
+                            found: Box::new(self.found_token()),
+                        },
+                        span: self.span(),
+                    });
+                } else {
+                    target_children.extend(self.parse_ident_list(&TokenKind::RBrace)?);
+                }
                 let close = self.expect_token(&TokenKind::RBrace)?;
                 target_children.push(close);
             }
@@ -505,6 +579,47 @@ impl Parser<'_, '_> {
             SyntaxNodeKind::Constraint,
             [ident, op, SyntaxElementId::Node(ty)],
         ))
+    }
+
+    fn parse_effect_set(&mut self) -> ParseResult<SyntaxNodeId> {
+        let open = self.expect_token(&TokenKind::LBrace)?;
+        let mut children = vec![open];
+        if self.at(&TokenKind::RBrace) {
+            self.error(self.expected_effect_item());
+        } else {
+            children.push(SyntaxElementId::Node(self.parse_effect_item()?));
+            while let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+                if self.at(&TokenKind::RBrace) {
+                    break;
+                }
+                children.push(SyntaxElementId::Node(self.parse_effect_item()?));
+            }
+        }
+        let close = self.expect_token(&TokenKind::RBrace)?;
+        children.push(close);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::EffectSet, children))
+    }
+
+    fn parse_effect_item(&mut self) -> ParseResult<SyntaxNodeId> {
+        if !matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+            return Err(self.expected_effect_item());
+        }
+
+        let mut children = vec![self.advance_element()];
+        if self.at(&TokenKind::LBracket) {
+            let open = self.advance_element();
+            children.push(open);
+            children.push(SyntaxElementId::Node(self.parse_ty()?));
+            let close = self.expect_token(&TokenKind::RBracket)?;
+            children.push(close);
+        }
+
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::EffectItem, children))
     }
 }
 

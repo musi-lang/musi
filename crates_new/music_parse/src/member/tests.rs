@@ -12,3 +12,14 @@ fn test_parse_instance_member() {
 
     assert!(parsed.errors().is_empty());
 }
+
+#[test]
+fn test_parse_operator_member_name() {
+    let source = "instance Math { let (+) (x : Int, y : Int) : Int := x + y };";
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", source);
+    let lexed = Lexer::new(source).lex();
+    let parsed = parse(source_id, &lexed);
+
+    assert!(parsed.errors().is_empty());
+}
