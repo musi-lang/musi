@@ -19,9 +19,9 @@ pub use boxed::{
 pub use expr::{
     HirArg, HirArrayItem, HirCallableName, HirCaseArm, HirChainKind, HirConstraint,
     HirConstraintKind, HirDeclMods, HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirExprKind,
-    HirFStringPart, HirFieldDef, HirHandleClause, HirImportTarget, HirLit, HirLitKind,
-    HirMemberDef, HirMemberKey, HirParam, HirRecordItem, HirRecordPatField, HirSplice, HirSpliceId,
-    HirSpliceKind, HirTypeParam, HirVariantDef,
+    HirFStringPart, HirFieldDef, HirHandleClause, HirLit, HirLitKind, HirMemberDef, HirMemberKey,
+    HirParam, HirRecordItem, HirRecordPatField, HirSplice, HirSpliceId, HirSpliceKind,
+    HirTypeParam, HirVariantDef,
 };
 pub use module::{HirModule, HirStore};
 pub use origin::HirOrigin;

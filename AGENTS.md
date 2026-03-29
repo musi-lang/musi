@@ -25,7 +25,7 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 | `true`/`false`            | `.True`/`.False`                            | Variants, dot-prefixed, capitalized                |
 | `enum`                    | `data { A \| B : T }`                       | `\|` separates variants, `:` for payload           |
 | `struct`                  | `data { x : T; y : U }`                     | Fields separated by `;`                            |
-| `x.field` (obj lit)       | `.{ field := value }`                       | Record literals use `.{`                           |
+| `x.field` (obj lit)       | `{ field := value }`                        | Record literals use `{}`. Record update uses `x.{` |
 | `#[attr]`                 | `@attr`                                     | Rust-style attributes replaced by `@` prefix       |
 | `'T`                      | `T` (declared in `[T]`)                     | No tick prefix for type variables                  |
 | `A \| B` (type sum)       | `A + B`                                     | `+` for sums, `*` for products                     |

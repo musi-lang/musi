@@ -34,7 +34,6 @@ support_wrapper!(HandlerClause, HandlerClause);
 support_wrapper!(Member, Member);
 support_wrapper!(ArrayItem, ArrayItem);
 support_wrapper!(RecordItem, RecordItem);
-support_wrapper!(ImportTarget, ImportTarget);
 support_wrapper!(EffectSet, EffectSet);
 support_wrapper!(EffectItem, EffectItem);
 support_wrapper!(Arg, Arg);
@@ -80,22 +79,6 @@ impl RecordItem<'_> {
         self.syntax
             .child_tokens()
             .any(|token| matches!(token.kind(), TokenKind::ColonEq))
-    }
-}
-
-impl ImportTarget<'_> {
-    #[must_use]
-    pub fn has_alias(self) -> bool {
-        self.syntax
-            .child_tokens()
-            .any(|token| matches!(token.kind(), TokenKind::KwAs))
-    }
-
-    #[must_use]
-    pub fn is_selective(self) -> bool {
-        self.syntax
-            .child_tokens()
-            .any(|token| matches!(token.kind(), TokenKind::DotLBrace))
     }
 }
 

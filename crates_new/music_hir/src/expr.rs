@@ -33,7 +33,6 @@ pub enum HirExprKind {
     },
     Import {
         path: HirStringLit,
-        target: Option<HirImportTarget>,
     },
     ForeignBlock {
         abi: Option<HirStringLit>,
@@ -274,13 +273,6 @@ pub struct HirCaseArm {
     pub pat: HirPatId,
     pub guard: Option<HirExprId>,
     pub body: HirExprId,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum HirImportTarget {
-    Alias { name: Ident },
-    Wildcard { span: Span },
-    Selective { module: Ident, items: HirIdents },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

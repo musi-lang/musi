@@ -53,7 +53,6 @@ pub enum SyntaxNodeKind {
     AttrArg,
     ArrayItem,
     RecordItem,
-    ImportTarget,
     EffectSet,
     EffectItem,
     Arg,

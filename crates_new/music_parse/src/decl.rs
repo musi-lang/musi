@@ -270,20 +270,39 @@ impl Parser<'_, '_> {
         let import_kw = self.expect_token(&TokenKind::KwImport)?;
         let path = self.expect_string_element()?;
         let mut children = vec![import_kw, path];
-        if let Some(as_kw) = self.eat(&TokenKind::KwAs) {
-            let mut target_children = vec![as_kw];
-            target_children.push(self.expect_ident_element()?);
-            if self.at(&TokenKind::DotLBrace) {
-                let open = self.advance_element();
-                target_children.push(open);
-                target_children.extend(self.parse_ident_list_nonempty(&TokenKind::RBrace));
-                let close = self.expect_token(&TokenKind::RBrace)?;
-                target_children.push(close);
+        if self.at(&TokenKind::KwAs) {
+            self.error(ParseError {
+                kind: ParseErrorKind::ImportAliasNotSupported,
+                span: self.span(),
+            });
+
+            // Recover by consuming the unsupported alias tail so callers don't cascade
+            // into unrelated "expected token" errors.
+            let mut tail = vec![];
+            while !self.at_any(&[
+                TokenKind::Semi,
+                TokenKind::Comma,
+                TokenKind::RParen,
+                TokenKind::RBracket,
+                TokenKind::RBrace,
+                TokenKind::Pipe,
+                TokenKind::Eof,
+            ]) {
+                if self.at(&TokenKind::DotLBrace) {
+                    tail.push(self.advance_element());
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        tail.push(self.advance_element());
+                    }
+                    if self.at(&TokenKind::RBrace) {
+                        tail.push(self.advance_element());
+                    }
+                    continue;
+                }
+                tail.push(self.advance_element());
             }
-            let target = self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::ImportTarget, target_children);
-            children.push(SyntaxElementId::Node(target));
+            if !tail.is_empty() {
+                children.push(SyntaxElementId::Node(self.builder.push_error_node(tail)));
+            }
         }
         Ok(self
             .builder

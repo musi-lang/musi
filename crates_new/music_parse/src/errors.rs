@@ -17,6 +17,8 @@ pub enum ParseErrorKind {
         expected: Box<TokenKind>,
         found: Box<TokenKind>,
     },
+    #[error("import does not support 'as' aliasing; use a let binding")]
+    ImportAliasNotSupported,
     #[error("expected expression, found {}", display_token_kind(.found.as_ref()))]
     ExpectedExpression { found: Box<TokenKind> },
     #[error("expected pattern, found {}", display_token_kind(.found.as_ref()))]
@@ -49,6 +51,12 @@ pub enum ParseErrorKind {
     InvalidAttributeTarget { found: Box<TokenKind> },
     #[error("non-associative comparison chain")]
     NonAssociativeChain,
+    #[error(
+        "record literal starts with '{{' ('.{{' is record update syntax and requires a receiver)"
+    )]
+    RecordLiteralUsesDotBrace,
+    #[error("record pattern starts with '{{'")]
+    RecordPatternUsesDotBrace,
 }
 
 impl ParseError {

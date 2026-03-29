@@ -133,7 +133,6 @@ fn test_support_wrappers_cast_exact_kinds() {
         SyntaxNodeKind::Constraint,
         SyntaxNodeKind::ArrayItem,
         SyntaxNodeKind::RecordItem,
-        SyntaxNodeKind::ImportTarget,
         SyntaxNodeKind::EffectSet,
         SyntaxNodeKind::EffectItem,
         SyntaxNodeKind::Arg,
@@ -159,7 +158,6 @@ fn test_support_wrappers_cast_exact_kinds() {
     assert!(Constraint::cast(nodes.next().expect("constraint")).is_some());
     assert!(ArrayItem::cast(nodes.next().expect("array item")).is_some());
     assert!(RecordItem::cast(nodes.next().expect("record item")).is_some());
-    assert!(ImportTarget::cast(nodes.next().expect("import target")).is_some());
     assert!(EffectSet::cast(nodes.next().expect("effect set")).is_some());
     assert!(EffectItem::cast(nodes.next().expect("effect item")).is_some());
     assert!(Arg::cast(nodes.next().expect("arg")).is_some());
@@ -429,58 +427,6 @@ fn test_array_and_record_items_report_flags() {
     assert!(array_item.is_spread());
     assert!(!record_item.is_spread());
     assert!(record_item.has_value());
-}
-
-#[test]
-fn test_import_target_reports_alias_and_selective_flags() {
-    let mut sources = SourceMap::default();
-    let source_id = sources.add("test.ms", "import \"x\" as Foo.{bar}");
-
-    let mut nodes = Arena::new();
-    let mut tokens = Arena::new();
-    let as_id = tokens.alloc(SyntaxTokenData {
-        kind: TokenKind::KwAs,
-        span: Span::new(11, 13),
-        leading_trivia: Trivias::new(),
-        trailing_trivia: Trivias::new(),
-    });
-    let selective_id = tokens.alloc(SyntaxTokenData {
-        kind: TokenKind::DotLBrace,
-        span: Span::new(17, 19),
-        leading_trivia: Trivias::new(),
-        trailing_trivia: Trivias::new(),
-    });
-    let alias_target_id = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::ImportTarget,
-        span: Span::new(11, 16),
-        children: iter::once(SyntaxElementId::Token(as_id)).collect(),
-    });
-    let selective_target_id = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::ImportTarget,
-        span: Span::new(17, 24),
-        children: iter::once(SyntaxElementId::Token(selective_id)).collect(),
-    });
-    let root_id = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::SourceFile,
-        span: Span::new(0, 24),
-        children: [
-            SyntaxElementId::Node(alias_target_id),
-            SyntaxElementId::Node(selective_target_id),
-        ]
-        .into_iter()
-        .collect(),
-    });
-
-    let tree = SyntaxTree::new(source_id, nodes, tokens, root_id);
-    let mut children = tree.root().child_nodes();
-    let alias = ImportTarget::cast(children.next().expect("alias target")).expect("alias target");
-    let selective =
-        ImportTarget::cast(children.next().expect("selective target")).expect("selective target");
-
-    assert!(alias.has_alias());
-    assert!(!alias.is_selective());
-    assert!(!selective.has_alias());
-    assert!(selective.is_selective());
 }
 
 #[test]

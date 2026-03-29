@@ -436,20 +436,6 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         children
     }
 
-    pub(crate) fn parse_ident_list_nonempty(&mut self, close: &TokenKind) -> SyntaxElementIds {
-        if self.at(close) {
-            self.error(ParseError {
-                kind: ParseErrorKind::ExpectedIdentifier {
-                    found: Box::new(self.found_token()),
-                },
-                span: self.span(),
-            });
-            return vec![];
-        }
-
-        self.parse_ident_list_opt(close)
-    }
-
     pub(crate) fn wrap_list(
         &mut self,
         kind: SyntaxNodeKind,

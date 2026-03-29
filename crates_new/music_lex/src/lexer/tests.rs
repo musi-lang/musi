@@ -227,7 +227,7 @@ fn test_structured_fstring_uses_span_parts() {
 
 #[test]
 fn test_fstring_interpolation_handles_nested_braces() {
-    let lexed = lex("f\"{case x of (| y => .{ value := y })}\"");
+    let lexed = lex("f\"{case x of (| y => { value := y })}\"");
     let TokenKind::FStringLit(parts) = &lexed.tokens()[0].kind else {
         panic!("expected f-string token");
     };
@@ -236,7 +236,7 @@ fn test_fstring_interpolation_handles_nested_braces() {
     assert_eq!(parts[0].kind, FStringPartKind::Interpolation);
     assert_eq!(
         lexed.text(parts[0].span),
-        "case x of (| y => .{ value := y })"
+        "case x of (| y => { value := y })"
     );
 }
 

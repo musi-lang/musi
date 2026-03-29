@@ -190,6 +190,17 @@ impl<'tree> Expr<'tree> {
     pub fn is_block_quote(self) -> bool {
         self.kind() == ExprKindView::Quote && has_token(self.syntax, &TokenKind::LBrace)
     }
+
+    #[must_use]
+    pub fn import_path_token(self) -> Option<SyntaxToken<'tree>> {
+        if self.kind() != ExprKindView::Import {
+            return None;
+        }
+
+        self.syntax
+            .child_tokens()
+            .find(|token| matches!(token.kind(), TokenKind::StringLit))
+    }
 }
 
 impl<'tree> DeclSurface<'tree> {

@@ -6,11 +6,27 @@ use crate::parse;
 #[test]
 fn test_parse_import_expr() {
     let mut sources = SourceMap::default();
-    let source_id = sources.add("test.ms", "import \"x\" as Foo;");
-    let lexed = Lexer::new("import \"x\" as Foo;").lex();
+    let source_id = sources.add("test.ms", "let Foo := import \"x\";");
+    let lexed = Lexer::new("let Foo := import \"x\";").lex();
     let parsed = parse(source_id, &lexed);
 
     assert!(parsed.errors().is_empty());
+}
+
+#[test]
+fn test_import_alias_is_rejected() {
+    let source = r#"import "x" as Foo;"#;
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", source);
+    let lexed = Lexer::new(source).lex();
+    let parsed = parse(source_id, &lexed);
+
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| matches!(error.kind, crate::ParseErrorKind::ImportAliasNotSupported))
+    );
 }
 
 #[test]

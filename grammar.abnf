@@ -271,7 +271,7 @@ array-items = array-item *("," array-item)
 array-item  = spread
               / ast-expr
 ; §4.4  Record literals
-ast-rec-lit    = ".{" [rec-lit-fields] "}"
+ast-rec-lit    = "{" [rec-lit-fields] "}"
 
 rec-lit-fields = *(",") [rec-lit-field *("," rec-lit-field)] *(",")
 
@@ -318,7 +318,7 @@ ast-dot-pfx      = "." ident ["(" [expr-list] ")"]
 
 ast-resume       = "resume" [ast-expr]
 
-ast-import       = "import" lit-string ["as" (ident / "_" / ident ".{" ident-list "}")]  ; selective import
+ast-import       = "import" lit-string
 
 ast-foreign-expr = "foreign" [lit-string] ("let" let-rest / "(" *("let" foreign-binding ";") ")")  ; omitted ABI defaults to "c"
 
@@ -380,7 +380,7 @@ ast-pat-primary = "_"  ; wildcard
                   / lit  ; literal
                   / ident ["as" ast-pat-primary]  ; bind or as-pattern
                   / "." ident ["(" [pat-list] ")"]  ; variant
-                  / ".{" [rec-pat-fields] "}"  ; record pattern
+                  / "{" [rec-pat-fields] "}"  ; record pattern
                   / "(" [pat-list] ")"  ; tuple / grouped
                   / "[" [pat-list] "]"  ; array
 

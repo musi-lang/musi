@@ -42,6 +42,25 @@ let mut counter := 0;
 counter <- counter + 1;
 ```
 
+## Records
+
+Record literals use `{ ... }`. Record update uses `expr.{ ... }`. Record patterns also use `{ ... }`.
+
+```musi
+let p := { x := 1, y := 2 };
+let q := p.{ x := 3 };
+let {x, y} := p;
+```
+
+## Imports
+
+`import "path"` is an expression. Aliasing and selective binding use `let` patterns.
+
+```musi
+let IO := import "std/io";
+let {read, write} := IO;
+```
+
 ## Types
 
 Type application uses brackets:

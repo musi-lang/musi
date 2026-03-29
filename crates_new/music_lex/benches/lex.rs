@@ -18,12 +18,12 @@ fn bench_operators(c: &mut Criterion) {
 
 fn bench_mixed(c: &mut Criterion) {
     let source = r#"
-let Point := data { x : Float; y : Float };
-let origin := .{ x := 0.0, y := 0.0 };
-let render := (name) => f"Point {name}";
-case origin of (
-| value if value.x >= 0.0 => value
-| _ => origin
+	let Point := data { x : Float; y : Float };
+	let origin := { x := 0.0, y := 0.0 };
+	let render := (name) => f"Point {name}";
+	case origin of (
+	| value if value.x >= 0.0 => value
+	| _ => origin
 );
 "#
     .repeat(80);

@@ -3,6 +3,7 @@ use music_lex::TokenKind;
 
 use crate::errors::ParseResult;
 use crate::parser::Parser;
+use crate::{ParseError, ParseErrorKind};
 
 impl Parser<'_, '_> {
     pub(crate) fn parse_pat(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -30,7 +31,14 @@ impl Parser<'_, '_> {
             | TokenKind::FStringLit(_)
             | TokenKind::RuneLit => Ok(self.parse_literal_pat()),
             TokenKind::Dot => self.parse_variant_pat(),
-            TokenKind::DotLBrace => self.parse_record_pat(),
+            TokenKind::LBrace => self.parse_record_pat(),
+            TokenKind::DotLBrace => {
+                self.error(ParseError {
+                    kind: ParseErrorKind::RecordPatternUsesDotBrace,
+                    span: self.span(),
+                });
+                self.parse_record_pat_dot_brace()
+            }
             TokenKind::LParen => self.parse_tuple_pat(),
             TokenKind::LBracket => self.parse_array_pat(),
             _ => Err(self.expected_pattern()),
@@ -89,6 +97,36 @@ impl Parser<'_, '_> {
     }
 
     fn parse_record_pat(&mut self) -> ParseResult<SyntaxNodeId> {
+        let open = self.expect_token(&TokenKind::LBrace)?;
+        let mut children = vec![open];
+        if !self.at(&TokenKind::RBrace) {
+            loop {
+                if let Some(mut_kw) = self.eat(&TokenKind::KwMut) {
+                    children.push(mut_kw);
+                }
+                children.push(self.expect_ident_element()?);
+                if let Some(colon) = self.eat(&TokenKind::Colon) {
+                    children.push(colon);
+                    children.push(SyntaxElementId::Node(self.parse_pat()?));
+                }
+                if let Some(comma) = self.eat(&TokenKind::Comma) {
+                    children.push(comma);
+                    if self.at(&TokenKind::RBrace) {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        let close = self.expect_token(&TokenKind::RBrace)?;
+        children.push(close);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::RecordPat, children))
+    }
+
+    fn parse_record_pat_dot_brace(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::DotLBrace)?;
         let mut children = vec![open];
         if !self.at(&TokenKind::RBrace) {

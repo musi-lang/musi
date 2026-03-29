@@ -81,7 +81,14 @@ impl Parser<'_, '_> {
             TokenKind::Ident | TokenKind::EscapedIdent => self.parse_name_expr(),
             TokenKind::LParen => self.parse_paren_expr(),
             TokenKind::LBracket => self.parse_array_expr(),
-            TokenKind::DotLBrace => self.parse_record_expr(),
+            TokenKind::LBrace => self.parse_record_expr(),
+            TokenKind::DotLBrace => {
+                self.error(ParseError {
+                    kind: ParseErrorKind::RecordLiteralUsesDotBrace,
+                    span: self.span(),
+                });
+                self.parse_record_expr_dot_brace()
+            }
             TokenKind::Dot => self.parse_dot_prefix_expr(),
             TokenKind::KwCase => self.parse_case_expr(),
             TokenKind::KwLet => self.parse_let_expr_required_body(vec![]),
@@ -234,6 +241,24 @@ impl Parser<'_, '_> {
     }
 
     fn parse_record_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let open = self.expect_token(&TokenKind::LBrace)?;
+        let mut children = vec![open];
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+                continue;
+            }
+            let item = self.parse_record_item()?;
+            children.push(SyntaxElementId::Node(item));
+        }
+        let close = self.expect_token(&TokenKind::RBrace)?;
+        children.push(close);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::RecordExpr, children))
+    }
+
+    fn parse_record_expr_dot_brace(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::DotLBrace)?;
         let mut children = vec![open];
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {

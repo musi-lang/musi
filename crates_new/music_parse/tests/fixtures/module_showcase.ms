@@ -1,4 +1,5 @@
-import "std/io" as IO.{read, write};
+let IO := import "std/io";
+let {read, write} := IO;
 export opaque let id (x : T) [T] := x;
 let Maybe := data { | Some : Int | None };
 let Console := effect {
