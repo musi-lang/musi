@@ -14,3 +14,6 @@ instance [T] where T : Display Show[T] {
   law id(x) := x
 };
 let run with { Read[Int], Write } := work;
+let run_empty with {} := work;
+let run_sep_only with {,} := work;
+let handled := handle x with k of (| ok => x | op() => y | op(,a,b,) => y);

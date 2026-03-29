@@ -352,23 +352,99 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         Ok(children)
     }
 
-    pub(crate) fn parse_ident_list(&mut self, close: &TokenKind) -> ParseResult<SyntaxElementIds> {
+    pub(crate) fn parse_ident_list_opt(&mut self, close: &TokenKind) -> SyntaxElementIds {
         let mut children = vec![];
         if self.at(close) {
-            return Ok(children);
+            return children;
         }
+
+        // Allow leading separators for better recovery/IDE tolerance.
+        while let Some(comma) = self.eat(&TokenKind::Comma) {
+            children.push(comma);
+        }
+
+        if self.at(close) {
+            // Reject comma-only lists (e.g. `f(,)`) as syntactically invalid.
+            self.error(ParseError {
+                kind: ParseErrorKind::ExpectedIdentifier {
+                    found: Box::new(self.found_token()),
+                },
+                span: self.span(),
+            });
+            return children;
+        }
+
         loop {
-            children.push(self.expect_ident_element()?);
-            if let Some(comma) = self.eat(&TokenKind::Comma) {
-                children.push(comma);
-                if self.at(close) {
-                    break;
+            if matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+                children.push(self.advance_element());
+            } else {
+                self.error(ParseError {
+                    kind: ParseErrorKind::ExpectedIdentifier {
+                        found: Box::new(self.found_token()),
+                    },
+                    span: self.span(),
+                });
+
+                // Recover inside a list: skip until the next separator or close.
+                while !self.at_any(&[TokenKind::Comma, close.clone(), TokenKind::Eof]) {
+                    children.push(self.advance_element());
                 }
-                continue;
             }
-            break;
+
+            let mut comma_count = 0usize;
+            let mut extra_span = None;
+            while self.at(&TokenKind::Comma) {
+                comma_count += 1;
+                if comma_count == 2 {
+                    extra_span = Some(self.span());
+                }
+                children.push(self.advance_element());
+            }
+
+            if comma_count == 0 || self.at(close) {
+                break;
+            }
+
+            // Multiple separators between items are an error (but we still parse the next item).
+            if comma_count > 1 {
+                self.error(ParseError {
+                    kind: ParseErrorKind::ExpectedIdentifier {
+                        found: Box::new(TokenKind::Comma),
+                    },
+                    span: extra_span.expect("count > 1"),
+                });
+            }
+
+            // Allow leading commas before the next item as well.
+            while let Some(comma) = self.eat(&TokenKind::Comma) {
+                children.push(comma);
+            }
+
+            if self.at(close) {
+                self.error(ParseError {
+                    kind: ParseErrorKind::ExpectedIdentifier {
+                        found: Box::new(self.found_token()),
+                    },
+                    span: self.span(),
+                });
+                break;
+            }
         }
-        Ok(children)
+        children
+    }
+
+    pub(crate) fn parse_ident_list_nonempty(&mut self, close: &TokenKind) -> SyntaxElementIds {
+        if self.at(close) {
+            self.error(ParseError {
+                kind: ParseErrorKind::ExpectedIdentifier {
+                    found: Box::new(self.found_token()),
+                },
+                span: self.span(),
+            });
+            return vec![];
+        }
+
+        self.parse_ident_list_opt(close)
     }
 
     pub(crate) fn wrap_list(

@@ -40,3 +40,23 @@ fn test_parse_call_arg_spread() {
 
     assert!(parsed.errors().is_empty());
 }
+
+#[test]
+fn test_parse_handle_clause_empty_param_list() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "handle x with k of (| op() => y);");
+    let lexed = Lexer::new("handle x with k of (| op() => y);").lex();
+    let parsed = parse(source_id, &lexed);
+
+    assert!(parsed.errors().is_empty());
+}
+
+#[test]
+fn test_parse_handle_clause_param_list_allows_leading_trailing_commas() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "handle x with k of (| op(,a,b,) => y);");
+    let lexed = Lexer::new("handle x with k of (| op(,a,b,) => y);").lex();
+    let parsed = parse(source_id, &lexed);
+
+    assert!(parsed.errors().is_empty());
+}

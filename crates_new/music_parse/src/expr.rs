@@ -406,7 +406,7 @@ impl Parser<'_, '_> {
         if self.at(&TokenKind::LParen) {
             let open = self.advance_element();
             children.push(open);
-            children.extend(self.parse_ident_list(&TokenKind::RParen)?);
+            children.extend(self.parse_ident_list_opt(&TokenKind::RParen));
             let close = self.expect_token(&TokenKind::RParen)?;
             children.push(close);
         }

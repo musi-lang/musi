@@ -276,16 +276,7 @@ impl Parser<'_, '_> {
             if self.at(&TokenKind::DotLBrace) {
                 let open = self.advance_element();
                 target_children.push(open);
-                if self.at(&TokenKind::RBrace) {
-                    self.error(ParseError {
-                        kind: ParseErrorKind::ExpectedIdentifier {
-                            found: Box::new(self.found_token()),
-                        },
-                        span: self.span(),
-                    });
-                } else {
-                    target_children.extend(self.parse_ident_list(&TokenKind::RBrace)?);
-                }
+                target_children.extend(self.parse_ident_list_nonempty(&TokenKind::RBrace));
                 let close = self.expect_token(&TokenKind::RBrace)?;
                 target_children.push(close);
             }
@@ -584,16 +575,52 @@ impl Parser<'_, '_> {
     fn parse_effect_set(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(&TokenKind::LBrace)?;
         let mut children = vec![open];
-        if self.at(&TokenKind::RBrace) {
-            self.error(self.expected_effect_item());
-        } else {
-            children.push(SyntaxElementId::Node(self.parse_effect_item()?));
-            while let Some(comma) = self.eat(&TokenKind::Comma) {
-                children.push(comma);
+        // Permit empty/sep-only sets in the syntax tree; meaning is handled later.
+        while let Some(comma) = self.eat(&TokenKind::Comma) {
+            children.push(comma);
+        }
+
+        if !self.at(&TokenKind::RBrace) {
+            if let Some(item) = self.parse_effect_item_or_error() {
+                children.push(SyntaxElementId::Node(item));
+            }
+
+            loop {
+                let mut comma_count = 0usize;
+                let mut extra_span = None;
+                while self.at(&TokenKind::Comma) {
+                    comma_count += 1;
+                    if comma_count == 2 {
+                        extra_span = Some(self.span());
+                    }
+                    children.push(self.advance_element());
+                }
+
+                if comma_count == 0 || self.at(&TokenKind::RBrace) {
+                    break;
+                }
+
+                // Multiple separators between items are an error, but still recover and keep parsing.
+                if comma_count > 1 {
+                    self.error(ParseError {
+                        kind: ParseErrorKind::ExpectedEffectItem {
+                            found: Box::new(TokenKind::Comma),
+                        },
+                        span: extra_span.expect("count > 1"),
+                    });
+                }
+
+                while let Some(comma) = self.eat(&TokenKind::Comma) {
+                    children.push(comma);
+                }
+
                 if self.at(&TokenKind::RBrace) {
                     break;
                 }
-                children.push(SyntaxElementId::Node(self.parse_effect_item()?));
+
+                if let Some(item) = self.parse_effect_item_or_error() {
+                    children.push(SyntaxElementId::Node(item));
+                }
             }
         }
         let close = self.expect_token(&TokenKind::RBrace)?;
@@ -620,6 +647,24 @@ impl Parser<'_, '_> {
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::EffectItem, children))
+    }
+
+    fn parse_effect_item_or_error(&mut self) -> Option<SyntaxNodeId> {
+        match self.parse_effect_item() {
+            Ok(item) => Some(item),
+            Err(error) => {
+                self.error(error);
+                if self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
+                    return None;
+                }
+
+                let mut bad = vec![];
+                while !self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
+                    bad.push(self.advance_element());
+                }
+                Some(self.builder.push_error_node(bad))
+            }
+        }
     }
 }
 
