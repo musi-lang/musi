@@ -165,10 +165,10 @@ fn test_literals_are_classified_without_payloads() {
 }
 
 #[test]
-fn test_exponent_without_decimal_point_stays_non_float() {
+fn test_exponent_without_decimal_point_is_float() {
     let lexed = lex("1e10");
-    assert_eq!(lexed.tokens()[0].kind, TokenKind::IntLit);
-    assert_eq!(lexed.tokens()[1].kind, TokenKind::Ident);
+    assert_eq!(lexed.tokens()[0].kind, TokenKind::FloatLit);
+    assert_eq!(lexed.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]
@@ -189,6 +189,24 @@ fn test_invalid_exponent_reports_error() {
         lexed.errors()[0].kind,
         LexErrorKind::ExpectedDigitsAfterExponent
     ));
+}
+
+#[test]
+fn test_leading_dot_float_is_float_lit() {
+    let lexed = lex(".5");
+    assert_eq!(lexed.tokens()[0].kind, TokenKind::FloatLit);
+}
+
+#[test]
+fn test_digit_separators_are_strict() {
+    let lexed = lex("1__0 1_ 0x_FF 1e_10 1.0e+_2");
+    let invalid = lexed
+        .errors()
+        .iter()
+        .filter(|error| matches!(error.kind, LexErrorKind::InvalidDigitSeparator))
+        .count();
+
+    assert!(invalid >= 5);
 }
 
 #[test]

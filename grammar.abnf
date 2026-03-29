@@ -63,15 +63,20 @@ lit-int     = dec-int
               / oct-int
               / bin-int
 
-dec-int     = digit *(digit / "_")
+dec-digits  = digit *(digit / ("_" digit))
 
-hex-int     = "0x" xdigit *(xdigit / "_")
+dec-int     = dec-digits
 
-oct-int     = "0o" (%x30-37) *(%x30-37 / "_")
+hex-int     = "0x" xdigit *(xdigit / ("_" xdigit))
 
-bin-int     = "0b" ("0" / "1") *(("0" / "1") / "_")
+oct-int     = "0o" (%x30-37) *(%x30-37 / ("_" %x30-37))
 
-lit-float   = *digit "." 1*digit [("e" / "E") ["+" / "-"] 1*digit]
+bin-int     = "0b" ("0" / "1") *(("0" / "1") / ("_" ("0" / "1")))
+
+exp-part    = ("e" / "E") ["+" / "-"] dec-digits
+
+lit-float   = [dec-digits] "." dec-digits [exp-part]
+              / dec-digits exp-part
 
 lit-string  = DQUOTE *(str-char) DQUOTE
 

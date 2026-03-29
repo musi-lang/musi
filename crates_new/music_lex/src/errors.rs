@@ -40,6 +40,8 @@ pub enum LexErrorKind {
     ExpectedDigitsAfterBasePrefix,
     #[error("expected digit(s) after exponent")]
     ExpectedDigitsAfterExponent,
+    #[error("invalid digit separator")]
+    InvalidDigitSeparator,
 }
 
 impl LexError {
@@ -101,6 +103,10 @@ impl LexError {
             LexErrorKind::ExpectedDigitsAfterExponent => (
                 DiagCode::new(1014),
                 String::from("expected digit(s) after exponent"),
+            ),
+            LexErrorKind::InvalidDigitSeparator => (
+                DiagCode::new(1015),
+                String::from("invalid digit separator"),
             ),
         };
 

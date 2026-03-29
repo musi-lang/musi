@@ -4,6 +4,7 @@ mod tables;
 
 use music_basic::Span;
 use smallvec::SmallVec;
+use std::collections::VecDeque;
 
 use crate::Cursor;
 use crate::errors::{LexError, LexErrorKind, LexResult};
@@ -95,7 +96,7 @@ pub struct Lexer<'src> {
     cursor: Cursor<'src>,
     source: &'src str,
     finished: bool,
-    pending_error: Option<LexError>,
+    pending_errors: VecDeque<LexError>,
 }
 
 impl<'src> Lexer<'src> {
@@ -105,7 +106,7 @@ impl<'src> Lexer<'src> {
             cursor: Cursor::new(source),
             source,
             finished: false,
-            pending_error: None,
+            pending_errors: VecDeque::new(),
         }
     }
 
@@ -139,6 +140,9 @@ impl<'src> Lexer<'src> {
         match ch {
             _ if is_ident_start(ch) => self.scan_ident_like(start),
             '0'..='9' => self.scan_number(start, ch),
+            '.' if self.cursor.peek().is_some_and(|next| next.is_ascii_digit()) => {
+                self.scan_leading_dot_float(start)
+            }
             '"' => self.scan_string(start),
             '\'' => self.scan_rune(start),
             '`' => self.scan_escaped_ident(start),
@@ -166,6 +170,60 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    fn queue_error(&mut self, kind: LexErrorKind, span: Span) {
+        self.pending_errors.push_back(LexError { kind, span });
+    }
+
+    fn scan_digits_with_separators(
+        &mut self,
+        is_digit: impl Fn(u8) -> bool,
+        require_first_digit: bool,
+    ) -> bool {
+        let mut last_was_sep = false;
+        let mut saw_digit = false;
+        while let Some(byte) = self.cursor.peek_byte() {
+            if !byte.is_ascii() {
+                break;
+            }
+            if is_digit(byte) {
+                saw_digit = true;
+                last_was_sep = false;
+                self.cursor.advance_by(1);
+                continue;
+            }
+            if byte == b'_' {
+                let underscore_pos = self.cursor.pos();
+                self.cursor.advance_by(1);
+                let next_is_digit = self
+                    .cursor
+                    .peek_byte()
+                    .is_some_and(|next| next.is_ascii() && is_digit(next));
+                if !saw_digit || last_was_sep || !next_is_digit {
+                    self.queue_error(
+                        LexErrorKind::InvalidDigitSeparator,
+                        Span::new(underscore_pos, underscore_pos + 1),
+                    );
+                }
+                last_was_sep = true;
+                continue;
+            }
+            break;
+        }
+        saw_digit || !require_first_digit
+    }
+
+    fn scan_exponent_part(&mut self, exp_start: u32) {
+        let _ = self.cursor.advance();
+        let _ = self.cursor.eat('+') || self.cursor.eat('-');
+
+        if !self.scan_digits_with_separators(|byte| byte.is_ascii_digit(), true) {
+            self.queue_error(
+                LexErrorKind::ExpectedDigitsAfterExponent,
+                self.cursor.span_from(exp_start),
+            );
+        }
+    }
+
     fn scan_ident_like(&mut self, start: u32) -> LexResult<TokenKind> {
         let _ = self
             .cursor
@@ -186,57 +244,47 @@ impl<'src> Lexer<'src> {
                     'o' => 8,
                     _ => 2,
                 };
-                let before_digits = self.cursor.pos();
-                let _ = self
-                    .cursor
-                    .eat_while_ascii(|byte| is_digit_for_base(byte, base) || byte == b'_');
-                if self.cursor.pos() == before_digits {
-                    return Err(LexError {
-                        kind: LexErrorKind::ExpectedDigitsAfterBasePrefix,
-                        span: self.cursor.span_from(start),
-                    });
+                if !self.scan_digits_with_separators(|byte| is_digit_for_base(byte, base), true) {
+                    self.queue_error(
+                        LexErrorKind::ExpectedDigitsAfterBasePrefix,
+                        self.cursor.span_from(start),
+                    );
                 }
                 return Ok(TokenKind::IntLit);
             }
         }
 
-        let _ = self
-            .cursor
-            .eat_while_ascii(|byte| byte.is_ascii_digit() || byte == b'_');
+        let _ = self.scan_digits_with_separators(|byte| byte.is_ascii_digit(), false);
         if self.cursor.peek() == Some('.')
             && self
                 .cursor
                 .peek_next()
                 .is_some_and(|next| next.is_ascii_digit())
         {
-            return self.scan_float();
+            let _ = self.cursor.advance();
+            let _ = self.scan_digits_with_separators(|byte| byte.is_ascii_digit(), true);
+            if matches!(self.cursor.peek(), Some('e' | 'E')) {
+                let exp_start = self.cursor.pos();
+                self.scan_exponent_part(exp_start);
+            }
+            return Ok(TokenKind::FloatLit);
+        }
+
+        if matches!(self.cursor.peek(), Some('e' | 'E')) {
+            let exp_start = self.cursor.pos();
+            self.scan_exponent_part(exp_start);
+            return Ok(TokenKind::FloatLit);
         }
 
         Ok(TokenKind::IntLit)
     }
 
-    fn scan_float(&mut self) -> LexResult<TokenKind> {
-        let _ = self.cursor.advance();
-        let _ = self
-            .cursor
-            .eat_while_ascii(|byte| byte.is_ascii_digit() || byte == b'_');
-
+    fn scan_leading_dot_float(&mut self, _start: u32) -> LexResult<TokenKind> {
+        let _ = self.scan_digits_with_separators(|byte| byte.is_ascii_digit(), true);
         if matches!(self.cursor.peek(), Some('e' | 'E')) {
             let exp_start = self.cursor.pos();
-            let _ = self.cursor.advance();
-            let _ = self.cursor.eat('+') || self.cursor.eat('-');
-            let before_digits = self.cursor.pos();
-            let _ = self
-                .cursor
-                .eat_while_ascii(|byte| byte.is_ascii_digit() || byte == b'_');
-            if self.cursor.pos() == before_digits {
-                return Err(LexError {
-                    kind: LexErrorKind::ExpectedDigitsAfterExponent,
-                    span: self.cursor.span_from(exp_start),
-                });
-            }
+            self.scan_exponent_part(exp_start);
         }
-
         Ok(TokenKind::FloatLit)
     }
 
@@ -677,7 +725,7 @@ impl Iterator for Lexer<'_> {
     type Item = LexResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(error) = self.pending_error.take() {
+        if let Some(error) = self.pending_errors.pop_front() {
             return Some(Err(error));
         }
 
@@ -706,7 +754,9 @@ impl Iterator for Lexer<'_> {
             Ok(kind) => {
                 let span = self.cursor.span_from(start);
                 let (trailing_trivia, trailing_error) = self.collect_trailing_trivia();
-                self.pending_error = trailing_error;
+                if let Some(error) = trailing_error {
+                    self.pending_errors.push_back(error);
+                }
                 Some(Ok(Token {
                     kind,
                     span,
