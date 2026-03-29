@@ -1,51 +1,57 @@
 # SEAM VM Reference
 
-SEAM is a typed runtime IR executed by a stack-based virtual machine. It is not generic machine assembly and it is not a byte-for-byte lowering of Musi surface syntax. The VM owns the runtime contracts that matter for execution, embedding, foreign calls, effects, aggregate storage, and garbage collection.
+SEAM is a typed runtime IR executed by a stack-based virtual machine. It is not generic machine assembly and it is not a byte-for-byte lowering of Musi surface syntax.
+
+The clean-room SEAM layer is split deliberately:
+
+- `seam_ir` defines the runtime contract
+- `seam_codec` moves that contract between binary and text forms
+
+The VM that eventually executes SEAM is downstream of that boundary. The SEAM docs define what the machine must honor, not which crate currently happens to execute it.
 
 ## Identity
 
-| Property            | Value                                       |
-| ------------------- | ------------------------------------------- |
-| Execution model     | stack machine                               |
-| IR level            | typed runtime IR                            |
-| Binary artifact     | `.seam`                                     |
-| Human-readable form | SEAM text IL                                |
-| Embedding boundary  | `musi_vm::{load, Program, Vm, RuntimeHost}` |
+| Property            | Value                              |
+| ------------------- | ---------------------------------- |
+| Execution model     | stack machine                      |
+| IR level            | typed runtime IR                   |
+| Binary artifact     | `.seam`                            |
+| Human-readable form | SEAM text IL                       |
+| Contract crates     | `crates_new/seam_ir`, `seam_codec` |
 
-SEAM stays small by lowering source-level sugar away. It stays expressive by keeping explicit VM-level operations for runtime concerns that do not collapse cleanly into plain loads, stores, calls, and branches.
+SEAM stays small by lowering source sugar away. It stays expressive by keeping explicit operations for the runtime concepts the VM actually owns.
 
 ## Runtime Value Model
 
 SEAM uses uniform runtime values plus metadata tables.
 
-- scalars use NaN-boxed inline representations where possible
-- heap values remain explicit VM objects
-- the binary format carries string, type, effect, class, foreign, method, and global metadata
-- the VM executes against decoded `Program` metadata, not against source syntax
+- scalars may use NaN-boxed inline representations
+- heap values remain explicit runtime objects
+- the artifact carries string, type, effect, class, foreign, method, and global metadata
+- the VM executes against decoded program metadata, not source syntax
 
-The VM directly understands these runtime object categories:
+The VM directly understands runtime object categories such as:
 
 - closures
 - continuations
-- arrays
-- slices
+- sequences
+- aggregates
 - strings
 - C pointers
-- cells
+- mutable cells
 
-That is the right abstraction level for an embeddable language runtime. It keeps host interaction, GC, and inspection explicit without leaking source-language sugar into the machine.
+That is the right abstraction level for an embeddable language runtime. It keeps host interaction and inspection explicit without leaking source-language sugar into the machine.
 
 ## Execution Model
 
 ### Entry And Startup
 
-`musi run` executes the selected module’s top level.
+The language-level startup model remains top-level module execution.
 
-- source entry file selection comes from CLI or `musi.json`
-- `index.ms` remains the default module lookup when the manifest does not override it
-- the emitter synthesizes module entry methods
-- `Vm::initialize()` runs entry methods once
-- `Vm::run()` is the convenience wrapper over initialization
+- source entry selection comes from CLI or `musi.json`
+- `index.ms` remains the default lookup when the manifest does not override it
+- lowering synthesizes module entry methods
+- initialization runs module top levels once before export use
 
 There is no source-language `main` requirement and no `@main` attribute in the language model.
 
@@ -59,11 +65,11 @@ The VM owns:
 - resolved constant values
 - active effect handlers
 
-This stays a classic stack VM. Performance work belongs in instruction dispatch, compact operands, value representation, and object layout, not in turning SEAM into register assembly.
+This stays a classic stack VM. Performance work belongs in compact operands, dispatch, value representation, and object layout, not in turning SEAM into register assembly.
 
 ## VM-Level Semantic Families
 
-SEAM keeps explicit operations for runtime concepts that the VM genuinely owns.
+SEAM keeps explicit operations only for runtime concepts the VM genuinely owns.
 
 ### Calls And Closures
 
@@ -71,19 +77,28 @@ SEAM keeps explicit operations for runtime concepts that the VM genuinely owns.
 - tail call
 - return
 - closure allocation
-- upvalue/global/local access
+- local/global/upvalue access
+
+### Sequences
+
+The sequence family is explicit because the VM and GC care about sequence objects directly.
+
+- allocation
+- indexed access and mutation
+- length
+- slicing
+- fill/copy/concatenation
 
 ### Aggregates
 
-The aggregate family remains explicit because the VM and GC care about these objects directly.
+ADTs and record-like aggregates are their own family.
 
-- allocation
-- indexed load/store
-- slicing
-- fill/copy/concatenation
-- tagged aggregate support
+- construction
+- field projection
+- field mutation
+- variant-tag inspection
 
-The current family uses `arr.*` mnemonics. That is the sequence/aggregate family in the VM contract, even if future naming becomes broader.
+This keeps algebraic data explicit without pretending they are just tagged sequences.
 
 ### Runtime Type Operations
 
@@ -91,9 +106,9 @@ Runtime typing remains explicit:
 
 - type check
 - type cast
-- runtime tag access
+- runtime type-id inspection
 
-This keeps casts, gradual/runtime checks, host inspection, and aggregate tagging honest at the VM boundary.
+The VM does not conflate aggregate variant tags with runtime type identity.
 
 ### Resumable Algebraic Effects
 
@@ -104,28 +119,17 @@ Effects stay explicit in SEAM.
 - effect invocation
 - continuation resumption
 
-Resumable algebraic effects are a real VM concern, not just emitter sugar over ordinary calls.
-
-### Typeclass Dictionary / Evidence Dispatch
-
-Typeclass dispatch stays explicit in SEAM.
-
-- dictionary/evidence acquisition
-- dictionary method invocation
-
-This keeps generic class-driven execution visible in the runtime contract instead of hiding it inside ad hoc call conventions.
+Resumable algebraic effects are a real VM concern, not emitter sugar over ordinary calls.
 
 ### Foreign Boundary
 
 Foreign calls remain explicit VM operations coordinated with runtime metadata and the host boundary.
 
 - foreign descriptors live in `.seam`
-- `RuntimeHost` resolves libraries and symbols
-- the VM owns marshaling control at the bytecode boundary
+- the host/runtime boundary resolves libraries and symbols
+- `ffi.call` is the public machine contract
 
-### GC Control
-
-The VM also owns runtime-only coordination instructions such as pinning where the foreign boundary requires it.
+GC pinning is not a public opcode. If the runtime needs pinning for foreign calls, that stays behind the `ffi.call` implementation.
 
 ## Garbage Collection
 
@@ -133,7 +137,7 @@ SEAM targets a mark-region heap.
 
 - allocation and object layout are VM concerns
 - safepoints exist at runtime-relevant operations such as calls, allocation, foreign calls, and effect transitions
-- stack, frames, globals, constants, continuations, and handler state are all part of root discovery
+- stacks, frames, globals, constants, continuations, and handler state all contribute to root discovery
 
 The important design rule is:
 
@@ -144,13 +148,13 @@ The important design rule is:
 
 SEAM is designed to embed cleanly.
 
-- hosts load a `Program`
-- hosts build a `Vm`
-- hosts initialize the module top level
-- hosts invoke exports or values explicitly
-- hosts inspect results through `ValueView`
+- hosts load a program artifact
+- hosts build a VM
+- hosts initialize module top levels
+- hosts invoke exports explicitly
+- hosts inspect results through stable value views
 
-The stable embedding API sits above raw bytecode details, but the bytecode contract stays explicit enough that loader, VM, host integration, and docs all agree on the same runtime machine.
+The stable embedding API sits above raw bytecode details, but the bytecode contract stays explicit enough that loaders, VMs, host integration, and docs agree on the same machine.
 
 ## Design Boundaries
 
@@ -162,18 +166,16 @@ SEAM does not own:
 - matrix literals
 - range syntax
 - optional/result sugar
-- list-cons as a built-in concept
-
-Those are either removed from the language core or lowered away before bytecode emission.
+- built-in list cons
+- typeclass dispatch as a VM primitive
 
 SEAM does own:
 
 - values
 - control transfer
 - closures
+- sequences
 - aggregates
 - runtime typing
 - resumable effects
-- typeclass evidence dispatch
 - foreign calls
-- GC coordination

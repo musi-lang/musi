@@ -1,19 +1,23 @@
 # SEAM Bytecode Reference
 
-SEAM bytecode is the binary execution contract for the SEAM VM. It is paired with a first-class human-readable text IL used for docs, debugging, testing, and future assembly/disassembly tooling.
+SEAM bytecode is the binary execution contract for the clean-room SEAM layer in `crates_new/`.
+
+- `seam_ir` owns the neutral ISA, metadata descriptors, and artifact model.
+- `seam_codec` owns binary encoding/decoding, text IL transport, wire constants, and validation.
 
 SEAM is:
 
 - stack-based
 - typed at the runtime-contract level
 - organized by opcode family
-- explicit about effects, typeclass dispatch, aggregates, FFI, and runtime typing
+- explicit about sequences, aggregates, effects, FFI, and runtime typing
 
 SEAM is not:
 
 - generic machine assembly
 - an AST dump
 - split into “core” and “extension” opcode tiers
+- a mirror of legacy crate structure
 
 ## Binary And Text Layers
 
@@ -24,6 +28,21 @@ There are three layers to keep distinct:
 3. `.seam` binary sections and encoded instructions
 
 The text IL is the readable contract. The `.seam` binary is the execution artifact.
+
+## Crate Boundaries
+
+`seam_ir` is the core domain crate.
+
+- `isa/` owns opcodes, families, operands, and instructions
+- `descriptors/` owns runtime-visible SEAM descriptors
+- `artifact/` owns the single SEAM artifact model used by both encode and decode
+
+`seam_codec` is the transport boundary crate.
+
+- `binary/` owns binary encode/decode, section tags, versioning, and binary validation
+- `text/` owns text IL formatting, parsing, assembly, and text validation
+
+Each concept has one source of truth. There is no separate opcode count constant, no duplicated mnemonic table, and no legacy compatibility layout inside the clean-room crates.
 
 ## Mnemonic Design
 
@@ -36,13 +55,14 @@ Examples:
 - `cmp.eq`
 - `br.tbl`
 - `call.tail`
-- `arr.new`
+- `seq.new`
+- `data.new`
 - `ty.chk`
+- `ty.id`
 - `eff.invk`
-- `tycl.dict`
 - `ffi.call`
 
-This naming scheme groups instructions by runtime family and scales better than flat names or source-level spellings.
+This keeps the ISA readable without encoding source-level sugar into bytecode names.
 
 ## Text IL
 
@@ -53,8 +73,8 @@ SEAM text IL is directive-based and symbolic where possible.
 - directives describe metadata and declaration boundaries
 - labels are symbolic
 - locals use `%` slots
-- globals, methods, types, effects, classes, and foreigns are named symbolically in text form
-- numeric immediates remain numeric where they are truly immediate machine data
+- globals, methods, types, effects, and foreigns are symbolic in text form
+- numeric immediates stay numeric only when they are truly machine data
 
 ### Intended Shape
 
@@ -66,7 +86,7 @@ L0:
   ld.smi 41
   st.loc %0
   ld.loc %0
-  ld.one
+  ld.smi 1
   i.add
   ret
 ```
@@ -77,25 +97,25 @@ Additional directive families should cover:
 - `.global`
 - `.method`
 - `.effect`
-- `.class`
 - `.foreign`
-- optional debug directives later
 
-This text form is meant to be readable first. The assembler/disassembler layer is responsible for lowering symbolic references to numeric indices used in the binary format.
+The text form is readable first. `seam_codec` lowers symbolic references to numeric indices in the binary format.
 
 ## Operand Model
 
 The binary instruction layer stays compact.
 
-Current operand categories already fit the desired contract:
+Current operand categories are:
 
 - none
 - `u8`
 - `u16`
 - `i16`
-- compact structured operands for closures, aggregates, effects, jumps, and tables
-
-The text IL should present these as readable arguments rather than exposing raw operand enums directly.
+- `wide(u16, u8)`
+- `type_len(u16, u16)`
+- `effect(u16, u16)`
+- `effect_jump(u16, u16, i16)`
+- branch tables
 
 Examples:
 
@@ -103,43 +123,28 @@ Examples:
 - `ld.const @const:msg`
 - `br.false L_else`
 - `cls.new @fn:closure 2`
+- `seq.new @type:Bytes 64`
+- `data.new @type:Option 1`
 - `eff.invk @effect:Abort @op:abort`
-- `tycl.call 0 2`
 
-## Opcode-Space Policy
+`data.new` uses the tag value from the stack. The operand carries only the aggregate type id and field count.
 
-Opcode space is reserved by runtime family.
+## Opcode Families
 
-The family split should remain visible in both docs and code:
+The clean-room ISA keeps only semantic-core families:
 
 - data movement
 - stack
-- scalar arithmetic / bitwise / comparison
+- scalar arithmetic
+- logic
+- compare
 - branch
 - call / closure
-- aggregate / sequence
-- runtime type operations
-- effect / continuation
-- typeclass dictionary / evidence
-- FFI / host
-- GC / runtime control
-
-### Reservation Rule
-
-Future additions should land in or adjacent to the relevant family band.
-
-Do not treat the high unused range as a conceptual “extension set”. It is just unallocated opcode space. Growth should preserve family locality instead of scattering unrelated instructions into a generic extension pool.
-
-### Current Reality
-
-The current bytecode already has:
-
-- family-local reserved holes
-- a large unused tail range
-
-The rewrite keeps the family-local story and treats the tail as capacity for future family expansion, not as a separate extension tier.
-
-## Family-Level Semantics
+- `seq.*`
+- `data.*`
+- `ty.*`
+- `eff.*`
+- `ffi.*`
 
 ### Data And Stack
 
@@ -148,55 +153,84 @@ These remain classic stack-machine instructions:
 - loads
 - stores
 - stack shuffles
-- constants
+- immediate scalar loads
 
-### Scalar Ops
+### Scalar, Logic, And Compare
 
-Integer and float arithmetic stay explicit. Logical/bitwise operations stay unified where the VM genuinely executes the same class of operation.
+Integer and float arithmetic stay explicit. Logical and bit-oriented operators stay unified where the machine-level meaning is the same.
 
 ### Calls And Closures
 
-Call, tail call, return, and closure creation remain first-class instruction families. They are fundamental to the machine.
+Call, tail call, return, and closure allocation remain first-class instruction families.
 
-### Aggregates
+### Sequences
 
-The current family uses `arr.*`, but semantically it is the runtime aggregate/sequence family.
-
-It covers:
+`seq.*` is only for sequence-like runtime objects:
 
 - allocation
-- indexing
-- mutation
+- indexed access
+- indexed mutation
 - length
 - slicing
 - fill/copy/concatenation
-- tagged aggregate helpers
 
-Collection-level source constructs stay lowered out of bytecode.
+Fixed-index fast paths are not part of the stable ISA.
 
-### Runtime Type Ops
+### Aggregates
 
-Runtime checks and tags are explicit because the VM owns them directly.
+`data.*` is the first-class family for ADTs and record-like aggregates:
+
+- construction
+- field access
+- field mutation
+- variant-tag inspection
+
+ADT tagging does not leak through `seq.*`.
+
+### Runtime Type Operations
+
+The runtime type family is explicit:
+
+- `ty.chk`
+- `ty.cast`
+- `ty.id`
+
+`ty.id` is runtime type-id inspection. Variant tags belong to `data.tag`, not `ty.*`.
 
 ### Effects
 
-Resumable algebraic effects remain explicit SEAM instructions.
+Resumable algebraic effects remain explicit SEAM instructions:
 
 - handler push/pop
 - effect invoke
 - continuation resume
 
-This is part of the VM contract, not an afterthought.
+### Foreign Boundary
 
-### Typeclass Dispatch
+Foreign calls remain explicit VM operations coordinated through metadata and the host boundary.
 
-Dictionary/evidence dispatch remains explicit SEAM machinery.
+Pinning is not a public opcode. If the runtime needs to pin values for FFI, that stays behind `ffi.call`.
 
-The emitter may optimize or erase some static cases, but the runtime contract still includes a narrow explicit dispatch family for generic paths.
+## Removed From The Clean-Room ISA
 
-### FFI And GC
+These are intentionally absent from `crates_new/seam_ir`:
 
-FFI and GC coordination stay explicit because they cross the host/runtime boundary and need stable machine-visible behavior.
+- `ld.nil`
+- `ld.one`
+- `br.back`
+- `seq.get.i`
+- `seq.set.i`
+- `seq.tag`
+- `seq.new.tag`
+- `ty.tag`
+- `tycl.*`
+- `gc.pin`
+- `gc.unpin`
+- `nop`
+- `panic`
+- `halt`
+
+If a future profiling pass justifies new micro-ops, they belong in reserved family space, not in a generic extension tier.
 
 ## `.seam` Binary Sections
 
@@ -205,15 +239,13 @@ The binary format remains section-based:
 - strings
 - types
 - constants
-- dependencies
 - globals
 - methods
 - effects
 - classes
 - foreign descriptors
-- debug data
 
-This section model is part of what makes SEAM typed and embeddable. The binary does not rely on hidden compiler-only conventions to recover runtime meaning.
+This is enough metadata to keep the artifact typed and embeddable without encoding source syntax directly.
 
 ## What SEAM Does Not Encode Directly
 
@@ -228,5 +260,6 @@ That includes:
 - ranges
 - optional/result sugar
 - built-in list cons
+- typeclass dispatch as a VM primitive
 
-If a source feature survives into the language, it must justify itself as a runtime concern before it becomes a bytecode concern.
+If a source feature survives into the language, it only becomes a bytecode concern when it survives lowering as a durable runtime concept.
