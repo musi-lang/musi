@@ -21,7 +21,7 @@ pub fn format_instruction(instruction: &Instruction) -> String {
             "{} {effect_id} {operation_id} {jump}",
             instruction.opcode.mnemonic()
         ),
-        Operand::Table(offsets) => format!(
+        Operand::BranchTable(offsets) => format!(
             "{} {}",
             instruction.opcode.mnemonic(),
             offsets

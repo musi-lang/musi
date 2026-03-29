@@ -1,14 +1,14 @@
 use music_il::{FfiType, ForeignAbi, ForeignDescriptor, ForeignDescriptors};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_foreigns(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<ForeignDescriptors> {
+) -> CodecResult<ForeignDescriptors> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut foreigns = Vec::with_capacity(count);
@@ -50,8 +50,8 @@ pub(super) fn decode_foreigns(
 
 pub(super) fn encode_foreigns(
     foreigns: &ForeignDescriptors,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if foreigns.is_empty() {
         return Ok(vec![]);
     }

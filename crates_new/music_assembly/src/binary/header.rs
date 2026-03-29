@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn decode_header(data: &[u8]) -> AssemblyResult<u32> {
+pub(super) fn decode_header(data: &[u8]) -> CodecResult<u32> {
     if data.len() < HEADER_SIZE {
         return Err(CodecError::TruncatedHeader);
     }
@@ -19,7 +19,7 @@ pub(super) fn decode_header(data: &[u8]) -> AssemblyResult<u32> {
     read_u32(data, 8).ok_or(CodecError::TruncatedHeader)
 }
 
-pub(super) fn finalize_header(output: &mut [u8], section_count: u32) -> AssemblyResult<()> {
+pub(super) fn finalize_header(output: &mut [u8], section_count: u32) -> CodecResult<()> {
     assert!(output.len() > 15);
     output[0..4].copy_from_slice(&MAGIC);
     output[4] = VERSION_MAJOR;

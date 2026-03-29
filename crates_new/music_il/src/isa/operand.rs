@@ -10,5 +10,5 @@ pub enum Operand {
     TypeLen(u16, u16),
     Effect(u16, u16),
     EffectJump(u16, u16, i16),
-    Table(BranchOffsets),
+    BranchTable(BranchOffsets),
 }

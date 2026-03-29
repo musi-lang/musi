@@ -7,7 +7,7 @@ use super::*;
 /// # Errors
 /// Returns an error when decoding fails because the binary is malformed,
 /// truncated, or semantically invalid.
-pub fn validate_binary(data: &[u8]) -> AssemblyResult<()> {
+pub fn validate_binary(data: &[u8]) -> CodecResult<()> {
     let _ = decode_binary(data)?;
     Ok(())
 }
@@ -16,7 +16,7 @@ pub fn validate_binary(data: &[u8]) -> AssemblyResult<()> {
 ///
 /// # Errors
 /// Returns an error when an artifact exceeds representable SEAM limits.
-pub fn validate_module(artifact: &SeamArtifact) -> AssemblyResult<()> {
+pub fn validate_module(artifact: &SeamArtifact) -> CodecResult<()> {
     for method in &artifact.methods {
         let _ = u16::try_from(method.instructions.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     }

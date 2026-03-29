@@ -60,6 +60,12 @@ The clean-room crate layout is also locked:
 - `tests/` is for integration and e2e only
 - no Rust file may exceed 2000 LOC, including tests and benches
 
+The clean-room naming rule is also locked:
+
+- public names must stay domain-specific when imported unqualified
+- avoid generic names that read like std or UI vocabulary when a bounded-context name is clearer
+- keep established compiler and IL terms such as `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
+
 ## Ownership Chain
 
 ### 1. Source Language

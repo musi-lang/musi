@@ -15,7 +15,7 @@ mod types;
 mod wire;
 
 type SectionBytes = Vec<u8>;
-type StringPool = Vec<String>;
+type DecodedStrings = Vec<String>;
 type StringOffsets = HashMap<u32, u32>;
 type TextOffsets = HashMap<String, u32>;
 type ConstantOffsets = HashMap<u16, u16>;
@@ -26,17 +26,17 @@ pub use wire::{
     STRING_SECTION_TAG, TYPE_SECTION_TAG, VERSION_MAJOR, VERSION_MINOR,
 };
 
-use crate::{AssemblyResult, CodecError};
+use crate::{CodecError, CodecResult};
 
 /// Decode a `.seam` artifact from its binary representation.
 ///
 /// # Errors
 /// Returns an error when the header, section layout, opcode stream, or
 /// referenced metadata is invalid or truncated.
-pub fn decode_binary(data: &[u8]) -> AssemblyResult<SeamArtifact> {
+pub fn decode_binary(data: &[u8]) -> CodecResult<SeamArtifact> {
     let section_count = header::decode_header(data)?;
 
-    let mut strings = StringPool::new();
+    let mut strings = DecodedStrings::new();
     let mut offsets = StringOffsets::new();
     let mut constants = music_il::ConstantPool::new();
     let (mut methods, mut globals, mut types, mut effects, mut classes, mut foreigns) =
@@ -103,10 +103,10 @@ pub fn decode_binary(data: &[u8]) -> AssemblyResult<SeamArtifact> {
 /// # Errors
 /// Returns an error when the artifact cannot fit in the binary section/index
 /// limits or references a missing interned string.
-pub fn encode_binary(artifact: &SeamArtifact) -> AssemblyResult<SectionBytes> {
+pub fn encode_binary(artifact: &SeamArtifact) -> CodecResult<SectionBytes> {
     let mut output = vec![0; HEADER_SIZE];
     let mut section_count = 0_u32;
-    let strings = strings::StringTable::build(artifact)?;
+    let strings = strings::StringIndex::build(artifact)?;
 
     let sections = [
         (STRING_SECTION_TAG, strings.bytes.clone()),
@@ -155,7 +155,7 @@ pub fn encode_binary(artifact: &SeamArtifact) -> AssemblyResult<SectionBytes> {
     Ok(output)
 }
 
-fn write_section(output: &mut SectionBytes, tag: [u8; 4], bytes: &[u8]) -> AssemblyResult<()> {
+fn write_section(output: &mut SectionBytes, tag: [u8; 4], bytes: &[u8]) -> CodecResult<()> {
     output.extend_from_slice(&tag);
     let length = u32::try_from(bytes.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     output.extend_from_slice(&length.to_le_bytes());

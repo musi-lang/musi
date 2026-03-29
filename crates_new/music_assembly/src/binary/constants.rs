@@ -1,14 +1,14 @@
 use music_il::{ConstantEntry, ConstantPool};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_constants(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<ConstantPool> {
+) -> CodecResult<ConstantPool> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut pool = ConstantPool::new();
@@ -60,8 +60,8 @@ pub(super) fn decode_constants(
 
 pub(super) fn encode_constants(
     constants: &ConstantPool,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     let entries = constants.entries();
     if entries.is_empty() {
         return Ok(vec![]);

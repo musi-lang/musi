@@ -6,7 +6,7 @@ use super::*;
 
 /// Terminal colors used for diagnostic rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Color {
+pub enum DiagColor {
     Red,
     Yellow,
     Cyan,
@@ -15,7 +15,7 @@ pub enum Color {
     Reset,
 }
 
-impl Color {
+impl DiagColor {
     /// ANSI escape sequence for this color.
     #[must_use]
     pub const fn ansi_code(self) -> &'static str {
@@ -33,12 +33,12 @@ impl Color {
 impl DiagLevel {
     /// ANSI color associated with this severity.
     #[must_use]
-    pub const fn color(self) -> Color {
+    pub const fn color(self) -> DiagColor {
         match self {
-            Self::Fatal => Color::Purple,
-            Self::Error => Color::Red,
-            Self::Warning => Color::Yellow,
-            Self::Note => Color::Cyan,
+            Self::Fatal => DiagColor::Purple,
+            Self::Error => DiagColor::Red,
+            Self::Warning => DiagColor::Yellow,
+            Self::Note => DiagColor::Cyan,
         }
     }
 }
@@ -54,9 +54,13 @@ pub fn emit<W: Write>(
     sources: &SourceMap,
     use_color: bool,
 ) -> io::Result<()> {
-    let paint = |color: Color, text: &str| -> String {
+    let paint = |color: DiagColor, text: &str| -> String {
         if use_color {
-            format!("{}{text}{}", color.ansi_code(), Color::Reset.ansi_code())
+            format!(
+                "{}{text}{}",
+                color.ansi_code(),
+                DiagColor::Reset.ansi_code()
+            )
         } else {
             String::from(text)
         }
@@ -79,9 +83,9 @@ pub fn emit<W: Write>(
             writeln!(
                 writer,
                 "{} {}: {}",
-                paint(Color::Bold, &loc),
+                paint(DiagColor::Bold, &loc),
                 paint(diag.level.color(), &level),
-                paint(Color::Bold, &message),
+                paint(DiagColor::Bold, &message),
             )?;
 
             if let Some(line_text) = source.line_text(line) {
@@ -131,7 +135,7 @@ pub fn emit<W: Write>(
             writer,
             "{}: {}",
             paint(diag.level.color(), &level),
-            paint(Color::Bold, &message),
+            paint(DiagColor::Bold, &message),
         )?;
     }
 
@@ -139,8 +143,8 @@ pub fn emit<W: Write>(
         writeln!(
             writer,
             "{}: {}",
-            paint(Color::Cyan, "note"),
-            paint(Color::Bold, note_msg),
+            paint(DiagColor::Cyan, "note"),
+            paint(DiagColor::Bold, note_msg),
         )?;
     }
 

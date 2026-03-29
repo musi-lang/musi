@@ -1,14 +1,14 @@
 use music_il::{TypeDescriptor, TypeDescriptors, TypeKind};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_types(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<TypeDescriptors> {
+) -> CodecResult<TypeDescriptors> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut descriptors = Vec::with_capacity(count);
@@ -39,8 +39,8 @@ pub(super) fn decode_types(
 
 pub(super) fn encode_types(
     types: &TypeDescriptors,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if types.is_empty() {
         return Ok(vec![]);
     }

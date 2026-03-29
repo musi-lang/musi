@@ -1,14 +1,14 @@
 use music_il::{ClassDescriptor, ClassDescriptors, ClassInstance, ClassInstances, ClassMethod};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_classes(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<ClassDescriptors> {
+) -> CodecResult<ClassDescriptors> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut classes = Vec::with_capacity(count);
@@ -61,8 +61,8 @@ pub(super) fn decode_classes(
 
 pub(super) fn encode_classes(
     classes: &ClassDescriptors,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if classes.is_empty() {
         return Ok(vec![]);
     }

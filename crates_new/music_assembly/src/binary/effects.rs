@@ -1,14 +1,14 @@
-use music_il::{EffectDescriptor, EffectDescriptors, EffectOpDescriptor, EffectOperations};
+use music_il::{EffectDescriptor, EffectDescriptors, EffectOpDescriptor, EffectOps};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_effects(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<EffectDescriptors> {
+) -> CodecResult<EffectDescriptors> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut effects = Vec::with_capacity(count);
@@ -20,7 +20,7 @@ pub(super) fn decode_effects(
         let name = strings::read_string_ref(data, &mut position, strings, offsets)?;
         let op_count = usize::from(read_u16(data, position).ok_or(CodecError::TruncatedSection)?);
         position += 2;
-        let mut operations = EffectOperations::with_capacity(op_count);
+        let mut operations = EffectOps::with_capacity(op_count);
         for _ in 0..op_count {
             let op_id = read_u16(data, position).ok_or(CodecError::TruncatedSection)?;
             position += 2;
@@ -43,8 +43,8 @@ pub(super) fn decode_effects(
 
 pub(super) fn encode_effects(
     effects: &EffectDescriptors,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if effects.is_empty() {
         return Ok(vec![]);
     }

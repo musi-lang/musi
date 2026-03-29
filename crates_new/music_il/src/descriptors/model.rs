@@ -25,7 +25,7 @@ pub struct TypeDescriptor {
     pub member_count: u16,
 }
 
-pub type EffectOperations = Vec<EffectOpDescriptor>;
+pub type EffectOps = Vec<EffectOpDescriptor>;
 pub type ClassMethods = Vec<ClassMethod>;
 pub type ClassInstances = Vec<ClassInstance>;
 pub type MethodNames = Vec<String>;
@@ -42,7 +42,7 @@ pub struct EffectDescriptor {
     pub id: u16,
     pub module_name: String,
     pub name: String,
-    pub operations: EffectOperations,
+    pub operations: EffectOps,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

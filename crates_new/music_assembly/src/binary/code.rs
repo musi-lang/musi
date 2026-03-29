@@ -4,7 +4,7 @@ use music_il::{Instruction, InstructionStream, Opcode, Operand};
 
 use super::*;
 
-pub(super) fn decode_instruction_stream(code: &[u8]) -> AssemblyResult<InstructionStream> {
+pub(super) fn decode_instruction_stream(code: &[u8]) -> CodecResult<InstructionStream> {
     let mut position = 0_usize;
     let mut instructions = vec![];
 
@@ -93,7 +93,7 @@ pub(super) fn decode_instruction_stream(code: &[u8]) -> AssemblyResult<Instructi
                 }
                 Instruction::with_table(opcode, table)
             }
-            _ => Instruction::simple(opcode),
+            _ => Instruction::basic(opcode),
         };
 
         instructions.push(instruction);
@@ -127,7 +127,7 @@ pub(super) fn encode_instruction(output: &mut SectionBytes, instruction: &Instru
             output.extend_from_slice(&operation_id.to_le_bytes());
             output.extend_from_slice(&jump.to_le_bytes());
         }
-        Operand::Table(offsets) => {
+        Operand::BranchTable(offsets) => {
             let count = u16::try_from(offsets.len()).expect("branch table length fits in u16");
             output.extend_from_slice(&count.to_le_bytes());
             for offset in offsets {
@@ -141,7 +141,7 @@ pub(super) fn scan_method_bytes(
     data: &[u8],
     position: &mut usize,
     instruction_count: u16,
-) -> AssemblyResult<SectionBytes> {
+) -> CodecResult<SectionBytes> {
     let start = *position;
     for _ in 0..instruction_count {
         let opcode_position = *position;
@@ -163,7 +163,7 @@ pub(super) fn scan_method_bytes(
         .ok_or(CodecError::TruncatedSection)
 }
 
-fn operand_size(opcode: Opcode, data: &[u8], position: usize) -> AssemblyResult<usize> {
+fn operand_size(opcode: Opcode, data: &[u8], position: usize) -> CodecResult<usize> {
     match opcode {
         Opcode::LdLoc | Opcode::StLoc | Opcode::Call | Opcode::CallTail | Opcode::EffCont => Ok(1),
         Opcode::LdConst

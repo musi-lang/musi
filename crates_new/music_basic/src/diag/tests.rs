@@ -52,8 +52,8 @@ fn emit_colored_includes_ansi_codes() {
 
     let output = emit_to_string(&diag, &sources, true);
 
-    assert!(output.contains(Color::Red.ansi_code()));
-    assert!(output.contains(Color::Reset.ansi_code()));
+    assert!(output.contains(DiagColor::Red.ansi_code()));
+    assert!(output.contains(DiagColor::Reset.ansi_code()));
 }
 
 #[test]
@@ -153,10 +153,10 @@ fn diag_level_label_values() {
 
 #[test]
 fn diag_level_color_values() {
-    assert_eq!(DiagLevel::Fatal.color(), Color::Purple);
-    assert_eq!(DiagLevel::Error.color(), Color::Red);
-    assert_eq!(DiagLevel::Warning.color(), Color::Yellow);
-    assert_eq!(DiagLevel::Note.color(), Color::Cyan);
+    assert_eq!(DiagLevel::Fatal.color(), DiagColor::Purple);
+    assert_eq!(DiagLevel::Error.color(), DiagColor::Red);
+    assert_eq!(DiagLevel::Warning.color(), DiagColor::Yellow);
+    assert_eq!(DiagLevel::Note.color(), DiagColor::Cyan);
 }
 
 #[test]

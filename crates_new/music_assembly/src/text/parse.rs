@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 use music_il::{Instruction, InstructionStream, Opcode};
 
-use crate::{AssemblyResult, CodecError};
+use crate::{CodecError, CodecResult};
 
 /// Parse one text-IL instruction line into a SEAM instruction.
 ///
 /// # Errors
 /// Returns an error when the mnemonic is unknown or its operands do not match
 /// the opcode's expected shape.
-pub fn parse_instruction(line: &str) -> AssemblyResult<Instruction> {
+pub fn parse_instruction(line: &str) -> CodecResult<Instruction> {
     let parts = line.split_whitespace().collect::<Vec<_>>();
     let Some((&mnemonic, operands)) = parts.split_first() else {
         return Err(CodecError::InvalidMnemonic {
@@ -22,7 +22,7 @@ pub fn parse_instruction(line: &str) -> AssemblyResult<Instruction> {
     })?;
 
     match operands {
-        [] => Ok(Instruction::simple(opcode)),
+        [] => Ok(Instruction::basic(opcode)),
         [single] => {
             if matches!(
                 opcode,
@@ -98,7 +98,7 @@ pub fn parse_instruction(line: &str) -> AssemblyResult<Instruction> {
 /// # Errors
 /// Returns an error when any non-empty, non-label line is not a valid SEAM
 /// instruction.
-pub fn assemble_method(source: &str) -> AssemblyResult<InstructionStream> {
+pub fn assemble_method(source: &str) -> CodecResult<InstructionStream> {
     source
         .lines()
         .map(str::trim)
@@ -108,7 +108,7 @@ pub fn assemble_method(source: &str) -> AssemblyResult<InstructionStream> {
         .collect()
 }
 
-fn parse_number<T>(raw: &str, mnemonic: &str) -> AssemblyResult<T>
+fn parse_number<T>(raw: &str, mnemonic: &str) -> CodecResult<T>
 where
     T: FromStr,
 {

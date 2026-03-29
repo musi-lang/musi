@@ -54,7 +54,7 @@ impl Display for DiagCode {
 
 /// A source annotation pointing to a span with a message.
 #[derive(Debug)]
-pub struct Label {
+pub struct DiagLabel {
     pub span: Span,
     pub source_id: SourceId,
     pub message: String,
@@ -67,7 +67,7 @@ pub struct Diag {
     pub code: Option<DiagCode>,
     pub message: String,
     pub hint: Option<String>,
-    pub labels: Vec<Label>,
+    pub labels: Vec<DiagLabel>,
     pub notes: Vec<String>,
 }
 
@@ -115,7 +115,7 @@ impl Diag {
         source_id: SourceId,
         message: impl Into<String>,
     ) -> Self {
-        self.labels.push(Label {
+        self.labels.push(DiagLabel {
             span,
             source_id,
             message: message.into(),

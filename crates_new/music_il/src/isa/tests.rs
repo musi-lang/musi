@@ -67,7 +67,7 @@ fn test_removed_opcodes_are_not_decodable() {
 
 #[test]
 fn test_instruction_builders_store_expected_operands() {
-    assert_eq!(Instruction::simple(Opcode::Ret).operand, Operand::None);
+    assert_eq!(Instruction::basic(Opcode::Ret).operand, Operand::None);
     assert_eq!(
         Instruction::with_u8(Opcode::LdLoc, 7).operand,
         Operand::U8(7)
@@ -98,6 +98,6 @@ fn test_instruction_builders_store_expected_operands() {
     );
     assert_eq!(
         Instruction::with_table(Opcode::BrTbl, vec![3, -2]).operand,
-        Operand::Table(vec![3, -2])
+        Operand::BranchTable(vec![3, -2])
     );
 }

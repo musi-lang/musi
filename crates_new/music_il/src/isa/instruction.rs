@@ -8,7 +8,7 @@ pub struct Instruction {
 
 impl Instruction {
     #[must_use]
-    pub const fn simple(opcode: Opcode) -> Self {
+    pub const fn basic(opcode: Opcode) -> Self {
         Self {
             opcode,
             operand: Operand::None,
@@ -75,7 +75,7 @@ impl Instruction {
     pub const fn with_table(opcode: Opcode, offsets: BranchOffsets) -> Self {
         Self {
             opcode,
-            operand: Operand::Table(offsets),
+            operand: Operand::BranchTable(offsets),
         }
     }
 }

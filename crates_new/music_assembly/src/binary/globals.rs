@@ -1,14 +1,14 @@
 use music_il::{GlobalEntries, GlobalEntry};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_globals(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<GlobalEntries> {
+) -> CodecResult<GlobalEntries> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut globals = Vec::with_capacity(count);
@@ -31,8 +31,8 @@ pub(super) fn decode_globals(
 
 pub(super) fn encode_globals(
     globals: &GlobalEntries,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if globals.is_empty() {
         return Ok(vec![]);
     }

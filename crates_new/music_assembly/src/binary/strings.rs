@@ -2,14 +2,14 @@ use music_il::{ConstantEntry, MethodName, SeamArtifact};
 
 use super::*;
 
-pub(super) struct StringTable {
+pub(super) struct StringIndex {
     pub(super) bytes: Vec<u8>,
     offsets_by_text: TextOffsets,
     pub(super) constant_offsets: ConstantOffsets,
 }
 
-impl StringTable {
-    pub(super) fn build(artifact: &SeamArtifact) -> AssemblyResult<Self> {
+impl StringIndex {
+    pub(super) fn build(artifact: &SeamArtifact) -> CodecResult<Self> {
         let mut table = Self {
             bytes: vec![],
             offsets_by_text: TextOffsets::new(),
@@ -72,7 +72,7 @@ impl StringTable {
         Ok(table)
     }
 
-    pub(super) fn intern(&mut self, text: &str) -> AssemblyResult<u32> {
+    pub(super) fn intern(&mut self, text: &str) -> CodecResult<u32> {
         if let Some(&offset) = self.offsets_by_text.get(text) {
             return Ok(offset);
         }
@@ -84,7 +84,7 @@ impl StringTable {
         Ok(offset)
     }
 
-    pub(super) fn offset(&self, text: &str) -> AssemblyResult<u32> {
+    pub(super) fn offset(&self, text: &str) -> CodecResult<u32> {
         self.offsets_by_text
             .get(text)
             .copied()
@@ -92,8 +92,8 @@ impl StringTable {
     }
 }
 
-pub(super) fn decode_string_pool(data: &[u8]) -> (StringPool, StringOffsets) {
-    let mut strings = StringPool::new();
+pub(super) fn decode_string_pool(data: &[u8]) -> (DecodedStrings, StringOffsets) {
+    let mut strings = DecodedStrings::new();
     let mut offsets = StringOffsets::new();
     let mut position = 0_usize;
 
@@ -114,9 +114,9 @@ pub(super) fn decode_string_pool(data: &[u8]) -> (StringPool, StringOffsets) {
 
 pub(super) fn read_named_string(
     offset: u32,
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<String> {
+) -> CodecResult<String> {
     resolve_string(offset, strings, offsets)
         .map_err(|_| CodecError::InvalidMethodName { reference: offset })
 }
@@ -124,9 +124,9 @@ pub(super) fn read_named_string(
 pub(super) fn read_string_ref(
     data: &[u8],
     position: &mut usize,
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<String> {
+) -> CodecResult<String> {
     let offset = read_u32(data, *position).ok_or(CodecError::TruncatedSection)?;
     *position += 4;
     resolve_string(offset, strings, offsets)
@@ -135,9 +135,9 @@ pub(super) fn read_string_ref(
 pub(super) fn read_optional_string_ref(
     data: &[u8],
     position: &mut usize,
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<Option<String>> {
+) -> CodecResult<Option<String>> {
     let offset = read_u32(data, *position).ok_or(CodecError::TruncatedSection)?;
     *position += 4;
     if offset == u32::MAX {
@@ -148,9 +148,9 @@ pub(super) fn read_optional_string_ref(
 
 pub(super) fn resolve_string(
     offset: u32,
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<String> {
+) -> CodecResult<String> {
     let string_index = offsets
         .get(&offset)
         .copied()

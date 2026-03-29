@@ -1,14 +1,14 @@
 use music_il::{MethodEntries, MethodEntry, MethodName};
 
-use crate::binary::strings::StringTable;
+use crate::binary::strings::StringIndex;
 
 use super::*;
 
 pub(super) fn decode_methods(
     data: &[u8],
-    strings: &StringPool,
+    strings: &DecodedStrings,
     offsets: &StringOffsets,
-) -> AssemblyResult<MethodEntries> {
+) -> CodecResult<MethodEntries> {
     let count = usize::from(read_u16(data, 0).ok_or(CodecError::TruncatedSection)?);
     let mut position = 2_usize;
     let mut methods = Vec::with_capacity(count);
@@ -39,8 +39,8 @@ pub(super) fn decode_methods(
 
 pub(super) fn encode_methods(
     methods: &MethodEntries,
-    strings: &StringTable,
-) -> AssemblyResult<SectionBytes> {
+    strings: &StringIndex,
+) -> CodecResult<SectionBytes> {
     if methods.is_empty() {
         return Ok(vec![]);
     }

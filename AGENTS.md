@@ -87,20 +87,26 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 - `tests/` is for integration and e2e only
 - No Rust file may exceed 2000 LOC, including tests and benches
 
+## Clean-Room Naming Rule (HARD)
+
+- In `crates_new/`, public names must be domain-specific when imported unqualified
+- Avoid std-like or generic exported names such as `Color`, `Label`, `List`, `Map`, `Table`, `Pool`, or `Result` when a bounded-context name is clearer
+- Keep established compiler-domain names like `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
+- Apply the same rule to internal helpers when the generic name obscures ownership
+
 ```mermaid
 graph TD
-    A["crates/music_shared/"] --> B["src/"]
+    A["crates_new/music_basic/"] --> B["src/"]
     A --> C["tests/"]
     B --> D["lib.rs"]
     B --> E["span.rs"]
     B --> F["span/"]
     B --> G["ident.rs"]
     B --> H["ident/"]
-    B --> I["diag.rs"]
-    B --> J["diag/"]
+    B --> I["diag/"]
     F --> K["tests.rs<br/>(unit tests for span.rs)"]
     H --> L["tests.rs<br/>(unit tests for ident.rs)"]
-    J --> M["tests.rs<br/>(unit tests for diag.rs)"]
+    I --> M["tests.rs<br/>(unit tests for diag/)"]
     C --> N["integration_test.rs<br/>(integration/e2e tests)"]
 
     style K fill:#e1f5ff
