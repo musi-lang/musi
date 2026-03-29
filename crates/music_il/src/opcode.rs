@@ -1,5 +1,11 @@
 /// All 78 active opcodes in the SEAM bytecode instruction set.
 ///
+/// SEAM groups opcodes by runtime family. The instruction set is neither a
+/// source-level syntax mirror nor a split "core vs extension" design:
+/// dedicated families exist where the VM genuinely owns the contract, such as
+/// effects, typeclass dispatch, aggregates, runtime type operations, FFI, and
+/// GC coordination.
+///
 /// Each variant carries its encoding as a `u8` discriminant via `#[repr(u8)]`.
 /// Gaps in the opcode space are reserved for future use.
 #[repr(u8)]
@@ -114,6 +120,24 @@ pub enum Opcode {
     Halt = 0x5B,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OpcodeFamily {
+    Data,
+    Stack,
+    Scalar,
+    Logic,
+    Shift,
+    Compare,
+    Branch,
+    Call,
+    Sequence,
+    Type,
+    Effect,
+    Typeclass,
+    Runtime,
+    Misc,
+}
+
 /// Total number of active opcodes in the instruction set.
 pub const OPCODE_COUNT: usize = 78;
 
@@ -204,6 +228,83 @@ const BYTE_TO_OPCODE: [Option<Opcode>; 256] = {
 };
 
 impl Opcode {
+    #[must_use]
+    pub const fn family(self) -> OpcodeFamily {
+        match self {
+            Self::LdLoc
+            | Self::LdConst
+            | Self::LdGlob
+            | Self::LdUpv
+            | Self::LdUnit
+            | Self::LdTru
+            | Self::LdFls
+            | Self::LdNil
+            | Self::LdOne
+            | Self::LdSmi
+            | Self::StLoc
+            | Self::StGlob
+            | Self::StUpv
+            | Self::LdLocW
+            | Self::StLocW => OpcodeFamily::Data,
+
+            Self::Pop | Self::Dup | Self::Swap | Self::Rot => OpcodeFamily::Stack,
+
+            Self::IAdd
+            | Self::ISub
+            | Self::IMul
+            | Self::IDiv
+            | Self::IRem
+            | Self::INeg
+            | Self::FAdd
+            | Self::FSub
+            | Self::FMul
+            | Self::FDiv
+            | Self::FNeg => OpcodeFamily::Scalar,
+
+            Self::And | Self::Or | Self::Not | Self::Xor => OpcodeFamily::Logic,
+
+            Self::Shl | Self::Shr => OpcodeFamily::Shift,
+
+            Self::CmpEq
+            | Self::CmpNeq
+            | Self::CmpLt
+            | Self::CmpGt
+            | Self::CmpLeq
+            | Self::CmpGeq => OpcodeFamily::Compare,
+
+            Self::BrTrue | Self::BrFalse | Self::BrJmp | Self::BrTbl | Self::BrBack => {
+                OpcodeFamily::Branch
+            }
+
+            Self::Call | Self::CallTail | Self::Ret | Self::ClsNew => OpcodeFamily::Call,
+
+            Self::ArrNew
+            | Self::ArrGet
+            | Self::ArrSet
+            | Self::ArrLen
+            | Self::ArrSlice
+            | Self::ArrFill
+            | Self::ArrCopy
+            | Self::ArrCaten
+            | Self::ArrGetI
+            | Self::ArrSetI
+            | Self::ArrTag
+            | Self::ArrNewT => OpcodeFamily::Sequence,
+
+            Self::TyChk | Self::TyCast | Self::TyTag => OpcodeFamily::Type,
+
+            Self::EffHdlPush | Self::EffHdlPop | Self::EffInvk | Self::EffCont => {
+                OpcodeFamily::Effect
+            }
+
+            Self::TyclDict | Self::TyclCall => OpcodeFamily::Typeclass,
+
+            Self::GcPin | Self::GcUnpin | Self::FfiCall => OpcodeFamily::Runtime,
+
+            Self::Nop | Self::Panic | Self::Halt => OpcodeFamily::Misc,
+        }
+    }
+
     /// Decode a byte into an opcode. Returns `None` for reserved/unused values.
     #[must_use]
     pub const fn from_byte(byte: u8) -> Option<Self> {
@@ -275,19 +376,19 @@ impl Opcode {
             Self::Ret => "ret",
             Self::ClsNew => "cls.new",
 
-            Self::ArrNew => "arr.new",
-            Self::ArrGet => "arr.get",
-            Self::ArrSet => "arr.set",
-            Self::ArrLen => "arr.len",
-            Self::ArrSlice => "arr.slice",
-            Self::ArrFill => "arr.fill",
-            Self::ArrCopy => "arr.copy",
-            Self::ArrCaten => "arr.caten",
+            Self::ArrNew => "seq.new",
+            Self::ArrGet => "seq.get",
+            Self::ArrSet => "seq.set",
+            Self::ArrLen => "seq.len",
+            Self::ArrSlice => "seq.slice",
+            Self::ArrFill => "seq.fill",
+            Self::ArrCopy => "seq.copy",
+            Self::ArrCaten => "seq.concat",
 
-            Self::ArrGetI => "arr.get.i",
-            Self::ArrSetI => "arr.set.i",
-            Self::ArrTag => "arr.tag",
-            Self::ArrNewT => "arr.new.t",
+            Self::ArrGetI => "seq.get.i",
+            Self::ArrSetI => "seq.set.i",
+            Self::ArrTag => "seq.tag",
+            Self::ArrNewT => "seq.new.tag",
 
             Self::TyChk => "ty.chk",
             Self::TyCast => "ty.cast",

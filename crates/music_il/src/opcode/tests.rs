@@ -90,18 +90,18 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::CallTail.mnemonic(), "call.tail");
     assert_eq!(Opcode::Ret.mnemonic(), "ret");
     assert_eq!(Opcode::ClsNew.mnemonic(), "cls.new");
-    assert_eq!(Opcode::ArrNew.mnemonic(), "arr.new");
-    assert_eq!(Opcode::ArrGet.mnemonic(), "arr.get");
-    assert_eq!(Opcode::ArrSet.mnemonic(), "arr.set");
-    assert_eq!(Opcode::ArrLen.mnemonic(), "arr.len");
-    assert_eq!(Opcode::ArrSlice.mnemonic(), "arr.slice");
-    assert_eq!(Opcode::ArrFill.mnemonic(), "arr.fill");
-    assert_eq!(Opcode::ArrCopy.mnemonic(), "arr.copy");
-    assert_eq!(Opcode::ArrCaten.mnemonic(), "arr.caten");
-    assert_eq!(Opcode::ArrGetI.mnemonic(), "arr.get.i");
-    assert_eq!(Opcode::ArrSetI.mnemonic(), "arr.set.i");
-    assert_eq!(Opcode::ArrTag.mnemonic(), "arr.tag");
-    assert_eq!(Opcode::ArrNewT.mnemonic(), "arr.new.t");
+    assert_eq!(Opcode::ArrNew.mnemonic(), "seq.new");
+    assert_eq!(Opcode::ArrGet.mnemonic(), "seq.get");
+    assert_eq!(Opcode::ArrSet.mnemonic(), "seq.set");
+    assert_eq!(Opcode::ArrLen.mnemonic(), "seq.len");
+    assert_eq!(Opcode::ArrSlice.mnemonic(), "seq.slice");
+    assert_eq!(Opcode::ArrFill.mnemonic(), "seq.fill");
+    assert_eq!(Opcode::ArrCopy.mnemonic(), "seq.copy");
+    assert_eq!(Opcode::ArrCaten.mnemonic(), "seq.concat");
+    assert_eq!(Opcode::ArrGetI.mnemonic(), "seq.get.i");
+    assert_eq!(Opcode::ArrSetI.mnemonic(), "seq.set.i");
+    assert_eq!(Opcode::ArrTag.mnemonic(), "seq.tag");
+    assert_eq!(Opcode::ArrNewT.mnemonic(), "seq.new.tag");
     assert_eq!(Opcode::TyChk.mnemonic(), "ty.chk");
     assert_eq!(Opcode::TyCast.mnemonic(), "ty.cast");
     assert_eq!(Opcode::TyTag.mnemonic(), "ty.tag");
@@ -117,6 +117,24 @@ fn mnemonic_returns_correct_string() {
     assert_eq!(Opcode::Nop.mnemonic(), "nop");
     assert_eq!(Opcode::Panic.mnemonic(), "panic");
     assert_eq!(Opcode::Halt.mnemonic(), "halt");
+}
+
+#[test]
+fn family_groups_match_runtime_domains() {
+    assert_eq!(Opcode::LdLoc.family(), OpcodeFamily::Data);
+    assert_eq!(Opcode::Dup.family(), OpcodeFamily::Stack);
+    assert_eq!(Opcode::IAdd.family(), OpcodeFamily::Scalar);
+    assert_eq!(Opcode::And.family(), OpcodeFamily::Logic);
+    assert_eq!(Opcode::Shl.family(), OpcodeFamily::Shift);
+    assert_eq!(Opcode::CmpEq.family(), OpcodeFamily::Compare);
+    assert_eq!(Opcode::BrJmp.family(), OpcodeFamily::Branch);
+    assert_eq!(Opcode::Call.family(), OpcodeFamily::Call);
+    assert_eq!(Opcode::ArrNew.family(), OpcodeFamily::Sequence);
+    assert_eq!(Opcode::TyChk.family(), OpcodeFamily::Type);
+    assert_eq!(Opcode::EffInvk.family(), OpcodeFamily::Effect);
+    assert_eq!(Opcode::TyclDict.family(), OpcodeFamily::Typeclass);
+    assert_eq!(Opcode::FfiCall.family(), OpcodeFamily::Runtime);
+    assert_eq!(Opcode::Halt.family(), OpcodeFamily::Misc);
 }
 
 #[test]
