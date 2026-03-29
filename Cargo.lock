@@ -259,6 +259,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_ast"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_basic",
+ "music_lex",
+ "music_storage",
+ "smallvec",
+]
+
+[[package]]
 name = "music_basic"
 version = "0.1.0-rc1"
 

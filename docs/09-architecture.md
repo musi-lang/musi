@@ -25,7 +25,7 @@ Compiler and IL crates stay under `music_*`:
 - `music_storage`: arena/index storage and related typed storage mechanics
 - `music_lex`: lossless lexing and token/trivia production
 - `music_parse`: parsing token streams into syntax structures
-- `music_ast`: syntax-level AST, not typed semantic output
+- `music_ast`: full-fidelity green/red syntax tree, syntax only, with top-level expression sequences
 - `music_intrins`: compiler-known builtins and intrinsic surface
 - `music_session`: compiler session state, loaded sources, and shared compile context
 - `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
