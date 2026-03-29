@@ -6,8 +6,8 @@ pub mod red;
 
 pub use builder::SyntaxTreeBuilder;
 pub use green::{
-    SyntaxElementId, SyntaxNodeChildren, SyntaxNodeData, SyntaxNodeId, SyntaxTokenData,
-    SyntaxTokenId, SyntaxTree,
+    SyntaxElementId, SyntaxElementIds, SyntaxNodeChildren, SyntaxNodeData, SyntaxNodeId,
+    SyntaxTokenData, SyntaxTokenId, SyntaxTree,
 };
 pub use kinds::SyntaxNodeKind;
 pub use node::{

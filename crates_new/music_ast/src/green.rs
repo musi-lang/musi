@@ -5,6 +5,7 @@ use smallvec::SmallVec;
 
 use crate::kinds::SyntaxNodeKind;
 
+pub type SyntaxElementIds = Vec<SyntaxElementId>;
 pub type SyntaxNodeChildren = SmallVec<[SyntaxElementId; 6]>;
 pub type SyntaxNodeId = Idx<SyntaxNodeData>;
 pub type SyntaxTokenId = Idx<SyntaxTokenData>;

@@ -40,3 +40,17 @@ fn token_can_carry_structured_fstring_parts() {
     assert_eq!(parts.len(), 3);
     assert_eq!(parts[1].kind, FStringPartKind::Interpolation);
 }
+
+#[test]
+fn token_display_uses_source_spelling_and_classes() {
+    assert_eq!(display_token_kind(&TokenKind::LBrace).to_string(), "'{'");
+    assert_eq!(display_token_kind(&TokenKind::KwLet).to_string(), "'let'");
+    assert_eq!(
+        display_token_kind(&TokenKind::StringLit).to_string(),
+        "string literal"
+    );
+    assert_eq!(
+        display_token_kind(&TokenKind::Eof).to_string(),
+        "end of file"
+    );
+}

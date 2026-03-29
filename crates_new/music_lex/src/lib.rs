@@ -8,4 +8,5 @@ pub use errors::{LexError, LexErrorKind, LexResult};
 pub use lexer::{LexedSource, Lexer};
 pub use token::{
     FStringPart, FStringPartKind, FStringParts, Token, TokenKind, Trivia, TriviaKind, Trivias,
+    display_token_kind,
 };

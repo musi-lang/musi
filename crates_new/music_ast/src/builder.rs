@@ -54,6 +54,10 @@ impl SyntaxTreeBuilder {
         )
     }
 
+    pub fn push_lex_element(&mut self, token: &Token) -> SyntaxElementId {
+        SyntaxElementId::Token(self.push_lex_token(token))
+    }
+
     pub fn push_node(
         &mut self,
         kind: SyntaxNodeKind,
@@ -72,8 +76,64 @@ impl SyntaxTreeBuilder {
     }
 
     #[must_use]
+    pub fn node_kind(&self, id: SyntaxNodeId) -> SyntaxNodeKind {
+        self.nodes.get(id).kind
+    }
+
+    pub fn push_node_from_children(
+        &mut self,
+        kind: SyntaxNodeKind,
+        children: impl IntoIterator<Item = SyntaxElementId>,
+    ) -> SyntaxNodeId {
+        let children = children.into_iter().collect::<SyntaxNodeChildren>();
+        let span = node_span(&self.nodes, &self.tokens, &children);
+        self.push_node(kind, span, children)
+    }
+
+    pub fn push_error_node(
+        &mut self,
+        children: impl IntoIterator<Item = SyntaxElementId>,
+    ) -> SyntaxNodeId {
+        self.push_node_from_children(SyntaxNodeKind::Error, children)
+    }
+
+    #[must_use]
+    pub fn finish_root(
+        mut self,
+        children: impl IntoIterator<Item = SyntaxElementId>,
+    ) -> SyntaxTree {
+        let root = self.push_node_from_children(SyntaxNodeKind::SourceFile, children);
+        self.finish(root)
+    }
+
+    #[must_use]
     pub fn finish(self, root: SyntaxNodeId) -> SyntaxTree {
         SyntaxTree::new(self.source_id, self.nodes, self.tokens, root)
+    }
+}
+
+fn node_span(
+    nodes: &Arena<SyntaxNodeData>,
+    tokens: &Arena<SyntaxTokenData>,
+    children: &SyntaxNodeChildren,
+) -> Span {
+    let Some(first) = children.first() else {
+        return Span::new(0, 0);
+    };
+    let Some(last) = children.last() else {
+        return Span::new(0, 0);
+    };
+    element_span(nodes, tokens, *first).to(element_span(nodes, tokens, *last))
+}
+
+fn element_span(
+    nodes: &Arena<SyntaxNodeData>,
+    tokens: &Arena<SyntaxTokenData>,
+    id: SyntaxElementId,
+) -> Span {
+    match id {
+        SyntaxElementId::Node(node) => nodes.get(node).span,
+        SyntaxElementId::Token(token) => tokens.get(token).span,
     }
 }
 
