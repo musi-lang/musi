@@ -1,0 +1,17 @@
+[package]
+name = "music_hir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Typed high-level IR model for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_ast = { path = "../music_ast" }
+music_basic = { path = "../music_basic" }
+music_names = { path = "../music_names" }
+music_storage = { path = "../music_storage" }
+
+[lints]
+workspace = true

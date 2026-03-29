@@ -26,7 +26,7 @@ Compiler and IL crates stay under `music_*`:
 - `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
 - `music_codegen`: lowering from typed IR into `music_il`
 - `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
-- `music_hir`: typed high-level IR after semantic analysis
+- `music_hir`: typed high-level IR data model produced by `music_sema` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
 - `music_il`: VM-facing bytecode / intermediate language contract
 - `music_known`: compiler-known builtins and intrinsic surface
 - `music_lex`: lossless lexing and token/trivia production
