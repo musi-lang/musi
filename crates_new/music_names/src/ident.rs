@@ -1,4 +1,6 @@
-use crate::{Span, Symbol};
+use music_basic::Span;
+
+use crate::Symbol;
 
 /// A named identifier with its source location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -2,7 +2,7 @@
 
 SCOPE ?= new
 VALID_SCOPES := new all legacy
-NEW_PACKAGES := music_basic music_storage music_il music_assembly
+NEW_PACKAGES := music_basic music_storage music_names music_lex music_il music_assembly
 LEGACY_PACKAGES := $(shell find crates -mindepth 2 -maxdepth 2 -name Cargo.toml -exec sed -n 's/^name = "\(.*\)"/\1/p' {} \;)
 
 ifeq ($(filter $(SCOPE),$(VALID_SCOPES)),)

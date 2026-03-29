@@ -25,15 +25,15 @@ Compiler and IL crates stay under `music_*`:
 - `music_storage`
 - `music_lex`
 - `music_parse`
-- `music_ast`
+- `music_ast` - (typed) AST
 - `music_intrinsics`
 - `music_session`
 - `music_names`
 - `music_sema`
-- `music_ir`
+- `music_ir` - (typed) high-level intermediate representation
 - `music_codegen`
-- `music_frontend`
-- `music_il`
+- `music_fe` - frontend
+- `music_il` - bytecode (intermediate language)
 - `music_assembly`
 
 Project, tooling, and runtime crates stay under `musi_*`:
@@ -48,6 +48,7 @@ This naming is part of the architecture contract:
 - `music_*` owns the compiler and IL boundary
 - `musi_*` owns project loading, tooling, and runtime embedding
 - diagnostics stay inside `music_basic`
+- symbols, interning, and identifiers stay inside `music_names`
 - `music_names` and `music_sema` stay separate
 - `music_il` and `music_assembly` are the locked SEAM pair
 

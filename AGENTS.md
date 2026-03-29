@@ -94,6 +94,12 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 - Keep established compiler-domain names like `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
 - Apply the same rule to internal helpers when the generic name obscures ownership
 
+## Clean-Room Boundary Rule (HARD)
+
+- `music_basic` owns spans, sources, diagnostics, and other non-binding foundation types
+- `music_names` owns `Symbol`, `Interner`, `Ident`, and later name/binding infrastructure
+- `music_lex` must not depend on `music_names`; identifier tokens stay span-based in the lexer
+
 ```mermaid
 graph TD
     A["crates_new/music_basic/"] --> B["src/"]
