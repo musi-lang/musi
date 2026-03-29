@@ -24,6 +24,9 @@ pub enum ExprKindView {
     Call,
     Field,
     Index,
+    RecordUpdate,
+    TypeTest,
+    TypeCast,
     Prefix,
     Binary,
     Case,
@@ -73,6 +76,11 @@ pub struct Expr<'tree> {
     syntax: SyntaxNode<'tree>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct DeclSurface<'tree> {
+    syntax: SyntaxNode<'tree>,
+}
+
 impl<'tree> SourceFile<'tree> {
     #[must_use]
     pub fn cast(node: SyntaxNode<'tree>) -> Option<Self> {
@@ -116,29 +124,20 @@ impl<'tree> Expr<'tree> {
     }
 
     #[must_use]
-    pub fn is_mutable(self) -> bool {
-        self.kind() == ExprKindView::Let && has_token(self.syntax, &TokenKind::KwMut)
+    pub fn decl_surface(self) -> Option<DeclSurface<'tree>> {
+        supports_decl_surface(self.kind()).then_some(DeclSurface {
+            syntax: self.syntax,
+        })
     }
 
     #[must_use]
-    pub fn is_exported(self) -> bool {
-        matches!(
-            self.kind(),
-            ExprKindView::Let | ExprKindView::Instance | ExprKindView::ForeignBlock
-        ) && has_token(self.syntax, &TokenKind::KwExport)
+    pub fn is_optional_chain(self) -> bool {
+        self.kind() == ExprKindView::Field && has_token(self.syntax, &TokenKind::QuestionDot)
     }
 
     #[must_use]
-    pub fn is_opaque(self) -> bool {
-        matches!(self.kind(), ExprKindView::Let | ExprKindView::ForeignBlock)
-            && has_token(self.syntax, &TokenKind::KwOpaque)
-    }
-
-    #[must_use]
-    pub fn foreign_abi_token(self) -> Option<SyntaxToken<'tree>> {
-        self.syntax
-            .child_tokens()
-            .find(|token| matches!(token.kind(), TokenKind::StringLit))
+    pub fn is_forced_chain(self) -> bool {
+        self.kind() == ExprKindView::Field && has_token(self.syntax, &TokenKind::BangDot)
     }
 
     #[must_use]
@@ -185,6 +184,45 @@ impl<'tree> Expr<'tree> {
                 _ => None,
             })
     }
+
+    #[must_use]
+    pub fn is_block_quote(self) -> bool {
+        self.kind() == ExprKindView::Quote && has_token(self.syntax, &TokenKind::LBrace)
+    }
+}
+
+impl<'tree> DeclSurface<'tree> {
+    #[must_use]
+    pub const fn syntax(self) -> SyntaxNode<'tree> {
+        self.syntax
+    }
+
+    #[must_use]
+    pub fn is_exported(self) -> bool {
+        has_token(self.syntax, &TokenKind::KwExport)
+    }
+
+    #[must_use]
+    pub fn is_opaque(self) -> bool {
+        has_token(self.syntax, &TokenKind::KwOpaque)
+    }
+
+    #[must_use]
+    pub fn is_mutable(self) -> bool {
+        has_token(self.syntax, &TokenKind::KwMut)
+    }
+
+    #[must_use]
+    pub fn is_external(self) -> bool {
+        has_token(self.syntax, &TokenKind::KwForeign)
+    }
+
+    #[must_use]
+    pub fn external_abi_token(self) -> Option<SyntaxToken<'tree>> {
+        self.syntax
+            .child_tokens()
+            .find(|token| matches!(token.kind(), TokenKind::StringLit))
+    }
 }
 
 impl ExprKindView {
@@ -209,6 +247,9 @@ impl ExprKindView {
             SyntaxNodeKind::CallExpr => Some(Self::Call),
             SyntaxNodeKind::FieldExpr => Some(Self::Field),
             SyntaxNodeKind::IndexExpr => Some(Self::Index),
+            SyntaxNodeKind::RecordUpdateExpr => Some(Self::RecordUpdate),
+            SyntaxNodeKind::TypeTestExpr => Some(Self::TypeTest),
+            SyntaxNodeKind::TypeCastExpr => Some(Self::TypeCast),
             SyntaxNodeKind::PrefixExpr => Some(Self::Prefix),
             SyntaxNodeKind::BinaryExpr => Some(Self::Binary),
             SyntaxNodeKind::CaseExpr => Some(Self::Case),
@@ -224,6 +265,13 @@ impl ExprKindView {
 fn has_token(node: SyntaxNode<'_>, expected: &TokenKind) -> bool {
     node.child_tokens()
         .any(|token| same_token_kind(token.kind(), expected))
+}
+
+const fn supports_decl_surface(kind: ExprKindView) -> bool {
+    matches!(
+        kind,
+        ExprKindView::Let | ExprKindView::Instance | ExprKindView::ForeignBlock
+    )
 }
 
 fn same_token_kind(left: &TokenKind, right: &TokenKind) -> bool {

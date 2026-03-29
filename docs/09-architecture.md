@@ -28,7 +28,7 @@ Compiler and IL crates stay under `music_*`:
 - `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
 - `music_hir`: typed high-level IR after semantic analysis
 - `music_il`: VM-facing bytecode / intermediate language contract
-- `music_intrins`: compiler-known builtins and intrinsic surface
+- `music_known`: compiler-known builtins and intrinsic surface
 - `music_lex`: lossless lexing and token/trivia production
 - `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
 - `music_parse`: parsing token streams into syntax structures

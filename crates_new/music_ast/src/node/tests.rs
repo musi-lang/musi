@@ -143,6 +143,21 @@ fn test_support_wrappers_cast_exact_kinds() {
             children: SmallVec::default(),
         }),
         nodes.alloc(SyntaxNodeData {
+            kind: SyntaxNodeKind::ArrayItem,
+            span: Span::new(0, 1),
+            children: SmallVec::default(),
+        }),
+        nodes.alloc(SyntaxNodeData {
+            kind: SyntaxNodeKind::RecordItem,
+            span: Span::new(0, 1),
+            children: SmallVec::default(),
+        }),
+        nodes.alloc(SyntaxNodeData {
+            kind: SyntaxNodeKind::ImportTarget,
+            span: Span::new(0, 1),
+            children: SmallVec::default(),
+        }),
+        nodes.alloc(SyntaxNodeData {
             kind: SyntaxNodeKind::HandlerClause,
             span: Span::new(0, 1),
             children: SmallVec::default(),
@@ -168,6 +183,9 @@ fn test_support_wrappers_cast_exact_kinds() {
     assert!(Variant::cast(nodes.next().expect("variant")).is_some());
     assert!(TypeParam::cast(nodes.next().expect("type param")).is_some());
     assert!(Constraint::cast(nodes.next().expect("constraint")).is_some());
+    assert!(ArrayItem::cast(nodes.next().expect("array item")).is_some());
+    assert!(RecordItem::cast(nodes.next().expect("record item")).is_some());
+    assert!(ImportTarget::cast(nodes.next().expect("import target")).is_some());
     assert!(HandlerClause::cast(nodes.next().expect("handler clause")).is_some());
     assert!(Member::cast(nodes.next().expect("member")).is_some());
 }
@@ -199,9 +217,36 @@ fn test_binary_expression_uses_operator_enum() {
 }
 
 #[test]
-fn test_let_expression_uses_modifier_accessors() {
+fn test_field_expression_uses_chain_flags() {
     let mut sources = SourceMap::default();
-    let source_id = sources.add("test.ms", "export let mut x := y");
+    let source_id = sources.add("test.ms", "x?.y");
+
+    let mut nodes = Arena::new();
+    let mut tokens = Arena::new();
+    let access_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::QuestionDot,
+        span: Span::new(1, 3),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let expr_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::FieldExpr,
+        span: Span::new(0, 4),
+        children: iter::once(SyntaxElementId::Token(access_id)).collect(),
+    });
+
+    let tree = SyntaxTree::new(source_id, nodes, tokens, expr_id);
+    let expr = Expr::cast(tree.root()).expect("field expression");
+
+    assert_eq!(expr.kind(), ExprKindView::Field);
+    assert!(expr.is_optional_chain());
+    assert!(!expr.is_forced_chain());
+}
+
+#[test]
+fn test_decl_surface_reports_modifiers_and_external_abi() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "export foreign \"c\" let mut x := y");
 
     let mut nodes = Arena::new();
     let mut tokens = Arena::new();
@@ -213,15 +258,29 @@ fn test_let_expression_uses_modifier_accessors() {
     });
     let mut_id = tokens.alloc(SyntaxTokenData {
         kind: TokenKind::KwMut,
-        span: Span::new(11, 14),
+        span: Span::new(23, 26),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let foreign_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::KwForeign,
+        span: Span::new(7, 14),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let abi_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::StringLit,
+        span: Span::new(15, 18),
         leading_trivia: Trivias::new(),
         trailing_trivia: Trivias::new(),
     });
     let expr_id = nodes.alloc(SyntaxNodeData {
         kind: SyntaxNodeKind::LetExpr,
-        span: Span::new(0, 20),
+        span: Span::new(0, 32),
         children: [
             SyntaxElementId::Token(export_id),
+            SyntaxElementId::Token(foreign_id),
+            SyntaxElementId::Token(abi_id),
             SyntaxElementId::Token(mut_id),
         ]
         .into_iter()
@@ -230,9 +289,16 @@ fn test_let_expression_uses_modifier_accessors() {
 
     let tree = SyntaxTree::new(source_id, nodes, tokens, expr_id);
     let expr = Expr::cast(tree.root()).expect("let expression");
+    let decl = expr.decl_surface().expect("declaration surface");
 
-    assert!(expr.is_exported());
-    assert!(expr.is_mutable());
+    assert!(decl.is_exported());
+    assert!(decl.is_external());
+    assert!(decl.is_mutable());
+    assert!(!decl.is_opaque());
+    assert!(matches!(
+        decl.external_abi_token().map(crate::SyntaxToken::kind),
+        Some(TokenKind::StringLit)
+    ));
 }
 
 #[test]
@@ -284,6 +350,160 @@ fn test_named_type_uses_mutability_and_function_flavor_helpers() {
     assert!(named.is_mutable());
     assert_eq!(function.kind(), TyKindView::Function);
     assert_eq!(function.function_flavor(), Some(FunctionTyFlavor::Pure));
+}
+
+#[test]
+fn test_binary_type_uses_operator_enum() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "A + B");
+
+    let mut nodes = Arena::new();
+    let mut tokens = Arena::new();
+    let plus_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::Plus,
+        span: Span::new(2, 3),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let ty_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::BinaryTy,
+        span: Span::new(0, 5),
+        children: iter::once(SyntaxElementId::Token(plus_id)).collect(),
+    });
+
+    let tree = SyntaxTree::new(source_id, nodes, tokens, ty_id);
+    let ty = Ty::cast(tree.root()).expect("binary type");
+
+    assert_eq!(ty.kind(), TyKindView::Binary);
+    assert_eq!(ty.binary_op(), Some(BinaryTyOp::Sum));
+}
+
+#[test]
+fn test_quote_expression_reports_block_flag() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "quote { x; }");
+
+    let mut nodes = Arena::new();
+    let mut tokens = Arena::new();
+    let lbrace_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::LBrace,
+        span: Span::new(6, 7),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let expr_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::QuoteExpr,
+        span: Span::new(0, 12),
+        children: iter::once(SyntaxElementId::Token(lbrace_id)).collect(),
+    });
+
+    let tree = SyntaxTree::new(source_id, nodes, tokens, expr_id);
+    let expr = Expr::cast(tree.root()).expect("quote expression");
+
+    assert_eq!(expr.kind(), ExprKindView::Quote);
+    assert!(expr.is_block_quote());
+}
+
+#[test]
+fn test_array_and_record_items_report_flags() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "...x, field := value");
+
+    let mut nodes = Arena::new();
+    let mut tokens = Arena::new();
+    let spread_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::DotDotDot,
+        span: Span::new(0, 3),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let assign_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::ColonEq,
+        span: Span::new(12, 14),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let array_item_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::ArrayItem,
+        span: Span::new(0, 5),
+        children: iter::once(SyntaxElementId::Token(spread_id)).collect(),
+    });
+    let record_item_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::RecordItem,
+        span: Span::new(6, 20),
+        children: iter::once(SyntaxElementId::Token(assign_id)).collect(),
+    });
+    let root_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::SourceFile,
+        span: Span::new(0, 20),
+        children: [
+            SyntaxElementId::Node(array_item_id),
+            SyntaxElementId::Node(record_item_id),
+        ]
+        .into_iter()
+        .collect(),
+    });
+
+    let tree = SyntaxTree::new(source_id, nodes, tokens, root_id);
+    let mut children = tree.root().child_nodes();
+    let array_item = ArrayItem::cast(children.next().expect("array item")).expect("array item");
+    let record_item = RecordItem::cast(children.next().expect("record item")).expect("record item");
+
+    assert!(array_item.is_spread());
+    assert!(!record_item.is_spread());
+    assert!(record_item.has_value());
+}
+
+#[test]
+fn test_import_target_reports_alias_and_selective_flags() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "import \"x\" as Foo.{bar}");
+
+    let mut nodes = Arena::new();
+    let mut tokens = Arena::new();
+    let as_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::KwAs,
+        span: Span::new(11, 13),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let selective_id = tokens.alloc(SyntaxTokenData {
+        kind: TokenKind::DotLBrace,
+        span: Span::new(17, 19),
+        leading_trivia: Trivias::new(),
+        trailing_trivia: Trivias::new(),
+    });
+    let alias_target_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::ImportTarget,
+        span: Span::new(11, 16),
+        children: iter::once(SyntaxElementId::Token(as_id)).collect(),
+    });
+    let selective_target_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::ImportTarget,
+        span: Span::new(17, 24),
+        children: iter::once(SyntaxElementId::Token(selective_id)).collect(),
+    });
+    let root_id = nodes.alloc(SyntaxNodeData {
+        kind: SyntaxNodeKind::SourceFile,
+        span: Span::new(0, 24),
+        children: [
+            SyntaxElementId::Node(alias_target_id),
+            SyntaxElementId::Node(selective_target_id),
+        ]
+        .into_iter()
+        .collect(),
+    });
+
+    let tree = SyntaxTree::new(source_id, nodes, tokens, root_id);
+    let mut children = tree.root().child_nodes();
+    let alias = ImportTarget::cast(children.next().expect("alias target")).expect("alias target");
+    let selective =
+        ImportTarget::cast(children.next().expect("selective target")).expect("selective target");
+
+    assert!(alias.has_alias());
+    assert!(!alias.is_selective());
+    assert!(!selective.has_alias());
+    assert!(selective.is_selective());
 }
 
 #[test]

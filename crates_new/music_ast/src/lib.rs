@@ -11,8 +11,8 @@ pub use green::{
 };
 pub use kinds::SyntaxNodeKind;
 pub use node::{
-    Attr, BinaryExprOp, Constraint, Expr, ExprKindView, Field, FunctionTyFlavor, HandlerClause,
-    Member, MemberKind, Param, Pat, PatKindView, PrefixExprOp, SourceFile, Ty, TyKindView,
-    TypeInfixOp, TypeParam, Variant,
+    ArrayItem, Attr, BinaryExprOp, BinaryTyOp, Constraint, DeclSurface, Expr, ExprKindView, Field,
+    FunctionTyFlavor, HandlerClause, ImportTarget, Member, MemberKind, Param, Pat, PatKindView,
+    PrefixExprOp, RecordItem, SourceFile, Ty, TyKindView, TypeParam, Variant,
 };
 pub use red::{SyntaxElement, SyntaxNode, SyntaxToken};

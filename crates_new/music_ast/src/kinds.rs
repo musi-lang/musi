@@ -21,6 +21,9 @@ pub enum SyntaxNodeKind {
     CallExpr,
     FieldExpr,
     IndexExpr,
+    RecordUpdateExpr,
+    TypeTestExpr,
+    TypeCastExpr,
     PrefixExpr,
     BinaryExpr,
     CaseExpr,
@@ -40,13 +43,16 @@ pub enum SyntaxNodeKind {
 
     NamedTy,
     FunctionTy,
-    InfixTy,
+    BinaryTy,
     PiTy,
     TupleTy,
     ArrayTy,
 
     Attr,
     AttrArg,
+    ArrayItem,
+    RecordItem,
+    ImportTarget,
     ParamList,
     Param,
     FieldList,
@@ -86,6 +92,9 @@ impl SyntaxNodeKind {
                 | Self::CallExpr
                 | Self::FieldExpr
                 | Self::IndexExpr
+                | Self::RecordUpdateExpr
+                | Self::TypeTestExpr
+                | Self::TypeCastExpr
                 | Self::PrefixExpr
                 | Self::BinaryExpr
                 | Self::CaseExpr
@@ -117,7 +126,7 @@ impl SyntaxNodeKind {
             self,
             Self::NamedTy
                 | Self::FunctionTy
-                | Self::InfixTy
+                | Self::BinaryTy
                 | Self::PiTy
                 | Self::TupleTy
                 | Self::ArrayTy

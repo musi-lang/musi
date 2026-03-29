@@ -2,14 +2,14 @@ use core::mem;
 
 use music_lex::TokenKind;
 
-use crate::kinds::SyntaxNodeKind;
+use crate::SyntaxNodeKind;
 use crate::red::SyntaxNode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TyKindView {
     Named,
     Function,
-    Infix,
+    Binary,
     Pi,
     Tuple,
     Array,
@@ -22,7 +22,7 @@ pub enum FunctionTyFlavor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeInfixOp {
+pub enum BinaryTyOp {
     Sum,
     Product,
 }
@@ -75,16 +75,16 @@ impl<'tree> Ty<'tree> {
     }
 
     #[must_use]
-    pub fn infix_op(self) -> Option<TypeInfixOp> {
-        if self.kind() != TyKindView::Infix {
+    pub fn binary_op(self) -> Option<BinaryTyOp> {
+        if self.kind() != TyKindView::Binary {
             return None;
         }
 
         self.syntax
             .child_tokens()
             .find_map(|token| match token.kind() {
-                TokenKind::Plus => Some(TypeInfixOp::Sum),
-                TokenKind::Star => Some(TypeInfixOp::Product),
+                TokenKind::Plus => Some(BinaryTyOp::Sum),
+                TokenKind::Star => Some(BinaryTyOp::Product),
                 _ => None,
             })
     }
@@ -96,7 +96,7 @@ impl TyKindView {
         match kind {
             SyntaxNodeKind::NamedTy => Some(Self::Named),
             SyntaxNodeKind::FunctionTy => Some(Self::Function),
-            SyntaxNodeKind::InfixTy => Some(Self::Infix),
+            SyntaxNodeKind::BinaryTy => Some(Self::Binary),
             SyntaxNodeKind::PiTy => Some(Self::Pi),
             SyntaxNodeKind::TupleTy => Some(Self::Tuple),
             SyntaxNodeKind::ArrayTy => Some(Self::Array),
