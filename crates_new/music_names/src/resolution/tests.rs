@@ -4,7 +4,7 @@ use super::{NameBinding, NameBindingKind, NameResolution, NameSite};
 use crate::Interner;
 
 #[test]
-fn records_refs_by_site() {
+fn test_records_refs_by_site() {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", "x");
 

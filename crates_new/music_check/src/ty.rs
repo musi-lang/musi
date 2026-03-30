@@ -3,10 +3,12 @@ use std::fmt;
 
 use music_basic::Span;
 use music_hir::{HirArrowFlavor, HirDim, HirTyBinOp};
-use music_names::Symbol;
+use music_names::{Interner, Symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SemTyId(u32);
+
+pub(crate) type SemTyIds = Box<[SemTyId]>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SemTy {
@@ -16,10 +18,10 @@ pub enum SemTy {
 
     Named {
         name: Symbol,
-        args: Box<[SemTyId]>,
+        args: SemTyIds,
     },
     Tuple {
-        items: Box<[SemTyId]>,
+        items: SemTyIds,
     },
     Array {
         dims: Box<[HirDim]>,
@@ -107,7 +109,7 @@ impl Default for SemTys {
 
 pub struct SemTyDisplay<'a> {
     pub tys: &'a SemTys,
-    pub interner: &'a music_names::Interner,
+    pub interner: &'a Interner,
     pub ty: SemTyId,
 }
 
@@ -119,7 +121,7 @@ impl fmt::Display for SemTyDisplay<'_> {
 
 fn fmt_ty(
     tys: &SemTys,
-    interner: &music_names::Interner,
+    interner: &Interner,
     ty: SemTyId,
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
@@ -204,11 +206,7 @@ fn fmt_ty(
     }
 }
 
-fn fmt_array_dims(
-    dims: &[HirDim],
-    interner: &music_names::Interner,
-    f: &mut fmt::Formatter<'_>,
-) -> fmt::Result {
+fn fmt_array_dims(dims: &[HirDim], interner: &Interner, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     if dims.len() == 1 && matches!(dims[0], HirDim::Inferred { .. }) {
         return write!(f, "[]");
     }

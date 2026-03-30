@@ -4,15 +4,16 @@ pub fn validate(text: &str) {
         return;
     }
 
-    if text.contains(": ") {
-        panic!("diagnostic text contains ': ': {text:?}");
-    }
+    assert!(
+        !text.contains(": "),
+        "diagnostic text contains ': ': {text:?}"
+    );
 
     for word in text.split(|c: char| !c.is_ascii_alphabetic()) {
-        match word {
-            "a" | "an" | "the" => panic!("diagnostic text contains article {word:?}: {text:?}"),
-            _ => {}
-        }
+        assert!(
+            !matches!(word, "a" | "an" | "the"),
+            "diagnostic text contains article {word:?}: {text:?}"
+        );
     }
 }
 

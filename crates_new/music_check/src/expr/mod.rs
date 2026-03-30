@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
+use music_basic::int_lit;
 use music_hir::{
-    HirArg, HirArrowFlavor, HirBinaryOp, HirDeclMods, HirEffectSet, HirExprId, HirExprKind,
-    HirLitKind, HirMemberKey, HirOrigin, HirParam, HirPatId, HirRecordItem, HirTyId,
+    HirArg, HirArrayItem, HirArrowFlavor, HirBinaryOp, HirCaseArm, HirChainKind, HirDeclMods,
+    HirDim, HirEffectSet, HirExprId, HirExprKind, HirFStringPart, HirLitKind, HirMemberDef,
+    HirMemberKey, HirOrigin, HirParam, HirPatId, HirPrefixOp, HirRecordItem, HirTyId, HirTyKind,
+    HirTypeParam,
 };
-use music_names::Symbol;
+use music_names::{Ident, Symbol};
 
 use crate::SemaErrorKind;
 
@@ -111,7 +114,7 @@ impl<'a> Checker<'a> {
                 value,
             ),
             HirExprKind::Import { exports, .. } => {
-                let mut fields = std::collections::BTreeMap::new();
+                let mut fields = BTreeMap::new();
                 for sym in exports.iter().copied() {
                     let _prev = fields.insert(sym, self.state.builtins.unknown);
                 }
@@ -161,8 +164,8 @@ impl<'a> Checker<'a> {
                     let mut effs = EffectRow::empty();
                     for part in parts.iter() {
                         match part {
-                            music_hir::HirFStringPart::Literal { .. } => {}
-                            music_hir::HirFStringPart::Expr { expr, origin } => {
+                            HirFStringPart::Literal { .. } => {}
+                            HirFStringPart::Expr { expr, origin } => {
                                 let (t, e) = self.synth_expr(*expr);
                                 effs.union_with(&e);
                                 let _ = self.unify_or_report(
@@ -198,19 +201,19 @@ impl<'a> Checker<'a> {
                 let elem = self.state.semtys.fresh_infer_var(origin.span);
                 for item in items {
                     match item {
-                        music_hir::HirArrayItem::Expr(id) => {
+                        HirArrayItem::Expr(id) => {
                             let (t, e) = self.synth_expr(id);
                             effs.union_with(&e);
                             let _ = self.unify_or_report(origin.span, elem, t);
                         }
-                        music_hir::HirArrayItem::Spread { expr, .. } => {
+                        HirArrayItem::Spread { expr, .. } => {
                             let (_t, e) = self.synth_expr(expr);
                             effs.union_with(&e);
                         }
                     }
                 }
                 let ty = self.state.semtys.alloc(SemTy::Array {
-                    dims: Box::new([music_hir::HirDim::Inferred { span: origin.span }]),
+                    dims: Box::new([HirDim::Inferred { span: origin.span }]),
                     elem,
                 });
                 (ty, effs)
@@ -262,11 +265,11 @@ impl<'a> Checker<'a> {
             HirExprKind::Prefix { op, expr } => {
                 let (inner, effs) = self.synth_expr(expr);
                 let ty = match op {
-                    music_hir::HirPrefixOp::Negate => {
+                    HirPrefixOp::Negate => {
                         let _ = self.unify_or_report(origin.span, self.state.builtins.int_, inner);
                         self.state.builtins.int_
                     }
-                    music_hir::HirPrefixOp::Not => {
+                    HirPrefixOp::Not => {
                         if self.is_named_zero_arg(inner, self.state.builtins.int_) {
                             let _ =
                                 self.unify_or_report(origin.span, self.state.builtins.int_, inner);
@@ -277,9 +280,7 @@ impl<'a> Checker<'a> {
                             self.state.builtins.bool_
                         }
                     }
-                    music_hir::HirPrefixOp::Mut => {
-                        self.state.semtys.alloc(SemTy::Mut { base: inner })
-                    }
+                    HirPrefixOp::Mut => self.state.semtys.alloc(SemTy::Mut { base: inner }),
                 };
                 (ty, effs)
             }
@@ -306,7 +307,7 @@ impl<'a> Checker<'a> {
         items: Box<[HirRecordItem]>,
     ) -> (SemTyId, EffectRow) {
         let mut effs = EffectRow::empty();
-        let mut fields = std::collections::BTreeMap::<Symbol, SemTyId>::new();
+        let mut fields = BTreeMap::<Symbol, SemTyId>::new();
         let mut open = false;
 
         for item in items.iter() {
@@ -371,7 +372,7 @@ impl<'a> Checker<'a> {
         pat: HirPatId,
         has_params: bool,
         params: Box<[HirParam]>,
-        type_params: Box<[music_hir::HirTypeParam]>,
+        type_params: Box<[HirTypeParam]>,
         effects: Option<HirEffectSet>,
         annot: Option<HirTyId>,
         value: Option<HirExprId>,
@@ -536,9 +537,9 @@ impl<'a> Checker<'a> {
     fn synth_instance(
         &mut self,
         origin: HirOrigin,
-        type_params: Box<[music_hir::HirTypeParam]>,
+        type_params: Box<[HirTypeParam]>,
         target: HirTyId,
-        members: Box<[music_hir::HirMemberDef]>,
+        members: Box<[HirMemberDef]>,
     ) -> (SemTyId, EffectRow) {
         let mut ty_params_map = HashMap::<Symbol, u32>::new();
         for (i, tp) in type_params.iter().enumerate() {
@@ -546,7 +547,7 @@ impl<'a> Checker<'a> {
         }
 
         let target_ty = self.ctx.store.tys.get(target).clone();
-        let music_hir::HirTyKind::Named {
+        let HirTyKind::Named {
             name: class_name,
             args: class_args,
         } = target_ty.kind
@@ -595,9 +596,9 @@ impl<'a> Checker<'a> {
             _ => {}
         }
 
-        let mut member_by_name: HashMap<Symbol, &music_hir::HirMemberDef> = HashMap::new();
+        let mut member_by_name: HashMap<Symbol, &HirMemberDef> = HashMap::new();
         for member in members.iter() {
-            let music_hir::HirMemberDef::Let { name, .. } = member else {
+            let HirMemberDef::Let { name, .. } = member else {
                 continue;
             };
             let _prev = member_by_name.insert(name.name.name, member);
@@ -615,7 +616,7 @@ impl<'a> Checker<'a> {
                 continue;
             };
 
-            let music_hir::HirMemberDef::Let {
+            let HirMemberDef::Let {
                 origin: member_origin,
                 params,
                 ret,
@@ -685,7 +686,7 @@ impl<'a> Checker<'a> {
         }
 
         for member in members.iter() {
-            let music_hir::HirMemberDef::Let { name, .. } = member else {
+            let HirMemberDef::Let { name, .. } = member else {
                 continue;
             };
             if !class_family.ops.contains_key(&name.name.name) {
@@ -908,7 +909,7 @@ impl<'a> Checker<'a> {
         &mut self,
         origin: HirOrigin,
         base: HirExprId,
-        chain: music_hir::HirChainKind,
+        chain: HirChainKind,
         key: HirMemberKey,
     ) -> (SemTyId, EffectRow) {
         let (mut base_ty, effs) = self.synth_expr(base);
@@ -921,17 +922,11 @@ impl<'a> Checker<'a> {
         }
 
         match (chain, self.state.semtys.get(base_ty).clone(), key) {
-            (music_hir::HirChainKind::Optional, base, key) => {
+            (HirChainKind::Optional, base, key) => {
                 self.synth_optional_member(origin, base, key, effs)
             }
-            (music_hir::HirChainKind::Forced, base, key) => {
-                self.synth_forced_member(origin, base, key, effs)
-            }
-            (
-                music_hir::HirChainKind::Normal,
-                SemTy::Tuple { items },
-                HirMemberKey::IntLit { span, .. },
-            ) => {
+            (HirChainKind::Forced, base, key) => self.synth_forced_member(origin, base, key, effs),
+            (HirChainKind::Normal, SemTy::Tuple { items }, HirMemberKey::IntLit { span, .. }) => {
                 let idx = parse_int_lit_u32(self.slice(span));
                 let len = u32::try_from(items.len()).unwrap_or(0);
                 match idx.and_then(|i| items.get(i as usize).copied()) {
@@ -948,22 +943,14 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            (
-                music_hir::HirChainKind::Normal,
-                SemTy::Record { fields },
-                HirMemberKey::Name(field),
-            ) => (
+            (HirChainKind::Normal, SemTy::Record { fields }, HirMemberKey::Name(field)) => (
                 fields
                     .get(&field.name)
                     .copied()
                     .unwrap_or(self.state.builtins.unknown),
                 effs,
             ),
-            (
-                music_hir::HirChainKind::Normal,
-                SemTy::Named { name, args },
-                HirMemberKey::Name(field),
-            ) => {
+            (HirChainKind::Normal, SemTy::Named { name, args }, HirMemberKey::Name(field)) => {
                 let Some(def) = self.state.env.get_data_def(name).cloned() else {
                     return (self.state.builtins.unknown, effs);
                 };
@@ -1533,7 +1520,7 @@ impl<'a> Checker<'a> {
     fn synth_symbolic_infix(
         &mut self,
         origin: HirOrigin,
-        op_ident: music_names::Ident,
+        op_ident: Ident,
         left: HirExprId,
         right: HirExprId,
     ) -> (SemTyId, EffectRow) {
@@ -1575,7 +1562,7 @@ impl<'a> Checker<'a> {
         &mut self,
         origin: HirOrigin,
         scrut: HirExprId,
-        arms: Box<[music_hir::HirCaseArm]>,
+        arms: Box<[HirCaseArm]>,
     ) -> (SemTyId, EffectRow) {
         let (scrut_ty, mut effs) = self.synth_expr(scrut);
         let result = self.state.semtys.fresh_infer_var(origin.span);
@@ -1631,6 +1618,6 @@ fn string_lit_expr_text(checker: &Checker<'_>, expr_id: HirExprId) -> Option<Str
 }
 
 fn parse_int_lit_u32(text: &str) -> Option<u32> {
-    let v = music_basic::int_lit::parse_u64(text)?;
+    let v = int_lit::parse_u64(text)?;
     u32::try_from(v).ok()
 }

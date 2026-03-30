@@ -1,3 +1,5 @@
+use music_hir::{HirArrowFlavor, HirDim};
+
 use super::*;
 use crate::checker::Checker;
 
@@ -97,10 +99,8 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
             }
             // Allow `T -> U` to unify with `T ~> U` by keeping the effectful flavor.
             match (a_flavor, b_flavor) {
-                (music_hir::HirArrowFlavor::Effectful, music_hir::HirArrowFlavor::Pure) => Ok(left),
-                (music_hir::HirArrowFlavor::Pure, music_hir::HirArrowFlavor::Effectful) => {
-                    Ok(right)
-                }
+                (HirArrowFlavor::Effectful, HirArrowFlavor::Pure) => Ok(left),
+                (HirArrowFlavor::Pure, HirArrowFlavor::Effectful) => Ok(right),
                 _ => Ok(left),
             }
         }
@@ -136,17 +136,18 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
     }
 }
 
-fn array_dims_compatible(left: &[music_hir::HirDim], right: &[music_hir::HirDim]) -> bool {
+fn array_dims_compatible(left: &[HirDim], right: &[HirDim]) -> bool {
     if left.len() != right.len() {
         return false;
     }
 
     for (a, b) in left.iter().zip(right.iter()) {
         match (a, b) {
-            (
-                music_hir::HirDim::IntLit { value: Some(a), .. },
-                music_hir::HirDim::IntLit { value: Some(b), .. },
-            ) if a != b => return false,
+            (HirDim::IntLit { value: Some(a), .. }, HirDim::IntLit { value: Some(b), .. })
+                if a != b =>
+            {
+                return false;
+            }
             _ => {}
         }
     }
@@ -154,13 +155,13 @@ fn array_dims_compatible(left: &[music_hir::HirDim], right: &[music_hir::HirDim]
     true
 }
 
-fn array_specificity(dims: &[music_hir::HirDim]) -> u32 {
+fn array_specificity(dims: &[HirDim]) -> u32 {
     let mut score = 0u32;
     for d in dims {
         match d {
-            music_hir::HirDim::IntLit { value: Some(_), .. } => score += 2,
-            music_hir::HirDim::Name { .. } => score += 1,
-            music_hir::HirDim::Inferred { .. } | music_hir::HirDim::IntLit { value: None, .. } => {}
+            HirDim::IntLit { value: Some(_), .. } => score += 2,
+            HirDim::Name { .. } => score += 1,
+            HirDim::Inferred { .. } | HirDim::IntLit { value: None, .. } => {}
         }
     }
     score
@@ -169,8 +170,8 @@ fn array_specificity(dims: &[music_hir::HirDim]) -> u32 {
 fn select_array_type(
     left_id: SemTyId,
     right_id: SemTyId,
-    left_dims: &[music_hir::HirDim],
-    right_dims: &[music_hir::HirDim],
+    left_dims: &[HirDim],
+    right_dims: &[HirDim],
 ) -> SemTyId {
     if array_specificity(right_dims) > array_specificity(left_dims) {
         right_id
@@ -192,7 +193,7 @@ impl<'a> Checker<'a> {
 
     pub(crate) fn unify_or_report(
         &mut self,
-        span: music_basic::Span,
+        span: Span,
         expected: SemTyId,
         found: SemTyId,
     ) -> SemTyId {
@@ -225,7 +226,7 @@ impl<'a> Checker<'a> {
 
     pub(crate) fn unify_read_or_report(
         &mut self,
-        span: music_basic::Span,
+        span: Span,
         left: SemTyId,
         right: SemTyId,
     ) -> SemTyId {

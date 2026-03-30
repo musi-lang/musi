@@ -1,4 +1,6 @@
-use music_il::{ConstantEntry, ConstantPool, Instruction, MethodEntry, MethodName, SeamArtifact};
+use music_il::{
+    ConstantEntry, ConstantPool, Instruction, MethodEntry, MethodName, Opcode, SeamArtifact,
+};
 
 use super::*;
 
@@ -12,8 +14,8 @@ fn test_binary_codec_round_trips_minimal_module() {
         methods: vec![MethodEntry {
             name: MethodName::Entry,
             instructions: vec![
-                Instruction::with_u16(music_il::Opcode::LdConst, 0),
-                Instruction::basic(music_il::Opcode::Ret),
+                Instruction::with_u16(Opcode::LdConst, 0),
+                Instruction::basic(Opcode::Ret),
             ],
             locals_count: 1,
             absolute_global_loads: vec![],

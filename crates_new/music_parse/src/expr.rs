@@ -2,7 +2,7 @@ use core::mem;
 
 use music_ast::{SyntaxElementId, SyntaxNodeId, SyntaxNodeKind};
 use music_basic::Span;
-use music_lex::{LexErrorKind, Lexer, Token, TokenKind};
+use music_lex::{FStringPartKind, LexErrorKind, Lexer, Token, TokenKind};
 
 use crate::parser::Parser;
 
@@ -118,22 +118,19 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_fstring_expr(&mut self) -> SyntaxNodeId {
-        let token = self.peek().clone();
-        let parts = match token.kind.clone() {
-            TokenKind::FStringLit(parts) => parts,
-            _ => {
-                let fallback = self.advance_element();
-                return self
-                    .builder
-                    .push_node_from_children(SyntaxNodeKind::LiteralExpr, [fallback]);
-            }
+        let TokenKind::FStringLit(parts) = &self.peek().kind else {
+            let fallback = self.advance_element();
+            return self
+                .builder
+                .push_node_from_children(SyntaxNodeKind::LiteralExpr, [fallback]);
         };
+        let parts = parts.clone();
 
         let token_el = self.advance_element();
         let mut children = vec![token_el];
 
         for part in parts {
-            if part.kind != music_lex::FStringPartKind::Interpolation {
+            if part.kind != FStringPartKind::Interpolation {
                 continue;
             }
 
@@ -170,7 +167,7 @@ impl Parser<'_, '_, '_> {
             });
         }
 
-        let mut tokens: Vec<Token> = sub.tokens().iter().cloned().collect();
+        let mut tokens: Vec<Token> = sub.tokens().to_vec();
         for token in &mut tokens {
             offset_token(token, base);
         }

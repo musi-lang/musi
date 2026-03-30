@@ -1,8 +1,9 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::Path;
 
-use music_basic::{SourceId, SourceMap};
-use music_lex::Lexer;
+use music_ast::SyntaxNodeKind;
+use music_basic::{SourceId, SourceMap, path, string_lit};
+use music_lex::{Lexer, TokenKind};
 use music_parse::ParsedSource;
 
 use crate::errors::{FrontendError, FrontendErrorKind, FrontendResult};
@@ -21,13 +22,13 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
     let entry_source = sources.get(entry).ok_or(FrontendError {
         kind: FrontendErrorKind::EntrySourceMissing,
     })?;
-    let entry_path = music_basic::path::normalize_path(entry_source.path())
+    let entry_path = path::normalize_path(entry_source.path())
         .to_string_lossy()
         .into_owned();
 
     let mut source_id_by_path = HashMap::<String, SourceId>::new();
     for source in sources.iter() {
-        let key = music_basic::path::normalize_path(source.path())
+        let key = path::normalize_path(source.path())
             .to_string_lossy()
             .into_owned();
         let _prev = source_id_by_path.insert(key, source.id());
@@ -94,20 +95,20 @@ fn collect_import_paths(
     let root = tree.root();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if node.kind() == music_ast::SyntaxNodeKind::ImportExpr {
+        if node.kind() == SyntaxNodeKind::ImportExpr {
             let path_tok = node
                 .child_tokens()
-                .find(|t| matches!(t.kind(), music_lex::TokenKind::StringLit));
+                .find(|t| matches!(t.kind(), TokenKind::StringLit));
             if let Some(path_tok) = path_tok {
                 if let Some(source) = sources.get(tree.source_id()) {
                     let start = usize::try_from(path_tok.span().start).unwrap_or(0);
                     let end = usize::try_from(path_tok.span().end).unwrap_or(start);
                     let raw = source.text().get(start..end).unwrap_or("");
-                    let raw = music_basic::string_lit::decode(raw);
+                    let raw = string_lit::decode(raw);
                     let key = if raw.starts_with('@') {
                         raw
                     } else if raw.starts_with('.') || Path::new(raw.as_str()).is_absolute() {
-                        music_basic::path::resolve_import_path(from_path, raw.as_str())
+                        path::resolve_import_path(from_path, raw.as_str())
                             .to_string_lossy()
                             .into_owned()
                     } else {

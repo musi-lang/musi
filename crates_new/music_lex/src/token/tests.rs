@@ -3,7 +3,7 @@ use music_basic::Span;
 use super::*;
 
 #[test]
-fn token_can_carry_structured_fstring_parts() {
+fn test_token_can_carry_structured_fstring_parts() {
     let token = Token {
         kind: TokenKind::FStringLit(
             SmallVec::from_buf([
@@ -42,7 +42,7 @@ fn token_can_carry_structured_fstring_parts() {
 }
 
 #[test]
-fn token_display_uses_source_spelling_and_classes() {
+fn test_token_display_uses_source_spelling_and_classes() {
     assert_eq!(display_token_kind(&TokenKind::LBrace).to_string(), "'{'");
     assert_eq!(display_token_kind(&TokenKind::KwLet).to_string(), "'let'");
     assert_eq!(display_token_kind(&TokenKind::Hash).to_string(), "'#'");

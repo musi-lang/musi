@@ -50,9 +50,7 @@ impl<'tree> AstCursor<'tree> {
     }
 
     pub(super) fn eat_node(&mut self, expected: SyntaxNodeKind) -> Option<SyntaxNode<'tree>> {
-        let Some(node) = self.peek().and_then(SyntaxElement::into_node) else {
-            return None;
-        };
+        let node = self.peek().and_then(SyntaxElement::into_node)?;
         if node.kind() == expected {
             self.pos += 1;
             Some(node)

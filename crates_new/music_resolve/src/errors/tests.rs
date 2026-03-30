@@ -3,7 +3,7 @@ use music_basic::{DiagCode, SourceMap, Span};
 use super::*;
 
 #[test]
-fn undefined_binding_has_stable_code() {
+fn test_undefined_binding_has_stable_code() {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", "let x := 1;");
 
@@ -20,7 +20,7 @@ fn undefined_binding_has_stable_code() {
 }
 
 #[test]
-fn duplicate_binding_has_stable_code() {
+fn test_duplicate_binding_has_stable_code() {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", "let x := 1;");
 

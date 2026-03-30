@@ -139,23 +139,24 @@ impl<'src> Lexer<'src> {
 
         match ch {
             _ if is_ident_start(ch) => self.scan_ident_like(start),
-            '0'..='9' => self.scan_number(start, ch),
+            '0'..='9' => Ok(self.scan_number(start, ch)),
             '.' if self.cursor.peek().is_some_and(|next| next.is_ascii_digit())
                 && self.leading_dot_is_float(start) =>
             {
-                self.scan_leading_dot_float(start)
+                Ok(self.scan_leading_dot_float(start))
             }
             '"' => self.scan_string(start),
             '\'' => self.scan_rune(start),
             '`' => self.scan_escaped_ident(start),
             _ if ch.is_ascii() => {
-                let first = ch as u8;
-                if is_symop_byte(first)
-                    && self
-                        .cursor
-                        .peek()
-                        .is_some_and(|next| next.is_ascii() && is_symop_byte(next as u8))
-                {
+                let is_symop_char = |c: char| {
+                    if !c.is_ascii() {
+                        return false;
+                    }
+                    u8::try_from(u32::from(c)).ok().is_some_and(is_symop_byte)
+                };
+
+                if is_symop_char(ch) && self.cursor.peek().is_some_and(is_symop_char) {
                     let _ = self.cursor.eat_while_ascii(is_symop_byte);
                     return Ok(TokenKind::SymOp);
                 }
@@ -188,7 +189,7 @@ impl<'src> Lexer<'src> {
         self.pending_errors.push_back(LexError { kind, span });
     }
 
-    fn is_expr_end_byte(byte: u8) -> bool {
+    const fn is_expr_end_byte(byte: u8) -> bool {
         byte.is_ascii_alphanumeric()
             || byte == b'_'
             || matches!(byte, b')' | b']' | b'}' | b'"' | b'\'' | b'`')
@@ -255,7 +256,7 @@ impl<'src> Lexer<'src> {
         Ok(keyword_from_text(text).unwrap_or(TokenKind::Ident))
     }
 
-    fn scan_number(&mut self, start: u32, first: char) -> LexResult<TokenKind> {
+    fn scan_number(&mut self, start: u32, first: char) -> TokenKind {
         if first == '0' {
             if let Some(prefix @ ('x' | 'o' | 'b')) = self.cursor.peek() {
                 let _ = self.cursor.advance();
@@ -270,7 +271,7 @@ impl<'src> Lexer<'src> {
                         self.cursor.span_from(start),
                     );
                 }
-                return Ok(TokenKind::IntLit);
+                return TokenKind::IntLit;
             }
         }
 
@@ -287,25 +288,25 @@ impl<'src> Lexer<'src> {
                 let exp_start = self.cursor.pos();
                 self.scan_exponent_part(exp_start);
             }
-            return Ok(TokenKind::FloatLit);
+            return TokenKind::FloatLit;
         }
 
         if matches!(self.cursor.peek(), Some('e' | 'E')) {
             let exp_start = self.cursor.pos();
             self.scan_exponent_part(exp_start);
-            return Ok(TokenKind::FloatLit);
+            return TokenKind::FloatLit;
         }
 
-        Ok(TokenKind::IntLit)
+        TokenKind::IntLit
     }
 
-    fn scan_leading_dot_float(&mut self, _start: u32) -> LexResult<TokenKind> {
+    fn scan_leading_dot_float(&mut self, _start: u32) -> TokenKind {
         let _ = self.scan_digits_with_separators(|byte| byte.is_ascii_digit(), true);
         if matches!(self.cursor.peek(), Some('e' | 'E')) {
             let exp_start = self.cursor.pos();
             self.scan_exponent_part(exp_start);
         }
-        Ok(TokenKind::FloatLit)
+        TokenKind::FloatLit
     }
 
     fn scan_string(&mut self, start: u32) -> LexResult<TokenKind> {

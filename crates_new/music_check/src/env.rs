@@ -1,6 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use music_basic::Span;
 use music_names::{NameBindingId, Symbol};
+
+use crate::{
+    ty::{InferVarId, SemTyIds},
+    unify,
+};
 
 use super::{EffectRow, SemTy, SemTyId, SemTys};
 
@@ -13,13 +19,13 @@ pub struct ValueScheme {
 
 #[derive(Debug, Clone)]
 pub struct EffectOpSig {
-    pub params: Box<[SemTyId]>,
+    pub params: SemTyIds,
     pub ret: SemTyId,
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassOpSig {
-    pub params: Box<[SemTyId]>,
+    pub params: SemTyIds,
     pub ret: SemTyId,
 }
 
@@ -52,7 +58,7 @@ pub struct TypeEnv {
     values: HashMap<NameBindingId, ValueScheme>,
     effects: HashMap<NameBindingId, EffectFamily>,
     classes: HashMap<NameBindingId, ClassFamily>,
-    instances: HashMap<NameBindingId, Vec<Box<[SemTyId]>>>,
+    instances: HashMap<NameBindingId, Vec<SemTyIds>>,
     data_defs: HashMap<Symbol, DataDef>,
 }
 
@@ -109,7 +115,7 @@ impl TypeEnv {
         self.classes.get(&binding)
     }
 
-    pub fn insert_instance(&mut self, class: NameBindingId, args: Box<[SemTyId]>) {
+    pub fn insert_instance(&mut self, class: NameBindingId, args: SemTyIds) {
         self.instances.entry(class).or_default().push(args);
     }
 
@@ -122,12 +128,7 @@ impl TypeEnv {
         self.data_defs.get(&name)
     }
 
-    pub fn instantiate(
-        &self,
-        tys: &mut SemTys,
-        scheme: &ValueScheme,
-        span: music_basic::Span,
-    ) -> SemTyId {
+    pub fn instantiate(&self, tys: &mut SemTys, scheme: &ValueScheme, span: Span) -> SemTyId {
         if scheme.generic_count == 0 {
             return scheme.ty;
         }
@@ -140,7 +141,7 @@ impl TypeEnv {
 }
 
 pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {
-    let ty = super::unify::resolve(tys, ty);
+    let ty = unify::resolve(tys, ty);
     match tys.get(ty).clone() {
         SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::InferVar(_) => ty,
         SemTy::Generic(i) => subst.get(i as usize).copied().unwrap_or(ty),
@@ -192,7 +193,7 @@ pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyI
             tys.alloc(SemTy::Mut { base })
         }
         SemTy::Record { fields } => {
-            let mut new_fields = std::collections::BTreeMap::new();
+            let mut new_fields = BTreeMap::new();
             for (k, v) in fields {
                 let v = substitute_generics(tys, v, subst);
                 let _prev = new_fields.insert(k, v);
@@ -207,14 +208,14 @@ pub(crate) fn generalize_infer_vars(
     ty: SemTyId,
     start_index: u32,
 ) -> (u32, SemTyId) {
-    let ty = super::unify::resolve(tys, ty);
-    let mut vars = std::collections::BTreeSet::<super::ty::InferVarId>::new();
+    let ty = unify::resolve(tys, ty);
+    let mut vars = BTreeSet::<InferVarId>::new();
     collect_unbound_infer_vars(tys, ty, &mut vars);
     if vars.is_empty() {
         return (0, ty);
     }
 
-    let mut mapping = std::collections::BTreeMap::<super::ty::InferVarId, u32>::new();
+    let mut mapping = BTreeMap::<InferVarId, u32>::new();
     for (i, var) in vars.into_iter().enumerate() {
         let idx = start_index + u32::try_from(i).unwrap_or(0);
         let _prev = mapping.insert(var, idx);
@@ -224,12 +225,8 @@ pub(crate) fn generalize_infer_vars(
     (u32::try_from(mapping.len()).unwrap_or(0), out)
 }
 
-fn collect_unbound_infer_vars(
-    tys: &SemTys,
-    ty: SemTyId,
-    out: &mut std::collections::BTreeSet<super::ty::InferVarId>,
-) {
-    let ty = super::unify::resolve(tys, ty);
+fn collect_unbound_infer_vars(tys: &SemTys, ty: SemTyId, out: &mut BTreeSet<InferVarId>) {
+    let ty = unify::resolve(tys, ty);
     match tys.get(ty) {
         SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::Generic(_) => {}
         SemTy::InferVar(var) => {
@@ -270,9 +267,9 @@ fn collect_unbound_infer_vars(
 fn replace_infer_with_generics(
     tys: &mut SemTys,
     ty: SemTyId,
-    mapping: &std::collections::BTreeMap<super::ty::InferVarId, u32>,
+    mapping: &BTreeMap<InferVarId, u32>,
 ) -> SemTyId {
-    let ty = super::unify::resolve(tys, ty);
+    let ty = unify::resolve(tys, ty);
     match tys.get(ty).clone() {
         SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::Generic(_) => ty,
         SemTy::InferVar(var) => {
@@ -332,7 +329,7 @@ fn replace_infer_with_generics(
             tys.alloc(SemTy::Mut { base })
         }
         SemTy::Record { fields } => {
-            let mut out = std::collections::BTreeMap::new();
+            let mut out = BTreeMap::new();
             for (k, v) in fields {
                 let v = replace_infer_with_generics(tys, v, mapping);
                 let _prev = out.insert(k, v);

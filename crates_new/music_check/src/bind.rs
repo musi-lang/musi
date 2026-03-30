@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use music_basic::Span;
 use music_hir::{HirFieldDef, HirLitKind, HirMemberDef, HirPatId, HirPatKind, HirVariantDef};
-use music_names::Symbol;
+use music_names::{Ident, Symbol};
 
 use crate::SemaErrorKind;
 
@@ -10,6 +10,7 @@ use super::checker::Checker;
 use super::env::{
     ClassOpSig, DataDef, DataFieldDef, EffectOpSig, ValueScheme, substitute_generics,
 };
+use super::ty::SemTyIds;
 use super::unify;
 use super::{SemTy, SemTyId};
 
@@ -149,7 +150,7 @@ impl<'a> Checker<'a> {
                                     };
                                     let generic_count = def.generic_count;
 
-                                    let mut out = std::collections::BTreeMap::new();
+                                    let mut out = BTreeMap::new();
                                     for (k, v) in field_defs {
                                         let mut subst = Vec::with_capacity(generic_count as usize);
                                         for i in 0..generic_count {
@@ -234,7 +235,7 @@ impl<'a> Checker<'a> {
             HirPatKind::Variant { name, args } => {
                 let mut payload_ty = None::<Option<SemTyId>>;
                 let mut generic_count = 0u32;
-                let mut ty_args: Box<[SemTyId]> = Box::new([]);
+                let mut ty_args: SemTyIds = Box::new([]);
 
                 match self.state.semtys.get(scrut_ty).clone() {
                     SemTy::Named {
@@ -357,7 +358,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn bind_value_clause_binder(&mut self, binder: music_names::Ident, ty: SemTyId) {
+    pub(crate) fn bind_value_clause_binder(&mut self, binder: Ident, ty: SemTyId) {
         if let Some(binding) = self.binding_for_def(binder.span) {
             self.state.env.insert_value(
                 binding,
@@ -370,7 +371,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn bind_handle_param(&mut self, param: music_names::Ident, ty: SemTyId) {
+    pub(crate) fn bind_handle_param(&mut self, param: Ident, ty: SemTyId) {
         if let Some(binding) = self.binding_for_def(param.span) {
             self.state.env.insert_value(
                 binding,
@@ -388,7 +389,7 @@ impl<'a> Checker<'a> {
         pat: HirPatId,
         generic_count: u32,
         ty_params: &HashMap<Symbol, u32>,
-        members: &Box<[music_hir::HirMemberDef]>,
+        members: &Box<[HirMemberDef]>,
     ) {
         // Only supports `let EffectName := effect { ... }` bindings for now.
         let mut bind_sites = Vec::new();
@@ -403,7 +404,7 @@ impl<'a> Checker<'a> {
 
         let mut ops = HashMap::<Symbol, EffectOpSig>::new();
         for member in members.iter() {
-            let music_hir::HirMemberDef::Let {
+            let HirMemberDef::Let {
                 name, params, ret, ..
             } = member
             else {

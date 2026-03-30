@@ -3,7 +3,7 @@ use std::path::Path;
 use super::{Source, SourceId, SourceMap};
 
 #[test]
-fn single_line_line_col() {
+fn test_single_line_line_col() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -12,7 +12,7 @@ fn single_line_line_col() {
 }
 
 #[test]
-fn multi_line_line_col() {
+fn test_multi_line_line_col() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "ab\ncd\nef");
     let src = map.get(id).expect("source exists");
@@ -24,7 +24,7 @@ fn multi_line_line_col() {
 }
 
 #[test]
-fn line_col_at_newline_boundary() {
+fn test_line_col_at_newline_boundary() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "a\nb");
     let src = map.get(id).expect("source exists");
@@ -33,7 +33,7 @@ fn line_col_at_newline_boundary() {
 }
 
 #[test]
-fn line_text_returns_correct_lines() {
+fn test_line_text_returns_correct_lines() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "first\nsecond\nthird");
     let src = map.get(id).expect("source exists");
@@ -43,7 +43,7 @@ fn line_text_returns_correct_lines() {
 }
 
 #[test]
-fn line_text_out_of_range() {
+fn test_line_text_out_of_range() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -52,7 +52,7 @@ fn line_text_out_of_range() {
 }
 
 #[test]
-fn line_count_single_line() {
+fn test_line_count_single_line() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -60,7 +60,7 @@ fn line_count_single_line() {
 }
 
 #[test]
-fn line_count_multi_line() {
+fn test_line_count_multi_line() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "a\nb\nc");
     let src = map.get(id).expect("source exists");
@@ -68,7 +68,7 @@ fn line_count_multi_line() {
 }
 
 #[test]
-fn line_count_trailing_newline() {
+fn test_line_count_trailing_newline() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "a\n");
     let src = map.get(id).expect("source exists");
@@ -76,7 +76,7 @@ fn line_count_trailing_newline() {
 }
 
 #[test]
-fn source_map_round_trip() {
+fn test_source_map_round_trip() {
     let mut map = SourceMap::default();
     let id1 = map.add("a.ms", "aaa");
     let id2 = map.add("b.ms", "bbb");
@@ -93,7 +93,7 @@ fn source_map_round_trip() {
 }
 
 #[test]
-fn empty_source() {
+fn test_empty_source() {
     let mut map = SourceMap::default();
     let id = map.add("empty.ms", "");
     let src = map.get(id).expect("source exists");
@@ -103,7 +103,7 @@ fn empty_source() {
 }
 
 #[test]
-fn source_map_iter() {
+fn test_source_map_iter() {
     let mut map = SourceMap::default();
     let _id1 = map.add("a.ms", "aaa");
     let _id2 = map.add("b.ms", "bbb");
@@ -112,13 +112,13 @@ fn source_map_iter() {
 }
 
 #[test]
-fn source_id_raw() {
+fn test_source_id_raw() {
     let id = SourceId(5);
     assert_eq!(id.raw(), 5);
 }
 
 #[test]
-fn source_span_covers_full_text() {
+fn test_source_span_covers_full_text() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -128,14 +128,14 @@ fn source_span_covers_full_text() {
 }
 
 #[test]
-fn source_map_get_invalid_id_returns_none() {
+fn test_source_map_get_invalid_id_returns_none() {
     let map = SourceMap::default();
     assert!(map.get(SourceId(0)).is_none());
     assert!(map.get(SourceId(99)).is_none());
 }
 
 #[test]
-fn line_col_at_eof() {
+fn test_line_col_at_eof() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -145,7 +145,7 @@ fn line_col_at_eof() {
 }
 
 #[test]
-fn line_col_past_eof() {
+fn test_line_col_past_eof() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "hello");
     let src = map.get(id).expect("source exists");
@@ -155,7 +155,7 @@ fn line_col_past_eof() {
 }
 
 #[test]
-fn line_text_strips_cr() {
+fn test_line_text_strips_cr() {
     let mut map = SourceMap::default();
     let id = map.add("test.ms", "first\r\nsecond\r\nthird");
     let src = map.get(id).expect("source exists");
@@ -165,7 +165,7 @@ fn line_text_strips_cr() {
 }
 
 #[test]
-fn source_id_display() {
+fn test_source_id_display() {
     let id = SourceId(5);
     assert_eq!(format!("{id}"), "5");
 }

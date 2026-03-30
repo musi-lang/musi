@@ -1,6 +1,6 @@
 use music_basic::Span;
 use smallvec::SmallVec;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{self, Display, Formatter};
 
 pub type TokenKinds = Vec<TokenKind>;
 pub type Trivias = SmallVec<[Trivia; 2]>;
@@ -140,7 +140,7 @@ pub const fn display_token_kind(kind: &TokenKind) -> TokenKindDisplay<'_> {
 pub struct TokenKindDisplay<'a>(&'a TokenKind);
 
 impl Display for TokenKindDisplay<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
             TokenKind::IntLit => write!(f, "integer literal"),
             TokenKind::FloatLit => write!(f, "float literal"),

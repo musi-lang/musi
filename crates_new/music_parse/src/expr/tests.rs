@@ -2,7 +2,7 @@ use music_ast::{Expr, ExprKindView};
 use music_basic::SourceMap;
 use music_lex::Lexer;
 
-use crate::parse;
+use crate::{ParseErrorKind, parse};
 
 #[test]
 fn test_parse_symbolic_binary_expr() {
@@ -31,7 +31,7 @@ fn test_parse_splice_expr() {
         parsed
             .errors()
             .iter()
-            .any(|e| matches!(e.kind, crate::errors::ParseErrorKind::SpliceOutsideQuote)),
+            .any(|e| matches!(e.kind, ParseErrorKind::SpliceOutsideQuote)),
         "expected SpliceOutsideQuote, got {:?}",
         parsed.errors()
     );
@@ -49,7 +49,7 @@ fn test_parse_splice_expr_inside_quote_has_no_error() {
         !parsed
             .errors()
             .iter()
-            .any(|e| matches!(e.kind, crate::errors::ParseErrorKind::SpliceOutsideQuote)),
+            .any(|e| matches!(e.kind, ParseErrorKind::SpliceOutsideQuote)),
         "unexpected SpliceOutsideQuote errors: {:?}",
         parsed.errors()
     );

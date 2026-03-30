@@ -157,6 +157,14 @@ Apply these during initial implementation, not as afterthoughts:
 - Prefer `usize` for internal indices, convert to `u32` at boundaries only
 - Use `derive` over manual trait impls wherever possible (saves LOC, reduces bugs)
 
+## Rust Import Hygiene
+
+- Avoid noisy absolute paths in expression position: prefer `use std::mem;` then `mem::take(x)` over `std::mem::take(x)`.
+- Prefer importing types used in signatures: `use music_basic::Span;` then `Span`, not `music_basic::Span`.
+- Prefer importing struct/enum items directly when used unqualified improves clarity.
+- Do not alias `std` items; if disambiguation is needed, rename the local/project import instead.
+- Absolute paths are OK for singletons and “name anchors”: `log::info!(...)`, `music_parse::parse(...)`, `crate::BIG_CONSTANT`.
+
 ## Collaboration Protocol
 
 ### Adaptive Depth

@@ -1,5 +1,6 @@
 use music_il::descriptors;
 use music_il::{TypeDescriptor, TypeKind};
+use music_ir::{IrScalarTy, IrTypeRef};
 
 pub(super) fn builtin_type_descriptors() -> Vec<TypeDescriptor> {
     // Keep builtin table empty for now; SEAM reserves ids in `music_il::descriptors::builtins`.
@@ -50,18 +51,18 @@ pub(super) fn ensure_choice_type(
     id
 }
 
-pub(super) fn builtin_type_id_for_ref(ty: music_ir::IrTypeRef) -> u16 {
+pub(super) fn builtin_type_id_for_ref(ty: IrTypeRef) -> u16 {
     match ty {
-        music_ir::IrTypeRef::Scalar(s) => match s {
-            music_ir::IrScalarTy::Unit => descriptors::BUILTIN_TYPE_UNIT,
-            music_ir::IrScalarTy::Bool => descriptors::BUILTIN_TYPE_BOOL,
-            music_ir::IrScalarTy::Int => descriptors::BUILTIN_TYPE_INT,
-            music_ir::IrScalarTy::Float => descriptors::BUILTIN_TYPE_FLOAT,
-            music_ir::IrScalarTy::String => descriptors::BUILTIN_TYPE_STRING,
+        IrTypeRef::Scalar(s) => match s {
+            IrScalarTy::Unit => descriptors::BUILTIN_TYPE_UNIT,
+            IrScalarTy::Bool => descriptors::BUILTIN_TYPE_BOOL,
+            IrScalarTy::Int => descriptors::BUILTIN_TYPE_INT,
+            IrScalarTy::Float => descriptors::BUILTIN_TYPE_FLOAT,
+            IrScalarTy::String => descriptors::BUILTIN_TYPE_STRING,
         },
-        music_ir::IrTypeRef::Any => descriptors::BUILTIN_TYPE_ANY,
-        music_ir::IrTypeRef::Unknown => descriptors::BUILTIN_TYPE_UNKNOWN,
-        music_ir::IrTypeRef::Error => descriptors::BUILTIN_TYPE_NEVER,
-        music_ir::IrTypeRef::Named(_) => descriptors::BUILTIN_TYPE_UNKNOWN,
+        IrTypeRef::Any => descriptors::BUILTIN_TYPE_ANY,
+        IrTypeRef::Unknown => descriptors::BUILTIN_TYPE_UNKNOWN,
+        IrTypeRef::Error => descriptors::BUILTIN_TYPE_NEVER,
+        IrTypeRef::Named(_) => descriptors::BUILTIN_TYPE_UNKNOWN,
     }
 }

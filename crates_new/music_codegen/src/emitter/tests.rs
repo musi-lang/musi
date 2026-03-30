@@ -1,20 +1,26 @@
+use std::collections::HashMap;
+
+use music_basic::SourceId;
 use music_basic::SourceMap;
+use music_il::ConstantEntry;
+use music_il::Opcode;
+use music_il::Operand;
 use music_known::KnownSymbols;
 use music_lex::Lexer;
 use music_names::Interner;
 use music_resolve::ImportEnv;
 use music_resolve::ResolveOptions;
 
-use crate::{EmitModule, EmitProgram, emit_program, emit_single_module};
+use crate::{EmitModule, EmitProgram};
 
 struct TestImportEnv {
-    exports_by_path: std::collections::HashMap<String, Vec<String>>,
+    exports_by_path: HashMap<String, Vec<String>>,
 }
 
 impl TestImportEnv {
     fn new() -> Self {
         Self {
-            exports_by_path: std::collections::HashMap::new(),
+            exports_by_path: HashMap::new(),
         }
     }
 
@@ -24,11 +30,11 @@ impl TestImportEnv {
 }
 
 impl ImportEnv for TestImportEnv {
-    fn has_module(&self, _from: music_basic::SourceId, path: &str) -> bool {
+    fn has_module(&self, _from: SourceId, path: &str) -> bool {
         self.exports_by_path.contains_key(path)
     }
 
-    fn for_each_export(&self, _from: music_basic::SourceId, path: &str, f: &mut dyn FnMut(&str)) {
+    fn for_each_export(&self, _from: SourceId, path: &str, f: &mut dyn FnMut(&str)) {
         let Some(exports) = self.exports_by_path.get(path) else {
             return;
         };
@@ -37,7 +43,7 @@ impl ImportEnv for TestImportEnv {
         }
     }
 
-    fn is_export_opaque(&self, _from: music_basic::SourceId, _path: &str, _name: &str) -> bool {
+    fn is_export_opaque(&self, _from: SourceId, _path: &str, _name: &str) -> bool {
         false
     }
 }
@@ -63,13 +69,13 @@ fn test_emit_single_module_decodes_numeric_separators() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
     let entries = artifact.constants.entries();
-    assert!(entries.contains(&music_il::ConstantEntry::Int(123_456)));
-    assert!(entries.contains(&music_il::ConstantEntry::Float(1234.5_f64.to_bits())));
+    assert!(entries.contains(&ConstantEntry::Int(123_456)));
+    assert!(entries.contains(&ConstantEntry::Float(1234.5_f64.to_bits())));
 }
 
 #[test]
@@ -93,16 +99,17 @@ fn test_emit_record_fields_are_canonicalized_by_name() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
     assert!(artifact.types.iter().any(|t| t.key == "record(x,y)"));
     let entry = artifact.methods.first().expect("entry method exists");
     assert!(
-        entry.instructions.iter().any(
-            |i| i.opcode == music_il::Opcode::DataGet && i.operand == music_il::Operand::U16(0)
-        )
+        entry
+            .instructions
+            .iter()
+            .any(|i| i.opcode == Opcode::DataGet && i.operand == Operand::U16(0))
     );
 }
 
@@ -130,14 +137,17 @@ fn test_emit_record_update_copies_unchanged_fields() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
     let entry = artifact.methods.first().expect("entry method exists");
-    assert!(entry.instructions.iter().any(|i| {
-        i.opcode == music_il::Opcode::DataGet && i.operand == music_il::Operand::U16(1)
-    }));
+    assert!(
+        entry
+            .instructions
+            .iter()
+            .any(|i| { i.opcode == Opcode::DataGet && i.operand == Operand::U16(1) })
+    );
 }
 
 #[test]
@@ -200,7 +210,7 @@ fn test_emit_import_expr_builds_export_record() {
         },
     ]);
 
-    let artifact = emit_program(EmitProgram {
+    let artifact = super::emit_program(EmitProgram {
         interner: &interner,
         sources: &sources,
         modules_in_order,
@@ -217,13 +227,16 @@ fn test_emit_import_expr_builds_export_record() {
         .expect("dep a global");
 
     let entry = artifact.methods.first().expect("entry method exists");
-    assert!(entry.instructions.iter().any(|i| {
-        i.opcode == music_il::Opcode::LdGlob && i.operand == music_il::Operand::U16(dep_a_idx)
-    }));
     assert!(
         entry
             .instructions
             .iter()
-            .any(|i| i.opcode == music_il::Opcode::DataNew)
+            .any(|i| { i.opcode == Opcode::LdGlob && i.operand == Operand::U16(dep_a_idx) })
+    );
+    assert!(
+        entry
+            .instructions
+            .iter()
+            .any(|i| i.opcode == Opcode::DataNew)
     );
 }

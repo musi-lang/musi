@@ -4,12 +4,12 @@ use crate::token::TokenKinds;
 
 use super::*;
 
-fn lex(source: &str) -> LexedSource<'_> {
+fn test_lex(source: &str) -> LexedSource<'_> {
     Lexer::new(source).lex()
 }
 
-fn token_kinds(source: &str) -> TokenKinds {
-    lex(source)
+fn test_token_kinds(source: &str) -> TokenKinds {
+    test_lex(source)
         .tokens()
         .iter()
         .map(|token| token.kind.clone())
@@ -18,13 +18,13 @@ fn token_kinds(source: &str) -> TokenKinds {
 
 #[test]
 fn test_empty_source_emits_only_eof() {
-    assert_eq!(token_kinds(""), vec![TokenKind::Eof]);
+    assert_eq!(test_token_kinds(""), vec![TokenKind::Eof]);
 }
 
 #[test]
 fn test_reduced_keywords_are_lexed() {
     assert_eq!(
-        token_kinds("let quote resume"),
+        test_token_kinds("let quote resume"),
         vec![
             TokenKind::KwLet,
             TokenKind::KwQuote,
@@ -64,7 +64,7 @@ fn test_compound_table_is_current() {
 #[test]
 fn test_removed_keywords_fall_back_to_identifiers() {
     assert_eq!(
-        token_kinds("return via"),
+        test_token_kinds("return via"),
         vec![TokenKind::Ident, TokenKind::Ident, TokenKind::Eof,]
     );
 }
@@ -72,7 +72,7 @@ fn test_removed_keywords_fall_back_to_identifiers() {
 #[test]
 fn test_current_compounds_are_lexed() {
     assert_eq!(
-        token_kinds(":= :? :?> ... .{ .[ ?. !. |> #( #["),
+        test_token_kinds(":= :? :?> ... .{ .[ ?. !. |> #( #["),
         vec![
             TokenKind::ColonEq,
             TokenKind::ColonQuestion,
@@ -93,7 +93,7 @@ fn test_current_compounds_are_lexed() {
 #[test]
 fn test_splice_prefix_and_operator_chars_lex_as_single_tokens() {
     assert_eq!(
-        token_kinds("#foo & ^ ~ ++"),
+        test_token_kinds("#foo & ^ ~ ++"),
         vec![
             TokenKind::Hash,
             TokenKind::Ident,
@@ -108,7 +108,7 @@ fn test_splice_prefix_and_operator_chars_lex_as_single_tokens() {
 
 #[test]
 fn test_removed_compounds_do_not_lex_as_single_tokens() {
-    let lexed = lex(":: .. ..< ??");
+    let lexed = test_lex(":: .. ..< ??");
     let kinds = lexed
         .tokens()
         .iter()
@@ -134,7 +134,7 @@ fn test_removed_compounds_do_not_lex_as_single_tokens() {
 
 #[test]
 fn test_identifiers_are_span_based() {
-    let lexed = lex("alpha beta");
+    let lexed = test_lex("alpha beta");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::Ident);
     assert_eq!(lexed.token_text(0), "alpha");
     assert_eq!(lexed.tokens()[1].kind, TokenKind::Ident);
@@ -143,7 +143,7 @@ fn test_identifiers_are_span_based() {
 
 #[test]
 fn test_escaped_identifiers_are_lexed() {
-    let lexed = lex("`match`");
+    let lexed = test_lex("`match`");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::EscapedIdent);
     assert_eq!(lexed.token_text(0), "`match`");
 }
@@ -151,7 +151,7 @@ fn test_escaped_identifiers_are_lexed() {
 #[test]
 fn test_literals_are_classified_without_payloads() {
     assert_eq!(
-        token_kinds("42 0xFF 0b10 3.25 \"ok\" 'x'"),
+        test_token_kinds("42 0xFF 0b10 3.25 \"ok\" 'x'"),
         vec![
             TokenKind::IntLit,
             TokenKind::IntLit,
@@ -166,14 +166,14 @@ fn test_literals_are_classified_without_payloads() {
 
 #[test]
 fn test_exponent_without_decimal_point_is_float() {
-    let lexed = lex("1e10");
+    let lexed = test_lex("1e10");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::FloatLit);
     assert_eq!(lexed.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]
 fn test_invalid_number_prefix_reports_error() {
-    let lexed = lex("0x");
+    let lexed = test_lex("0x");
     assert_eq!(lexed.errors().len(), 1);
     assert!(matches!(
         lexed.errors()[0].kind,
@@ -183,7 +183,7 @@ fn test_invalid_number_prefix_reports_error() {
 
 #[test]
 fn test_invalid_exponent_reports_error() {
-    let lexed = lex("1.0e+");
+    let lexed = test_lex("1.0e+");
     assert_eq!(lexed.errors().len(), 1);
     assert!(matches!(
         lexed.errors()[0].kind,
@@ -193,13 +193,13 @@ fn test_invalid_exponent_reports_error() {
 
 #[test]
 fn test_leading_dot_float_is_float_lit() {
-    let lexed = lex(".5");
+    let lexed = test_lex(".5");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::FloatLit);
 }
 
 #[test]
 fn test_digit_separators_are_strict() {
-    let lexed = lex("1__0 1_ 0x_FF 1e_10 1.0e+_2");
+    let lexed = test_lex("1__0 1_ 0x_FF 1e_10 1.0e+_2");
     let invalid = lexed
         .errors()
         .iter()
@@ -211,7 +211,7 @@ fn test_digit_separators_are_strict() {
 
 #[test]
 fn test_structured_fstring_uses_span_parts() {
-    let lexed = lex("f\"hi {name} !\"");
+    let lexed = test_lex("f\"hi {name} !\"");
     let TokenKind::FStringLit(parts) = &lexed.tokens()[0].kind else {
         panic!("expected f-string token");
     };
@@ -227,7 +227,7 @@ fn test_structured_fstring_uses_span_parts() {
 
 #[test]
 fn test_fstring_interpolation_handles_nested_braces() {
-    let lexed = lex("f\"{case x of (| y => { value := y })}\"");
+    let lexed = test_lex("f\"{case x of (| y => { value := y })}\"");
     let TokenKind::FStringLit(parts) = &lexed.tokens()[0].kind else {
         panic!("expected f-string token");
     };
@@ -242,7 +242,7 @@ fn test_fstring_interpolation_handles_nested_braces() {
 
 #[test]
 fn test_comments_and_whitespace_attach_as_trivia() {
-    let lexed = lex("  // note\nlet");
+    let lexed = test_lex("  // note\nlet");
     let token = &lexed.tokens()[0];
 
     assert_eq!(token.kind, TokenKind::KwLet);
@@ -259,7 +259,7 @@ fn test_comments_and_whitespace_attach_as_trivia() {
 
 #[test]
 fn test_trailing_comment_stays_with_token() {
-    let lexed = lex("let // trailing\nmut");
+    let lexed = test_lex("let // trailing\nmut");
     let first = &lexed.tokens()[0];
     let second = &lexed.tokens()[1];
 
@@ -273,7 +273,7 @@ fn test_trailing_comment_stays_with_token() {
 
 #[test]
 fn test_unterminated_block_comment_is_reported_and_eof_still_emits() {
-    let lexed = lex("let /* never closes");
+    let lexed = test_lex("let /* never closes");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::KwLet);
     assert_eq!(
         lexed.tokens().last().map(|token| &token.kind),
@@ -287,7 +287,7 @@ fn test_unterminated_block_comment_is_reported_and_eof_still_emits() {
 
 #[test]
 fn test_string_escape_validation_reports_errors() {
-    let lexed = lex("\"bad\\z\"");
+    let lexed = test_lex("\"bad\\z\"");
     assert!(matches!(
         lexed.errors()[0].kind,
         LexErrorKind::InvalidEscape('z')
@@ -296,7 +296,7 @@ fn test_string_escape_validation_reports_errors() {
 
 #[test]
 fn test_rune_validation_reports_multi_char_errors() {
-    let lexed = lex("'ab'");
+    let lexed = test_lex("'ab'");
     assert!(matches!(
         lexed.errors()[0].kind,
         LexErrorKind::MultiCharRune
@@ -306,7 +306,7 @@ fn test_rune_validation_reports_multi_char_errors() {
 #[test]
 fn test_batch_and_streaming_see_the_same_tokens() {
     let source = "let value := f\"{name}\";";
-    let batch = lex(source);
+    let batch = test_lex(source);
     let streaming = Lexer::new(source)
         .filter_map(Result::ok)
         .map(|token| token.kind)
@@ -324,7 +324,7 @@ fn test_batch_and_streaming_see_the_same_tokens() {
 
 #[test]
 fn test_token_text_uses_spans_from_batch_result() {
-    let lexed = lex("let value");
+    let lexed = test_lex("let value");
     assert_eq!(lexed.token_text(0), "let");
     assert_eq!(lexed.token_text(1), "value");
     assert_eq!(lexed.tokens()[0].span, Span::new(0, 3));

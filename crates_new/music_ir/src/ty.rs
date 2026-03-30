@@ -1,4 +1,4 @@
-use music_names::Symbol;
+use music_names::{Symbol, SymbolSlice};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IrScalarTy {
@@ -24,7 +24,7 @@ pub enum IrExprTy {
     Named(Symbol),
     Tuple { arity: u16 },
     Array { elem: IrTypeRef },
-    Record { fields: Box<[Symbol]> },
+    Record { fields: SymbolSlice },
     Any,
     Unknown,
     Error,
@@ -32,14 +32,15 @@ pub enum IrExprTy {
 
 impl IrExprTy {
     #[must_use]
-    pub fn as_type_ref(&self) -> IrTypeRef {
+    pub const fn as_type_ref(&self) -> IrTypeRef {
         match self {
             Self::Scalar(s) => IrTypeRef::Scalar(*s),
             Self::Named(sym) => IrTypeRef::Named(*sym),
             Self::Any => IrTypeRef::Any,
-            Self::Unknown => IrTypeRef::Unknown,
             Self::Error => IrTypeRef::Error,
-            Self::Tuple { .. } | Self::Array { .. } | Self::Record { .. } => IrTypeRef::Unknown,
+            Self::Unknown | Self::Tuple { .. } | Self::Array { .. } | Self::Record { .. } => {
+                IrTypeRef::Unknown
+            }
         }
     }
 }

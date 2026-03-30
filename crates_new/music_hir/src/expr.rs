@@ -1,6 +1,6 @@
 use music_ast::{SyntaxNodeId, SyntaxTokenId};
 use music_basic::Span;
-use music_names::{Ident, Symbol};
+use music_names::{Ident, SymbolSlice};
 use music_storage::Idx;
 
 use super::*;
@@ -8,14 +8,14 @@ use super::*;
 pub type HirExprId = Idx<HirExpr>;
 pub type HirSpliceId = Idx<HirSplice>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirExpr {
     pub origin: HirOrigin,
     pub ty: HirTyId,
     pub kind: HirExprKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirExprKind {
     Sequence {
         exprs: HirExprIds,
@@ -35,7 +35,7 @@ pub enum HirExprKind {
     },
     Import {
         path: HirStringLit,
-        exports: Box<[Symbol]>,
+        exports: SymbolSlice,
     },
     ForeignBlock {
         abi: Option<HirStringLit>,
@@ -189,7 +189,7 @@ pub enum HirMemberKey {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirDeclMods {
     pub attrs: HirAttrIds,
     pub exported: bool,
@@ -198,7 +198,7 @@ pub struct HirDeclMods {
     pub external_abi: Option<HirStringLit>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirParam {
     pub origin: HirOrigin,
     pub mutable: bool,
@@ -213,45 +213,45 @@ pub struct HirTypeParam {
     pub name: Ident,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirConstraint {
     pub origin: HirOrigin,
     pub kind: HirConstraintKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirConstraintKind {
     Subtype { name: Ident, bound: HirTyId },
     Implements { name: Ident, class: HirTyId },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirEffectSet {
     pub origin: HirOrigin,
     pub items: Box<[HirEffectItem]>,
     pub rest: Option<Ident>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirEffectItem {
     pub origin: HirOrigin,
     pub name: Ident,
     pub arg: Option<HirTyId>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirArg {
     Expr(HirExprId),
     Spread { origin: HirOrigin, expr: HirExprId },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirArrayItem {
     Expr(HirExprId),
     Spread { origin: HirOrigin, expr: HirExprId },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirRecordItem {
     Field {
         origin: HirOrigin,
@@ -264,7 +264,7 @@ pub enum HirRecordItem {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirRecordPatField {
     pub origin: HirOrigin,
     pub mutable: bool,
@@ -272,7 +272,7 @@ pub struct HirRecordPatField {
     pub sub: Option<HirPatId>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirCaseArm {
     pub origin: HirOrigin,
     pub attrs: HirAttrIds,
@@ -286,7 +286,7 @@ pub struct HirCallableName {
     pub name: Ident,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirMemberDef {
     Let {
         origin: HirOrigin,
@@ -305,7 +305,7 @@ pub enum HirMemberDef {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirVariantDef {
     pub origin: HirOrigin,
     pub attrs: HirAttrIds,
@@ -314,7 +314,7 @@ pub struct HirVariantDef {
     pub value: Option<HirExprId>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirFieldDef {
     pub origin: HirOrigin,
     pub name: Ident,
@@ -322,7 +322,7 @@ pub struct HirFieldDef {
     pub value: Option<HirExprId>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirHandleClause {
     pub origin: HirOrigin,
     pub is_value: bool,
@@ -331,25 +331,25 @@ pub struct HirHandleClause {
     pub body: HirExprId,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirSplice {
     pub origin: HirOrigin,
     pub kind: HirSpliceKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirSpliceKind {
     Name(Ident),
     Expr(HirExprId),
     ExprArray(HirExprIds),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirLit {
     pub kind: HirLitKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirLitKind {
     Int {
         span: Span,
@@ -371,7 +371,7 @@ pub enum HirLitKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirFStringPart {
     Literal { span: Span },
     Expr { origin: HirOrigin, expr: HirExprId },

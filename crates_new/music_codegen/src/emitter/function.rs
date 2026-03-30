@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use music_basic::SourceMap;
 use music_check::AnalyzedModule;
 use music_hir::{HirExprId, HirExprKind};
-use music_il::{ConstantPool, MethodEntry, MethodName, Opcode, TypeDescriptor};
-use music_names::Interner;
+use music_il::{ConstantPool, Instruction, MethodEntry, MethodName, Opcode, TypeDescriptor};
+use music_names::{Interner, NameBindingId, Symbol};
 
 use crate::errors::{EmitError, EmitErrorKind, EmitResult};
 
@@ -12,9 +14,9 @@ pub(super) struct FunctionEmitter<'a> {
     interner: &'a Interner,
     sources: &'a SourceMap,
     analyzed: &'a AnalyzedModule,
-    globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
-    import_globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
-    module_export_globals: &'a std::collections::HashMap<(String, music_names::Symbol), u16>,
+    globals_by_binding: &'a HashMap<NameBindingId, u16>,
+    import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
+    module_export_globals: &'a HashMap<(String, Symbol), u16>,
     constants: &'a mut ConstantPool,
     methods: &'a mut Vec<MethodEntry>,
     types: &'a mut Vec<TypeDescriptor>,
@@ -25,9 +27,9 @@ impl<'a> FunctionEmitter<'a> {
         interner: &'a Interner,
         sources: &'a SourceMap,
         analyzed: &'a AnalyzedModule,
-        globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
-        import_globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
-        module_export_globals: &'a std::collections::HashMap<(String, music_names::Symbol), u16>,
+        globals_by_binding: &'a HashMap<NameBindingId, u16>,
+        import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
+        module_export_globals: &'a HashMap<(String, Symbol), u16>,
         constants: &'a mut ConstantPool,
         methods: &'a mut Vec<MethodEntry>,
         types: &'a mut Vec<TypeDescriptor>,
@@ -74,9 +76,7 @@ impl<'a> FunctionEmitter<'a> {
         );
         emitter.bind_params(&params);
         emitter.emit_expr(body)?;
-        emitter
-            .instructions
-            .push(music_il::Instruction::basic(Opcode::Ret));
+        emitter.instructions.push(Instruction::basic(Opcode::Ret));
 
         let locals_count = u16::try_from(emitter.locals_count()).unwrap_or(u16::MAX);
         Ok(emitter.finish_method(MethodName::Anonymous, locals_count))
@@ -84,7 +84,7 @@ impl<'a> FunctionEmitter<'a> {
 
     pub(super) fn emit_expr_into(
         &mut self,
-        out: &mut Vec<music_il::Instruction>,
+        out: &mut Vec<Instruction>,
         expr_id: HirExprId,
     ) -> EmitResult<usize> {
         let mut emitter = MethodEmitter::new(

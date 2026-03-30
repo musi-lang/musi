@@ -5,14 +5,14 @@ use super::*;
 
 pub type HirPatId = Idx<HirPat>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirPat {
     pub origin: HirOrigin,
     pub ty: HirTyId,
     pub kind: HirPatKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirPatKind {
     Wildcard,
     Bind { name: Ident, sub: Option<HirPatId> },

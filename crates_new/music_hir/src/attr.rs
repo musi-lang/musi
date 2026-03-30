@@ -14,20 +14,20 @@ pub struct HirAttrPath {
 }
 
 /// Attribute, stored in an arena and referenced by `HirAttrId`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirAttr {
     pub origin: HirOrigin,
     pub path: HirAttrPath,
     pub args: Box<[HirAttrArg]>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirAttrArg {
     pub origin: HirOrigin,
     pub kind: HirAttrArgKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirAttrArgKind {
     Named { name: Ident, value: HirExprId },
     Positional { value: HirExprId },

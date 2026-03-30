@@ -6,7 +6,7 @@ use std::hint::black_box;
 
 const SIZES: [usize; 3] = [100, 1_000, 10_000];
 
-fn to_u64(n: usize) -> u64 {
+fn bench_to_u64(n: usize) -> u64 {
     u64::try_from(n).unwrap()
 }
 
@@ -17,7 +17,7 @@ fn bench_alloc_sequential(c: &mut Criterion) {
             b.iter(|| {
                 let mut arena: Arena<u64> = Arena::with_capacity(n);
                 for i in 0..n {
-                    let _ = black_box(arena.alloc(to_u64(i)));
+                    let _ = black_box(arena.alloc(bench_to_u64(i)));
                 }
                 arena
             });
@@ -30,7 +30,7 @@ fn bench_get_sequential(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_sequential");
     for &n in &SIZES {
         let mut arena: Arena<u64> = Arena::with_capacity(n);
-        let indices: Vec<Idx<u64>> = (0..n).map(|i| arena.alloc(to_u64(i))).collect();
+        let indices: Vec<Idx<u64>> = (0..n).map(|i| arena.alloc(bench_to_u64(i))).collect();
 
         let _ = group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &_n| {
             b.iter(|| {
@@ -49,7 +49,7 @@ fn bench_get_random(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_random");
     for &n in &SIZES {
         let mut arena: Arena<u64> = Arena::with_capacity(n);
-        let mut indices: Vec<Idx<u64>> = (0..n).map(|i| arena.alloc(to_u64(i))).collect();
+        let mut indices: Vec<Idx<u64>> = (0..n).map(|i| arena.alloc(bench_to_u64(i))).collect();
 
         let mut rng = 0xDEAD_BEEF_u64;
         for i in (1..indices.len()).rev() {
@@ -79,7 +79,7 @@ fn bench_iter(c: &mut Criterion) {
     for &n in &SIZES {
         let mut arena: Arena<u64> = Arena::with_capacity(n);
         for i in 0..n {
-            let _ = arena.alloc(to_u64(i));
+            let _ = arena.alloc(bench_to_u64(i));
         }
 
         let _ = group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &_n| {
@@ -103,7 +103,7 @@ fn bench_alloc_and_get_interleaved(c: &mut Criterion) {
                 let mut arena: Arena<u64> = Arena::with_capacity(n);
                 let mut prev = arena.alloc(0u64);
                 for i in 1..n {
-                    let cur = arena.alloc(to_u64(i));
+                    let cur = arena.alloc(bench_to_u64(i));
                     let _ = black_box(arena.get(prev));
                     prev = cur;
                 }

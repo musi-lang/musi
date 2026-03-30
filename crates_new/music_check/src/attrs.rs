@@ -1,4 +1,7 @@
-use music_hir::{HirArrayItem, HirAttr, HirAttrArgKind, HirExprKind, HirLitKind};
+use music_hir::{
+    HirArrayItem, HirAttr, HirAttrArgKind, HirExprId, HirExprKind, HirLit, HirLitKind,
+};
+use music_names::Interner;
 
 use crate::SemaErrorKind;
 
@@ -416,12 +419,12 @@ impl<'a> Checker<'a> {
         !slot.repeatable && *count > 1
     }
 
-    fn is_lit_kind(&self, expr: music_hir::HirExprId, expected: AttrValueKind) -> bool {
+    fn is_lit_kind(&self, expr: HirExprId, expected: AttrValueKind) -> bool {
         match expected {
             AttrValueKind::StringLit => matches!(
                 self.ctx.store.exprs.get(expr).kind,
                 HirExprKind::Lit {
-                    lit: music_hir::HirLit {
+                    lit: HirLit {
                         kind: HirLitKind::String(_),
                     }
                 }
@@ -443,7 +446,7 @@ impl<'a> Checker<'a> {
             AttrValueKind::IntLit => matches!(
                 self.ctx.store.exprs.get(expr).kind,
                 HirExprKind::Lit {
-                    lit: music_hir::HirLit {
+                    lit: HirLit {
                         kind: HirLitKind::Int { .. },
                     }
                 }
@@ -452,7 +455,7 @@ impl<'a> Checker<'a> {
     }
 }
 
-fn is_path(attr: &HirAttr, segments: &[&str], interner: &music_names::Interner) -> bool {
+fn is_path(attr: &HirAttr, segments: &[&str], interner: &Interner) -> bool {
     if attr.path.segments.len() != segments.len() {
         return false;
     }
@@ -463,7 +466,7 @@ fn is_path(attr: &HirAttr, segments: &[&str], interner: &music_names::Interner) 
         .all(|(seg, expected)| interner.resolve(seg.name) == expected)
 }
 
-fn is_path_prefix(attr: &HirAttr, segments: &[&str], interner: &music_names::Interner) -> bool {
+fn is_path_prefix(attr: &HirAttr, segments: &[&str], interner: &Interner) -> bool {
     if attr.path.segments.len() < segments.len() {
         return false;
     }
@@ -475,7 +478,7 @@ fn is_path_prefix(attr: &HirAttr, segments: &[&str], interner: &music_names::Int
         .all(|(seg, expected)| interner.resolve(seg.name) == expected)
 }
 
-fn attr_name(attr: &HirAttr, interner: &music_names::Interner) -> String {
+fn attr_name(attr: &HirAttr, interner: &Interner) -> String {
     let mut out = String::new();
     for (i, seg) in attr.path.segments.iter().enumerate() {
         if i > 0 {

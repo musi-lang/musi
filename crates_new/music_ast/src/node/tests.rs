@@ -4,7 +4,9 @@ use music_storage::Arena;
 use smallvec::SmallVec;
 use std::iter;
 
-use crate::{SyntaxElementId, SyntaxNodeData, SyntaxNodeKind, SyntaxTokenData, SyntaxTree};
+use crate::{
+    SyntaxElementId, SyntaxNodeData, SyntaxNodeKind, SyntaxToken, SyntaxTokenData, SyntaxTree,
+};
 
 use super::*;
 
@@ -271,7 +273,7 @@ fn test_decl_surface_reports_modifiers_and_external_abi() {
     assert!(decl.is_mutable());
     assert!(!decl.is_opaque());
     assert!(matches!(
-        decl.external_abi_token().map(crate::SyntaxToken::kind),
+        decl.external_abi_token().map(SyntaxToken::kind),
         Some(TokenKind::StringLit)
     ));
 }

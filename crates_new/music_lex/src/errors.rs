@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{self, Display, Formatter};
 
 use music_basic::{Diag, DiagCode, SourceId, Span};
 use thiserror::Error;
@@ -116,7 +116,7 @@ impl LexError {
 }
 
 impl Display for LexError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.kind.fmt(f)
     }
 }

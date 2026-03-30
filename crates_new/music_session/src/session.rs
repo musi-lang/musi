@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use music_basic::{SourceId, SourceMap};
+use music_basic::{SourceId, SourceMap, path};
 use music_check::AnalyzedModule;
+use music_hir::{HirExprKind, HirModule, HirPatKind};
 use music_known::KnownSymbols;
 use music_lex::{LexError, LexedSource, Lexer};
 use music_names::{Interner, Symbol};
@@ -183,7 +184,7 @@ impl Session {
         let Some(source) = self.sources.get(source_id) else {
             return;
         };
-        let path = music_basic::path::normalize_path(source.path())
+        let path = path::normalize_path(source.path())
             .to_string_lossy()
             .into_owned();
         if path.is_empty() {
@@ -204,20 +205,17 @@ impl Session {
     }
 }
 
-fn collect_top_level_opaque_exports(
-    module: &music_hir::HirModule,
-    interner: &Interner,
-) -> Vec<String> {
+fn collect_top_level_opaque_exports(module: &HirModule, interner: &Interner) -> Vec<String> {
     let mut out = Vec::new();
     let root = module.store.exprs.get(module.root);
-    let music_hir::HirExprKind::Sequence { exprs, .. } = &root.kind else {
+    let HirExprKind::Sequence { exprs, .. } = &root.kind else {
         return out;
     };
 
     for expr_id in exprs.iter().copied() {
         let expr = module.store.exprs.get(expr_id);
         let (mods, pat) = match &expr.kind {
-            music_hir::HirExprKind::Let { mods, pat, .. } => (mods, *pat),
+            HirExprKind::Let { mods, pat, .. } => (mods, *pat),
             _ => continue,
         };
         if !mods.exported || !mods.opaque {
@@ -225,7 +223,7 @@ fn collect_top_level_opaque_exports(
         }
 
         let pat = module.store.pats.get(pat);
-        let music_hir::HirPatKind::Bind { name, .. } = &pat.kind else {
+        let HirPatKind::Bind { name, .. } = &pat.kind else {
             continue;
         };
         out.push(String::from(interner.resolve(name.name)));

@@ -20,12 +20,12 @@ fn test_builder_creates_tree_from_tokens_and_nodes() {
     let expr_id = builder.push_node(
         SyntaxNodeKind::InstanceExpr,
         Span::new(0, 10),
-        [crate::SyntaxElementId::Token(token_id)],
+        [SyntaxElementId::Token(token_id)],
     );
     let root_id = builder.push_node(
         SyntaxNodeKind::SourceFile,
         Span::new(0, 11),
-        [crate::SyntaxElementId::Node(expr_id)],
+        [SyntaxElementId::Node(expr_id)],
     );
 
     let tree = builder.finish(root_id);

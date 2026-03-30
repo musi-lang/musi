@@ -1,17 +1,19 @@
 use music_ast::{SyntaxElement, SyntaxNode, SyntaxNodeKind};
 use music_hir::{
-    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirConstraint, HirConstraintKind, HirDeclMods,
-    HirEffectItem, HirEffectSet, HirExprKind, HirFieldDef, HirHandleClause, HirMemberKey,
-    HirRecordItem, HirRecordItems, HirTypeParam, HirTypeParams, HirVariantDef,
+    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirChainKind, HirConstraint, HirConstraintKind,
+    HirDeclMods, HirEffectItem, HirEffectSet, HirExprId, HirExprKind, HirFStringPart, HirFieldDef,
+    HirHandleClause, HirLit, HirLitKind, HirMemberKey, HirOrigin, HirPatKind, HirPrefixOp,
+    HirRecordItem, HirRecordItems, HirSplice, HirSpliceId, HirSpliceKind, HirStringLit, HirTy,
+    HirTyKind, HirTypeParam, HirTypeParams, HirVariantDef,
 };
-use music_lex::TokenKind;
+use music_lex::{FStringPartKind, TokenKind};
 use music_names::{Ident, NameBindingKind, Symbol};
 
 use super::{Resolver, cursor::AstCursor};
 
-impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
-    pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+impl<'tree> Resolver<'_, 'tree, '_> {
+    pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         match node.kind() {
             SyntaxNodeKind::SequenceExpr => self.lower_sequence_expr(node),
@@ -88,22 +90,22 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_fstring_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirLit {
+    fn lower_fstring_expr(&mut self, node: SyntaxNode<'tree>) -> HirLit {
         let Some(tok) = node
             .child_tokens()
             .find(|t| matches!(t.kind(), TokenKind::FStringLit(_)))
         else {
             self.error(node.span(), "expected f-string literal");
-            return music_hir::HirLit {
-                kind: music_hir::HirLitKind::String(music_hir::HirStringLit::new(
-                    node.span(),
-                    None,
-                )),
+            return HirLit {
+                kind: HirLitKind::String(HirStringLit::new(node.span(), None)),
             };
         };
 
         let TokenKind::FStringLit(parts) = tok.kind().clone() else {
-            unreachable!("kind checked above");
+            self.error(node.span(), "expected f-string literal");
+            return HirLit {
+                kind: HirLitKind::String(HirStringLit::new(node.span(), None)),
+            };
         };
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
@@ -111,27 +113,26 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let mut hir_parts = Vec::new();
         for part in parts {
             match part.kind {
-                music_lex::FStringPartKind::Literal => {
-                    hir_parts.push(music_hir::HirFStringPart::Literal { span: part.span });
+                FStringPartKind::Literal => {
+                    hir_parts.push(HirFStringPart::Literal { span: part.span });
                 }
-                music_lex::FStringPartKind::Interpolation => {
-                    let expr_node = exprs.next();
-                    let origin = match expr_node {
-                        Some(expr_node) => {
-                            music_hir::HirOrigin::new(part.span, Some(expr_node.id()))
-                        }
-                        None => music_hir::HirOrigin::new(part.span, None),
+                FStringPartKind::Interpolation => {
+                    let (origin, expr) = if let Some(expr_node) = exprs.next() {
+                        let origin = HirOrigin::new(part.span, Some(expr_node.id()));
+                        let expr = self.lower_expr(expr_node);
+                        (origin, expr)
+                    } else {
+                        let origin = HirOrigin::new(part.span, None);
+                        let expr = self.alloc_expr(origin, HirExprKind::Error);
+                        (origin, expr)
                     };
-                    let expr = expr_node
-                        .map(|n| self.lower_expr(n))
-                        .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
-                    hir_parts.push(music_hir::HirFStringPart::Expr { origin, expr });
+                    hir_parts.push(HirFStringPart::Expr { origin, expr });
                 }
             }
         }
 
-        music_hir::HirLit {
-            kind: music_hir::HirLitKind::FString {
+        HirLit {
+            kind: HirLitKind::FString {
                 span: tok.span(),
                 syntax: Some(tok.id()),
                 parts: hir_parts.into_boxed_slice(),
@@ -139,8 +140,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_sequence_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_sequence_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let has_lparen = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::LParen));
@@ -189,8 +190,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_let_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_let_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let attrs = self.lower_attr_prefix(&mut cursor).into_boxed_slice();
@@ -210,7 +211,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         if cursor.eat_token(&TokenKind::KwForeign).is_some() {
             is_foreign = true;
             if let Some(tok) = cursor.eat_token(&TokenKind::StringLit) {
-                external_abi = Some(self.string_lit_token(tok));
+                external_abi = Some(Self::string_lit_token(tok));
             }
         }
 
@@ -251,7 +252,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         // `import "..."` in statement position opens all exports into scope.
         // A wildcard-bound let binding is semantically equivalent.
         if let Some(import_node) = value_node.filter(|n| n.kind() == SyntaxNodeKind::ImportExpr) {
-            if matches!(self.store.pats[pat].kind, music_hir::HirPatKind::Wildcard) {
+            if matches!(self.store.pats[pat].kind, HirPatKind::Wildcard) {
                 self.open_import_expr(import_node);
             }
         }
@@ -259,17 +260,23 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         // Type params and value params are scoped to the bound value.
         self.push_scope();
 
-        let type_params = type_params_node
-            .map(|list| self.lower_type_params(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let type_params = if let Some(list) = type_params_node {
+            self.lower_type_params(list)
+        } else {
+            Vec::new().into_boxed_slice()
+        };
 
-        let params = params_node
-            .map(|list| self.lower_param_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let params = if let Some(list) = params_node {
+            self.lower_param_list(list)
+        } else {
+            Vec::new().into_boxed_slice()
+        };
 
-        let where_ = where_node
-            .map(|list| self.lower_constraint_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let where_ = if let Some(list) = where_node {
+            self.lower_constraint_list(list)
+        } else {
+            Vec::new().into_boxed_slice()
+        };
 
         let effects = effects_node.map(|set| self.lower_effect_set(set));
         let annot = annot_node.map(|ty| self.lower_ty(ty));
@@ -306,8 +313,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_import_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_import_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let Some(path_tok) = node
             .child_tokens()
             .find(|t| matches!(t.kind(), TokenKind::StringLit))
@@ -315,7 +322,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             self.error(node.span(), "expected string literal import path");
             return self.alloc_expr(origin, HirExprKind::Error);
         };
-        let path = self.string_lit_token(path_tok);
+        let path = Self::string_lit_token(path_tok);
 
         let mut exports = Vec::<Symbol>::new();
         if let Some(env) = self.import_env {
@@ -337,8 +344,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let block_attrs = self.lower_attr_prefix(&mut cursor);
@@ -351,7 +358,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let _foreign = cursor.eat_token(&TokenKind::KwForeign);
         let abi = cursor
             .eat_token(&TokenKind::StringLit)
-            .map(|t| self.string_lit_token(t));
+            .map(Self::string_lit_token);
 
         let _ = cursor.eat_token(&TokenKind::LParen);
 
@@ -365,9 +372,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     let id = self.lower_expr(n);
                     // `foreign "abi" ( let ...; )` desugars to each inner `let` carrying the ABI and
                     // inheriting the outer attrs.
-                    if let music_hir::HirExprKind::Let { mods, .. } =
-                        &mut self.store.exprs.get_mut(id).kind
-                    {
+                    if let HirExprKind::Let { mods, .. } = &mut self.store.exprs.get_mut(id).kind {
                         mods.is_foreign = true;
                         if mods.external_abi.is_none() {
                             mods.external_abi = abi;
@@ -394,8 +399,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_data_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_data_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let has_pipe = node
             .child_tokens()
@@ -432,7 +437,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_variant_def(&mut self, node: SyntaxNode<'tree>) -> HirVariantDef {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
         let attrs = self.lower_attr_prefix(&mut cursor).into_boxed_slice();
 
@@ -465,7 +470,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_field_def(&mut self, node: SyntaxNode<'tree>) -> HirFieldDef {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let name_tok = cursor
@@ -481,9 +486,9 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .filter(|n| n.kind().is_ty())
             .map(|ty| self.lower_ty(ty))
             .unwrap_or_else(|| {
-                self.store.tys.alloc(music_hir::HirTy {
+                self.store.tys.alloc(HirTy {
                     origin,
-                    kind: music_hir::HirTyKind::Error,
+                    kind: HirTyKind::Error,
                 })
             });
 
@@ -501,14 +506,14 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_effect_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_effect_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let members = self.lower_member_defs(node);
         self.alloc_expr(origin, HirExprKind::Effect { members })
     }
 
-    fn lower_class_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_class_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let where_ = node
             .child_nodes()
@@ -520,8 +525,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Class { where_, members })
     }
 
-    fn lower_instance_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_instance_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let attrs = self.lower_attr_prefix(&mut cursor).into_boxed_slice();
@@ -555,9 +560,9 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .filter(|n| n.kind().is_ty())
             .map(|ty| self.lower_ty(ty))
             .unwrap_or_else(|| {
-                self.store.tys.alloc(music_hir::HirTy {
+                self.store.tys.alloc(HirTy {
                     origin,
-                    kind: music_hir::HirTyKind::Error,
+                    kind: HirTyKind::Error,
                 })
             });
 
@@ -583,7 +588,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::TypeParam)
         {
-            let origin = self.origin_node(tp);
+            let origin = Self::origin_node(tp);
             let Some(name_tok) = tp
                 .child_tokens()
                 .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent))
@@ -609,7 +614,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_constraint(&mut self, node: SyntaxNode<'tree>) -> HirConstraint {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut toks = node.child_tokens();
 
         let name_tok = toks
@@ -633,9 +638,9 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .find(|n| n.kind().is_ty())
             .map(|t| self.lower_ty(t))
             .unwrap_or_else(|| {
-                self.store.tys.alloc(music_hir::HirTy {
+                self.store.tys.alloc(HirTy {
                     origin,
-                    kind: music_hir::HirTyKind::Error,
+                    kind: HirTyKind::Error,
                 })
             });
 
@@ -649,7 +654,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_effect_set(&mut self, node: SyntaxNode<'tree>) -> HirEffectSet {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let items: Vec<HirEffectItem> = node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::EffectItem)
@@ -679,7 +684,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_effect_item(&mut self, node: SyntaxNode<'tree>) -> HirEffectItem {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let name_tok = cursor
@@ -699,8 +704,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         HirEffectItem { origin, name, arg }
     }
 
-    fn lower_array_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_array_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let items: Vec<HirArrayItem> = node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::ArrayItem)
@@ -716,7 +721,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_array_item(&mut self, node: SyntaxNode<'tree>) -> HirArrayItem {
-        let item_origin = self.origin_node(node);
+        let item_origin = Self::origin_node(node);
         let spread = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::DotDotDot));
@@ -736,8 +741,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_record_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_record_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let items = self.lower_record_items(node);
         self.alloc_expr(origin, HirExprKind::Record { items })
     }
@@ -754,7 +759,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_record_item(&mut self, node: SyntaxNode<'tree>) -> HirRecordItem {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
         if cursor.eat_token(&TokenKind::DotDotDot).is_some() {
             let expr = cursor
@@ -796,8 +801,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_variant_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_variant_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut tokens = node.child_tokens();
         let _dot = tokens.next();
@@ -830,8 +835,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Variant { name, payload })
     }
 
-    fn lower_lambda_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_lambda_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let params_node = node
             .child_nodes()
@@ -859,8 +864,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Lambda { params, ret, body })
     }
 
-    fn lower_call_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_call_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut expr_nodes = node.child_nodes().filter(|n| n.kind().is_expr());
         let callee = expr_nodes
@@ -884,7 +889,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_arg(&mut self, node: SyntaxNode<'tree>) -> HirArg {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let spread = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::DotDotDot));
@@ -901,8 +906,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_field_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_field_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let base = exprs
@@ -913,12 +918,12 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let chain = node
             .child_tokens()
             .find_map(|t| match t.kind() {
-                TokenKind::Dot => Some(music_hir::HirChainKind::Normal),
-                TokenKind::QuestionDot => Some(music_hir::HirChainKind::Optional),
-                TokenKind::BangDot => Some(music_hir::HirChainKind::Forced),
+                TokenKind::Dot => Some(HirChainKind::Normal),
+                TokenKind::QuestionDot => Some(HirChainKind::Optional),
+                TokenKind::BangDot => Some(HirChainKind::Forced),
                 _ => None,
             })
-            .unwrap_or(music_hir::HirChainKind::Normal);
+            .unwrap_or(HirChainKind::Normal);
 
         let Some(target_tok) = node
             .child_tokens()
@@ -945,8 +950,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Member { base, chain, key })
     }
 
-    fn lower_index_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_index_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
         let base = exprs
@@ -964,8 +969,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_record_update_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_record_update_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
         let base = exprs
@@ -977,8 +982,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::RecordUpdate { base, items })
     }
 
-    fn lower_type_test_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_type_test_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let expr = exprs
@@ -991,9 +996,9 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .find(|n| n.kind().is_ty())
             .map(|n| self.lower_ty(n))
             .unwrap_or_else(|| {
-                self.store.tys.alloc(music_hir::HirTy {
+                self.store.tys.alloc(HirTy {
                     origin,
-                    kind: music_hir::HirTyKind::Error,
+                    kind: HirTyKind::Error,
                 })
             });
 
@@ -1011,8 +1016,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::TypeTest { expr, ty, alias })
     }
 
-    fn lower_type_cast_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_type_cast_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let expr = exprs
@@ -1025,27 +1030,27 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .find(|n| n.kind().is_ty())
             .map(|n| self.lower_ty(n))
             .unwrap_or_else(|| {
-                self.store.tys.alloc(music_hir::HirTy {
+                self.store.tys.alloc(HirTy {
                     origin,
-                    kind: music_hir::HirTyKind::Error,
+                    kind: HirTyKind::Error,
                 })
             });
 
         self.alloc_expr(origin, HirExprKind::TypeCast { expr, ty })
     }
 
-    fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let op = node
             .child_tokens()
             .find_map(|t| match t.kind() {
-                TokenKind::Minus => Some(music_hir::HirPrefixOp::Negate),
-                TokenKind::KwNot => Some(music_hir::HirPrefixOp::Not),
-                TokenKind::KwMut => Some(music_hir::HirPrefixOp::Mut),
+                TokenKind::Minus => Some(HirPrefixOp::Negate),
+                TokenKind::KwNot => Some(HirPrefixOp::Not),
+                TokenKind::KwMut => Some(HirPrefixOp::Mut),
                 _ => None,
             })
-            .unwrap_or(music_hir::HirPrefixOp::Not);
+            .unwrap_or(HirPrefixOp::Not);
 
         let expr = node
             .child_nodes()
@@ -1056,8 +1061,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Prefix { op, expr })
     }
 
-    fn lower_binary_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_binary_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let left = exprs
@@ -1124,8 +1129,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Binary { op, left, right })
     }
 
-    fn lower_case_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_case_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let _ = cursor.eat_token(&TokenKind::KwCase);
@@ -1149,7 +1154,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 .bump_node()
                 .filter(|n| n.kind().is_pat())
                 .map(|p| self.lower_pat(p, true, NameBindingKind::PatternBind))
-                .unwrap_or_else(|| self.alloc_pat(origin, music_hir::HirPatKind::Error));
+                .unwrap_or_else(|| self.alloc_pat(origin, HirPatKind::Error));
 
             let guard = cursor
                 .eat_token(&TokenKind::KwIf)
@@ -1216,8 +1221,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_perform_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_perform_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let expr = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
@@ -1226,8 +1231,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Perform { expr })
     }
 
-    fn lower_handle_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_handle_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let _ = cursor.eat_token(&TokenKind::KwHandle);
@@ -1281,7 +1286,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_handle_clause(&mut self, node: SyntaxNode<'tree>, _handler: Ident) -> HirHandleClause {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let name_tok = cursor
@@ -1333,8 +1338,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
     }
 
-    fn lower_resume_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_resume_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let value = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
@@ -1342,8 +1347,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Resume { value })
     }
 
-    fn lower_quote_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_quote_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let mut splice_nodes = Vec::new();
         collect_quote_splices(node, &mut splice_nodes);
         let mut splices = Vec::with_capacity(splice_nodes.len());
@@ -1359,14 +1364,14 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_splice_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
-        let origin = self.origin_node(node);
+    fn lower_splice_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
+        let origin = Self::origin_node(node);
         let splice = self.alloc_splice_from_node(node);
         self.alloc_expr(origin, HirExprKind::Splice { splice })
     }
 
-    fn alloc_splice_from_node(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirSpliceId {
-        let origin = self.origin_node(node);
+    fn alloc_splice_from_node(&mut self, node: SyntaxNode<'tree>) -> HirSpliceId {
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let first = cursor.bump_token();
@@ -1378,7 +1383,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     .map(|t| self.intern_ident_token(t))
                     .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
                 self.check_use(target);
-                music_hir::HirSpliceKind::Name(target)
+                HirSpliceKind::Name(target)
             }
             Some(TokenKind::SpliceLParen) => {
                 let expr = cursor
@@ -1386,7 +1391,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     .filter(|n| n.kind().is_expr())
                     .map(|n| self.lower_expr(n))
                     .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
-                music_hir::HirSpliceKind::Expr(expr)
+                HirSpliceKind::Expr(expr)
             }
             Some(TokenKind::SpliceLBracket) => {
                 let exprs: Vec<_> = node
@@ -1394,14 +1399,12 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     .filter(|n| n.kind().is_expr())
                     .map(|n| self.lower_expr(n))
                     .collect();
-                music_hir::HirSpliceKind::ExprArray(exprs.into_boxed_slice())
+                HirSpliceKind::ExprArray(exprs.into_boxed_slice())
             }
-            _ => music_hir::HirSpliceKind::Expr(self.alloc_expr(origin, HirExprKind::Error)),
+            _ => HirSpliceKind::Expr(self.alloc_expr(origin, HirExprKind::Error)),
         };
 
-        self.store
-            .splices
-            .alloc(music_hir::HirSplice { origin, kind })
+        self.store.splices.alloc(HirSplice { origin, kind })
     }
 }
 
@@ -1419,12 +1422,12 @@ fn sequence_yields_unit(node: SyntaxNode<'_>) -> bool {
     let mut last_semi = false;
     for el in node.children() {
         match el {
-            music_ast::SyntaxElement::Token(tok) => match tok.kind() {
+            SyntaxElement::Token(tok) => match tok.kind() {
                 TokenKind::Semi => last_semi = true,
                 TokenKind::RParen => return last_semi,
                 _ => {}
             },
-            music_ast::SyntaxElement::Node(n) => {
+            SyntaxElement::Node(n) => {
                 if n.kind().is_expr() {
                     // An expr after the last ';' means the sequence yields that expr's value.
                     last_semi = false;

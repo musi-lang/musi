@@ -1,23 +1,27 @@
 use std::collections::BTreeMap;
 
-use music_ast::{SyntaxNode, SyntaxNodeKind};
+use music_ast::{SyntaxNode, SyntaxNodeKind, SyntaxToken};
 use music_basic::Span;
-use music_hir::{HirLit, HirPat, HirPatId, HirPatKind, HirPatKind::*, HirRecordPatField};
-use music_lex::TokenKind;
+use music_hir::{
+    HirExprKind, HirFStringPart, HirLit, HirLitKind, HirOrigin, HirPat, HirPatId,
+    HirPatKind::{self, *},
+    HirRecordPatField, HirStringLit,
+};
+use music_lex::{FStringPartKind, TokenKind};
 use music_names::{Ident, NameBindingKind, Symbol};
 
 use crate::{ResolveError, ResolveErrorKind};
 
 use super::Resolver;
 
-impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
+impl<'tree> Resolver<'_, 'tree, '_> {
     pub(super) fn lower_pat(
         &mut self,
         node: SyntaxNode<'tree>,
         bind_names: bool,
         bind_kind: NameBindingKind,
     ) -> HirPatId {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
 
         let kind = match node.kind() {
             SyntaxNodeKind::WildcardPat => Wildcard,
@@ -102,7 +106,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     };
 
                     fields.push(HirRecordPatField {
-                        origin: self.origin_node(node),
+                        origin: Self::origin_node(node),
                         mutable,
                         name,
                         sub,
@@ -135,7 +139,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             }
             SyntaxNodeKind::OrPat => {
                 let mut alt_nodes = Vec::new();
-                self.collect_or_pat_nodes(node, &mut alt_nodes);
+                Self::collect_or_pat_nodes(node, &mut alt_nodes);
                 let alts = self.lower_or_pat_alts(bind_names, bind_kind, &alt_nodes);
                 Or { alts }
             }
@@ -147,7 +151,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         self.alloc_pat(origin, kind)
     }
-    pub(super) fn alloc_pat(&mut self, origin: music_hir::HirOrigin, kind: HirPatKind) -> HirPatId {
+    pub(super) fn alloc_pat(&mut self, origin: HirOrigin, kind: HirPatKind) -> HirPatId {
         self.store.pats.alloc(HirPat {
             origin,
             ty: self.error_ty,
@@ -169,10 +173,12 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let name = if matches!(name_tok.kind(), TokenKind::LParen) {
             let op_tok = tokens.next();
             let _close = tokens.next();
-            op_tok.map(|t| self.intern_op_token(t)).unwrap_or_else(|| {
+            if let Some(t) = op_tok {
+                self.intern_op_token(t)
+            } else {
                 self.error(node.span(), "expected binding operator name");
                 Ident::dummy(Symbol::synthetic(u32::MAX))
-            })
+            }
         } else {
             self.intern_ident_token(name_tok)
         };
@@ -190,14 +196,14 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         Bind { name, sub }
     }
 
-    fn collect_or_pat_nodes(&mut self, node: SyntaxNode<'tree>, out: &mut Vec<SyntaxNode<'tree>>) {
+    fn collect_or_pat_nodes(node: SyntaxNode<'tree>, out: &mut Vec<SyntaxNode<'tree>>) {
         if node.kind() == SyntaxNodeKind::OrPat {
             let mut children = node.child_nodes().filter(|n| n.kind().is_pat());
             if let Some(left) = children.next() {
-                self.collect_or_pat_nodes(left, out);
+                Self::collect_or_pat_nodes(left, out);
             }
             if let Some(right) = children.next() {
-                self.collect_or_pat_nodes(right, out);
+                Self::collect_or_pat_nodes(right, out);
             }
             return;
         }
@@ -243,7 +249,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
 
         for (&sym, &span) in first {
-            self.define(bind_kind, music_names::Ident::new(sym, span));
+            self.define(bind_kind, Ident::new(sym, span));
         }
 
         let out: Vec<_> = alt_nodes
@@ -255,6 +261,11 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn collect_pat_binds(&mut self, node: SyntaxNode<'tree>, out: &mut BTreeMap<Symbol, Span>) {
+        if node.kind() == SyntaxNodeKind::OrPat {
+            // Bind mismatch is handled by the caller that lowers the `OrPat`.
+            return;
+        }
+
         match node.kind() {
             SyntaxNodeKind::BindPat => {
                 let Some(name_tok) = node.child_tokens().next() else {
@@ -267,7 +278,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 if let Some(first) = out.insert(ident.name, ident.span) {
                     self.errors.push(ResolveError {
                         kind: ResolveErrorKind::DuplicateBinding {
-                            name: self.interner.resolve(ident.name).to_string(),
+                            name: self.interner.resolve(ident.name).to_owned(),
                             first,
                         },
                         source_id: self.source_id,
@@ -291,7 +302,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                         continue;
                     }
                     let name_tok = if matches!(tok.kind(), TokenKind::KwMut) {
-                        it.next().and_then(|e| e.into_token())
+                        it.next().and_then(music_ast::SyntaxElement::into_token)
                     } else {
                         Some(tok)
                     };
@@ -316,17 +327,15 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                         {
                             self.collect_pat_binds(sub, out);
                         }
-                    } else {
-                        if let Some(first) = out.insert(ident.name, ident.span) {
-                            self.errors.push(ResolveError {
-                                kind: ResolveErrorKind::DuplicateBinding {
-                                    name: self.interner.resolve(ident.name).to_string(),
-                                    first,
-                                },
-                                source_id: self.source_id,
-                                span: ident.span,
-                            });
-                        }
+                    } else if let Some(first) = out.insert(ident.name, ident.span) {
+                        self.errors.push(ResolveError {
+                            kind: ResolveErrorKind::DuplicateBinding {
+                                name: self.interner.resolve(ident.name).to_owned(),
+                                first,
+                            },
+                            source_id: self.source_id,
+                            span: ident.span,
+                        });
                     }
                 }
             }
@@ -335,48 +344,44 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     self.collect_pat_binds(child, out);
                 }
             }
-            SyntaxNodeKind::OrPat => {
-                // Bind mismatch is handled by the caller that lowers the `OrPat`.
-            }
             _ => {}
         }
     }
 
-    pub(super) fn lower_lit_token(&mut self, token: music_ast::SyntaxToken<'tree>) -> HirLit {
+    pub(super) fn lower_lit_token(&mut self, token: SyntaxToken<'tree>) -> HirLit {
         let kind = match token.kind() {
-            TokenKind::IntLit => music_hir::HirLitKind::Int {
+            TokenKind::IntLit => HirLitKind::Int {
                 span: token.span(),
                 syntax: Some(token.id()),
             },
-            TokenKind::FloatLit => music_hir::HirLitKind::Float {
+            TokenKind::FloatLit => HirLitKind::Float {
                 span: token.span(),
                 syntax: Some(token.id()),
             },
-            TokenKind::RuneLit => music_hir::HirLitKind::Rune {
+            TokenKind::RuneLit => HirLitKind::Rune {
                 span: token.span(),
                 syntax: Some(token.id()),
             },
-            TokenKind::StringLit => music_hir::HirLitKind::String(music_hir::HirStringLit::new(
-                token.span(),
-                Some(token.id()),
-            )),
+            TokenKind::StringLit => {
+                HirLitKind::String(HirStringLit::new(token.span(), Some(token.id())))
+            }
             TokenKind::FStringLit(parts) => {
                 let mut hir_parts = Vec::new();
                 for part in parts {
                     match part.kind {
-                        music_lex::FStringPartKind::Literal => {
-                            hir_parts.push(music_hir::HirFStringPart::Literal { span: part.span });
+                        FStringPartKind::Literal => {
+                            hir_parts.push(HirFStringPart::Literal { span: part.span });
                         }
-                        music_lex::FStringPartKind::Interpolation => {
+                        FStringPartKind::Interpolation => {
                             // Resolver-only lowering: interpolation expressions are not parsed yet.
                             // The span is still preserved so later layers can re-parse from source.
-                            let origin = music_hir::HirOrigin::new(part.span, None);
-                            let expr = self.alloc_expr(origin, music_hir::HirExprKind::Error);
-                            hir_parts.push(music_hir::HirFStringPart::Expr { origin, expr });
+                            let origin = HirOrigin::new(part.span, None);
+                            let expr = self.alloc_expr(origin, HirExprKind::Error);
+                            hir_parts.push(HirFStringPart::Expr { origin, expr });
                         }
                     }
                 }
-                music_hir::HirLitKind::FString {
+                HirLitKind::FString {
                     span: token.span(),
                     syntax: Some(token.id()),
                     parts: hir_parts.into_boxed_slice(),
@@ -384,10 +389,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             }
             _ => {
                 self.error(token.span(), "expected literal token");
-                music_hir::HirLitKind::String(music_hir::HirStringLit::new(
-                    token.span(),
-                    Some(token.id()),
-                ))
+                HirLitKind::String(HirStringLit::new(token.span(), Some(token.id())))
             }
         };
 

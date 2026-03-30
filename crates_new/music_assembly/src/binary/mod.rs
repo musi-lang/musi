@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use music_il::SeamArtifact;
+use music_il::{ConstantPool, SeamArtifact};
 
 mod classes;
 mod code;
@@ -38,7 +38,7 @@ pub fn decode_binary(data: &[u8]) -> CodecResult<SeamArtifact> {
 
     let mut strings = DecodedStrings::new();
     let mut offsets = StringOffsets::new();
-    let mut constants = music_il::ConstantPool::new();
+    let mut constants = ConstantPool::new();
     let (mut methods, mut globals, mut types, mut effects, mut classes, mut foreigns) =
         (vec![], vec![], vec![], vec![], vec![], vec![]);
 

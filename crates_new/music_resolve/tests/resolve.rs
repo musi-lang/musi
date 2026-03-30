@@ -4,7 +4,7 @@ use music_names::Interner;
 use music_parse::parse;
 use music_resolve::{ResolveErrorKind, ResolveOptions, resolve_module};
 
-fn resolve_text(text: &str) -> Vec<ResolveErrorKind> {
+fn test_resolve_text(text: &str) -> Vec<ResolveErrorKind> {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", text);
 
@@ -24,7 +24,7 @@ fn resolve_text(text: &str) -> Vec<ResolveErrorKind> {
 
 #[test]
 fn test_reports_undefined_binding() {
-    let kinds = resolve_text("x;");
+    let kinds = test_resolve_text("x;");
     assert!(matches!(
         &kinds[..],
         [ResolveErrorKind::UndefinedBinding { .. }]
@@ -33,7 +33,7 @@ fn test_reports_undefined_binding() {
 
 #[test]
 fn test_reports_duplicate_binding() {
-    let kinds = resolve_text("let x := 1; let x := 2;");
+    let kinds = test_resolve_text("let x := 1; let x := 2;");
     assert!(
         kinds
             .iter()
@@ -43,12 +43,12 @@ fn test_reports_duplicate_binding() {
 
 #[test]
 fn test_let_binds_name_for_following_stmts() {
-    let kinds = resolve_text("let x := 1; x;");
+    let kinds = test_resolve_text("let x := 1; x;");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }
 
 #[test]
 fn test_fstring_interpolation_resolves_inner_expr() {
-    let kinds = resolve_text("let x := 1; f\"x is {x}\";");
+    let kinds = test_resolve_text("let x := 1; f\"x is {x}\";");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }

@@ -1,5 +1,5 @@
 use music_basic::SourceMap;
-use music_check::{SemaErrorKind, analyze_module};
+use music_check::SemaErrorKind;
 use music_known::KnownSymbols;
 use music_lex::Lexer;
 use music_names::Interner;
@@ -16,7 +16,7 @@ fn test_array_dim_out_of_range_reports_error() {
 
     let mut interner = Interner::new();
     let known = KnownSymbols::new(&mut interner);
-    let analyzed = analyze_module(
+    let analyzed = music_check::analyze_module(
         parsed.tree(),
         &sources,
         &mut interner,

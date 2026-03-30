@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-pub type EmitResult<T> = Result<T, EmitError>;
+pub type EmitResult<T = ()> = Result<T, EmitError>;
 
 #[derive(Debug, Error)]
 #[error("{kind}")]

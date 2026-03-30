@@ -1,11 +1,13 @@
 use music_ast::{SyntaxElement, SyntaxNode, SyntaxNodeKind};
-use music_hir::{HirCallableName, HirMemberDef, HirMemberDefs, HirOrigin, HirParam, HirParams};
+use music_hir::{
+    HirCallableName, HirExprKind, HirMemberDef, HirMemberDefs, HirOrigin, HirParam, HirParams,
+};
 use music_lex::TokenKind;
 use music_names::{Ident, NameBindingKind, Symbol};
 
 use super::{Resolver, cursor::AstCursor};
 
-impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
+impl<'tree> Resolver<'_, 'tree, '_> {
     pub(super) fn lower_member_defs(&mut self, node: SyntaxNode<'tree>) -> HirMemberDefs {
         let defs: Vec<HirMemberDef> = node
             .child_nodes()
@@ -16,7 +18,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_member_def(&mut self, node: SyntaxNode<'tree>) -> HirMemberDef {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
 
         let head = cursor
@@ -34,7 +36,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                     attrs: Box::new([]),
                     name: Ident::dummy(Symbol::synthetic(u32::MAX)),
                     params: Box::new([]),
-                    value: self.alloc_expr(origin, music_hir::HirExprKind::Error),
+                    value: self.alloc_expr(origin, HirExprKind::Error),
                 }
             }
         }
@@ -97,7 +99,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 attrs: Box::new([]),
                 name: Ident::dummy(Symbol::synthetic(u32::MAX)),
                 params: Box::new([]),
-                value: self.alloc_expr(origin, music_hir::HirExprKind::Error),
+                value: self.alloc_expr(origin, HirExprKind::Error),
             };
         };
 
@@ -116,7 +118,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .bump_node()
             .filter(|n| n.kind().is_expr())
             .map(|expr| self.lower_expr(expr))
-            .unwrap_or_else(|| self.alloc_expr(origin, music_hir::HirExprKind::Error));
+            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
 
         self.pop_scope();
 
@@ -165,7 +167,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn lower_param(&mut self, node: SyntaxNode<'tree>) -> HirParam {
-        let origin = self.origin_node(node);
+        let origin = Self::origin_node(node);
         let mutable = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::KwMut));

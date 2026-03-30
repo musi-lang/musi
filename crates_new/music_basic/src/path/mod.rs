@@ -1,5 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
+#[must_use]
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in path.components() {
@@ -16,6 +17,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+#[must_use]
 pub fn resolve_import_path(from_path: &Path, raw: &str) -> PathBuf {
     let mut path = PathBuf::from(raw);
     if !path.is_absolute() {

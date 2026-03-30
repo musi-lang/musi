@@ -2,17 +2,19 @@
 //!
 //! Inputs use the token slice form, including surrounding quotes.
 
+use core::str;
+
 /// Decode a Musi string literal token slice, including surrounding quotes.
 ///
 /// When the input is not a quoted string token, it is returned verbatim.
 #[must_use]
 pub fn decode(raw: &str) -> String {
     let Some(inner) = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
-        return raw.to_string();
+        return raw.to_owned();
     };
 
     if !inner.contains('\\') {
-        return inner.to_string();
+        return inner.to_owned();
     }
 
     let mut out = String::with_capacity(inner.len());
@@ -35,19 +37,16 @@ pub fn decode(raw: &str) -> String {
             '"' => out.push('"'),
             '0' => out.push('\0'),
             'x' => {
-                let hi = chars.next();
-                let lo = chars.next();
-                let Some((hi, lo)) = hi.zip(lo) else {
-                    break;
-                };
-                let mut buf = [0u8; 2];
-                buf[0] = hi as u8;
-                buf[1] = lo as u8;
-                let Ok(hex) = core::str::from_utf8(&buf) else {
-                    continue;
-                };
-                if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                    out.push(byte as char);
+                if let Some((hi, lo)) = chars.next().zip(chars.next())
+                    && let Ok(hi) = u8::try_from(u32::from(hi))
+                    && let Ok(lo) = u8::try_from(u32::from(lo))
+                {
+                    let buf = [hi, lo];
+                    if let Ok(hex) = str::from_utf8(&buf) {
+                        if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                            out.push(char::from(byte));
+                        }
+                    }
                 }
             }
             'u' => {
@@ -55,7 +54,7 @@ pub fn decode(raw: &str) -> String {
                     continue;
                 }
                 let mut digits = String::new();
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if next == '}' {
                         break;
                     }

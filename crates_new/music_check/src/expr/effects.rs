@@ -1,13 +1,14 @@
 use music_hir::{
     HirArg, HirArrowFlavor, HirExprId, HirExprKind, HirHandleClause, HirMemberKey, HirOrigin,
 };
+use music_names::{Ident, Symbol};
 
 use std::collections::HashMap;
 
 use crate::SemaErrorKind;
 
 use crate::checker::{Checker, ResumeCtx};
-use crate::env::substitute_generics;
+use crate::env::{EffectOpSig, substitute_generics};
 use crate::{EffectKey, EffectRow, SemTy, SemTyId};
 
 impl<'a> Checker<'a> {
@@ -96,7 +97,7 @@ impl<'a> Checker<'a> {
                     .collect();
                 let ret = substitute_generics(&mut self.state.semtys, sig.ret, &subst);
                 (
-                    crate::env::EffectOpSig {
+                    EffectOpSig {
                         params: params.into_boxed_slice(),
                         ret,
                     },
@@ -155,7 +156,7 @@ impl<'a> Checker<'a> {
         &mut self,
         origin: HirOrigin,
         expr: HirExprId,
-        handler: music_names::Ident,
+        handler: Ident,
         clauses: Box<[HirHandleClause]>,
     ) -> (SemTyId, EffectRow) {
         let (handled_ty, mut handled_effs) = self.synth_expr(expr);
@@ -185,7 +186,7 @@ impl<'a> Checker<'a> {
 
         let effect_name = self.ctx.interner.resolve(handler.name).to_string();
         if let Some(family) = handler_family.as_ref() {
-            let mut counts = HashMap::<music_names::Symbol, u32>::new();
+            let mut counts = HashMap::<Symbol, u32>::new();
             for clause in clauses.iter().filter(|c| !c.is_value) {
                 *counts.entry(clause.name.name).or_insert(0) += 1;
             }
@@ -258,7 +259,7 @@ impl<'a> Checker<'a> {
                                 let ret =
                                     substitute_generics(&mut self.state.semtys, sig.ret, &subst);
                                 (
-                                    crate::env::EffectOpSig {
+                                    EffectOpSig {
                                         params: params.into_boxed_slice(),
                                         ret,
                                     },

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use music_basic::SourceId;
-use music_hir::{HirExprId, HirExprKind, HirStore};
+use music_hir::{HirExprId, HirExprKind, HirPatKind, HirStore};
 use music_ir::{IrDataLayout, IrDataLayouts, IrExprTy, IrModuleInfo, IrScalarTy, IrTypeRef};
 use music_known::KnownSymbols;
 use music_names::{Interner, NameBindingId, NameResolution, NameSite};
@@ -113,7 +113,7 @@ fn collect_data_layouts(
         };
 
         let pat = store.pats.get(*pat);
-        let music_hir::HirPatKind::Bind { name, .. } = &pat.kind else {
+        let HirPatKind::Bind { name, .. } = &pat.kind else {
             continue;
         };
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use music_basic::Span;
 use music_hir::{HirDim, HirEffectItem, HirEffectSet, HirTy, HirTyId, HirTyKind};
-use music_names::Symbol;
+use music_names::{Ident, Symbol};
 
 use crate::checker::Checker;
 
@@ -123,11 +123,11 @@ impl<'a> Checker<'a> {
         let kind = match self.state.semtys.get(ty).clone() {
             SemTy::Error => HirTyKind::Error,
             SemTy::Unknown => HirTyKind::Named {
-                name: music_names::Ident::dummy(self.state.known.unknown),
+                name: Ident::dummy(self.state.known.unknown),
                 args: Box::new([]),
             },
             SemTy::Any => HirTyKind::Named {
-                name: music_names::Ident::dummy(self.state.known.any),
+                name: Ident::dummy(self.state.known.any),
                 args: Box::new([]),
             },
             SemTy::InferVar(var) => {
@@ -135,12 +135,12 @@ impl<'a> Checker<'a> {
                     return self.lower_sem_ty_to_hir(bound);
                 }
                 HirTyKind::Named {
-                    name: music_names::Ident::dummy(self.state.known.unknown),
+                    name: Ident::dummy(self.state.known.unknown),
                     args: Box::new([]),
                 }
             }
             SemTy::Generic(_) => HirTyKind::Named {
-                name: music_names::Ident::dummy(self.state.known.unknown),
+                name: Ident::dummy(self.state.known.unknown),
                 args: Box::new([]),
             },
             SemTy::Named { name, args } => {
@@ -150,7 +150,7 @@ impl<'a> Checker<'a> {
                     .map(|a| self.lower_sem_ty_to_hir(a))
                     .collect();
                 HirTyKind::Named {
-                    name: music_names::Ident::dummy(name),
+                    name: Ident::dummy(name),
                     args: hir_args.into_boxed_slice(),
                 }
             }
@@ -186,7 +186,7 @@ impl<'a> Checker<'a> {
                 base: self.lower_sem_ty_to_hir(base),
             },
             SemTy::Record { .. } => HirTyKind::Named {
-                name: music_names::Ident::dummy(self.state.known.unknown),
+                name: Ident::dummy(self.state.known.unknown),
                 args: Box::new([]),
             },
         };

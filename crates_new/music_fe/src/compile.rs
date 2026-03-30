@@ -1,12 +1,13 @@
-use music_basic::SourceId;
+use music_basic::{SourceId, path};
 use music_codegen::{EmitModule, EmitProgram, emit_program};
+use music_il::SeamArtifact;
 use music_session::Session;
 
 use crate::errors::{FrontendError, FrontendErrorKind, FrontendResult};
 use crate::graph::build_module_graph;
 
 pub struct CompiledProgram {
-    pub artifact: music_il::SeamArtifact,
+    pub artifact: SeamArtifact,
 }
 
 pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<CompiledProgram> {
@@ -19,7 +20,7 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
             kind: FrontendErrorKind::EntrySourceMissing,
         })?
         .path();
-    let entry_path = music_basic::path::normalize_path(entry_path)
+    let entry_path = path::normalize_path(entry_path)
         .to_string_lossy()
         .into_owned();
 

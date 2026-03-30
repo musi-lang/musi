@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use music_names::Symbol;
+use music_names::{Symbol, SymbolSlice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataLayout {
-    pub record_fields: Option<Box<[Symbol]>>,
-    pub choice_variants: Option<Box<[Symbol]>>,
+    pub record_fields: Option<SymbolSlice>,
+    pub choice_variants: Option<SymbolSlice>,
 }
 
 impl IrDataLayout {

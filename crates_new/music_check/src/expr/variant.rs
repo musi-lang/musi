@@ -1,4 +1,5 @@
 use music_hir::{HirExprId, HirOrigin};
+use music_names::Ident;
 
 use crate::checker::Checker;
 use crate::env::substitute_generics;
@@ -9,7 +10,7 @@ impl<'a> Checker<'a> {
     pub(super) fn check_variant_expr(
         &mut self,
         origin: HirOrigin,
-        name: music_names::Ident,
+        name: Ident,
         payload: Option<HirExprId>,
         expected: SemTyId,
     ) -> (SemTyId, EffectRow) {

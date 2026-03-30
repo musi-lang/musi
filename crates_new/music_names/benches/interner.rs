@@ -11,7 +11,7 @@ fn bench_intern_unique(c: &mut Criterion) {
             for input in &inputs {
                 let _ = interner.intern(input);
             }
-        })
+        });
     });
 }
 
@@ -23,7 +23,7 @@ fn bench_intern_repeated(c: &mut Criterion) {
             for _ in 0..10_000 {
                 let _ = interner.intern(input);
             }
-        })
+        });
     });
 }
 

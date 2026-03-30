@@ -1,6 +1,6 @@
-/// Integer literal parsing shared across compiler crates.
-///
-/// Grammar reference: `grammar.abnf` (`lit-int` and digit separator `_` rules).
+//! Integer literal parsing shared across compiler crates.
+//!
+//! Grammar reference: `grammar.abnf` (`lit-int` and digit separator `_` rules).
 
 /// Parses an integer literal into `u64`.
 ///
@@ -12,20 +12,15 @@
 #[must_use]
 pub fn parse_u64(text: &str) -> Option<u64> {
     let text = text.trim();
-    let (base, digits) = if let Some(hex) = text.strip_prefix("0x").or(text.strip_prefix("0X")) {
-        (16, hex)
-    } else if let Some(oct) = text.strip_prefix("0o").or(text.strip_prefix("0O")) {
-        (8, oct)
-    } else if let Some(bin) = text.strip_prefix("0b").or(text.strip_prefix("0B")) {
-        (2, bin)
-    } else {
-        (10, text)
+    let (base, digits) = match text.get(0..2) {
+        Some("0x" | "0X") => (16, text.get(2..).unwrap_or("")),
+        Some("0o" | "0O") => (8, text.get(2..).unwrap_or("")),
+        Some("0b" | "0B") => (2, text.get(2..).unwrap_or("")),
+        _ => (10, text),
     };
-
     if digits.is_empty() {
         return None;
     }
-
     if !digits.as_bytes().contains(&b'_') {
         return u64::from_str_radix(digits, base).ok();
     }

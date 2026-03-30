@@ -1,7 +1,7 @@
 use music_basic::SourceMap;
 use music_lex::Lexer;
 
-use crate::parse;
+use crate::{ParseErrorKind, parse};
 
 #[test]
 fn test_parse_import_expr() {
@@ -25,7 +25,7 @@ fn test_import_alias_is_rejected() {
         parsed
             .errors()
             .iter()
-            .any(|error| matches!(error.kind, crate::ParseErrorKind::ImportAliasNotSupported))
+            .any(|error| matches!(error.kind, ParseErrorKind::ImportAliasNotSupported))
     );
 }
 

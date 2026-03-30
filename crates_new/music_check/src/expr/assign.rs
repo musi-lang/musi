@@ -1,6 +1,6 @@
 use music_hir::{HirChainKind, HirExprId, HirExprKind, HirMemberKey, HirOrigin};
 
-use crate::SemaErrorKind;
+use crate::{SemaErrorKind, env};
 
 use crate::checker::Checker;
 use crate::unify;
@@ -174,7 +174,7 @@ impl<'a> Checker<'a> {
                             .unwrap_or(self.state.builtins.unknown),
                     );
                 }
-                crate::env::substitute_generics(&mut self.state.semtys, field_def.ty, &subst)
+                env::substitute_generics(&mut self.state.semtys, field_def.ty, &subst)
             }
             (SemTy::Unknown | SemTy::Any | SemTy::Error, _) => self.state.builtins.unknown,
             _ => {

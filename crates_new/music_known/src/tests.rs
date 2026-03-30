@@ -3,7 +3,7 @@ use music_names::Interner;
 use crate::KnownSymbols;
 
 #[test]
-fn known_symbols_have_canonical_spelling() {
+fn test_known_symbols_have_canonical_spelling() {
     let mut interner = Interner::default();
     let k = KnownSymbols::new(&mut interner);
 
@@ -30,7 +30,7 @@ fn known_symbols_have_canonical_spelling() {
 }
 
 #[test]
-fn compiler_prelude_is_stable() {
+fn test_compiler_prelude_is_stable() {
     let mut interner = Interner::default();
     let k = KnownSymbols::new(&mut interner);
     let prelude = k.compiler_prelude();

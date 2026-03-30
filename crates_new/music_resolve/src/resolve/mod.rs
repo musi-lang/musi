@@ -5,10 +5,10 @@ mod member;
 mod pat;
 mod ty;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use music_ast::{SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree};
-use music_basic::{SourceId, SourceMap, Span};
+use music_basic::{SourceId, SourceMap, Span, path as import_path, string_lit};
 use music_hir::{
     HirExpr, HirExprId, HirExprKind, HirModule, HirOrigin, HirPatId, HirPatKind, HirStore, HirTy,
     HirTyId, HirTyKind,
@@ -17,6 +17,7 @@ use music_known::KnownSymbols;
 use music_lex::TokenKind;
 use music_names::{
     Ident, Interner, NameBinding, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol,
+    SymbolSlice,
 };
 
 use crate::{ResolveError, ResolveErrorKind};
@@ -27,18 +28,10 @@ pub trait ImportEnv {
     fn is_export_opaque(&self, from: SourceId, path: &str, name: &str) -> bool;
 }
 
+#[derive(Default)]
 pub struct ResolveOptions<'env> {
     pub prelude: Vec<Symbol>,
     pub import_env: Option<&'env dyn ImportEnv>,
-}
-
-impl<'env> Default for ResolveOptions<'env> {
-    fn default() -> Self {
-        Self {
-            prelude: vec![],
-            import_env: None,
-        }
-    }
 }
 
 impl<'env> ResolveOptions<'env> {
@@ -63,7 +56,7 @@ impl<'env> ResolveOptions<'env> {
 #[derive(Debug)]
 pub struct ResolvedModule {
     pub module: HirModule,
-    pub exports: Box<[Symbol]>,
+    pub exports: SymbolSlice,
     pub names: NameResolution,
     pub errors: Vec<ResolveError>,
 }
@@ -269,7 +262,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             let first_span = self.names.bindings.get(first_id).site.span;
             self.errors.push(ResolveError {
                 kind: ResolveErrorKind::DuplicateBinding {
-                    name: self.interner.resolve(ident.name).to_string(),
+                    name: self.interner.resolve(ident.name).to_owned(),
                     first: first_span,
                 },
                 source_id: self.source_id,
@@ -297,7 +290,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let Some(binding) = self.lookup(ident.name) else {
             self.errors.push(ResolveError {
                 kind: ResolveErrorKind::UndefinedBinding {
-                    name: self.interner.resolve(ident.name).to_string(),
+                    name: self.interner.resolve(ident.name).to_owned(),
                 },
                 source_id: self.source_id,
                 span: ident.span,
@@ -323,7 +316,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         });
     }
 
-    fn origin_node(&self, node: SyntaxNode<'tree>) -> HirOrigin {
+    fn origin_node(node: SyntaxNode<'tree>) -> HirOrigin {
         HirOrigin::new(node.span(), Some(node.id()))
     }
 
@@ -344,14 +337,14 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn decode_string_lit_span(&mut self, span: Span) -> String {
-        music_basic::string_lit::decode(self.slice(span))
+        string_lit::decode(self.slice(span))
     }
 
     fn normalize_import_key(&self, raw: &str) -> String {
         if raw.starts_with('@') {
             return raw.to_owned();
         }
-        let path = std::path::Path::new(raw);
+        let path = Path::new(raw);
         if !raw.starts_with('.') && !path.is_absolute() {
             return raw.to_owned();
         }
@@ -359,7 +352,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let Some(source) = self.sources.get(self.source_id) else {
             return raw.to_owned();
         };
-        music_basic::path::resolve_import_path(source.path(), raw)
+        import_path::resolve_import_path(source.path(), raw)
             .to_string_lossy()
             .into_owned()
     }

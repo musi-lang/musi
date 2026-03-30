@@ -1,5 +1,6 @@
 use music_basic::SourceMap;
 use music_check::AnalyzedModule;
+use music_il::SeamArtifact;
 use music_names::Interner;
 
 #[derive(Debug)]
@@ -18,5 +19,5 @@ pub struct EmitProgram<'a> {
 
 #[derive(Debug)]
 pub struct ProgramArtifact {
-    pub artifact: music_il::SeamArtifact,
+    pub artifact: SeamArtifact,
 }

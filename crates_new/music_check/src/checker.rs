@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use music_basic::{SourceId, SourceMap, Span};
-use music_hir::{HirExprId, HirStore};
+use music_basic::{SourceId, SourceMap, Span, string_lit};
+use music_hir::{HirExprId, HirPatId, HirStore};
+use music_ir::IrModuleInfo;
 use music_known::KnownSymbols;
 use music_names::{Interner, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol};
 
@@ -62,7 +63,7 @@ pub(crate) struct CheckerState {
     pub(crate) builtins: BuiltinTys,
     pub(crate) flow: FlowState,
     pub(crate) binding_mut: HashMap<NameBindingId, bool>,
-    pub(crate) opaque_imports: std::collections::HashSet<Symbol>,
+    pub(crate) opaque_imports: HashSet<Symbol>,
 }
 
 pub(crate) struct Checker<'a> {
@@ -128,12 +129,12 @@ impl<'a> Checker<'a> {
                 },
                 flow: FlowState::default(),
                 binding_mut: HashMap::new(),
-                opaque_imports: std::collections::HashSet::new(),
+                opaque_imports: HashSet::new(),
             },
         };
 
         for (_id, binding) in &checker.ctx.names.bindings {
-            let music_names::NameBindingKind::Import { opaque: true } = binding.kind else {
+            let NameBindingKind::Import { opaque: true } = binding.kind else {
                 continue;
             };
             let _did_insert = checker.state.opaque_imports.insert(binding.name);
@@ -144,7 +145,7 @@ impl<'a> Checker<'a> {
         checker
     }
 
-    pub(crate) fn check_module(&mut self, root: HirExprId) -> music_ir::IrModuleInfo {
+    pub(crate) fn check_module(&mut self, root: HirExprId) -> IrModuleInfo {
         self.validate_public_attrs();
         let _ = self.synth_expr(root);
         self.finalize_expr_types();
@@ -219,7 +220,7 @@ impl<'a> Checker<'a> {
             .unwrap_or(false)
     }
 
-    pub(crate) fn mark_pat_bindings_mut(&mut self, pat: music_hir::HirPatId, mutable: bool) {
+    pub(crate) fn mark_pat_bindings_mut(&mut self, pat: HirPatId, mutable: bool) {
         let mut sites = Vec::new();
         self.collect_bind_sites(pat, &mut sites);
         for span in sites {
@@ -239,7 +240,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn decode_string_span(&self, span: Span) -> String {
-        music_basic::string_lit::decode(self.slice(span))
+        string_lit::decode(self.slice(span))
     }
 
     fn seed_compiler_prelude_values(&mut self) {

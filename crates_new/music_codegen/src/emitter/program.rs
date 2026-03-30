@@ -1,14 +1,17 @@
 use std::collections::HashMap;
+use std::mem;
 use std::path::Path;
 
-use music_basic::{SourceId, SourceMap, Span};
+use music_basic::{SourceId, SourceMap, Span, path as import_path, string_lit};
 use music_check::AnalyzedModule;
-use music_hir::HirExprKind;
+use music_hir::{HirExprKind, HirModule, HirPatKind};
 use music_il::{
     ConstantPool, GlobalEntry, Instruction, MethodEntry, MethodName, Opcode, SeamArtifact,
     TypeDescriptor,
 };
-use music_names::{Interner, NameBindingKind, NameResolution, NameSite, Symbol};
+use music_names::{
+    Interner, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol, SymbolSlice,
+};
 
 use crate::errors::EmitResult;
 use crate::model::EmitModule;
@@ -26,8 +29,8 @@ pub(super) struct ProgramEmitter<'a> {
     globals: Vec<GlobalEntry>,
     types: Vec<TypeDescriptor>,
 
-    global_by_binding: HashMap<music_names::NameBindingId, u16>,
-    import_global_by_binding: HashMap<music_names::NameBindingId, u16>,
+    global_by_binding: HashMap<NameBindingId, u16>,
+    import_global_by_binding: HashMap<NameBindingId, u16>,
     module_export_globals: HashMap<(String, Symbol), u16>,
 }
 
@@ -67,7 +70,7 @@ impl<'a> ProgramEmitter<'a> {
 
             // Only bind-name top-level lets become globals.
             let pat = analyzed.module.store.pats.get(pat).clone();
-            let music_hir::HirPatKind::Bind { name, .. } = pat.kind else {
+            let HirPatKind::Bind { name, .. } = pat.kind else {
                 continue;
             };
 
@@ -103,7 +106,7 @@ impl<'a> ProgramEmitter<'a> {
             } else if raw_import_path.starts_with('.')
                 || Path::new(raw_import_path.as_str()).is_absolute()
             {
-                music_basic::path::resolve_import_path(from_path, raw_import_path.as_str())
+                import_path::resolve_import_path(from_path, raw_import_path.as_str())
                     .to_string_lossy()
                     .into_owned()
             } else {
@@ -143,10 +146,10 @@ impl<'a> ProgramEmitter<'a> {
         }
 
         Ok(SeamArtifact {
-            constants: std::mem::take(&mut self.constants),
-            methods: std::mem::take(&mut self.methods),
-            globals: std::mem::take(&mut self.globals),
-            types: std::mem::take(&mut self.types),
+            constants: mem::take(&mut self.constants),
+            methods: mem::take(&mut self.methods),
+            globals: mem::take(&mut self.globals),
+            types: mem::take(&mut self.types),
             effects: vec![],
             classes: vec![],
             foreigns: vec![],
@@ -205,7 +208,7 @@ impl<'a> ProgramEmitter<'a> {
                     ..
                 } => {
                     let pat = analyzed.module.store.pats.get(pat).clone();
-                    let music_hir::HirPatKind::Bind { name, .. } = pat.kind else {
+                    let HirPatKind::Bind { name, .. } = pat.kind else {
                         continue;
                     };
 
@@ -286,7 +289,7 @@ fn find_def_binding(
     names: &NameResolution,
     source_id: SourceId,
     span: Span,
-) -> Option<music_names::NameBindingId> {
+) -> Option<NameBindingId> {
     let site = NameSite::new(source_id, span);
     names
         .bindings
@@ -295,7 +298,7 @@ fn find_def_binding(
         .map(|(id, _)| id)
 }
 
-fn collect_import_exprs(module: &music_hir::HirModule) -> Vec<(Span, Span, Box<[Symbol]>)> {
+fn collect_import_exprs(module: &HirModule) -> Vec<(Span, Span, SymbolSlice)> {
     let mut out = Vec::new();
     for (_id, expr) in module.store.exprs.iter() {
         let HirExprKind::Import { path, exports } = &expr.kind else {
@@ -313,5 +316,5 @@ fn decode_string_lit(sources: &SourceMap, source_id: SourceId, span: Span) -> St
     let start = usize::try_from(span.start).unwrap_or(0);
     let end = usize::try_from(span.end).unwrap_or(start);
     let raw = source.text().get(start..end).unwrap_or("");
-    music_basic::string_lit::decode(raw)
+    string_lit::decode(raw)
 }

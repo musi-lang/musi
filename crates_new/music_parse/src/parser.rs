@@ -45,7 +45,7 @@ pub fn parse(source_id: SourceId, lexed: &LexedSource<'_>) -> ParsedSource {
     ParsedSource::new(tree, errors)
 }
 
-pub(crate) struct Parser<'a, 't, 'src> {
+pub struct Parser<'a, 't, 'src> {
     pub(super) source_id: SourceId,
     pub(super) source: &'src str,
     pub(super) tokens: &'t [Token],
@@ -121,7 +121,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
         self.builder.push_error_node(children)
     }
 
-    pub(crate) fn tokens(&self) -> &[Token] {
+    pub(crate) const fn tokens(&self) -> &[Token] {
         self.tokens
     }
 
