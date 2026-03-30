@@ -4,7 +4,7 @@ resolver = "2"
 
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace.package]
-version = "0.1.0-rc1"
+version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.87.0"
 description = "An interpreted systems programming language."
