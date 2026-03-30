@@ -260,7 +260,8 @@ seq-tail   = <empty>  ; trailing ;, returns ()
 seq-cont   = <empty>  ; returns last expr
              / ";" [seq-tail]  ; continue sequence
 ; §4.2  Case
-ast-case = "case" ast-expr "of" "(" ["|"] case-arm *("|" case-arm) ["|"] ")"  ; leading/trailing | allowed
+ast-case = "case" ast-expr "of" "(" ["|"] case-arm *("|" case-arm) ["|"]
+           ")"  ; leading/trailing | allowed
 
 case-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
 ; §4.3  Arrays
@@ -284,7 +285,8 @@ rec-lit-field  = ident [":=" ast-expr]
 ;   let f (params) := body            function definition
 ;   let f (params) : Ret := body      function with return type
 ;   let f [T] (params) := body        generic function
-ast-let        = "let" ["mut"] ast-pat [params] [bracket-params] [where-clause] [with-clause] [ty-annot] ":=" ast-expr
+ast-let        = "let" ["mut"] ast-pat [params] [bracket-params] [where-clause]
+                 [with-clause] [ty-annot] ":=" ast-expr
 
 bracket-params = "[" ident *("," ident) [","] "]"  ; trailing , allowed
 
@@ -297,11 +299,13 @@ data-body      = variant-list  ; sum type
                  / "|"  ; empty sum (Empty)
                  / ";"  ; empty product (Unit)
 
-variant-list   = ["|"] variant *("|" variant) ["|"]  ; leading/trailing | allowed
+variant-list   = ["|"] variant *("|" variant)
+                 ["|"]  ; leading/trailing | allowed
 
 variant        = [attrs] ident [":" ast-ty] [":=" ast-expr]
 
-rec-def-fields = [";"] rec-def-field *(";" rec-def-field) [";"]  ; leading/trailing ; allowed
+rec-def-fields = [";"] rec-def-field *(";" rec-def-field)
+                 [";"]  ; leading/trailing ; allowed
 
 rec-def-field  = ident ":" ast-ty [":=" ast-expr]
 ; §4.7  Effects (anonymous - always bound via let)
@@ -320,11 +324,13 @@ ast-resume       = "resume" [ast-expr]
 
 ast-import       = "import" lit-string
 
-ast-foreign-expr = "foreign" [lit-string] ("let" let-rest / "(" *("let" foreign-binding ";") ")")  ; omitted ABI defaults to "c"
+ast-foreign-expr = "foreign" [lit-string] ("let" let-rest / "(" *("let"
+                   foreign-binding ";") ")")  ; omitted ABI defaults to "c"
 
 ast-perform      = "perform" postfix-expr
 
-ast-handle       = "handle" ast-expr "with" ident "of" "(" ["|"] handle-clause *("|" handle-clause) ["|"] ")"
+ast-handle       = "handle" ast-expr "with" ident "of" "(" ["|"] handle-clause
+                   *("|" handle-clause) ["|"] ")"
 
 handle-clause    = ident "=>" ast-expr  ; handled computation result binder
                    / ident "(" [ident-list] ")" "=>" ast-expr
@@ -409,16 +415,20 @@ ast-decl       = "export" export-tail
                  / ast-foreign-expr
                  / ast-instance-decl
 ; §7.3  Exports
-export-tail = ["opaque"] ["foreign" [lit-string]] ("let" let-rest / "(" *("let" foreign-binding ";") ")")
+export-tail = ["opaque"] ["foreign" [lit-string]] ("let" let-rest / "(" *("let"
+              foreign-binding ";") ")")
               / ast-instance-decl
 
-let-rest    = ["mut"] ast-pat [params] [bracket-params] [where-clause] [with-clause] [ty-annot] [":=" ast-expr]
+let-rest    = ["mut"] ast-pat [params] [bracket-params] [where-clause]
+              [with-clause] [ty-annot] [":=" ast-expr]
 ; §7.4  Instances
-ast-instance-decl = "instance" [bracket-params] [where-clause] ast-ty-named instance-body
+ast-instance-decl = "instance" [bracket-params] [where-clause] ast-ty-named
+                    instance-body
 
 instance-body     = "{" *(class-member) "}"
 ; §7.5  Foreign
-foreign-binding = [attrs] ident [bracket-params] [params] [where-clause] [":" ast-ty]
+foreign-binding = [attrs] ident [bracket-params] [params] [where-clause] [":"
+                  ast-ty]
 ; §7.6  Members
 fn-decl     = "let" op-or-ident [params] [ty-annot] [":=" ast-expr]
 
