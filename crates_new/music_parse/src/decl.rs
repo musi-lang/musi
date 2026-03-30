@@ -324,9 +324,26 @@ impl Parser<'_, '_> {
                 children.push(SyntaxElementId::Node(self.parse_field_list()?));
             }
         } else if !self.at(&TokenKind::RBrace) {
-            let first = self.parse_data_item()?;
-            children.push(SyntaxElementId::Node(first));
-            if self.at(&TokenKind::Pipe) {
+            let (first_children, first_has_colon) = self.parse_data_member_parts()?;
+            let first_kind = if self.at(&TokenKind::Pipe) {
+                SyntaxNodeKind::Variant
+            } else if self.at(&TokenKind::Semi) {
+                SyntaxNodeKind::Field
+            } else if self.at(&TokenKind::RBrace) {
+                if first_has_colon {
+                    SyntaxNodeKind::Field
+                } else {
+                    SyntaxNodeKind::Variant
+                }
+            } else {
+                SyntaxNodeKind::Field
+            };
+            children.push(SyntaxElementId::Node(
+                self.builder
+                    .push_node_from_children(first_kind, first_children),
+            ));
+
+            if first_kind == SyntaxNodeKind::Variant {
                 while let Some(pipe) = self.eat(&TokenKind::Pipe) {
                     children.push(pipe);
                     if self.at(&TokenKind::RBrace) {
@@ -351,19 +368,23 @@ impl Parser<'_, '_> {
             .push_node_from_children(SyntaxNodeKind::DataExpr, children))
     }
 
-    fn parse_data_item(&mut self) -> ParseResult<SyntaxNodeId> {
-        let attrs = self.parse_attrs()?;
-        if self.at(&TokenKind::Ident) || self.at(&TokenKind::EscapedIdent) {
-            if self.nth_kind(1) == &TokenKind::Colon {
-                return self.parse_field();
-            }
-            let mut children = attrs;
-            children.push(self.expect_ident_element()?);
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::Variant, children));
+    fn parse_data_member_parts(&mut self) -> ParseResult<(Vec<SyntaxElementId>, bool)> {
+        let mut children = self.parse_attrs()?;
+        children.push(self.expect_ident_element()?);
+
+        let mut has_colon = false;
+        if let Some(colon) = self.eat(&TokenKind::Colon) {
+            has_colon = true;
+            children.push(colon);
+            children.push(SyntaxElementId::Node(self.parse_ty()?));
         }
-        Err(self.expected_data_member())
+
+        if let Some(bind) = self.eat(&TokenKind::ColonEq) {
+            children.push(bind);
+            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        }
+
+        Ok((children, has_colon))
     }
 
     fn parse_variant_list(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -656,7 +677,11 @@ impl Parser<'_, '_> {
             .push_node_from_children(SyntaxNodeKind::EffectSet, children))
     }
 
-    fn parse_effect_entry_or_error(&mut self, out: &mut Vec<SyntaxElementId>, saw_remainder: &mut bool) {
+    fn parse_effect_entry_or_error(
+        &mut self,
+        out: &mut Vec<SyntaxElementId>,
+        saw_remainder: &mut bool,
+    ) {
         if self.at(&TokenKind::DotDotDot) && !*saw_remainder {
             let dots = self.advance_element();
             out.push(dots);

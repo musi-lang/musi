@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 
 use music_basic::Span;
-use music_hir::{HirPatId, HirPatKind};
+use music_hir::{HirFieldDef, HirMemberDef, HirPatId, HirPatKind, HirVariantDef};
 use music_names::Symbol;
 
-use super::{SemTyId};
+use crate::SemaErrorKind;
+
 use super::check::Checker;
-use super::env::{EffectOpSig, ValueScheme};
+use super::env::{
+    ClassOpSig, DataDef, DataFieldDef, EffectOpSig, ValueScheme, substitute_generics,
+};
+use super::unify;
+use super::{SemTy, SemTyId};
 
 impl<'a> Checker<'a> {
     pub(super) fn bind_pat_to_scheme(&mut self, pat: HirPatId, scheme: ValueScheme) {
@@ -44,6 +49,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn bind_pat_for_scrut(&mut self, pat: HirPatId, scrut_ty: SemTyId) {
+        let scrut_ty = unify::resolve(&self.state.semtys, scrut_ty);
         let pat = self.ctx.store.pats.get(pat).clone();
         match pat.kind {
             HirPatKind::Bind { name, sub } => {
@@ -61,27 +67,78 @@ impl<'a> Checker<'a> {
                     self.bind_pat_for_scrut(sub, scrut_ty);
                 }
             }
-            HirPatKind::Tuple { items } | HirPatKind::Array { items } => {
+            HirPatKind::Tuple { items } => {
+                if let SemTy::Tuple { items: tys } = self.state.semtys.get(scrut_ty).clone() {
+                    if tys.len() == items.len() {
+                        for (p, t) in items.iter().copied().zip(tys.iter().copied()) {
+                            self.bind_pat_for_scrut(p, t);
+                        }
+                        return;
+                    }
+                }
                 for p in items.iter().copied() {
                     self.bind_pat_for_scrut(p, self.state.builtins.unknown);
                 }
             }
+            HirPatKind::Array { items } => {
+                let elem = match self.state.semtys.get(scrut_ty).clone() {
+                    SemTy::Array { elem, .. } => elem,
+                    _ => self.state.builtins.unknown,
+                };
+                for p in items.iter().copied() {
+                    self.bind_pat_for_scrut(p, elem);
+                }
+            }
             HirPatKind::Record { fields } => {
+                let record_def = match self.state.semtys.get(scrut_ty).clone() {
+                    SemTy::Record { fields } => Some(fields),
+                    SemTy::Named { name, args } => self
+                        .state
+                        .env
+                        .get_data_def(name)
+                        .cloned()
+                        .and_then(|def| def.fields.map(|f| (def.generic_count, args, f)))
+                        .map(|(generic_count, args, field_defs)| {
+                            let mut out = std::collections::BTreeMap::new();
+                            for (k, v) in field_defs {
+                                let mut subst = Vec::with_capacity(generic_count as usize);
+                                for i in 0..generic_count {
+                                    subst.push(
+                                        args.get(i as usize)
+                                            .copied()
+                                            .unwrap_or(self.state.builtins.unknown),
+                                    );
+                                }
+                                let ty = substitute_generics(&mut self.state.semtys, v.ty, &subst);
+                                let _prev = out.insert(k, ty);
+                            }
+                            out
+                        }),
+                    _ => None,
+                };
+
                 for f in fields.iter() {
+                    let field_ty = record_def
+                        .as_ref()
+                        .and_then(|fields| fields.get(&f.name.name).copied());
+
                     if f.sub.is_none() {
                         if let Some(binding) = self.binding_for_def(f.name.span) {
                             self.state.env.insert_value(
                                 binding,
                                 ValueScheme {
                                     generic_count: 0,
-                                    ty: self.state.builtins.unknown,
+                                    ty: field_ty.unwrap_or(self.state.builtins.unknown),
                                     declared_effects: None,
                                 },
                             );
                         }
                     }
                     if let Some(sub) = f.sub {
-                        self.bind_pat_for_scrut(sub, self.state.builtins.unknown);
+                        self.bind_pat_for_scrut(
+                            sub,
+                            field_ty.unwrap_or(self.state.builtins.unknown),
+                        );
                     }
                 }
             }
@@ -90,7 +147,53 @@ impl<'a> Checker<'a> {
                     self.bind_pat_for_scrut(p, scrut_ty);
                 }
             }
-            HirPatKind::Variant { args, .. } => {
+            HirPatKind::Variant { name, args } => {
+                let payload_ty = match self.state.semtys.get(scrut_ty).clone() {
+                    SemTy::Named {
+                        name: ty_name,
+                        args,
+                    } => self
+                        .state
+                        .env
+                        .get_data_def(ty_name)
+                        .cloned()
+                        .and_then(|def| {
+                            def.variants
+                                .and_then(|v| Some((def.generic_count, args, v)))
+                        })
+                        .and_then(|(generic_count, args, variants)| {
+                            let payload = variants.get(&name.name).copied()?;
+                            let Some(payload) = payload else {
+                                return None;
+                            };
+                            let mut subst = Vec::with_capacity(generic_count as usize);
+                            for i in 0..generic_count {
+                                subst.push(
+                                    args.get(i as usize)
+                                        .copied()
+                                        .unwrap_or(self.state.builtins.unknown),
+                                );
+                            }
+                            Some(substitute_generics(&mut self.state.semtys, payload, &subst))
+                        }),
+                    _ => None,
+                };
+
+                if let Some(payload_ty) = payload_ty {
+                    if args.len() == 1 {
+                        self.bind_pat_for_scrut(args[0], payload_ty);
+                        return;
+                    }
+                    if let SemTy::Tuple { items } = self.state.semtys.get(payload_ty).clone() {
+                        if items.len() == args.len() {
+                            for (p, t) in args.iter().copied().zip(items.iter().copied()) {
+                                self.bind_pat_for_scrut(p, t);
+                            }
+                            return;
+                        }
+                    }
+                }
+
                 for p in args.iter().copied() {
                     self.bind_pat_for_scrut(p, self.state.builtins.unknown);
                 }
@@ -128,6 +231,7 @@ impl<'a> Checker<'a> {
     pub(super) fn register_effect_def(
         &mut self,
         pat: HirPatId,
+        generic_count: u32,
         ty_params: &HashMap<Symbol, u32>,
         members: &Box<[music_hir::HirMemberDef]>,
     ) {
@@ -144,7 +248,10 @@ impl<'a> Checker<'a> {
 
         let mut ops = HashMap::<Symbol, EffectOpSig>::new();
         for member in members.iter() {
-            let music_hir::HirMemberDef::Let { name, params, ret, .. } = member else {
+            let music_hir::HirMemberDef::Let {
+                name, params, ret, ..
+            } = member
+            else {
                 continue;
             };
             let mut param_tys = Vec::new();
@@ -166,7 +273,205 @@ impl<'a> Checker<'a> {
                 },
             );
         }
-        self.state.env.insert_effect_ops(binding, ops);
+        self.state
+            .env
+            .insert_effect_family(binding, generic_count, ops);
+    }
+
+    pub(super) fn register_class_def(
+        &mut self,
+        pat: HirPatId,
+        generic_count: u32,
+        ty_params: &HashMap<Symbol, u32>,
+        members: &Box<[HirMemberDef]>,
+    ) {
+        // Only supports `let ClassName := class { ... }` bindings for now.
+        let mut bind_sites = Vec::new();
+        self.collect_bind_sites(pat, &mut bind_sites);
+        let Some(first_bind_span) = bind_sites.first().copied() else {
+            return;
+        };
+
+        let Some(binding) = self.binding_for_def(first_bind_span) else {
+            return;
+        };
+
+        let mut ops = HashMap::<Symbol, ClassOpSig>::new();
+        for member in members.iter() {
+            let HirMemberDef::Let {
+                name,
+                params,
+                ret,
+                value,
+                ..
+            } = member
+            else {
+                continue;
+            };
+
+            let mut param_tys = Vec::new();
+            for p in params.iter() {
+                let ty = p
+                    .annot
+                    .map(|t| self.lower_hir_ty(t, ty_params))
+                    .unwrap_or(self.state.builtins.unknown);
+                param_tys.push(ty);
+            }
+            let ret_ty = ret
+                .map(|t| self.lower_hir_ty(t, ty_params))
+                .unwrap_or(self.state.builtins.unknown);
+
+            let _prev = ops.insert(
+                name.name.name,
+                ClassOpSig {
+                    params: param_tys.clone().into_boxed_slice(),
+                    ret: ret_ty,
+                },
+            );
+
+            // Default bodies are validated for type correctness but do not contribute effects at
+            // definition site.
+            if let Some(body) = *value {
+                for (p, p_ty) in params.iter().zip(param_tys.iter().copied()) {
+                    if let Some(binding) = self.binding_for_def(p.name.span) {
+                        self.state.env.insert_value(
+                            binding,
+                            ValueScheme {
+                                generic_count: 0,
+                                ty: p_ty,
+                                declared_effects: None,
+                            },
+                        );
+                    }
+                }
+                for (p, p_ty) in params.iter().zip(param_tys.iter().copied()) {
+                    if let Some(default) = p.default {
+                        let _ = self.check_expr(default, p_ty);
+                    }
+                }
+                let _ = self.check_expr(body, ret_ty);
+            }
+        }
+
+        self.state
+            .env
+            .insert_class_family(binding, generic_count, ops);
+    }
+
+    pub(super) fn register_data_def(
+        &mut self,
+        pat: HirPatId,
+        generic_count: u32,
+        ty_params: &HashMap<Symbol, u32>,
+        variants: Option<&[HirVariantDef]>,
+        fields: Option<&[HirFieldDef]>,
+    ) {
+        // Only supports `let TypeName := data { ... }` bindings for now.
+        let mut bind_sites = Vec::new();
+        self.collect_bind_sites(pat, &mut bind_sites);
+        let Some(first_bind_span) = bind_sites.first().copied() else {
+            return;
+        };
+
+        let Some(binding) = self.binding_for_def(first_bind_span) else {
+            return;
+        };
+        let type_name = self.ctx.names.bindings[binding].name;
+
+        let variants_map = variants.map(|variants| {
+            let mut out = HashMap::<Symbol, Option<SemTyId>>::new();
+            for v in variants {
+                let payload_ty = v.payload_ty.map(|t| self.lower_hir_ty(t, ty_params));
+                let _prev = out.insert(v.name.name, payload_ty);
+
+                if let Some(value) = v.value {
+                    if let Some(payload_ty) = payload_ty {
+                        let _ = self.check_expr(value, payload_ty);
+                    } else {
+                        let _ = self.synth_expr(value);
+                    }
+                }
+            }
+            out
+        });
+
+        let fields_map = fields.map(|fields| {
+            let mut out = HashMap::<Symbol, DataFieldDef>::new();
+            for f in fields {
+                let ty = self.lower_hir_ty(f.ty, ty_params);
+                let _prev = out.insert(f.name.name, DataFieldDef { ty });
+
+                if let Some(value) = f.value {
+                    let _ = self.check_expr(value, ty);
+                }
+            }
+            out
+        });
+
+        self.state.env.insert_data_def(
+            type_name,
+            DataDef {
+                generic_count,
+                variants: variants_map,
+                fields: fields_map,
+            },
+        );
+
+        self.validate_option_lang_item(type_name);
+    }
+
+    fn validate_option_lang_item(&mut self, type_name: Symbol) {
+        if self.state.lang.option_ty != Some(type_name) {
+            return;
+        }
+
+        let span = self.state.lang.option_span.unwrap_or(Span::DUMMY);
+
+        let Some(def) = self.state.env.get_data_def(type_name).cloned() else {
+            return;
+        };
+
+        if def.generic_count != 1 {
+            self.error(
+                span,
+                SemaErrorKind::OptionLangItemTypeParamCountUnsupported {
+                    count: def.generic_count,
+                },
+            );
+        }
+
+        if def.fields.is_some() {
+            self.error(span, SemaErrorKind::OptionLangItemFieldsNotAllowed);
+        }
+
+        let Some(variants) = def.variants.as_ref() else {
+            self.error(span, SemaErrorKind::OptionLangItemVariantsRequired);
+            return;
+        };
+
+        if variants.len() != 2 {
+            self.error(span, SemaErrorKind::OptionLangItemVariantCountInvalid);
+        }
+
+        let some_payload = variants.get(&self.state.known.some).copied().flatten();
+        let none_payload = variants.get(&self.state.known.none).copied();
+
+        let Some(some_payload) = some_payload else {
+            self.error(span, SemaErrorKind::OptionLangItemSomeRequired);
+            return;
+        };
+        if none_payload.is_none() {
+            self.error(span, SemaErrorKind::OptionLangItemNoneRequired);
+            return;
+        }
+
+        if none_payload != Some(None) {
+            self.error(span, SemaErrorKind::OptionLangItemNoneMustBeNullary);
+        }
+
+        if !matches!(self.state.semtys.get(some_payload), SemTy::Generic(0)) {
+            self.error(span, SemaErrorKind::OptionLangItemSomePayloadInvalid);
+        }
     }
 
     fn collect_bind_sites(&self, pat: HirPatId, out: &mut Vec<Span>) {
@@ -198,4 +503,3 @@ impl<'a> Checker<'a> {
         }
     }
 }
-

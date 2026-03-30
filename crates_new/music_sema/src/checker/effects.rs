@@ -42,5 +42,4 @@ impl EffectRow {
         self.items.extend(other.items.iter().cloned());
         self.is_open |= other.is_open;
     }
-
 }

@@ -36,4 +36,3 @@ fn duplicate_binding_has_stable_code() {
     let diag = err.to_diag();
     assert_eq!(diag.code, Some(DiagCode::new(3002)));
 }
-

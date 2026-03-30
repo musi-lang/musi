@@ -15,4 +15,3 @@ pub mod resolve;
 
 pub use errors::{ResolveError, ResolveErrorKind};
 pub use resolve::{ImportEnv, ResolveOptions, ResolvedModule, resolve_module};
-

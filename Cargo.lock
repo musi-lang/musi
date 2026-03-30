@@ -287,6 +287,13 @@ name = "music_il"
 version = "0.1.0-rc1"
 
 [[package]]
+name = "music_known"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_names",
+]
+
+[[package]]
 name = "music_lex"
 version = "0.1.0-rc1"
 dependencies = [
@@ -323,6 +330,7 @@ dependencies = [
  "music_ast",
  "music_basic",
  "music_hir",
+ "music_known",
  "music_lex",
  "music_names",
  "music_parse",
@@ -336,6 +344,7 @@ dependencies = [
  "music_ast",
  "music_basic",
  "music_hir",
+ "music_known",
  "music_lex",
  "music_names",
  "music_parse",

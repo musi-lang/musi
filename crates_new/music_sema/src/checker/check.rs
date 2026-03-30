@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
-use music_basic::{SourceId, Span};
+use music_basic::{SourceId, SourceMap, Span};
 use music_hir::{HirExprId, HirStore};
-use music_names::{Interner, NameBindingId, NameResolution, NameSite, Symbol};
+use music_known::KnownSymbols;
+use music_names::{Interner, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol};
 
 use crate::{SemaError, SemaErrorKind};
 
+use super::env::{EffectOpSig, TypeEnv, ValueScheme};
+use super::lang::LangItems;
 use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
-use super::env::TypeEnv;
 
 #[derive(Debug, Clone)]
 pub(super) struct ResumeCtx {
@@ -22,11 +24,15 @@ pub(super) struct BuiltinTys {
     pub(super) any: SemTyId,
 
     pub(super) type_: SemTyId,
+    pub(super) empty: SemTyId,
     pub(super) unit: SemTyId,
     pub(super) bool_: SemTyId,
     pub(super) int_: SemTyId,
     pub(super) float_: SemTyId,
     pub(super) string_: SemTyId,
+
+    pub(super) cstring: SemTyId,
+    pub(super) cptr: SemTyId,
 }
 
 #[derive(Debug, Default)]
@@ -38,6 +44,7 @@ pub(super) struct FlowState {
 
 pub(super) struct CheckerCtx<'a> {
     pub(super) source_id: SourceId,
+    pub(super) sources: &'a SourceMap,
     pub(super) interner: &'a mut Interner,
     pub(super) names: &'a NameResolution,
     pub(super) binding_by_site: HashMap<NameSite, NameBindingId>,
@@ -48,6 +55,8 @@ pub(super) struct CheckerCtx<'a> {
 pub(super) struct CheckerState {
     pub(super) semtys: SemTys,
     pub(super) env: TypeEnv,
+    pub(super) known: KnownSymbols,
+    pub(super) lang: LangItems,
     pub(super) builtins: BuiltinTys,
     pub(super) flow: FlowState,
 }
@@ -60,26 +69,32 @@ pub(super) struct Checker<'a> {
 impl<'a> Checker<'a> {
     pub(super) fn new(
         source_id: SourceId,
+        sources: &'a SourceMap,
         interner: &'a mut Interner,
         names: &'a NameResolution,
         store: &'a mut HirStore,
         errors: &'a mut Vec<SemaError>,
     ) -> Self {
+        let known = KnownSymbols::new(interner);
         let mut semtys = SemTys::new();
         let error = semtys.alloc(SemTy::Error);
         let unknown = semtys.alloc(SemTy::Unknown);
         let any = semtys.alloc(SemTy::Any);
 
-        let type_ = builtin_named(&mut semtys, interner, "Type");
-        let unit = builtin_named(&mut semtys, interner, "Unit");
-        let bool_ = builtin_named(&mut semtys, interner, "Bool");
-        let int_ = builtin_named(&mut semtys, interner, "Int");
-        let float_ = builtin_named(&mut semtys, interner, "Float");
-        let string_ = builtin_named(&mut semtys, interner, "String");
+        let type_ = builtin_named(&mut semtys, known.type_);
+        let empty = builtin_named(&mut semtys, known.empty);
+        let unit = builtin_named(&mut semtys, known.unit);
+        let bool_ = builtin_named(&mut semtys, known.bool_);
+        let int_ = builtin_named(&mut semtys, known.int_);
+        let float_ = builtin_named(&mut semtys, known.float_);
+        let string_ = builtin_named(&mut semtys, known.string_);
+        let cstring = builtin_named(&mut semtys, known.cstring);
+        let cptr = builtin_named(&mut semtys, known.cptr);
 
-        Self {
+        let mut checker = Self {
             ctx: CheckerCtx {
                 source_id,
+                sources,
                 interner,
                 names,
                 binding_by_site: binding_by_site(names),
@@ -89,20 +104,29 @@ impl<'a> Checker<'a> {
             state: CheckerState {
                 semtys,
                 env: TypeEnv::new(),
+                known,
+                lang: LangItems::default(),
                 builtins: BuiltinTys {
                     error,
                     unknown,
                     any,
                     type_,
+                    empty,
                     unit,
                     bool_,
                     int_,
                     float_,
                     string_,
+                    cstring,
+                    cptr,
                 },
                 flow: FlowState::default(),
             },
-        }
+        };
+
+        checker.seed_compiler_prelude_values();
+        checker.seed_abort_effect_family();
+        checker
     }
 
     pub(super) fn check_module(&mut self, root: HirExprId) {
@@ -144,15 +168,70 @@ impl<'a> Checker<'a> {
             .copied()
     }
 
-    pub(super) fn sym(&mut self, name: &str) -> Symbol {
-        self.ctx.interner.intern(name)
+    pub(super) fn slice(&self, span: Span) -> &str {
+        let Some(source) = self.ctx.sources.get(self.ctx.source_id) else {
+            return "";
+        };
+        let start = usize::try_from(span.start).unwrap_or(0);
+        let end = usize::try_from(span.end).unwrap_or(start);
+        source.text().get(start..end).unwrap_or("")
+    }
+
+    pub(super) fn decode_string_span(&self, span: Span) -> String {
+        music_basic::string_lit::decode(self.slice(span))
+    }
+
+    fn seed_compiler_prelude_values(&mut self) {
+        let prelude = self.state.known.compiler_prelude();
+        for (id, binding) in &self.ctx.names.bindings {
+            if binding.kind != NameBindingKind::Prelude {
+                continue;
+            }
+            if !prelude.contains(&binding.name) {
+                continue;
+            }
+            self.state.env.insert_value(
+                id,
+                ValueScheme {
+                    generic_count: 0,
+                    ty: self.state.builtins.type_,
+                    declared_effects: None,
+                },
+            );
+        }
+    }
+
+    fn seed_abort_effect_family(&mut self) {
+        let abort_sym = self.state.known.abort;
+        let abort_op = self.state.known.abort_op;
+
+        let mut abort_binding = None;
+        for (id, binding) in &self.ctx.names.bindings {
+            if binding.kind == NameBindingKind::Prelude && binding.name == abort_sym {
+                abort_binding = Some(id);
+                break;
+            }
+        }
+
+        let Some(abort_binding) = abort_binding else {
+            return;
+        };
+
+        let mut ops = HashMap::new();
+        let _prev = ops.insert(
+            abort_op,
+            EffectOpSig {
+                params: Box::new([self.state.builtins.string_]),
+                ret: self.state.builtins.empty,
+            },
+        );
+        self.state.env.insert_effect_family(abort_binding, 0, ops);
     }
 }
 
-fn builtin_named(semtys: &mut SemTys, interner: &mut Interner, name: &str) -> SemTyId {
-    let sym = interner.intern(name);
+fn builtin_named(semtys: &mut SemTys, name: Symbol) -> SemTyId {
     semtys.alloc(SemTy::Named {
-        name: sym,
+        name,
         args: Box::new([]),
     })
 }

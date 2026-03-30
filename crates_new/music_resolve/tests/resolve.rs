@@ -46,4 +46,3 @@ fn let_binds_name_for_following_stmts() {
     let kinds = resolve_text("let x := 1; x;");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }
-

@@ -13,6 +13,7 @@ use music_hir::{
     HirExpr, HirExprId, HirExprKind, HirModule, HirOrigin, HirPatId, HirPatKind, HirStore, HirTy,
     HirTyId, HirTyKind,
 };
+use music_known::KnownSymbols;
 use music_lex::TokenKind;
 use music_names::{
     Ident, Interner, NameBinding, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol,
@@ -125,15 +126,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let mut names = NameResolution::new();
         let mut root = Scope::default();
 
-        // Built-in prelude names (always present).
-        //
-        // These are first-class values of type `Type` (and related built-in
-        // type roles like `Any` / `Unknown`). They must be available even in
-        // standalone parsing/analysis without an explicit project prelude.
-        for name in [
-            "Type", "Any", "Unknown", "Empty", "Unit", "Bool", "Int", "Float", "String",
-        ] {
-            let sym = interner.intern(name);
+        let known = KnownSymbols::new(interner);
+        for sym in known.compiler_prelude() {
             let binding = names.alloc_binding(NameBinding {
                 name: sym,
                 site: NameSite::new(source_id, Span::DUMMY),
@@ -343,72 +337,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn decode_string_lit_span(&mut self, span: Span) -> String {
-        let raw = self.slice(span);
-        let Some(inner) = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
-            return raw.to_string();
-        };
-
-        if !inner.contains('\\') {
-            return inner.to_string();
-        }
-
-        let mut out = String::with_capacity(inner.len());
-        let mut chars = inner.chars();
-        while let Some(ch) = chars.next() {
-            if ch != '\\' {
-                out.push(ch);
-                continue;
-            }
-
-            let Some(esc) = chars.next() else {
-                break;
-            };
-
-            match esc {
-                'n' => out.push('\n'),
-                't' => out.push('\t'),
-                'r' => out.push('\r'),
-                '\\' => out.push('\\'),
-                '"' => out.push('"'),
-                '0' => out.push('\0'),
-                'x' => {
-                    let hi = chars.next();
-                    let lo = chars.next();
-                    let Some((hi, lo)) = hi.zip(lo) else {
-                        break;
-                    };
-                    let mut buf = [0u8; 2];
-                    buf[0] = hi as u8;
-                    buf[1] = lo as u8;
-                    let Ok(hex) = core::str::from_utf8(&buf) else {
-                        continue;
-                    };
-                    if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                        out.push(byte as char);
-                    }
-                }
-                'u' => {
-                    if chars.next() != Some('{') {
-                        continue;
-                    }
-                    let mut digits = String::new();
-                    while let Some(next) = chars.next() {
-                        if next == '}' {
-                            break;
-                        }
-                        digits.push(next);
-                    }
-                    if let Ok(code) = u32::from_str_radix(&digits, 16) {
-                        if let Some(ch) = char::from_u32(code) {
-                            out.push(ch);
-                        }
-                    }
-                }
-                other => out.push(other),
-            }
-        }
-
-        out
+        music_basic::string_lit::decode(self.slice(span))
     }
 
     fn open_import_expr(&mut self, node: SyntaxNode<'tree>) {

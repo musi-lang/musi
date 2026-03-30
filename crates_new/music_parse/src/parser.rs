@@ -275,15 +275,6 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         }
     }
 
-    pub(crate) fn expected_data_member(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedDataMember {
-                found: Box::new(self.found_token()),
-            },
-            span: self.span(),
-        }
-    }
-
     pub(crate) fn expected_array_dimension(&self) -> ParseError {
         ParseError {
             kind: ParseErrorKind::ExpectedArrayDimension {

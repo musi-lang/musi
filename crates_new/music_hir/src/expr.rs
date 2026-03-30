@@ -1,6 +1,6 @@
 use music_ast::{SyntaxNodeId, SyntaxTokenId};
 use music_basic::Span;
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 use music_storage::Idx;
 
 use super::*;
@@ -35,6 +35,7 @@ pub enum HirExprKind {
     },
     Import {
         path: HirStringLit,
+        exports: Box<[Symbol]>,
     },
     ForeignBlock {
         abi: Option<HirStringLit>,
@@ -192,6 +193,7 @@ pub struct HirDeclMods {
     pub attrs: HirAttrIds,
     pub exported: bool,
     pub opaque: bool,
+    pub is_foreign: bool,
     pub external_abi: Option<HirStringLit>,
 }
 

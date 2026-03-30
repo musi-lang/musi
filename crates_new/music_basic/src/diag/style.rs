@@ -18,4 +18,3 @@ pub fn validate(text: &str) {
 
 #[cfg(not(any(test, debug_assertions)))]
 pub fn validate(_text: &str) {}
-

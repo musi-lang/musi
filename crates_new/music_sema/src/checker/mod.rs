@@ -1,9 +1,10 @@
-mod effects;
 mod bind;
 mod callable;
 mod check;
+mod effects;
 mod env;
 mod expr;
+mod lang;
 mod lower;
 mod ty;
 mod unify;
@@ -48,6 +49,7 @@ pub fn analyze_module(
     let mut check_errors = Vec::new();
     let mut checker = check::Checker::new(
         tree.source_id(),
+        sources,
         interner,
         &names,
         &mut module.store,

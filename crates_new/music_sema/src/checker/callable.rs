@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use music_hir::{HirArrowFlavor, HirExprId, HirOrigin, HirParam, HirTyId};
 use music_names::Symbol;
 
-use super::{EffectRow, SemTy, SemTyId};
 use super::check::Checker;
 use super::env::ValueScheme;
+use super::{EffectRow, SemTy, SemTyId};
 
 impl<'a> Checker<'a> {
     pub(super) fn typecheck_callable(
@@ -61,9 +61,9 @@ impl<'a> Checker<'a> {
             .unwrap_or_else(|| self.state.semtys.fresh_infer_var(origin.span));
 
         if let Some(body) = body {
-            let (body_ty, body_effs) = self.synth_expr(body);
+            let (body_ty, body_effs) = self.check_expr(body, output);
             effs.union_with(&body_effs);
-            let _ = self.unify_or_report(origin.span, body_ty, output);
+            let _ = body_ty;
         }
 
         let flavor = if declared_effects.is_some() || !effs.is_pure() {
@@ -88,7 +88,8 @@ impl<'a> Checker<'a> {
         body: HirExprId,
     ) -> (SemTyId, EffectRow) {
         let ty_params = HashMap::new();
-        let (fn_ty, effs) = self.typecheck_callable(origin, &params, &ty_params, ret, Some(body), None);
+        let (fn_ty, effs) =
+            self.typecheck_callable(origin, &params, &ty_params, ret, Some(body), None);
         (fn_ty, effs)
     }
 }

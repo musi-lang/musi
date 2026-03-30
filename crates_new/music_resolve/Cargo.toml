@@ -11,6 +11,7 @@ publish.workspace = true
 music_ast = { path = "../music_ast" }
 music_basic = { path = "../music_basic" }
 music_hir = { path = "../music_hir" }
+music_known = { path = "../music_known" }
 music_lex = { path = "../music_lex" }
 music_names = { path = "../music_names" }
 thiserror = { workspace = true }
@@ -20,4 +21,3 @@ music_parse = { path = "../music_parse" }
 
 [lints]
 workspace = true
-

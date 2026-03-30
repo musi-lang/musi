@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 use music_basic::Span;
@@ -13,12 +14,33 @@ pub enum SemTy {
     Unknown,
     Any,
 
-    Named { name: Symbol, args: Box<[SemTyId]> },
-    Tuple { items: Box<[SemTyId]> },
-    Array { dims: Box<[HirDim]>, elem: SemTyId },
-    Arrow { flavor: HirArrowFlavor, input: SemTyId, output: SemTyId },
-    Binary { op: HirTyBinOp, left: SemTyId, right: SemTyId },
-    Mut { base: SemTyId },
+    Named {
+        name: Symbol,
+        args: Box<[SemTyId]>,
+    },
+    Tuple {
+        items: Box<[SemTyId]>,
+    },
+    Array {
+        dims: Box<[HirDim]>,
+        elem: SemTyId,
+    },
+    Arrow {
+        flavor: HirArrowFlavor,
+        input: SemTyId,
+        output: SemTyId,
+    },
+    Binary {
+        op: HirTyBinOp,
+        left: SemTyId,
+        right: SemTyId,
+    },
+    Mut {
+        base: SemTyId,
+    },
+    Record {
+        fields: BTreeMap<Symbol, SemTyId>,
+    },
 
     InferVar(InferVarId),
     Generic(u32),
@@ -75,7 +97,6 @@ impl SemTys {
             .expect("InferVarId out of bounds");
         *slot = Some(to);
     }
-
 }
 
 impl Default for SemTys {
@@ -164,6 +185,18 @@ fn fmt_ty(
         SemTy::Mut { base } => {
             write!(f, "mut ")?;
             fmt_ty(tys, interner, *base, f)
+        }
+        SemTy::Record { fields } => {
+            write!(f, "{{")?;
+            for (i, (name, ty)) in fields.iter().enumerate() {
+                if i != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", interner.resolve(*name))?;
+                write!(f, " := ")?;
+                fmt_ty(tys, interner, *ty, f)?;
+            }
+            write!(f, "}}")
         }
     }
 }

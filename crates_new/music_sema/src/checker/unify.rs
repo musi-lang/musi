@@ -1,6 +1,6 @@
-use super::{SemTy, SemTyId, SemTys};
 use super::SemTyDisplay;
 use super::check::Checker;
+use super::{SemTy, SemTyId, SemTys};
 
 use crate::SemaErrorKind;
 
@@ -98,7 +98,9 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
             // Allow `T -> U` to unify with `T ~> U` by keeping the effectful flavor.
             match (a_flavor, b_flavor) {
                 (music_hir::HirArrowFlavor::Effectful, music_hir::HirArrowFlavor::Pure) => Ok(left),
-                (music_hir::HirArrowFlavor::Pure, music_hir::HirArrowFlavor::Effectful) => Ok(right),
+                (music_hir::HirArrowFlavor::Pure, music_hir::HirArrowFlavor::Effectful) => {
+                    Ok(right)
+                }
                 _ => Ok(left),
             }
         }
@@ -122,13 +124,25 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
             let _ = unify(tys, a, b)?;
             Ok(left)
         }
+        (SemTy::Record { fields: a }, SemTy::Record { fields: b }) if a.keys().eq(b.keys()) => {
+            for (k, a_ty) in a {
+                let b_ty = b.get(&k).copied().expect("record keys already matched");
+                let _ = unify(tys, a_ty, b_ty)?;
+            }
+            Ok(left)
+        }
 
         _ => Err(UnifyMismatch { left, right }),
     }
 }
 
 impl<'a> Checker<'a> {
-    pub(super) fn unify_or_report(&mut self, span: music_basic::Span, left: SemTyId, right: SemTyId) -> SemTyId {
+    pub(super) fn unify_or_report(
+        &mut self,
+        span: music_basic::Span,
+        left: SemTyId,
+        right: SemTyId,
+    ) -> SemTyId {
         match unify(&mut self.state.semtys, left, right) {
             Ok(ok) => ok,
             Err(m) => {

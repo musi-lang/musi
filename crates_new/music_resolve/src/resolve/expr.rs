@@ -147,6 +147,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         let mut exported = false;
         let mut opaque = false;
+        let mut is_foreign = false;
         let mut external_abi = None;
 
         if cursor.eat_token(&TokenKind::KwExport).is_some() {
@@ -157,6 +158,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         }
 
         if cursor.eat_token(&TokenKind::KwForeign).is_some() {
+            is_foreign = true;
             if let Some(tok) = cursor.eat_token(&TokenKind::StringLit) {
                 external_abi = Some(self.string_lit_token(tok));
             }
@@ -229,6 +231,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             attrs,
             exported,
             opaque,
+            is_foreign,
             external_abi,
         };
 
@@ -263,14 +266,39 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             return self.alloc_expr(origin, HirExprKind::Error);
         };
         let path = self.string_lit_token(path_tok);
-        self.alloc_expr(origin, HirExprKind::Import { path })
+
+        let mut exports = Vec::<Symbol>::new();
+        if let Some(env) = self.import_env {
+            // The string literal token span still includes quotes.
+            if let Some(source) = self.sources.get(self.source_id) {
+                let span = path_tok.span();
+                let start = usize::try_from(span.start).unwrap_or(0);
+                let end = usize::try_from(span.end).unwrap_or(start);
+                if let Some(path_text) = source.text().get(start..end) {
+                    let path_text = path_text.trim_matches('"');
+                    env.for_each_export(self.source_id, path_text, &mut |name| {
+                        exports.push(self.interner.intern(name));
+                    });
+                }
+            }
+        }
+        exports.sort();
+        exports.dedup();
+
+        self.alloc_expr(
+            origin,
+            HirExprKind::Import {
+                path,
+                exports: exports.into_boxed_slice(),
+            },
+        )
     }
 
     fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
         let origin = self.origin_node(node);
         let mut cursor = AstCursor::new(node);
 
-        let _attrs = self.lower_attr_prefix(&mut cursor);
+        let block_attrs = self.lower_attr_prefix(&mut cursor);
 
         if cursor.at_token(&TokenKind::KwExport) {
             let _ = cursor.bump_token();
@@ -291,7 +319,25 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             };
             if let Some(n) = el.into_node() {
                 if n.kind().is_expr() {
-                    items.push(self.lower_expr(n));
+                    let id = self.lower_expr(n);
+                    // `foreign "abi" ( let ...; )` desugars to each inner `let` carrying the ABI and
+                    // inheriting the outer attrs.
+                    if let music_hir::HirExprKind::Let { mods, .. } =
+                        &mut self.store.exprs.get_mut(id).kind
+                    {
+                        mods.is_foreign = true;
+                        if mods.external_abi.is_none() {
+                            mods.external_abi = abi;
+                        }
+                        if !block_attrs.is_empty() {
+                            let mut merged =
+                                Vec::with_capacity(block_attrs.len() + mods.attrs.len());
+                            merged.extend(block_attrs.iter().copied());
+                            merged.extend(mods.attrs.iter().copied());
+                            mods.attrs = merged.into_boxed_slice();
+                        }
+                    }
+                    items.push(id);
                 }
             }
         }
@@ -442,6 +488,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             attrs,
             exported,
             opaque: false,
+            is_foreign: false,
             external_abi: None,
         };
 
@@ -1065,7 +1112,10 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 .eat_token(&TokenKind::KwIf)
                 .and_then(|_| cursor.bump_node())
                 .filter(|n| n.kind().is_expr())
-                .map(|g| self.lower_expr(g));
+                .map(|g| {
+                    self.define_type_test_aliases_in_guard(g);
+                    self.lower_expr(g)
+                });
 
             let _ = cursor.eat_token(&TokenKind::EqGt);
             let body = cursor
@@ -1100,6 +1150,27 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 arms: arms.into_boxed_slice(),
             },
         )
+    }
+
+    fn define_type_test_aliases_in_guard(&mut self, guard: SyntaxNode<'tree>) {
+        let mut stack = vec![guard];
+        while let Some(node) = stack.pop() {
+            if node.kind() == SyntaxNodeKind::TypeTestExpr {
+                let mut saw_as = false;
+                for tok in node.child_tokens() {
+                    if matches!(tok.kind(), TokenKind::KwAs) {
+                        saw_as = true;
+                        continue;
+                    }
+                    if saw_as && matches!(tok.kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+                        let ident = self.intern_ident_token(tok);
+                        self.define(NameBindingKind::PatternBind, ident);
+                        break;
+                    }
+                }
+            }
+            stack.extend(node.child_nodes());
+        }
     }
 
     fn lower_perform_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {

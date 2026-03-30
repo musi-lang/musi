@@ -34,6 +34,7 @@ fn test_decl_mods_flags_are_plain_data() {
         attrs: Box::new([]),
         exported: true,
         opaque: false,
+        is_foreign: false,
         external_abi: None,
     };
     assert!(mods.exported);

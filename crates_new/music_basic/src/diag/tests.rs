@@ -99,9 +99,11 @@ fn note_level_produces_correct_label() {
 #[test]
 fn label_message_appears_after_caret() {
     let (sources, source_id) = make_source_map();
-    let diag =
-        Diag::error("expected type 'Int', found type 'String'")
-            .with_label(Span::new(13, 14), source_id, "expected Int");
+    let diag = Diag::error("expected type 'Int', found type 'String'").with_label(
+        Span::new(13, 14),
+        source_id,
+        "expected Int",
+    );
 
     let output = emit_to_string(&diag, &sources, false);
 
