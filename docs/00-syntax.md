@@ -42,6 +42,8 @@ let mut counter := 0;
 counter <- counter + 1;
 ```
 
+`<-` writes value into target location. Borrow checking not part of reduced core.
+
 `mut` has two separate roles:
 
 - `let mut name := expr` marks binding as updatable via `<-`

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use music_basic::Span;
-use music_hir::{HirFieldDef, HirMemberDef, HirPatId, HirPatKind, HirVariantDef};
+use music_hir::{HirFieldDef, HirLitKind, HirMemberDef, HirPatId, HirPatKind, HirVariantDef};
 use music_names::Symbol;
 
 use crate::SemaErrorKind;
@@ -49,7 +49,14 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn bind_pat_for_scrut(&mut self, pat: HirPatId, scrut_ty: SemTyId) {
-        let scrut_ty = unify::resolve(&self.state.semtys, scrut_ty);
+        let mut scrut_ty = unify::resolve(&self.state.semtys, scrut_ty);
+        loop {
+            let SemTy::Mut { base } = self.state.semtys.get(scrut_ty).clone() else {
+                break;
+            };
+            scrut_ty = unify::resolve(&self.state.semtys, base);
+        }
+
         let pat = self.ctx.store.pats.get(pat).clone();
         match pat.kind {
             HirPatKind::Bind { name, sub } => {
@@ -67,23 +74,55 @@ impl<'a> Checker<'a> {
                     self.bind_pat_for_scrut(sub, scrut_ty);
                 }
             }
-            HirPatKind::Tuple { items } => {
-                if let SemTy::Tuple { items: tys } = self.state.semtys.get(scrut_ty).clone() {
-                    if tys.len() == items.len() {
-                        for (p, t) in items.iter().copied().zip(tys.iter().copied()) {
-                            self.bind_pat_for_scrut(p, t);
-                        }
-                        return;
+            HirPatKind::Lit { lit } => {
+                let expected = match lit.kind {
+                    HirLitKind::Int { .. } | HirLitKind::Rune { .. } => self.state.builtins.int_,
+                    HirLitKind::Float { .. } => self.state.builtins.float_,
+                    HirLitKind::String(_) | HirLitKind::FString { .. } => {
+                        self.state.builtins.string_
+                    }
+                };
+                let _ = self.unify_or_report(pat.origin.span, expected, scrut_ty);
+            }
+            HirPatKind::Tuple { items } => match self.state.semtys.get(scrut_ty).clone() {
+                SemTy::Tuple { items: tys } => {
+                    if tys.len() != items.len() {
+                        self.error(
+                            pat.origin.span,
+                            SemaErrorKind::TuplePatternArityMismatch {
+                                expected: u32::try_from(tys.len()).unwrap_or(0),
+                                found: u32::try_from(items.len()).unwrap_or(0),
+                            },
+                        );
+                    }
+
+                    for (i, p) in items.iter().copied().enumerate() {
+                        let t = tys.get(i).copied().unwrap_or(self.state.builtins.unknown);
+                        self.bind_pat_for_scrut(p, t);
                     }
                 }
-                for p in items.iter().copied() {
-                    self.bind_pat_for_scrut(p, self.state.builtins.unknown);
+                SemTy::Unknown | SemTy::Any | SemTy::Error | SemTy::InferVar(_) => {
+                    for p in items.iter().copied() {
+                        self.bind_pat_for_scrut(p, self.state.builtins.unknown);
+                    }
                 }
-            }
+                _ => {
+                    self.error(pat.origin.span, SemaErrorKind::TuplePatternRequiresTuple);
+                    for p in items.iter().copied() {
+                        self.bind_pat_for_scrut(p, self.state.builtins.unknown);
+                    }
+                }
+            },
             HirPatKind::Array { items } => {
                 let elem = match self.state.semtys.get(scrut_ty).clone() {
                     SemTy::Array { elem, .. } => elem,
-                    _ => self.state.builtins.unknown,
+                    SemTy::Unknown | SemTy::Any | SemTy::Error | SemTy::InferVar(_) => {
+                        self.state.builtins.unknown
+                    }
+                    _ => {
+                        self.error(pat.origin.span, SemaErrorKind::ArrayPatternRequiresArray);
+                        self.state.builtins.unknown
+                    }
                 };
                 for p in items.iter().copied() {
                     self.bind_pat_for_scrut(p, elem);
@@ -97,8 +136,16 @@ impl<'a> Checker<'a> {
                         .env
                         .get_data_def(name)
                         .cloned()
-                        .and_then(|def| def.fields.map(|f| (def.generic_count, args, f)))
-                        .map(|(generic_count, args, field_defs)| {
+                        .and_then(|def| {
+                            let Some(field_defs) = def.fields else {
+                                self.error(
+                                    pat.origin.span,
+                                    SemaErrorKind::RecordPatternRequiresRecord,
+                                );
+                                return None;
+                            };
+                            let generic_count = def.generic_count;
+
                             let mut out = std::collections::BTreeMap::new();
                             for (k, v) in field_defs {
                                 let mut subst = Vec::with_capacity(generic_count as usize);
@@ -112,15 +159,40 @@ impl<'a> Checker<'a> {
                                 let ty = substitute_generics(&mut self.state.semtys, v.ty, &subst);
                                 let _prev = out.insert(k, ty);
                             }
-                            out
+                            Some(out)
+                        })
+                        .or_else(|| {
+                            self.error(pat.origin.span, SemaErrorKind::RecordPatternRequiresRecord);
+                            None
                         }),
-                    _ => None,
+                    SemTy::Unknown | SemTy::Any | SemTy::Error | SemTy::InferVar(_) => None,
+                    _ => {
+                        self.error(pat.origin.span, SemaErrorKind::RecordPatternRequiresRecord);
+                        None
+                    }
                 };
 
                 for f in fields.iter() {
                     let field_ty = record_def
                         .as_ref()
                         .and_then(|fields| fields.get(&f.name.name).copied());
+
+                    if record_def.is_some() && field_ty.is_none() {
+                        self.error(
+                            f.name.span,
+                            SemaErrorKind::FieldNotFound {
+                                name: self.ctx.interner.resolve(f.name.name).to_string(),
+                            },
+                        );
+                    }
+
+                    if f.mutable {
+                        if let Some(sub) = f.sub {
+                            self.mark_pat_bindings_mut(sub, true);
+                        } else if let Some(binding) = self.binding_for_def(f.name.span) {
+                            self.mark_binding_mut(binding, true);
+                        }
+                    }
 
                     if f.sub.is_none() {
                         if let Some(binding) = self.binding_for_def(f.name.span) {
@@ -148,57 +220,126 @@ impl<'a> Checker<'a> {
                 }
             }
             HirPatKind::Variant { name, args } => {
-                let payload_ty = match self.state.semtys.get(scrut_ty).clone() {
+                let mut payload_ty = None::<Option<SemTyId>>;
+                let mut generic_count = 0u32;
+                let mut ty_args: Box<[SemTyId]> = Box::new([]);
+
+                match self.state.semtys.get(scrut_ty).clone() {
                     SemTy::Named {
                         name: ty_name,
                         args,
-                    } => self
-                        .state
-                        .env
-                        .get_data_def(ty_name)
-                        .cloned()
-                        .and_then(|def| {
-                            def.variants
-                                .and_then(|v| Some((def.generic_count, args, v)))
-                        })
-                        .and_then(|(generic_count, args, variants)| {
-                            let payload = variants.get(&name.name).copied()?;
-                            let Some(payload) = payload else {
-                                return None;
-                            };
-                            let mut subst = Vec::with_capacity(generic_count as usize);
-                            for i in 0..generic_count {
-                                subst.push(
-                                    args.get(i as usize)
-                                        .copied()
-                                        .unwrap_or(self.state.builtins.unknown),
+                    } => {
+                        if let Some(def) = self.state.env.get_data_def(ty_name).cloned() {
+                            generic_count = def.generic_count;
+                            ty_args = args;
+                            if let Some(variants) = def.variants.as_ref() {
+                                payload_ty = variants.get(&name.name).copied();
+                                if payload_ty.is_none() {
+                                    self.error(
+                                        name.span,
+                                        SemaErrorKind::VariantNotFound {
+                                            name: self.ctx.interner.resolve(name.name).to_string(),
+                                        },
+                                    );
+                                }
+                            } else {
+                                self.error(
+                                    pat.origin.span,
+                                    SemaErrorKind::VariantPatternRequiresData,
                                 );
                             }
-                            Some(substitute_generics(&mut self.state.semtys, payload, &subst))
-                        }),
-                    _ => None,
+                        }
+                    }
+                    SemTy::Unknown | SemTy::Any | SemTy::Error | SemTy::InferVar(_) => {}
+                    _ => {
+                        self.error(pat.origin.span, SemaErrorKind::VariantPatternRequiresData);
+                    }
+                }
+
+                let Some(payload_ty) = payload_ty else {
+                    for p in args.iter().copied() {
+                        self.bind_pat_for_scrut(p, self.state.builtins.unknown);
+                    }
+                    return;
                 };
 
-                if let Some(payload_ty) = payload_ty {
-                    if args.len() == 1 {
-                        self.bind_pat_for_scrut(args[0], payload_ty);
-                        return;
+                let payload_ty = payload_ty.map(|payload_ty| {
+                    let mut subst = Vec::with_capacity(generic_count as usize);
+                    for i in 0..generic_count {
+                        subst.push(
+                            ty_args
+                                .get(i as usize)
+                                .copied()
+                                .unwrap_or(self.state.builtins.unknown),
+                        );
                     }
-                    if let SemTy::Tuple { items } = self.state.semtys.get(payload_ty).clone() {
-                        if items.len() == args.len() {
-                            for (p, t) in args.iter().copied().zip(items.iter().copied()) {
-                                self.bind_pat_for_scrut(p, t);
+                    substitute_generics(&mut self.state.semtys, payload_ty, &subst)
+                });
+
+                match payload_ty {
+                    None => {
+                        if !args.is_empty() {
+                            self.error(
+                                name.span,
+                                SemaErrorKind::VariantPatternArgCountMismatch {
+                                    variant: self.ctx.interner.resolve(name.name).to_string(),
+                                    expected: "0".to_string(),
+                                    found: u32::try_from(args.len()).unwrap_or(0),
+                                },
+                            );
+                        }
+                    }
+                    Some(payload_ty) => {
+                        let resolved = unify::resolve(&self.state.semtys, payload_ty);
+                        let tuple_len = match self.state.semtys.get(resolved).clone() {
+                            SemTy::Tuple { items } => Some(items.len()),
+                            _ => None,
+                        };
+
+                        let found = u32::try_from(args.len()).unwrap_or(0);
+                        let ok = if args.len() == 1 {
+                            self.bind_pat_for_scrut(args[0], payload_ty);
+                            true
+                        } else if let Some(tuple_len) = tuple_len {
+                            if tuple_len == args.len() {
+                                let SemTy::Tuple { items } =
+                                    self.state.semtys.get(resolved).clone()
+                                else {
+                                    unreachable!();
+                                };
+                                for (p, t) in args.iter().copied().zip(items.iter().copied()) {
+                                    self.bind_pat_for_scrut(p, t);
+                                }
+                                true
+                            } else {
+                                false
                             }
-                            return;
+                        } else {
+                            false
+                        };
+
+                        if !ok {
+                            let expected = if let Some(tuple_len) = tuple_len {
+                                format!("1 or {tuple_len}")
+                            } else {
+                                "1".to_string()
+                            };
+                            self.error(
+                                name.span,
+                                SemaErrorKind::VariantPatternArgCountMismatch {
+                                    variant: self.ctx.interner.resolve(name.name).to_string(),
+                                    expected,
+                                    found,
+                                },
+                            );
+                            for p in args.iter().copied() {
+                                self.bind_pat_for_scrut(p, self.state.builtins.unknown);
+                            }
                         }
                     }
                 }
-
-                for p in args.iter().copied() {
-                    self.bind_pat_for_scrut(p, self.state.builtins.unknown);
-                }
             }
-            HirPatKind::Wildcard | HirPatKind::Lit { .. } | HirPatKind::Error => {}
+            HirPatKind::Wildcard | HirPatKind::Error => {}
         }
     }
 

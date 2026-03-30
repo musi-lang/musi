@@ -2,6 +2,8 @@ use music_hir::{
     HirArg, HirArrowFlavor, HirExprId, HirExprKind, HirHandleClause, HirMemberKey, HirOrigin,
 };
 
+use std::collections::HashMap;
+
 use crate::SemaErrorKind;
 
 use crate::checker::{Checker, ResumeCtx};
@@ -111,12 +113,29 @@ impl<'a> Checker<'a> {
         };
 
         let mut effs = EffectRow::empty();
-        for (arg, expected) in args.iter().zip(sig.params.iter().copied()) {
+        let has_spread = args.iter().any(|a| matches!(a, HirArg::Spread { .. }));
+        if !has_spread && args.len() != sig.params.len() {
+            self.error(
+                origin.span,
+                SemaErrorKind::PerformArgCountMismatch {
+                    effect: self.ctx.interner.resolve(effect_ident.name).to_string(),
+                    op: self.ctx.interner.resolve(op_ident.name).to_string(),
+                    expected: u32::try_from(sig.params.len()).unwrap_or(0),
+                    found: u32::try_from(args.len()).unwrap_or(0),
+                },
+            );
+        }
+
+        for (i, arg) in args.iter().enumerate() {
             match arg {
                 HirArg::Expr(id) => {
-                    let (t, e) = self.synth_expr(*id);
+                    let expected = sig
+                        .params
+                        .get(i)
+                        .copied()
+                        .unwrap_or(self.state.builtins.unknown);
+                    let (_t, e) = self.check_expr(*id, expected);
                     effs.union_with(&e);
-                    let _ = self.unify_or_report(origin.span, t, expected);
                 }
                 HirArg::Spread { expr, .. } => {
                     let (_t, e) = self.synth_expr(*expr);
@@ -162,6 +181,47 @@ impl<'a> Checker<'a> {
                     name: self.ctx.interner.resolve(handler.name).to_string(),
                 },
             );
+        }
+
+        let effect_name = self.ctx.interner.resolve(handler.name).to_string();
+        if let Some(family) = handler_family.as_ref() {
+            let mut counts = HashMap::<music_names::Symbol, u32>::new();
+            for clause in clauses.iter().filter(|c| !c.is_value) {
+                *counts.entry(clause.name.name).or_insert(0) += 1;
+            }
+
+            for (&op, _sig) in family.ops.iter() {
+                let count = counts.get(&op).copied().unwrap_or(0);
+                if count == 0 {
+                    self.error(
+                        handler.span,
+                        SemaErrorKind::HandleClauseMissingOp {
+                            effect: effect_name.clone(),
+                            op: self.ctx.interner.resolve(op).to_string(),
+                        },
+                    );
+                } else if count > 1 {
+                    self.error(
+                        handler.span,
+                        SemaErrorKind::HandleClauseDuplicateOp {
+                            effect: effect_name.clone(),
+                            op: self.ctx.interner.resolve(op).to_string(),
+                        },
+                    );
+                }
+            }
+
+            for clause in clauses.iter().filter(|c| !c.is_value) {
+                if !family.ops.contains_key(&clause.name.name) {
+                    self.error(
+                        clause.name.span,
+                        SemaErrorKind::UnknownEffectOp {
+                            effect: effect_name.clone(),
+                            op: self.ctx.interner.resolve(clause.name.name).to_string(),
+                        },
+                    );
+                }
+            }
         }
 
         let mut handled_arg = handled_effs
@@ -215,6 +275,21 @@ impl<'a> Checker<'a> {
                         };
                         op_ret = sig.ret;
                         param_tys = sig.params.to_vec();
+
+                        let expected_params =
+                            u32::try_from(param_tys.len() + 1).unwrap_or(u32::MAX);
+                        let found = u32::try_from(clause.params.len()).unwrap_or(0);
+                        if expected_params != found {
+                            self.error(
+                                clause.origin.span,
+                                SemaErrorKind::HandleClauseParamCountMismatch {
+                                    effect: effect_name.clone(),
+                                    op: self.ctx.interner.resolve(clause.name.name).to_string(),
+                                    expected: expected_params,
+                                    found,
+                                },
+                            );
+                        }
                     }
                 }
 

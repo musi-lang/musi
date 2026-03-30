@@ -99,3 +99,63 @@ fn test_reports_resume_outside_op_clause() {
             .any(|k| matches!(k, SemaErrorKind::ResumeOutsideOpClause))
     );
 }
+
+#[test]
+fn test_perform_reports_arg_count_mismatch() {
+    let kinds = analyze_text(
+        r#"
+let Console := effect { let writeln (msg : String) : Unit; };
+let f () with { Console } : Unit := perform Console.writeln("x", "y");
+f();
+"#,
+    );
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::PerformArgCountMismatch { .. }))
+    );
+}
+
+#[test]
+fn test_handle_reports_missing_op_clause() {
+    let kinds = analyze_text(
+        r#"
+let Console := effect { let writeln (msg : String) : Unit; let readln () : String; };
+let work () with { Console } : Int := (
+  perform Console.writeln("x");
+  1
+);
+handle work() with Console of (
+| v => v
+| writeln(msg, k) => resume ()
+);
+"#,
+    );
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::HandleClauseMissingOp { .. }))
+    );
+}
+
+#[test]
+fn test_handle_reports_clause_param_count_mismatch() {
+    let kinds = analyze_text(
+        r#"
+let Console := effect { let writeln (msg : String) : Unit; };
+let work () with { Console } : Int := (
+  perform Console.writeln("x");
+  1
+);
+handle work() with Console of (
+| v => v
+| writeln(k) => resume ()
+);
+"#,
+    );
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::HandleClauseParamCountMismatch { .. }))
+    );
+}

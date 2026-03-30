@@ -41,9 +41,9 @@ Status legend:
 | Assignment (`<-`)                              | done | done      | done        | done    | Name update requires `let mut`; place update requires `mut T`  |
 | Calls                                          | done | done      | done        | done    | Call typing + effect propagation; dispatch not modeled        |
 | Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | done    | Tuple `.0` supported; `.[\"field\"]` resolves record/data keys |
-| `case ... of` with guards                      | done | done      | done        | partial | Pattern/type interactions incomplete                          |
+| `case ... of` with guards                      | done | done      | done        | done    | Pattern/type interactions checked                             |
 | `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
-| `perform`, `handle`, `resume`                  | done | done      | done        | partial | Effect-row computation exists; full handler typing incomplete |
+| `perform`, `handle`, `resume`                  | done | done      | done        | done    | Handler clause shape and arity checked                         |
 | `quote` and splice forms                       | done | done      | done        | partial | Quote/splice are typed as `Any` today                         |
 
 ## Types

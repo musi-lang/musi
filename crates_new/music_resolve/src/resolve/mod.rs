@@ -304,6 +304,12 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             return;
         };
 
+        // Avoid recording a "use" at the same span as the binding site. This happens in `or`
+        // patterns where non-binding passes still walk the first alternative.
+        if self.names.bindings[binding].site.span == ident.span {
+            return;
+        }
+
         self.names
             .record_ref(NameSite::new(self.source_id, ident.span), binding);
     }

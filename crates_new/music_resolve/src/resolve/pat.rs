@@ -95,6 +95,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                         // Shorthand binds the field name.
                         if bind_names {
                             self.define(bind_kind, name);
+                        } else {
+                            self.check_use(name);
                         }
                         None
                     };
@@ -176,6 +178,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         };
         if bind_names {
             self.define(bind_kind, name);
+        } else {
+            self.check_use(name);
         }
 
         let sub = node

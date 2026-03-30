@@ -23,7 +23,7 @@ fn resolve_text(text: &str) -> Vec<ResolveErrorKind> {
 }
 
 #[test]
-fn reports_undefined_binding() {
+fn test_reports_undefined_binding() {
     let kinds = resolve_text("x;");
     assert!(matches!(
         &kinds[..],
@@ -32,7 +32,7 @@ fn reports_undefined_binding() {
 }
 
 #[test]
-fn reports_duplicate_binding() {
+fn test_reports_duplicate_binding() {
     let kinds = resolve_text("let x := 1; let x := 2;");
     assert!(
         kinds
@@ -42,13 +42,13 @@ fn reports_duplicate_binding() {
 }
 
 #[test]
-fn let_binds_name_for_following_stmts() {
+fn test_let_binds_name_for_following_stmts() {
     let kinds = resolve_text("let x := 1; x;");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }
 
 #[test]
-fn fstring_interpolation_resolves_inner_expr() {
+fn test_fstring_interpolation_resolves_inner_expr() {
     let kinds = resolve_text("let x := 1; f\"x is {x}\";");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }

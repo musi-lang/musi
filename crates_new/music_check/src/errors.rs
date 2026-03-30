@@ -25,6 +25,53 @@ pub enum SemaErrorKind {
     #[error("invalid assignment target")]
     AssignTargetInvalid,
 
+    #[error("tuple pattern requires tuple")]
+    TuplePatternRequiresTuple,
+
+    #[error("tuple pattern expects {expected} element(s), found {found}")]
+    TuplePatternArityMismatch { expected: u32, found: u32 },
+
+    #[error("array pattern requires array")]
+    ArrayPatternRequiresArray,
+
+    #[error("record pattern requires record")]
+    RecordPatternRequiresRecord,
+
+    #[error("variant pattern requires data")]
+    VariantPatternRequiresData,
+
+    #[error("variant '{name}' not found")]
+    VariantNotFound { name: String },
+
+    #[error("variant '{variant}' pattern expects {expected} argument(s), found {found}")]
+    VariantPatternArgCountMismatch {
+        variant: String,
+        expected: String,
+        found: u32,
+    },
+
+    #[error("perform '{effect}.{op}' expects {expected} argument(s), found {found}")]
+    PerformArgCountMismatch {
+        effect: String,
+        op: String,
+        expected: u32,
+        found: u32,
+    },
+
+    #[error("handler missing operation clause '{effect}.{op}'")]
+    HandleClauseMissingOp { effect: String, op: String },
+
+    #[error("handler has duplicate operation clause '{effect}.{op}'")]
+    HandleClauseDuplicateOp { effect: String, op: String },
+
+    #[error("handler clause '{effect}.{op}' expects {expected} parameter(s), found {found}")]
+    HandleClauseParamCountMismatch {
+        effect: String,
+        op: String,
+        expected: u32,
+        found: u32,
+    },
+
     #[error("tuple index {index} out of range for tuple length {len}")]
     TupleIndexOutOfRange { index: u32, len: u32 },
 
@@ -186,6 +233,43 @@ impl SemaError {
             SemaErrorKind::AssignTargetInvalid => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3052))
                 .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::TuplePatternRequiresTuple => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3053))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::TuplePatternArityMismatch { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3054))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::ArrayPatternRequiresArray => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3055))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::RecordPatternRequiresRecord => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3056))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::VariantPatternRequiresData => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3057))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::VariantNotFound { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3058))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::VariantPatternArgCountMismatch { .. } => {
+                Diag::error(self.kind.to_string())
+                    .with_code(DiagCode::new(3059))
+                    .with_label(self.span, self.source_id, "")
+            }
+            SemaErrorKind::PerformArgCountMismatch { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3060))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::HandleClauseMissingOp { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3061))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::HandleClauseDuplicateOp { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3062))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::HandleClauseParamCountMismatch { .. } => {
+                Diag::error(self.kind.to_string())
+                    .with_code(DiagCode::new(3063))
+                    .with_label(self.span, self.source_id, "")
+            }
             SemaErrorKind::TupleIndexOutOfRange { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3047))
                 .with_label(self.span, self.source_id, ""),
