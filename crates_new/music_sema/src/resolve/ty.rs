@@ -1,10 +1,11 @@
 use music_ast::{SyntaxNode, SyntaxNodeKind, SyntaxToken};
 use music_hir::{HirArrowFlavor, HirDim, HirTy, HirTyBinOp, HirTyId, HirTyKind};
 use music_lex::TokenKind;
+use music_names::NameBindingKind;
 
 use super::Resolver;
 
-impl<'a, 'tree> Resolver<'a, 'tree> {
+impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     pub(super) fn lower_ty(&mut self, node: SyntaxNode<'tree>) -> HirTyId {
         let origin = self.origin_node(node);
 
@@ -53,6 +54,7 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         };
 
         let name = self.intern_ident_token(name_tok);
+        self.check_use(name);
         let args: Vec<HirTyId> = node
             .child_nodes()
             .filter(|n| n.kind().is_ty())
@@ -120,20 +122,14 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
             })
             .unwrap_or(HirTyBinOp::Sum);
 
-        self.alloc_ty(
-            origin,
-            HirTyKind::Binary {
-                op,
-                left,
-                right,
-            },
-        )
+        self.alloc_ty(origin, HirTyKind::Binary { op, left, right })
     }
 
     fn lower_pi_ty(&mut self, node: SyntaxNode<'tree>) -> HirTyId {
         let origin = self.origin_node(node);
         let mut tokens = node.child_tokens();
-        let binder_tok = tokens.find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
+        let binder_tok =
+            tokens.find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
         let Some(binder_tok) = binder_tok else {
             return self.alloc_ty(origin, HirTyKind::Error);
         };
@@ -146,7 +142,7 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
             .unwrap_or_else(|| self.alloc_ty(origin, HirTyKind::Error));
 
         self.push_scope();
-        self.define(binder);
+        self.define(NameBindingKind::PiBinder, binder);
         let body = tys
             .next()
             .map(|n| self.lower_ty(n))
@@ -170,9 +166,12 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
             .filter(|n| n.kind().is_ty())
             .map(|n| self.lower_ty(n))
             .collect();
-        self.alloc_ty(origin, HirTyKind::Tuple {
-            items: items.into_boxed_slice(),
-        })
+        self.alloc_ty(
+            origin,
+            HirTyKind::Tuple {
+                items: items.into_boxed_slice(),
+            },
+        )
     }
 
     fn lower_array_ty(&mut self, node: SyntaxNode<'tree>) -> HirTyId {
@@ -182,9 +181,9 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
             match tok.kind() {
                 TokenKind::IntLit => dims.push(HirDim::IntLit { span: tok.span() }),
                 TokenKind::Ident | TokenKind::EscapedIdent => {
-                    dims.push(HirDim::Name {
-                        name: self.intern_ident_token(tok),
-                    });
+                    let name = self.intern_ident_token(tok);
+                    self.check_use(name);
+                    dims.push(HirDim::Name { name });
                 }
                 TokenKind::LBracket | TokenKind::RBracket | TokenKind::Comma => {}
                 _ => {}
@@ -207,7 +206,10 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         )
     }
 
-    pub(super) fn string_lit_token(&mut self, token: SyntaxToken<'tree>) -> music_hir::HirStringLit {
+    pub(super) fn string_lit_token(
+        &mut self,
+        token: SyntaxToken<'tree>,
+    ) -> music_hir::HirStringLit {
         music_hir::HirStringLit::new(token.span(), Some(token.id()))
     }
 }

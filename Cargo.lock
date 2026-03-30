@@ -303,6 +303,7 @@ dependencies = [
  "criterion",
  "intaglio",
  "music_basic",
+ "music_storage",
 ]
 
 [[package]]

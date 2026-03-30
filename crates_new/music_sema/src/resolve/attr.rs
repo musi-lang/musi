@@ -3,7 +3,7 @@ use music_hir::{HirAttr, HirAttrArg, HirAttrArgKind, HirAttrId, HirAttrPath};
 
 use super::{Resolver, cursor::AstCursor};
 
-impl<'a, 'tree> Resolver<'a, 'tree> {
+impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     pub(super) fn lower_attr_prefix(&mut self, cursor: &mut AstCursor<'tree>) -> Vec<HirAttrId> {
         let mut out = Vec::new();
         while let Some(node) = cursor.peek().and_then(SyntaxElement::into_node) {
@@ -19,8 +19,10 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
     pub(super) fn lower_attr(&mut self, node: SyntaxNode<'tree>) -> HirAttrId {
         let mut segments = Vec::new();
         for token in node.child_tokens() {
-            if matches!(token.kind(), music_lex::TokenKind::Ident | music_lex::TokenKind::EscapedIdent)
-            {
+            if matches!(
+                token.kind(),
+                music_lex::TokenKind::Ident | music_lex::TokenKind::EscapedIdent
+            ) {
                 segments.push(self.intern_ident_token(token));
             }
         }
@@ -48,7 +50,12 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         let first_token = cursor
             .peek()
             .and_then(SyntaxElement::into_token)
-            .filter(|tok| matches!(tok.kind(), music_lex::TokenKind::Ident | music_lex::TokenKind::EscapedIdent));
+            .filter(|tok| {
+                matches!(
+                    tok.kind(),
+                    music_lex::TokenKind::Ident | music_lex::TokenKind::EscapedIdent
+                )
+            });
 
         let kind = if let (Some(name_tok), Some(_colon_eq)) = (
             first_token,

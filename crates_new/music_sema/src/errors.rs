@@ -16,6 +16,12 @@ pub enum SemaErrorKind {
     #[error("duplicate binding '{name}'")]
     DuplicateBinding { name: String, first: Span },
 
+    #[error("or-pattern bindings must match across alternatives")]
+    OrPatternBindingsMismatch,
+
+    #[error("unresolved import '{path}'")]
+    UnresolvedImport { path: String },
+
     #[error("malformed syntax: {what}")]
     MalformedSyntax { what: &'static str },
 }
@@ -33,6 +39,12 @@ impl SemaError {
                 .with_label(*first, self.source_id, "previously defined here"),
             SemaErrorKind::MalformedSyntax { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3003))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::OrPatternBindingsMismatch => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3004))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::UnresolvedImport { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3005))
                 .with_label(self.span, self.source_id, ""),
         }
     }

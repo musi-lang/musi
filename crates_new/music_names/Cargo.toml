@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 music_basic = { path = "../music_basic" }
+music_storage = { path = "../music_storage" }
 intaglio = { workspace = true }
 
 [dev-dependencies]

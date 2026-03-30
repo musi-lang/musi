@@ -1,11 +1,11 @@
 use music_ast::{SyntaxElement, SyntaxNode, SyntaxNodeKind};
 use music_hir::{HirCallableName, HirMemberDef, HirMemberDefs, HirOrigin, HirParam, HirParams};
 use music_lex::TokenKind;
-use music_names::{Ident, Symbol};
+use music_names::{Ident, NameBindingKind, Symbol};
 
-use super::{cursor::AstCursor, Resolver};
+use super::{Resolver, cursor::AstCursor};
 
-impl<'a, 'tree> Resolver<'a, 'tree> {
+impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     pub(super) fn lower_member_defs(&mut self, node: SyntaxNode<'tree>) -> HirMemberDefs {
         let defs: Vec<HirMemberDef> = node
             .child_nodes()
@@ -40,7 +40,11 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         }
     }
 
-    fn lower_let_member(&mut self, origin: HirOrigin, mut cursor: AstCursor<'tree>) -> HirMemberDef {
+    fn lower_let_member(
+        &mut self,
+        origin: HirOrigin,
+        mut cursor: AstCursor<'tree>,
+    ) -> HirMemberDef {
         let name = self.lower_callable_name(&mut cursor);
         let params_node = cursor.eat_node(SyntaxNodeKind::ParamList);
 
@@ -81,7 +85,11 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         }
     }
 
-    fn lower_law_member(&mut self, origin: HirOrigin, mut cursor: AstCursor<'tree>) -> HirMemberDef {
+    fn lower_law_member(
+        &mut self,
+        origin: HirOrigin,
+        mut cursor: AstCursor<'tree>,
+    ) -> HirMemberDef {
         let Some(name_tok) = cursor.bump_token() else {
             self.error(origin.span, "expected law name");
             return HirMemberDef::Law {
@@ -147,7 +155,10 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
 
     pub(super) fn lower_param_list(&mut self, node: SyntaxNode<'tree>) -> HirParams {
         let mut params = Vec::new();
-        for param_node in node.child_nodes().filter(|n| n.kind() == SyntaxNodeKind::Param) {
+        for param_node in node
+            .child_nodes()
+            .filter(|n| n.kind() == SyntaxNodeKind::Param)
+        {
             params.push(self.lower_param(param_node));
         }
         params.into_boxed_slice()
@@ -174,7 +185,7 @@ impl<'a, 'tree> Resolver<'a, 'tree> {
         };
 
         let name = self.intern_ident_token(name_tok);
-        self.define(name);
+        self.define(NameBindingKind::Param, name);
 
         let annot = node
             .child_nodes()
