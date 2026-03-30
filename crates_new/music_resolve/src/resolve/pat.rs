@@ -4,7 +4,7 @@ use music_ast::{SyntaxNode, SyntaxNodeKind};
 use music_basic::Span;
 use music_hir::{HirLit, HirPat, HirPatId, HirPatKind, HirPatKind::*, HirRecordPatField};
 use music_lex::TokenKind;
-use music_names::{NameBindingKind, Symbol};
+use music_names::{Ident, NameBindingKind, Symbol};
 
 use crate::{ResolveError, ResolveErrorKind};
 
@@ -164,7 +164,16 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             self.error(node.span(), "expected binding name");
             return Error;
         };
-        let name = self.intern_ident_token(name_tok);
+        let name = if matches!(name_tok.kind(), TokenKind::LParen) {
+            let op_tok = tokens.next();
+            let _close = tokens.next();
+            op_tok.map(|t| self.intern_op_token(t)).unwrap_or_else(|| {
+                self.error(node.span(), "expected binding operator name");
+                Ident::dummy(Symbol::synthetic(u32::MAX))
+            })
+        } else {
+            self.intern_ident_token(name_tok)
+        };
         if bind_names {
             self.define(bind_kind, name);
         }

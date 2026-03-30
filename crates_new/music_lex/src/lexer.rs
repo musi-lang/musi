@@ -140,7 +140,9 @@ impl<'src> Lexer<'src> {
         match ch {
             _ if is_ident_start(ch) => self.scan_ident_like(start),
             '0'..='9' => self.scan_number(start, ch),
-            '.' if self.cursor.peek().is_some_and(|next| next.is_ascii_digit()) => {
+            '.' if self.cursor.peek().is_some_and(|next| next.is_ascii_digit())
+                && self.leading_dot_is_float(start) =>
+            {
                 self.scan_leading_dot_float(start)
             }
             '"' => self.scan_string(start),
@@ -170,8 +172,26 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    fn leading_dot_is_float(&self, start: u32) -> bool {
+        let mut i = usize::try_from(start).unwrap_or(0);
+        let bytes = self.source.as_bytes();
+        while i > 0 && bytes[i - 1].is_ascii_whitespace() {
+            i -= 1;
+        }
+        if i == 0 {
+            return true;
+        }
+        !Self::is_expr_end_byte(bytes[i - 1])
+    }
+
     fn queue_error(&mut self, kind: LexErrorKind, span: Span) {
         self.pending_errors.push_back(LexError { kind, span });
+    }
+
+    fn is_expr_end_byte(byte: u8) -> bool {
+        byte.is_ascii_alphanumeric()
+            || byte == b'_'
+            || matches!(byte, b')' | b']' | b'}' | b'"' | b'\'' | b'`')
     }
 
     fn scan_digits_with_separators(

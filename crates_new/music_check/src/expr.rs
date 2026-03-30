@@ -957,8 +957,26 @@ impl<'a> Checker<'a> {
             (music_hir::HirChainKind::Forced, base, key) => {
                 self.synth_forced_member(origin, base, key, effs)
             }
-            (music_hir::HirChainKind::Normal, SemTy::Tuple { .. }, HirMemberKey::IntLit { .. }) => {
-                (self.state.builtins.unknown, effs)
+            (
+                music_hir::HirChainKind::Normal,
+                SemTy::Tuple { items },
+                HirMemberKey::IntLit { span, .. },
+            ) => {
+                let idx = parse_int_lit_u32(self.slice(span));
+                let len = u32::try_from(items.len()).unwrap_or(0);
+                match idx.and_then(|i| items.get(i as usize).copied()) {
+                    Some(ty) => (ty, effs),
+                    None => {
+                        self.error(
+                            span,
+                            SemaErrorKind::TupleIndexOutOfRange {
+                                index: idx.unwrap_or(0),
+                                len,
+                            },
+                        );
+                        (self.state.builtins.error, effs)
+                    }
+                }
             }
             (
                 music_hir::HirChainKind::Normal,
@@ -1102,18 +1120,115 @@ impl<'a> Checker<'a> {
         base: HirExprId,
         indices: Box<[HirExprId]>,
     ) -> (SemTyId, EffectRow) {
-        let (base_ty, mut effs) = self.synth_expr(base);
-        for idx in indices.iter().copied() {
-            let (idx_ty, e) = self.synth_expr(idx);
-            effs.union_with(&e);
-            let _ = self.unify_or_report(origin.span, idx_ty, self.state.builtins.int_);
+        let (mut ty, mut effs) = self.synth_expr(base);
+        let mut array_chain = false;
+
+        for idx_expr in indices.iter().copied() {
+            let (idx_ty, idx_effs) = self.synth_expr(idx_expr);
+            effs.union_with(&idx_effs);
+
+            let resolved = unify::resolve(&self.state.semtys, ty);
+            match self.state.semtys.get(resolved).clone() {
+                SemTy::Array { elem, .. } => {
+                    array_chain = true;
+                    let _ = self.unify_or_report(origin.span, idx_ty, self.state.builtins.int_);
+                    ty = elem;
+                }
+                SemTy::Tuple { items } => {
+                    if array_chain {
+                        self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
+                        return (self.state.builtins.error, effs);
+                    }
+
+                    if let Some(i) = int_lit_expr_u32(self, idx_expr) {
+                        if let Some(item) = items.get(i as usize).copied() {
+                            ty = item;
+                        } else {
+                            self.error(
+                                origin.span,
+                                SemaErrorKind::TupleIndexOutOfRange {
+                                    index: i,
+                                    len: u32::try_from(items.len()).unwrap_or(0),
+                                },
+                            );
+                            ty = self.state.builtins.error;
+                        }
+                    } else {
+                        let _ = self.unify_or_report(origin.span, idx_ty, self.state.builtins.int_);
+                        ty = self.state.builtins.unknown;
+                    }
+                }
+                SemTy::Record { fields } => {
+                    if array_chain {
+                        self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
+                        return (self.state.builtins.error, effs);
+                    }
+
+                    if let Some(name) = string_lit_expr_text(self, idx_expr) {
+                        let sym = self.ctx.interner.intern(&name);
+                        if let Some(field_ty) = fields.get(&sym).copied() {
+                            ty = field_ty;
+                        } else {
+                            self.error(origin.span, SemaErrorKind::FieldNotFound { name });
+                            ty = self.state.builtins.error;
+                        }
+                    } else {
+                        ty = self.state.builtins.unknown;
+                    }
+                }
+                SemTy::Named { name, args } => {
+                    if array_chain {
+                        self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
+                        return (self.state.builtins.error, effs);
+                    }
+
+                    let Some(field_name) = string_lit_expr_text(self, idx_expr) else {
+                        ty = self.state.builtins.unknown;
+                        continue;
+                    };
+                    let field_sym = self.ctx.interner.intern(&field_name);
+
+                    let Some(def) = self.state.env.get_data_def(name).cloned() else {
+                        ty = self.state.builtins.unknown;
+                        continue;
+                    };
+                    let Some(fields) = def.fields.as_ref() else {
+                        ty = self.state.builtins.unknown;
+                        continue;
+                    };
+                    let Some(field_def) = fields.get(&field_sym) else {
+                        self.error(
+                            origin.span,
+                            SemaErrorKind::FieldNotFound { name: field_name },
+                        );
+                        ty = self.state.builtins.error;
+                        continue;
+                    };
+
+                    let mut subst = Vec::with_capacity(def.generic_count as usize);
+                    for i in 0..def.generic_count {
+                        subst.push(
+                            args.get(i as usize)
+                                .copied()
+                                .unwrap_or(self.state.builtins.unknown),
+                        );
+                    }
+                    ty = substitute_generics(&mut self.state.semtys, field_def.ty, &subst);
+                }
+                SemTy::Unknown | SemTy::Any | SemTy::Error => {
+                    ty = self.state.builtins.unknown;
+                }
+                _ => {
+                    if array_chain {
+                        self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
+                        return (self.state.builtins.error, effs);
+                    }
+                    ty = self.state.builtins.unknown;
+                }
+            }
         }
 
-        let base_ty = unify::resolve(&self.state.semtys, base_ty);
-        match self.state.semtys.get(base_ty).clone() {
-            SemTy::Array { elem, .. } => (elem, effs),
-            _ => (self.state.builtins.unknown, effs),
-        }
+        (ty, effs)
     }
 
     fn synth_record_update(
@@ -1383,13 +1498,51 @@ impl<'a> Checker<'a> {
                     (self.state.builtins.int_, effs)
                 }
             }
-            _ => {
-                let (_l_ty, mut effs) = self.synth_expr(left);
-                let (_r_ty, r_effs) = self.synth_expr(right);
-                effs.union_with(&r_effs);
-                (self.state.builtins.unknown, effs)
+            HirBinaryOp::Symbolic(op_ident) => {
+                self.synth_symbolic_infix(origin, op_ident, left, right)
             }
         }
+    }
+
+    fn synth_symbolic_infix(
+        &mut self,
+        origin: HirOrigin,
+        op_ident: music_names::Ident,
+        left: HirExprId,
+        right: HirExprId,
+    ) -> (SemTyId, EffectRow) {
+        let (l_ty, mut effs) = self.synth_expr(left);
+        let (r_ty, r_effs) = self.synth_expr(right);
+        effs.union_with(&r_effs);
+
+        let mut declared = None;
+        let callee_ty = self
+            .binding_for_use(op_ident.span)
+            .and_then(|binding| self.state.env.get_value(binding))
+            .map(|scheme| {
+                declared = scheme.declared_effects.clone();
+                self.state
+                    .env
+                    .instantiate(&mut self.state.semtys, scheme, op_ident.span)
+            })
+            .unwrap_or(self.state.builtins.unknown);
+
+        if let Some(declared) = declared.as_ref() {
+            effs.union_with(declared);
+        }
+
+        let input = self.state.semtys.alloc(SemTy::Tuple {
+            items: Box::new([l_ty, r_ty]),
+        });
+        let out = self.state.semtys.fresh_infer_var(origin.span);
+        let expect_fn = self.state.semtys.alloc(SemTy::Arrow {
+            flavor: HirArrowFlavor::Effectful,
+            input,
+            output: out,
+        });
+        let _ = self.unify_or_report(origin.span, callee_ty, expect_fn);
+
+        (out, effs)
     }
 
     fn synth_case(
@@ -1699,4 +1852,51 @@ impl<'a> Checker<'a> {
 
         (ctx.result, effs)
     }
+}
+
+fn int_lit_expr_u32(checker: &Checker<'_>, expr_id: HirExprId) -> Option<u32> {
+    match checker.ctx.store.exprs.get(expr_id).kind.clone() {
+        HirExprKind::Lit { lit } => match lit.kind {
+            HirLitKind::Int { span, .. } => parse_int_lit_u32(checker.slice(span)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn string_lit_expr_text(checker: &Checker<'_>, expr_id: HirExprId) -> Option<String> {
+    match checker.ctx.store.exprs.get(expr_id).kind.clone() {
+        HirExprKind::Lit { lit } => match lit.kind {
+            HirLitKind::String(s) => Some(checker.decode_string_span(s.span)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn parse_int_lit_u32(text: &str) -> Option<u32> {
+    let v = parse_int_lit_u64(text)?;
+    u32::try_from(v).ok()
+}
+
+fn parse_int_lit_u64(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let (base, digits) = if let Some(hex) = text.strip_prefix("0x").or(text.strip_prefix("0X")) {
+        (16, hex)
+    } else if let Some(oct) = text.strip_prefix("0o").or(text.strip_prefix("0O")) {
+        (8, oct)
+    } else if let Some(bin) = text.strip_prefix("0b").or(text.strip_prefix("0B")) {
+        (2, bin)
+    } else {
+        (10, text)
+    };
+
+    let mut buf = String::with_capacity(digits.len());
+    for ch in digits.chars() {
+        if ch != '_' {
+            buf.push(ch);
+        }
+    }
+
+    u64::from_str_radix(&buf, base).ok()
 }

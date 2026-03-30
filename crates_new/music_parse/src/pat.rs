@@ -39,10 +39,49 @@ impl Parser<'_, '_, '_> {
                 });
                 self.parse_record_pat_dot_brace()
             }
-            TokenKind::LParen => self.parse_tuple_pat(),
+            TokenKind::LParen => {
+                if self.is_op_bind_pat() {
+                    self.parse_op_bind_pat()
+                } else {
+                    self.parse_tuple_pat()
+                }
+            }
             TokenKind::LBracket => self.parse_array_pat(),
             _ => Err(self.expected_pattern()),
         }
+    }
+
+    fn is_op_bind_pat(&self) -> bool {
+        if !self.at(&TokenKind::LParen) {
+            return false;
+        }
+        matches!(
+            self.nth_kind(1),
+            TokenKind::SymOp
+                | TokenKind::Plus
+                | TokenKind::Minus
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Percent
+                | TokenKind::Eq
+                | TokenKind::Lt
+                | TokenKind::Gt
+                | TokenKind::Amp
+                | TokenKind::Caret
+                | TokenKind::Tilde
+        ) && self.nth_kind(2) == &TokenKind::RParen
+    }
+
+    fn parse_op_bind_pat(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = self.parse_op_or_ident_name()?;
+        if let Some(as_kw) = self.eat(&TokenKind::KwAs) {
+            children.push(as_kw);
+            let pat = self.parse_pat_primary()?;
+            children.push(SyntaxElementId::Node(pat));
+        }
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::BindPat, children))
     }
 
     fn parse_bind_pat(&mut self) -> ParseResult<SyntaxNodeId> {

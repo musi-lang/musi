@@ -20,10 +20,10 @@ Status legend:
 
 ## Surface Syntax
 
-| Feature                                  | Lex  | Parse/AST | Resolve/HIR | Sema    | Notes                                                                 |
+| Feature                                  | Lex  | Parse/AST | Resolve/HIR | Check   | Notes                                                                 |
 | ---------------------------------------- | ---- | --------- | ----------- | ------- | --------------------------------------------------------------------- |
 | Identifiers (plain/escaped)              | done | done      | done        | done    |                                                                       |
-| Symbolic operators (`SymOp`)             | done | done      | done        | partial | Sema treats most ops as unknown callable surface                      |
+| Symbolic operators (`SymOp`)             | done | done      | done        | done    | Symbolic infix typechecks like callable surface                       |
 | Integer literals (bases, `_`)            | done | done      | done        | partial | Type is `Int`; numeric-range validation is not modeled yet            |
 | Float literals (incl. exponent)          | done | done      | done        | partial | Type is `Float`; no numeric-range validation yet                      |
 | Strings                                  | done | done      | done        | done    | `music_basic::string_lit` supports decoding                           |
@@ -33,14 +33,14 @@ Status legend:
 
 ## Expressions
 
-| Feature                                        | Lex  | Parse/AST | Resolve/HIR | Sema    | Notes                                                         |
+| Feature                                        | Lex  | Parse/AST | Resolve/HIR | Check   | Notes                                                         |
 | ---------------------------------------------- | ---- | --------- | ----------- | ------- | ------------------------------------------------------------- |
 | Sequences (`;`)                                | done | done      | done        | done    | Statement wrappers lowered as a top-level sequence            |
 | `let` bindings                                 | done | done      | done        | partial | Polymorphism and full generalization not complete             |
 | Mut bindings (`let mut`)                       | done | done      | done        | partial | Mutation model is not fully enforced                          |
 | Assignment (`<-`)                              | done | done      | done        | partial | Treated as expression; effect model is still evolving         |
 | Calls                                          | done | done      | done        | partial | Callable inference is present, dispatch not fully modeled     |
-| Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | partial | Optional/forced chain validated via lang item `Option`        |
+| Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | done    | Tuple `.0` supported; `.[\"field\"]` resolves record/data keys |
 | `case ... of` with guards                      | done | done      | done        | partial | Pattern/type interactions incomplete                          |
 | `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
 | `perform`, `handle`, `resume`                  | done | done      | done        | partial | Effect-row computation exists; full handler typing incomplete |
@@ -48,12 +48,12 @@ Status legend:
 
 ## Types
 
-| Feature                             | Parse/AST | Resolve/HIR | Sema    | Notes                                                       |
+| Feature                             | Parse/AST | Resolve/HIR | Check   | Notes                                                       |
 | ----------------------------------- | --------- | ----------- | ------- | ----------------------------------------------------------- |
 | Named types + application (`T[A]`)  | done      | done        | partial | Generic instantiation exists but is limited                 |
 | Functions (`->`, `~>`)              | done      | done        | partial | Effect rows live on signatures (`with {}`)                  |
-| Products (`*`, tuples)              | done      | done        | partial | Sema models tuples; product types are still evolving        |
-| Sums (`+`)                          | done      | done        | partial | Sema represents sum types but does not fully lower/dispatch |
+| Products (`*`, tuples)              | done      | done        | partial | Check models tuples; product types are still evolving       |
+| Sums (`+`)                          | done      | done        | partial | Check represents sum types but does not fully lower/dispatch |
 | Arrays (`[]T`, `[n]T`)              | done      | done        | partial | Shape/dimension checking not complete                       |
 | `mut T`                             | done      | done        | partial | Treated as prefix type op; enforcement incomplete           |
 | `where` constraints (`T <:`, `T :`) | done      | done        | partial | Stored and partially checked                                |
@@ -61,7 +61,7 @@ Status legend:
 
 ## Attributes + FFI
 
-| Feature                     | Parse/AST | Resolve/HIR | Sema    | Notes                                                             |
+| Feature                     | Parse/AST | Resolve/HIR | Check   | Notes                                                             |
 | --------------------------- | --------- | ----------- | ------- | ----------------------------------------------------------------- |
 | Attribute syntax + args     | done      | done        | partial | Argument-model validation for compiler-known attrs is in progress |
 | `foreign` decl surface      | done      | done        | done    | `foreign (...)` block attrs copied to inner decls                 |
@@ -80,4 +80,3 @@ Status legend:
 - `music_codegen`: missing
 - `music_fe`: missing
 - `music_session`: missing
-

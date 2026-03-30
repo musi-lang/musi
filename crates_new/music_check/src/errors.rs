@@ -16,6 +16,15 @@ pub enum SemaErrorKind {
     #[error("expected type '{expected}', found '{found}'")]
     TypeMismatch { expected: String, found: String },
 
+    #[error("tuple index {index} out of range for tuple length {len}")]
+    TupleIndexOutOfRange { index: u32, len: u32 },
+
+    #[error("field '{name}' not found")]
+    FieldNotFound { name: String },
+
+    #[error("index exceeds array nesting")]
+    IndexExceedsArrayNesting,
+
     #[error("effectful expression requires explicit 'with {{ ... }}' signature")]
     MissingWithClause,
 
@@ -40,7 +49,7 @@ pub enum SemaErrorKind {
     #[error("effect row remainder not declared in this signature's effect row")]
     EffectRemainderNotDeclared,
 
-    #[error("effect type parameter count '{count}' unsupported")]
+    #[error("effect type parameter count {count} unsupported")]
     EffectTypeParamCountUnsupported { count: u32 },
 
     #[error("unknown class '{name}'")]
@@ -58,58 +67,58 @@ pub enum SemaErrorKind {
     #[error("invalid instance target")]
     InvalidInstanceTarget,
 
-    #[error("class type parameter count '{count}' unsupported")]
+    #[error("class type parameter count {count} unsupported")]
     ClassTypeParamCountUnsupported { count: u32 },
 
     #[error("splice outside quote")]
     SpliceOutsideQuote,
 
-    #[error("Option lang item required")]
+    #[error("'Option' lang item required")]
     OptionLangItemRequired,
 
-    #[error("optional chain requires Option[T]")]
+    #[error("optional chain requires 'Option[T]'")]
     OptionalChainRequiresOption,
 
-    #[error("forced chain requires Option[T]")]
+    #[error("forced chain requires 'Option[T]'")]
     ForcedChainRequiresOption,
 
-    #[error("unknown lang item '{name}'")]
+    #[error("unknown language item item '{name}'")]
     UnknownLangItem { name: String },
 
-    #[error("duplicate lang item '{name}'")]
+    #[error("duplicate language item '{name}'")]
     DuplicateLangItem { name: String },
 
-    #[error("@musi.lang requires 'name' argument")]
+    #[error("language item requires 'name' argument")]
     LangItemNameRequired,
 
     #[error("'name' argument requires string literal")]
     LangItemNameRequiresString,
 
-    #[error("lang item requires value")]
+    #[error("language item requires value")]
     LangItemMissingValue,
 
-    #[error("lang item requires data definition")]
+    #[error("language item requires data definition")]
     LangItemRequiresData,
 
-    #[error("lang item requires name binding")]
+    #[error("language item requires name binding")]
     LangItemRequiresName,
 
-    #[error("Option type parameter count '{count}' unsupported")]
+    #[error("'Option' type parameter count {count} unsupported")]
     OptionLangItemTypeParamCountUnsupported { count: u32 },
 
-    #[error("Option fields not allowed")]
+    #[error("'Option' fields not allowed")]
     OptionLangItemFieldsNotAllowed,
 
-    #[error("Option variants required")]
+    #[error("'Option' variants required")]
     OptionLangItemVariantsRequired,
 
-    #[error("Option variant count invalid")]
+    #[error("'Option' variant count invalid")]
     OptionLangItemVariantCountInvalid,
 
-    #[error("Option requires 'Some' variant")]
+    #[error("'Option' requires 'Some' variant")]
     OptionLangItemSomeRequired,
 
-    #[error("Option requires 'None' variant")]
+    #[error("'Option' requires 'None' variant")]
     OptionLangItemNoneRequired,
 
     #[error("'None' must be nullary")]
@@ -124,20 +133,20 @@ pub enum SemaErrorKind {
     #[error("duplicate attribute argument '{name}' for '{attr}'")]
     AttrDuplicateArg { attr: String, name: String },
 
-    #[error("expected {expected} attribute arguments for '{attr}', found {found}")]
+    #[error("expected {expected} attribute argument(s) for '{attr}', found {found}")]
     AttrArgCountInvalid {
         attr: String,
         expected: u32,
         found: u32,
     },
 
-    #[error("named attribute arguments not allowed for '{attr}'")]
+    #[error("named attribute argumentss not allowed for '{attr}'")]
     AttrNamedArgsNotAllowed { attr: String },
 
     #[error("attribute arguments required for '{attr}'")]
     AttrArgsRequired { attr: String },
 
-    #[error("@musi.lang name argument duplicated")]
+    #[error("language item 'name' argument duplicated")]
     LangItemNameDuplicate,
 }
 
@@ -147,6 +156,15 @@ impl SemaError {
         match &self.kind {
             SemaErrorKind::TypeMismatch { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3006))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::TupleIndexOutOfRange { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3047))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::FieldNotFound { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3048))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::IndexExceedsArrayNesting => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3049))
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::MissingWithClause => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3007))
