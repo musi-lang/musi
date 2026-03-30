@@ -16,6 +16,9 @@ pub enum SemaErrorKind {
     #[error("expected type '{expected}', found '{found}'")]
     TypeMismatch { expected: String, found: String },
 
+    #[error("opaque type '{name}' blocks representation access")]
+    OpaqueTypeBlocksRepresentation { name: String },
+
     #[error("assignment target '{name}' requires 'let mut'")]
     AssignTargetRequiresMutableBinding { name: String },
 
@@ -221,6 +224,9 @@ impl SemaError {
         match &self.kind {
             SemaErrorKind::TypeMismatch { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3006))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::OpaqueTypeBlocksRepresentation { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3064))
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::AssignTargetRequiresMutableBinding { .. } => {
                 Diag::error(self.kind.to_string())

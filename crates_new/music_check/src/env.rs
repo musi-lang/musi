@@ -201,3 +201,145 @@ pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyI
         }
     }
 }
+
+pub(crate) fn generalize_infer_vars(
+    tys: &mut SemTys,
+    ty: SemTyId,
+    start_index: u32,
+) -> (u32, SemTyId) {
+    let ty = super::unify::resolve(tys, ty);
+    let mut vars = std::collections::BTreeSet::<super::ty::InferVarId>::new();
+    collect_unbound_infer_vars(tys, ty, &mut vars);
+    if vars.is_empty() {
+        return (0, ty);
+    }
+
+    let mut mapping = std::collections::BTreeMap::<super::ty::InferVarId, u32>::new();
+    for (i, var) in vars.into_iter().enumerate() {
+        let idx = start_index + u32::try_from(i).unwrap_or(0);
+        let _prev = mapping.insert(var, idx);
+    }
+
+    let out = replace_infer_with_generics(tys, ty, &mapping);
+    (u32::try_from(mapping.len()).unwrap_or(0), out)
+}
+
+fn collect_unbound_infer_vars(
+    tys: &SemTys,
+    ty: SemTyId,
+    out: &mut std::collections::BTreeSet<super::ty::InferVarId>,
+) {
+    let ty = super::unify::resolve(tys, ty);
+    match tys.get(ty) {
+        SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::Generic(_) => {}
+        SemTy::InferVar(var) => {
+            if let Some(bound) = tys.infer_binding(*var) {
+                collect_unbound_infer_vars(tys, bound, out);
+            } else {
+                let _did_insert = out.insert(*var);
+            }
+        }
+        SemTy::Named { args, .. } => {
+            for a in args.iter().copied() {
+                collect_unbound_infer_vars(tys, a, out);
+            }
+        }
+        SemTy::Tuple { items } => {
+            for a in items.iter().copied() {
+                collect_unbound_infer_vars(tys, a, out);
+            }
+        }
+        SemTy::Array { elem, .. } => collect_unbound_infer_vars(tys, *elem, out),
+        SemTy::Arrow {
+            input, output, ..
+        } => {
+            collect_unbound_infer_vars(tys, *input, out);
+            collect_unbound_infer_vars(tys, *output, out);
+        }
+        SemTy::Binary { left, right, .. } => {
+            collect_unbound_infer_vars(tys, *left, out);
+            collect_unbound_infer_vars(tys, *right, out);
+        }
+        SemTy::Mut { base } => collect_unbound_infer_vars(tys, *base, out),
+        SemTy::Record { fields } => {
+            for ty in fields.values().copied() {
+                collect_unbound_infer_vars(tys, ty, out);
+            }
+        }
+    }
+}
+
+fn replace_infer_with_generics(
+    tys: &mut SemTys,
+    ty: SemTyId,
+    mapping: &std::collections::BTreeMap<super::ty::InferVarId, u32>,
+) -> SemTyId {
+    let ty = super::unify::resolve(tys, ty);
+    match tys.get(ty).clone() {
+        SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::Generic(_) => ty,
+        SemTy::InferVar(var) => {
+            if let Some(bound) = tys.infer_binding(var) {
+                return replace_infer_with_generics(tys, bound, mapping);
+            }
+            if let Some(&idx) = mapping.get(&var) {
+                return tys.alloc(SemTy::Generic(idx));
+            }
+            ty
+        }
+        SemTy::Named { name, args } => {
+            let new_args: Vec<_> = args
+                .iter()
+                .copied()
+                .map(|a| replace_infer_with_generics(tys, a, mapping))
+                .collect();
+            tys.alloc(SemTy::Named {
+                name,
+                args: new_args.into_boxed_slice(),
+            })
+        }
+        SemTy::Tuple { items } => {
+            let new_items: Vec<_> = items
+                .iter()
+                .copied()
+                .map(|a| replace_infer_with_generics(tys, a, mapping))
+                .collect();
+            tys.alloc(SemTy::Tuple {
+                items: new_items.into_boxed_slice(),
+            })
+        }
+        SemTy::Array { dims, elem } => {
+            let elem = replace_infer_with_generics(tys, elem, mapping);
+            tys.alloc(SemTy::Array { dims, elem })
+        }
+        SemTy::Arrow {
+            flavor,
+            input,
+            output,
+        } => {
+            let input = replace_infer_with_generics(tys, input, mapping);
+            let output = replace_infer_with_generics(tys, output, mapping);
+            tys.alloc(SemTy::Arrow {
+                flavor,
+                input,
+                output,
+            })
+        }
+        SemTy::Binary { op, left, right } => {
+            let left = replace_infer_with_generics(tys, left, mapping);
+            let right = replace_infer_with_generics(tys, right, mapping);
+            tys.alloc(SemTy::Binary { op, left, right })
+        }
+        SemTy::Mut { base } => {
+            let base = replace_infer_with_generics(tys, base, mapping);
+            tys.alloc(SemTy::Mut { base })
+        }
+        SemTy::Record { fields } => {
+            let mut out = std::collections::BTreeMap::new();
+            for (k, v) in fields {
+                let v = replace_infer_with_generics(tys, v, mapping);
+                let _prev = out.insert(k, v);
+            }
+            tys.alloc(SemTy::Record { fields: out })
+        }
+    }
+}

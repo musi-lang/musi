@@ -24,6 +24,7 @@ use crate::{ResolveError, ResolveErrorKind};
 pub trait ImportEnv {
     fn has_module(&self, from: SourceId, path: &str) -> bool;
     fn for_each_export(&self, from: SourceId, path: &str, f: &mut dyn FnMut(&str));
+    fn is_export_opaque(&self, from: SourceId, path: &str, name: &str) -> bool;
 }
 
 pub struct ResolveOptions<'env> {
@@ -378,7 +379,11 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let site_span = node.span();
         let mut insert = |name: &str| {
             let sym = self.interner.intern(name);
-            self.define(NameBindingKind::Import, Ident::new(sym, site_span));
+            let opaque = env.is_export_opaque(source_id, &path, name);
+            self.define(
+                NameBindingKind::Import { opaque },
+                Ident::new(sym, site_span),
+            );
         };
         env.for_each_export(source_id, &path, &mut insert);
     }

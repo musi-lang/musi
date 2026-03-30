@@ -21,12 +21,15 @@ The language has these important built-in type roles:
 | `Type`    | universe of types        |
 | `Any`     | gradual/dynamic boundary |
 | `Unknown` | imprecise top-like type  |
+| `Syntax`  | syntax values            |
 | `Empty`   | uninhabited type         |
 | `Unit`    | singleton result type    |
 | `Bool`    | truth values             |
 | `Int`     | integer values           |
 | `Float`   | floating-point values    |
 | `String`  | text values              |
+
+`Syntax` is used by `quote` and splice typing in v0.1. The long-term surface may evolve, but the role remains compiler-owned.
 
 The precise runtime layout of these types belongs to the SEAM docs, not this document.
 

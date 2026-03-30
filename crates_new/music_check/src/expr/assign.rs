@@ -146,6 +146,16 @@ impl<'a> Checker<'a> {
                 })
             }
             (SemTy::Named { name, args }, HirMemberKey::Name(field)) => {
+                if self.state.opaque_imports.contains(&name) {
+                    self.error(
+                        origin.span,
+                        SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                            name: self.ctx.interner.resolve(name).to_string(),
+                        },
+                    );
+                    return self.state.builtins.unknown;
+                }
+
                 let Some(def) = self.state.env.get_data_def(name).cloned() else {
                     return self.state.builtins.unknown;
                 };

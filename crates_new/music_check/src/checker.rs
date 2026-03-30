@@ -24,6 +24,7 @@ pub(crate) struct BuiltinTys {
     pub(crate) any: SemTyId,
 
     pub(crate) type_: SemTyId,
+    pub(crate) syntax: SemTyId,
     pub(crate) empty: SemTyId,
     pub(crate) unit: SemTyId,
     pub(crate) bool_: SemTyId,
@@ -60,6 +61,7 @@ pub(crate) struct CheckerState {
     pub(crate) builtins: BuiltinTys,
     pub(crate) flow: FlowState,
     pub(crate) binding_mut: HashMap<NameBindingId, bool>,
+    pub(crate) opaque_imports: std::collections::HashSet<Symbol>,
 }
 
 pub(crate) struct Checker<'a> {
@@ -83,6 +85,7 @@ impl<'a> Checker<'a> {
         let any = semtys.alloc(SemTy::Any);
 
         let type_ = builtin_named(&mut semtys, known.type_);
+        let syntax = builtin_named(&mut semtys, known.syntax);
         let empty = builtin_named(&mut semtys, known.empty);
         let unit = builtin_named(&mut semtys, known.unit);
         let bool_ = builtin_named(&mut semtys, known.bool_);
@@ -112,6 +115,7 @@ impl<'a> Checker<'a> {
                     unknown,
                     any,
                     type_,
+                    syntax,
                     empty,
                     unit,
                     bool_,
@@ -123,8 +127,16 @@ impl<'a> Checker<'a> {
                 },
                 flow: FlowState::default(),
                 binding_mut: HashMap::new(),
+                opaque_imports: std::collections::HashSet::new(),
             },
         };
+
+        for (_id, binding) in &checker.ctx.names.bindings {
+            let music_names::NameBindingKind::Import { opaque: true } = binding.kind else {
+                continue;
+            };
+            let _did_insert = checker.state.opaque_imports.insert(binding.name);
+        }
 
         checker.seed_compiler_prelude_values();
         checker.seed_abort_effect_family();

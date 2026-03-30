@@ -64,16 +64,19 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
         }
         (
             SemTy::Array {
-                dims: _a_dims,
+                dims: a_dims,
                 elem: a_elem,
             },
             SemTy::Array {
-                dims: _b_dims,
+                dims: b_dims,
                 elem: b_elem,
             },
         ) => {
             let _ = unify(tys, a_elem, b_elem)?;
-            Ok(left)
+            if !array_dims_compatible(&a_dims, &b_dims) {
+                return Err(UnifyMismatch { left, right });
+            }
+            Ok(select_array_type(left, right, &a_dims, &b_dims))
         }
         (
             SemTy::Arrow {
@@ -133,14 +136,73 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
     }
 }
 
+fn array_dims_compatible(left: &[music_hir::HirDim], right: &[music_hir::HirDim]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+
+    for (a, b) in left.iter().zip(right.iter()) {
+        match (a, b) {
+            (
+                music_hir::HirDim::IntLit { value: a, .. },
+                music_hir::HirDim::IntLit { value: b, .. },
+            ) if a != b => return false,
+            _ => {}
+        }
+    }
+
+    true
+}
+
+fn array_specificity(dims: &[music_hir::HirDim]) -> u32 {
+    let mut score = 0u32;
+    for d in dims {
+        match d {
+            music_hir::HirDim::IntLit { .. } => score += 2,
+            music_hir::HirDim::Name { .. } => score += 1,
+            music_hir::HirDim::Inferred { .. } => {}
+        }
+    }
+    score
+}
+
+fn select_array_type(
+    left_id: SemTyId,
+    right_id: SemTyId,
+    left_dims: &[music_hir::HirDim],
+    right_dims: &[music_hir::HirDim],
+) -> SemTyId {
+    if array_specificity(right_dims) > array_specificity(left_dims) {
+        right_id
+    } else {
+        left_id
+    }
+}
+
 impl<'a> Checker<'a> {
+    fn read_ty(&self, ty: SemTyId) -> SemTyId {
+        let mut ty = resolve(&self.state.semtys, ty);
+        loop {
+            let SemTy::Mut { base } = self.state.semtys.get(ty).clone() else {
+                return ty;
+            };
+            ty = resolve(&self.state.semtys, base);
+        }
+    }
+
     pub(crate) fn unify_or_report(
         &mut self,
         span: music_basic::Span,
-        left: SemTyId,
-        right: SemTyId,
+        expected: SemTyId,
+        found: SemTyId,
     ) -> SemTyId {
-        match unify(&mut self.state.semtys, left, right) {
+        let expected = resolve(&self.state.semtys, expected);
+        let mut found = resolve(&self.state.semtys, found);
+        if !matches!(self.state.semtys.get(expected), SemTy::Mut { .. }) {
+            found = self.read_ty(found);
+        }
+
+        match unify(&mut self.state.semtys, expected, found) {
             Ok(ok) => ok,
             Err(m) => {
                 let expected = SemTyDisplay {
@@ -159,5 +221,16 @@ impl<'a> Checker<'a> {
                 self.state.builtins.error
             }
         }
+    }
+
+    pub(crate) fn unify_read_or_report(
+        &mut self,
+        span: music_basic::Span,
+        left: SemTyId,
+        right: SemTyId,
+    ) -> SemTyId {
+        let left = self.read_ty(left);
+        let right = self.read_ty(right);
+        self.unify_or_report(span, left, right)
     }
 }

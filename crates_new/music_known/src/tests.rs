@@ -10,6 +10,7 @@ fn known_symbols_have_canonical_spelling() {
     assert_eq!(interner.resolve(k.type_), "Type");
     assert_eq!(interner.resolve(k.any), "Any");
     assert_eq!(interner.resolve(k.unknown), "Unknown");
+    assert_eq!(interner.resolve(k.syntax), "Syntax");
     assert_eq!(interner.resolve(k.empty), "Empty");
     assert_eq!(interner.resolve(k.unit), "Unit");
     assert_eq!(interner.resolve(k.bool_), "Bool");
@@ -38,8 +39,8 @@ fn compiler_prelude_is_stable() {
     assert_eq!(
         names,
         vec![
-            "Type", "Any", "Unknown", "Empty", "Unit", "Bool", "Int", "Float", "String", "CString",
-            "CPtr", "Abort",
+            "Type", "Any", "Unknown", "Syntax", "Empty", "Unit", "Bool", "Int", "Float", "String",
+            "CString", "CPtr", "Abort",
         ]
     );
 }

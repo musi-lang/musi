@@ -324,7 +324,7 @@ impl<'a> Checker<'a> {
             };
 
             clause_effs.union_with(&body_effs);
-            let _ = self.unify_or_report(origin.span, body_ty, result);
+            let _ = self.unify_or_report(origin.span, result, body_ty);
         }
 
         if value_clause_count != 1 {
@@ -350,9 +350,9 @@ impl<'a> Checker<'a> {
         if let Some(value) = value {
             let (t, e) = self.synth_expr(value);
             effs.union_with(&e);
-            let _ = self.unify_or_report(origin.span, t, ctx.arg);
+            let _ = self.unify_or_report(origin.span, ctx.arg, t);
         } else {
-            let _ = self.unify_or_report(origin.span, self.state.builtins.unit, ctx.arg);
+            let _ = self.unify_or_report(origin.span, ctx.arg, self.state.builtins.unit);
         }
 
         (ctx.result, effs)

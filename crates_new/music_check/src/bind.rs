@@ -131,40 +131,58 @@ impl<'a> Checker<'a> {
             HirPatKind::Record { fields } => {
                 let record_def = match self.state.semtys.get(scrut_ty).clone() {
                     SemTy::Record { fields } => Some(fields),
-                    SemTy::Named { name, args } => self
-                        .state
-                        .env
-                        .get_data_def(name)
-                        .cloned()
-                        .and_then(|def| {
-                            let Some(field_defs) = def.fields else {
-                                self.error(
-                                    pat.origin.span,
-                                    SemaErrorKind::RecordPatternRequiresRecord,
-                                );
-                                return None;
-                            };
-                            let generic_count = def.generic_count;
-
-                            let mut out = std::collections::BTreeMap::new();
-                            for (k, v) in field_defs {
-                                let mut subst = Vec::with_capacity(generic_count as usize);
-                                for i in 0..generic_count {
-                                    subst.push(
-                                        args.get(i as usize)
-                                            .copied()
-                                            .unwrap_or(self.state.builtins.unknown),
-                                    );
-                                }
-                                let ty = substitute_generics(&mut self.state.semtys, v.ty, &subst);
-                                let _prev = out.insert(k, ty);
-                            }
-                            Some(out)
-                        })
-                        .or_else(|| {
-                            self.error(pat.origin.span, SemaErrorKind::RecordPatternRequiresRecord);
+                    SemTy::Named { name, args } => {
+                        if self.state.opaque_imports.contains(&name) {
+                            self.error(
+                                pat.origin.span,
+                                SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                                    name: self.ctx.interner.resolve(name).to_string(),
+                                },
+                            );
                             None
-                        }),
+                        } else {
+                            self.state
+                                .env
+                                .get_data_def(name)
+                                .cloned()
+                                .and_then(|def| {
+                                    let Some(field_defs) = def.fields else {
+                                        self.error(
+                                            pat.origin.span,
+                                            SemaErrorKind::RecordPatternRequiresRecord,
+                                        );
+                                        return None;
+                                    };
+                                    let generic_count = def.generic_count;
+
+                                    let mut out = std::collections::BTreeMap::new();
+                                    for (k, v) in field_defs {
+                                        let mut subst = Vec::with_capacity(generic_count as usize);
+                                        for i in 0..generic_count {
+                                            subst.push(
+                                                args.get(i as usize)
+                                                    .copied()
+                                                    .unwrap_or(self.state.builtins.unknown),
+                                            );
+                                        }
+                                        let ty = substitute_generics(
+                                            &mut self.state.semtys,
+                                            v.ty,
+                                            &subst,
+                                        );
+                                        let _prev = out.insert(k, ty);
+                                    }
+                                    Some(out)
+                                })
+                                .or_else(|| {
+                                    self.error(
+                                        pat.origin.span,
+                                        SemaErrorKind::RecordPatternRequiresRecord,
+                                    );
+                                    None
+                                })
+                        }
+                    }
                     SemTy::Unknown | SemTy::Any | SemTy::Error | SemTy::InferVar(_) => None,
                     _ => {
                         self.error(pat.origin.span, SemaErrorKind::RecordPatternRequiresRecord);
@@ -229,7 +247,14 @@ impl<'a> Checker<'a> {
                         name: ty_name,
                         args,
                     } => {
-                        if let Some(def) = self.state.env.get_data_def(ty_name).cloned() {
+                        if self.state.opaque_imports.contains(&ty_name) {
+                            self.error(
+                                pat.origin.span,
+                                SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                                    name: self.ctx.interner.resolve(ty_name).to_string(),
+                                },
+                            );
+                        } else if let Some(def) = self.state.env.get_data_def(ty_name).cloned() {
                             generic_count = def.generic_count;
                             ty_args = args;
                             if let Some(variants) = def.variants.as_ref() {

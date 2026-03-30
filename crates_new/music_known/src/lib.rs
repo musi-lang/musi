@@ -13,6 +13,7 @@ pub struct KnownSymbols {
     pub type_: Symbol,
     pub any: Symbol,
     pub unknown: Symbol,
+    pub syntax: Symbol,
     pub empty: Symbol,
     pub unit: Symbol,
     pub bool_: Symbol,
@@ -48,6 +49,7 @@ impl KnownSymbols {
             type_: interner.intern("Type"),
             any: interner.intern("Any"),
             unknown: interner.intern("Unknown"),
+            syntax: interner.intern("Syntax"),
             empty: interner.intern("Empty"),
             unit: interner.intern("Unit"),
             bool_: interner.intern("Bool"),
@@ -69,11 +71,12 @@ impl KnownSymbols {
 
     /// Compiler-owned names that are always seeded into name resolution.
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 12] {
+    pub const fn compiler_prelude(self) -> [Symbol; 13] {
         [
             self.type_,
             self.any,
             self.unknown,
+            self.syntax,
             self.empty,
             self.unit,
             self.bool_,

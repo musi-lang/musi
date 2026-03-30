@@ -30,7 +30,7 @@ pub struct NameBinding {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameBindingKind {
     Prelude,
-    Import,
+    Import { opaque: bool },
     Let,
     Param,
     TypeParam,

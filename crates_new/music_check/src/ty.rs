@@ -46,7 +46,7 @@ pub enum SemTy {
     Generic(u32),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InferVarId(u32);
 
 #[derive(Debug)]
@@ -158,8 +158,11 @@ fn fmt_ty(
             }
             write!(f, ")")
         }
-        SemTy::Array { elem, .. } => {
-            write!(f, "[]")?;
+        SemTy::Array { elem: _, .. } => {
+            let SemTy::Array { dims, elem } = tys.get(ty) else {
+                return write!(f, "[]<error>");
+            };
+            fmt_array_dims(dims, interner, f)?;
             fmt_ty(tys, interner, *elem, f)
         }
         SemTy::Arrow {
@@ -199,4 +202,27 @@ fn fmt_ty(
             write!(f, "}}")
         }
     }
+}
+
+fn fmt_array_dims(
+    dims: &[HirDim],
+    interner: &music_names::Interner,
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    if dims.len() == 1 && matches!(dims[0], HirDim::Inferred { .. }) {
+        return write!(f, "[]");
+    }
+
+    write!(f, "[")?;
+    for (i, dim) in dims.iter().enumerate() {
+        if i != 0 {
+            write!(f, ", ")?;
+        }
+        match dim {
+            HirDim::IntLit { value, .. } => write!(f, "{value}")?,
+            HirDim::Name { name } => write!(f, "{}", interner.resolve(name.name))?,
+            HirDim::Inferred { .. } => write!(f, "_")?,
+        }
+    }
+    write!(f, "]")
 }

@@ -44,7 +44,7 @@ Status legend:
 | `case ... of` with guards                      | done | done      | done        | done    | Pattern/type interactions checked                             |
 | `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
 | `perform`, `handle`, `resume`                  | done | done      | done        | done    | Handler clause shape and arity checked                         |
-| `quote` and splice forms                       | done | done      | done        | partial | Quote/splice are typed as `Any` today                         |
+| `quote` and splice forms                       | done | done      | done        | partial | Quote/splice are typed as `Syntax` in v0.1                    |
 
 ## Types
 
@@ -79,4 +79,3 @@ Status legend:
 
 - `music_codegen`: missing
 - `music_fe`: missing
-- `music_session`: missing

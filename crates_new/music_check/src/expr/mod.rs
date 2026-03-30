@@ -11,7 +11,7 @@ use crate::SemaErrorKind;
 use super::unify;
 use super::{
     EffectKey, EffectRow, SemTy, SemTyId,
-    env::{ValueScheme, substitute_generics},
+    env::{ValueScheme, generalize_infer_vars, substitute_generics},
 };
 
 use super::checker::Checker;
@@ -55,7 +55,7 @@ impl<'a> Checker<'a> {
             }
             _ => {
                 let (ty, effs) = self.synth_expr(expr_id);
-                let ty = self.unify_or_report(expr.origin.span, ty, expected);
+                let ty = self.unify_or_report(expr.origin.span, expected, ty);
                 (ty, effs)
             }
         };
@@ -165,8 +165,8 @@ impl<'a> Checker<'a> {
                                 effs.union_with(&e);
                                 let _ = self.unify_or_report(
                                     origin.span,
-                                    t,
                                     self.state.builtins.string_,
+                                    t,
                                 );
                             }
                         }
@@ -208,7 +208,7 @@ impl<'a> Checker<'a> {
                     }
                 }
                 let ty = self.state.semtys.alloc(SemTy::Array {
-                    dims: Box::new([]),
+                    dims: Box::new([music_hir::HirDim::Inferred { span: origin.span }]),
                     elem,
                 });
                 (ty, effs)
@@ -261,17 +261,17 @@ impl<'a> Checker<'a> {
                 let (inner, effs) = self.synth_expr(expr);
                 let ty = match op {
                     music_hir::HirPrefixOp::Negate => {
-                        let _ = self.unify_or_report(origin.span, inner, self.state.builtins.int_);
+                        let _ = self.unify_or_report(origin.span, self.state.builtins.int_, inner);
                         self.state.builtins.int_
                     }
                     music_hir::HirPrefixOp::Not => {
                         if self.is_named_zero_arg(inner, self.state.builtins.int_) {
                             let _ =
-                                self.unify_or_report(origin.span, inner, self.state.builtins.int_);
+                                self.unify_or_report(origin.span, self.state.builtins.int_, inner);
                             self.state.builtins.int_
                         } else {
                             let _ =
-                                self.unify_or_report(origin.span, inner, self.state.builtins.bool_);
+                                self.unify_or_report(origin.span, self.state.builtins.bool_, inner);
                             self.state.builtins.bool_
                         }
                     }
@@ -290,10 +290,10 @@ impl<'a> Checker<'a> {
                 clauses,
             } => self.synth_handle(origin, expr, handler, clauses),
             HirExprKind::Resume { value } => self.synth_resume(origin, value),
-            HirExprKind::Quote { .. } => (self.state.builtins.any, EffectRow::empty()),
+            HirExprKind::Quote { .. } => (self.state.builtins.syntax, EffectRow::empty()),
             HirExprKind::Splice { .. } => {
                 self.error(origin.span, SemaErrorKind::SpliceOutsideQuote);
-                (self.state.builtins.any, EffectRow::empty())
+                (self.state.builtins.syntax, EffectRow::empty())
             }
         };
 
@@ -423,10 +423,14 @@ impl<'a> Checker<'a> {
                 self.error(origin.span, SemaErrorKind::MissingWithClause);
             }
 
+            let base_generic_count = u32::try_from(type_params.len()).unwrap_or(0);
+            let (extra_generic_count, fn_ty) =
+                generalize_infer_vars(&mut self.state.semtys, fn_ty, base_generic_count);
+
             self.bind_pat_to_scheme(
                 pat,
                 ValueScheme {
-                    generic_count: type_params.len().try_into().unwrap_or(0),
+                    generic_count: base_generic_count + extra_generic_count,
                     ty: fn_ty,
                     declared_effects,
                 },
@@ -490,11 +494,35 @@ impl<'a> Checker<'a> {
                 latent = self.state.flow.callable_effs.get(&value).cloned();
             }
 
+            let base_generic_count = u32::try_from(type_params.len()).unwrap_or(0);
+            let mut scheme_generic_count = base_generic_count;
+            let mut scheme_ty = rhs_ty;
+
+            if annot.is_none()
+                && type_params.is_empty()
+                && matches!(self.ctx.store.exprs.get(value).kind, HirExprKind::Name { .. })
+            {
+                if let HirExprKind::Name { ident } = self.ctx.store.exprs.get(value).kind.clone() {
+                    if let Some(binding) = self.binding_for_use(ident.span) {
+                        if let Some(scheme) = self.state.env.get_value(binding).cloned() {
+                            scheme_generic_count = scheme.generic_count;
+                            scheme_ty = scheme.ty;
+                            latent = scheme.declared_effects;
+                        }
+                    }
+                }
+            } else if rhs_effs.is_pure() {
+                let (extra, generalized) =
+                    generalize_infer_vars(&mut self.state.semtys, rhs_ty, base_generic_count);
+                scheme_generic_count = base_generic_count + extra;
+                scheme_ty = generalized;
+            }
+
             self.bind_pat_to_scheme(
                 pat,
                 ValueScheme {
-                    generic_count: type_params.len().try_into().unwrap_or(0),
-                    ty: rhs_ty,
+                    generic_count: scheme_generic_count,
+                    ty: scheme_ty,
                     declared_effects: latent,
                 },
             );
@@ -615,7 +643,7 @@ impl<'a> Checker<'a> {
                     .annot
                     .map(|t| {
                         let t = self.lower_hir_ty(t, &ty_params_map);
-                        let _ = self.unify_or_report(p.origin.span, t, expected);
+                        let _ = self.unify_or_report(p.origin.span, expected, t);
                         t
                     })
                     .unwrap_or(expected);
@@ -639,7 +667,7 @@ impl<'a> Checker<'a> {
             let actual_ret = ret
                 .map(|t| {
                     let t = self.lower_hir_ty(t, &ty_params_map);
-                    let _ = self.unify_or_report(member_origin.span, t, expected_ret);
+                    let _ = self.unify_or_report(member_origin.span, expected_ret, t);
                     t
                 })
                 .unwrap_or(expected_ret);
@@ -730,7 +758,7 @@ impl<'a> Checker<'a> {
                         };
                         effs.union_with(&e);
                         if let Some(expected_field) = expected_field {
-                            let _ = self.unify_or_report(name.span, val_ty, expected_field);
+                            let _ = self.unify_or_report(name.span, expected_field, val_ty);
                         }
                     }
                 }
@@ -794,7 +822,7 @@ impl<'a> Checker<'a> {
                     effs.union_with(&e);
 
                     if let Some(expected_field) = expected_field {
-                        let _ = self.unify_or_report(name.span, val_ty, expected_field);
+                        let _ = self.unify_or_report(name.span, expected_field, val_ty);
                     }
                 }
             }
@@ -824,7 +852,7 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        let ty = self.unify_or_report(origin.span, self.state.builtins.unknown, expected);
+        let ty = self.unify_or_report(origin.span, expected, self.state.builtins.unknown);
         (ty, effs)
     }
 
@@ -843,6 +871,16 @@ impl<'a> Checker<'a> {
         else {
             return self.synth_and_unify_variant(origin, payload, expected);
         };
+
+        if self.state.opaque_imports.contains(&ty_name) {
+            self.error(
+                origin.span,
+                SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                    name: self.ctx.interner.resolve(ty_name).to_string(),
+                },
+            );
+            return self.synth_and_unify_variant(origin, payload, expected);
+        }
 
         let Some(def) = self.state.env.get_data_def(ty_name).cloned() else {
             return self.synth_and_unify_variant(origin, payload, expected);
@@ -894,7 +932,7 @@ impl<'a> Checker<'a> {
             let (_t, e) = self.synth_expr(payload);
             effs.union_with(&e);
         }
-        let ty = self.unify_or_report(origin.span, self.state.builtins.unknown, expected);
+        let ty = self.unify_or_report(origin.span, expected, self.state.builtins.unknown);
         (ty, effs)
     }
 
@@ -937,7 +975,7 @@ impl<'a> Checker<'a> {
             output: out,
         });
 
-        let _ = self.unify_or_report(origin.span, callee_ty, expect_fn);
+        let _ = self.unify_or_report(origin.span, expect_fn, callee_ty);
 
         self.union_call_effects(callee, &mut effs);
 
@@ -1101,6 +1139,16 @@ impl<'a> Checker<'a> {
                 .copied()
                 .unwrap_or(self.state.builtins.unknown),
             (SemTy::Named { name, args }, HirMemberKey::Name(field)) => {
+                if self.state.opaque_imports.contains(&name) {
+                    self.error(
+                        field.span,
+                        SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                            name: self.ctx.interner.resolve(name).to_string(),
+                        },
+                    );
+                    return self.state.builtins.unknown;
+                }
+
                 let Some(def) = self.state.env.get_data_def(name).cloned() else {
                     return self.state.builtins.unknown;
                 };
@@ -1147,10 +1195,19 @@ impl<'a> Checker<'a> {
             }
 
             match self.state.semtys.get(resolved).clone() {
-                SemTy::Array { elem, .. } => {
+                SemTy::Array { dims, elem } => {
                     array_chain = true;
-                    let _ = self.unify_or_report(origin.span, idx_ty, self.state.builtins.int_);
-                    ty = elem;
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.int_, idx_ty);
+
+                    if dims.len() == 1 {
+                        ty = elem;
+                    } else {
+                        let remaining = dims[1..].to_vec().into_boxed_slice();
+                        ty = self.state.semtys.alloc(SemTy::Array {
+                            dims: remaining,
+                            elem,
+                        });
+                    }
                 }
                 SemTy::Tuple { items } => {
                     if array_chain {
@@ -1172,7 +1229,7 @@ impl<'a> Checker<'a> {
                             ty = self.state.builtins.error;
                         }
                     } else {
-                        let _ = self.unify_or_report(origin.span, idx_ty, self.state.builtins.int_);
+                        let _ = self.unify_or_report(origin.span, self.state.builtins.int_, idx_ty);
                         ty = self.state.builtins.unknown;
                     }
                 }
@@ -1198,6 +1255,17 @@ impl<'a> Checker<'a> {
                     if array_chain {
                         self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
                         return self.state.builtins.error;
+                    }
+
+                    if self.state.opaque_imports.contains(&name) {
+                        self.error(
+                            origin.span,
+                            SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                                name: self.ctx.interner.resolve(name).to_string(),
+                            },
+                        );
+                        ty = self.state.builtins.unknown;
+                        continue;
                     }
 
                     let Some(field_name) = string_lit_expr_text(self, idx_expr) else {
@@ -1262,7 +1330,7 @@ impl<'a> Checker<'a> {
 
     fn synth_record_update(
         &mut self,
-        _origin: HirOrigin,
+        origin: HirOrigin,
         base: HirExprId,
         items: Box<[HirRecordItem]>,
     ) -> (SemTyId, EffectRow) {
@@ -1355,6 +1423,30 @@ impl<'a> Checker<'a> {
             return (self.state.builtins.unknown, effs);
         };
 
+        if self.state.opaque_imports.contains(&name) {
+            self.error(
+                origin.span,
+                SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                    name: self.ctx.interner.resolve(name).to_string(),
+                },
+            );
+            for item in items.iter() {
+                match item {
+                    HirRecordItem::Field { value, .. } => {
+                        if let Some(expr) = value {
+                            let (_t, e) = self.synth_expr(*expr);
+                            effs.union_with(&e);
+                        }
+                    }
+                    HirRecordItem::Spread { expr, .. } => {
+                        let (_t, e) = self.synth_expr(*expr);
+                        effs.union_with(&e);
+                    }
+                }
+            }
+            return (self.state.builtins.unknown, effs);
+        }
+
         let Some(def) = self.state.env.get_data_def(name).cloned() else {
             for item in items.iter() {
                 match item {
@@ -1436,7 +1528,7 @@ impl<'a> Checker<'a> {
                     effs.union_with(&e);
 
                     if let Some(expected_field) = expected_field {
-                        let _ = self.unify_or_report(field.span, val_ty, expected_field);
+                        let _ = self.unify_or_report(field.span, expected_field, val_ty);
                     }
                 }
             }
@@ -1465,7 +1557,7 @@ impl<'a> Checker<'a> {
                     input: l_ty,
                     output: out,
                 });
-                let _ = self.unify_or_report(origin.span, r_ty, expect_fn);
+                let _ = self.unify_or_report(origin.span, expect_fn, r_ty);
                 self.union_call_effects(right, &mut effs);
                 (out, effs)
             }
@@ -1478,12 +1570,12 @@ impl<'a> Checker<'a> {
                 let ty = if self.is_named_zero_arg(l_ty, self.state.builtins.int_)
                     || self.is_named_zero_arg(r_ty, self.state.builtins.int_)
                 {
-                    let _ = self.unify_or_report(origin.span, l_ty, self.state.builtins.int_);
-                    let _ = self.unify_or_report(origin.span, r_ty, self.state.builtins.int_);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.int_, l_ty);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.int_, r_ty);
                     self.state.builtins.int_
                 } else {
-                    let _ = self.unify_or_report(origin.span, l_ty, self.state.builtins.bool_);
-                    let _ = self.unify_or_report(origin.span, r_ty, self.state.builtins.bool_);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.bool_, l_ty);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.bool_, r_ty);
                     self.state.builtins.bool_
                 };
                 (ty, effs)
@@ -1497,15 +1589,15 @@ impl<'a> Checker<'a> {
                 let (l_ty, mut effs) = self.synth_expr(left);
                 let (r_ty, r_effs) = self.synth_expr(right);
                 effs.union_with(&r_effs);
-                let _ = self.unify_or_report(origin.span, l_ty, r_ty);
+                let _ = self.unify_read_or_report(origin.span, l_ty, r_ty);
                 (self.state.builtins.bool_, effs)
             }
             HirBinaryOp::Shl | HirBinaryOp::Shr => {
                 let (l_ty, mut effs) = self.synth_expr(left);
                 let (r_ty, r_effs) = self.synth_expr(right);
                 effs.union_with(&r_effs);
-                let _ = self.unify_or_report(origin.span, l_ty, self.state.builtins.int_);
-                let _ = self.unify_or_report(origin.span, r_ty, self.state.builtins.int_);
+                let _ = self.unify_or_report(origin.span, self.state.builtins.int_, l_ty);
+                let _ = self.unify_or_report(origin.span, self.state.builtins.int_, r_ty);
                 (self.state.builtins.int_, effs)
             }
             HirBinaryOp::Add
@@ -1519,12 +1611,12 @@ impl<'a> Checker<'a> {
                 if self.is_named_zero_arg(l_ty, self.state.builtins.float_)
                     || self.is_named_zero_arg(r_ty, self.state.builtins.float_)
                 {
-                    let _ = self.unify_or_report(origin.span, l_ty, self.state.builtins.float_);
-                    let _ = self.unify_or_report(origin.span, r_ty, self.state.builtins.float_);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.float_, l_ty);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.float_, r_ty);
                     (self.state.builtins.float_, effs)
                 } else {
-                    let _ = self.unify_or_report(origin.span, l_ty, self.state.builtins.int_);
-                    let _ = self.unify_or_report(origin.span, r_ty, self.state.builtins.int_);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.int_, l_ty);
+                    let _ = self.unify_or_report(origin.span, self.state.builtins.int_, r_ty);
                     (self.state.builtins.int_, effs)
                 }
             }
@@ -1570,7 +1662,7 @@ impl<'a> Checker<'a> {
             input,
             output: out,
         });
-        let _ = self.unify_or_report(origin.span, callee_ty, expect_fn);
+        let _ = self.unify_or_report(origin.span, expect_fn, callee_ty);
 
         (out, effs)
     }
@@ -1590,12 +1682,12 @@ impl<'a> Checker<'a> {
             if let Some(guard) = arm.guard {
                 let (t, e) = self.synth_expr(guard);
                 effs.union_with(&e);
-                let _ = self.unify_or_report(origin.span, t, self.state.builtins.bool_);
+                let _ = self.unify_or_report(origin.span, self.state.builtins.bool_, t);
             }
 
             let (body_ty, body_effs) = self.synth_expr(arm.body);
             effs.union_with(&body_effs);
-            let _ = self.unify_or_report(origin.span, body_ty, result);
+            let _ = self.unify_or_report(origin.span, result, body_ty);
         }
 
         (result, effs)
@@ -1635,28 +1727,6 @@ fn string_lit_expr_text(checker: &Checker<'_>, expr_id: HirExprId) -> Option<Str
 }
 
 fn parse_int_lit_u32(text: &str) -> Option<u32> {
-    let v = parse_int_lit_u64(text)?;
+    let v = music_basic::int_lit::parse_u64(text)?;
     u32::try_from(v).ok()
-}
-
-fn parse_int_lit_u64(text: &str) -> Option<u64> {
-    let text = text.trim();
-    let (base, digits) = if let Some(hex) = text.strip_prefix("0x").or(text.strip_prefix("0X")) {
-        (16, hex)
-    } else if let Some(oct) = text.strip_prefix("0o").or(text.strip_prefix("0O")) {
-        (8, oct)
-    } else if let Some(bin) = text.strip_prefix("0b").or(text.strip_prefix("0B")) {
-        (2, bin)
-    } else {
-        (10, text)
-    };
-
-    let mut buf = String::with_capacity(digits.len());
-    for ch in digits.chars() {
-        if ch != '_' {
-            buf.push(ch);
-        }
-    }
-
-    u64::from_str_radix(&buf, base).ok()
 }

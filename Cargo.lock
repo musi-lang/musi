@@ -353,6 +353,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_session"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_basic",
+ "music_check",
+ "music_hir",
+ "music_known",
+ "music_lex",
+ "music_names",
+ "music_parse",
+ "music_resolve",
+]
+
+[[package]]
 name = "music_storage"
 version = "0.1.0-alpha.1"
 dependencies = [

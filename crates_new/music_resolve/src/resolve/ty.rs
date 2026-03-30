@@ -179,15 +179,32 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let mut dims = Vec::new();
         for tok in node.child_tokens() {
             match tok.kind() {
-                TokenKind::IntLit => dims.push(HirDim::IntLit { span: tok.span() }),
+                TokenKind::IntLit => {
+                    let raw = self.slice(tok.span());
+                    let value = music_basic::int_lit::parse_u64(raw).unwrap_or(0);
+                    dims.push(HirDim::IntLit {
+                        span: tok.span(),
+                        value,
+                    });
+                }
                 TokenKind::Ident | TokenKind::EscapedIdent => {
-                    let name = self.intern_ident_token(tok);
-                    self.check_use(name);
-                    dims.push(HirDim::Name { name });
+                    let raw = self.slice(tok.span());
+                    if raw == "_" {
+                        dims.push(HirDim::Inferred { span: tok.span() });
+                    } else {
+                        let name = self.intern_ident_token(tok);
+                        self.check_use(name);
+                        dims.push(HirDim::Name { name });
+                    }
                 }
                 TokenKind::LBracket | TokenKind::RBracket | TokenKind::Comma => {}
                 _ => {}
             }
+        }
+
+        // `[]T` is rank-1 with inferred dimension.
+        if dims.is_empty() {
+            dims.push(HirDim::Inferred { span: node.span() });
         }
 
         let elem = node

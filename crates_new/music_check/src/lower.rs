@@ -40,6 +40,7 @@ impl<'a> Checker<'a> {
                         s if s == self.state.known.any => return self.state.builtins.any,
                         s if s == self.state.known.unknown => return self.state.builtins.unknown,
                         s if s == self.state.known.type_ => return self.state.builtins.type_,
+                        s if s == self.state.known.syntax => return self.state.builtins.syntax,
                         s if s == self.state.known.empty => return self.state.builtins.empty,
                         s if s == self.state.known.unit => return self.state.builtins.unit,
                         s if s == self.state.known.bool_ => return self.state.builtins.bool_,

@@ -47,7 +47,7 @@ impl<'a> Checker<'a> {
             if let Some(default) = p.default {
                 let (t, e) = self.synth_expr(default);
                 effs.union_with(&e);
-                let _ = self.unify_or_report(p.origin.span, t, p_ty);
+                let _ = self.unify_or_report(p.origin.span, p_ty, t);
             }
         }
 
