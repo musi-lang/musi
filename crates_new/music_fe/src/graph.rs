@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::path::Path;
 
 use music_basic::{SourceId, SourceMap};
 use music_lex::Lexer;
@@ -20,7 +21,17 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
     let entry_source = sources.get(entry).ok_or(FrontendError {
         kind: FrontendErrorKind::EntrySourceMissing,
     })?;
-    let entry_path = entry_source.path().to_string_lossy().into_owned();
+    let entry_path = music_basic::path::normalize_path(entry_source.path())
+        .to_string_lossy()
+        .into_owned();
+
+    let mut source_id_by_path = HashMap::<String, SourceId>::new();
+    for source in sources.iter() {
+        let key = music_basic::path::normalize_path(source.path())
+            .to_string_lossy()
+            .into_owned();
+        let _prev = source_id_by_path.insert(key, source.id());
+    }
 
     let mut seen = BTreeSet::<String>::new();
     let mut queue = VecDeque::<String>::new();
@@ -31,7 +42,7 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
     let mut node_by_path = HashMap::<String, usize>::new();
 
     while let Some(path) = queue.pop_front() {
-        let source_id = find_source_id_by_path(sources, &path).ok_or(FrontendError {
+        let source_id = source_id_by_path.get(&path).copied().ok_or(FrontendError {
             kind: FrontendErrorKind::ImportTargetMissing,
         })?;
 
@@ -43,7 +54,7 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
         let parsed = music_parse::parse(source_id, &lexed);
 
         // Import discovery is syntax-only.
-        let imports = collect_import_paths(sources, &parsed);
+        let imports = collect_import_paths(sources, source.path(), &parsed);
 
         let idx = nodes.len();
         nodes.push(ModuleNode {
@@ -73,14 +84,11 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
     Ok(ModuleGraph { nodes_in_order })
 }
 
-fn find_source_id_by_path(sources: &SourceMap, path: &str) -> Option<SourceId> {
-    sources.iter().find_map(|source| {
-        let p = source.path().to_string_lossy();
-        (p.as_ref() == path).then_some(source.id())
-    })
-}
-
-fn collect_import_paths(sources: &SourceMap, parsed: &ParsedSource) -> Vec<String> {
+fn collect_import_paths(
+    sources: &SourceMap,
+    from_path: &Path,
+    parsed: &ParsedSource,
+) -> Vec<String> {
     let mut out = Vec::new();
     let tree = parsed.tree();
     let root = tree.root();
@@ -95,7 +103,17 @@ fn collect_import_paths(sources: &SourceMap, parsed: &ParsedSource) -> Vec<Strin
                     let start = usize::try_from(path_tok.span().start).unwrap_or(0);
                     let end = usize::try_from(path_tok.span().end).unwrap_or(start);
                     let raw = source.text().get(start..end).unwrap_or("");
-                    out.push(music_basic::string_lit::decode(raw));
+                    let raw = music_basic::string_lit::decode(raw);
+                    let key = if raw.starts_with('@') {
+                        raw
+                    } else if raw.starts_with('.') || Path::new(raw.as_str()).is_absolute() {
+                        music_basic::path::resolve_import_path(from_path, raw.as_str())
+                            .to_string_lossy()
+                            .into_owned()
+                    } else {
+                        raw
+                    };
+                    out.push(key);
                 }
             }
         }

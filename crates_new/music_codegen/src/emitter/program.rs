@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use music_basic::{SourceId, SourceMap, Span};
 use music_check::AnalyzedModule;
-use music_hir::{HirExprId, HirExprKind};
+use music_hir::HirExprKind;
 use music_il::{
     ConstantPool, GlobalEntry, Instruction, MethodEntry, MethodName, Opcode, SeamArtifact,
     TypeDescriptor,
@@ -86,12 +87,28 @@ impl<'a> ProgramEmitter<'a> {
     }
 
     fn register_import_globals(&mut self, path: &str, analyzed: &AnalyzedModule) {
-        let mut import_exprs = Vec::new();
-        collect_import_exprs(&analyzed.module, analyzed.module.root, &mut import_exprs);
+        let import_exprs = collect_import_exprs(&analyzed.module);
+
+        let from_path = self
+            .sources
+            .get(analyzed.module.source_id)
+            .map(|s| s.path())
+            .unwrap_or_else(|| Path::new(""));
 
         for (import_span, import_path_span, exports) in import_exprs {
-            let import_path =
+            let raw_import_path =
                 decode_string_lit(self.sources, analyzed.module.source_id, import_path_span);
+            let import_path = if raw_import_path.starts_with('@') {
+                raw_import_path
+            } else if raw_import_path.starts_with('.')
+                || Path::new(raw_import_path.as_str()).is_absolute()
+            {
+                music_basic::path::resolve_import_path(from_path, raw_import_path.as_str())
+                    .to_string_lossy()
+                    .into_owned()
+            } else {
+                raw_import_path
+            };
             for export in exports {
                 let target = self
                     .module_export_globals
@@ -164,6 +181,7 @@ impl<'a> ProgramEmitter<'a> {
         };
 
         let mut entry_instructions = Vec::new();
+        let mut entry_locals_max = 0usize;
 
         let mut f = FunctionEmitter::new(
             self.interner,
@@ -171,6 +189,7 @@ impl<'a> ProgramEmitter<'a> {
             analyzed,
             &self.global_by_binding,
             &self.import_global_by_binding,
+            &self.module_export_globals,
             &mut self.constants,
             &mut self.methods,
             &mut self.types,
@@ -214,12 +233,14 @@ impl<'a> ProgramEmitter<'a> {
                         ));
                         entry_instructions.push(Instruction::with_u16(Opcode::StGlob, global_idx));
                     } else if let Some(value) = value {
-                        f.emit_expr_into(&mut entry_instructions, value)?;
+                        let locals = f.emit_expr_into(&mut entry_instructions, value)?;
+                        entry_locals_max = entry_locals_max.max(locals);
                         entry_instructions.push(Instruction::with_u16(Opcode::StGlob, global_idx));
                     }
                 }
                 _ => {
-                    f.emit_expr_into(&mut entry_instructions, expr_id)?;
+                    let locals = f.emit_expr_into(&mut entry_instructions, expr_id)?;
+                    entry_locals_max = entry_locals_max.max(locals);
                     entry_instructions.push(Instruction::basic(Opcode::Pop));
                 }
             }
@@ -234,7 +255,7 @@ impl<'a> ProgramEmitter<'a> {
             .get_mut(entry_index)
             .expect("entry method exists");
         entry.instructions = entry_instructions;
-        entry.locals_count = 0;
+        entry.locals_count = u16::try_from(entry_locals_max).unwrap_or(u16::MAX);
 
         let _ = path;
         Ok(())
@@ -274,23 +295,15 @@ fn find_def_binding(
         .map(|(id, _)| id)
 }
 
-fn collect_import_exprs(
-    module: &music_hir::HirModule,
-    root: HirExprId,
-    out: &mut Vec<(Span, Span, Box<[Symbol]>)>,
-) {
-    let expr = module.store.exprs.get(root).clone();
-    match expr.kind {
-        HirExprKind::Sequence { exprs, .. } => {
-            for id in exprs.iter().copied() {
-                collect_import_exprs(module, id, out);
-            }
-        }
-        HirExprKind::Import { path, exports } => {
-            out.push((expr.origin.span, path.span, exports));
-        }
-        _ => {}
+fn collect_import_exprs(module: &music_hir::HirModule) -> Vec<(Span, Span, Box<[Symbol]>)> {
+    let mut out = Vec::new();
+    for (_id, expr) in module.store.exprs.iter() {
+        let HirExprKind::Import { path, exports } = &expr.kind else {
+            continue;
+        };
+        out.push((expr.origin.span, path.span, exports.clone()));
     }
+    out
 }
 
 fn decode_string_lit(sources: &SourceMap, source_id: SourceId, span: Span) -> String {

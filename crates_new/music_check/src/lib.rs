@@ -13,6 +13,7 @@ mod effects;
 mod env;
 mod errors;
 mod expr;
+mod ir;
 mod lang;
 mod lower;
 mod ty;
@@ -21,6 +22,7 @@ mod unify;
 use music_ast::SyntaxTree;
 use music_basic::{SourceMap, Span};
 use music_hir::{HirModule, HirOrigin};
+use music_ir::IrModuleInfo;
 use music_names::{Interner, NameBindingId, NameResolution, NameSite, Symbol};
 use music_resolve::{ResolveError, ResolveOptions, ResolvedModule};
 
@@ -38,6 +40,7 @@ pub struct AnalyzedModule {
     pub names: NameResolution,
     pub resolve_errors: Vec<ResolveError>,
     pub check_errors: Vec<SemaError>,
+    pub ir: IrModuleInfo,
 }
 
 #[must_use]
@@ -63,7 +66,7 @@ pub fn analyze_module(
         &mut module.store,
         &mut check_errors,
     );
-    checker.check_module(module.root);
+    let ir = checker.check_module(module.root);
 
     AnalyzedModule {
         module,
@@ -71,6 +74,7 @@ pub fn analyze_module(
         names,
         resolve_errors,
         check_errors,
+        ir,
     }
 }
 

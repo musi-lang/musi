@@ -183,7 +183,9 @@ impl Session {
         let Some(source) = self.sources.get(source_id) else {
             return;
         };
-        let path = source.path().to_string_lossy().into_owned();
+        let path = music_basic::path::normalize_path(source.path())
+            .to_string_lossy()
+            .into_owned();
         if path.is_empty() {
             return;
         }

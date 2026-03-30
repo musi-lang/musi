@@ -11,6 +11,7 @@ publish.workspace = true
 music_basic = { path = "../music_basic" }
 music_check = { path = "../music_check" }
 music_hir = { path = "../music_hir" }
+music_ir = { path = "../music_ir" }
 music_il = { path = "../music_il" }
 music_names = { path = "../music_names" }
 thiserror = { workspace = true }

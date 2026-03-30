@@ -14,6 +14,7 @@ pub(super) struct FunctionEmitter<'a> {
     analyzed: &'a AnalyzedModule,
     globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
     import_globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
+    module_export_globals: &'a std::collections::HashMap<(String, music_names::Symbol), u16>,
     constants: &'a mut ConstantPool,
     methods: &'a mut Vec<MethodEntry>,
     types: &'a mut Vec<TypeDescriptor>,
@@ -26,6 +27,7 @@ impl<'a> FunctionEmitter<'a> {
         analyzed: &'a AnalyzedModule,
         globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
         import_globals_by_binding: &'a std::collections::HashMap<music_names::NameBindingId, u16>,
+        module_export_globals: &'a std::collections::HashMap<(String, music_names::Symbol), u16>,
         constants: &'a mut ConstantPool,
         methods: &'a mut Vec<MethodEntry>,
         types: &'a mut Vec<TypeDescriptor>,
@@ -36,6 +38,7 @@ impl<'a> FunctionEmitter<'a> {
             analyzed,
             globals_by_binding,
             import_globals_by_binding,
+            module_export_globals,
             constants,
             methods,
             types,
@@ -61,8 +64,10 @@ impl<'a> FunctionEmitter<'a> {
             self.analyzed.module.source_id,
             &self.analyzed.module.store,
             &self.analyzed.names,
+            &self.analyzed.ir,
             self.globals_by_binding,
             self.import_globals_by_binding,
+            self.module_export_globals,
             self.constants,
             self.methods,
             self.types,
@@ -81,21 +86,24 @@ impl<'a> FunctionEmitter<'a> {
         &mut self,
         out: &mut Vec<music_il::Instruction>,
         expr_id: HirExprId,
-    ) -> EmitResult<()> {
+    ) -> EmitResult<usize> {
         let mut emitter = MethodEmitter::new(
             self.interner,
             self.sources,
             self.analyzed.module.source_id,
             &self.analyzed.module.store,
             &self.analyzed.names,
+            &self.analyzed.ir,
             self.globals_by_binding,
             self.import_globals_by_binding,
+            self.module_export_globals,
             self.constants,
             self.methods,
             self.types,
         );
         emitter.emit_expr(expr_id)?;
+        let locals_count = emitter.locals_count();
         out.extend(emitter.instructions.drain(..));
-        Ok(())
+        Ok(locals_count)
     }
 }

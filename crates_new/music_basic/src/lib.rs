@@ -1,6 +1,7 @@
 pub mod diag;
 pub mod int_lit;
 pub mod literal;
+pub mod path;
 pub mod source;
 pub mod span;
 pub mod string_lit;

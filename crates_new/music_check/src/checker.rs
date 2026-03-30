@@ -8,6 +8,7 @@ use music_names::{Interner, NameBindingId, NameBindingKind, NameResolution, Name
 use crate::{SemaError, SemaErrorKind};
 
 use super::env::{EffectOpSig, TypeEnv, ValueScheme};
+use super::ir;
 use super::lang::LangItems;
 use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
 
@@ -143,10 +144,19 @@ impl<'a> Checker<'a> {
         checker
     }
 
-    pub(crate) fn check_module(&mut self, root: HirExprId) {
+    pub(crate) fn check_module(&mut self, root: HirExprId) -> music_ir::IrModuleInfo {
         self.validate_public_attrs();
         let _ = self.synth_expr(root);
         self.finalize_expr_types();
+        ir::build_ir_module(
+            self.state.known,
+            self.ctx.interner,
+            &self.state.semtys,
+            &self.state.flow.expr_tys,
+            self.ctx.store,
+            self.ctx.names,
+            self.ctx.source_id,
+        )
     }
 
     fn finalize_expr_types(&mut self) {

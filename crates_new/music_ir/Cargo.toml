@@ -1,0 +1,15 @@
+[package]
+name = "music_ir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Typed IR surface for codegen and lowering (clean-room)"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_names = { path = "../music_names" }
+
+[lints]
+workspace = true
+

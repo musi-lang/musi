@@ -319,18 +319,11 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         let mut exports = Vec::<Symbol>::new();
         if let Some(env) = self.import_env {
-            // The string literal token span still includes quotes.
-            if let Some(source) = self.sources.get(self.source_id) {
-                let span = path_tok.span();
-                let start = usize::try_from(span.start).unwrap_or(0);
-                let end = usize::try_from(span.end).unwrap_or(start);
-                if let Some(path_text) = source.text().get(start..end) {
-                    let path_text = path_text.trim_matches('"');
-                    env.for_each_export(self.source_id, path_text, &mut |name| {
-                        exports.push(self.interner.intern(name));
-                    });
-                }
-            }
+            let raw_path = self.decode_string_lit_span(path_tok.span());
+            let path_key = self.normalize_import_key(raw_path.as_str());
+            env.for_each_export(self.source_id, path_key.as_str(), &mut |name| {
+                exports.push(self.interner.intern(name));
+            });
         }
         exports.sort();
         exports.dedup();

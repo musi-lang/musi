@@ -18,7 +18,8 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
         .ok_or(FrontendError {
             kind: FrontendErrorKind::EntrySourceMissing,
         })?
-        .path()
+        .path();
+    let entry_path = music_basic::path::normalize_path(entry_path)
         .to_string_lossy()
         .into_owned();
 

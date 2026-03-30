@@ -347,6 +347,23 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         music_basic::string_lit::decode(self.slice(span))
     }
 
+    fn normalize_import_key(&self, raw: &str) -> String {
+        if raw.starts_with('@') {
+            return raw.to_owned();
+        }
+        let path = std::path::Path::new(raw);
+        if !raw.starts_with('.') && !path.is_absolute() {
+            return raw.to_owned();
+        }
+
+        let Some(source) = self.sources.get(self.source_id) else {
+            return raw.to_owned();
+        };
+        music_basic::path::resolve_import_path(source.path(), raw)
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn open_import_expr(&mut self, node: SyntaxNode<'tree>) {
         let Some(path_tok) = node
             .child_tokens()
@@ -356,7 +373,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             return;
         };
 
-        let path = self.decode_string_lit_span(path_tok.span());
+        let raw_path = self.decode_string_lit_span(path_tok.span());
+        let path = self.normalize_import_key(raw_path.as_str());
         let Some(env) = self.import_env else {
             self.errors.push(ResolveError {
                 kind: ResolveErrorKind::UnresolvedImport { path },
@@ -366,7 +384,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             return;
         };
 
-        if !env.has_module(self.source_id, &path) {
+        if !env.has_module(self.source_id, path.as_str()) {
             self.errors.push(ResolveError {
                 kind: ResolveErrorKind::UnresolvedImport { path },
                 source_id: self.source_id,
@@ -379,13 +397,13 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let site_span = node.span();
         let mut insert = |name: &str| {
             let sym = self.interner.intern(name);
-            let opaque = env.is_export_opaque(source_id, &path, name);
+            let opaque = env.is_export_opaque(source_id, path.as_str(), name);
             self.define(
                 NameBindingKind::Import { opaque },
                 Ident::new(sym, site_span),
             );
         };
-        env.for_each_export(source_id, &path, &mut insert);
+        env.for_each_export(source_id, path.as_str(), &mut insert);
     }
 
     fn intern_ident_token(&mut self, token: SyntaxToken<'tree>) -> Ident {
