@@ -1,0 +1,22 @@
+[package]
+name = "music_sema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Semantic analysis and name resolution for Musi"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_ast = { path = "../music_ast" }
+music_basic = { path = "../music_basic" }
+music_hir = { path = "../music_hir" }
+music_lex = { path = "../music_lex" }
+music_names = { path = "../music_names" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+music_parse = { path = "../music_parse" }
+
+[lints]
+workspace = true

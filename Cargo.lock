@@ -316,6 +316,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_sema"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_ast",
+ "music_basic",
+ "music_hir",
+ "music_lex",
+ "music_names",
+ "music_parse",
+ "thiserror",
+]
+
+[[package]]
 name = "music_storage"
 version = "0.1.0-rc1"
 dependencies = [

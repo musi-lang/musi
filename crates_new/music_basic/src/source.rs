@@ -123,6 +123,11 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Register a source file and return its id.
     ///
     /// # Panics

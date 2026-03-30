@@ -18,7 +18,7 @@ pub use boxed::{
 };
 pub use expr::{
     HirArg, HirArrayItem, HirCallableName, HirCaseArm, HirChainKind, HirConstraint,
-    HirConstraintKind, HirDeclMods, HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirExprKind,
+    HirConstraintKind, HirDeclMods, HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirExprKind, HirPrefixOp, HirBinaryOp,
     HirFStringPart, HirFieldDef, HirHandleClause, HirLit, HirLitKind, HirMemberDef, HirMemberKey,
     HirParam, HirRecordItem, HirRecordPatField, HirSplice, HirSpliceId, HirSpliceKind,
     HirTypeParam, HirVariantDef,
@@ -26,4 +26,4 @@ pub use expr::{
 pub use module::{HirModule, HirStore};
 pub use origin::HirOrigin;
 pub use pat::{HirPat, HirPatId, HirPatKind};
-pub use ty::{HirDim, HirTy, HirTyBinOp, HirTyId, HirTyKind};
+pub use ty::{HirArrowFlavor, HirDim, HirTy, HirTyBinOp, HirTyId, HirTyKind};

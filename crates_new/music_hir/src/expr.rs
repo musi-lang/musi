@@ -23,6 +23,7 @@ pub enum HirExprKind {
     },
     Let {
         mods: HirDeclMods,
+        mutable: bool,
         pat: HirPatId,
         params: HirParams,
         type_params: HirTypeParams,
