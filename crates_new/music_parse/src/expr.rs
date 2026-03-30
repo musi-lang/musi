@@ -530,30 +530,39 @@ impl Parser<'_, '_, '_> {
 
     fn parse_quote_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let quote = self.expect_token(&TokenKind::KwQuote)?;
-        if self.at(&TokenKind::LParen) {
+        self.quote_depth = self.quote_depth.saturating_add(1);
+        let result = if self.at(&TokenKind::LParen) {
             let open = self.advance_element();
             let expr = self.parse_expr(0)?;
             let close = self.expect_token(&TokenKind::RParen)?;
-            return Ok(self.builder.push_node_from_children(
+            self.builder.push_node_from_children(
                 SyntaxNodeKind::QuoteExpr,
                 [quote, open, SyntaxElementId::Node(expr), close],
-            ));
-        }
-
-        let open = self.expect_token(&TokenKind::LBrace)?;
-        let mut children = vec![quote, open];
-        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let stmt = self.parse_stmt()?;
-            children.push(SyntaxElementId::Node(stmt));
-        }
-        let close = self.expect_token(&TokenKind::RBrace)?;
-        children.push(close);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::QuoteExpr, children))
+            )
+        } else {
+            let open = self.expect_token(&TokenKind::LBrace)?;
+            let mut children = vec![quote, open];
+            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                let stmt = self.parse_stmt()?;
+                children.push(SyntaxElementId::Node(stmt));
+            }
+            let close = self.expect_token(&TokenKind::RBrace)?;
+            children.push(close);
+            self.builder
+                .push_node_from_children(SyntaxNodeKind::QuoteExpr, children)
+        };
+        self.quote_depth = self.quote_depth.saturating_sub(1);
+        Ok(result)
     }
 
     fn parse_splice_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        if self.quote_depth == 0 {
+            self.error(ParseError {
+                kind: ParseErrorKind::SpliceOutsideQuote,
+                span: self.span(),
+            });
+        }
+
         match self.peek_kind() {
             TokenKind::Hash => {
                 let hash = self.advance_element();

@@ -132,9 +132,6 @@ pub enum SemaErrorKind {
     #[error("class type parameter count {count} unsupported")]
     ClassTypeParamCountUnsupported { count: u32 },
 
-    #[error("splice outside quote")]
-    SpliceOutsideQuote,
-
     #[error("'Option' lang item required")]
     OptionLangItemRequired,
 
@@ -269,7 +266,6 @@ impl SemaErrorKind {
             SemaErrorKind::InstanceMemberValueRequired => DiagCode::new(3019),
             SemaErrorKind::InvalidInstanceTarget => DiagCode::new(3020),
             SemaErrorKind::ClassTypeParamCountUnsupported { .. } => DiagCode::new(3021),
-            SemaErrorKind::SpliceOutsideQuote => DiagCode::new(3022),
             SemaErrorKind::OptionLangItemRequired => DiagCode::new(3023),
             SemaErrorKind::OptionalChainRequiresOption => DiagCode::new(3024),
             SemaErrorKind::ForcedChainRequiresOption => DiagCode::new(3025),

@@ -54,6 +54,7 @@ pub(crate) struct Parser<'a, 't, 'src> {
     pub(super) errors: &'a mut Vec<ParseError>,
     pub(super) comparison_exprs: Vec<SyntaxNodeId>,
     pub(super) lparen_match: Vec<Option<usize>>,
+    pub(super) quote_depth: u32,
 }
 
 impl<'a, 't, 'src> Parser<'a, 't, 'src> {
@@ -74,6 +75,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
             errors,
             comparison_exprs: Vec::new(),
             lparen_match,
+            quote_depth: 0,
         }
     }
 

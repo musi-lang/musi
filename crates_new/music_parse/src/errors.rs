@@ -37,6 +37,8 @@ pub enum ParseErrorKind {
     ExpectedStringLiteral { found: Box<TokenKind> },
     #[error("expected splice target, found {}", display_token_kind(.found.as_ref()))]
     ExpectedSpliceTarget { found: Box<TokenKind> },
+    #[error("splice outside quote")]
+    SpliceOutsideQuote,
     #[error("expected operator member name, found {}", display_token_kind(.found.as_ref()))]
     ExpectedOperatorMemberName { found: Box<TokenKind> },
     #[error("expected effect item, found {}", display_token_kind(.found.as_ref()))]
@@ -87,6 +89,7 @@ impl ParseError {
             ParseErrorKind::ExpectedIdentifier { .. } => 2007,
             ParseErrorKind::ExpectedStringLiteral { .. } => 2008,
             ParseErrorKind::ExpectedSpliceTarget { .. } => 2009,
+            ParseErrorKind::SpliceOutsideQuote => 2025,
             ParseErrorKind::ExpectedOperatorMemberName { .. } => 2010,
             ParseErrorKind::ExpectedEffectItem { .. } => 2011,
             ParseErrorKind::ExpectedEffectRemainderName { .. } => 2012,

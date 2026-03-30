@@ -27,8 +27,32 @@ fn test_parse_splice_expr() {
     let sequence = Expr::cast(root.child_nodes().next().expect("stmt")).expect("sequence");
     let splice = sequence.child_expressions().next().expect("splice");
 
-    assert!(parsed.errors().is_empty());
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|e| matches!(e.kind, crate::errors::ParseErrorKind::SpliceOutsideQuote)),
+        "expected SpliceOutsideQuote, got {:?}",
+        parsed.errors()
+    );
     assert_eq!(splice.kind(), ExprKindView::Splice);
+}
+
+#[test]
+fn test_parse_splice_expr_inside_quote_has_no_error() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "quote (#(value));");
+    let lexed = Lexer::new("quote (#(value));").lex();
+    let parsed = parse(source_id, &lexed);
+
+    assert!(
+        !parsed
+            .errors()
+            .iter()
+            .any(|e| matches!(e.kind, crate::errors::ParseErrorKind::SpliceOutsideQuote)),
+        "unexpected SpliceOutsideQuote errors: {:?}",
+        parsed.errors()
+    );
 }
 
 #[test]

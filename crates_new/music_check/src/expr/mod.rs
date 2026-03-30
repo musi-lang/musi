@@ -18,6 +18,7 @@ use super::checker::Checker;
 
 mod assign;
 mod effects;
+mod quote;
 mod variant;
 
 impl<'a> Checker<'a> {
@@ -291,11 +292,8 @@ impl<'a> Checker<'a> {
                 clauses,
             } => self.synth_handle(origin, expr, handler, clauses),
             HirExprKind::Resume { value } => self.synth_resume(origin, value),
-            HirExprKind::Quote { .. } => (self.state.builtins.syntax, EffectRow::empty()),
-            HirExprKind::Splice { .. } => {
-                self.error(origin.span, SemaErrorKind::SpliceOutsideQuote);
-                (self.state.builtins.syntax, EffectRow::empty())
-            }
+            HirExprKind::Quote { splices, .. } => self.synth_quote(origin, splices),
+            HirExprKind::Splice { .. } => (self.state.builtins.syntax, EffectRow::empty()),
         };
 
         self.record_type(expr_id, ty);

@@ -77,12 +77,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             SyntaxNodeKind::PerformExpr => self.lower_perform_expr(node),
             SyntaxNodeKind::HandleExpr => self.lower_handle_expr(node),
             SyntaxNodeKind::ResumeExpr => self.lower_resume_expr(node),
-            SyntaxNodeKind::QuoteExpr => self.alloc_expr(
-                origin,
-                HirExprKind::Quote {
-                    body_syntax: node.id(),
-                },
-            ),
+            SyntaxNodeKind::QuoteExpr => self.lower_quote_expr(node),
             SyntaxNodeKind::SpliceExpr => self.lower_splice_expr(node),
 
             SyntaxNodeKind::Error => self.alloc_expr(origin, HirExprKind::Error),
@@ -1354,7 +1349,30 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         self.alloc_expr(origin, HirExprKind::Resume { value })
     }
 
+    fn lower_quote_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
+        let origin = self.origin_node(node);
+        let mut splice_nodes = Vec::new();
+        collect_quote_splices(node, &mut splice_nodes);
+        let mut splices = Vec::with_capacity(splice_nodes.len());
+        for splice_node in splice_nodes {
+            splices.push(self.alloc_splice_from_node(splice_node));
+        }
+        self.alloc_expr(
+            origin,
+            HirExprKind::Quote {
+                body_syntax: node.id(),
+                splices: splices.into_boxed_slice(),
+            },
+        )
+    }
+
     fn lower_splice_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirExprId {
+        let origin = self.origin_node(node);
+        let splice = self.alloc_splice_from_node(node);
+        self.alloc_expr(origin, HirExprKind::Splice { splice })
+    }
+
+    fn alloc_splice_from_node(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirSpliceId {
         let origin = self.origin_node(node);
         let mut cursor = AstCursor::new(node);
 
@@ -1388,11 +1406,19 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             _ => music_hir::HirSpliceKind::Expr(self.alloc_expr(origin, HirExprKind::Error)),
         };
 
-        let splice = self
-            .store
+        self.store
             .splices
-            .alloc(music_hir::HirSplice { origin, kind });
-        self.alloc_expr(origin, HirExprKind::Splice { splice })
+            .alloc(music_hir::HirSplice { origin, kind })
+    }
+}
+
+fn collect_quote_splices<'tree>(node: SyntaxNode<'tree>, out: &mut Vec<SyntaxNode<'tree>>) {
+    for child in node.child_nodes() {
+        match child.kind() {
+            SyntaxNodeKind::QuoteExpr => {}
+            SyntaxNodeKind::SpliceExpr => out.push(child),
+            _ => collect_quote_splices(child, out),
+        }
     }
 }
 

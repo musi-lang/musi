@@ -44,7 +44,7 @@ Status legend:
 | `case ... of` with guards                      | done | done      | done        | done    | Pattern/type interactions checked                             |
 | `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
 | `perform`, `handle`, `resume`                  | done | done      | done        | done    | Handler clause shape and arity checked                         |
-| `quote` and splice forms                       | done | done      | done        | partial | Quote/splice are typed as `Syntax` in v0.1                    |
+| `quote` and splice forms                       | done | done      | done        | done    | Quote/splice are typed as `Syntax` in v0.1                    |
 
 ## Types
 

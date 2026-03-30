@@ -135,6 +135,7 @@ pub enum HirExprKind {
     },
     Quote {
         body_syntax: SyntaxNodeId,
+        splices: Box<[HirSpliceId]>,
     },
     Splice {
         splice: HirSpliceId,
