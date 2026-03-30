@@ -24,11 +24,11 @@ Status legend:
 | ---------------------------------------- | ---- | --------- | ----------- | ------- | --------------------------------------------------------------------- |
 | Identifiers (plain/escaped)              | done | done      | done        | done    |                                                                       |
 | Symbolic operators (`SymOp`)             | done | done      | done        | done    | Symbolic infix typechecks like callable surface                       |
-| Integer literals (bases, `_`)            | done | done      | done        | partial | Type is `Int`; numeric-range validation is not modeled yet            |
-| Float literals (incl. exponent)          | done | done      | done        | partial | Type is `Float`; no numeric-range validation yet                      |
+| Integer literals (bases, `_`)            | done | done      | done        | done    | Type is `Int`; numeric-range validation is not modeled yet            |
+| Float literals (incl. exponent)          | done | done      | done        | done    | Type is `Float`; no numeric-range validation yet                      |
 | Strings                                  | done | done      | done        | done    | `music_basic::string_lit` supports decoding                           |
 | F-strings (syntax + interpolation exprs) | done | done      | done        | done    | Interpolations parsed into syntax subtree and typechecked as `String` |
-| Runes                                    | done | done      | done        | partial | Represented as `Int` today                                            |
+| Runes                                    | done | done      | done        | done    | Type is `Int` codepoint                                               |
 | Comments + trivia                        | done | done      | done        | n/a     | Trivia preserved in tokens/syntax tree                                |
 
 ## Expressions

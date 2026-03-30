@@ -321,3 +321,44 @@ fn multi_index_reports_exceeds_array_nesting() {
             .any(|k| matches!(k, SemaErrorKind::IndexExceedsArrayNesting))
     );
 }
+
+#[test]
+fn int_literals_support_bases_and_underscore_separators() {
+    let kinds = analyze_text(
+        r#"
+let a : Int := 0x2a;
+let b : Int := 0b1010_0101;
+let c : Int := 1_000_000;
+(a; b; c);
+"#,
+    );
+    assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
+}
+
+#[test]
+fn float_literals_support_exponent() {
+    let kinds = analyze_text(
+        r#"
+let a : Float := 1e3;
+let b : Float := 3.14e-2;
+(a; b);
+"#,
+    );
+    assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
+}
+
+#[test]
+fn rune_literals_typecheck_as_int() {
+    let kinds = analyze_text("let r : Int := 'a'; r;");
+    assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
+}
+
+#[test]
+fn float_int_mismatch_reports_error() {
+    let kinds = analyze_text("let x : Int := 1e3; x;");
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. }))
+    );
+}
