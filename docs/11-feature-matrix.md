@@ -63,7 +63,7 @@ Status legend:
 
 | Feature                     | Parse/AST | Resolve/HIR | Check   | Notes                                                             |
 | --------------------------- | --------- | ----------- | ------- | ----------------------------------------------------------------- |
-| Attribute syntax + args     | done      | done        | partial | Argument-model validation for compiler-known attrs is in progress |
+| Attribute syntax + args     | done      | done        | done    | Argument-model validation for `@link/@when/@repr/@layout/@diag.*` |
 | `foreign` decl surface      | done      | done        | done    | `foreign (...)` block attrs copied to inner decls                 |
 | `export` / `opaque` surface | done      | done        | partial | Export collection exists; representation hiding not implemented   |
 

@@ -17,6 +17,11 @@ Public language attrs share one argument model:
 - positional args map by strict parameter order
 - duplicate names are invalid
 - unknown names are invalid
+- attribute payloads are data-only:
+  - string/int/rune literals
+  - variant literals (`.None`, `.Some(...)`) where args are data-only
+  - arrays (`[...]`) of data-only values
+  - records (`{ key := value, ... }`) of data-only values
 
 Examples:
 
@@ -54,6 +59,13 @@ Marks a declaration or module item as conditionally present for a target.
 
 ```musi
 @when(os := "linux", arch := "x86_64")
+foreign let clock_gettime (id : Int, out : CPtr) : Int;
+```
+
+To express multiple alternatives, use arrays:
+
+```musi
+@when(os := ["linux", "mac"], arch := ["x86_64", "aarch64"])
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
@@ -112,9 +124,9 @@ Parameter order:
 Controls diagnostics by `ms####` code.
 
 ```musi
-@diag.allow(ms4023) let x := 1;
-@diag.warn(ms2502) @musi.lang(name := "Fake") let Fake := data { Fake };
-@diag.expect(ms2502) @musi.lang(name := "Fake") let Fake := data { Fake };
+@diag.allow("ms4023") let x := 1;
+@diag.warn("ms2502") @musi.lang(name := "Fake") let Fake := data { Fake };
+@diag.expect("ms2502") @musi.lang(name := "Fake") let Fake := data { Fake };
 ```
 
 - `allow` suppresses matching diagnostics

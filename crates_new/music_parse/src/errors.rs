@@ -55,6 +55,11 @@ pub enum ParseErrorKind {
     ExpectedFieldTarget { found: Box<TokenKind> },
     #[error("expected constraint operator '<:' or ':', found {}", display_token_kind(.found.as_ref()))]
     ExpectedConstraintOperator { found: Box<TokenKind> },
+    #[error(
+        "expected attribute value, found {}",
+        display_token_kind(.found.as_ref())
+    )]
+    ExpectedAttrValue { found: Box<TokenKind> },
     #[error("invalid attribute target before {}", display_token_kind(.found.as_ref()))]
     InvalidAttributeTarget { found: Box<TokenKind> },
     #[error("non-associative comparison chain")]
@@ -96,6 +101,7 @@ impl ParseError {
             ParseErrorKind::RecordLiteralUsesDotBrace => 2021,
             ParseErrorKind::RecordPatternUsesDotBrace => 2022,
             ParseErrorKind::InvalidFStringInterpolation { .. } => 2023,
+            ParseErrorKind::ExpectedAttrValue { .. } => 2024,
         };
 
         Diag::error(self.kind.to_string())

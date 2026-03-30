@@ -63,7 +63,7 @@ Attributes remain part of metaprogramming, but they are not all the same kind of
 @link(name := "c", symbol := "puts")
 foreign let puts (s : CString) : Int;
 
-@diag.allow(ms4023)
+@diag.allow("ms4023")
 let x := 1;
 ```
 

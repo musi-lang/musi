@@ -1,0 +1,36 @@
+use music_basic::SourceMap;
+use music_check::{SemaErrorKinds, SemaErrors, analyze_module};
+use music_lex::Lexer;
+use music_names::Interner;
+use music_parse::parse;
+use music_resolve::ResolveOptions;
+
+pub(crate) fn analyze_text(text: &str) -> SemaErrorKinds {
+    analyze_text_full(text)
+        .into_iter()
+        .map(|e| e.kind)
+        .collect()
+}
+
+pub(crate) fn analyze_text_full(text: &str) -> SemaErrors {
+    let mut sources = SourceMap::new();
+    let source_id = sources.add("test.ms", text);
+
+    let lexed = Lexer::new(text).lex();
+    let parsed = parse(source_id, &lexed);
+    assert!(parsed.errors().is_empty(), "test inputs must parse");
+
+    let mut interner = Interner::default();
+    let analyzed = analyze_module(
+        parsed.tree(),
+        &sources,
+        &mut interner,
+        ResolveOptions::default(),
+    );
+    assert!(
+        analyzed.resolve_errors.is_empty(),
+        "test inputs must resolve, got {:#?}",
+        analyzed.resolve_errors
+    );
+    analyzed.check_errors
+}

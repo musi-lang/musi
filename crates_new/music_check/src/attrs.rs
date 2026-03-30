@@ -1,8 +1,32 @@
-use music_hir::{HirAttr, HirAttrArgKind};
+use music_hir::{HirArrayItem, HirAttr, HirAttrArgKind, HirExprKind, HirLitKind};
 
 use crate::SemaErrorKind;
 
 use super::checker::Checker;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum AttrValueKind {
+    StringLit,
+    StringOrStringArray,
+    IntLit,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct AttrSlot {
+    key: &'static str,
+    value: AttrValueKind,
+    repeatable: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct AttrSpec {
+    attr: &'static str,
+    positional: &'static [AttrSlot],
+    named: &'static [AttrSlot],
+    extra_positional: Option<AttrSlot>,
+    required_all: &'static [&'static str],
+    required_any: &'static [&'static str],
+}
 
 impl<'a> Checker<'a> {
     pub(super) fn validate_public_attrs(&mut self) {
@@ -21,17 +45,17 @@ impl<'a> Checker<'a> {
             }
 
             if is_path(&attr, &["link"], self.ctx.interner) {
-                self.validate_named_positional(&attr, "link", &["name", "symbol"]);
+                self.validate_link_attr(&attr);
                 continue;
             }
 
             if is_path(&attr, &["repr"], self.ctx.interner) {
-                self.validate_named_positional(&attr, "repr", &["kind"]);
+                self.validate_repr_attr(&attr);
                 continue;
             }
 
             if is_path(&attr, &["layout"], self.ctx.interner) {
-                self.validate_named_positional(&attr, "layout", &["align", "pack"]);
+                self.validate_layout_attr(&attr);
                 continue;
             }
 
@@ -47,135 +71,173 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn validate_named_positional(&mut self, attr: &HirAttr, name: &str, params: &[&str]) {
-        if attr.args.is_empty() {
-            self.error(
-                attr.origin.span,
-                SemaErrorKind::AttrArgsRequired {
-                    attr: attr_name(attr, self.ctx.interner),
-                },
-            );
-            return;
-        }
+    fn validate_link_attr(&mut self, attr: &HirAttr) {
+        self.validate_attr_args(
+            attr,
+            AttrSpec {
+                attr: "link",
+                positional: &[
+                    AttrSlot {
+                        key: "name",
+                        value: AttrValueKind::StringLit,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "symbol",
+                        value: AttrValueKind::StringLit,
+                        repeatable: false,
+                    },
+                ],
+                named: &[
+                    AttrSlot {
+                        key: "name",
+                        value: AttrValueKind::StringLit,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "symbol",
+                        value: AttrValueKind::StringLit,
+                        repeatable: false,
+                    },
+                ],
+                extra_positional: None,
+                required_all: &["name"],
+                required_any: &[],
+            },
+        );
+    }
 
-        let mut used = vec![false; params.len()];
-        let mut positional_index = 0usize;
+    fn validate_repr_attr(&mut self, attr: &HirAttr) {
+        self.validate_attr_args(
+            attr,
+            AttrSpec {
+                attr: "repr",
+                positional: &[AttrSlot {
+                    key: "kind",
+                    value: AttrValueKind::StringLit,
+                    repeatable: false,
+                }],
+                named: &[AttrSlot {
+                    key: "kind",
+                    value: AttrValueKind::StringLit,
+                    repeatable: false,
+                }],
+                extra_positional: None,
+                required_all: &["kind"],
+                required_any: &[],
+            },
+        );
+    }
 
-        for arg in attr.args.iter() {
-            match arg.kind {
-                HirAttrArgKind::Positional { .. } => {
-                    if positional_index >= params.len() {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrArgCountInvalid {
-                                attr: String::from(name),
-                                expected: u32::try_from(params.len()).unwrap_or(0),
-                                found: u32::try_from(positional_index + 1).unwrap_or(0),
-                            },
-                        );
-                        positional_index += 1;
-                        continue;
-                    }
-
-                    let key = params[positional_index];
-                    if used[positional_index] {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrDuplicateArg {
-                                attr: String::from(name),
-                                name: String::from(key),
-                            },
-                        );
-                    } else {
-                        used[positional_index] = true;
-                    }
-                    positional_index += 1;
-                }
-                HirAttrArgKind::Named { name: ident, .. } => {
-                    let key = self.ctx.interner.resolve(ident.name).to_string();
-                    let Some(index) = params.iter().position(|p| *p == key) else {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrUnknownArg {
-                                attr: String::from(name),
-                                name: key,
-                            },
-                        );
-                        continue;
-                    };
-                    if used[index] {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrDuplicateArg {
-                                attr: String::from(name),
-                                name: params[index].to_string(),
-                            },
-                        );
-                    } else {
-                        used[index] = true;
-                    }
-                }
-            }
-        }
+    fn validate_layout_attr(&mut self, attr: &HirAttr) {
+        self.validate_attr_args(
+            attr,
+            AttrSpec {
+                attr: "layout",
+                positional: &[
+                    AttrSlot {
+                        key: "align",
+                        value: AttrValueKind::IntLit,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "pack",
+                        value: AttrValueKind::IntLit,
+                        repeatable: false,
+                    },
+                ],
+                named: &[
+                    AttrSlot {
+                        key: "align",
+                        value: AttrValueKind::IntLit,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "pack",
+                        value: AttrValueKind::IntLit,
+                        repeatable: false,
+                    },
+                ],
+                extra_positional: None,
+                required_all: &[],
+                required_any: &["align", "pack"],
+            },
+        );
     }
 
     fn validate_when_attr(&mut self, attr: &HirAttr) {
-        if attr.args.is_empty() {
-            self.error(
-                attr.origin.span,
-                SemaErrorKind::AttrArgsRequired {
-                    attr: String::from("when"),
-                },
-            );
-            return;
-        }
-
-        let allowed = ["os", "arch", "env", "abi", "vendor", "feature"];
-        let mut used = [false; 5];
-
-        for arg in attr.args.iter() {
-            let HirAttrArgKind::Named { name: ident, .. } = arg.kind else {
-                // Positional args map to `os, arch, env, abi, vendor, feature...`.
-                continue;
-            };
-
-            let key = self.ctx.interner.resolve(ident.name).to_string();
-            if !allowed.iter().copied().any(|k| k == key) {
-                self.error(
-                    arg.origin.span,
-                    SemaErrorKind::AttrUnknownArg {
-                        attr: String::from("when"),
-                        name: key,
+        self.validate_attr_args(
+            attr,
+            AttrSpec {
+                attr: "when",
+                positional: &[
+                    AttrSlot {
+                        key: "os",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
                     },
-                );
-                continue;
-            }
-
-            if key == "feature" {
-                continue;
-            }
-
-            let index = match key.as_str() {
-                "os" => 0,
-                "arch" => 1,
-                "env" => 2,
-                "abi" => 3,
-                "vendor" => 4,
-                _ => continue,
-            };
-
-            if used[index] {
-                self.error(
-                    arg.origin.span,
-                    SemaErrorKind::AttrDuplicateArg {
-                        attr: String::from("when"),
-                        name: key,
+                    AttrSlot {
+                        key: "arch",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
                     },
-                );
-            } else {
-                used[index] = true;
-            }
-        }
+                    AttrSlot {
+                        key: "env",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "abi",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "vendor",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                ],
+                named: &[
+                    AttrSlot {
+                        key: "os",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "arch",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "env",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "abi",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "vendor",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: false,
+                    },
+                    AttrSlot {
+                        key: "feature",
+                        value: AttrValueKind::StringOrStringArray,
+                        repeatable: true,
+                    },
+                ],
+                extra_positional: Some(AttrSlot {
+                    key: "feature",
+                    value: AttrValueKind::StringOrStringArray,
+                    repeatable: true,
+                }),
+                required_all: &[],
+                required_any: &[],
+            },
+        );
     }
 
     fn validate_diag_attr(&mut self, attr: &HirAttr) {
@@ -198,6 +260,194 @@ impl<'a> Checker<'a> {
                     },
                 );
             }
+        }
+    }
+
+    fn validate_attr_args(&mut self, attr: &HirAttr, spec: AttrSpec) {
+        if attr.args.is_empty() {
+            self.error(
+                attr.origin.span,
+                SemaErrorKind::AttrArgsRequired {
+                    attr: spec.attr.to_string(),
+                },
+            );
+            return;
+        }
+
+        let mut seen: Vec<(&'static str, u32)> = Vec::new();
+        let mut positional_index = 0usize;
+
+        for arg in attr.args.iter() {
+            match arg.kind {
+                HirAttrArgKind::Positional { value } => {
+                    let slot = spec
+                        .positional
+                        .get(positional_index)
+                        .copied()
+                        .or(spec.extra_positional);
+                    positional_index += 1;
+
+                    let Some(slot) = slot else {
+                        self.error(
+                            arg.origin.span,
+                            SemaErrorKind::AttrArgCountInvalid {
+                                attr: spec.attr.to_string(),
+                                expected: u32::try_from(spec.positional.len()).unwrap_or(0),
+                                found: u32::try_from(positional_index).unwrap_or(0),
+                            },
+                        );
+                        continue;
+                    };
+
+                    if self.bump_seen(&mut seen, slot) {
+                        self.error(
+                            arg.origin.span,
+                            SemaErrorKind::AttrDuplicateArg {
+                                attr: spec.attr.to_string(),
+                                name: slot.key.to_string(),
+                            },
+                        );
+                        continue;
+                    }
+
+                    if !self.is_lit_kind(value, slot.value) {
+                        self.error(
+                            arg.origin.span,
+                            match slot.value {
+                                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
+                                    SemaErrorKind::AttrArgStringRequired {
+                                        attr: spec.attr.to_string(),
+                                        name: slot.key.to_string(),
+                                    }
+                                }
+                                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
+                                    attr: spec.attr.to_string(),
+                                    name: slot.key.to_string(),
+                                },
+                            },
+                        );
+                    }
+                }
+                HirAttrArgKind::Named { name, value } => {
+                    let key = self.ctx.interner.resolve(name.name);
+                    let Some(slot) = spec.named.iter().copied().find(|s| s.key == key) else {
+                        self.error(
+                            arg.origin.span,
+                            SemaErrorKind::AttrUnknownArg {
+                                attr: spec.attr.to_string(),
+                                name: key.to_string(),
+                            },
+                        );
+                        continue;
+                    };
+
+                    if self.bump_seen(&mut seen, slot) {
+                        self.error(
+                            arg.origin.span,
+                            SemaErrorKind::AttrDuplicateArg {
+                                attr: spec.attr.to_string(),
+                                name: key.to_string(),
+                            },
+                        );
+                        continue;
+                    }
+
+                    if !self.is_lit_kind(value, slot.value) {
+                        self.error(
+                            arg.origin.span,
+                            match slot.value {
+                                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
+                                    SemaErrorKind::AttrArgStringRequired {
+                                        attr: spec.attr.to_string(),
+                                        name: key.to_string(),
+                                    }
+                                }
+                                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
+                                    attr: spec.attr.to_string(),
+                                    name: key.to_string(),
+                                },
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        for key in spec.required_all {
+            if !seen.iter().any(|(k, c)| *k == *key && *c > 0) {
+                self.error(
+                    attr.origin.span,
+                    SemaErrorKind::AttrArgRequired {
+                        attr: spec.attr.to_string(),
+                        name: (*key).to_string(),
+                    },
+                );
+            }
+        }
+
+        if !spec.required_any.is_empty()
+            && !spec
+                .required_any
+                .iter()
+                .any(|key| seen.iter().any(|(k, c)| *k == *key && *c > 0))
+        {
+            let name = spec.required_any[0];
+            self.error(
+                attr.origin.span,
+                SemaErrorKind::AttrArgRequired {
+                    attr: spec.attr.to_string(),
+                    name: name.to_string(),
+                },
+            );
+        }
+    }
+
+    fn bump_seen(&self, seen: &mut Vec<(&'static str, u32)>, slot: AttrSlot) -> bool {
+        let entry = seen.iter_mut().find(|(key, _)| *key == slot.key);
+        let count = match entry {
+            Some((_, c)) => c,
+            None => {
+                seen.push((slot.key, 0));
+                &mut seen.last_mut().unwrap().1
+            }
+        };
+
+        *count = count.saturating_add(1);
+        !slot.repeatable && *count > 1
+    }
+
+    fn is_lit_kind(&self, expr: music_hir::HirExprId, expected: AttrValueKind) -> bool {
+        match expected {
+            AttrValueKind::StringLit => matches!(
+                self.ctx.store.exprs.get(expr).kind,
+                HirExprKind::Lit {
+                    lit: music_hir::HirLit {
+                        kind: HirLitKind::String(_),
+                    }
+                }
+            ),
+            AttrValueKind::StringOrStringArray => {
+                if self.is_lit_kind(expr, AttrValueKind::StringLit) {
+                    return true;
+                }
+
+                let HirExprKind::Array { items } = &self.ctx.store.exprs.get(expr).kind else {
+                    return false;
+                };
+
+                items.iter().all(|item| match *item {
+                    HirArrayItem::Expr(expr) => self.is_lit_kind(expr, AttrValueKind::StringLit),
+                    HirArrayItem::Spread { .. } => false,
+                })
+            }
+            AttrValueKind::IntLit => matches!(
+                self.ctx.store.exprs.get(expr).kind,
+                HirExprKind::Lit {
+                    lit: music_hir::HirLit {
+                        kind: HirLitKind::Int { .. },
+                    }
+                }
+            ),
         }
     }
 }

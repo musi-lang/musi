@@ -312,6 +312,15 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
         }
     }
 
+    pub(crate) fn expected_attr_value(&self) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::ExpectedAttrValue {
+                found: Box::new(self.found_token()),
+            },
+            span: self.span(),
+        }
+    }
+
     pub(crate) fn found_token(&self) -> TokenKind {
         self.peek_kind().clone()
     }

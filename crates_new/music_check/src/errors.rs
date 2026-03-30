@@ -133,6 +133,15 @@ pub enum SemaErrorKind {
     #[error("duplicate attribute argument '{name}' for '{attr}'")]
     AttrDuplicateArg { attr: String, name: String },
 
+    #[error("attribute argument '{name}' for '{attr}' requires string literal")]
+    AttrArgStringRequired { attr: String, name: String },
+
+    #[error("attribute argument '{name}' for '{attr}' requires integer literal")]
+    AttrArgIntRequired { attr: String, name: String },
+
+    #[error("attribute argument '{name}' for '{attr}' required")]
+    AttrArgRequired { attr: String, name: String },
+
     #[error("expected {expected} attribute argument(s) for '{attr}', found {found}")]
     AttrArgCountInvalid {
         attr: String,
@@ -140,7 +149,7 @@ pub enum SemaErrorKind {
         found: u32,
     },
 
-    #[error("named attribute argumentss not allowed for '{attr}'")]
+    #[error("named attribute arguments not allowed for '{attr}'")]
     AttrNamedArgsNotAllowed { attr: String },
 
     #[error("attribute arguments required for '{attr}'")]
@@ -283,6 +292,15 @@ impl SemaError {
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::AttrDuplicateArg { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3042))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrArgStringRequired { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3050))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrArgIntRequired { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3051))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrArgRequired { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3052))
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::AttrArgCountInvalid { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3043))

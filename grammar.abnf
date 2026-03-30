@@ -411,8 +411,29 @@ attr-path = ident *("." ident)
 
 attr-args = attr-arg *("," attr-arg)
 
-attr-arg  = ident ":=" ast-expr  ; named argument
-            / ast-expr  ; positional argument
+attr-arg  = ident ":=" attr-value  ; named argument
+            / attr-value  ; positional argument
+
+; Attribute payloads are data-only (JSON-like) to avoid introducing a hidden
+; const-eval language.
+attr-value = lit-string
+             / lit-int
+             / lit-rune
+             / attr-variant
+             / attr-array
+             / attr-record
+
+attr-variant = "." ident ["(" [attr-value-list] ")"]
+
+attr-array = "[" [attr-value-list] "]"
+
+attr-record = "{" [attr-record-fields] "}"
+
+attr-record-fields = attr-record-field *("," attr-record-field) *(",")
+
+attr-record-field = ident ":=" attr-value
+
+attr-value-list = attr-value *("," attr-value) *(",")
 ; §7.2  Declaration dispatch
 ast-with-attrs = attrs ast-decl
 

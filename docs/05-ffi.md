@@ -71,6 +71,13 @@ If `name` is omitted, lookup falls back to compiler-owned builtin host symbols.
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
+To express multiple alternatives, use arrays:
+
+```musi
+@when(os := ["linux", "mac"], arch := ["x86_64", "aarch64"])
+foreign let clock_gettime (id : Int, out : CPtr) : Int;
+```
+
 Use named predicates as the canonical form.
 
 `@when` is target selection, not general compile-time branching.
