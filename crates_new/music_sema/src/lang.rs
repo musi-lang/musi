@@ -84,16 +84,34 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
-            let mut found = None;
+            let mut found = None::<(Span, HirExprId)>;
             for arg in attr.args.iter() {
-                let HirAttrArgKind::Named { name, value } = arg.kind else {
-                    continue;
-                };
-                if name.name != self.state.known.name_key {
-                    continue;
+                match arg.kind {
+                    HirAttrArgKind::Positional { value } => {
+                        if found.is_some() {
+                            self.error(arg.origin.span, SemaErrorKind::LangItemNameDuplicate);
+                            continue;
+                        }
+                        found = Some((arg.origin.span, value));
+                    }
+                    HirAttrArgKind::Named { name, value } => {
+                        if name.name != self.state.known.name_key {
+                            self.error(
+                                arg.origin.span,
+                                SemaErrorKind::AttrUnknownArg {
+                                    attr: String::from("musi.lang"),
+                                    name: self.ctx.interner.resolve(name.name).to_string(),
+                                },
+                            );
+                            continue;
+                        }
+                        if found.is_some() {
+                            self.error(arg.origin.span, SemaErrorKind::LangItemNameDuplicate);
+                            continue;
+                        }
+                        found = Some((arg.origin.span, value));
+                    }
                 }
-                found = Some((arg.origin.span, value));
-                break;
             }
 
             let Some((arg_span, value_expr)) = found else {

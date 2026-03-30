@@ -3,7 +3,7 @@ use music_basic::{DiagCode, SourceMap, Span};
 use super::*;
 
 #[test]
-fn expected_type_found_type_has_stable_code() {
+fn test_expected_type_found_type_has_stable_code() {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", "let x := 1;");
 
@@ -21,7 +21,7 @@ fn expected_type_found_type_has_stable_code() {
 }
 
 #[test]
-fn missing_with_clause_has_stable_code() {
+fn test_missing_with_clause_has_stable_code() {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", "let x := 1;");
 

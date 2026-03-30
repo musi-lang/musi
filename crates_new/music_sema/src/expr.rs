@@ -39,7 +39,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn check_expr(
+    pub(crate) fn check_expr(
         &mut self,
         expr_id: HirExprId,
         expected: SemTyId,
@@ -63,7 +63,7 @@ impl<'a> Checker<'a> {
         (ty, effs)
     }
 
-    pub(super) fn synth_expr(&mut self, expr_id: HirExprId) -> (SemTyId, EffectRow) {
+    pub(crate) fn synth_expr(&mut self, expr_id: HirExprId) -> (SemTyId, EffectRow) {
         let expr = self.ctx.store.exprs.get(expr_id).clone();
         let origin = expr.origin;
 
@@ -148,17 +148,30 @@ impl<'a> Checker<'a> {
                     .unwrap_or(self.state.builtins.unknown);
                 (ty, EffectRow::empty())
             }
-            HirExprKind::Lit { lit } => {
-                let ty = match lit.kind {
-                    HirLitKind::Int { .. } => self.state.builtins.int_,
-                    HirLitKind::Float { .. } => self.state.builtins.float_,
-                    HirLitKind::Rune { .. } => self.state.builtins.int_,
-                    HirLitKind::String(_) | HirLitKind::FString { .. } => {
-                        self.state.builtins.string_
+            HirExprKind::Lit { lit } => match lit.kind {
+                HirLitKind::Int { .. } => (self.state.builtins.int_, EffectRow::empty()),
+                HirLitKind::Float { .. } => (self.state.builtins.float_, EffectRow::empty()),
+                HirLitKind::Rune { .. } => (self.state.builtins.int_, EffectRow::empty()),
+                HirLitKind::String(_) => (self.state.builtins.string_, EffectRow::empty()),
+                HirLitKind::FString { parts, .. } => {
+                    let mut effs = EffectRow::empty();
+                    for part in parts.iter() {
+                        match part {
+                            music_hir::HirFStringPart::Literal { .. } => {}
+                            music_hir::HirFStringPart::Expr { expr, origin } => {
+                                let (t, e) = self.synth_expr(*expr);
+                                effs.union_with(&e);
+                                let _ = self.unify_or_report(
+                                    origin.span,
+                                    t,
+                                    self.state.builtins.string_,
+                                );
+                            }
+                        }
                     }
-                };
-                (ty, EffectRow::empty())
-            }
+                    (self.state.builtins.string_, effs)
+                }
+            },
             HirExprKind::Tuple { items } => {
                 if items.is_empty() {
                     (self.state.builtins.unit, EffectRow::empty())

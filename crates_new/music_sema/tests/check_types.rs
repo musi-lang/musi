@@ -52,6 +52,16 @@ fn test_reports_type_mismatch() {
 }
 
 #[test]
+fn test_fstring_interpolation_requires_string_parts() {
+    let kinds = analyze_text("let x := 1; f\"{x}\";");
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. }))
+    );
+}
+
+#[test]
 fn test_calling_pure_fn_is_ok() {
     let kinds = analyze_text("let f () : Int := 1; f();");
     assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");

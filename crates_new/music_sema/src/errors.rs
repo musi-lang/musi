@@ -117,6 +117,28 @@ pub enum SemaErrorKind {
 
     #[error("'Some' payload must be type parameter")]
     OptionLangItemSomePayloadInvalid,
+
+    #[error("unknown attribute argument '{name}' for '{attr}'")]
+    AttrUnknownArg { attr: String, name: String },
+
+    #[error("duplicate attribute argument '{name}' for '{attr}'")]
+    AttrDuplicateArg { attr: String, name: String },
+
+    #[error("expected {expected} attribute arguments for '{attr}', found {found}")]
+    AttrArgCountInvalid {
+        attr: String,
+        expected: u32,
+        found: u32,
+    },
+
+    #[error("named attribute arguments not allowed for '{attr}'")]
+    AttrNamedArgsNotAllowed { attr: String },
+
+    #[error("attribute arguments required for '{attr}'")]
+    AttrArgsRequired { attr: String },
+
+    #[error("@musi.lang name argument duplicated")]
+    LangItemNameDuplicate,
 }
 
 impl SemaError {
@@ -237,6 +259,24 @@ impl SemaError {
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::OptionLangItemSomePayloadInvalid => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3040))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrUnknownArg { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3041))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrDuplicateArg { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3042))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrArgCountInvalid { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3043))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrNamedArgsNotAllowed { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3044))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AttrArgsRequired { .. } => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3045))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::LangItemNameDuplicate => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3046))
                 .with_label(self.span, self.source_id, ""),
         }
     }

@@ -8,7 +8,7 @@ use super::env::ValueScheme;
 use super::{EffectRow, SemTy, SemTyId};
 
 impl<'a> Checker<'a> {
-    pub(super) fn typecheck_callable(
+    pub(crate) fn typecheck_callable(
         &mut self,
         origin: HirOrigin,
         params: &[HirParam],
@@ -80,7 +80,7 @@ impl<'a> Checker<'a> {
         (fn_ty, effs)
     }
 
-    pub(super) fn synth_lambda(
+    pub(crate) fn synth_lambda(
         &mut self,
         origin: HirOrigin,
         params: Box<[HirParam]>,

@@ -12,62 +12,62 @@ use super::lang::LangItems;
 use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
 
 #[derive(Debug, Clone)]
-pub(super) struct ResumeCtx {
-    pub(super) arg: SemTyId,
-    pub(super) result: SemTyId,
+pub(crate) struct ResumeCtx {
+    pub(crate) arg: SemTyId,
+    pub(crate) result: SemTyId,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct BuiltinTys {
-    pub(super) error: SemTyId,
-    pub(super) unknown: SemTyId,
-    pub(super) any: SemTyId,
+pub(crate) struct BuiltinTys {
+    pub(crate) error: SemTyId,
+    pub(crate) unknown: SemTyId,
+    pub(crate) any: SemTyId,
 
-    pub(super) type_: SemTyId,
-    pub(super) empty: SemTyId,
-    pub(super) unit: SemTyId,
-    pub(super) bool_: SemTyId,
-    pub(super) int_: SemTyId,
-    pub(super) float_: SemTyId,
-    pub(super) string_: SemTyId,
+    pub(crate) type_: SemTyId,
+    pub(crate) empty: SemTyId,
+    pub(crate) unit: SemTyId,
+    pub(crate) bool_: SemTyId,
+    pub(crate) int_: SemTyId,
+    pub(crate) float_: SemTyId,
+    pub(crate) string_: SemTyId,
 
-    pub(super) cstring: SemTyId,
-    pub(super) cptr: SemTyId,
+    pub(crate) cstring: SemTyId,
+    pub(crate) cptr: SemTyId,
 }
 
 #[derive(Debug, Default)]
-pub(super) struct FlowState {
-    pub(super) expr_tys: HashMap<HirExprId, SemTyId>,
-    pub(super) callable_effs: HashMap<HirExprId, EffectRow>,
-    pub(super) resume_stack: Vec<ResumeCtx>,
+pub(crate) struct FlowState {
+    pub(crate) expr_tys: HashMap<HirExprId, SemTyId>,
+    pub(crate) callable_effs: HashMap<HirExprId, EffectRow>,
+    pub(crate) resume_stack: Vec<ResumeCtx>,
 }
 
-pub(super) struct CheckerCtx<'a> {
-    pub(super) source_id: SourceId,
-    pub(super) sources: &'a SourceMap,
-    pub(super) interner: &'a mut Interner,
-    pub(super) names: &'a NameResolution,
-    pub(super) binding_by_site: HashMap<NameSite, NameBindingId>,
-    pub(super) store: &'a mut HirStore,
-    pub(super) errors: &'a mut Vec<SemaError>,
+pub(crate) struct CheckerCtx<'a> {
+    pub(crate) source_id: SourceId,
+    pub(crate) sources: &'a SourceMap,
+    pub(crate) interner: &'a mut Interner,
+    pub(crate) names: &'a NameResolution,
+    pub(crate) binding_by_site: HashMap<NameSite, NameBindingId>,
+    pub(crate) store: &'a mut HirStore,
+    pub(crate) errors: &'a mut Vec<SemaError>,
 }
 
-pub(super) struct CheckerState {
-    pub(super) semtys: SemTys,
-    pub(super) env: TypeEnv,
-    pub(super) known: KnownSymbols,
-    pub(super) lang: LangItems,
-    pub(super) builtins: BuiltinTys,
-    pub(super) flow: FlowState,
+pub(crate) struct CheckerState {
+    pub(crate) semtys: SemTys,
+    pub(crate) env: TypeEnv,
+    pub(crate) known: KnownSymbols,
+    pub(crate) lang: LangItems,
+    pub(crate) builtins: BuiltinTys,
+    pub(crate) flow: FlowState,
 }
 
-pub(super) struct Checker<'a> {
-    pub(super) ctx: CheckerCtx<'a>,
-    pub(super) state: CheckerState,
+pub(crate) struct Checker<'a> {
+    pub(crate) ctx: CheckerCtx<'a>,
+    pub(crate) state: CheckerState,
 }
 
 impl<'a> Checker<'a> {
-    pub(super) fn new(
+    pub(crate) fn new(
         source_id: SourceId,
         sources: &'a SourceMap,
         interner: &'a mut Interner,
@@ -129,7 +129,8 @@ impl<'a> Checker<'a> {
         checker
     }
 
-    pub(super) fn check_module(&mut self, root: HirExprId) {
+    pub(crate) fn check_module(&mut self, root: HirExprId) {
+        self.validate_public_attrs();
         let _ = self.synth_expr(root);
         self.finalize_expr_types();
     }
@@ -141,11 +142,11 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn record_type(&mut self, expr_id: HirExprId, ty: SemTyId) {
+    pub(crate) fn record_type(&mut self, expr_id: HirExprId, ty: SemTyId) {
         let _prev = self.state.flow.expr_tys.insert(expr_id, ty);
     }
 
-    pub(super) fn error(&mut self, span: Span, kind: SemaErrorKind) {
+    pub(crate) fn error(&mut self, span: Span, kind: SemaErrorKind) {
         self.ctx.errors.push(SemaError {
             kind,
             source_id: self.ctx.source_id,
@@ -153,7 +154,7 @@ impl<'a> Checker<'a> {
         });
     }
 
-    pub(super) fn binding_for_use(&self, span: Span) -> Option<NameBindingId> {
+    pub(crate) fn binding_for_use(&self, span: Span) -> Option<NameBindingId> {
         self.ctx
             .names
             .refs
@@ -161,14 +162,14 @@ impl<'a> Checker<'a> {
             .copied()
     }
 
-    pub(super) fn binding_for_def(&self, span: Span) -> Option<NameBindingId> {
+    pub(crate) fn binding_for_def(&self, span: Span) -> Option<NameBindingId> {
         self.ctx
             .binding_by_site
             .get(&site(self.ctx.source_id, span))
             .copied()
     }
 
-    pub(super) fn slice(&self, span: Span) -> &str {
+    pub(crate) fn slice(&self, span: Span) -> &str {
         let Some(source) = self.ctx.sources.get(self.ctx.source_id) else {
             return "";
         };
@@ -177,7 +178,7 @@ impl<'a> Checker<'a> {
         source.text().get(start..end).unwrap_or("")
     }
 
-    pub(super) fn decode_string_span(&self, span: Span) -> String {
+    pub(crate) fn decode_string_span(&self, span: Span) -> String {
         music_basic::string_lit::decode(self.slice(span))
     }
 

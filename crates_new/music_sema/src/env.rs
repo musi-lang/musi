@@ -139,7 +139,7 @@ impl TypeEnv {
     }
 }
 
-pub(super) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {
+pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {
     let ty = super::unify::resolve(tys, ty);
     match tys.get(ty).clone() {
         SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::InferVar(_) => ty,

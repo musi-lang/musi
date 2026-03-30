@@ -14,7 +14,7 @@ use super::unify;
 use super::{SemTy, SemTyId};
 
 impl<'a> Checker<'a> {
-    pub(super) fn bind_pat_to_scheme(&mut self, pat: HirPatId, scheme: ValueScheme) {
+    pub(crate) fn bind_pat_to_scheme(&mut self, pat: HirPatId, scheme: ValueScheme) {
         let mut stack = vec![pat];
         while let Some(pat_id) = stack.pop() {
             let pat = self.ctx.store.pats.get(pat_id).clone();
@@ -48,7 +48,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn bind_pat_for_scrut(&mut self, pat: HirPatId, scrut_ty: SemTyId) {
+    pub(crate) fn bind_pat_for_scrut(&mut self, pat: HirPatId, scrut_ty: SemTyId) {
         let scrut_ty = unify::resolve(&self.state.semtys, scrut_ty);
         let pat = self.ctx.store.pats.get(pat).clone();
         match pat.kind {
@@ -202,7 +202,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn bind_value_clause_binder(&mut self, binder: music_names::Ident, ty: SemTyId) {
+    pub(crate) fn bind_value_clause_binder(&mut self, binder: music_names::Ident, ty: SemTyId) {
         if let Some(binding) = self.binding_for_def(binder.span) {
             self.state.env.insert_value(
                 binding,
@@ -215,7 +215,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn bind_handle_param(&mut self, param: music_names::Ident, ty: SemTyId) {
+    pub(crate) fn bind_handle_param(&mut self, param: music_names::Ident, ty: SemTyId) {
         if let Some(binding) = self.binding_for_def(param.span) {
             self.state.env.insert_value(
                 binding,
@@ -228,7 +228,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn register_effect_def(
+    pub(crate) fn register_effect_def(
         &mut self,
         pat: HirPatId,
         generic_count: u32,
@@ -278,7 +278,7 @@ impl<'a> Checker<'a> {
             .insert_effect_family(binding, generic_count, ops);
     }
 
-    pub(super) fn register_class_def(
+    pub(crate) fn register_class_def(
         &mut self,
         pat: HirPatId,
         generic_count: u32,
@@ -358,7 +358,7 @@ impl<'a> Checker<'a> {
             .insert_class_family(binding, generic_count, ops);
     }
 
-    pub(super) fn register_data_def(
+    pub(crate) fn register_data_def(
         &mut self,
         pat: HirPatId,
         generic_count: u32,

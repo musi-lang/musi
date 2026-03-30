@@ -1,8 +1,5 @@
-use super::SemTyDisplay;
-use super::check::Checker;
-use super::{SemTy, SemTyId, SemTys};
-
-use crate::SemaErrorKind;
+use super::*;
+use crate::check::Checker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnifyMismatch {
@@ -137,7 +134,7 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
 }
 
 impl<'a> Checker<'a> {
-    pub(super) fn unify_or_report(
+    pub(crate) fn unify_or_report(
         &mut self,
         span: music_basic::Span,
         left: SemTyId,
