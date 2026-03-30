@@ -34,6 +34,9 @@ impl<'a> Checker<'a> {
                         declared_effects: None,
                     },
                 );
+                if p.mutable {
+                    self.mark_binding_mut(binding, true);
+                }
             }
         }
 

@@ -42,6 +42,19 @@ let mut counter := 0;
 counter <- counter + 1;
 ```
 
+`mut` has two separate roles:
+
+- `let mut name := expr` marks binding as updatable via `<-`
+- `mut expr` produces writable value (`mut T` in type position), needed for writes through members and indices
+
+```musi
+let mut x := 0;
+x <- 1;
+
+let array := mut [1, 2, 3];
+array.[0] <- 4;
+```
+
 ## Records
 
 Record literals use `{ ... }`. Record update uses `expr.{ ... }`. Record patterns also use `{ ... }`.

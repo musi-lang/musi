@@ -59,6 +59,7 @@ pub(crate) struct CheckerState {
     pub(crate) lang: LangItems,
     pub(crate) builtins: BuiltinTys,
     pub(crate) flow: FlowState,
+    pub(crate) binding_mut: HashMap<NameBindingId, bool>,
 }
 
 pub(crate) struct Checker<'a> {
@@ -121,6 +122,7 @@ impl<'a> Checker<'a> {
                     cptr,
                 },
                 flow: FlowState::default(),
+                binding_mut: HashMap::new(),
             },
         };
 
@@ -167,6 +169,29 @@ impl<'a> Checker<'a> {
             .binding_by_site
             .get(&site(self.ctx.source_id, span))
             .copied()
+    }
+
+    pub(crate) fn mark_binding_mut(&mut self, binding: NameBindingId, mutable: bool) {
+        let _prev = self.state.binding_mut.insert(binding, mutable);
+    }
+
+    #[must_use]
+    pub(crate) fn binding_is_mut(&self, binding: NameBindingId) -> bool {
+        self.state
+            .binding_mut
+            .get(&binding)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn mark_pat_bindings_mut(&mut self, pat: music_hir::HirPatId, mutable: bool) {
+        let mut sites = Vec::new();
+        self.collect_bind_sites(pat, &mut sites);
+        for span in sites {
+            if let Some(binding) = self.binding_for_def(span) {
+                self.mark_binding_mut(binding, mutable);
+            }
+        }
     }
 
     pub(crate) fn slice(&self, span: Span) -> &str {

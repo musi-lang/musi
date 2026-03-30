@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use music_hir::{
     HirArg, HirArrowFlavor, HirBinaryOp, HirDeclMods, HirEffectSet, HirExprId, HirExprKind,
-    HirHandleClause, HirLitKind, HirMemberKey, HirOrigin, HirParam, HirPatId, HirRecordItem,
-    HirTyId,
+    HirLitKind, HirMemberKey, HirOrigin, HirParam, HirPatId, HirRecordItem, HirTyId,
 };
 use music_names::Symbol;
 
@@ -16,7 +15,9 @@ use super::{
 };
 
 use super::checker::Checker;
-use super::checker::ResumeCtx;
+
+mod assign;
+mod effects;
 
 impl<'a> Checker<'a> {
     fn union_call_effects(&mut self, callee: HirExprId, effs: &mut EffectRow) {
@@ -86,7 +87,7 @@ impl<'a> Checker<'a> {
             }
             HirExprKind::Let {
                 mods,
-                mutable: _mutable,
+                mutable,
                 pat,
                 has_params,
                 params,
@@ -98,6 +99,7 @@ impl<'a> Checker<'a> {
             } => self.synth_let(
                 origin,
                 mods,
+                mutable,
                 pat,
                 has_params,
                 params,
@@ -366,6 +368,7 @@ impl<'a> Checker<'a> {
         &mut self,
         origin: HirOrigin,
         mods: HirDeclMods,
+        mutable: bool,
         pat: HirPatId,
         has_params: bool,
         params: Box<[HirParam]>,
@@ -377,6 +380,7 @@ impl<'a> Checker<'a> {
         let mut effs = EffectRow::empty();
 
         self.register_lang_items_on_let(&mods, pat, value);
+        self.mark_pat_bindings_mut(pat, mutable);
 
         let mut ty_params = HashMap::<Symbol, u32>::new();
         for (i, tp) in type_params.iter().enumerate() {
@@ -947,8 +951,14 @@ impl<'a> Checker<'a> {
         chain: music_hir::HirChainKind,
         key: HirMemberKey,
     ) -> (SemTyId, EffectRow) {
-        let (base_ty, effs) = self.synth_expr(base);
-        let base_ty = unify::resolve(&self.state.semtys, base_ty);
+        let (mut base_ty, effs) = self.synth_expr(base);
+        base_ty = unify::resolve(&self.state.semtys, base_ty);
+        loop {
+            let SemTy::Mut { base } = self.state.semtys.get(base_ty).clone() else {
+                break;
+            };
+            base_ty = unify::resolve(&self.state.semtys, base);
+        }
 
         match (chain, self.state.semtys.get(base_ty).clone(), key) {
             (music_hir::HirChainKind::Optional, base, key) => {
@@ -1085,6 +1095,7 @@ impl<'a> Checker<'a> {
     fn type_member(&mut self, ty: SemTyId, key: &HirMemberKey) -> SemTyId {
         let ty = unify::resolve(&self.state.semtys, ty);
         match (self.state.semtys.get(ty).clone(), key) {
+            (SemTy::Mut { base }, key) => self.type_member(base, key),
             (SemTy::Record { fields }, HirMemberKey::Name(field)) => fields
                 .get(&field.name)
                 .copied()
@@ -1114,20 +1125,27 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn synth_index(
+    fn project_indices(
         &mut self,
         origin: HirOrigin,
-        base: HirExprId,
-        indices: Box<[HirExprId]>,
-    ) -> (SemTyId, EffectRow) {
-        let (mut ty, mut effs) = self.synth_expr(base);
+        mut ty: SemTyId,
+        indices: &[HirExprId],
+        effs: &mut EffectRow,
+    ) -> SemTyId {
         let mut array_chain = false;
 
         for idx_expr in indices.iter().copied() {
             let (idx_ty, idx_effs) = self.synth_expr(idx_expr);
             effs.union_with(&idx_effs);
 
-            let resolved = unify::resolve(&self.state.semtys, ty);
+            let mut resolved = unify::resolve(&self.state.semtys, ty);
+            loop {
+                let SemTy::Mut { base } = self.state.semtys.get(resolved).clone() else {
+                    break;
+                };
+                resolved = unify::resolve(&self.state.semtys, base);
+            }
+
             match self.state.semtys.get(resolved).clone() {
                 SemTy::Array { elem, .. } => {
                     array_chain = true;
@@ -1137,7 +1155,7 @@ impl<'a> Checker<'a> {
                 SemTy::Tuple { items } => {
                     if array_chain {
                         self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
-                        return (self.state.builtins.error, effs);
+                        return self.state.builtins.error;
                     }
 
                     if let Some(i) = int_lit_expr_u32(self, idx_expr) {
@@ -1161,7 +1179,7 @@ impl<'a> Checker<'a> {
                 SemTy::Record { fields } => {
                     if array_chain {
                         self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
-                        return (self.state.builtins.error, effs);
+                        return self.state.builtins.error;
                     }
 
                     if let Some(name) = string_lit_expr_text(self, idx_expr) {
@@ -1179,7 +1197,7 @@ impl<'a> Checker<'a> {
                 SemTy::Named { name, args } => {
                     if array_chain {
                         self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
-                        return (self.state.builtins.error, effs);
+                        return self.state.builtins.error;
                     }
 
                     let Some(field_name) = string_lit_expr_text(self, idx_expr) else {
@@ -1221,13 +1239,24 @@ impl<'a> Checker<'a> {
                 _ => {
                     if array_chain {
                         self.error(origin.span, SemaErrorKind::IndexExceedsArrayNesting);
-                        return (self.state.builtins.error, effs);
+                        return self.state.builtins.error;
                     }
                     ty = self.state.builtins.unknown;
                 }
             }
         }
 
+        ty
+    }
+
+    fn synth_index(
+        &mut self,
+        origin: HirOrigin,
+        base: HirExprId,
+        indices: Box<[HirExprId]>,
+    ) -> (SemTyId, EffectRow) {
+        let (ty, mut effs) = self.synth_expr(base);
+        let ty = self.project_indices(origin, ty, &indices, &mut effs);
         (ty, effs)
     }
 
@@ -1238,7 +1267,13 @@ impl<'a> Checker<'a> {
         items: Box<[HirRecordItem]>,
     ) -> (SemTyId, EffectRow) {
         let (base_ty, mut effs) = self.synth_expr(base);
-        let base_resolved = unify::resolve(&self.state.semtys, base_ty);
+        let mut base_resolved = unify::resolve(&self.state.semtys, base_ty);
+        loop {
+            let SemTy::Mut { base } = self.state.semtys.get(base_resolved).clone() else {
+                break;
+            };
+            base_resolved = unify::resolve(&self.state.semtys, base);
+        }
         if let SemTy::Record { fields } = self.state.semtys.get(base_resolved).clone() {
             let mut out_fields = fields;
             let mut open = false;
@@ -1434,12 +1469,7 @@ impl<'a> Checker<'a> {
                 self.union_call_effects(right, &mut effs);
                 (out, effs)
             }
-            HirBinaryOp::Assign => {
-                let (_l_ty, mut effs) = self.synth_expr(left);
-                let (_r_ty, r_effs) = self.synth_expr(right);
-                effs.union_with(&r_effs);
-                (self.state.builtins.unit, effs)
-            }
+            HirBinaryOp::Assign => self.synth_assign(origin, left, right),
             HirBinaryOp::Or | HirBinaryOp::Xor | HirBinaryOp::And => {
                 let (l_ty, mut effs) = self.synth_expr(left);
                 let (r_ty, r_effs) = self.synth_expr(right);
@@ -1581,276 +1611,6 @@ impl<'a> Checker<'a> {
             self.state.semtys.get(ty),
             SemTy::Named { name, args } if *name == builtin && args.is_empty()
         )
-    }
-
-    fn synth_perform(&mut self, origin: HirOrigin, expr: HirExprId) -> (SemTyId, EffectRow) {
-        // Must be `perform Effect.op(args...)`.
-        let HirExprKind::Call { callee, args } = self.ctx.store.exprs.get(expr).kind.clone() else {
-            self.error(origin.span, SemaErrorKind::InvalidPerformTarget);
-            let (_t, effs) = self.synth_expr(expr);
-            return (self.state.builtins.unknown, effs);
-        };
-
-        let HirExprKind::Member { base, key, .. } = self.ctx.store.exprs.get(callee).kind.clone()
-        else {
-            self.error(origin.span, SemaErrorKind::InvalidPerformTarget);
-            let (_t, effs) = self.synth_expr(expr);
-            return (self.state.builtins.unknown, effs);
-        };
-
-        let HirMemberKey::Name(op_ident) = key else {
-            self.error(origin.span, SemaErrorKind::InvalidPerformTarget);
-            let (_t, effs) = self.synth_expr(expr);
-            return (self.state.builtins.unknown, effs);
-        };
-
-        let HirExprKind::Name {
-            ident: effect_ident,
-        } = self.ctx.store.exprs.get(base).kind.clone()
-        else {
-            self.error(origin.span, SemaErrorKind::InvalidPerformTarget);
-            let (_t, effs) = self.synth_expr(expr);
-            return (self.state.builtins.unknown, effs);
-        };
-
-        let Some(effect_binding) = self.binding_for_use(effect_ident.span) else {
-            self.error(
-                origin.span,
-                SemaErrorKind::UnknownEffect {
-                    name: self.ctx.interner.resolve(effect_ident.name).to_string(),
-                },
-            );
-            return (self.state.builtins.unknown, EffectRow::empty());
-        };
-
-        let sig = {
-            let Some(family) = self.state.env.get_effect_family(effect_binding) else {
-                self.error(
-                    origin.span,
-                    SemaErrorKind::UnknownEffect {
-                        name: self.ctx.interner.resolve(effect_ident.name).to_string(),
-                    },
-                );
-                return (self.state.builtins.unknown, EffectRow::empty());
-            };
-            family
-                .ops
-                .get(&op_ident.name)
-                .cloned()
-                .map(|sig| (family.generic_count, sig))
-        };
-
-        let Some((generic_count, sig)) = sig else {
-            self.error(
-                origin.span,
-                SemaErrorKind::UnknownEffectOp {
-                    effect: self.ctx.interner.resolve(effect_ident.name).to_string(),
-                    op: self.ctx.interner.resolve(op_ident.name).to_string(),
-                },
-            );
-            return (self.state.builtins.unknown, EffectRow::empty());
-        };
-
-        let (sig, eff_arg) = match generic_count {
-            0 => (sig, None),
-            1 => {
-                let eff_arg = self.state.semtys.fresh_infer_var(origin.span);
-                let subst = [eff_arg];
-                let params: Vec<_> = sig
-                    .params
-                    .iter()
-                    .copied()
-                    .map(|t| substitute_generics(&mut self.state.semtys, t, &subst))
-                    .collect();
-                let ret = substitute_generics(&mut self.state.semtys, sig.ret, &subst);
-                (
-                    super::env::EffectOpSig {
-                        params: params.into_boxed_slice(),
-                        ret,
-                    },
-                    Some(eff_arg),
-                )
-            }
-            other => {
-                self.error(
-                    origin.span,
-                    SemaErrorKind::EffectTypeParamCountUnsupported { count: other },
-                );
-                return (self.state.builtins.unknown, EffectRow::empty());
-            }
-        };
-
-        let mut effs = EffectRow::empty();
-        for (arg, expected) in args.iter().zip(sig.params.iter().copied()) {
-            match arg {
-                HirArg::Expr(id) => {
-                    let (t, e) = self.synth_expr(*id);
-                    effs.union_with(&e);
-                    let _ = self.unify_or_report(origin.span, t, expected);
-                }
-                HirArg::Spread { expr, .. } => {
-                    let (_t, e) = self.synth_expr(*expr);
-                    effs.union_with(&e);
-                }
-            }
-        }
-
-        effs.add(EffectKey {
-            name: effect_ident.name,
-            arg: eff_arg,
-        });
-        (sig.ret, effs)
-    }
-
-    fn synth_handle(
-        &mut self,
-        origin: HirOrigin,
-        expr: HirExprId,
-        handler: music_names::Ident,
-        clauses: Box<[HirHandleClause]>,
-    ) -> (SemTyId, EffectRow) {
-        let (handled_ty, mut handled_effs) = self.synth_expr(expr);
-
-        let result = self.state.semtys.fresh_infer_var(origin.span);
-        let mut clause_effs = EffectRow::empty();
-
-        let Some(handler_binding) = self.binding_for_use(handler.span) else {
-            self.error(
-                handler.span,
-                SemaErrorKind::UnknownEffect {
-                    name: self.ctx.interner.resolve(handler.name).to_string(),
-                },
-            );
-            return (result, handled_effs);
-        };
-
-        let handler_family = self.state.env.get_effect_family(handler_binding).cloned();
-        if handler_family.is_none() {
-            self.error(
-                handler.span,
-                SemaErrorKind::UnknownEffect {
-                    name: self.ctx.interner.resolve(handler.name).to_string(),
-                },
-            );
-        }
-
-        let mut handled_arg = handled_effs
-            .items
-            .iter()
-            .find(|k| k.name == handler.name)
-            .and_then(|k| k.arg);
-
-        let mut value_clause_count = 0usize;
-        for clause in clauses.iter() {
-            let (body_ty, body_effs) = if clause.is_value {
-                value_clause_count += 1;
-                self.bind_value_clause_binder(clause.name, handled_ty);
-                self.synth_expr(clause.body)
-            } else {
-                let mut op_ret = self.state.builtins.unknown;
-                let mut param_tys = Vec::<SemTyId>::new();
-
-                if let Some(family) = handler_family.as_ref() {
-                    if let Some(sig) = family.ops.get(&clause.name.name).cloned() {
-                        let (sig, _eff_arg) = match family.generic_count {
-                            0 => (sig, None),
-                            1 => {
-                                let arg = handled_arg.get_or_insert_with(|| {
-                                    self.state.semtys.fresh_infer_var(origin.span)
-                                });
-                                let subst = [*arg];
-                                let params: Vec<_> = sig
-                                    .params
-                                    .iter()
-                                    .copied()
-                                    .map(|t| substitute_generics(&mut self.state.semtys, t, &subst))
-                                    .collect();
-                                let ret =
-                                    substitute_generics(&mut self.state.semtys, sig.ret, &subst);
-                                (
-                                    super::env::EffectOpSig {
-                                        params: params.into_boxed_slice(),
-                                        ret,
-                                    },
-                                    Some(*arg),
-                                )
-                            }
-                            other => {
-                                self.error(
-                                    clause.origin.span,
-                                    SemaErrorKind::EffectTypeParamCountUnsupported { count: other },
-                                );
-                                (sig, None)
-                            }
-                        };
-                        op_ret = sig.ret;
-                        param_tys = sig.params.to_vec();
-                    }
-                }
-
-                // Bind params, last param is continuation.
-                let k_ty = self.state.semtys.alloc(SemTy::Arrow {
-                    flavor: HirArrowFlavor::Pure,
-                    input: op_ret,
-                    output: result,
-                });
-
-                if !clause.params.is_empty() {
-                    for (i, p) in clause.params.iter().copied().enumerate() {
-                        let ty = if i + 1 == clause.params.len() {
-                            k_ty
-                        } else {
-                            param_tys
-                                .get(i)
-                                .copied()
-                                .unwrap_or(self.state.builtins.unknown)
-                        };
-                        self.bind_handle_param(p, ty);
-                    }
-                }
-
-                self.state.flow.resume_stack.push(ResumeCtx {
-                    arg: op_ret,
-                    result,
-                });
-                let out = self.synth_expr(clause.body);
-                let _ = self.state.flow.resume_stack.pop();
-                out
-            };
-
-            clause_effs.union_with(&body_effs);
-            let _ = self.unify_or_report(origin.span, body_ty, result);
-        }
-
-        if value_clause_count != 1 {
-            self.error(origin.span, SemaErrorKind::HandleValueClauseRequired);
-        }
-
-        handled_effs.remove_by_name(handler.name);
-        handled_effs.union_with(&clause_effs);
-        (result, handled_effs)
-    }
-
-    fn synth_resume(
-        &mut self,
-        origin: HirOrigin,
-        value: Option<HirExprId>,
-    ) -> (SemTyId, EffectRow) {
-        let Some(ctx) = self.state.flow.resume_stack.last().cloned() else {
-            self.error(origin.span, SemaErrorKind::ResumeOutsideOpClause);
-            return (self.state.builtins.error, EffectRow::empty());
-        };
-
-        let mut effs = EffectRow::empty();
-        if let Some(value) = value {
-            let (t, e) = self.synth_expr(value);
-            effs.union_with(&e);
-            let _ = self.unify_or_report(origin.span, t, ctx.arg);
-        } else {
-            let _ = self.unify_or_report(origin.span, self.state.builtins.unit, ctx.arg);
-        }
-
-        (ctx.result, effs)
     }
 }
 

@@ -85,6 +85,11 @@ mut Point
 
 `mut T` means writable `T`. Mutability belongs to the type/value model, not only to bindings.
 
+Binding mutability is separate:
+
+- `let mut x := expr` controls whether `x <- value` is permitted
+- `mut T` controls whether writes through `base.field <- value` and `base.[i] <- value` are permitted
+
 ## Type Definitions
 
 All named type definitions are expressed through `let`.

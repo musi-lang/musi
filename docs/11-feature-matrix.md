@@ -37,8 +37,8 @@ Status legend:
 | ---------------------------------------------- | ---- | --------- | ----------- | ------- | ------------------------------------------------------------- |
 | Sequences (`;`)                                | done | done      | done        | done    | Statement wrappers lowered as a top-level sequence            |
 | `let` bindings                                 | done | done      | done        | partial | Polymorphism and full generalization not complete             |
-| Mut bindings (`let mut`)                       | done | done      | done        | partial | Mutation model is not fully enforced                          |
-| Assignment (`<-`)                              | done | done      | done        | partial | Treated as expression; effect model is still evolving         |
+| Mut bindings (`let mut`)                       | done | done      | done        | done    | Enforced for `name <- value`                                  |
+| Assignment (`<-`)                              | done | done      | done        | done    | Name update requires `let mut`; place update requires `mut T`  |
 | Calls                                          | done | done      | done        | done    | Call typing + effect propagation; dispatch not modeled        |
 | Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | done    | Tuple `.0` supported; `.[\"field\"]` resolves record/data keys |
 | `case ... of` with guards                      | done | done      | done        | partial | Pattern/type interactions incomplete                          |

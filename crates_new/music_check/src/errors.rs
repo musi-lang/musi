@@ -16,6 +16,15 @@ pub enum SemaErrorKind {
     #[error("expected type '{expected}', found '{found}'")]
     TypeMismatch { expected: String, found: String },
 
+    #[error("assignment target '{name}' requires 'let mut'")]
+    AssignTargetRequiresMutableBinding { name: String },
+
+    #[error("assignment target requires writable base")]
+    AssignTargetRequiresWritableBase,
+
+    #[error("invalid assignment target")]
+    AssignTargetInvalid,
+
     #[error("tuple index {index} out of range for tuple length {len}")]
     TupleIndexOutOfRange { index: u32, len: u32 },
 
@@ -165,6 +174,17 @@ impl SemaError {
         match &self.kind {
             SemaErrorKind::TypeMismatch { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3006))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AssignTargetRequiresMutableBinding { .. } => {
+                Diag::error(self.kind.to_string())
+                    .with_code(DiagCode::new(3050))
+                    .with_label(self.span, self.source_id, "")
+            }
+            SemaErrorKind::AssignTargetRequiresWritableBase => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3051))
+                .with_label(self.span, self.source_id, ""),
+            SemaErrorKind::AssignTargetInvalid => Diag::error(self.kind.to_string())
+                .with_code(DiagCode::new(3052))
                 .with_label(self.span, self.source_id, ""),
             SemaErrorKind::TupleIndexOutOfRange { .. } => Diag::error(self.kind.to_string())
                 .with_code(DiagCode::new(3047))

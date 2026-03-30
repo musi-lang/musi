@@ -474,7 +474,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn collect_bind_sites(&self, pat: HirPatId, out: &mut Vec<Span>) {
+    pub(crate) fn collect_bind_sites(&self, pat: HirPatId, out: &mut Vec<Span>) {
         let mut stack = vec![pat];
         while let Some(pat_id) = stack.pop() {
             let pat = self.ctx.store.pats.get(pat_id);
