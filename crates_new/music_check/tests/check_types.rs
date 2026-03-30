@@ -279,19 +279,19 @@ fn tuple_projection_dot_int_reports_out_of_range() {
 }
 
 #[test]
-fn tuple_index_brackets_typechecks() {
+fn test_tuple_index_brackets_typechecks() {
     let kinds = analyze_text("let t := (1, 2); t.[1];");
     assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
 }
 
 #[test]
-fn record_computed_field_typechecks() {
+fn test_record_computed_field_typechecks() {
     let kinds = analyze_text("let r := { x := 1, y := 2 }; r.[\"x\"];");
     assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
 }
 
 #[test]
-fn data_computed_field_typechecks() {
+fn test_data_computed_field_typechecks() {
     let kinds = analyze_text(
         r#"
 let P := data { x : Int; y : Int; };
@@ -303,7 +303,7 @@ p.["x"];
 }
 
 #[test]
-fn computed_field_reports_missing() {
+fn test_computed_field_reports_missing() {
     let kinds = analyze_text("let r := { x := 1 }; r.[\"y\"];");
     assert!(
         kinds
@@ -313,7 +313,7 @@ fn computed_field_reports_missing() {
 }
 
 #[test]
-fn multi_index_reports_exceeds_array_nesting() {
+fn test_multi_index_reports_exceeds_array_nesting() {
     let kinds = analyze_text("let xs := [1, 2]; xs.[0, 0];");
     assert!(
         kinds
@@ -323,7 +323,7 @@ fn multi_index_reports_exceeds_array_nesting() {
 }
 
 #[test]
-fn int_literals_support_bases_and_underscore_separators() {
+fn test_int_literals_support_bases_and_underscore_separators() {
     let kinds = analyze_text(
         r#"
 let a : Int := 0x2a;
@@ -336,7 +336,7 @@ let c : Int := 1_000_000;
 }
 
 #[test]
-fn float_literals_support_exponent() {
+fn test_float_literals_support_exponent() {
     let kinds = analyze_text(
         r#"
 let a : Float := 1e3;
@@ -348,14 +348,40 @@ let b : Float := 3.14e-2;
 }
 
 #[test]
-fn rune_literals_typecheck_as_int() {
+fn test_rune_literals_typecheck_as_int() {
     let kinds = analyze_text("let r : Int := 'a'; r;");
     assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
 }
 
 #[test]
-fn float_int_mismatch_reports_error() {
+fn test_float_int_mismatch_reports_error() {
     let kinds = analyze_text("let x : Int := 1e3; x;");
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. }))
+    );
+}
+
+#[test]
+fn test_multi_arg_call_typechecks() {
+    let kinds = analyze_text(
+        r#"
+let add (a : Int, b : Int) : Int := a + b;
+add(1, 2);
+"#,
+    );
+    assert!(kinds.is_empty(), "expected no errors, got {kinds:?}");
+}
+
+#[test]
+fn test_multi_arg_call_reports_mismatch() {
+    let kinds = analyze_text(
+        r#"
+let add (a : Int, b : Int) : Int := a + b;
+add(1, "x");
+"#,
+    );
     assert!(
         kinds
             .iter()

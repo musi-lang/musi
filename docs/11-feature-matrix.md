@@ -39,7 +39,7 @@ Status legend:
 | `let` bindings                                 | done | done      | done        | partial | Polymorphism and full generalization not complete             |
 | Mut bindings (`let mut`)                       | done | done      | done        | partial | Mutation model is not fully enforced                          |
 | Assignment (`<-`)                              | done | done      | done        | partial | Treated as expression; effect model is still evolving         |
-| Calls                                          | done | done      | done        | partial | Callable inference is present, dispatch not fully modeled     |
+| Calls                                          | done | done      | done        | done    | Call typing + effect propagation; dispatch not modeled        |
 | Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | done    | Tuple `.0` supported; `.[\"field\"]` resolves record/data keys |
 | `case ... of` with guards                      | done | done      | done        | partial | Pattern/type interactions incomplete                          |
 | `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
