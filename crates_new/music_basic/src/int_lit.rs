@@ -42,4 +42,3 @@ pub fn parse_u64(text: &str) -> Option<u64> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests;
-

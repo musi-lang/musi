@@ -168,6 +168,19 @@ impl<'a> Checker<'a> {
         });
     }
 
+    pub(crate) fn error_if_opaque_repr_access(&mut self, span: Span, ty_name: Symbol) -> bool {
+        if !self.state.opaque_imports.contains(&ty_name) {
+            return false;
+        }
+        self.error(
+            span,
+            SemaErrorKind::OpaqueTypeBlocksRepresentation {
+                name: self.ctx.interner.resolve(ty_name).to_string(),
+            },
+        );
+        true
+    }
+
     pub(crate) fn binding_for_use(&self, span: Span) -> Option<NameBindingId> {
         self.ctx
             .names

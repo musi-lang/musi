@@ -219,7 +219,10 @@ fn fmt_array_dims(
             write!(f, ", ")?;
         }
         match dim {
-            HirDim::IntLit { value, .. } => write!(f, "{value}")?,
+            HirDim::IntLit {
+                value: Some(value), ..
+            } => write!(f, "{value}")?,
+            HirDim::IntLit { value: None, .. } => write!(f, "_")?,
             HirDim::Name { name } => write!(f, "{}", interner.resolve(name.name))?,
             HirDim::Inferred { .. } => write!(f, "_")?,
         }

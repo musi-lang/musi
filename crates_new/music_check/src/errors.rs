@@ -19,6 +19,9 @@ pub enum SemaErrorKind {
     #[error("opaque type '{name}' blocks representation access")]
     OpaqueTypeBlocksRepresentation { name: String },
 
+    #[error("array dimension out of range")]
+    ArrayDimOutOfRange,
+
     #[error("assignment target '{name}' requires 'let mut'")]
     AssignTargetRequiresMutableBinding { name: String },
 
@@ -221,209 +224,98 @@ pub enum SemaErrorKind {
 impl SemaError {
     #[must_use]
     pub fn to_diag(&self) -> Diag {
+        let mut diag = Diag::error(self.kind.to_string())
+            .with_code(self.kind.diag_code())
+            .with_label(self.span, self.source_id, "");
+
         match &self.kind {
-            SemaErrorKind::TypeMismatch { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3006))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OpaqueTypeBlocksRepresentation { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3064))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AssignTargetRequiresMutableBinding { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3050))
-                    .with_label(self.span, self.source_id, "")
+            SemaErrorKind::MissingWithClause => {
+                diag = diag.with_hint("add 'with { ... }' clause to declaration signature");
             }
-            SemaErrorKind::AssignTargetRequiresWritableBase => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3051))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AssignTargetInvalid => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3052))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::TuplePatternRequiresTuple => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3053))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::TuplePatternArityMismatch { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3054))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::ArrayPatternRequiresArray => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3055))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::RecordPatternRequiresRecord => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3056))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::VariantPatternRequiresData => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3057))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::VariantNotFound { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3058))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::VariantPatternArgCountMismatch { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3059))
-                    .with_label(self.span, self.source_id, "")
+            SemaErrorKind::EffectRemainderNotDeclared => {
+                diag = diag
+                    .with_hint("make signature effect row open by adding remainder like '...r'");
             }
-            SemaErrorKind::PerformArgCountMismatch { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3060))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::HandleClauseMissingOp { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3061))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::HandleClauseDuplicateOp { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3062))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::HandleClauseParamCountMismatch { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3063))
-                    .with_label(self.span, self.source_id, "")
+            SemaErrorKind::OptionLangItemRequired => {
+                diag = diag.with_hint("add @musi.lang(name := \"Option\") Option definition");
             }
-            SemaErrorKind::TupleIndexOutOfRange { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3047))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::FieldNotFound { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3048))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::IndexExceedsArrayNesting => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3049))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::MissingWithClause => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3007))
-                .with_label(self.span, self.source_id, "")
-                .with_hint("add 'with { ... }' clause to declaration signature"),
-            SemaErrorKind::InvalidPerformTarget => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3008))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::UnknownEffect { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3009))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::UnknownEffectOp { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3010))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::HandleValueClauseRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3011))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::ResumeOutsideOpClause => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3012))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::EffectNotDeclared { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3013))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::EffectRemainderNotDeclared => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3014))
-                .with_label(self.span, self.source_id, "")
-                .with_hint("make signature effect row open by adding remainder like '...r'"),
-            SemaErrorKind::EffectTypeParamCountUnsupported { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3015))
-                    .with_label(self.span, self.source_id, "")
+            SemaErrorKind::LangItemNameRequired => {
+                diag = diag.with_hint("use @musi.lang(name := \"...\") form");
             }
-            SemaErrorKind::UnknownClass { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3016))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::UnknownClassOp { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3017))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::InstanceMissingOp { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3018))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::InstanceMemberValueRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3019))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::InvalidInstanceTarget => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3020))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::ClassTypeParamCountUnsupported { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3021))
-                    .with_label(self.span, self.source_id, "")
-            }
-            SemaErrorKind::SpliceOutsideQuote => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3022))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3023))
-                .with_label(self.span, self.source_id, "")
-                .with_hint("add @musi.lang(name := \"Option\") Option definition"),
-            SemaErrorKind::OptionalChainRequiresOption => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3024))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::ForcedChainRequiresOption => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3025))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::UnknownLangItem { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3026))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::DuplicateLangItem { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3027))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::LangItemNameRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3028))
-                .with_label(self.span, self.source_id, "")
-                .with_hint("use @musi.lang(name := \"...\") form"),
-            SemaErrorKind::LangItemNameRequiresString => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3029))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::LangItemMissingValue => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3030))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::LangItemRequiresData => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3031))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::LangItemRequiresName => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3032))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemTypeParamCountUnsupported { .. } => {
-                Diag::error(self.kind.to_string())
-                    .with_code(DiagCode::new(3033))
-                    .with_label(self.span, self.source_id, "")
-            }
-            SemaErrorKind::OptionLangItemFieldsNotAllowed => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3034))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemVariantsRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3035))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemVariantCountInvalid => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3036))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemSomeRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3037))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemNoneRequired => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3038))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemNoneMustBeNullary => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3039))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::OptionLangItemSomePayloadInvalid => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3040))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrUnknownArg { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3041))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrDuplicateArg { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3042))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrArgStringRequired { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3050))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrArgIntRequired { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3051))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrArgRequired { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3052))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrArgCountInvalid { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3043))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrNamedArgsNotAllowed { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3044))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::AttrArgsRequired { .. } => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3045))
-                .with_label(self.span, self.source_id, ""),
-            SemaErrorKind::LangItemNameDuplicate => Diag::error(self.kind.to_string())
-                .with_code(DiagCode::new(3046))
-                .with_label(self.span, self.source_id, ""),
+            _ => {}
+        }
+
+        diag
+    }
+}
+
+impl SemaErrorKind {
+    #[must_use]
+    pub(crate) fn diag_code(&self) -> DiagCode {
+        match self {
+            SemaErrorKind::TypeMismatch { .. } => DiagCode::new(3006),
+            SemaErrorKind::MissingWithClause => DiagCode::new(3007),
+            SemaErrorKind::InvalidPerformTarget => DiagCode::new(3008),
+            SemaErrorKind::UnknownEffect { .. } => DiagCode::new(3009),
+            SemaErrorKind::UnknownEffectOp { .. } => DiagCode::new(3010),
+            SemaErrorKind::HandleValueClauseRequired => DiagCode::new(3011),
+            SemaErrorKind::ResumeOutsideOpClause => DiagCode::new(3012),
+            SemaErrorKind::EffectNotDeclared { .. } => DiagCode::new(3013),
+            SemaErrorKind::EffectRemainderNotDeclared => DiagCode::new(3014),
+            SemaErrorKind::EffectTypeParamCountUnsupported { .. } => DiagCode::new(3015),
+            SemaErrorKind::UnknownClass { .. } => DiagCode::new(3016),
+            SemaErrorKind::UnknownClassOp { .. } => DiagCode::new(3017),
+            SemaErrorKind::InstanceMissingOp { .. } => DiagCode::new(3018),
+            SemaErrorKind::InstanceMemberValueRequired => DiagCode::new(3019),
+            SemaErrorKind::InvalidInstanceTarget => DiagCode::new(3020),
+            SemaErrorKind::ClassTypeParamCountUnsupported { .. } => DiagCode::new(3021),
+            SemaErrorKind::SpliceOutsideQuote => DiagCode::new(3022),
+            SemaErrorKind::OptionLangItemRequired => DiagCode::new(3023),
+            SemaErrorKind::OptionalChainRequiresOption => DiagCode::new(3024),
+            SemaErrorKind::ForcedChainRequiresOption => DiagCode::new(3025),
+            SemaErrorKind::UnknownLangItem { .. } => DiagCode::new(3026),
+            SemaErrorKind::DuplicateLangItem { .. } => DiagCode::new(3027),
+            SemaErrorKind::LangItemNameRequired => DiagCode::new(3028),
+            SemaErrorKind::LangItemNameRequiresString => DiagCode::new(3029),
+            SemaErrorKind::LangItemMissingValue => DiagCode::new(3030),
+            SemaErrorKind::LangItemRequiresData => DiagCode::new(3031),
+            SemaErrorKind::LangItemRequiresName => DiagCode::new(3032),
+            SemaErrorKind::OptionLangItemTypeParamCountUnsupported { .. } => DiagCode::new(3033),
+            SemaErrorKind::OptionLangItemFieldsNotAllowed => DiagCode::new(3034),
+            SemaErrorKind::OptionLangItemVariantsRequired => DiagCode::new(3035),
+            SemaErrorKind::OptionLangItemVariantCountInvalid => DiagCode::new(3036),
+            SemaErrorKind::OptionLangItemSomeRequired => DiagCode::new(3037),
+            SemaErrorKind::OptionLangItemNoneRequired => DiagCode::new(3038),
+            SemaErrorKind::OptionLangItemNoneMustBeNullary => DiagCode::new(3039),
+            SemaErrorKind::OptionLangItemSomePayloadInvalid => DiagCode::new(3040),
+            SemaErrorKind::AttrUnknownArg { .. } => DiagCode::new(3041),
+            SemaErrorKind::AttrDuplicateArg { .. } => DiagCode::new(3042),
+            SemaErrorKind::AttrArgCountInvalid { .. } => DiagCode::new(3043),
+            SemaErrorKind::AttrNamedArgsNotAllowed { .. } => DiagCode::new(3044),
+            SemaErrorKind::AttrArgsRequired { .. } => DiagCode::new(3045),
+            SemaErrorKind::LangItemNameDuplicate => DiagCode::new(3046),
+            SemaErrorKind::TupleIndexOutOfRange { .. } => DiagCode::new(3047),
+            SemaErrorKind::FieldNotFound { .. } => DiagCode::new(3048),
+            SemaErrorKind::IndexExceedsArrayNesting => DiagCode::new(3049),
+            SemaErrorKind::AssignTargetRequiresMutableBinding { .. } => DiagCode::new(3050),
+            SemaErrorKind::AssignTargetRequiresWritableBase => DiagCode::new(3051),
+            SemaErrorKind::AssignTargetInvalid => DiagCode::new(3052),
+            SemaErrorKind::TuplePatternRequiresTuple => DiagCode::new(3053),
+            SemaErrorKind::TuplePatternArityMismatch { .. } => DiagCode::new(3054),
+            SemaErrorKind::ArrayPatternRequiresArray => DiagCode::new(3055),
+            SemaErrorKind::RecordPatternRequiresRecord => DiagCode::new(3056),
+            SemaErrorKind::VariantPatternRequiresData => DiagCode::new(3057),
+            SemaErrorKind::VariantNotFound { .. } => DiagCode::new(3058),
+            SemaErrorKind::VariantPatternArgCountMismatch { .. } => DiagCode::new(3059),
+            SemaErrorKind::PerformArgCountMismatch { .. } => DiagCode::new(3060),
+            SemaErrorKind::HandleClauseMissingOp { .. } => DiagCode::new(3061),
+            SemaErrorKind::HandleClauseDuplicateOp { .. } => DiagCode::new(3062),
+            SemaErrorKind::HandleClauseParamCountMismatch { .. } => DiagCode::new(3063),
+            SemaErrorKind::OpaqueTypeBlocksRepresentation { .. } => DiagCode::new(3064),
+            SemaErrorKind::ArrayDimOutOfRange => DiagCode::new(3065),
+            SemaErrorKind::AttrArgStringRequired { .. } => DiagCode::new(3066),
+            SemaErrorKind::AttrArgIntRequired { .. } => DiagCode::new(3067),
+            SemaErrorKind::AttrArgRequired { .. } => DiagCode::new(3068),
         }
     }
 }

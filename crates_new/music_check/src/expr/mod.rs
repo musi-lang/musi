@@ -18,6 +18,7 @@ use super::checker::Checker;
 
 mod assign;
 mod effects;
+mod variant;
 
 impl<'a> Checker<'a> {
     fn union_call_effects(&mut self, callee: HirExprId, effs: &mut EffectRow) {
@@ -500,7 +501,10 @@ impl<'a> Checker<'a> {
 
             if annot.is_none()
                 && type_params.is_empty()
-                && matches!(self.ctx.store.exprs.get(value).kind, HirExprKind::Name { .. })
+                && matches!(
+                    self.ctx.store.exprs.get(value).kind,
+                    HirExprKind::Name { .. }
+                )
             {
                 if let HirExprKind::Name { ident } = self.ctx.store.exprs.get(value).kind.clone() {
                     if let Some(binding) = self.binding_for_use(ident.span) {
@@ -856,86 +860,6 @@ impl<'a> Checker<'a> {
         (ty, effs)
     }
 
-    fn check_variant_expr(
-        &mut self,
-        origin: HirOrigin,
-        name: music_names::Ident,
-        payload: Option<HirExprId>,
-        expected: SemTyId,
-    ) -> (SemTyId, EffectRow) {
-        let expected = unify::resolve(&self.state.semtys, expected);
-        let SemTy::Named {
-            name: ty_name,
-            args,
-        } = self.state.semtys.get(expected).clone()
-        else {
-            return self.synth_and_unify_variant(origin, payload, expected);
-        };
-
-        if self.state.opaque_imports.contains(&ty_name) {
-            self.error(
-                origin.span,
-                SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                    name: self.ctx.interner.resolve(ty_name).to_string(),
-                },
-            );
-            return self.synth_and_unify_variant(origin, payload, expected);
-        }
-
-        let Some(def) = self.state.env.get_data_def(ty_name).cloned() else {
-            return self.synth_and_unify_variant(origin, payload, expected);
-        };
-        let Some(variants) = def.variants.as_ref() else {
-            return self.synth_and_unify_variant(origin, payload, expected);
-        };
-
-        let Some(payload_ty) = variants.get(&name.name).copied() else {
-            return self.synth_and_unify_variant(origin, payload, expected);
-        };
-
-        let mut subst = Vec::with_capacity(def.generic_count as usize);
-        for i in 0..def.generic_count {
-            subst.push(
-                args.get(i as usize)
-                    .copied()
-                    .unwrap_or(self.state.builtins.unknown),
-            );
-        }
-
-        let mut effs = EffectRow::empty();
-        match (payload_ty, payload) {
-            (None, None) => {}
-            (None, Some(payload)) => {
-                let (_t, e) = self.synth_expr(payload);
-                effs.union_with(&e);
-            }
-            (Some(payload_ty), Some(payload)) => {
-                let payload_expected =
-                    substitute_generics(&mut self.state.semtys, payload_ty, &subst);
-                let (_t, e) = self.check_expr(payload, payload_expected);
-                effs.union_with(&e);
-            }
-            (Some(_), None) => {}
-        };
-
-        (expected, effs)
-    }
-
-    fn synth_and_unify_variant(
-        &mut self,
-        origin: HirOrigin,
-        payload: Option<HirExprId>,
-        expected: SemTyId,
-    ) -> (SemTyId, EffectRow) {
-        let mut effs = EffectRow::empty();
-        if let Some(payload) = payload {
-            let (_t, e) = self.synth_expr(payload);
-            effs.union_with(&e);
-        }
-        let ty = self.unify_or_report(origin.span, expected, self.state.builtins.unknown);
-        (ty, effs)
-    }
-
     fn synth_call(
         &mut self,
         origin: HirOrigin,
@@ -1139,13 +1063,7 @@ impl<'a> Checker<'a> {
                 .copied()
                 .unwrap_or(self.state.builtins.unknown),
             (SemTy::Named { name, args }, HirMemberKey::Name(field)) => {
-                if self.state.opaque_imports.contains(&name) {
-                    self.error(
-                        field.span,
-                        SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                            name: self.ctx.interner.resolve(name).to_string(),
-                        },
-                    );
+                if self.error_if_opaque_repr_access(field.span, name) {
                     return self.state.builtins.unknown;
                 }
 
@@ -1257,13 +1175,7 @@ impl<'a> Checker<'a> {
                         return self.state.builtins.error;
                     }
 
-                    if self.state.opaque_imports.contains(&name) {
-                        self.error(
-                            origin.span,
-                            SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                                name: self.ctx.interner.resolve(name).to_string(),
-                            },
-                        );
+                    if self.error_if_opaque_repr_access(origin.span, name) {
                         ty = self.state.builtins.unknown;
                         continue;
                     }
@@ -1423,13 +1335,7 @@ impl<'a> Checker<'a> {
             return (self.state.builtins.unknown, effs);
         };
 
-        if self.state.opaque_imports.contains(&name) {
-            self.error(
-                origin.span,
-                SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                    name: self.ctx.interner.resolve(name).to_string(),
-                },
-            );
+        if self.error_if_opaque_repr_access(origin.span, name) {
             for item in items.iter() {
                 match item {
                     HirRecordItem::Field { value, .. } => {

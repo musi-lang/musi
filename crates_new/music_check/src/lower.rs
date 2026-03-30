@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use music_basic::Span;
-use music_hir::{HirEffectItem, HirEffectSet, HirTy, HirTyId, HirTyKind};
+use music_hir::{HirDim, HirEffectItem, HirEffectSet, HirTy, HirTyId, HirTyKind};
 use music_names::Symbol;
 
 use crate::checker::Checker;
@@ -77,7 +77,20 @@ impl<'a> Checker<'a> {
             }
             HirTyKind::Array { dims, elem } => {
                 let elem = self.lower_hir_ty(elem, ty_params);
-                self.state.semtys.alloc(SemTy::Array { dims, elem })
+                let mut new_dims = Vec::with_capacity(dims.len());
+                for d in dims.into_vec() {
+                    match d {
+                        HirDim::IntLit { span, value: None } => {
+                            self.error(span, SemaErrorKind::ArrayDimOutOfRange);
+                            new_dims.push(HirDim::Inferred { span });
+                        }
+                        other => new_dims.push(other),
+                    }
+                }
+                self.state.semtys.alloc(SemTy::Array {
+                    dims: new_dims.into_boxed_slice(),
+                    elem,
+                })
             }
             HirTyKind::Arrow {
                 flavor,

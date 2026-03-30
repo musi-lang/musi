@@ -5,20 +5,56 @@ use music_check::AnalyzedModule;
 use music_known::KnownSymbols;
 use music_lex::{LexError, LexedSource, Lexer};
 use music_names::{Interner, Symbol};
-use music_parse::ParsedSource;
+use music_parse::{ParseError, ParsedSource};
 use music_resolve::ResolveOptions;
 
 use crate::{SessionImportEnv, SessionImportModule};
 
+/// Result of lexing and parsing a single source file in a [`Session`].
 pub struct SessionParsedSource {
-    pub source_id: SourceId,
-    pub lex_errors: Vec<LexError>,
-    pub parsed: ParsedSource,
+    source_id: SourceId,
+    lex_errors: Vec<LexError>,
+    parsed: ParsedSource,
 }
 
+impl SessionParsedSource {
+    #[must_use]
+    pub const fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    #[must_use]
+    pub fn lex_errors(&self) -> &[LexError] {
+        &self.lex_errors
+    }
+
+    #[must_use]
+    pub fn parse_errors(&self) -> &[ParseError] {
+        self.parsed.errors()
+    }
+
+    #[must_use]
+    pub const fn parsed(&self) -> &ParsedSource {
+        &self.parsed
+    }
+}
+
+/// Result of analyzing a single source file in a [`Session`].
 pub struct SessionAnalyzedSource {
-    pub parsed: SessionParsedSource,
-    pub analyzed: AnalyzedModule,
+    parsed: SessionParsedSource,
+    analyzed: AnalyzedModule,
+}
+
+impl SessionAnalyzedSource {
+    #[must_use]
+    pub const fn parsed(&self) -> &SessionParsedSource {
+        &self.parsed
+    }
+
+    #[must_use]
+    pub const fn analyzed(&self) -> &AnalyzedModule {
+        &self.analyzed
+    }
 }
 
 /// Session owns the shared compiler context needed to compile a set of sources.
@@ -114,7 +150,7 @@ impl Session {
         };
 
         let analyzed = music_check::analyze_module(
-            parsed.parsed.tree(),
+            parsed.parsed().tree(),
             &self.sources,
             &mut self.interner,
             options,
@@ -147,7 +183,10 @@ impl Session {
     }
 }
 
-fn collect_top_level_opaque_exports(module: &music_hir::HirModule, interner: &Interner) -> Vec<String> {
+fn collect_top_level_opaque_exports(
+    module: &music_hir::HirModule,
+    interner: &Interner,
+) -> Vec<String> {
     let mut out = Vec::new();
     let root = module.store.exprs.get(module.root);
     let music_hir::HirExprKind::Sequence { exprs, .. } = &root.kind else {

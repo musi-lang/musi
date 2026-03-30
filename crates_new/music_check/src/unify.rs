@@ -144,8 +144,8 @@ fn array_dims_compatible(left: &[music_hir::HirDim], right: &[music_hir::HirDim]
     for (a, b) in left.iter().zip(right.iter()) {
         match (a, b) {
             (
-                music_hir::HirDim::IntLit { value: a, .. },
-                music_hir::HirDim::IntLit { value: b, .. },
+                music_hir::HirDim::IntLit { value: Some(a), .. },
+                music_hir::HirDim::IntLit { value: Some(b), .. },
             ) if a != b => return false,
             _ => {}
         }
@@ -158,9 +158,9 @@ fn array_specificity(dims: &[music_hir::HirDim]) -> u32 {
     let mut score = 0u32;
     for d in dims {
         match d {
-            music_hir::HirDim::IntLit { .. } => score += 2,
+            music_hir::HirDim::IntLit { value: Some(_), .. } => score += 2,
             music_hir::HirDim::Name { .. } => score += 1,
-            music_hir::HirDim::Inferred { .. } => {}
+            music_hir::HirDim::Inferred { .. } | music_hir::HirDim::IntLit { value: None, .. } => {}
         }
     }
     score

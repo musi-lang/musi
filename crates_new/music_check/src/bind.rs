@@ -132,13 +132,7 @@ impl<'a> Checker<'a> {
                 let record_def = match self.state.semtys.get(scrut_ty).clone() {
                     SemTy::Record { fields } => Some(fields),
                     SemTy::Named { name, args } => {
-                        if self.state.opaque_imports.contains(&name) {
-                            self.error(
-                                pat.origin.span,
-                                SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                                    name: self.ctx.interner.resolve(name).to_string(),
-                                },
-                            );
+                        if self.error_if_opaque_repr_access(pat.origin.span, name) {
                             None
                         } else {
                             self.state
@@ -247,14 +241,9 @@ impl<'a> Checker<'a> {
                         name: ty_name,
                         args,
                     } => {
-                        if self.state.opaque_imports.contains(&ty_name) {
-                            self.error(
-                                pat.origin.span,
-                                SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                                    name: self.ctx.interner.resolve(ty_name).to_string(),
-                                },
-                            );
-                        } else if let Some(def) = self.state.env.get_data_def(ty_name).cloned() {
+                        if !self.error_if_opaque_repr_access(pat.origin.span, ty_name)
+                            && let Some(def) = self.state.env.get_data_def(ty_name).cloned()
+                        {
                             generic_count = def.generic_count;
                             ty_args = args;
                             if let Some(variants) = def.variants.as_ref() {

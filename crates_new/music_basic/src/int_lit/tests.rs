@@ -32,4 +32,3 @@ fn test_parse_u64_rejects_empty() {
     assert_eq!(parse_u64("0b"), None);
     assert_eq!(parse_u64("0o"), None);
 }
-

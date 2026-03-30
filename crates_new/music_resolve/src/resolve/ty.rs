@@ -181,7 +181,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             match tok.kind() {
                 TokenKind::IntLit => {
                     let raw = self.slice(tok.span());
-                    let value = music_basic::int_lit::parse_u64(raw).unwrap_or(0);
+                    let value = music_basic::int_lit::parse_u64(raw);
                     dims.push(HirDim::IntLit {
                         span: tok.span(),
                         value,
@@ -230,3 +230,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         music_hir::HirStringLit::new(token.span(), Some(token.id()))
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests;

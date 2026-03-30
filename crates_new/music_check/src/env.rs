@@ -250,9 +250,7 @@ fn collect_unbound_infer_vars(
             }
         }
         SemTy::Array { elem, .. } => collect_unbound_infer_vars(tys, *elem, out),
-        SemTy::Arrow {
-            input, output, ..
-        } => {
+        SemTy::Arrow { input, output, .. } => {
             collect_unbound_infer_vars(tys, *input, out);
             collect_unbound_infer_vars(tys, *output, out);
         }

@@ -5,8 +5,8 @@ use music_resolve::ImportEnv;
 
 #[derive(Debug, Clone)]
 pub struct SessionImportModule {
-    pub exports: Box<[String]>,
-    pub opaque_exports: HashSet<String>,
+    exports: Box<[String]>,
+    opaque_exports: HashSet<String>,
 }
 
 impl SessionImportModule {
@@ -27,6 +27,16 @@ impl SessionImportModule {
             exports: exports.into_iter().collect(),
             opaque_exports: opaque_exports.into_iter().collect(),
         }
+    }
+
+    #[must_use]
+    pub fn exports(&self) -> &[String] {
+        &self.exports
+    }
+
+    #[must_use]
+    pub fn is_export_opaque(&self, name: &str) -> bool {
+        self.opaque_exports.contains(name)
     }
 }
 
@@ -64,7 +74,7 @@ impl ImportEnv for SessionImportEnv {
         let Some(module) = self.modules.get(path) else {
             return;
         };
-        for name in module.exports.iter() {
+        for name in module.exports().iter() {
             f(name.as_str());
         }
     }
@@ -72,7 +82,6 @@ impl ImportEnv for SessionImportEnv {
     fn is_export_opaque(&self, _from: SourceId, path: &str, name: &str) -> bool {
         self.modules
             .get(path)
-            .is_some_and(|m| m.opaque_exports.contains(name))
+            .is_some_and(|m| m.is_export_opaque(name))
     }
 }
-

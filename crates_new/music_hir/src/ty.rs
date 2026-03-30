@@ -26,7 +26,7 @@ pub enum HirTyBinOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HirDim {
-    IntLit { span: Span, value: u64 },
+    IntLit { span: Span, value: Option<u64> },
     Name { name: Ident },
     Inferred { span: Span },
 }

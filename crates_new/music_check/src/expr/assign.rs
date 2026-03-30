@@ -146,13 +146,7 @@ impl<'a> Checker<'a> {
                 })
             }
             (SemTy::Named { name, args }, HirMemberKey::Name(field)) => {
-                if self.state.opaque_imports.contains(&name) {
-                    self.error(
-                        origin.span,
-                        SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                            name: self.ctx.interner.resolve(name).to_string(),
-                        },
-                    );
+                if self.error_if_opaque_repr_access(origin.span, name) {
                     return self.state.builtins.unknown;
                 }
 
