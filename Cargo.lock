@@ -288,6 +288,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_codegen"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_basic",
+ "music_check",
+ "music_hir",
+ "music_il",
+ "music_known",
+ "music_lex",
+ "music_names",
+ "music_parse",
+ "music_resolve",
+ "thiserror",
+]
+
+[[package]]
+name = "music_fe"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_assembly",
+ "music_ast",
+ "music_basic",
+ "music_check",
+ "music_codegen",
+ "music_il",
+ "music_lex",
+ "music_parse",
+ "music_session",
+ "thiserror",
+]
+
+[[package]]
 name = "music_hir"
 version = "0.1.0-alpha.1"
 dependencies = [

@@ -6,6 +6,9 @@ use super::*;
 
 #[test]
 fn test_can_allocate_minimal_module_graph() {
+    let mut sources = music_basic::SourceMap::new();
+    let source_id = sources.add("<test>", "");
+
     let mut store = HirStore::new();
     let ty_error = store.tys.alloc(HirTy {
         origin: HirOrigin::dummy(),
@@ -17,7 +20,7 @@ fn test_can_allocate_minimal_module_graph() {
         kind: HirExprKind::Error,
     });
 
-    let module = HirModule::new(store, expr_error);
+    let module = HirModule::new(source_id, store, expr_error);
     assert_eq!(module.root, expr_error);
 
     // Sanity: Idx is Copy and stable.

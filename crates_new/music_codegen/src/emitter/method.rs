@@ -1,0 +1,417 @@
+use std::collections::HashMap;
+
+use music_basic::{SourceId, SourceMap, Span};
+use music_hir::{HirExprId, HirExprKind};
+use music_il::{
+    ConstantEntry, ConstantPool, Instruction, MethodEntry, MethodName, Opcode, Operand,
+    TypeDescriptor,
+};
+use music_names::{Interner, NameResolution, NameSite};
+
+use crate::errors::{EmitError, EmitErrorKind, EmitResult};
+
+use super::number::{parse_float, parse_int};
+use super::types::ensure_tuple_type;
+
+pub(super) struct MethodEmitter<'a> {
+    interner: &'a Interner,
+    sources: &'a SourceMap,
+    source_id: SourceId,
+    store: &'a music_hir::HirStore,
+    names: &'a NameResolution,
+    binding_by_site: HashMap<NameSite, music_names::NameBindingId>,
+    globals_by_binding: &'a HashMap<music_names::NameBindingId, u16>,
+    import_globals_by_binding: &'a HashMap<music_names::NameBindingId, u16>,
+    constants: &'a mut ConstantPool,
+    methods: &'a mut Vec<MethodEntry>,
+    types: &'a mut Vec<TypeDescriptor>,
+
+    pub(super) instructions: Vec<Instruction>,
+    locals: HashMap<music_names::NameBindingId, u16>,
+}
+
+impl<'a> MethodEmitter<'a> {
+    pub(super) fn new(
+        interner: &'a Interner,
+        sources: &'a SourceMap,
+        source_id: SourceId,
+        store: &'a music_hir::HirStore,
+        names: &'a NameResolution,
+        globals_by_binding: &'a HashMap<music_names::NameBindingId, u16>,
+        import_globals_by_binding: &'a HashMap<music_names::NameBindingId, u16>,
+        constants: &'a mut ConstantPool,
+        methods: &'a mut Vec<MethodEntry>,
+        types: &'a mut Vec<TypeDescriptor>,
+    ) -> Self {
+        let mut binding_by_site = HashMap::with_capacity(names.bindings.len());
+        for (id, binding) in &names.bindings {
+            let _prev = binding_by_site.insert(binding.site, id);
+        }
+        Self {
+            interner,
+            sources,
+            source_id,
+            store,
+            names,
+            binding_by_site,
+            globals_by_binding,
+            import_globals_by_binding,
+            constants,
+            methods,
+            types,
+            instructions: vec![],
+            locals: HashMap::new(),
+        }
+    }
+
+    pub(super) fn locals_count(&self) -> usize {
+        self.locals.len()
+    }
+
+    pub(super) fn finish_method(&mut self, name: MethodName, locals_count: u16) -> usize {
+        let index = self.methods.len();
+        self.methods.push(MethodEntry {
+            name,
+            instructions: std::mem::take(&mut self.instructions),
+            locals_count,
+            absolute_global_loads: vec![],
+        });
+        index
+    }
+
+    pub(super) fn bind_params(&mut self, params: &[music_hir::HirParam]) {
+        for p in params.iter() {
+            let site = NameSite::new(self.source_id, p.name.span);
+            let binding = self.binding_by_site.get(&site).copied();
+            let Some(binding) = binding else {
+                continue;
+            };
+            let slot = u16::try_from(self.locals.len()).unwrap_or(u16::MAX);
+            let _prev = self.locals.insert(binding, slot);
+        }
+    }
+
+    pub(super) fn emit_expr(&mut self, expr_id: HirExprId) -> EmitResult<()> {
+        let expr = self.store.exprs.get(expr_id).clone();
+        match expr.kind {
+            HirExprKind::Lit { lit } => {
+                self.emit_lit(lit)?;
+            }
+            HirExprKind::Name { ident } => {
+                self.emit_name(expr.origin.span, ident)?;
+            }
+            HirExprKind::Tuple { items } => {
+                self.emit_tuple(items.as_ref())?;
+            }
+            HirExprKind::Sequence { exprs, yields_unit } => {
+                for id in exprs.iter().copied() {
+                    self.emit_expr(id)?;
+                    self.instructions.push(Instruction::basic(Opcode::Pop));
+                }
+                if yields_unit {
+                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                }
+            }
+            HirExprKind::Binary { op, left, right } => {
+                self.emit_expr(left)?;
+                self.emit_expr(right)?;
+                self.emit_binop(op)?;
+            }
+            HirExprKind::Call { callee, args } => {
+                self.emit_expr(callee)?;
+                let mut arity = 0u8;
+                for arg in args.iter() {
+                    match arg {
+                        music_hir::HirArg::Expr(id) => {
+                            self.emit_expr(*id)?;
+                            arity = arity.saturating_add(1);
+                        }
+                        music_hir::HirArg::Spread { .. } => {
+                            return Err(EmitError {
+                                kind: EmitErrorKind::UnsupportedExpr,
+                            });
+                        }
+                    }
+                }
+                self.instructions
+                    .push(Instruction::with_u8(Opcode::Call, arity));
+            }
+            HirExprKind::Lambda { params, body, .. } => {
+                let method_idx = self.emit_lambda_method(params.as_ref(), body)?;
+                self.instructions.push(Instruction::with_wide(
+                    Opcode::ClsNew,
+                    u16::try_from(method_idx).unwrap_or(u16::MAX),
+                    0,
+                ));
+            }
+            HirExprKind::Let {
+                has_params,
+                params,
+                pat,
+                value,
+                ..
+            } => {
+                // Expression `let` is compiled as local store after evaluating rhs.
+                let pat = self.store.pats.get(pat).clone();
+                let music_hir::HirPatKind::Bind { name, .. } = pat.kind else {
+                    return Err(EmitError {
+                        kind: EmitErrorKind::UnsupportedPat,
+                    });
+                };
+
+                let binding = self
+                    .binding_by_site
+                    .get(&NameSite::new(self.source_id, name.span))
+                    .copied();
+
+                let Some(binding) = binding else {
+                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                    return Ok(());
+                };
+
+                if has_params {
+                    let Some(body) = value else {
+                        self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                        return Ok(());
+                    };
+                    let method_idx = self.emit_lambda_method(params.as_ref(), body)?;
+                    self.instructions.push(Instruction::with_wide(
+                        Opcode::ClsNew,
+                        u16::try_from(method_idx).unwrap_or(u16::MAX),
+                        0,
+                    ));
+                } else if let Some(value) = value {
+                    self.emit_expr(value)?;
+                } else {
+                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                }
+
+                let slot = u16::try_from(self.locals.len()).unwrap_or(u16::MAX);
+                let _prev = self.locals.insert(binding, slot);
+                self.emit_st_loc(slot);
+                self.instructions.push(Instruction::basic(Opcode::LdUnit));
+            }
+            HirExprKind::Member { .. }
+            | HirExprKind::Index { .. }
+            | HirExprKind::RecordUpdate { .. }
+            | HirExprKind::TypeTest { .. }
+            | HirExprKind::TypeCast { .. }
+            | HirExprKind::Prefix { .. }
+            | HirExprKind::Case { .. }
+            | HirExprKind::Perform { .. }
+            | HirExprKind::Handle { .. }
+            | HirExprKind::Resume { .. }
+            | HirExprKind::Import { .. }
+            | HirExprKind::ForeignBlock { .. }
+            | HirExprKind::Data { .. }
+            | HirExprKind::Effect { .. }
+            | HirExprKind::Class { .. }
+            | HirExprKind::Instance { .. }
+            | HirExprKind::Record { .. }
+            | HirExprKind::Variant { .. }
+            | HirExprKind::Array { .. }
+            | HirExprKind::Quote { .. }
+            | HirExprKind::Splice { .. }
+            | HirExprKind::Error => {
+                return Err(EmitError {
+                    kind: EmitErrorKind::UnsupportedExpr,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_lambda_method(
+        &mut self,
+        params: &[music_hir::HirParam],
+        body: HirExprId,
+    ) -> EmitResult<usize> {
+        let mut sub = MethodEmitter::new(
+            self.interner,
+            self.sources,
+            self.source_id,
+            self.store,
+            self.names,
+            self.globals_by_binding,
+            self.import_globals_by_binding,
+            self.constants,
+            self.methods,
+            self.types,
+        );
+        sub.bind_params(params);
+        sub.emit_expr(body)?;
+        sub.instructions.push(Instruction::basic(Opcode::Ret));
+
+        let locals_count = u16::try_from(sub.locals_count()).unwrap_or(u16::MAX);
+        Ok(sub.finish_method(MethodName::Anonymous, locals_count))
+    }
+
+    fn emit_lit(&mut self, lit: music_hir::HirLit) -> EmitResult<()> {
+        match lit.kind {
+            music_hir::HirLitKind::Int { span, .. } => {
+                let text = self.slice(span);
+                let value = parse_int(text).unwrap_or(0);
+                if let Ok(small) = i16::try_from(value) {
+                    self.instructions
+                        .push(Instruction::with_i16(Opcode::LdSmi, small));
+                } else {
+                    let idx = self.constants.add(ConstantEntry::Int(value));
+                    self.instructions
+                        .push(Instruction::with_u16(Opcode::LdConst, idx));
+                }
+            }
+            music_hir::HirLitKind::Float { span, .. } => {
+                let text = self.slice(span);
+                let value = parse_float(text).unwrap_or(0.0);
+                let idx = self.constants.add(ConstantEntry::Float(value.to_bits()));
+                self.instructions
+                    .push(Instruction::with_u16(Opcode::LdConst, idx));
+            }
+            music_hir::HirLitKind::Rune { span, .. } => {
+                let text = self.slice(span);
+                let decoded = music_basic::string_lit::decode(text);
+                let ch = decoded.chars().next().unwrap_or('\0');
+                let value = i64::from(u32::from(ch));
+                let idx = self.constants.add(ConstantEntry::Int(value));
+                self.instructions
+                    .push(Instruction::with_u16(Opcode::LdConst, idx));
+            }
+            music_hir::HirLitKind::String(s) => {
+                let text = self.slice(s.span);
+                let value = music_basic::string_lit::decode(text);
+                let idx = self.constants.add(ConstantEntry::Str(value));
+                self.instructions
+                    .push(Instruction::with_u16(Opcode::LdConst, idx));
+            }
+            music_hir::HirLitKind::FString { .. } => {
+                return Err(EmitError {
+                    kind: EmitErrorKind::UnsupportedExpr,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_name(&mut self, span: Span, ident: music_names::Ident) -> EmitResult<()> {
+        let site = NameSite::new(self.source_id, span);
+        let Some(binding) = self.names.refs.get(&site).copied() else {
+            self.instructions.push(Instruction::basic(Opcode::LdUnit));
+            return Ok(());
+        };
+
+        if let Some(slot) = self.locals.get(&binding).copied() {
+            self.emit_ld_loc(slot);
+            return Ok(());
+        }
+
+        if self.import_globals_by_binding.contains_key(&binding) {
+            let idx = self
+                .import_globals_by_binding
+                .get(&binding)
+                .copied()
+                .unwrap_or(u16::MAX);
+            if idx == u16::MAX {
+                return Err(EmitError {
+                    kind: EmitErrorKind::ImportTargetMissing,
+                });
+            }
+            self.instructions
+                .push(Instruction::with_u16(Opcode::LdGlob, idx));
+            return Ok(());
+        }
+
+        let idx = self
+            .globals_by_binding
+            .get(&binding)
+            .copied()
+            .unwrap_or(u16::MAX);
+        if idx == u16::MAX {
+            self.instructions.push(Instruction::basic(Opcode::LdUnit));
+            return Ok(());
+        }
+        self.instructions
+            .push(Instruction::with_u16(Opcode::LdGlob, idx));
+        let _ = ident;
+        Ok(())
+    }
+
+    fn emit_tuple(&mut self, items: &[HirExprId]) -> EmitResult<()> {
+        // Encode tuples as record aggregates with tag=0 and N fields.
+        self.emit_tag(0)?;
+        for id in items.iter().copied() {
+            self.emit_expr(id)?;
+        }
+        let type_id = ensure_tuple_type(self.types, items.len());
+        self.instructions.push(Instruction {
+            opcode: Opcode::DataNew,
+            operand: Operand::TypeLen(type_id, u16::try_from(items.len()).unwrap_or(0)),
+        });
+        Ok(())
+    }
+
+    fn emit_binop(&mut self, op: music_hir::HirBinaryOp) -> EmitResult<()> {
+        let opcode = match op {
+            music_hir::HirBinaryOp::Add => Opcode::IAdd,
+            music_hir::HirBinaryOp::Sub => Opcode::ISub,
+            music_hir::HirBinaryOp::Mul => Opcode::IMul,
+            music_hir::HirBinaryOp::Div => Opcode::IDiv,
+            music_hir::HirBinaryOp::Mod => Opcode::IRem,
+            music_hir::HirBinaryOp::Eq => Opcode::CmpEq,
+            music_hir::HirBinaryOp::NotEq => Opcode::CmpNeq,
+            music_hir::HirBinaryOp::Lt => Opcode::CmpLt,
+            music_hir::HirBinaryOp::Gt => Opcode::CmpGt,
+            music_hir::HirBinaryOp::LtEq => Opcode::CmpLeq,
+            music_hir::HirBinaryOp::GtEq => Opcode::CmpGeq,
+            music_hir::HirBinaryOp::And => Opcode::And,
+            music_hir::HirBinaryOp::Or => Opcode::Or,
+            music_hir::HirBinaryOp::Xor => Opcode::Xor,
+            music_hir::HirBinaryOp::Shl => Opcode::Shl,
+            music_hir::HirBinaryOp::Shr => Opcode::Shr,
+            music_hir::HirBinaryOp::Pipe
+            | music_hir::HirBinaryOp::Assign
+            | music_hir::HirBinaryOp::Symbolic(_) => {
+                return Err(EmitError {
+                    kind: EmitErrorKind::UnsupportedExpr,
+                });
+            }
+        };
+        self.instructions.push(Instruction::basic(opcode));
+        Ok(())
+    }
+
+    fn emit_tag(&mut self, tag: u16) -> EmitResult<()> {
+        let idx = self.constants.add(ConstantEntry::Tag(tag));
+        self.instructions
+            .push(Instruction::with_u16(Opcode::LdConst, idx));
+        Ok(())
+    }
+
+    fn emit_ld_loc(&mut self, slot: u16) {
+        if slot <= u16::from(u8::MAX) {
+            self.instructions
+                .push(Instruction::with_u8(Opcode::LdLoc, slot as u8));
+        } else {
+            self.instructions
+                .push(Instruction::with_u16(Opcode::LdLocW, slot));
+        }
+    }
+
+    fn emit_st_loc(&mut self, slot: u16) {
+        if slot <= u16::from(u8::MAX) {
+            self.instructions
+                .push(Instruction::with_u8(Opcode::StLoc, slot as u8));
+        } else {
+            self.instructions
+                .push(Instruction::with_u16(Opcode::StLocW, slot));
+        }
+    }
+
+    fn slice(&self, span: Span) -> &str {
+        let Some(source) = self.sources.get(self.source_id) else {
+            return "";
+        };
+        let start = usize::try_from(span.start).unwrap_or(0);
+        let end = usize::try_from(span.end).unwrap_or(start);
+        source.text().get(start..end).unwrap_or("")
+    }
+}

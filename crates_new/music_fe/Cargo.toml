@@ -1,0 +1,23 @@
+[package]
+name = "music_fe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Frontend orchestration for Musi (clean-room)"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_assembly = { path = "../music_assembly" }
+music_ast = { path = "../music_ast" }
+music_basic = { path = "../music_basic" }
+music_check = { path = "../music_check" }
+music_codegen = { path = "../music_codegen" }
+music_il = { path = "../music_il" }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_session = { path = "../music_session" }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

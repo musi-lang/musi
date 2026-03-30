@@ -1,0 +1,25 @@
+[package]
+name = "music_codegen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lowering from checked HIR into SEAM bytecode (clean-room)"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_basic = { path = "../music_basic" }
+music_check = { path = "../music_check" }
+music_hir = { path = "../music_hir" }
+music_il = { path = "../music_il" }
+music_names = { path = "../music_names" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+music_known = { path = "../music_known" }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_resolve = { path = "../music_resolve" }
+
+[lints]
+workspace = true

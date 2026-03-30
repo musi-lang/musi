@@ -1,6 +1,7 @@
 use music_storage::Arena;
 
 use super::*;
+use music_basic::SourceId;
 
 /// Arena storage for all HIR nodes in a module.
 #[derive(Debug, Default)]
@@ -28,14 +29,19 @@ impl HirStore {
 /// Typed representation of a single module after semantic analysis.
 #[derive(Debug)]
 pub struct HirModule {
+    pub source_id: SourceId,
     pub store: HirStore,
     pub root: HirExprId,
 }
 
 impl HirModule {
     #[must_use]
-    pub const fn new(store: HirStore, root: HirExprId) -> Self {
-        Self { store, root }
+    pub const fn new(source_id: SourceId, store: HirStore, root: HirExprId) -> Self {
+        Self {
+            source_id,
+            store,
+            root,
+        }
     }
 }
 

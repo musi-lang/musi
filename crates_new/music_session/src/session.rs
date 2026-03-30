@@ -160,6 +160,25 @@ impl Session {
         Some(SessionAnalyzedSource { parsed, analyzed })
     }
 
+    #[must_use]
+    pub fn analyze_module(&mut self, source_id: SourceId) -> Option<AnalyzedModule> {
+        let parsed = self.parse(source_id)?;
+        let options = ResolveOptions {
+            prelude: self.prelude.clone(),
+            import_env: Some(&self.import_env),
+        };
+
+        let analyzed = music_check::analyze_module(
+            parsed.parsed().tree(),
+            &self.sources,
+            &mut self.interner,
+            options,
+        );
+
+        self.register_analyzed_module(source_id, &analyzed);
+        Some(analyzed)
+    }
+
     fn register_analyzed_module(&mut self, source_id: SourceId, analyzed: &AnalyzedModule) {
         let Some(source) = self.sources.get(source_id) else {
             return;

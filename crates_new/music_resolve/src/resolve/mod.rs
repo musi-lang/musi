@@ -77,7 +77,7 @@ pub fn resolve_module(
 ) -> ResolvedModule {
     let mut resolver = Resolver::new(tree, sources, interner, options);
     let root = resolver.lower_source_file();
-    let module = HirModule::new(resolver.store, root);
+    let module = HirModule::new(tree.source_id(), resolver.store, root);
     let exports = resolver.exports.into_boxed_slice();
     ResolvedModule {
         module,

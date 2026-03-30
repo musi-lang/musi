@@ -24,7 +24,7 @@ Compiler and IL crates stay under `music_*`:
 - `music_assembly`: text/binary IL encoding, decoding, printing, and validation
 - `music_ast`: full-fidelity green/red syntax tree, syntax only, with top-level expression sequences
 - `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
-- `music_codegen`: lowering from typed IR into `music_il`
+- `music_codegen`: lowering from checked HIR into `music_il`
 - `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
 - `music_hir`: typed high-level IR data model produced by `music_check` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
 - `music_il`: VM-facing bytecode / intermediate language contract

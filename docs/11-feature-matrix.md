@@ -75,7 +75,10 @@ Status legend:
 | Text encode/decode          | n/a             | done                        |                                |
 | Binary encode/decode        | n/a             | done                        |                                |
 
-## Missing Clean-Room Crates (Locked In 09)
+## Toolchain
 
-- `music_codegen`: missing
-- `music_fe`: missing
+| Feature                                  | Frontend (`music_fe`) | Codegen (`music_codegen`) | Notes                                                      |
+| ---------------------------------------- | --------------------- | -------------------------- | ---------------------------------------------------------- |
+| Module graph discovery from loaded files | partial               | n/a                        | Works when all imported source paths exist in `SourceMap`   |
+| Compile entry source to SEAM artifact    | partial               | partial                    | Emits subset of checked HIR into `music_il` (reduced core) |
+| Compile entry source to `.seam` bytes    | partial               | partial                    | Uses `music_assembly::encode_binary`                        |
