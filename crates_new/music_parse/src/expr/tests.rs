@@ -60,3 +60,18 @@ fn test_parse_handle_clause_param_list_allows_leading_trailing_commas() {
 
     assert!(parsed.errors().is_empty());
 }
+
+#[test]
+fn test_parse_fstring_interpolation_as_syntax_subtree() {
+    let mut sources = SourceMap::default();
+    let source_id = sources.add("test.ms", "f\"x is {x + 1}\";");
+    let lexed = Lexer::new("f\"x is {x + 1}\";").lex();
+    let parsed = parse(source_id, &lexed);
+    let root = parsed.tree().root();
+    let sequence = Expr::cast(root.child_nodes().next().expect("stmt")).expect("sequence");
+    let fstring = sequence.child_expressions().next().expect("fstring");
+
+    assert!(parsed.errors().is_empty());
+    assert_eq!(fstring.kind(), ExprKindView::FString);
+    assert!(fstring.child_expressions().next().is_some());
+}

@@ -1,7 +1,8 @@
 use core::mem;
 
 use music_ast::{SyntaxElementId, SyntaxNodeId, SyntaxNodeKind};
-use music_lex::TokenKind;
+use music_basic::Span;
+use music_lex::{LexErrorKind, Lexer, Token, TokenKind};
 
 use crate::parser::Parser;
 
@@ -16,7 +17,7 @@ enum InfixClass {
     Other,
 }
 
-impl Parser<'_, '_> {
+impl Parser<'_, '_, '_> {
     pub(crate) fn parse_expr(&mut self, min_bp: u8) -> ParseResult<SyntaxNodeId> {
         let mut left = self.parse_prefix_expr()?;
 
@@ -73,11 +74,10 @@ impl Parser<'_, '_> {
 
     fn parse_atom_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         match self.peek_kind() {
-            TokenKind::IntLit
-            | TokenKind::FloatLit
-            | TokenKind::StringLit
-            | TokenKind::FStringLit(_)
-            | TokenKind::RuneLit => Ok(self.parse_literal_expr()),
+            TokenKind::IntLit | TokenKind::FloatLit | TokenKind::StringLit | TokenKind::RuneLit => {
+                Ok(self.parse_literal_expr())
+            }
+            TokenKind::FStringLit(_) => Ok(self.parse_fstring_expr()),
             TokenKind::Ident | TokenKind::EscapedIdent => self.parse_name_expr(),
             TokenKind::LParen => self.parse_paren_expr(),
             TokenKind::LBracket => self.parse_array_expr(),
@@ -115,6 +115,96 @@ impl Parser<'_, '_> {
         let literal = self.advance_element();
         self.builder
             .push_node_from_children(SyntaxNodeKind::LiteralExpr, [literal])
+    }
+
+    fn parse_fstring_expr(&mut self) -> SyntaxNodeId {
+        let token = self.peek().clone();
+        let parts = match token.kind.clone() {
+            TokenKind::FStringLit(parts) => parts,
+            _ => {
+                let fallback = self.advance_element();
+                return self
+                    .builder
+                    .push_node_from_children(SyntaxNodeKind::LiteralExpr, [fallback]);
+            }
+        };
+
+        let token_el = self.advance_element();
+        let mut children = vec![token_el];
+
+        for part in parts {
+            if part.kind != music_lex::FStringPartKind::Interpolation {
+                continue;
+            }
+
+            let expr = self.parse_fstring_interpolation_expr(part.span);
+            children.push(SyntaxElementId::Node(expr));
+        }
+
+        self.builder
+            .push_node_from_children(SyntaxNodeKind::FStringExpr, children)
+    }
+
+    fn parse_fstring_interpolation_expr(&mut self, span: Span) -> SyntaxNodeId {
+        let start = usize::try_from(span.start).unwrap_or(0);
+        let end = usize::try_from(span.end).unwrap_or(start);
+        let Some(text) = self.source.get(start..end) else {
+            self.error(ParseError {
+                kind: ParseErrorKind::InvalidFStringInterpolation {
+                    kind: Box::new(LexErrorKind::UnexpectedChar('\0')),
+                },
+                span,
+            });
+            return self.builder.push_error_node([]);
+        };
+
+        let sub = Lexer::new(text).lex();
+        let base = span.start;
+
+        for err in sub.errors().iter().cloned() {
+            self.error(ParseError {
+                kind: ParseErrorKind::InvalidFStringInterpolation {
+                    kind: Box::new(err.kind),
+                },
+                span: offset_span(err.span, base),
+            });
+        }
+
+        let mut tokens: Vec<Token> = sub.tokens().iter().cloned().collect();
+        for token in &mut tokens {
+            offset_token(token, base);
+        }
+
+        let mut parser = Parser::new(
+            self.source_id,
+            self.source,
+            &tokens,
+            &mut *self.builder,
+            &mut *self.errors,
+        );
+
+        match parser.parse_expr(0) {
+            Ok(expr) => {
+                if !parser.at(&TokenKind::Eof) {
+                    parser.error(ParseError {
+                        kind: ParseErrorKind::ExpectedToken {
+                            expected: Box::new(TokenKind::Eof),
+                            found: Box::new(parser.found_token()),
+                        },
+                        span: parser.span(),
+                    });
+                }
+                expr
+            }
+            Err(error) => {
+                parser.error(error);
+                let mut junk = vec![];
+                while !parser.at(&TokenKind::Eof) {
+                    junk.push(parser.advance_element());
+                }
+                parser.builder.push_error_node(junk)
+            }
+        }
     }
 
     fn parse_name_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -692,6 +782,26 @@ const fn infix_binding_power(kind: &TokenKind) -> Option<(u8, u8, InfixClass)> {
 
 fn same_kind(left: &TokenKind, right: &TokenKind) -> bool {
     mem::discriminant(left) == mem::discriminant(right)
+}
+
+fn offset_span(span: Span, base: u32) -> Span {
+    Span::new(span.start + base, span.end + base)
+}
+
+fn offset_token(token: &mut Token, base: u32) {
+    token.span = offset_span(token.span, base);
+    for trivia in token
+        .leading_trivia
+        .iter_mut()
+        .chain(token.trailing_trivia.iter_mut())
+    {
+        trivia.span = offset_span(trivia.span, base);
+    }
+    if let TokenKind::FStringLit(parts) = &mut token.kind {
+        for part in parts.iter_mut() {
+            part.span = offset_span(part.span, base);
+        }
+    }
 }
 
 #[cfg(test)]

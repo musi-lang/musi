@@ -32,39 +32,52 @@ impl ParsedSource {
 
 #[must_use]
 pub fn parse(source_id: SourceId, lexed: &LexedSource<'_>) -> ParsedSource {
-    let mut parser = Parser::new(source_id, lexed);
-    parser.parse_root()
+    let tokens = lexed.tokens();
+    let source = lexed.source();
+    let mut builder =
+        SyntaxTreeBuilder::with_capacity(source_id, tokens.len().saturating_mul(2), tokens.len());
+    let mut errors = Vec::new();
+
+    let mut parser = Parser::new(source_id, source, tokens, &mut builder, &mut errors);
+    let mut children = parser.parse_root_children();
+    children.push(parser.advance_element());
+    let tree = mem::replace(&mut builder, SyntaxTreeBuilder::new(source_id)).finish_root(children);
+    ParsedSource::new(tree, errors)
 }
 
-pub struct Parser<'lex, 'src> {
+pub(crate) struct Parser<'a, 't, 'src> {
     pub(super) source_id: SourceId,
-    pub(super) lexed: &'lex LexedSource<'src>,
+    pub(super) source: &'src str,
+    pub(super) tokens: &'t [Token],
     pub(super) pos: usize,
-    pub(super) builder: SyntaxTreeBuilder,
-    pub(super) errors: Vec<ParseError>,
+    pub(super) builder: &'a mut SyntaxTreeBuilder,
+    pub(super) errors: &'a mut Vec<ParseError>,
     pub(super) comparison_exprs: Vec<SyntaxNodeId>,
     pub(super) lparen_match: Vec<Option<usize>>,
 }
 
-impl<'lex, 'src> Parser<'lex, 'src> {
-    pub(crate) fn new(source_id: SourceId, lexed: &'lex LexedSource<'src>) -> Self {
-        let lparen_match = compute_lparen_matches(lexed.tokens());
+impl<'a, 't, 'src> Parser<'a, 't, 'src> {
+    pub(crate) fn new(
+        source_id: SourceId,
+        source: &'src str,
+        tokens: &'t [Token],
+        builder: &'a mut SyntaxTreeBuilder,
+        errors: &'a mut Vec<ParseError>,
+    ) -> Self {
+        let lparen_match = compute_lparen_matches(tokens);
         Self {
             source_id,
-            lexed,
+            source,
+            tokens,
             pos: 0,
-            builder: SyntaxTreeBuilder::with_capacity(
-                source_id,
-                lexed.tokens().len().saturating_mul(2),
-                lexed.tokens().len(),
-            ),
-            errors: Vec::new(),
+            builder,
+            errors,
             comparison_exprs: Vec::new(),
             lparen_match,
         }
     }
 
-    pub(crate) fn parse_root(&mut self) -> ParsedSource {
+    pub(crate) fn parse_root_children(&mut self) -> SyntaxElementIds {
         let mut children = vec![];
 
         while !self.at(&TokenKind::Eof) {
@@ -83,10 +96,7 @@ impl<'lex, 'src> Parser<'lex, 'src> {
             }
         }
 
-        children.push(self.advance_element());
-        let tree = mem::replace(&mut self.builder, SyntaxTreeBuilder::new(self.source_id))
-            .finish_root(children);
-        ParsedSource::new(tree, mem::take(&mut self.errors))
+        children
     }
 
     pub(crate) fn parse_stmt(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -110,7 +120,7 @@ impl<'lex, 'src> Parser<'lex, 'src> {
     }
 
     pub(crate) fn tokens(&self) -> &[Token] {
-        self.lexed.tokens()
+        self.tokens
     }
 
     pub(crate) fn peek(&self) -> &Token {
@@ -471,6 +481,18 @@ impl<'lex, 'src> Parser<'lex, 'src> {
         }
         children.push(self.expect_token(&TokenKind::RParen)?);
         Ok(children)
+    }
+
+    pub(crate) fn token_text(&self, index: usize) -> &'src str {
+        let token = self
+            .tokens
+            .get(index)
+            .unwrap_or_else(|| self.tokens.last().expect("lexer emits EOF token"));
+        let start = usize::try_from(token.span.start).expect("token span start fits in usize");
+        let end = usize::try_from(token.span.end).expect("token span end fits in usize");
+        self.source
+            .get(start..end)
+            .expect("token span stays on UTF-8 edges")
     }
 }
 

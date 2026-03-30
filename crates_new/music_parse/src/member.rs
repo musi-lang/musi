@@ -4,7 +4,7 @@ use music_lex::TokenKind;
 use super::*;
 use crate::parser::Parser;
 
-impl Parser<'_, '_> {
+impl Parser<'_, '_, '_> {
     pub(crate) fn parse_member(&mut self) -> ParseResult<SyntaxNodeId> {
         match self.peek_kind() {
             TokenKind::KwLet => self.parse_let_member(),

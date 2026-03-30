@@ -5,7 +5,7 @@ use crate::errors::ParseResult;
 use crate::parser::Parser;
 use crate::{ParseError, ParseErrorKind};
 
-impl Parser<'_, '_> {
+impl Parser<'_, '_, '_> {
     pub(crate) fn parse_pat(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut left = self.parse_pat_primary()?;
         while let Some(or_kw) = self.eat(&TokenKind::KwOr) {
@@ -46,7 +46,7 @@ impl Parser<'_, '_> {
     }
 
     fn parse_bind_pat(&mut self) -> ParseResult<SyntaxNodeId> {
-        let is_wildcard = self.lexed.token_text(self.pos) == "_";
+        let is_wildcard = self.token_text(self.pos) == "_";
         let ident = self.expect_ident_element()?;
         if is_wildcard {
             return Ok(self

@@ -43,6 +43,10 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 let lit = self.lower_lit_token(tok);
                 self.alloc_expr(origin, HirExprKind::Lit { lit })
             }
+            SyntaxNodeKind::FStringExpr => {
+                let lit = self.lower_fstring_expr(node);
+                self.alloc_expr(origin, HirExprKind::Lit { lit })
+            }
 
             SyntaxNodeKind::TupleExpr => {
                 let items: Vec<_> = node
@@ -86,6 +90,57 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 self.error(node.span(), "expected expression");
                 self.alloc_expr(origin, HirExprKind::Error)
             }
+        }
+    }
+
+    fn lower_fstring_expr(&mut self, node: SyntaxNode<'tree>) -> music_hir::HirLit {
+        let Some(tok) = node
+            .child_tokens()
+            .find(|t| matches!(t.kind(), TokenKind::FStringLit(_)))
+        else {
+            self.error(node.span(), "expected f-string literal");
+            return music_hir::HirLit {
+                kind: music_hir::HirLitKind::String(music_hir::HirStringLit::new(
+                    node.span(),
+                    None,
+                )),
+            };
+        };
+
+        let TokenKind::FStringLit(parts) = tok.kind().clone() else {
+            unreachable!("kind checked above");
+        };
+
+        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
+
+        let mut hir_parts = Vec::new();
+        for part in parts {
+            match part.kind {
+                music_lex::FStringPartKind::Literal => {
+                    hir_parts.push(music_hir::HirFStringPart::Literal { span: part.span });
+                }
+                music_lex::FStringPartKind::Interpolation => {
+                    let expr_node = exprs.next();
+                    let origin = match expr_node {
+                        Some(expr_node) => {
+                            music_hir::HirOrigin::new(part.span, Some(expr_node.id()))
+                        }
+                        None => music_hir::HirOrigin::new(part.span, None),
+                    };
+                    let expr = expr_node
+                        .map(|n| self.lower_expr(n))
+                        .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+                    hir_parts.push(music_hir::HirFStringPart::Expr { origin, expr });
+                }
+            }
+        }
+
+        music_hir::HirLit {
+            kind: music_hir::HirLitKind::FString {
+                span: tok.span(),
+                syntax: Some(tok.id()),
+                parts: hir_parts.into_boxed_slice(),
+            },
         }
     }
 

@@ -11,7 +11,7 @@ enum LetBody {
     Optional,
 }
 
-impl Parser<'_, '_> {
+impl Parser<'_, '_, '_> {
     pub(crate) fn parse_with_attrs_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let attrs = self.parse_attrs()?;
         match self.peek_kind() {

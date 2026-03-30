@@ -6,7 +6,7 @@ use music_lex::TokenKind;
 use crate::errors::ParseResult;
 use crate::parser::Parser;
 
-impl Parser<'_, '_> {
+impl Parser<'_, '_, '_> {
     pub(crate) fn parse_ty(&mut self) -> ParseResult<SyntaxNodeId> {
         self.parse_function_ty()
     }

@@ -46,3 +46,9 @@ fn let_binds_name_for_following_stmts() {
     let kinds = resolve_text("let x := 1; x;");
     assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }
+
+#[test]
+fn fstring_interpolation_resolves_inner_expr() {
+    let kinds = resolve_text("let x := 1; f\"x is {x}\";");
+    assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
+}

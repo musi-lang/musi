@@ -13,6 +13,7 @@ pub enum SyntaxNodeKind {
     InstanceExpr,
     NameExpr,
     LiteralExpr,
+    FStringExpr,
     TupleExpr,
     ArrayExpr,
     RecordExpr,
@@ -87,6 +88,7 @@ impl SyntaxNodeKind {
                 | Self::InstanceExpr
                 | Self::NameExpr
                 | Self::LiteralExpr
+                | Self::FStringExpr
                 | Self::TupleExpr
                 | Self::ArrayExpr
                 | Self::RecordExpr

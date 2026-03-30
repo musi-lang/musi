@@ -1,5 +1,5 @@
 use music_basic::{Diag, DiagCode, SourceId, Span};
-use music_lex::{TokenKind, display_token_kind};
+use music_lex::{LexErrorKind, TokenKind, display_token_kind};
 use thiserror::Error;
 
 pub type ParseResult<T> = Result<T, ParseError>;
@@ -65,13 +65,41 @@ pub enum ParseErrorKind {
     RecordLiteralUsesDotBrace,
     #[error("record pattern starts with '{{'")]
     RecordPatternUsesDotBrace,
+    #[error("invalid f-string interpolation; {kind}")]
+    InvalidFStringInterpolation { kind: Box<LexErrorKind> },
 }
 
 impl ParseError {
     #[must_use]
     pub fn to_diag(&self, source_id: SourceId) -> Diag {
+        let code = match &self.kind {
+            ParseErrorKind::ExpectedToken { .. } => 2001,
+            ParseErrorKind::ImportAliasNotSupported => 2002,
+            ParseErrorKind::ExpectedExpression { .. } => 2003,
+            ParseErrorKind::ExpectedPattern { .. } => 2004,
+            ParseErrorKind::ExpectedType { .. } => 2005,
+            ParseErrorKind::ExpectedMember { .. } => 2006,
+            ParseErrorKind::ExpectedIdentifier { .. } => 2007,
+            ParseErrorKind::ExpectedStringLiteral { .. } => 2008,
+            ParseErrorKind::ExpectedSpliceTarget { .. } => 2009,
+            ParseErrorKind::ExpectedOperatorMemberName { .. } => 2010,
+            ParseErrorKind::ExpectedEffectItem { .. } => 2011,
+            ParseErrorKind::ExpectedEffectRemainderName { .. } => 2012,
+            ParseErrorKind::EffectRemainderMustBeLast => 2013,
+            ParseErrorKind::ExpectedForeignBinding { .. } => 2014,
+            ParseErrorKind::ExpectedDataMember { .. } => 2015,
+            ParseErrorKind::ExpectedArrayDimension { .. } => 2016,
+            ParseErrorKind::ExpectedFieldTarget { .. } => 2017,
+            ParseErrorKind::ExpectedConstraintOperator { .. } => 2018,
+            ParseErrorKind::InvalidAttributeTarget { .. } => 2019,
+            ParseErrorKind::NonAssociativeChain => 2020,
+            ParseErrorKind::RecordLiteralUsesDotBrace => 2021,
+            ParseErrorKind::RecordPatternUsesDotBrace => 2022,
+            ParseErrorKind::InvalidFStringInterpolation { .. } => 2023,
+        };
+
         Diag::error(self.kind.to_string())
-            .with_code(DiagCode::new(2001))
+            .with_code(DiagCode::new(code))
             .with_label(self.span, source_id, "")
     }
 }
