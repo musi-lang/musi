@@ -8,7 +8,7 @@ use music_names::{Interner, NameBindingId, NameResolution, NameSite};
 
 use crate::{SemTy, SemTyId, SemTys, unify};
 
-pub(crate) fn build_ir_module(
+pub fn build_ir_module(
     known: KnownSymbols,
     interner: &Interner,
     semtys: &SemTys,
@@ -43,27 +43,21 @@ fn lower_sem_ty_to_ir(
     let ty = unify::resolve(semtys, ty);
     match semtys.get(ty).clone() {
         SemTy::Error => IrExprTy::Error,
-        SemTy::Unknown => IrExprTy::Unknown,
+        SemTy::Unknown
+        | SemTy::InferVar(_)
+        | SemTy::Generic(_)
+        | SemTy::Arrow { .. }
+        | SemTy::Binary { .. }
+        | SemTy::Mut { .. } => IrExprTy::Unknown,
         SemTy::Any => IrExprTy::Any,
-        SemTy::InferVar(_) | SemTy::Generic(_) => IrExprTy::Unknown,
-        SemTy::Named { name, .. } => {
-            if name == known.unit {
-                return IrExprTy::Scalar(IrScalarTy::Unit);
-            }
-            if name == known.bool_ {
-                return IrExprTy::Scalar(IrScalarTy::Bool);
-            }
-            if name == known.int_ {
-                return IrExprTy::Scalar(IrScalarTy::Int);
-            }
-            if name == known.float_ {
-                return IrExprTy::Scalar(IrScalarTy::Float);
-            }
-            if name == known.string_ {
-                return IrExprTy::Scalar(IrScalarTy::String);
-            }
-            IrExprTy::Named(name)
-        }
+        SemTy::Named { name, .. } => match name {
+            n if n == known.unit => IrExprTy::Scalar(IrScalarTy::Unit),
+            n if n == known.bool_ => IrExprTy::Scalar(IrScalarTy::Bool),
+            n if n == known.int_ => IrExprTy::Scalar(IrScalarTy::Int),
+            n if n == known.float_ => IrExprTy::Scalar(IrScalarTy::Float),
+            n if n == known.string_ => IrExprTy::Scalar(IrScalarTy::String),
+            _ => IrExprTy::Named(name),
+        },
         SemTy::Tuple { items } => IrExprTy::Tuple {
             arity: u16::try_from(items.len()).unwrap_or(u16::MAX),
         },
@@ -77,7 +71,6 @@ fn lower_sem_ty_to_ir(
                 syms.into_boxed_slice()
             },
         },
-        SemTy::Arrow { .. } | SemTy::Binary { .. } | SemTy::Mut { .. } => IrExprTy::Unknown,
     }
 }
 
@@ -104,7 +97,7 @@ fn collect_data_layouts(
     let binding_by_site = binding_by_site(names);
     let mut out = IrDataLayouts::new();
 
-    for (_id, expr) in store.exprs.iter() {
+    for (_id, expr) in &store.exprs {
         let HirExprKind::Let { pat, value, .. } = &expr.kind else {
             continue;
         };

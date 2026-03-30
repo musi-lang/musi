@@ -65,7 +65,7 @@ fn test_display_shows_raw_number() {
 }
 
 #[test]
-fn test_type_safety_distinct_types() {
+fn test_ty_safety_distinct_tys() {
     let int_idx: Idx<u32> = Idx::from_raw(0);
     let str_idx: Idx<String> = Idx::from_raw(0);
 

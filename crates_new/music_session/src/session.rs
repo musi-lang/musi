@@ -95,27 +95,27 @@ impl Session {
     }
 
     #[must_use]
-    pub fn sources(&self) -> &SourceMap {
+    pub const fn sources(&self) -> &SourceMap {
         &self.sources
     }
 
     #[must_use]
-    pub fn interner(&self) -> &Interner {
+    pub const fn interner(&self) -> &Interner {
         &self.interner
     }
 
     #[must_use]
-    pub fn interner_mut(&mut self) -> &mut Interner {
+    pub const fn interner_mut(&mut self) -> &mut Interner {
         &mut self.interner
     }
 
     #[must_use]
-    pub fn import_env(&self) -> &SessionImportEnv {
+    pub const fn import_env(&self) -> &SessionImportEnv {
         &self.import_env
     }
 
     #[must_use]
-    pub fn import_env_mut(&mut self) -> &mut SessionImportEnv {
+    pub const fn import_env_mut(&mut self) -> &mut SessionImportEnv {
         &mut self.import_env
     }
 
@@ -206,7 +206,7 @@ impl Session {
 }
 
 fn collect_top_level_opaque_exports(module: &HirModule, interner: &Interner) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out = vec![];
     let root = module.store.exprs.get(module.root);
     let HirExprKind::Sequence { exprs, .. } = &root.kind else {
         return out;

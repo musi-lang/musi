@@ -6,7 +6,7 @@ use crate::env::substitute_generics;
 use crate::unify;
 use crate::{EffectRow, SemTy, SemTyId};
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn check_variant_expr(
         &mut self,
         origin: HirOrigin,
@@ -38,10 +38,11 @@ impl<'a> Checker<'a> {
             return self.synth_and_unify_variant(origin, payload, expected);
         };
 
-        let mut subst = Vec::with_capacity(def.generic_count as usize);
+        let cap = usize::try_from(def.generic_count).unwrap_or(0);
+        let mut subst = Vec::with_capacity(cap);
         for i in 0..def.generic_count {
             subst.push(
-                args.get(i as usize)
+                args.get(usize::try_from(i).unwrap_or(usize::MAX))
                     .copied()
                     .unwrap_or(self.state.builtins.unknown),
             );
@@ -49,7 +50,7 @@ impl<'a> Checker<'a> {
 
         let mut effs = EffectRow::empty();
         match (payload_ty, payload) {
-            (None, None) => {}
+            (None | Some(_), None) => {}
             (None, Some(payload)) => {
                 let (_t, e) = self.synth_expr(payload);
                 effs.union_with(&e);
@@ -60,8 +61,7 @@ impl<'a> Checker<'a> {
                 let (_t, e) = self.check_expr(payload, payload_expected);
                 effs.union_with(&e);
             }
-            (Some(_), None) => {}
-        };
+        }
 
         (expected, effs)
     }

@@ -19,13 +19,18 @@ The architecture stays honest when:
 
 The clean-room workspace in `crates_new/` uses bounded-context crate names and this structure is locked.
 
+Notes:
+
+- There is no `music_shared` crate. Shared foundation types live in `music_basic`.
+- There is no `music_arena` crate. Arena and typed index storage live in `music_storage`.
+
 Compiler and IL crates stay under `music_*`:
 
 - `music_assembly`: text/binary IL encoding, decoding, printing, and validation
 - `music_ast`: full-fidelity green/red syntax tree, syntax only, with top-level expression sequences
 - `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
 - `music_codegen`: lowering from checked HIR into `music_il`
-- `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
+- `music_fe`: frontend orchestration over lex/parse/ast/names/resolve/check/ir/codegen
 - `music_hir`: typed high-level IR data model produced by `music_check` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
 - `music_il`: VM-facing bytecode / intermediate language contract
 - `music_known`: compiler-known builtins and intrinsic surface
@@ -38,6 +43,8 @@ Compiler and IL crates stay under `music_*`:
 - `music_storage`: arena/index storage and related typed storage mechanics
 
 Project, tooling, and runtime crates stay under `musi_*`:
+
+- These crates are part of the architecture naming contract, but they are not required to exist in the current Cargo workspace.
 
 - `musi_project`: manifests, package/workspace model, dependency config, and task metadata
 - `musi_rt`: runtime, VM, loading, and embedding boundary

@@ -6,7 +6,7 @@ use crate::checker::Checker;
 use crate::unify;
 use crate::{EffectRow, SemTy, SemTyId};
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn synth_assign(
         &mut self,
         origin: HirOrigin,
@@ -22,7 +22,7 @@ impl<'a> Checker<'a> {
     fn assign_target(&mut self, origin: HirOrigin, expr: HirExprId) -> (SemTyId, EffectRow) {
         let kind = self.ctx.store.exprs.get(expr).kind.clone();
         match kind {
-            HirExprKind::Name { ident } => {
+            HirExprKind::Named { ident } => {
                 let Some(binding) = self.binding_for_use(ident.span) else {
                     self.error(origin.span, SemaErrorKind::AssignTargetInvalid);
                     return (self.state.builtins.unknown, EffectRow::empty());
@@ -32,7 +32,7 @@ impl<'a> Checker<'a> {
                     self.error(
                         ident.span,
                         SemaErrorKind::AssignTargetRequiresMutableBinding {
-                            name: self.ctx.interner.resolve(ident.name).to_string(),
+                            name: self.ctx.interner.resolve(ident.name).to_owned(),
                         },
                     );
                 }
@@ -41,12 +41,9 @@ impl<'a> Checker<'a> {
                     .state
                     .env
                     .get_value(binding)
-                    .map(|scheme| {
-                        self.state
-                            .env
-                            .instantiate(&mut self.state.semtys, scheme, ident.span)
-                    })
-                    .unwrap_or(self.state.builtins.unknown);
+                    .map_or(self.state.builtins.unknown, |scheme| {
+                        scheme.instantiate(&mut self.state.semtys, ident.span)
+                    });
                 (ty, EffectRow::empty())
             }
             HirExprKind::Member { base, chain, key } => {
@@ -120,18 +117,20 @@ impl<'a> Checker<'a> {
             (SemTy::Tuple { items }, HirMemberKey::IntLit { span, .. }) => {
                 let idx = super::parse_int_lit_u32(self.slice(*span));
                 let len = u32::try_from(items.len()).unwrap_or(0);
-                match idx.and_then(|i| items.get(i as usize).copied()) {
-                    Some(ty) => ty,
-                    None => {
-                        self.error(
-                            *span,
-                            SemaErrorKind::TupleIndexOutOfRange {
-                                index: idx.unwrap_or(0),
-                                len,
-                            },
-                        );
-                        self.state.builtins.error
-                    }
+                let ty = idx
+                    .and_then(|i| usize::try_from(i).ok())
+                    .and_then(|i| items.get(i).copied());
+                if let Some(ty) = ty {
+                    ty
+                } else {
+                    self.error(
+                        *span,
+                        SemaErrorKind::TupleIndexOutOfRange {
+                            index: idx.unwrap_or(0),
+                            len,
+                        },
+                    );
+                    self.state.builtins.error
                 }
             }
             (SemTy::Record { fields }, HirMemberKey::Name(field)) => {
@@ -139,7 +138,7 @@ impl<'a> Checker<'a> {
                     self.error(
                         origin.span,
                         SemaErrorKind::FieldNotFound {
-                            name: self.ctx.interner.resolve(field.name).to_string(),
+                            name: self.ctx.interner.resolve(field.name).to_owned(),
                         },
                     );
                     self.state.builtins.error
@@ -160,16 +159,17 @@ impl<'a> Checker<'a> {
                     self.error(
                         origin.span,
                         SemaErrorKind::FieldNotFound {
-                            name: self.ctx.interner.resolve(field.name).to_string(),
+                            name: self.ctx.interner.resolve(field.name).to_owned(),
                         },
                     );
                     return self.state.builtins.error;
                 };
 
-                let mut subst = Vec::with_capacity(def.generic_count as usize);
+                let cap = usize::try_from(def.generic_count).unwrap_or(0);
+                let mut subst = Vec::with_capacity(cap);
                 for i in 0..def.generic_count {
                     subst.push(
-                        args.get(i as usize)
+                        args.get(usize::try_from(i).unwrap_or(usize::MAX))
                             .copied()
                             .unwrap_or(self.state.builtins.unknown),
                     );

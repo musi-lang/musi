@@ -46,7 +46,10 @@ pub(super) fn decode_classes(
                 position += 2;
                 methods.push(ClassMethod { name, method_idx });
             }
-            instances.push(ClassInstance { type_id, methods });
+            instances.push(ClassInstance {
+                ty_id: type_id,
+                methods,
+            });
         }
         classes.push(ClassDescriptor {
             id,
@@ -84,7 +87,7 @@ pub(super) fn encode_classes(
             u16::try_from(class.instances.len()).map_err(|_| CodecError::ModuleTooLarge)?;
         output.extend_from_slice(&instance_count.to_le_bytes());
         for instance in &class.instances {
-            output.extend_from_slice(&instance.type_id.to_le_bytes());
+            output.extend_from_slice(&instance.ty_id.to_le_bytes());
             let impl_count =
                 u16::try_from(instance.methods.len()).map_err(|_| CodecError::ModuleTooLarge)?;
             output.extend_from_slice(&impl_count.to_le_bytes());

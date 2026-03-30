@@ -74,7 +74,7 @@ impl ImportEnv for SessionImportEnv {
         let Some(module) = self.modules.get(path) else {
             return;
         };
-        for name in module.exports().iter() {
+        for name in module.exports() {
             f(name.as_str());
         }
     }

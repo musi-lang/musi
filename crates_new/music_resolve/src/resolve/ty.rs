@@ -183,7 +183,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
     fn lower_array_ty(&mut self, node: SyntaxNode<'tree>) -> HirTyId {
         let origin = Self::origin_node(node);
-        let mut dims = Vec::new();
+        let mut dims = vec![];
         for tok in node.child_tokens() {
             match tok.kind() {
                 TokenKind::IntLit => {

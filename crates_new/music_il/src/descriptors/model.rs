@@ -53,7 +53,7 @@ pub struct ClassMethod {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassInstance {
-    pub type_id: u16,
+    pub ty_id: u16,
     pub methods: ClassMethods,
 }
 

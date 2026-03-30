@@ -27,7 +27,7 @@ pub enum HirExprKind {
         pat: HirPatId,
         has_params: bool,
         params: HirParams,
-        type_params: HirTypeParams,
+        ty_params: HirTypeParams,
         where_: HirConstraints,
         effects: Option<HirEffectSet>,
         annot: Option<HirTyId>,
@@ -54,12 +54,12 @@ pub enum HirExprKind {
     },
     Instance {
         mods: HirDeclMods,
-        type_params: HirTypeParams,
+        ty_params: HirTypeParams,
         where_: HirConstraints,
         target: HirTyId,
         members: HirMemberDefs,
     },
-    Name {
+    Named {
         ident: Ident,
     },
     Lit {
@@ -208,7 +208,7 @@ pub struct HirParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirTypeParam {
+pub struct HirTyParam {
     pub origin: HirOrigin,
     pub name: Ident,
 }

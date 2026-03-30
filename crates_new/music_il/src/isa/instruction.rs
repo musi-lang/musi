@@ -48,10 +48,10 @@ impl Instruction {
     }
 
     #[must_use]
-    pub const fn with_type_len(opcode: Opcode, type_id: u16, length: u16) -> Self {
+    pub const fn with_ty_len(opcode: Opcode, ty_id: u16, length: u16) -> Self {
         Self {
             opcode,
-            operand: Operand::TypeLen(type_id, length),
+            operand: Operand::TypeLen(ty_id, length),
         }
     }
 

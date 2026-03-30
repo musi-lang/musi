@@ -32,7 +32,7 @@ pub enum IrExprTy {
 
 impl IrExprTy {
     #[must_use]
-    pub const fn as_type_ref(&self) -> IrTypeRef {
+    pub const fn as_ty_ref(&self) -> IrTypeRef {
         match self {
             Self::Scalar(s) => IrTypeRef::Scalar(*s),
             Self::Named(sym) => IrTypeRef::Named(*sym),

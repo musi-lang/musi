@@ -4,10 +4,11 @@ use music_basic::SourceMap;
 use music_check::AnalyzedModule;
 use music_hir::{HirExprId, HirExprKind};
 use music_il::{ConstantPool, Instruction, MethodEntry, MethodName, Opcode, TypeDescriptor};
-use music_names::{Interner, NameBindingId, Symbol};
+use music_names::{Interner, NameBindingId};
 
 use crate::errors::{EmitError, EmitErrorKind, EmitResult};
 
+use super::context::{EmitMaps, EmitModuleCx, EmitPools, ModuleExportKey};
 use super::method::MethodEmitter;
 
 pub(super) struct FunctionEmitter<'a> {
@@ -16,31 +17,32 @@ pub(super) struct FunctionEmitter<'a> {
     analyzed: &'a AnalyzedModule,
     globals_by_binding: &'a HashMap<NameBindingId, u16>,
     import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
-    module_export_globals: &'a HashMap<(String, Symbol), u16>,
+    module_export_globals: &'a HashMap<ModuleExportKey, u16>,
     constants: &'a mut ConstantPool,
     methods: &'a mut Vec<MethodEntry>,
     types: &'a mut Vec<TypeDescriptor>,
 }
 
 impl<'a> FunctionEmitter<'a> {
-    pub(super) fn new(
+    pub(super) const fn new(
         interner: &'a Interner,
         sources: &'a SourceMap,
         analyzed: &'a AnalyzedModule,
-        globals_by_binding: &'a HashMap<NameBindingId, u16>,
-        import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
-        module_export_globals: &'a HashMap<(String, Symbol), u16>,
-        constants: &'a mut ConstantPool,
-        methods: &'a mut Vec<MethodEntry>,
-        types: &'a mut Vec<TypeDescriptor>,
+        maps: EmitMaps<'a>,
+        pools: EmitPools<'a>,
     ) -> Self {
+        let EmitPools {
+            constants,
+            methods,
+            types,
+        } = pools;
         Self {
             interner,
             sources,
             analyzed,
-            globals_by_binding,
-            import_globals_by_binding,
-            module_export_globals,
+            globals_by_binding: maps.globals_by_binding,
+            import_globals_by_binding: maps.import_globals_by_binding,
+            module_export_globals: maps.module_export_globals,
             constants,
             methods,
             types,
@@ -61,18 +63,24 @@ impl<'a> FunctionEmitter<'a> {
         };
 
         let mut emitter = MethodEmitter::new(
-            self.interner,
-            self.sources,
-            self.analyzed.module.source_id,
-            &self.analyzed.module.store,
-            &self.analyzed.names,
-            &self.analyzed.ir,
-            self.globals_by_binding,
-            self.import_globals_by_binding,
-            self.module_export_globals,
-            self.constants,
-            self.methods,
-            self.types,
+            EmitModuleCx {
+                interner: self.interner,
+                sources: self.sources,
+                source_id: self.analyzed.module.source_id,
+                store: &self.analyzed.module.store,
+                names: &self.analyzed.names,
+                ir: &self.analyzed.ir,
+                maps: EmitMaps {
+                    globals_by_binding: self.globals_by_binding,
+                    import_globals_by_binding: self.import_globals_by_binding,
+                    module_export_globals: self.module_export_globals,
+                },
+            },
+            EmitPools {
+                constants: self.constants,
+                methods: self.methods,
+                types: self.types,
+            },
         );
         emitter.bind_params(&params);
         emitter.emit_expr(body)?;
@@ -88,22 +96,28 @@ impl<'a> FunctionEmitter<'a> {
         expr_id: HirExprId,
     ) -> EmitResult<usize> {
         let mut emitter = MethodEmitter::new(
-            self.interner,
-            self.sources,
-            self.analyzed.module.source_id,
-            &self.analyzed.module.store,
-            &self.analyzed.names,
-            &self.analyzed.ir,
-            self.globals_by_binding,
-            self.import_globals_by_binding,
-            self.module_export_globals,
-            self.constants,
-            self.methods,
-            self.types,
+            EmitModuleCx {
+                interner: self.interner,
+                sources: self.sources,
+                source_id: self.analyzed.module.source_id,
+                store: &self.analyzed.module.store,
+                names: &self.analyzed.names,
+                ir: &self.analyzed.ir,
+                maps: EmitMaps {
+                    globals_by_binding: self.globals_by_binding,
+                    import_globals_by_binding: self.import_globals_by_binding,
+                    module_export_globals: self.module_export_globals,
+                },
+            },
+            EmitPools {
+                constants: self.constants,
+                methods: self.methods,
+                types: self.types,
+            },
         );
         emitter.emit_expr(expr_id)?;
         let locals_count = emitter.locals_count();
-        out.extend(emitter.instructions.drain(..));
+        out.append(&mut emitter.instructions);
         Ok(locals_count)
     }
 }

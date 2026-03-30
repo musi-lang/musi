@@ -8,7 +8,7 @@ use crate::checker::Checker;
 
 use super::*;
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn lower_effect_set(
         &mut self,
         set: &HirEffectSet,
@@ -16,7 +16,7 @@ impl<'a> Checker<'a> {
     ) -> EffectRow {
         let mut out = EffectRow::empty();
         out.is_open = set.rest.is_some();
-        for HirEffectItem { name, arg, .. } in set.items.iter() {
+        for HirEffectItem { name, arg, .. } in &set.items {
             let arg = arg.map(|t| self.lower_hir_ty(t, ty_params));
             out.add(EffectKey {
                 name: name.name,
@@ -122,7 +122,7 @@ impl<'a> Checker<'a> {
         let ty = unify::resolve(&self.state.semtys, ty);
         let kind = match self.state.semtys.get(ty).clone() {
             SemTy::Error => HirTyKind::Error,
-            SemTy::Unknown => HirTyKind::Named {
+            SemTy::Unknown | SemTy::Generic(_) | SemTy::Record { .. } => HirTyKind::Named {
                 name: Ident::dummy(self.state.known.unknown),
                 args: Box::new([]),
             },
@@ -139,10 +139,6 @@ impl<'a> Checker<'a> {
                     args: Box::new([]),
                 }
             }
-            SemTy::Generic(_) => HirTyKind::Named {
-                name: Ident::dummy(self.state.known.unknown),
-                args: Box::new([]),
-            },
             SemTy::Named { name, args } => {
                 let hir_args: Vec<_> = args
                     .iter()
@@ -184,10 +180,6 @@ impl<'a> Checker<'a> {
             },
             SemTy::Mut { base } => HirTyKind::Mut {
                 base: self.lower_sem_ty_to_hir(base),
-            },
-            SemTy::Record { .. } => HirTyKind::Named {
-                name: Ident::dummy(self.state.known.unknown),
-                args: Box::new([]),
             },
         };
 

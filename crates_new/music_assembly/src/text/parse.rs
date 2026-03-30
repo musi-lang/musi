@@ -53,7 +53,7 @@ pub fn parse_instruction(line: &str) -> CodecResult<Instruction> {
                 ));
             }
             if matches!(opcode, Opcode::SeqNew | Opcode::DataNew) {
-                return Ok(Instruction::with_type_len(
+                return Ok(Instruction::with_ty_len(
                     opcode,
                     parse_number(first, mnemonic)?,
                     parse_number(second, mnemonic)?,

@@ -1,7 +1,8 @@
+use music_basic::Span;
 use music_hir::{
     HirArrayItem, HirAttr, HirAttrArgKind, HirExprId, HirExprKind, HirLit, HirLitKind,
 };
-use music_names::Interner;
+use music_names::{Ident, Interner};
 
 use crate::SemaErrorKind;
 
@@ -31,7 +32,7 @@ struct AttrSpec {
     required_any: &'static [&'static str],
 }
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn validate_public_attrs(&mut self) {
         let attrs: Vec<HirAttr> = self
             .ctx
@@ -69,7 +70,6 @@ impl<'a> Checker<'a> {
 
             if is_path_prefix(&attr, &["diag"], self.ctx.interner) {
                 self.validate_diag_attr(&attr);
-                continue;
             }
         }
     }
@@ -254,7 +254,7 @@ impl<'a> Checker<'a> {
             return;
         }
 
-        for arg in attr.args.iter() {
+        for arg in &attr.args {
             if matches!(arg.kind, HirAttrArgKind::Named { .. }) {
                 self.error(
                     arg.origin.span,
@@ -271,16 +271,16 @@ impl<'a> Checker<'a> {
             self.error(
                 attr.origin.span,
                 SemaErrorKind::AttrArgsRequired {
-                    attr: spec.attr.to_string(),
+                    attr: spec.attr.to_owned(),
                 },
             );
             return;
         }
 
-        let mut seen: Vec<(&'static str, u32)> = Vec::new();
+        let mut seen: Vec<(&'static str, u32)> = vec![];
         let mut positional_index = 0usize;
 
-        for arg in attr.args.iter() {
+        for arg in &attr.args {
             match arg.kind {
                 HirAttrArgKind::Positional { value } => {
                     let slot = spec
@@ -290,129 +290,176 @@ impl<'a> Checker<'a> {
                         .or(spec.extra_positional);
                     positional_index += 1;
 
-                    let Some(slot) = slot else {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrArgCountInvalid {
-                                attr: spec.attr.to_string(),
-                                expected: u32::try_from(spec.positional.len()).unwrap_or(0),
-                                found: u32::try_from(positional_index).unwrap_or(0),
-                            },
-                        );
-                        continue;
-                    };
-
-                    if self.bump_seen(&mut seen, slot) {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrDuplicateArg {
-                                attr: spec.attr.to_string(),
-                                name: slot.key.to_string(),
-                            },
-                        );
-                        continue;
-                    }
-
-                    if !self.is_lit_kind(value, slot.value) {
-                        self.error(
-                            arg.origin.span,
-                            match slot.value {
-                                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
-                                    SemaErrorKind::AttrArgStringRequired {
-                                        attr: spec.attr.to_string(),
-                                        name: slot.key.to_string(),
-                                    }
-                                }
-                                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
-                                    attr: spec.attr.to_string(),
-                                    name: slot.key.to_string(),
-                                },
-                            },
-                        );
-                    }
+                    self.validate_positional_attr_arg(
+                        arg.origin.span,
+                        spec,
+                        &mut seen,
+                        slot,
+                        positional_index,
+                        value,
+                    );
                 }
                 HirAttrArgKind::Named { name, value } => {
-                    let key = self.ctx.interner.resolve(name.name);
-                    let Some(slot) = spec.named.iter().copied().find(|s| s.key == key) else {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrUnknownArg {
-                                attr: spec.attr.to_string(),
-                                name: key.to_string(),
-                            },
-                        );
-                        continue;
-                    };
-
-                    if self.bump_seen(&mut seen, slot) {
-                        self.error(
-                            arg.origin.span,
-                            SemaErrorKind::AttrDuplicateArg {
-                                attr: spec.attr.to_string(),
-                                name: key.to_string(),
-                            },
-                        );
-                        continue;
-                    }
-
-                    if !self.is_lit_kind(value, slot.value) {
-                        self.error(
-                            arg.origin.span,
-                            match slot.value {
-                                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
-                                    SemaErrorKind::AttrArgStringRequired {
-                                        attr: spec.attr.to_string(),
-                                        name: key.to_string(),
-                                    }
-                                }
-                                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
-                                    attr: spec.attr.to_string(),
-                                    name: key.to_string(),
-                                },
-                            },
-                        );
-                    }
+                    self.validate_named_attr_arg(arg.origin.span, spec, &mut seen, name, value);
                 }
             }
         }
 
-        for key in spec.required_all {
-            if !seen.iter().any(|(k, c)| *k == *key && *c > 0) {
-                self.error(
-                    attr.origin.span,
-                    SemaErrorKind::AttrArgRequired {
-                        attr: spec.attr.to_string(),
-                        name: (*key).to_string(),
-                    },
-                );
-            }
+        self.validate_required_attr_args(attr.origin.span, spec, &seen);
+    }
+
+    fn validate_positional_attr_arg(
+        &mut self,
+        span: Span,
+        spec: AttrSpec,
+        seen: &mut Vec<(&'static str, u32)>,
+        slot: Option<AttrSlot>,
+        positional_index: usize,
+        value: HirExprId,
+    ) {
+        let Some(slot) = slot else {
+            self.error(
+                span,
+                SemaErrorKind::AttrArgCountInvalid {
+                    attr: spec.attr.to_owned(),
+                    expected: u32::try_from(spec.positional.len()).unwrap_or(0),
+                    found: u32::try_from(positional_index).unwrap_or(0),
+                },
+            );
+            return;
+        };
+
+        if Self::bump_seen(seen, slot) {
+            self.error(
+                span,
+                SemaErrorKind::AttrDuplicateArg {
+                    attr: spec.attr.to_owned(),
+                    name: slot.key.to_owned(),
+                },
+            );
+            return;
         }
 
-        if !spec.required_any.is_empty()
-            && !spec
-                .required_any
-                .iter()
-                .any(|key| seen.iter().any(|(k, c)| *k == *key && *c > 0))
-        {
-            let name = spec.required_any[0];
+        if self.is_lit_kind(value, slot.value) {
+            return;
+        }
+
+        self.error(
+            span,
+            match slot.value {
+                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
+                    SemaErrorKind::AttrArgStringRequired {
+                        attr: spec.attr.to_owned(),
+                        name: slot.key.to_owned(),
+                    }
+                }
+                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
+                    attr: spec.attr.to_owned(),
+                    name: slot.key.to_owned(),
+                },
+            },
+        );
+    }
+
+    fn validate_named_attr_arg(
+        &mut self,
+        span: Span,
+        spec: AttrSpec,
+        seen: &mut Vec<(&'static str, u32)>,
+        name: Ident,
+        value: HirExprId,
+    ) {
+        let key = self.ctx.interner.resolve(name.name);
+        let Some(slot) = spec.named.iter().copied().find(|s| s.key == key) else {
             self.error(
-                attr.origin.span,
+                span,
+                SemaErrorKind::AttrUnknownArg {
+                    attr: spec.attr.to_owned(),
+                    name: key.to_owned(),
+                },
+            );
+            return;
+        };
+
+        if Self::bump_seen(seen, slot) {
+            self.error(
+                span,
+                SemaErrorKind::AttrDuplicateArg {
+                    attr: spec.attr.to_owned(),
+                    name: key.to_owned(),
+                },
+            );
+            return;
+        }
+
+        if self.is_lit_kind(value, slot.value) {
+            return;
+        }
+
+        self.error(
+            span,
+            match slot.value {
+                AttrValueKind::StringLit | AttrValueKind::StringOrStringArray => {
+                    SemaErrorKind::AttrArgStringRequired {
+                        attr: spec.attr.to_owned(),
+                        name: key.to_owned(),
+                    }
+                }
+                AttrValueKind::IntLit => SemaErrorKind::AttrArgIntRequired {
+                    attr: spec.attr.to_owned(),
+                    name: key.to_owned(),
+                },
+            },
+        );
+    }
+
+    fn validate_required_attr_args(
+        &mut self,
+        span: Span,
+        spec: AttrSpec,
+        seen: &[(&'static str, u32)],
+    ) {
+        for key in spec.required_all {
+            if seen.iter().any(|(k, c)| *k == *key && *c > 0) {
+                continue;
+            }
+            self.error(
+                span,
                 SemaErrorKind::AttrArgRequired {
-                    attr: spec.attr.to_string(),
-                    name: name.to_string(),
+                    attr: spec.attr.to_owned(),
+                    name: (*key).to_owned(),
                 },
             );
         }
+
+        if spec.required_any.is_empty() {
+            return;
+        }
+        if spec
+            .required_any
+            .iter()
+            .any(|key| seen.iter().any(|(k, c)| *k == *key && *c > 0))
+        {
+            return;
+        }
+
+        self.error(
+            span,
+            SemaErrorKind::AttrArgRequired {
+                attr: spec.attr.to_owned(),
+                name: spec.required_any[0].to_owned(),
+            },
+        );
     }
 
-    fn bump_seen(&self, seen: &mut Vec<(&'static str, u32)>, slot: AttrSlot) -> bool {
+    fn bump_seen(seen: &mut Vec<(&'static str, u32)>, slot: AttrSlot) -> bool {
         let entry = seen.iter_mut().find(|(key, _)| *key == slot.key);
-        let count = match entry {
-            Some((_, c)) => c,
-            None => {
-                seen.push((slot.key, 0));
-                &mut seen.last_mut().unwrap().1
-            }
+        let count = if let Some((_, c)) = entry {
+            c
+        } else {
+            let idx = seen.len();
+            seen.push((slot.key, 0));
+            &mut seen[idx].1
         };
 
         *count = count.saturating_add(1);

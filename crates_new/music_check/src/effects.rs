@@ -18,7 +18,7 @@ pub struct EffectRow {
 
 impl EffectRow {
     #[must_use]
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             items: BTreeSet::new(),
             is_open: false,
@@ -38,7 +38,7 @@ impl EffectRow {
         self.items.retain(|k| k.name != name);
     }
 
-    pub fn union_with(&mut self, other: &EffectRow) {
+    pub fn union_with(&mut self, other: &Self) {
         self.items.extend(other.items.iter().cloned());
         self.is_open |= other.is_open;
     }

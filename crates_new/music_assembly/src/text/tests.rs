@@ -6,7 +6,7 @@ use super::*;
 fn test_formatter_prints_simple_and_operand_instructions() {
     assert_eq!(format_instruction(&Instruction::basic(Opcode::Ret)), "ret");
     assert_eq!(
-        format_instruction(&Instruction::with_type_len(Opcode::DataNew, 7, 2)),
+        format_instruction(&Instruction::with_ty_len(Opcode::DataNew, 7, 2)),
         "data.new 7 2"
     );
 }

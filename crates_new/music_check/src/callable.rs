@@ -7,8 +7,8 @@ use super::checker::Checker;
 use super::env::ValueScheme;
 use super::{EffectRow, SemTy, SemTyId};
 
-impl<'a> Checker<'a> {
-    pub(crate) fn typecheck_callable(
+impl Checker<'_> {
+    pub(crate) fn check_callable(
         &mut self,
         origin: HirOrigin,
         params: &[HirParam],
@@ -19,10 +19,10 @@ impl<'a> Checker<'a> {
     ) -> (SemTyId, EffectRow) {
         let mut param_tys = Vec::with_capacity(params.len());
         for p in params {
+            let fallback = self.state.semtys.fresh_infer_var(p.origin.span);
             let ty = p
                 .annot
-                .map(|t| self.lower_hir_ty(t, ty_params))
-                .unwrap_or_else(|| self.state.semtys.fresh_infer_var(p.origin.span));
+                .map_or(fallback, |t| self.lower_hir_ty(t, ty_params));
             param_tys.push(ty);
 
             if let Some(binding) = self.binding_for_def(p.name.span) {
@@ -59,9 +59,8 @@ impl<'a> Checker<'a> {
             }),
         };
 
-        let output = ret_annot
-            .map(|t| self.lower_hir_ty(t, ty_params))
-            .unwrap_or_else(|| self.state.semtys.fresh_infer_var(origin.span));
+        let fallback = self.state.semtys.fresh_infer_var(origin.span);
+        let output = ret_annot.map_or(fallback, |t| self.lower_hir_ty(t, ty_params));
 
         if let Some(body) = body {
             let (body_ty, body_effs) = self.check_expr(body, output);
@@ -86,13 +85,12 @@ impl<'a> Checker<'a> {
     pub(crate) fn synth_lambda(
         &mut self,
         origin: HirOrigin,
-        params: Box<[HirParam]>,
+        params: &[HirParam],
         ret: Option<HirTyId>,
         body: HirExprId,
     ) -> (SemTyId, EffectRow) {
         let ty_params = HashMap::new();
-        let (fn_ty, effs) =
-            self.typecheck_callable(origin, &params, &ty_params, ret, Some(body), None);
+        let (fn_ty, effs) = self.check_callable(origin, params, &ty_params, ret, Some(body), None);
         (fn_ty, effs)
     }
 }

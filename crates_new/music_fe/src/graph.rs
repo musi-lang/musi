@@ -37,7 +37,7 @@ pub fn build_module_graph(sources: &SourceMap, entry: SourceId) -> FrontendResul
     let mut seen = BTreeSet::<String>::new();
     let mut queue = VecDeque::<String>::new();
     queue.push_back(entry_path.clone());
-    let _ = seen.insert(entry_path.clone());
+    let _ = seen.insert(entry_path);
 
     let mut nodes = Vec::<ModuleNode>::new();
     let mut node_by_path = HashMap::<String, usize>::new();
@@ -90,7 +90,7 @@ fn collect_import_paths(
     from_path: &Path,
     parsed: &ParsedSource,
 ) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out = vec![];
     let tree = parsed.tree();
     let root = tree.root();
     let mut stack = vec![root];
@@ -127,10 +127,10 @@ fn collect_import_paths(
 
 fn topo_sort(nodes: &[ModuleNode], node_by_path: &HashMap<String, usize>) -> Option<Vec<usize>> {
     let mut indeg = vec![0usize; nodes.len()];
-    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
+    let mut edges: Vec<Vec<usize>> = vec![vec![]; nodes.len()];
 
     for (i, node) in nodes.iter().enumerate() {
-        for dep in node.imports.iter() {
+        for dep in &node.imports {
             let j = *node_by_path.get(dep)?;
             edges[j].push(i);
             indeg[i] += 1;
@@ -147,7 +147,7 @@ fn topo_sort(nodes: &[ModuleNode], node_by_path: &HashMap<String, usize>) -> Opt
     let mut out = Vec::with_capacity(nodes.len());
     while let Some(i) = q.pop_front() {
         out.push(i);
-        for &to in edges[i].iter() {
+        for &to in &edges[i] {
             indeg[to] -= 1;
             if indeg[to] == 0 {
                 q.push_back(to);

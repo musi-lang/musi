@@ -3,27 +3,24 @@ use music_hir::{HirOrigin, HirSpliceId, HirSpliceKind};
 use crate::checker::Checker;
 use crate::{EffectRow, SemTyId};
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn synth_quote(
         &mut self,
         origin: HirOrigin,
-        splices: Box<[HirSpliceId]>,
+        splices: &[HirSpliceId],
     ) -> (SemTyId, EffectRow) {
         let mut effs = EffectRow::empty();
 
-        for splice_id in splices.iter().copied() {
+        for &splice_id in splices {
             let splice = self.ctx.store.splices.get(splice_id).clone();
             match splice.kind {
                 HirSpliceKind::Name(ident) => {
                     let ty = self
                         .binding_for_use(ident.span)
                         .and_then(|binding| self.state.env.get_value(binding))
-                        .map(|scheme| {
-                            self.state
-                                .env
-                                .instantiate(&mut self.state.semtys, scheme, ident.span)
-                        })
-                        .unwrap_or(self.state.builtins.unknown);
+                        .map_or(self.state.builtins.unknown, |scheme| {
+                            scheme.instantiate(&mut self.state.semtys, ident.span)
+                        });
                     let _ = self.unify_or_report(ident.span, self.state.builtins.syntax, ty);
                 }
                 HirSpliceKind::Expr(expr) => {

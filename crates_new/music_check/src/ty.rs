@@ -8,9 +8,9 @@ use music_names::{Interner, Symbol};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SemTyId(u32);
 
-pub(crate) type SemTyIds = Box<[SemTyId]>;
+pub type SemTyIds = Box<[SemTyId]>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SemTy {
     Error,
     Unknown,
@@ -59,13 +59,17 @@ pub struct SemTys {
 
 impl SemTys {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             tys: vec![],
             infer: vec![],
         }
     }
 
+    /// Allocates `ty` in the semantic type table.
+    ///
+    /// # Panics
+    /// Panics if semantic type table size exceeds `u32::MAX`.
     #[must_use]
     pub fn alloc(&mut self, ty: SemTy) -> SemTyId {
         let id = u32::try_from(self.tys.len()).expect("SemTys overflow");
@@ -73,13 +77,21 @@ impl SemTys {
         SemTyId(id)
     }
 
+    /// Returns semantic type for `id`.
+    ///
+    /// # Panics
+    /// Panics if `id` not allocated by this `SemTys`.
     #[must_use]
     pub fn get(&self, id: SemTyId) -> &SemTy {
         self.tys
-            .get(usize::try_from(id.0).unwrap_or(0))
+            .get(usize::try_from(id.0).unwrap_or(usize::MAX))
             .expect("SemTyId out of bounds")
     }
 
+    /// Allocates a fresh inference variable.
+    ///
+    /// # Panics
+    /// Panics if inference variable table size exceeds `u32::MAX`.
     pub fn fresh_infer_var(&mut self, span: Span) -> SemTyId {
         let id = u32::try_from(self.infer.len()).expect("InferVar overflow");
         self.infer.push(None);
@@ -89,14 +101,19 @@ impl SemTys {
 
     #[must_use]
     pub fn infer_binding(&self, var: InferVarId) -> Option<SemTyId> {
-        self.infer.get(var.0 as usize).copied().flatten()
+        self.infer
+            .get(usize::try_from(var.0).unwrap_or(usize::MAX))
+            .copied()
+            .flatten()
     }
 
     pub fn bind_infer(&mut self, var: InferVarId, to: SemTyId) {
-        let slot = self
+        let Some(slot) = self
             .infer
-            .get_mut(var.0 as usize)
-            .expect("InferVarId out of bounds");
+            .get_mut(usize::try_from(var.0).unwrap_or(usize::MAX))
+        else {
+            return;
+        };
         *slot = Some(to);
     }
 }
@@ -220,9 +237,8 @@ fn fmt_array_dims(dims: &[HirDim], interner: &Interner, f: &mut fmt::Formatter<'
             HirDim::IntLit {
                 value: Some(value), ..
             } => write!(f, "{value}")?,
-            HirDim::IntLit { value: None, .. } => write!(f, "_")?,
+            HirDim::IntLit { value: None, .. } | HirDim::Inferred { .. } => write!(f, "_")?,
             HirDim::Name { name } => write!(f, "{}", interner.resolve(name.name))?,
-            HirDim::Inferred { .. } => write!(f, "_")?,
         }
     }
     write!(f, "]")

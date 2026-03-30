@@ -167,7 +167,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             );
         }
 
-        let mut exprs = Vec::new();
+        let mut exprs = vec![];
 
         for node in root.child_nodes() {
             if is_stmt_wrapper(node) {

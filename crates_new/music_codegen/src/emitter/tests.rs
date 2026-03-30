@@ -69,7 +69,7 @@ fn test_emit_single_module_decodes_numeric_separators() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -99,7 +99,7 @@ fn test_emit_record_fields_are_canonicalized_by_name() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -137,7 +137,7 @@ fn test_emit_record_update_copies_unchanged_fields() {
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_module(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -210,14 +210,14 @@ fn test_emit_import_expr_builds_export_record() {
         },
     ]);
 
-    let artifact = super::emit_program(EmitProgram {
+    let program = EmitProgram {
         interner: &interner,
         sources: &sources,
         modules_in_order,
         entry_path,
-    })
-    .expect("emit")
-    .artifact;
+    };
+
+    let artifact = super::emit_program(&program).expect("emit").artifact;
 
     let dep_a_idx = artifact
         .globals

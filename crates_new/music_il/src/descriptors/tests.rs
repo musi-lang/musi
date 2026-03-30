@@ -15,7 +15,7 @@ fn test_nan_box_tags_fit_in_three_bits() {
 }
 
 #[test]
-fn test_builtin_type_ids_stay_reserved() {
+fn test_builtin_ty_ids_stay_reserved() {
     for id in [
         BUILTIN_TYPE_TYPE,
         BUILTIN_TYPE_ANY,

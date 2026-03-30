@@ -4,7 +4,7 @@ use music_hir::{
     HirDeclMods, HirEffectItem, HirEffectSet, HirExprId, HirExprKind, HirFStringPart, HirFieldDef,
     HirHandleClause, HirLit, HirLitKind, HirMemberKey, HirOrigin, HirPatKind, HirPrefixOp,
     HirRecordItem, HirRecordItems, HirSplice, HirSpliceId, HirSpliceKind, HirStringLit, HirTy,
-    HirTyKind, HirTypeParam, HirTypeParams, HirVariantDef,
+    HirTyKind, HirTyParam, HirTypeParams, HirVariantDef,
 };
 use music_lex::{FStringPartKind, TokenKind};
 use music_names::{Ident, NameBindingKind, Symbol};
@@ -35,7 +35,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 };
                 let ident = self.intern_ident_token(tok);
                 self.check_use(ident);
-                self.alloc_expr(origin, HirExprKind::Name { ident })
+                self.alloc_expr(origin, HirExprKind::Named { ident })
             }
             SyntaxNodeKind::LiteralExpr => {
                 let Some(tok) = node.child_tokens().next() else {
@@ -110,7 +110,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
-        let mut hir_parts = Vec::new();
+        let mut hir_parts = vec![];
         for part in parts {
             match part.kind {
                 FStringPartKind::Literal => {
@@ -151,7 +151,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         }
 
         let yields_unit = sequence_yields_unit(node);
-        let mut exprs = Vec::new();
+        let mut exprs = vec![];
         let mut last_stmt_expr: Option<SyntaxNode<'tree>> = None;
 
         for el in node.children() {
@@ -228,7 +228,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let pat = self.lower_pat(pat_node, true, NameBindingKind::Let);
 
         let params_node = cursor.eat_node(SyntaxNodeKind::ParamList);
-        let type_params_node = cursor.eat_node(SyntaxNodeKind::TypeParamList);
+        let ty_params_node = cursor.eat_node(SyntaxNodeKind::TypeParamList);
         let has_params = params_node.is_some();
 
         let where_node = cursor
@@ -260,23 +260,20 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         // Type params and value params are scoped to the bound value.
         self.push_scope();
 
-        let type_params = if let Some(list) = type_params_node {
-            self.lower_type_params(list)
-        } else {
-            Vec::new().into_boxed_slice()
-        };
+        let ty_params = ty_params_node.map_or_else(
+            || vec![].into_boxed_slice(),
+            |list| self.lower_ty_params(list),
+        );
 
-        let params = if let Some(list) = params_node {
-            self.lower_param_list(list)
-        } else {
-            Vec::new().into_boxed_slice()
-        };
+        let params = params_node.map_or_else(
+            || vec![].into_boxed_slice(),
+            |list| self.lower_param_list(list),
+        );
 
-        let where_ = if let Some(list) = where_node {
-            self.lower_constraint_list(list)
-        } else {
-            Vec::new().into_boxed_slice()
-        };
+        let where_ = where_node.map_or_else(
+            || vec![].into_boxed_slice(),
+            |list| self.lower_constraint_list(list),
+        );
 
         let effects = effects_node.map(|set| self.lower_effect_set(set));
         let annot = annot_node.map(|ty| self.lower_ty(ty));
@@ -304,7 +301,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 pat,
                 has_params,
                 params,
-                type_params,
+                ty_params,
                 where_,
                 effects,
                 annot,
@@ -362,7 +359,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         let _ = cursor.eat_token(&TokenKind::LParen);
 
-        let mut items = Vec::new();
+        let mut items = vec![];
         while !cursor.at_token(&TokenKind::RParen) {
             let Some(el) = cursor.bump() else {
                 break;
@@ -444,9 +441,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let name_tok = cursor
             .bump_token()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let name = name_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = name_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
 
         let payload_ty = cursor
             .eat_token(&TokenKind::Colon)
@@ -476,21 +474,20 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let name_tok = cursor
             .bump_token()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let name = name_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = name_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
 
         let _ = cursor.eat_token(&TokenKind::Colon);
+        let error_ty = self.store.tys.alloc(HirTy {
+            origin,
+            kind: HirTyKind::Error,
+        });
         let ty = cursor
             .bump_node()
             .filter(|n| n.kind().is_ty())
-            .map(|ty| self.lower_ty(ty))
-            .unwrap_or_else(|| {
-                self.store.tys.alloc(HirTy {
-                    origin,
-                    kind: HirTyKind::Error,
-                })
-            });
+            .map_or(error_ty, |ty| self.lower_ty(ty));
 
         let value = cursor
             .eat_token(&TokenKind::ColonEq)
@@ -518,8 +515,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let where_ = node
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
-            .map(|list| self.lower_constraint_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+            .map_or_else(
+                || vec![].into_boxed_slice(),
+                |list| self.lower_constraint_list(list),
+            );
 
         let members = self.lower_member_defs(node);
         self.alloc_expr(origin, HirExprKind::Class { where_, members })
@@ -544,27 +543,26 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         self.push_scope();
 
-        let type_params = cursor
-            .eat_node(SyntaxNodeKind::TypeParamList)
-            .map(|list| self.lower_type_params(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let ty_params = cursor.eat_node(SyntaxNodeKind::TypeParamList).map_or_else(
+            || vec![].into_boxed_slice(),
+            |list| self.lower_ty_params(list),
+        );
 
         let where_ = cursor
             .eat_token(&TokenKind::KwWhere)
             .and_then(|_| cursor.eat_node(SyntaxNodeKind::ConstraintList))
-            .map(|list| self.lower_constraint_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+            .map_or_else(
+                || vec![].into_boxed_slice(),
+                |list| self.lower_constraint_list(list),
+            );
 
-        let target = cursor
-            .bump_node()
-            .filter(|n| n.kind().is_ty())
-            .map(|ty| self.lower_ty(ty))
-            .unwrap_or_else(|| {
-                self.store.tys.alloc(HirTy {
-                    origin,
-                    kind: HirTyKind::Error,
-                })
-            });
+        let target = match cursor.bump_node().filter(|n| n.kind().is_ty()) {
+            Some(ty) => self.lower_ty(ty),
+            None => self.store.tys.alloc(HirTy {
+                origin,
+                kind: HirTyKind::Error,
+            }),
+        };
 
         let members = self.lower_member_defs(node);
 
@@ -574,7 +572,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             origin,
             HirExprKind::Instance {
                 mods,
-                type_params,
+                ty_params,
                 where_,
                 target,
                 members,
@@ -582,8 +580,8 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         )
     }
 
-    fn lower_type_params(&mut self, node: SyntaxNode<'tree>) -> HirTypeParams {
-        let mut params = Vec::new();
+    fn lower_ty_params(&mut self, node: SyntaxNode<'tree>) -> HirTypeParams {
+        let mut params = vec![];
         for tp in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::TypeParam)
@@ -597,13 +595,13 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             };
             let name = self.intern_ident_token(name_tok);
             self.define(NameBindingKind::TypeParam, name);
-            params.push(HirTypeParam { origin, name });
+            params.push(HirTyParam { origin, name });
         }
         params.into_boxed_slice()
     }
 
     fn lower_constraint_list(&mut self, node: SyntaxNode<'tree>) -> Box<[HirConstraint]> {
-        let mut items = Vec::new();
+        let mut items = vec![];
         for c in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::Constraint)
@@ -620,9 +618,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let name_tok = toks
             .next()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let name = name_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = name_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
         self.check_use(name);
 
         let is_subtype = toks
@@ -633,16 +632,14 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             })
             .unwrap_or(false);
 
+        let error_ty = self.store.tys.alloc(HirTy {
+            origin,
+            kind: HirTyKind::Error,
+        });
         let ty = node
             .child_nodes()
             .find(|n| n.kind().is_ty())
-            .map(|t| self.lower_ty(t))
-            .unwrap_or_else(|| {
-                self.store.tys.alloc(HirTy {
-                    origin,
-                    kind: HirTyKind::Error,
-                })
-            });
+            .map_or(error_ty, |t| self.lower_ty(t));
 
         let kind = if is_subtype {
             HirConstraintKind::Subtype { name, bound: ty }
@@ -664,12 +661,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let mut rest = None;
         let mut saw_dots = false;
         for tok in node.child_tokens() {
-            if saw_dots {
-                if matches!(tok.kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
-                    let ident = self.intern_ident_token(tok);
-                    rest = Some(ident);
-                    break;
-                }
+            if saw_dots && matches!(tok.kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+                let ident = self.intern_ident_token(tok);
+                rest = Some(ident);
+                break;
             }
             if matches!(tok.kind(), TokenKind::DotDotDot) {
                 saw_dots = true;
@@ -690,9 +685,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let name_tok = cursor
             .bump_token()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let name = name_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = name_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
         self.check_use(name);
 
         let arg = cursor
@@ -725,11 +721,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let spread = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::DotDotDot));
+        let error_expr = self.alloc_expr(item_origin, HirExprKind::Error);
         let expr = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
-            .map(|e| self.lower_expr(e))
-            .unwrap_or_else(|| self.alloc_expr(item_origin, HirExprKind::Error));
+            .map_or(error_expr, |e| self.lower_expr(e));
 
         if spread {
             HirArrayItem::Spread {
@@ -748,7 +744,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     fn lower_record_items(&mut self, node: SyntaxNode<'tree>) -> HirRecordItems {
-        let mut out = Vec::new();
+        let mut out = vec![];
         for item_node in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::RecordItem)
@@ -762,11 +758,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
         let mut cursor = AstCursor::new(node);
         if cursor.eat_token(&TokenKind::DotDotDot).is_some() {
+            let error_expr = self.alloc_expr(origin, HirExprKind::Error);
             let expr = cursor
                 .bump_node()
                 .filter(|n| n.kind().is_expr())
-                .map(|e| self.lower_expr(e))
-                .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+                .map_or(error_expr, |e| self.lower_expr(e));
             return HirRecordItem::Spread { origin, expr };
         }
 
@@ -843,21 +839,20 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             .find(|n| n.kind() == SyntaxNodeKind::ParamList);
 
         self.push_scope();
-        let params = params_node
-            .map(|n| self.lower_param_list(n))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let params =
+            params_node.map_or_else(|| vec![].into_boxed_slice(), |n| self.lower_param_list(n));
 
         let ret = node
             .child_nodes()
             .find(|n| n.kind().is_ty())
             .map(|ty| self.lower_ty(ty));
 
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let body = node
             .child_nodes()
             .filter(|n| n.kind().is_expr())
             .last()
-            .map(|expr| self.lower_expr(expr))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |expr| self.lower_expr(expr));
 
         self.pop_scope();
 
@@ -868,10 +863,8 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
 
         let mut expr_nodes = node.child_nodes().filter(|n| n.kind().is_expr());
-        let callee = expr_nodes
-            .next()
-            .map(|c| self.lower_expr(c))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let callee = expr_nodes.next().map_or(error_expr, |c| self.lower_expr(c));
 
         let args: Vec<HirArg> = node
             .child_nodes()
@@ -893,11 +886,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let spread = node
             .child_tokens()
             .any(|t| matches!(t.kind(), TokenKind::DotDotDot));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let expr = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
-            .map(|e| self.lower_expr(e))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |e| self.lower_expr(e));
 
         if spread {
             HirArg::Spread { origin, expr }
@@ -910,10 +903,8 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let base = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let base = exprs.next().map_or(error_expr, |n| self.lower_expr(n));
 
         let chain = node
             .child_tokens()
@@ -954,10 +945,8 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
-        let base = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let base = exprs.next().map_or(error_expr, |n| self.lower_expr(n));
 
         let indices: Vec<_> = exprs.map(|n| self.lower_expr(n)).collect();
         self.alloc_expr(
@@ -973,10 +962,8 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
-        let base = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let base = exprs.next().map_or(error_expr, |n| self.lower_expr(n));
 
         let items = self.lower_record_items(node);
         self.alloc_expr(origin, HirExprKind::RecordUpdate { base, items })
@@ -986,26 +973,21 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let expr = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let expr = exprs.next().map_or(error_expr, |n| self.lower_expr(n));
 
+        let error_ty = self.store.tys.alloc(HirTy {
+            origin,
+            kind: HirTyKind::Error,
+        });
         let ty = node
             .child_nodes()
             .find(|n| n.kind().is_ty())
-            .map(|n| self.lower_ty(n))
-            .unwrap_or_else(|| {
-                self.store.tys.alloc(HirTy {
-                    origin,
-                    kind: HirTyKind::Error,
-                })
-            });
+            .map_or(error_ty, |n| self.lower_ty(n));
 
         let alias = node
             .child_tokens()
-            .filter(|t| matches!(t.kind(), TokenKind::KwAs))
-            .next()
+            .find(|t| matches!(t.kind(), TokenKind::KwAs))
             .and_then(|_| {
                 node.child_tokens()
                     .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent))
@@ -1020,21 +1002,17 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let expr = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let expr = exprs.next().map_or(error_expr, |n| self.lower_expr(n));
 
+        let error_ty = self.store.tys.alloc(HirTy {
+            origin,
+            kind: HirTyKind::Error,
+        });
         let ty = node
             .child_nodes()
             .find(|n| n.kind().is_ty())
-            .map(|n| self.lower_ty(n))
-            .unwrap_or_else(|| {
-                self.store.tys.alloc(HirTy {
-                    origin,
-                    kind: HirTyKind::Error,
-                })
-            });
+            .map_or(error_ty, |n| self.lower_ty(n));
 
         self.alloc_expr(origin, HirExprKind::TypeCast { expr, ty })
     }
@@ -1052,11 +1030,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             })
             .unwrap_or(HirPrefixOp::Not);
 
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let expr = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
-            .map(|e| self.lower_expr(e))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |e| self.lower_expr(e));
 
         self.alloc_expr(origin, HirExprKind::Prefix { op, expr })
     }
@@ -1065,14 +1043,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let origin = Self::origin_node(node);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let left = exprs
-            .next()
-            .map(|e| self.lower_expr(e))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
-        let right = exprs
-            .next()
-            .map(|e| self.lower_expr(e))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let left = exprs.next().map_or(error_expr, |e| self.lower_expr(e));
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
+        let right = exprs.next().map_or(error_expr, |e| self.lower_expr(e));
 
         let op_tok = node.child_tokens().find(|t| {
             matches!(
@@ -1102,29 +1076,27 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             )
         });
 
-        let op = op_tok
-            .map(|tok| match tok.kind() {
-                TokenKind::LtMinus => HirBinaryOp::Assign,
-                TokenKind::PipeGt => HirBinaryOp::Pipe,
-                TokenKind::KwOr => HirBinaryOp::Or,
-                TokenKind::KwXor => HirBinaryOp::Xor,
-                TokenKind::KwAnd => HirBinaryOp::And,
-                TokenKind::Eq => HirBinaryOp::Eq,
-                TokenKind::SlashEq => HirBinaryOp::NotEq,
-                TokenKind::Lt => HirBinaryOp::Lt,
-                TokenKind::Gt => HirBinaryOp::Gt,
-                TokenKind::LtEq => HirBinaryOp::LtEq,
-                TokenKind::GtEq => HirBinaryOp::GtEq,
-                TokenKind::KwShl => HirBinaryOp::Shl,
-                TokenKind::KwShr => HirBinaryOp::Shr,
-                TokenKind::Plus => HirBinaryOp::Add,
-                TokenKind::Minus => HirBinaryOp::Sub,
-                TokenKind::Star => HirBinaryOp::Mul,
-                TokenKind::Slash => HirBinaryOp::Div,
-                TokenKind::Percent => HirBinaryOp::Mod,
-                _ => HirBinaryOp::Symbolic(self.intern_op_token(tok)),
-            })
-            .unwrap_or(HirBinaryOp::Add);
+        let op = op_tok.map_or(HirBinaryOp::Add, |tok| match tok.kind() {
+            TokenKind::LtMinus => HirBinaryOp::Assign,
+            TokenKind::PipeGt => HirBinaryOp::Pipe,
+            TokenKind::KwOr => HirBinaryOp::Or,
+            TokenKind::KwXor => HirBinaryOp::Xor,
+            TokenKind::KwAnd => HirBinaryOp::And,
+            TokenKind::Eq => HirBinaryOp::Eq,
+            TokenKind::SlashEq => HirBinaryOp::NotEq,
+            TokenKind::Lt => HirBinaryOp::Lt,
+            TokenKind::Gt => HirBinaryOp::Gt,
+            TokenKind::LtEq => HirBinaryOp::LtEq,
+            TokenKind::GtEq => HirBinaryOp::GtEq,
+            TokenKind::KwShl => HirBinaryOp::Shl,
+            TokenKind::KwShr => HirBinaryOp::Shr,
+            TokenKind::Plus => HirBinaryOp::Add,
+            TokenKind::Minus => HirBinaryOp::Sub,
+            TokenKind::Star => HirBinaryOp::Mul,
+            TokenKind::Slash => HirBinaryOp::Div,
+            TokenKind::Percent => HirBinaryOp::Mod,
+            _ => HirBinaryOp::Symbolic(self.intern_op_token(tok)),
+        });
 
         self.alloc_expr(origin, HirExprKind::Binary { op, left, right })
     }
@@ -1134,27 +1106,29 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let mut cursor = AstCursor::new(node);
 
         let _ = cursor.eat_token(&TokenKind::KwCase);
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let scrut = cursor
             .bump_node()
             .filter(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |n| self.lower_expr(n));
 
         let _ = cursor.eat_token(&TokenKind::KwOf);
         let _ = cursor.eat_token(&TokenKind::LParen);
         let _ = cursor.eat_token(&TokenKind::Pipe);
 
-        let mut arms = Vec::new();
+        let mut arms = vec![];
 
         while !cursor.at_token(&TokenKind::RParen) {
             let attrs = self.lower_attr_prefix(&mut cursor).into_boxed_slice();
 
             self.push_scope();
+            let error_pat = self.alloc_pat(origin, HirPatKind::Error);
             let pat = cursor
                 .bump_node()
                 .filter(|n| n.kind().is_pat())
-                .map(|p| self.lower_pat(p, true, NameBindingKind::PatternBind))
-                .unwrap_or_else(|| self.alloc_pat(origin, HirPatKind::Error));
+                .map_or(error_pat, |p| {
+                    self.lower_pat(p, true, NameBindingKind::PatternBind)
+                });
 
             let guard = cursor
                 .eat_token(&TokenKind::KwIf)
@@ -1166,11 +1140,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 });
 
             let _ = cursor.eat_token(&TokenKind::EqGt);
+            let error_expr = self.alloc_expr(origin, HirExprKind::Error);
             let body = cursor
                 .bump_node()
                 .filter(|n| n.kind().is_expr())
-                .map(|b| self.lower_expr(b))
-                .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+                .map_or(error_expr, |b| self.lower_expr(b));
 
             self.pop_scope();
 
@@ -1223,11 +1197,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
     fn lower_perform_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
         let origin = Self::origin_node(node);
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let expr = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |n| self.lower_expr(n));
         self.alloc_expr(origin, HirExprKind::Perform { expr })
     }
 
@@ -1236,26 +1210,27 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let mut cursor = AstCursor::new(node);
 
         let _ = cursor.eat_token(&TokenKind::KwHandle);
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let expr = cursor
             .bump_node()
             .filter(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |n| self.lower_expr(n));
 
         let _ = cursor.eat_token(&TokenKind::KwWith);
         let handler_tok = cursor
             .bump_token()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let handler = handler_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let handler = handler_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
         self.check_use(handler);
 
         let _ = cursor.eat_token(&TokenKind::KwOf);
         let _ = cursor.eat_token(&TokenKind::LParen);
         let _ = cursor.eat_token(&TokenKind::Pipe);
 
-        let mut clauses = Vec::new();
+        let mut clauses = vec![];
         while !cursor.at_token(&TokenKind::RParen) {
             let Some(clause_node) = cursor
                 .bump_node()
@@ -1292,11 +1267,12 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let name_tok = cursor
             .bump_token()
             .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent));
-        let name = name_tok
-            .map(|t| self.intern_ident_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = name_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_ident_token(t),
+        );
 
-        let mut params = Vec::new();
+        let mut params = vec![];
         let is_value = cursor.eat_token(&TokenKind::LParen).is_none();
         if !is_value {
             while !cursor.at_token(&TokenKind::RParen) {
@@ -1321,11 +1297,11 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             }
         }
 
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let body = cursor
             .bump_node()
             .filter(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |n| self.lower_expr(n));
 
         self.pop_scope();
 
@@ -1349,7 +1325,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
     fn lower_quote_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
         let origin = Self::origin_node(node);
-        let mut splice_nodes = Vec::new();
+        let mut splice_nodes = vec![];
         collect_quote_splices(node, &mut splice_nodes);
         let mut splices = Vec::with_capacity(splice_nodes.len());
         for splice_node in splice_nodes {
@@ -1380,17 +1356,19 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 let target = cursor
                     .bump_token()
                     .filter(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::EscapedIdent))
-                    .map(|t| self.intern_ident_token(t))
-                    .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+                    .map_or_else(
+                        || Ident::dummy(Symbol::synthetic(u32::MAX)),
+                        |t| self.intern_ident_token(t),
+                    );
                 self.check_use(target);
                 HirSpliceKind::Name(target)
             }
             Some(TokenKind::SpliceLParen) => {
+                let error_expr = self.alloc_expr(origin, HirExprKind::Error);
                 let expr = cursor
                     .bump_node()
                     .filter(|n| n.kind().is_expr())
-                    .map(|n| self.lower_expr(n))
-                    .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+                    .map_or(error_expr, |n| self.lower_expr(n));
                 HirSpliceKind::Expr(expr)
             }
             Some(TokenKind::SpliceLBracket) => {

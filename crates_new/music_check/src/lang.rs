@@ -10,12 +10,12 @@ use crate::SemaErrorKind;
 use super::checker::Checker;
 
 #[derive(Debug, Default, Clone)]
-pub(super) struct LangItems {
-    pub(super) option_ty: Option<Symbol>,
-    pub(super) option_span: Option<Span>,
+pub struct LangItems {
+    pub option_ty: Option<Symbol>,
+    pub option_span: Option<Span>,
 }
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     pub(super) fn register_lang_items_on_let(
         &mut self,
         mods: &HirDeclMods,
@@ -30,7 +30,7 @@ impl<'a> Checker<'a> {
             self.error(
                 attr_span,
                 SemaErrorKind::UnknownLangItem {
-                    name: self.ctx.interner.resolve(item).to_string(),
+                    name: self.ctx.interner.resolve(item).to_owned(),
                 },
             );
             return;
@@ -49,22 +49,22 @@ impl<'a> Checker<'a> {
             return;
         }
 
-        let Some(type_sym) = self.primary_pat_symbol(pat) else {
+        let Some(ty_sym) = self.primary_pat_symbol(pat) else {
             self.error(attr_span, SemaErrorKind::LangItemRequiresName);
             return;
         };
 
         match self.state.lang.option_ty {
             None => {
-                self.state.lang.option_ty = Some(type_sym);
+                self.state.lang.option_ty = Some(ty_sym);
                 self.state.lang.option_span = Some(attr_span);
             }
-            Some(prev) if prev == type_sym => {}
+            Some(prev) if prev == ty_sym => {}
             Some(_) => {
                 self.error(
                     attr_span,
                     SemaErrorKind::DuplicateLangItem {
-                        name: self.ctx.interner.resolve(item).to_string(),
+                        name: self.ctx.interner.resolve(item).to_owned(),
                     },
                 );
             }
@@ -74,18 +74,15 @@ impl<'a> Checker<'a> {
     fn musi_lang_item_from_attrs(&mut self, attrs: &[HirAttrId]) -> Option<(Span, Symbol)> {
         for id in attrs.iter().copied() {
             let attr = self.ctx.store.attrs.get(id).clone();
-            let segments = &attr.path.segments;
-            if segments.len() != 2 {
+            let [first, second] = attr.path.segments.as_ref() else {
                 continue;
-            }
-            if segments[0].name != self.state.known.musi
-                || segments[1].name != self.state.known.lang
-            {
+            };
+            if first.name != self.state.known.musi || second.name != self.state.known.lang {
                 continue;
             }
 
             let mut found = None::<(Span, HirExprId)>;
-            for arg in attr.args.iter() {
+            for arg in &attr.args {
                 match arg.kind {
                     HirAttrArgKind::Positional { value } => {
                         if found.is_some() {
@@ -100,7 +97,7 @@ impl<'a> Checker<'a> {
                                 arg.origin.span,
                                 SemaErrorKind::AttrUnknownArg {
                                     attr: String::from("musi.lang"),
-                                    name: self.ctx.interner.resolve(name.name).to_string(),
+                                    name: self.ctx.interner.resolve(name.name).to_owned(),
                                 },
                             );
                             continue;

@@ -10,6 +10,10 @@ pub struct CompiledProgram {
     pub artifact: SeamArtifact,
 }
 
+/// Compiles module graph rooted at `entry` into a SEAM artifact.
+///
+/// # Errors
+/// Returns `Err` when parse, analysis, or emission fails.
 pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<CompiledProgram> {
     let graph = build_module_graph(session.sources(), entry)?;
 
@@ -25,7 +29,7 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
         .into_owned();
 
     let mut analyzed_modules = Vec::with_capacity(graph.nodes_in_order.len());
-    for node in graph.nodes_in_order.iter() {
+    for node in &graph.nodes_in_order {
         let parsed = session.parse(node.source_id).ok_or(FrontendError {
             kind: FrontendErrorKind::ParseFailed,
         })?;
@@ -65,7 +69,7 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
         entry_path: entry_path.as_str(),
     };
 
-    let artifact = emit_program(program)
+    let artifact = emit_program(&program)
         .map_err(|_| FrontendError {
             kind: FrontendErrorKind::EmitFailed,
         })?
@@ -74,6 +78,10 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
     Ok(CompiledProgram { artifact })
 }
 
+/// Compiles `entry` into SEAM binary.
+///
+/// # Errors
+/// Returns `Err` when compilation or encoding fails.
 pub fn compile_entry_binary(session: &mut Session, entry: SourceId) -> FrontendResult<Vec<u8>> {
     let program = compile_entry(session, entry)?;
     music_assembly::encode_binary(&program.artifact).map_err(|_| FrontendError {

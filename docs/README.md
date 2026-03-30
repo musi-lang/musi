@@ -15,6 +15,8 @@ Canonical docs are ordered from language, to runtime, to tooling:
 9. `08-runtime-api.md`
 10. `09-architecture.md`
 11. `10-toolchain.md`
+12. `11-feature-matrix.md` (tracking)
+13. `12-public-api.md` (tracking)
 
 Historical pre-reduction material lives in `docs/legacy/`.
 

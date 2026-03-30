@@ -62,7 +62,7 @@ pub(super) fn decode_instruction_stream(code: &[u8]) -> CodecResult<InstructionS
                 let type_id = read_u16(code, position).ok_or(CodecError::TruncatedSection)?;
                 let length = read_u16(code, position + 2).ok_or(CodecError::TruncatedSection)?;
                 position += 4;
-                Instruction::with_type_len(opcode, type_id, length)
+                Instruction::with_ty_len(opcode, type_id, length)
             }
             Opcode::EffInvk => {
                 let effect_id = read_u16(code, position).ok_or(CodecError::TruncatedSection)?;

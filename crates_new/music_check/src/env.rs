@@ -127,24 +127,31 @@ impl TypeEnv {
     pub fn get_data_def(&self, name: Symbol) -> Option<&DataDef> {
         self.data_defs.get(&name)
     }
+}
 
-    pub fn instantiate(&self, tys: &mut SemTys, scheme: &ValueScheme, span: Span) -> SemTyId {
-        if scheme.generic_count == 0 {
-            return scheme.ty;
+impl ValueScheme {
+    pub fn instantiate(&self, tys: &mut SemTys, span: Span) -> SemTyId {
+        if self.generic_count == 0 {
+            return self.ty;
         }
-        let mut subst: Vec<SemTyId> = Vec::with_capacity(scheme.generic_count as usize);
-        for _ in 0..scheme.generic_count {
+
+        let cap = usize::try_from(self.generic_count).unwrap_or(0);
+        let mut subst: Vec<SemTyId> = Vec::with_capacity(cap);
+        for _ in 0..self.generic_count {
             subst.push(tys.fresh_infer_var(span));
         }
-        substitute_generics(tys, scheme.ty, &subst)
+        substitute_generics(tys, self.ty, &subst)
     }
 }
 
-pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {
+pub fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {
     let ty = unify::resolve(tys, ty);
     match tys.get(ty).clone() {
         SemTy::Error | SemTy::Unknown | SemTy::Any | SemTy::InferVar(_) => ty,
-        SemTy::Generic(i) => subst.get(i as usize).copied().unwrap_or(ty),
+        SemTy::Generic(i) => subst
+            .get(usize::try_from(i).unwrap_or(usize::MAX))
+            .copied()
+            .unwrap_or(ty),
         SemTy::Named { name, args } => {
             let new_args: Vec<_> = args
                 .iter()
@@ -203,11 +210,7 @@ pub(crate) fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyI
     }
 }
 
-pub(crate) fn generalize_infer_vars(
-    tys: &mut SemTys,
-    ty: SemTyId,
-    start_index: u32,
-) -> (u32, SemTyId) {
+pub fn generalize_infer_vars(tys: &mut SemTys, ty: SemTyId, start_index: u32) -> (u32, SemTyId) {
     let ty = unify::resolve(tys, ty);
     let mut vars = BTreeSet::<InferVarId>::new();
     collect_unbound_infer_vars(tys, ty, &mut vars);

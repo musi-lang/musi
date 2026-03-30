@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::Path;
 
-use music_basic::{SourceId, SourceMap, Span, path as import_path, string_lit};
+use music_basic::{Source, SourceId, SourceMap, Span, path as import_path, string_lit};
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirChainKind, HirExprId, HirExprKind, HirLit, HirLitKind,
-    HirMemberKey, HirParam, HirPatKind, HirPrefixOp, HirRecordItem, HirStore, HirStringLit,
+    HirMemberKey, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirRecordItem, HirStore,
+    HirStringLit,
 };
 use music_il::{
     ConstantEntry, ConstantPool, Instruction, MethodEntry, MethodName, Opcode, Operand,
@@ -16,10 +17,9 @@ use music_names::{Ident, Interner, NameBindingId, NameResolution, NameSite, Symb
 
 use crate::errors::{EmitError, EmitErrorKind, EmitResult};
 
+use super::context::{EmitMaps, EmitModuleCx, EmitPools, ModuleExportKey};
 use super::number::{parse_float, parse_int};
-use super::types::{
-    builtin_type_id_for_ref, ensure_choice_type, ensure_record_type, ensure_tuple_type,
-};
+use super::ty::{builtin_ty_id_for_ref, ensure_choice_ty, ensure_record_ty, ensure_tuple_ty};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RecordFieldValue {
@@ -37,7 +37,7 @@ pub(super) struct MethodEmitter<'a> {
     binding_by_site: HashMap<NameSite, NameBindingId>,
     globals_by_binding: &'a HashMap<NameBindingId, u16>,
     import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
-    module_export_globals: &'a HashMap<(String, Symbol), u16>,
+    module_export_globals: &'a HashMap<ModuleExportKey, u16>,
     constants: &'a mut ConstantPool,
     methods: &'a mut Vec<MethodEntry>,
     types: &'a mut Vec<TypeDescriptor>,
@@ -48,35 +48,27 @@ pub(super) struct MethodEmitter<'a> {
 }
 
 impl<'a> MethodEmitter<'a> {
-    pub(super) fn new(
-        interner: &'a Interner,
-        sources: &'a SourceMap,
-        source_id: SourceId,
-        store: &'a HirStore,
-        names: &'a NameResolution,
-        ir: &'a IrModuleInfo,
-        globals_by_binding: &'a HashMap<NameBindingId, u16>,
-        import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
-        module_export_globals: &'a HashMap<(String, Symbol), u16>,
-        constants: &'a mut ConstantPool,
-        methods: &'a mut Vec<MethodEntry>,
-        types: &'a mut Vec<TypeDescriptor>,
-    ) -> Self {
-        let mut binding_by_site = HashMap::with_capacity(names.bindings.len());
-        for (id, binding) in &names.bindings {
+    pub(super) fn new(cx: EmitModuleCx<'a>, pools: EmitPools<'a>) -> Self {
+        let EmitPools {
+            constants,
+            methods,
+            types,
+        } = pools;
+        let mut binding_by_site = HashMap::with_capacity(cx.names.bindings.len());
+        for (id, binding) in &cx.names.bindings {
             let _prev = binding_by_site.insert(binding.site, id);
         }
         Self {
-            interner,
-            sources,
-            source_id,
-            store,
-            names,
-            ir,
+            interner: cx.interner,
+            sources: cx.sources,
+            source_id: cx.source_id,
+            store: cx.store,
+            names: cx.names,
+            ir: cx.ir,
             binding_by_site,
-            globals_by_binding,
-            import_globals_by_binding,
-            module_export_globals,
+            globals_by_binding: cx.maps.globals_by_binding,
+            import_globals_by_binding: cx.maps.import_globals_by_binding,
+            module_export_globals: cx.maps.module_export_globals,
             constants,
             methods,
             types,
@@ -102,7 +94,7 @@ impl<'a> MethodEmitter<'a> {
     }
 
     pub(super) fn bind_params(&mut self, params: &[HirParam]) {
-        for p in params.iter() {
+        for p in params {
             let site = NameSite::new(self.source_id, p.name.span);
             let binding = self.binding_by_site.get(&site).copied();
             let Some(binding) = binding else {
@@ -117,59 +109,31 @@ impl<'a> MethodEmitter<'a> {
         let expr = self.store.exprs.get(expr_id).clone();
         match expr.kind {
             HirExprKind::Lit { lit } => {
-                self.emit_lit(lit)?;
+                self.emit_lit_expr(&lit)?;
             }
-            HirExprKind::Name { ident } => {
-                self.emit_name(expr.origin.span, ident)?;
+            HirExprKind::Named { ident } => {
+                self.emit_named_expr(expr.origin.span, ident)?;
             }
             HirExprKind::Record { items } => {
-                self.emit_record(expr_id, items.as_ref())?;
+                self.emit_record_expr(expr_id, items.as_ref())?;
             }
             HirExprKind::Variant { name, payload } => {
-                self.emit_variant(expr_id, name, payload)?;
+                self.emit_variant_expr(expr_id, name, payload)?;
             }
             HirExprKind::Tuple { items } => {
-                self.emit_tuple(items.as_ref())?;
+                self.emit_tuple_expr(items.as_ref())?;
             }
             HirExprKind::Array { items } => {
-                self.emit_array(expr_id, items.as_ref())?;
+                self.emit_array_expr(expr_id, items.as_ref())?;
             }
             HirExprKind::Sequence { exprs, yields_unit } => {
-                for id in exprs.iter().copied() {
-                    self.emit_expr(id)?;
-                    self.instructions.push(Instruction::basic(Opcode::Pop));
-                }
-                if yields_unit {
-                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
-                }
+                self.emit_sequence_expr(exprs.as_ref(), yields_unit)?;
             }
             HirExprKind::Binary { op, left, right } => {
-                if op == HirBinaryOp::Assign {
-                    self.emit_assign(left, right)?;
-                } else {
-                    self.emit_expr(left)?;
-                    self.emit_expr(right)?;
-                    self.emit_binop(expr_id, op, left, right)?;
-                }
+                self.emit_binary_expr(expr_id, op, left, right)?;
             }
             HirExprKind::Call { callee, args } => {
-                self.emit_expr(callee)?;
-                let mut arity = 0u8;
-                for arg in args.iter() {
-                    match arg {
-                        HirArg::Expr(id) => {
-                            self.emit_expr(*id)?;
-                            arity = arity.saturating_add(1);
-                        }
-                        HirArg::Spread { .. } => {
-                            return Err(EmitError {
-                                kind: EmitErrorKind::UnsupportedExpr,
-                            });
-                        }
-                    }
-                }
-                self.instructions
-                    .push(Instruction::with_u8(Opcode::Call, arity));
+                self.emit_call_expr(callee, args.as_ref())?;
             }
             HirExprKind::Lambda { params, body, .. } => {
                 let method_idx = self.emit_lambda_method(params.as_ref(), body)?;
@@ -186,60 +150,22 @@ impl<'a> MethodEmitter<'a> {
                 value,
                 ..
             } => {
-                // Expression `let` is compiled as local store after evaluating rhs.
-                let pat = self.store.pats.get(pat).clone();
-                let HirPatKind::Bind { name, .. } = pat.kind else {
-                    return Err(EmitError {
-                        kind: EmitErrorKind::UnsupportedPat,
-                    });
-                };
-
-                let binding = self
-                    .binding_by_site
-                    .get(&NameSite::new(self.source_id, name.span))
-                    .copied();
-
-                let Some(binding) = binding else {
-                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
-                    return Ok(());
-                };
-
-                if has_params {
-                    let Some(body) = value else {
-                        self.instructions.push(Instruction::basic(Opcode::LdUnit));
-                        return Ok(());
-                    };
-                    let method_idx = self.emit_lambda_method(params.as_ref(), body)?;
-                    self.instructions.push(Instruction::with_wide(
-                        Opcode::ClsNew,
-                        u16::try_from(method_idx).unwrap_or(u16::MAX),
-                        0,
-                    ));
-                } else if let Some(value) = value {
-                    self.emit_expr(value)?;
-                } else {
-                    self.instructions.push(Instruction::basic(Opcode::LdUnit));
-                }
-
-                let slot = self.alloc_local_slot();
-                let _prev = self.locals.insert(binding, slot);
-                self.emit_st_loc(slot);
-                self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                self.emit_let_expr(has_params, params.as_ref(), pat, value)?;
             }
             HirExprKind::Import { path, .. } => {
-                self.emit_import(expr_id, path)?;
+                self.emit_import_expr(expr_id, path)?;
             }
             HirExprKind::Member { base, chain, key } => {
-                self.emit_member(expr_id, base, chain, key)?;
+                self.emit_member_expr(expr_id, base, chain, &key)?;
             }
             HirExprKind::Index { base, indices } => {
-                self.emit_index(expr_id, base, indices.as_ref())?;
+                self.emit_index_expr(expr_id, base, indices.as_ref())?;
             }
             HirExprKind::Prefix { op, expr } => {
-                self.emit_prefix(expr_id, op, expr)?;
+                self.emit_prefix_expr(expr_id, op, expr)?;
             }
             HirExprKind::RecordUpdate { base, items } => {
-                self.emit_record_update(expr_id, base, items.as_ref())?;
+                self.emit_record_update_expr(expr_id, base, items.as_ref())?;
             }
             HirExprKind::TypeTest { .. }
             | HirExprKind::TypeCast { .. }
@@ -263,21 +189,123 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
+    fn emit_sequence_expr(&mut self, exprs: &[HirExprId], yields_unit: bool) -> EmitResult<()> {
+        for &id in exprs {
+            self.emit_expr(id)?;
+            self.instructions.push(Instruction::basic(Opcode::Pop));
+        }
+        if yields_unit {
+            self.instructions.push(Instruction::basic(Opcode::LdUnit));
+        }
+        Ok(())
+    }
+
+    fn emit_binary_expr(
+        &mut self,
+        expr_id: HirExprId,
+        op: HirBinaryOp,
+        left: HirExprId,
+        right: HirExprId,
+    ) -> EmitResult<()> {
+        if op == HirBinaryOp::Assign {
+            self.emit_binop_assign(left, right)?;
+            return Ok(());
+        }
+        self.emit_expr(left)?;
+        self.emit_expr(right)?;
+        self.emit_binop(expr_id, op, left, right)?;
+        Ok(())
+    }
+
+    fn emit_call_expr(&mut self, callee: HirExprId, args: &[HirArg]) -> EmitResult<()> {
+        self.emit_expr(callee)?;
+        let mut arity = 0u8;
+        for arg in args {
+            match arg {
+                HirArg::Expr(id) => {
+                    self.emit_expr(*id)?;
+                    arity = arity.saturating_add(1);
+                }
+                HirArg::Spread { .. } => {
+                    return Err(EmitError {
+                        kind: EmitErrorKind::UnsupportedExpr,
+                    });
+                }
+            }
+        }
+        self.instructions
+            .push(Instruction::with_u8(Opcode::Call, arity));
+        Ok(())
+    }
+
+    fn emit_let_expr(
+        &mut self,
+        has_params: bool,
+        params: &[HirParam],
+        pat: HirPatId,
+        value: Option<HirExprId>,
+    ) -> EmitResult<()> {
+        // Expression `let` is compiled as local store after evaluating rhs.
+        let pat = self.store.pats.get(pat).clone();
+        let HirPatKind::Bind { name, .. } = pat.kind else {
+            return Err(EmitError {
+                kind: EmitErrorKind::UnsupportedPat,
+            });
+        };
+
+        let binding = self
+            .binding_by_site
+            .get(&NameSite::new(self.source_id, name.span))
+            .copied();
+        let Some(binding) = binding else {
+            self.instructions.push(Instruction::basic(Opcode::LdUnit));
+            return Ok(());
+        };
+
+        if has_params {
+            let Some(body) = value else {
+                self.instructions.push(Instruction::basic(Opcode::LdUnit));
+                return Ok(());
+            };
+            let method_idx = self.emit_lambda_method(params, body)?;
+            self.instructions.push(Instruction::with_wide(
+                Opcode::ClsNew,
+                u16::try_from(method_idx).unwrap_or(u16::MAX),
+                0,
+            ));
+        } else if let Some(value) = value {
+            self.emit_expr(value)?;
+        } else {
+            self.instructions.push(Instruction::basic(Opcode::LdUnit));
+        }
+
+        let slot = self.alloc_local_slot();
+        let _prev = self.locals.insert(binding, slot);
+        self.emit_st_loc(slot);
+        self.instructions.push(Instruction::basic(Opcode::LdUnit));
+        Ok(())
+    }
+
     fn emit_lambda_method(&mut self, params: &[HirParam], body: HirExprId) -> EmitResult<usize> {
-        let mut sub = MethodEmitter::new(
-            self.interner,
-            self.sources,
-            self.source_id,
-            self.store,
-            self.names,
-            self.ir,
-            self.globals_by_binding,
-            self.import_globals_by_binding,
-            self.module_export_globals,
-            self.constants,
-            self.methods,
-            self.types,
-        );
+        let cx = EmitModuleCx {
+            interner: self.interner,
+            sources: self.sources,
+            source_id: self.source_id,
+            store: self.store,
+            names: self.names,
+            ir: self.ir,
+            maps: EmitMaps {
+                globals_by_binding: self.globals_by_binding,
+                import_globals_by_binding: self.import_globals_by_binding,
+                module_export_globals: self.module_export_globals,
+            },
+        };
+        let pools = EmitPools {
+            constants: self.constants,
+            methods: self.methods,
+            types: self.types,
+        };
+        let mut sub = MethodEmitter::new(cx, pools);
         sub.bind_params(params);
         sub.emit_expr(body)?;
         sub.instructions.push(Instruction::basic(Opcode::Ret));
@@ -286,13 +314,13 @@ impl<'a> MethodEmitter<'a> {
         Ok(sub.finish_method(MethodName::Anonymous, locals_count))
     }
 
-    fn alloc_local_slot(&mut self) -> u16 {
+    const fn alloc_local_slot(&mut self) -> u16 {
         let slot = self.next_local_slot;
         self.next_local_slot = self.next_local_slot.saturating_add(1);
         slot
     }
 
-    fn emit_lit(&mut self, lit: HirLit) -> EmitResult {
+    fn emit_lit_expr(&mut self, lit: &HirLit) -> EmitResult {
         match lit.kind {
             HirLitKind::Int { span, .. } => {
                 let text = self.slice(span);
@@ -338,7 +366,7 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn emit_name(&mut self, span: Span, ident: Ident) -> EmitResult<()> {
+    fn emit_named_expr(&mut self, span: Span, ident: Ident) -> EmitResult<()> {
         let site = NameSite::new(self.source_id, span);
         let Some(binding) = self.names.refs.get(&site).copied() else {
             self.instructions.push(Instruction::basic(Opcode::LdUnit));
@@ -381,31 +409,32 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn emit_tuple(&mut self, items: &[HirExprId]) -> EmitResult<()> {
+    fn emit_tuple_expr(&mut self, items: &[HirExprId]) -> EmitResult<()> {
         // Encode tuples as record aggregates with tag=0 and N fields.
-        self.emit_tag(0)?;
-        for id in items.iter().copied() {
+        self.emit_tag(0);
+        for &id in items {
             self.emit_expr(id)?;
         }
-        let type_id = ensure_tuple_type(self.types, items.len());
+        let ty_id = ensure_tuple_ty(self.types, items.len());
         self.instructions.push(Instruction {
             opcode: Opcode::DataNew,
-            operand: Operand::TypeLen(type_id, u16::try_from(items.len()).unwrap_or(0)),
+            operand: Operand::TypeLen(ty_id, u16::try_from(items.len()).unwrap_or(0)),
         });
         Ok(())
     }
 
-    fn emit_record(&mut self, expr_id: HirExprId, items: &[HirRecordItem]) -> EmitResult<()> {
-        let (layout_fields, type_id) = self.record_layout_and_type(expr_id)?;
+    fn emit_record_expr(&mut self, expr_id: HirExprId, items: &[HirRecordItem]) -> EmitResult<()> {
+        let (layout_fields, ty_id) = self.record_layout_and_ty(expr_id)?;
 
         let mut values = HashMap::<Symbol, RecordFieldValue>::new();
         for item in items {
             match item {
                 HirRecordItem::Field { name, value, .. } => {
-                    let entry = match value {
-                        Some(expr) => RecordFieldValue::Expr(*expr),
-                        None => RecordFieldValue::Shorthand(*name),
-                    };
+                    let entry = value
+                        .as_ref()
+                        .map_or(RecordFieldValue::Shorthand(*name), |expr| {
+                            RecordFieldValue::Expr(*expr)
+                        });
                     let _prev = values.insert(name.name, entry);
                 }
                 HirRecordItem::Spread { .. } => {
@@ -416,28 +445,28 @@ impl<'a> MethodEmitter<'a> {
             }
         }
 
-        self.emit_tag(0)?;
-        for field in layout_fields.iter().copied() {
-            let Some(value) = values.get(&field).copied() else {
+        self.emit_tag(0);
+        for field in &layout_fields {
+            let Some(value) = values.get(field).copied() else {
                 return Err(EmitError {
                     kind: EmitErrorKind::UnsupportedExpr,
                 });
             };
             match value {
                 RecordFieldValue::Expr(id) => self.emit_expr(id)?,
-                RecordFieldValue::Shorthand(ident) => self.emit_name(ident.span, ident)?,
+                RecordFieldValue::Shorthand(ident) => self.emit_named_expr(ident.span, ident)?,
             }
         }
-        self.instructions.push(Instruction::with_type_len(
+        self.instructions.push(Instruction::with_ty_len(
             Opcode::DataNew,
-            type_id,
+            ty_id,
             u16::try_from(layout_fields.len()).unwrap_or(0),
         ));
         Ok(())
     }
 
-    fn emit_import(&mut self, expr_id: HirExprId, path: HirStringLit) -> EmitResult<()> {
-        let (layout_fields, type_id) = self.record_layout_and_type(expr_id)?;
+    fn emit_import_expr(&mut self, expr_id: HirExprId, path: HirStringLit) -> EmitResult<()> {
+        let (layout_fields, ty_id) = self.record_layout_and_ty(expr_id)?;
 
         let raw = string_lit::decode(self.slice(path.span));
         let import_path = if raw.starts_with('@') {
@@ -446,8 +475,7 @@ impl<'a> MethodEmitter<'a> {
             let from_path = self
                 .sources
                 .get(self.source_id)
-                .map(|s| s.path())
-                .unwrap_or_else(|| Path::new(""));
+                .map_or_else(|| Path::new(""), Source::path);
             import_path::resolve_import_path(from_path, raw.as_str())
                 .to_string_lossy()
                 .into_owned()
@@ -455,8 +483,8 @@ impl<'a> MethodEmitter<'a> {
             raw
         };
 
-        self.emit_tag(0)?;
-        for field in layout_fields.iter().copied() {
+        self.emit_tag(0);
+        for &field in &layout_fields {
             let idx = self
                 .module_export_globals
                 .get(&(import_path.clone(), field))
@@ -467,30 +495,31 @@ impl<'a> MethodEmitter<'a> {
             self.instructions
                 .push(Instruction::with_u16(Opcode::LdGlob, idx));
         }
-        self.instructions.push(Instruction::with_type_len(
+        self.instructions.push(Instruction::with_ty_len(
             Opcode::DataNew,
-            type_id,
+            ty_id,
             u16::try_from(layout_fields.len()).unwrap_or(0),
         ));
         Ok(())
     }
 
-    fn emit_record_update(
+    fn emit_record_update_expr(
         &mut self,
         expr_id: HirExprId,
         base: HirExprId,
         items: &[HirRecordItem],
     ) -> EmitResult {
-        let (layout_fields, type_id) = self.record_layout_and_type(expr_id)?;
+        let (layout_fields, ty_id) = self.record_layout_and_ty(expr_id)?;
 
         let mut updates = HashMap::<Symbol, RecordFieldValue>::new();
         for item in items {
             match item {
                 HirRecordItem::Field { name, value, .. } => {
-                    let entry = match value {
-                        Some(expr) => RecordFieldValue::Expr(*expr),
-                        None => RecordFieldValue::Shorthand(*name),
-                    };
+                    let entry = value
+                        .as_ref()
+                        .map_or(RecordFieldValue::Shorthand(*name), |expr| {
+                            RecordFieldValue::Expr(*expr)
+                        });
                     let _prev = updates.insert(name.name, entry);
                 }
                 HirRecordItem::Spread { .. } => {
@@ -506,12 +535,14 @@ impl<'a> MethodEmitter<'a> {
         let base_slot = self.alloc_local_slot();
         self.emit_st_loc(base_slot);
 
-        self.emit_tag(0)?;
-        for (i, field) in layout_fields.iter().copied().enumerate() {
+        self.emit_tag(0);
+        for (i, &field) in layout_fields.iter().enumerate() {
             if let Some(value) = updates.get(&field).copied() {
                 match value {
                     RecordFieldValue::Expr(id) => self.emit_expr(id)?,
-                    RecordFieldValue::Shorthand(ident) => self.emit_name(ident.span, ident)?,
+                    RecordFieldValue::Shorthand(ident) => {
+                        self.emit_named_expr(ident.span, ident)?;
+                    }
                 }
                 continue;
             }
@@ -522,15 +553,15 @@ impl<'a> MethodEmitter<'a> {
                 .push(Instruction::with_u16(Opcode::DataGet, idx));
         }
 
-        self.instructions.push(Instruction::with_type_len(
+        self.instructions.push(Instruction::with_ty_len(
             Opcode::DataNew,
-            type_id,
+            ty_id,
             u16::try_from(layout_fields.len()).unwrap_or(0),
         ));
         Ok(())
     }
 
-    fn emit_variant(
+    fn emit_variant_expr(
         &mut self,
         expr_id: HirExprId,
         name: Ident,
@@ -559,35 +590,33 @@ impl<'a> MethodEmitter<'a> {
         };
 
         let key = format!("choice({})", self.interner.resolve(owner));
-        let type_id = ensure_choice_type(self.types, key, variants.len());
+        let ty_id = ensure_choice_ty(self.types, key, variants.len());
 
-        self.emit_tag(tag)?;
-        let mut field_count = 0u16;
-        if let Some(payload) = payload {
+        self.emit_tag(tag);
+        let field_count = if let Some(payload) = payload {
             self.emit_expr(payload)?;
-            field_count = 1;
-        }
-        self.instructions.push(Instruction::with_type_len(
+            1
+        } else {
+            0
+        };
+        self.instructions.push(Instruction::with_ty_len(
             Opcode::DataNew,
-            type_id,
+            ty_id,
             field_count,
         ));
         Ok(())
     }
 
-    fn emit_array(&mut self, expr_id: HirExprId, items: &[HirArrayItem]) -> EmitResult {
+    fn emit_array_expr(&mut self, expr_id: HirExprId, items: &[HirArrayItem]) -> EmitResult {
         let elem = match self.ir_expr_ty(expr_id) {
             IrExprTy::Array { elem } => elem,
             _ => IrTypeRef::Unknown,
         };
-        let elem_type_id = self.type_id_for_ref(elem);
+        let elem_ty_id = self.ty_id_for_ref(elem);
 
         let len = u16::try_from(items.len()).unwrap_or(u16::MAX);
-        self.instructions.push(Instruction::with_type_len(
-            Opcode::SeqNew,
-            elem_type_id,
-            len,
-        ));
+        self.instructions
+            .push(Instruction::with_ty_len(Opcode::SeqNew, elem_ty_id, len));
 
         for (i, item) in items.iter().enumerate() {
             let HirArrayItem::Expr(value) = item else {
@@ -596,7 +625,8 @@ impl<'a> MethodEmitter<'a> {
                 });
             };
             self.instructions.push(Instruction::basic(Opcode::Dup));
-            self.emit_small_int(i as i64);
+            let index = i64::try_from(i).unwrap_or(i64::MAX);
+            self.emit_small_int(index);
             self.emit_expr(*value)?;
             self.instructions.push(Instruction::basic(Opcode::SeqSet));
             self.instructions.push(Instruction::basic(Opcode::Pop));
@@ -605,12 +635,12 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn emit_member(
+    fn emit_member_expr(
         &mut self,
         _expr_id: HirExprId,
         base: HirExprId,
         chain: HirChainKind,
-        key: HirMemberKey,
+        key: &HirMemberKey,
     ) -> EmitResult<()> {
         if chain != HirChainKind::Normal {
             return Err(EmitError {
@@ -625,7 +655,7 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn emit_index(
+    fn emit_index_expr(
         &mut self,
         _expr_id: HirExprId,
         base: HirExprId,
@@ -647,10 +677,10 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn emit_assign(&mut self, left: HirExprId, right: HirExprId) -> EmitResult<()> {
+    fn emit_binop_assign(&mut self, left: HirExprId, right: HirExprId) -> EmitResult<()> {
         let left_expr = self.store.exprs.get(left).clone();
         match left_expr.kind {
-            HirExprKind::Name { ident } => {
+            HirExprKind::Named { ident } => {
                 self.emit_expr(right)?;
                 self.emit_store_name(ident.span)?;
                 self.instructions.push(Instruction::basic(Opcode::LdUnit));
@@ -662,7 +692,7 @@ impl<'a> MethodEmitter<'a> {
                         kind: EmitErrorKind::UnsupportedExpr,
                     });
                 }
-                let idx = self.member_index(base, key)?;
+                let idx = self.member_index(base, &key)?;
                 self.emit_expr(base)?;
                 self.emit_expr(right)?;
                 self.instructions
@@ -690,7 +720,7 @@ impl<'a> MethodEmitter<'a> {
         }
     }
 
-    fn emit_prefix(
+    fn emit_prefix_expr(
         &mut self,
         expr_id: HirExprId,
         op: HirPrefixOp,
@@ -751,8 +781,8 @@ impl<'a> MethodEmitter<'a> {
         Ok(())
     }
 
-    fn member_index(&self, base: HirExprId, key: HirMemberKey) -> EmitResult<u16> {
-        match key {
+    fn member_index(&self, base: HirExprId, key: &HirMemberKey) -> EmitResult<u16> {
+        match *key {
             HirMemberKey::IntLit { span, .. } => {
                 let text = self.slice(span);
                 let value = parse_int(text).unwrap_or(0);
@@ -788,7 +818,7 @@ impl<'a> MethodEmitter<'a> {
         }
     }
 
-    fn record_layout_and_type(&mut self, expr_id: HirExprId) -> EmitResult<(SymbolSlice, u16)> {
+    fn record_layout_and_ty(&mut self, expr_id: HirExprId) -> EmitResult<(SymbolSlice, u16)> {
         match self.ir_expr_ty(expr_id) {
             IrExprTy::Named(owner) => {
                 let Some(layout) = self.ir.data_layouts.get(&owner) else {
@@ -802,8 +832,8 @@ impl<'a> MethodEmitter<'a> {
                     });
                 };
                 let key = format!("record({})", self.interner.resolve(owner));
-                let type_id = ensure_record_type(self.types, key, fields.len());
-                Ok((fields.clone(), type_id))
+                let ty_id = ensure_record_ty(self.types, key, fields.len());
+                Ok((fields.clone(), ty_id))
             }
             IrExprTy::Record { fields } => {
                 let key = format!(
@@ -814,8 +844,8 @@ impl<'a> MethodEmitter<'a> {
                         .collect::<Vec<_>>()
                         .join(",")
                 );
-                let type_id = ensure_record_type(self.types, key, fields.len());
-                Ok((fields.clone(), type_id))
+                let ty_id = ensure_record_ty(self.types, key, fields.len());
+                Ok((fields, ty_id))
             }
             _ => Err(EmitError {
                 kind: EmitErrorKind::UnsupportedExpr,
@@ -823,25 +853,25 @@ impl<'a> MethodEmitter<'a> {
         }
     }
 
-    fn type_id_for_ref(&mut self, ty: IrTypeRef) -> u16 {
+    fn ty_id_for_ref(&mut self, ty: IrTypeRef) -> u16 {
         match ty {
-            IrTypeRef::Named(sym) => self.ensure_named_type_id(sym),
-            other => builtin_type_id_for_ref(other),
+            IrTypeRef::Named(sym) => self.ensure_named_ty_id(sym),
+            other => builtin_ty_id_for_ref(other),
         }
     }
 
-    fn ensure_named_type_id(&mut self, sym: Symbol) -> u16 {
+    fn ensure_named_ty_id(&mut self, sym: Symbol) -> u16 {
         if let Some(layout) = self.ir.data_layouts.get(&sym) {
             if let Some(fields) = layout.record_fields.as_ref() {
                 let key = format!("record({})", self.interner.resolve(sym));
-                return ensure_record_type(self.types, key, fields.len());
+                return ensure_record_ty(self.types, key, fields.len());
             }
             if let Some(variants) = layout.choice_variants.as_ref() {
                 let key = format!("choice({})", self.interner.resolve(sym));
-                return ensure_choice_type(self.types, key, variants.len());
+                return ensure_choice_ty(self.types, key, variants.len());
             }
         }
-        builtin_type_id_for_ref(IrTypeRef::Unknown)
+        builtin_ty_id_for_ref(IrTypeRef::Unknown)
     }
 
     fn emit_small_int(&mut self, value: i64) {
@@ -929,17 +959,16 @@ impl<'a> MethodEmitter<'a> {
         matches!(ty, IrExprTy::Scalar(IrScalarTy::Float))
     }
 
-    fn emit_tag(&mut self, tag: u16) -> EmitResult<()> {
+    fn emit_tag(&mut self, tag: u16) {
         let idx = self.constants.add(ConstantEntry::Tag(tag));
         self.instructions
             .push(Instruction::with_u16(Opcode::LdConst, idx));
-        Ok(())
     }
 
     fn emit_ld_loc(&mut self, slot: u16) {
-        if slot <= u16::from(u8::MAX) {
+        if let Ok(slot) = u8::try_from(slot) {
             self.instructions
-                .push(Instruction::with_u8(Opcode::LdLoc, slot as u8));
+                .push(Instruction::with_u8(Opcode::LdLoc, slot));
         } else {
             self.instructions
                 .push(Instruction::with_u16(Opcode::LdLocW, slot));
@@ -947,9 +976,9 @@ impl<'a> MethodEmitter<'a> {
     }
 
     fn emit_st_loc(&mut self, slot: u16) {
-        if slot <= u16::from(u8::MAX) {
+        if let Ok(slot) = u8::try_from(slot) {
             self.instructions
-                .push(Instruction::with_u8(Opcode::StLoc, slot as u8));
+                .push(Instruction::with_u8(Opcode::StLoc, slot));
         } else {
             self.instructions
                 .push(Instruction::with_u16(Opcode::StLocW, slot));

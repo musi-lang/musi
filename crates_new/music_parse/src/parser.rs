@@ -36,7 +36,7 @@ pub fn parse(source_id: SourceId, lexed: &LexedSource<'_>) -> ParsedSource {
     let source = lexed.source();
     let mut builder =
         SyntaxTreeBuilder::with_capacity(source_id, tokens.len().saturating_mul(2), tokens.len());
-    let mut errors = Vec::new();
+    let mut errors = vec![];
 
     let mut parser = Parser::new(source_id, source, tokens, &mut builder, &mut errors);
     let mut children = parser.parse_root_children();
@@ -73,7 +73,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
             pos: 0,
             builder,
             errors,
-            comparison_exprs: Vec::new(),
+            comparison_exprs: vec![],
             lparen_match,
             quote_depth: 0,
         }
@@ -513,7 +513,7 @@ fn same_kind(left: &TokenKind, right: &TokenKind) -> bool {
 
 fn compute_lparen_matches(tokens: &[Token]) -> Vec<Option<usize>> {
     let mut matches = vec![None; tokens.len()];
-    let mut stack = Vec::new();
+    let mut stack = vec![];
 
     for (index, token) in tokens.iter().enumerate() {
         match token.kind {

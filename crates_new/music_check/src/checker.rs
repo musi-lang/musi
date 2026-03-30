@@ -14,72 +14,72 @@ use super::lang::LangItems;
 use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
 
 #[derive(Debug, Clone)]
-pub(crate) struct ResumeCtx {
-    pub(crate) arg: SemTyId,
-    pub(crate) result: SemTyId,
+pub struct ResumeCtx {
+    pub arg: SemTyId,
+    pub result: SemTyId,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct BuiltinTys {
-    pub(crate) error: SemTyId,
-    pub(crate) unknown: SemTyId,
-    pub(crate) any: SemTyId,
+pub struct BuiltinTys {
+    pub error: SemTyId,
+    pub unknown: SemTyId,
+    pub any: SemTyId,
 
-    pub(crate) type_: SemTyId,
-    pub(crate) syntax: SemTyId,
-    pub(crate) empty: SemTyId,
-    pub(crate) unit: SemTyId,
-    pub(crate) bool_: SemTyId,
-    pub(crate) int_: SemTyId,
-    pub(crate) float_: SemTyId,
-    pub(crate) string_: SemTyId,
+    pub type_: SemTyId,
+    pub syntax: SemTyId,
+    pub empty: SemTyId,
+    pub unit: SemTyId,
+    pub bool_: SemTyId,
+    pub int_: SemTyId,
+    pub float_: SemTyId,
+    pub string_: SemTyId,
 
-    pub(crate) cstring: SemTyId,
-    pub(crate) cptr: SemTyId,
+    pub cstring: SemTyId,
+    pub cptr: SemTyId,
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct FlowState {
-    pub(crate) expr_tys: HashMap<HirExprId, SemTyId>,
-    pub(crate) callable_effs: HashMap<HirExprId, EffectRow>,
-    pub(crate) resume_stack: Vec<ResumeCtx>,
+pub struct FlowState {
+    pub expr_tys: HashMap<HirExprId, SemTyId>,
+    pub callable_effs: HashMap<HirExprId, EffectRow>,
+    pub resume_stack: Vec<ResumeCtx>,
 }
 
-pub(crate) struct CheckerCtx<'a> {
-    pub(crate) source_id: SourceId,
-    pub(crate) sources: &'a SourceMap,
-    pub(crate) interner: &'a mut Interner,
-    pub(crate) names: &'a NameResolution,
-    pub(crate) binding_by_site: HashMap<NameSite, NameBindingId>,
-    pub(crate) store: &'a mut HirStore,
-    pub(crate) errors: &'a mut Vec<SemaError>,
+pub struct CheckerCtx<'a> {
+    pub source_id: SourceId,
+    pub sources: &'a SourceMap,
+    pub interner: &'a mut Interner,
+    pub names: &'a NameResolution,
+    pub binding_by_site: HashMap<NameSite, NameBindingId>,
+    pub store: &'a mut HirStore,
+    pub errors: &'a mut Vec<SemaError>,
 }
 
-pub(crate) struct CheckerState {
-    pub(crate) semtys: SemTys,
-    pub(crate) env: TypeEnv,
-    pub(crate) known: KnownSymbols,
-    pub(crate) lang: LangItems,
-    pub(crate) builtins: BuiltinTys,
-    pub(crate) flow: FlowState,
-    pub(crate) binding_mut: HashMap<NameBindingId, bool>,
-    pub(crate) opaque_imports: HashSet<Symbol>,
+pub struct CheckerState {
+    pub semtys: SemTys,
+    pub env: TypeEnv,
+    pub known: KnownSymbols,
+    pub lang: LangItems,
+    pub builtins: BuiltinTys,
+    pub flow: FlowState,
+    pub binding_mut: HashMap<NameBindingId, bool>,
+    pub opaque_imports: HashSet<Symbol>,
 }
 
-pub(crate) struct Checker<'a> {
-    pub(crate) ctx: CheckerCtx<'a>,
-    pub(crate) state: CheckerState,
+pub struct Checker<'a> {
+    pub ctx: CheckerCtx<'a>,
+    pub state: CheckerState,
 }
 
-impl<'a> Checker<'a> {
-    pub(crate) fn new(
+impl Checker<'_> {
+    pub fn new<'a>(
         source_id: SourceId,
         sources: &'a SourceMap,
         interner: &'a mut Interner,
         names: &'a NameResolution,
         store: &'a mut HirStore,
         errors: &'a mut Vec<SemaError>,
-    ) -> Self {
+    ) -> Checker<'a> {
         let known = KnownSymbols::new(interner);
         let mut semtys = SemTys::new();
         let error = semtys.alloc(SemTy::Error);
@@ -97,7 +97,7 @@ impl<'a> Checker<'a> {
         let cstring = builtin_named(&mut semtys, known.cstring);
         let cptr = builtin_named(&mut semtys, known.cptr);
 
-        let mut checker = Self {
+        let mut checker = Checker {
             ctx: CheckerCtx {
                 source_id,
                 sources,
@@ -145,7 +145,7 @@ impl<'a> Checker<'a> {
         checker
     }
 
-    pub(crate) fn check_module(&mut self, root: HirExprId) -> IrModuleInfo {
+    pub fn check_module(&mut self, root: HirExprId) -> IrModuleInfo {
         self.validate_public_attrs();
         let _ = self.synth_expr(root);
         self.finalize_expr_types();
@@ -167,11 +167,11 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn record_type(&mut self, expr_id: HirExprId, ty: SemTyId) {
+    pub fn record_type(&mut self, expr_id: HirExprId, ty: SemTyId) {
         let _prev = self.state.flow.expr_tys.insert(expr_id, ty);
     }
 
-    pub(crate) fn error(&mut self, span: Span, kind: SemaErrorKind) {
+    pub fn error(&mut self, span: Span, kind: SemaErrorKind) {
         self.ctx.errors.push(SemaError {
             kind,
             source_id: self.ctx.source_id,
@@ -179,20 +179,20 @@ impl<'a> Checker<'a> {
         });
     }
 
-    pub(crate) fn error_if_opaque_repr_access(&mut self, span: Span, ty_name: Symbol) -> bool {
+    pub fn error_if_opaque_repr_access(&mut self, span: Span, ty_name: Symbol) -> bool {
         if !self.state.opaque_imports.contains(&ty_name) {
             return false;
         }
         self.error(
             span,
             SemaErrorKind::OpaqueTypeBlocksRepresentation {
-                name: self.ctx.interner.resolve(ty_name).to_string(),
+                name: self.ctx.interner.resolve(ty_name).to_owned(),
             },
         );
         true
     }
 
-    pub(crate) fn binding_for_use(&self, span: Span) -> Option<NameBindingId> {
+    pub fn binding_for_use(&self, span: Span) -> Option<NameBindingId> {
         self.ctx
             .names
             .refs
@@ -200,19 +200,19 @@ impl<'a> Checker<'a> {
             .copied()
     }
 
-    pub(crate) fn binding_for_def(&self, span: Span) -> Option<NameBindingId> {
+    pub fn binding_for_def(&self, span: Span) -> Option<NameBindingId> {
         self.ctx
             .binding_by_site
             .get(&site(self.ctx.source_id, span))
             .copied()
     }
 
-    pub(crate) fn mark_binding_mut(&mut self, binding: NameBindingId, mutable: bool) {
+    pub fn mark_binding_mut(&mut self, binding: NameBindingId, mutable: bool) {
         let _prev = self.state.binding_mut.insert(binding, mutable);
     }
 
     #[must_use]
-    pub(crate) fn binding_is_mut(&self, binding: NameBindingId) -> bool {
+    pub fn binding_is_mut(&self, binding: NameBindingId) -> bool {
         self.state
             .binding_mut
             .get(&binding)
@@ -220,8 +220,8 @@ impl<'a> Checker<'a> {
             .unwrap_or(false)
     }
 
-    pub(crate) fn mark_pat_bindings_mut(&mut self, pat: HirPatId, mutable: bool) {
-        let mut sites = Vec::new();
+    pub fn mark_pat_bindings_mut(&mut self, pat: HirPatId, mutable: bool) {
+        let mut sites = vec![];
         self.collect_bind_sites(pat, &mut sites);
         for span in sites {
             if let Some(binding) = self.binding_for_def(span) {
@@ -230,7 +230,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn slice(&self, span: Span) -> &str {
+    pub fn slice(&self, span: Span) -> &str {
         let Some(source) = self.ctx.sources.get(self.ctx.source_id) else {
             return "";
         };
@@ -239,7 +239,7 @@ impl<'a> Checker<'a> {
         source.text().get(start..end).unwrap_or("")
     }
 
-    pub(crate) fn decode_string_span(&self, span: Span) -> String {
+    pub fn decode_string_span(&self, span: Span) -> String {
         string_lit::decode(self.slice(span))
     }
 

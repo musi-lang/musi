@@ -21,7 +21,7 @@ pub use expr::{
     HirConstraintKind, HirDeclMods, HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirExprKind,
     HirFStringPart, HirFieldDef, HirHandleClause, HirLit, HirLitKind, HirMemberDef, HirMemberKey,
     HirParam, HirPrefixOp, HirRecordItem, HirRecordPatField, HirSplice, HirSpliceId, HirSpliceKind,
-    HirTypeParam, HirVariantDef,
+    HirTyParam, HirVariantDef,
 };
 pub use module::{HirModule, HirStore};
 pub use origin::HirOrigin;

@@ -8,6 +8,11 @@ Policy:
 - Diagnostics are user-facing: error kinds, diag codes, and message style are part of the API contract.
 - Internal modules may change freely as long as the crate root surface remains coherent.
 
+Notes:
+
+- There is no `music_shared` crate in `crates_new/`. Shared foundation types live in `music_basic`.
+- There is no `music_arena` crate in `crates_new/`. Arena and typed index storage live in `music_storage`.
+
 ## `music_basic`
 
 Exports (crate root):
@@ -98,6 +103,42 @@ Exports:
 - `analyze_module`, `AnalyzedModule`
 - errors: `SemaError`, `SemaErrorKind`, `SemaErrorKinds`, `SemaErrors`
 - effect/type surface used by sema: `EffectRow`, `EffectKey`, `SemTy*`
+
+## `music_ir`
+
+Exports:
+
+- layout: `IrDataLayout`, `IrDataLayouts`
+- module facts: `IrModuleInfo`
+- expression typing surface: `IrExprTy`, `IrScalarTy`, `IrTypeRef`
+
+## `music_codegen`
+
+Exports:
+
+- entrypoints: `emit_single_program`, `emit_program`
+- model: `EmitProgram`, `EmitModule`, `ProgramArtifact`
+- errors: `EmitError`, `EmitErrorKind`, `EmitResult`
+
+Contracts:
+
+- `emit_program` takes `&EmitProgram` and does not take ownership of input.
+
+## `music_session`
+
+Exports:
+
+- session: `Session`
+- import env: `SessionImportEnv`, `SessionImportModule`
+- convenience results: `SessionParsedSource`, `SessionAnalyzedSource`
+
+## `music_fe`
+
+Exports:
+
+- compilation entrypoints: `compile_entry`, `compile_entry_binary`
+- model: `CompiledProgram`
+- errors: `FrontendError`, `FrontendErrorKind`, `FrontendResult`
 
 ## `music_il`
 

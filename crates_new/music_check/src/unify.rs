@@ -12,10 +12,7 @@ pub struct UnifyMismatch {
 #[must_use]
 pub fn resolve(tys: &SemTys, ty: SemTyId) -> SemTyId {
     match tys.get(ty) {
-        SemTy::InferVar(var) => tys
-            .infer_binding(*var)
-            .map(|b| resolve(tys, b))
-            .unwrap_or(ty),
+        SemTy::InferVar(var) => tys.infer_binding(*var).map_or(ty, |b| resolve(tys, b)),
         _ => ty,
     }
 }
@@ -27,6 +24,14 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
         return Ok(left);
     }
 
+    unify_resolved(tys, left, right)
+}
+
+fn unify_resolved(
+    tys: &mut SemTys,
+    left: SemTyId,
+    right: SemTyId,
+) -> Result<SemTyId, UnifyMismatch> {
     match (tys.get(left).clone(), tys.get(right).clone()) {
         (SemTy::Error, _) | (_, SemTy::Error) => Ok(tys.alloc(SemTy::Error)),
         (SemTy::Unknown, _) | (_, SemTy::Unknown) => Ok(tys.alloc(SemTy::Unknown)),
@@ -52,17 +57,9 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
                 name: b,
                 args: b_args,
             },
-        ) if a == b && a_args.len() == b_args.len() => {
-            for (a, b) in a_args.iter().copied().zip(b_args.iter().copied()) {
-                let _ = unify(tys, a, b)?;
-            }
-            Ok(left)
-        }
+        ) if a == b && a_args.len() == b_args.len() => unify_zipped(tys, left, &a_args, &b_args),
         (SemTy::Tuple { items: a }, SemTy::Tuple { items: b }) if a.len() == b.len() => {
-            for (a, b) in a.iter().copied().zip(b.iter().copied()) {
-                let _ = unify(tys, a, b)?;
-            }
-            Ok(left)
+            unify_zipped(tys, left, &a, &b)
         }
         (
             SemTy::Array {
@@ -99,7 +96,6 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
             }
             // Allow `T -> U` to unify with `T ~> U` by keeping the effectful flavor.
             match (a_flavor, b_flavor) {
-                (HirArrowFlavor::Effectful, HirArrowFlavor::Pure) => Ok(left),
                 (HirArrowFlavor::Pure, HirArrowFlavor::Effectful) => Ok(right),
                 _ => Ok(left),
             }
@@ -125,15 +121,29 @@ pub fn unify(tys: &mut SemTys, left: SemTyId, right: SemTyId) -> Result<SemTyId,
             Ok(left)
         }
         (SemTy::Record { fields: a }, SemTy::Record { fields: b }) if a.keys().eq(b.keys()) => {
-            for (k, a_ty) in a {
-                let b_ty = b.get(&k).copied().expect("record keys already matched");
-                let _ = unify(tys, a_ty, b_ty)?;
+            for (k, a_ty) in &a {
+                let Some(&b_ty) = b.get(k) else {
+                    return Err(UnifyMismatch { left, right });
+                };
+                let _ = unify(tys, *a_ty, b_ty)?;
             }
             Ok(left)
         }
 
         _ => Err(UnifyMismatch { left, right }),
     }
+}
+
+fn unify_zipped(
+    tys: &mut SemTys,
+    out: SemTyId,
+    left: &[SemTyId],
+    right: &[SemTyId],
+) -> Result<SemTyId, UnifyMismatch> {
+    for (&a, &b) in left.iter().zip(right.iter()) {
+        let _ = unify(tys, a, b)?;
+    }
+    Ok(out)
 }
 
 fn array_dims_compatible(left: &[HirDim], right: &[HirDim]) -> bool {
@@ -180,7 +190,7 @@ fn select_array_type(
     }
 }
 
-impl<'a> Checker<'a> {
+impl Checker<'_> {
     fn read_ty(&self, ty: SemTyId) -> SemTyId {
         let mut ty = resolve(&self.state.semtys, ty);
         loop {

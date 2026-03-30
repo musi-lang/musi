@@ -23,8 +23,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         let head = cursor
             .bump_token()
-            .map(|t| t.kind().clone())
-            .unwrap_or(TokenKind::KwLet);
+            .map_or(TokenKind::KwLet, |t| t.kind().clone());
 
         match head {
             TokenKind::KwLet => self.lower_let_member(origin, cursor),
@@ -51,9 +50,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let params_node = cursor.eat_node(SyntaxNodeKind::ParamList);
 
         self.push_scope();
-        let params = params_node
-            .map(|list| self.lower_param_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let params = match params_node {
+            Some(list) => self.lower_param_list(list),
+            None => Box::new([]),
+        };
 
         let ret = if cursor.at_token(&TokenKind::Colon) {
             let _ = cursor.bump_token();
@@ -107,18 +107,19 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let params_node = cursor.eat_node(SyntaxNodeKind::ParamList);
 
         self.push_scope();
-        let params = params_node
-            .map(|list| self.lower_param_list(list))
-            .unwrap_or_else(|| Vec::new().into_boxed_slice());
+        let params = match params_node {
+            Some(list) => self.lower_param_list(list),
+            None => Box::new([]),
+        };
 
         // Skip ':=' token.
         let _ = cursor.eat_token(&TokenKind::ColonEq);
 
+        let error_expr = self.alloc_expr(origin, HirExprKind::Error);
         let value = cursor
             .bump_node()
             .filter(|n| n.kind().is_expr())
-            .map(|expr| self.lower_expr(expr))
-            .unwrap_or_else(|| self.alloc_expr(origin, HirExprKind::Error));
+            .map_or(error_expr, |expr| self.lower_expr(expr));
 
         self.pop_scope();
 
@@ -148,15 +149,16 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let op_tok = cursor.bump_token();
         let _ = cursor.eat_token(&TokenKind::RParen);
 
-        let name = op_tok
-            .map(|t| self.intern_op_token(t))
-            .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        let name = op_tok.map_or_else(
+            || Ident::dummy(Symbol::synthetic(u32::MAX)),
+            |t| self.intern_op_token(t),
+        );
 
         HirCallableName { name }
     }
 
     pub(super) fn lower_param_list(&mut self, node: SyntaxNode<'tree>) -> HirParams {
-        let mut params = Vec::new();
+        let mut params = vec![];
         for param_node in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::Param)

@@ -3,7 +3,6 @@
 mod tables;
 
 use music_basic::Span;
-use smallvec::SmallVec;
 use std::collections::VecDeque;
 
 use crate::Cursor;
@@ -620,7 +619,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn collect_leading_trivia(&mut self) -> (Trivias, Option<LexError>) {
-        let mut trivia = SmallVec::new();
+        let mut trivia = Trivias::new();
 
         loop {
             match self.cursor.peek() {
@@ -648,7 +647,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn collect_trailing_trivia(&mut self) -> (Trivias, Option<LexError>) {
-        let mut trivia = SmallVec::new();
+        let mut trivia = Trivias::new();
 
         loop {
             match self.cursor.peek() {
@@ -766,7 +765,7 @@ impl Iterator for Lexer<'_> {
                 kind: TokenKind::Eof,
                 span: eof_span,
                 leading_trivia,
-                trailing_trivia: SmallVec::new(),
+                trailing_trivia: Trivias::new(),
             }));
         }
 

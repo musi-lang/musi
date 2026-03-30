@@ -12,5 +12,5 @@ pub type HirMemberDefs = Box<[HirMemberDef]>;
 pub type HirParams = Box<[HirParam]>;
 pub type HirPatIds = Box<[HirPatId]>;
 pub type HirRecordItems = Box<[HirRecordItem]>;
-pub type HirTypeParams = Box<[HirTypeParam]>;
+pub type HirTypeParams = Box<[HirTyParam]>;
 pub type HirTyIds = Box<[HirTyId]>;

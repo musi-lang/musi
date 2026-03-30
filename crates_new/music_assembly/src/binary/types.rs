@@ -38,18 +38,18 @@ pub(super) fn decode_types(
 }
 
 pub(super) fn encode_types(
-    types: &TypeDescriptors,
+    ty_descs: &TypeDescriptors,
     strings: &StringIndex,
 ) -> CodecResult<SectionBytes> {
-    if types.is_empty() {
+    if ty_descs.is_empty() {
         return Ok(vec![]);
     }
 
     let mut output = vec![];
-    let count = u16::try_from(types.len()).map_err(|_| CodecError::ModuleTooLarge)?;
+    let count = u16::try_from(ty_descs.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     output.extend_from_slice(&count.to_le_bytes());
 
-    for descriptor in types {
+    for descriptor in ty_descs {
         output.extend_from_slice(&descriptor.id.to_le_bytes());
         output.extend_from_slice(&strings.offset(&descriptor.key)?.to_le_bytes());
         output.push(descriptor.kind.to_byte());

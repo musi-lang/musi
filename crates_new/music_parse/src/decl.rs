@@ -348,7 +348,7 @@ impl Parser<'_, '_, '_> {
         }
         if self.at(&TokenKind::LBracket) {
             let open = self.advance_element();
-            let params = self.parse_type_param_list_contents(&TokenKind::RBracket)?;
+            let params = self.parse_ty_param_list_contents(&TokenKind::RBracket)?;
             let close = self.expect_token(&TokenKind::RBracket)?;
             let list = self.wrap_list(SyntaxNodeKind::TypeParamList, open, params, close);
             attrs.push(SyntaxElementId::Node(list));
@@ -399,7 +399,7 @@ impl Parser<'_, '_, '_> {
 
         if self.at(&TokenKind::LBracket) {
             let open = self.advance_element();
-            let params = self.parse_type_param_list_contents(&TokenKind::RBracket)?;
+            let params = self.parse_ty_param_list_contents(&TokenKind::RBracket)?;
             let close = self.expect_token(&TokenKind::RBracket)?;
             let list = self.wrap_list(SyntaxNodeKind::TypeParamList, open, params, close);
             children.push(SyntaxElementId::Node(list));
@@ -635,7 +635,7 @@ impl Parser<'_, '_, '_> {
         attrs.push(self.expect_token(&TokenKind::KwInstance)?);
         if self.at(&TokenKind::LBracket) {
             let open = self.advance_element();
-            let params = self.parse_type_param_list_contents(&TokenKind::RBracket)?;
+            let params = self.parse_ty_param_list_contents(&TokenKind::RBracket)?;
             let close = self.expect_token(&TokenKind::RBracket)?;
             let list = self.wrap_list(SyntaxNodeKind::TypeParamList, open, params, close);
             attrs.push(SyntaxElementId::Node(list));
@@ -717,7 +717,7 @@ impl Parser<'_, '_, '_> {
             .push_node_from_children(SyntaxNodeKind::Param, children))
     }
 
-    pub(crate) fn parse_type_param_list_contents(
+    pub(crate) fn parse_ty_param_list_contents(
         &mut self,
         close: &TokenKind,
     ) -> ParseResult<Vec<SyntaxElementId>> {

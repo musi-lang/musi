@@ -85,7 +85,7 @@ fn test_instruction_builders_store_expected_operands() {
         Operand::Wide(9, 2)
     );
     assert_eq!(
-        Instruction::with_type_len(Opcode::SeqNew, 3, 4).operand,
+        Instruction::with_ty_len(Opcode::SeqNew, 3, 4).operand,
         Operand::TypeLen(3, 4)
     );
     assert_eq!(

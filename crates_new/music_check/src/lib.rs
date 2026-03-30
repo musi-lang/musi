@@ -61,7 +61,7 @@ pub fn analyze_module(
         errors: resolve_errors,
     } = music_resolve::resolve_module(tree, sources, interner, options);
 
-    let mut check_errors = Vec::new();
+    let mut check_errors = vec![];
     let mut checker = Checker::new(
         tree.source_id(),
         sources,
@@ -82,11 +82,11 @@ pub fn analyze_module(
     }
 }
 
-fn dummy_origin(span: Span) -> HirOrigin {
+const fn dummy_origin(span: Span) -> HirOrigin {
     HirOrigin::new(span, None)
 }
 
-fn site(source_id: SourceId, span: Span) -> NameSite {
+const fn site(source_id: SourceId, span: Span) -> NameSite {
     NameSite::new(source_id, span)
 }
 

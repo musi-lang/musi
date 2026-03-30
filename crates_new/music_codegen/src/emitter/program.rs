@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::Path;
 
-use music_basic::{SourceId, SourceMap, Span, path as import_path, string_lit};
+use music_basic::{Source, SourceId, SourceMap, Span, path as import_path, string_lit};
 use music_check::AnalyzedModule;
 use music_hir::{HirExprKind, HirModule, HirPatKind};
 use music_il::{
@@ -16,8 +16,9 @@ use music_names::{
 use crate::errors::EmitResult;
 use crate::model::EmitModule;
 
+use super::context::{EmitMaps, EmitPools, ModuleExportKey};
 use super::function::FunctionEmitter;
-use super::types::builtin_type_descriptors;
+use super::ty::builtin_ty_descriptors;
 
 pub(super) struct ProgramEmitter<'a> {
     interner: &'a Interner,
@@ -31,7 +32,7 @@ pub(super) struct ProgramEmitter<'a> {
 
     global_by_binding: HashMap<NameBindingId, u16>,
     import_global_by_binding: HashMap<NameBindingId, u16>,
-    module_export_globals: HashMap<(String, Symbol), u16>,
+    module_export_globals: HashMap<ModuleExportKey, u16>,
 }
 
 impl<'a> ProgramEmitter<'a> {
@@ -41,9 +42,9 @@ impl<'a> ProgramEmitter<'a> {
             sources,
             entry_path,
             constants: ConstantPool::new(),
-            methods: Vec::new(),
-            globals: Vec::new(),
-            types: builtin_type_descriptors(),
+            methods: vec![],
+            globals: vec![],
+            types: builtin_ty_descriptors(),
             global_by_binding: HashMap::new(),
             import_global_by_binding: HashMap::new(),
             module_export_globals: HashMap::new(),
@@ -95,8 +96,7 @@ impl<'a> ProgramEmitter<'a> {
         let from_path = self
             .sources
             .get(analyzed.module.source_id)
-            .map(|s| s.path())
-            .unwrap_or_else(|| Path::new(""));
+            .map_or_else(|| Path::new(""), Source::path);
 
         for (import_span, import_path_span, exports) in import_exprs {
             let raw_import_path =
@@ -172,7 +172,7 @@ impl<'a> ProgramEmitter<'a> {
         path: &str,
         analyzed: &AnalyzedModule,
         entry_index: usize,
-    ) -> EmitResult<()> {
+    ) -> EmitResult {
         let root = analyzed
             .module
             .store
@@ -183,30 +183,35 @@ impl<'a> ProgramEmitter<'a> {
             return Ok(());
         };
 
-        let mut entry_instructions = Vec::new();
+        let mut entry_instructions = vec![];
         let mut entry_locals_max = 0usize;
 
-        let mut f = FunctionEmitter::new(
-            self.interner,
-            self.sources,
-            analyzed,
-            &self.global_by_binding,
-            &self.import_global_by_binding,
-            &self.module_export_globals,
-            &mut self.constants,
-            &mut self.methods,
-            &mut self.types,
-        );
+        {
+            let mut f = FunctionEmitter::new(
+                self.interner,
+                self.sources,
+                analyzed,
+                EmitMaps {
+                    globals_by_binding: &self.global_by_binding,
+                    import_globals_by_binding: &self.import_global_by_binding,
+                    module_export_globals: &self.module_export_globals,
+                },
+                EmitPools {
+                    constants: &mut self.constants,
+                    methods: &mut self.methods,
+                    types: &mut self.types,
+                },
+            );
 
-        for expr_id in exprs.iter().copied() {
-            let expr = analyzed.module.store.exprs.get(expr_id).clone();
-            match expr.kind {
-                HirExprKind::Let {
+            for expr_id in exprs.iter().copied() {
+                let expr = analyzed.module.store.exprs.get(expr_id).clone();
+                if let HirExprKind::Let {
                     has_params,
                     pat,
                     value,
                     ..
-                } => {
+                } = expr.kind
+                {
                     let pat = analyzed.module.store.pats.get(pat).clone();
                     let HirPatKind::Bind { name, .. } = pat.kind else {
                         continue;
@@ -240,18 +245,16 @@ impl<'a> ProgramEmitter<'a> {
                         entry_locals_max = entry_locals_max.max(locals);
                         entry_instructions.push(Instruction::with_u16(Opcode::StGlob, global_idx));
                     }
-                }
-                _ => {
+                } else {
                     let locals = f.emit_expr_into(&mut entry_instructions, expr_id)?;
                     entry_locals_max = entry_locals_max.max(locals);
                     entry_instructions.push(Instruction::basic(Opcode::Pop));
                 }
             }
-        }
 
-        // Ensure an explicit `ret`.
-        entry_instructions.push(Instruction::basic(Opcode::Ret));
-        drop(f);
+            // Ensure an explicit `ret`.
+            entry_instructions.push(Instruction::basic(Opcode::Ret));
+        }
 
         let entry = self
             .methods
@@ -272,14 +275,16 @@ impl<'a> ProgramEmitter<'a> {
         opaque: bool,
     ) -> u16 {
         let idx = u16::try_from(self.globals.len()).expect("global count fits in u16");
-        let mut global_name = format!("{module_path}::{}", self.interner.resolve(name));
-        if exported && module_path == self.entry_path {
-            global_name = self.interner.resolve(name).to_owned();
-        }
+        let exported_here = exported && module_path == self.entry_path;
+        let global_name = if exported_here {
+            self.interner.resolve(name).to_owned()
+        } else {
+            format!("{module_path}::{}", self.interner.resolve(name))
+        };
         self.globals.push(GlobalEntry {
             name: global_name,
-            exported: exported && module_path == self.entry_path,
-            opaque: opaque && exported && module_path == self.entry_path,
+            exported: exported_here,
+            opaque: opaque && exported_here,
         });
         idx
     }
@@ -299,8 +304,8 @@ fn find_def_binding(
 }
 
 fn collect_import_exprs(module: &HirModule) -> Vec<(Span, Span, SymbolSlice)> {
-    let mut out = Vec::new();
-    for (_id, expr) in module.store.exprs.iter() {
+    let mut out = vec![];
+    for (_id, expr) in &module.store.exprs {
         let HirExprKind::Import { path, exports } = &expr.kind else {
             continue;
         };

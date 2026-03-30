@@ -1,13 +1,13 @@
 use music_il::descriptors;
-use music_il::{TypeDescriptor, TypeKind};
+use music_il::{TypeDescriptor, TypeDescriptors, TypeKind};
 use music_ir::{IrScalarTy, IrTypeRef};
 
-pub(super) fn builtin_type_descriptors() -> Vec<TypeDescriptor> {
+pub(super) const fn builtin_ty_descriptors() -> TypeDescriptors {
     // Keep builtin table empty for now; SEAM reserves ids in `music_il::descriptors::builtins`.
     Vec::new()
 }
 
-pub(super) fn ensure_tuple_type(types: &mut Vec<TypeDescriptor>, arity: usize) -> u16 {
+pub(super) fn ensure_tuple_ty(types: &mut TypeDescriptors, arity: usize) -> u16 {
     let id =
         descriptors::FIRST_EMITTED_TYPE_ID.saturating_add(u16::try_from(types.len()).unwrap_or(0));
     types.push(TypeDescriptor {
@@ -19,8 +19,8 @@ pub(super) fn ensure_tuple_type(types: &mut Vec<TypeDescriptor>, arity: usize) -
     id
 }
 
-pub(super) fn ensure_record_type(
-    types: &mut Vec<TypeDescriptor>,
+pub(super) fn ensure_record_ty(
+    types: &mut TypeDescriptors,
     key: String,
     field_count: usize,
 ) -> u16 {
@@ -35,8 +35,8 @@ pub(super) fn ensure_record_type(
     id
 }
 
-pub(super) fn ensure_choice_type(
-    types: &mut Vec<TypeDescriptor>,
+pub(super) fn ensure_choice_ty(
+    types: &mut TypeDescriptors,
     key: String,
     variant_count: usize,
 ) -> u16 {
@@ -51,7 +51,7 @@ pub(super) fn ensure_choice_type(
     id
 }
 
-pub(super) fn builtin_type_id_for_ref(ty: IrTypeRef) -> u16 {
+pub(super) const fn builtin_ty_id_for_ref(ty: IrTypeRef) -> u16 {
     match ty {
         IrTypeRef::Scalar(s) => match s {
             IrScalarTy::Unit => descriptors::BUILTIN_TYPE_UNIT,
@@ -61,8 +61,7 @@ pub(super) fn builtin_type_id_for_ref(ty: IrTypeRef) -> u16 {
             IrScalarTy::String => descriptors::BUILTIN_TYPE_STRING,
         },
         IrTypeRef::Any => descriptors::BUILTIN_TYPE_ANY,
-        IrTypeRef::Unknown => descriptors::BUILTIN_TYPE_UNKNOWN,
         IrTypeRef::Error => descriptors::BUILTIN_TYPE_NEVER,
-        IrTypeRef::Named(_) => descriptors::BUILTIN_TYPE_UNKNOWN,
+        IrTypeRef::Unknown | IrTypeRef::Named(_) => descriptors::BUILTIN_TYPE_UNKNOWN,
     }
 }
