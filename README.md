@@ -3,7 +3,7 @@
 A programming language with a type system, effect handling, and a stack-based bytecode VM.
 
 > [!WARNING]
-> Musi is `v0.1.0-rc1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
+> Musi is `v0.1.0-alpha.1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
 
 ## What Musi Is
 
@@ -136,21 +136,22 @@ The canonical grammar lives in `grammar.abnf`. Historical pre-reduction docs liv
 
 ## Project Structure
 
-| Crate           | Role                                                         |
-| --------------- | ------------------------------------------------------------ |
-| `musi`          | CLI                                                          |
-| `music_shared`  | spans, sources, diagnostics, interner                        |
-| `music_lex`     | lexer                                                        |
-| `music_ast`     | AST                                                          |
-| `music_parse`   | parser                                                       |
-| `music_resolve` | module/name resolution                                       |
-| `music_hir`     | typed frontend facade (`TypedModule` / `TypedProject`)       |
-| `music_sema`    | semantic analysis                                            |
-| `music_codegen` | bytecode emission and `.seam` writing                        |
-| `music_il`      | bytecode and format contract                                 |
-| `musi_vm`       | loader and VM                                                |
-| `music_owned`   | compiler-owned prelude, builtin descriptors, `musi:` modules |
-| `music_config`  | `musi.json` parsing                                          |
+The clean-room crate structure lives under `crates_new/` and is the authoritative ownership map.
+
+| Crate            | Role                                        |
+| ---------------- | ------------------------------------------- |
+| `music_basic`    | spans, sources, diagnostics, literals       |
+| `music_storage`  | arenas and typed indices                    |
+| `music_names`    | symbols and name-resolution graph           |
+| `music_known`    | compiler-known surface names                |
+| `music_lex`      | lexer                                       |
+| `music_ast`      | full-fidelity green/red syntax tree         |
+| `music_parse`    | parser (tokens to syntax tree)              |
+| `music_resolve`  | import/env resolution + AST to HIR lowering |
+| `music_hir`      | typed high-level IR model                   |
+| `music_sema`     | semantic analysis (types/effects/classes)   |
+| `music_il`       | SEAM bytecode contract                      |
+| `music_assembly` | SEAM text/binary transport + validation     |
 
 ## Editor Support
 
