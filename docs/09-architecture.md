@@ -26,14 +26,14 @@ Compiler and IL crates stay under `music_*`:
 - `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
 - `music_codegen`: lowering from typed IR into `music_il`
 - `music_fe`: frontend orchestration over lex/parse/ast/names/sema/ir/codegen
-- `music_hir`: typed high-level IR data model produced by `music_sema` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
+- `music_hir`: typed high-level IR data model produced by `music_check` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
 - `music_il`: VM-facing bytecode / intermediate language contract
 - `music_known`: compiler-known builtins and intrinsic surface
 - `music_lex`: lossless lexing and token/trivia production
 - `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
 - `music_parse`: parsing token streams into syntax structures (`music_ast`)
 - `music_resolve`: import graph discovery, name resolution, export collection, and AST to HIR lowering
-- `music_sema`: type/effect/class semantic analysis and validation
+- `music_check`: type/effect/class semantic analysis and validation
 - `music_session`: compiler session state, loaded sources, and shared compile context
 - `music_storage`: arena/index storage and related typed storage mechanics
 
@@ -50,7 +50,7 @@ This naming is part of the architecture contract:
 - `musi_*` owns project loading, tooling, and runtime embedding
 - diagnostics stay inside `music_basic`
 - symbols, interning, and identifiers stay inside `music_names`
-- `music_names` and `music_sema` stay separate
+- `music_names` and `music_check` stay separate
 - `music_il` and `music_assembly` are the locked SEAM pair
 
 The clean-room crate layout is also locked:

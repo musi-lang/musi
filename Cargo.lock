@@ -273,6 +273,21 @@ name = "music_basic"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "music_check"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_ast",
+ "music_basic",
+ "music_hir",
+ "music_known",
+ "music_lex",
+ "music_names",
+ "music_parse",
+ "music_resolve",
+ "thiserror",
+]
+
+[[package]]
 name = "music_hir"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -334,21 +349,6 @@ dependencies = [
  "music_lex",
  "music_names",
  "music_parse",
- "thiserror",
-]
-
-[[package]]
-name = "music_sema"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_ast",
- "music_basic",
- "music_hir",
- "music_known",
- "music_lex",
- "music_names",
- "music_parse",
- "music_resolve",
  "thiserror",
 ]
 

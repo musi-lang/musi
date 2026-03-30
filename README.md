@@ -149,7 +149,7 @@ The clean-room crate structure lives under `crates_new/` and is the authoritativ
 | `music_parse`    | parser (tokens to syntax tree)              |
 | `music_resolve`  | import/env resolution + AST to HIR lowering |
 | `music_hir`      | typed high-level IR model                   |
-| `music_sema`     | semantic analysis (types/effects/classes)   |
+| `music_check`    | semantic analysis (types/effects/classes)   |
 | `music_il`       | SEAM bytecode contract                      |
 | `music_assembly` | SEAM text/binary transport + validation     |
 

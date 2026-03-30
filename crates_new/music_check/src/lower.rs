@@ -4,8 +4,9 @@ use music_basic::Span;
 use music_hir::{HirEffectItem, HirEffectSet, HirTy, HirTyId, HirTyKind};
 use music_names::Symbol;
 
-use super::check::Checker;
-use super::{EffectKey, EffectRow, SemTy, SemTyId, dummy_origin, unify};
+use crate::checker::Checker;
+
+use super::*;
 
 impl<'a> Checker<'a> {
     pub(super) fn lower_effect_set(

@@ -2,7 +2,7 @@ use music_hir::{HirAttr, HirAttrArgKind};
 
 use crate::SemaErrorKind;
 
-use super::check::Checker;
+use super::checker::Checker;
 
 impl<'a> Checker<'a> {
     pub(super) fn validate_public_attrs(&mut self) {

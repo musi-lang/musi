@@ -91,7 +91,7 @@ Exports:
 - options: `ResolveOptions`, `ImportEnv`
 - errors: `ResolveError`, `ResolveErrorKind`
 
-## `music_sema`
+## `music_check`
 
 Exports:
 

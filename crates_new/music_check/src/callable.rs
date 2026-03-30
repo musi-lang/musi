@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use music_hir::{HirArrowFlavor, HirExprId, HirOrigin, HirParam, HirTyId};
 use music_names::Symbol;
 
-use super::check::Checker;
+use super::checker::Checker;
 use super::env::ValueScheme;
 use super::{EffectRow, SemTy, SemTyId};
 

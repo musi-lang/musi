@@ -7,7 +7,7 @@ use music_names::Symbol;
 
 use crate::SemaErrorKind;
 
-use super::check::Checker;
+use super::checker::Checker;
 
 #[derive(Debug, Default, Clone)]
 pub(super) struct LangItems {

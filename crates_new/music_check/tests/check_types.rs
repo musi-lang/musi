@@ -1,9 +1,9 @@
 use music_basic::SourceMap;
+use music_check::{analyze_module, SemaErrorKind, SemaErrorKinds, SemaErrors};
 use music_lex::Lexer;
 use music_names::Interner;
 use music_parse::parse;
 use music_resolve::ResolveOptions;
-use music_sema::{SemaErrorKind, SemaErrorKinds, SemaErrors, analyze_module};
 
 fn analyze_text(text: &str) -> SemaErrorKinds {
     analyze_text_full(text)
@@ -44,21 +44,17 @@ fn test_typechecks_simple_let_annot() {
 #[test]
 fn test_reports_type_mismatch() {
     let kinds = analyze_text("let x : Int := \"hi\"; x;");
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. }))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. })));
 }
 
 #[test]
 fn test_fstring_interpolation_requires_string_parts() {
     let kinds = analyze_text("let x := 1; f\"{x}\";");
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. }))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::TypeMismatch { .. })));
 }
 
 #[test]
@@ -76,11 +72,9 @@ let f () : Unit := perform Console.writeln("x");
 f();
 "#,
     );
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::MissingWithClause))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::MissingWithClause)));
 }
 
 #[test]
@@ -95,11 +89,9 @@ let g () : Unit := (
 g();
 "#,
     );
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::MissingWithClause))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::MissingWithClause)));
 }
 
 #[test]
@@ -113,11 +105,9 @@ let h () : Unit := g();
 h();
 "#,
     );
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::MissingWithClause))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::MissingWithClause)));
 }
 
 #[test]
@@ -175,11 +165,9 @@ handle work() with Console of (
 #[test]
 fn reports_resume_outside_op_clause() {
     let kinds = analyze_text("resume ();");
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::ResumeOutsideOpClause))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::ResumeOutsideOpClause)));
 }
 
 #[test]
@@ -192,11 +180,9 @@ let v : Opt[P] := .Some({ x := 1 });
 v?.x;
 "#,
     );
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::OptionLangItemRequired))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::OptionLangItemRequired)));
 }
 
 #[test]
@@ -227,11 +213,9 @@ let f () : Int := (
 f();
 "#,
     );
-    assert!(
-        kinds
-            .iter()
-            .any(|k| matches!(k, SemaErrorKind::MissingWithClause))
-    );
+    assert!(kinds
+        .iter()
+        .any(|k| matches!(k, SemaErrorKind::MissingWithClause)));
 }
 
 #[test]

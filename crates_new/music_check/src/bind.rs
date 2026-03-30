@@ -6,7 +6,7 @@ use music_names::Symbol;
 
 use crate::SemaErrorKind;
 
-use super::check::Checker;
+use super::checker::Checker;
 use super::env::{
     ClassOpSig, DataDef, DataFieldDef, EffectOpSig, ValueScheme, substitute_generics,
 };

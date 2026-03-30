@@ -1,5 +1,5 @@
 use super::*;
-use crate::check::Checker;
+use crate::checker::Checker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnifyMismatch {

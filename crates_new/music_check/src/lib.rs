@@ -8,7 +8,7 @@
 mod attrs;
 mod bind;
 mod callable;
-mod check;
+mod checker;
 mod effects;
 mod env;
 mod errors;
@@ -55,7 +55,7 @@ pub fn analyze_module(
     } = music_resolve::resolve_module(tree, sources, interner, options);
 
     let mut check_errors = Vec::new();
-    let mut checker = check::Checker::new(
+    let mut checker = checker::Checker::new(
         tree.source_id(),
         sources,
         interner,

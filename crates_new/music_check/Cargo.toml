@@ -1,5 +1,5 @@
 [package]
-name = "music_sema"
+name = "music_check"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

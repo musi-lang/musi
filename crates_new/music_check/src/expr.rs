@@ -15,8 +15,8 @@ use super::{
     env::{ValueScheme, substitute_generics},
 };
 
-use super::check::Checker;
-use super::check::ResumeCtx;
+use super::checker::Checker;
+use super::checker::ResumeCtx;
 
 impl<'a> Checker<'a> {
     fn union_call_effects(&mut self, callee: HirExprId, effs: &mut EffectRow) {
