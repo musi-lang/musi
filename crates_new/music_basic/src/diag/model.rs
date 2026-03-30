@@ -2,6 +2,8 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{SourceId, Span};
 
+use super::style;
+
 /// Severity level for a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagLevel {
@@ -73,10 +75,12 @@ pub struct Diag {
 
 impl Diag {
     fn with_level(level: DiagLevel, message: impl Into<String>) -> Self {
+        let message = message.into();
+        style::validate(&message);
         Self {
             level,
             code: None,
-            message: message.into(),
+            message,
             hint: None,
             labels: vec![],
             notes: vec![],
@@ -115,10 +119,12 @@ impl Diag {
         source_id: SourceId,
         message: impl Into<String>,
     ) -> Self {
+        let message = message.into();
+        style::validate(&message);
         self.labels.push(DiagLabel {
             span,
             source_id,
-            message: message.into(),
+            message,
         });
         self
     }
@@ -133,14 +139,18 @@ impl Diag {
     /// Attach a short fix-it hint.
     #[must_use]
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
-        self.hint = Some(hint.into());
+        let hint = hint.into();
+        style::validate(&hint);
+        self.hint = Some(hint);
         self
     }
 
     /// Attach a note to this diagnostic.
     #[must_use]
     pub fn with_note(mut self, message: impl Into<String>) -> Self {
-        self.notes.push(message.into());
+        let message = message.into();
+        style::validate(&message);
+        self.notes.push(message);
         self
     }
 }

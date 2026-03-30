@@ -20,7 +20,7 @@ fn builder_chain() {
     let diag = Diag::error("expected ';' after expression")
         .with_code(DiagCode::new(2001))
         .with_label(Span::new(16, 17), source_id, "here")
-        .with_note("add a semicolon");
+        .with_note("add semicolon");
 
     assert_eq!(diag.level, DiagLevel::Error);
     assert_eq!(diag.code, Some(DiagCode::new(2001)));
@@ -28,7 +28,7 @@ fn builder_chain() {
     assert_eq!(diag.labels.len(), 1);
     assert_eq!(diag.labels[0].message, "here");
     assert_eq!(diag.notes.len(), 1);
-    assert_eq!(diag.notes[0], "add a semicolon");
+    assert_eq!(diag.notes[0], "add semicolon");
 }
 
 #[test]
@@ -100,7 +100,8 @@ fn note_level_produces_correct_label() {
 fn label_message_appears_after_caret() {
     let (sources, source_id) = make_source_map();
     let diag =
-        Diag::error("type mismatch").with_label(Span::new(13, 14), source_id, "expected Int");
+        Diag::error("expected type 'Int', found type 'String'")
+            .with_label(Span::new(13, 14), source_id, "expected Int");
 
     let output = emit_to_string(&diag, &sources, false);
 
@@ -110,7 +111,7 @@ fn label_message_appears_after_caret() {
 #[test]
 fn multi_label_diagnostic() {
     let (sources, source_id) = make_source_map();
-    let diag = Diag::error("type mismatch")
+    let diag = Diag::error("expected type 'Int', found type 'String'")
         .with_label(Span::new(0, 3), source_id, "first")
         .with_label(Span::new(17, 20), source_id, "second");
 

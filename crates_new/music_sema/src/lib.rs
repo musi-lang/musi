@@ -2,10 +2,11 @@
 //!
 //! Current scope:
 //! - AST to HIR lowering
-//! - first-pass lexical name resolution (no type/effect checking yet)
+//! - first-pass lexical name resolution
+//! - basic type/effect checking over resolved HIR (gradual types via `Any`/`Unknown`)
 
 mod errors;
-pub mod resolve;
+mod checker;
 
-pub use errors::{SemaError, SemaErrorKind};
-pub use resolve::{ResolveOptions, ResolvedModule, resolve_module};
+pub use errors::{SemaError, SemaErrorKind, SemaErrorKinds};
+pub use checker::{AnalyzedModule, analyze_module};

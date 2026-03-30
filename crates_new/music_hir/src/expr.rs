@@ -25,6 +25,7 @@ pub enum HirExprKind {
         mods: HirDeclMods,
         mutable: bool,
         pat: HirPatId,
+        has_params: bool,
         params: HirParams,
         type_params: HirTypeParams,
         where_: HirConstraints,
@@ -225,6 +226,7 @@ pub enum HirConstraintKind {
 pub struct HirEffectSet {
     pub origin: HirOrigin,
     pub items: Box<[HirEffectItem]>,
+    pub rest: Option<Ident>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -320,6 +322,7 @@ pub struct HirFieldDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirHandleClause {
     pub origin: HirOrigin,
+    pub is_value: bool,
     pub name: Ident,
     pub params: HirIdents,
     pub body: HirExprId,

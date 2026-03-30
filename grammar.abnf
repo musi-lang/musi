@@ -369,16 +369,22 @@ dim          = lit-int
                / ident
                / "_"  ; static / variable / inferred
 ; §5.4  Effects and constraints
-effect-set   = "{" *(",") [effect-list] *(",") "}"
+effect-set     = "{" *(",") [effect-entries] *(",") "}"
 
-effect-list  = effect-item *("," effect-item)
+effect-entries = effect-list ["," effect-rest]
+                 / effect-rest
 
-effect-item  = ident ["[" ast-ty "]"]
+effect-rest    = "..." ident
 
-where-clause = "where" constraint *("," constraint) [","]  ; trailing , allowed
+effect-list    = effect-item *("," effect-item)
 
-constraint   = ident "<:" ast-ty-named  ; subtype
-               / ident ":" ast-ty-named  ; implements class
+effect-item    = ident ["[" ast-ty "]"]
+
+where-clause   = "where" constraint *("," constraint)
+                 [","]  ; trailing , allowed
+
+constraint     = ident "<:" ast-ty-named  ; subtype
+                 / ident ":" ast-ty-named  ; implements class
 ; §6  Patterns
 ast-pat         = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
 

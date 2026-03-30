@@ -18,7 +18,7 @@ use music_names::{
     Ident, Interner, NameBinding, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol,
 };
 
-use crate::{SemaError, SemaErrorKind};
+use crate::{ResolveError, ResolveErrorKind};
 
 pub trait ImportEnv {
     fn has_module(&self, from: SourceId, path: &str) -> bool;
@@ -63,7 +63,7 @@ pub struct ResolvedModule {
     pub module: HirModule,
     pub exports: Box<[Symbol]>,
     pub names: NameResolution,
-    pub errors: Vec<SemaError>,
+    pub errors: Vec<ResolveError>,
 }
 
 #[must_use]
@@ -103,7 +103,7 @@ struct Resolver<'a, 'tree, 'env> {
 
     names: NameResolution,
     exports: Vec<Symbol>,
-    errors: Vec<SemaError>,
+    errors: Vec<ResolveError>,
     scopes: Vec<Scope>,
 }
 
@@ -124,7 +124,29 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         let mut names = NameResolution::new();
         let mut root = Scope::default();
+
+        // Built-in prelude names (always present).
+        //
+        // These are first-class values of type `Type` (and related built-in
+        // type roles like `Any` / `Unknown`). They must be available even in
+        // standalone parsing/analysis without an explicit project prelude.
+        for name in [
+            "Type", "Any", "Unknown", "Empty", "Unit", "Bool", "Int", "Float", "String",
+        ] {
+            let sym = interner.intern(name);
+            let binding = names.alloc_binding(NameBinding {
+                name: sym,
+                site: NameSite::new(source_id, Span::DUMMY),
+                kind: NameBindingKind::Prelude,
+            });
+            let _prev = root.names.insert(sym, binding);
+        }
+
+        // Project/tooling prelude names (additional).
         for sym in options.prelude {
+            if root.names.contains_key(&sym) {
+                continue;
+            }
             let binding = names.alloc_binding(NameBinding {
                 name: sym,
                 site: NameSite::new(source_id, Span::DUMMY),
@@ -250,8 +272,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         if let Some(first_id) = scope.names.get(&ident.name).copied() {
             let first_span = self.names.bindings.get(first_id).site.span;
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::DuplicateBinding {
+            self.errors.push(ResolveError {
+                kind: ResolveErrorKind::DuplicateBinding {
                     name: self.interner.resolve(ident.name).to_string(),
                     first: first_span,
                 },
@@ -278,8 +300,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
     fn check_use(&mut self, ident: Ident) {
         let Some(binding) = self.lookup(ident.name) else {
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::UndefinedBinding {
+            self.errors.push(ResolveError {
+                kind: ResolveErrorKind::UndefinedBinding {
                     name: self.interner.resolve(ident.name).to_string(),
                 },
                 source_id: self.source_id,
@@ -293,8 +315,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
     }
 
     fn error(&mut self, span: Span, what: &'static str) {
-        self.errors.push(SemaError {
-            kind: SemaErrorKind::MalformedSyntax { what },
+        self.errors.push(ResolveError {
+            kind: ResolveErrorKind::MalformedSyntax { what },
             source_id: self.source_id,
             span,
         });
@@ -306,8 +328,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
     fn slice(&mut self, span: Span) -> &'a str {
         let Some(source) = self.sources.get(self.source_id) else {
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::MalformedSyntax {
+            self.errors.push(ResolveError {
+                kind: ResolveErrorKind::MalformedSyntax {
                     what: "missing source text",
                 },
                 source_id: self.source_id,
@@ -400,8 +422,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         let path = self.decode_string_lit_span(path_tok.span());
         let Some(env) = self.import_env else {
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::UnresolvedImport { path },
+            self.errors.push(ResolveError {
+                kind: ResolveErrorKind::UnresolvedImport { path },
                 source_id: self.source_id,
                 span: node.span(),
             });
@@ -409,8 +431,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         };
 
         if !env.has_module(self.source_id, &path) {
-            self.errors.push(SemaError {
-                kind: SemaErrorKind::UnresolvedImport { path },
+            self.errors.push(ResolveError {
+                kind: ResolveErrorKind::UnresolvedImport { path },
                 source_id: self.source_id,
                 span: node.span(),
             });

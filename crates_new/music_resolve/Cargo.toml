@@ -1,9 +1,9 @@
 [package]
-name = "music_sema"
+name = "music_resolve"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Semantic analysis for Musi"
+description = "Module resolution and AST to HIR lowering for Musi"
 license.workspace = true
 publish.workspace = true
 
@@ -11,13 +11,13 @@ publish.workspace = true
 music_ast = { path = "../music_ast" }
 music_basic = { path = "../music_basic" }
 music_hir = { path = "../music_hir" }
+music_lex = { path = "../music_lex" }
 music_names = { path = "../music_names" }
-music_resolve = { path = "../music_resolve" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
 
 [lints]
 workspace = true
+

@@ -2,9 +2,9 @@ use music_basic::SourceMap;
 use music_lex::Lexer;
 use music_names::Interner;
 use music_parse::parse;
-use music_sema::{ResolveOptions, SemaErrorKind, resolve_module};
+use music_resolve::{ResolveErrorKind, ResolveOptions, resolve_module};
 
-fn resolve_text(text: &str) -> Vec<SemaErrorKind> {
+fn resolve_text(text: &str) -> Vec<ResolveErrorKind> {
     let mut sources = SourceMap::new();
     let source_id = sources.add("test.ms", text);
 
@@ -23,29 +23,27 @@ fn resolve_text(text: &str) -> Vec<SemaErrorKind> {
 }
 
 #[test]
-fn test_reports_undefined_binding() {
+fn reports_undefined_binding() {
     let kinds = resolve_text("x;");
     assert!(matches!(
         &kinds[..],
-        [SemaErrorKind::UndefinedBinding { .. }]
+        [ResolveErrorKind::UndefinedBinding { .. }]
     ));
 }
 
 #[test]
-fn test_reports_duplicate_binding() {
+fn reports_duplicate_binding() {
     let kinds = resolve_text("let x := 1; let x := 2;");
     assert!(
         kinds
             .iter()
-            .any(|k| matches!(k, SemaErrorKind::DuplicateBinding { .. }))
+            .any(|k| matches!(k, ResolveErrorKind::DuplicateBinding { .. }))
     );
 }
 
 #[test]
-fn test_let_binds_name_for_following_stmts() {
+fn let_binds_name_for_following_stmts() {
     let kinds = resolve_text("let x := 1; x;");
-    assert!(
-        kinds.is_empty(),
-        "no resolution errors expected, got {kinds:?}"
-    );
+    assert!(kinds.is_empty(), "no errors expected, got {kinds:?}");
 }
+

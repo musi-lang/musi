@@ -12,12 +12,16 @@ pub struct ParseError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ParseErrorKind {
-    #[error("expected token {}, found {}", display_token_kind(.expected.as_ref()), display_token_kind(.found.as_ref()))]
+    #[error(
+        "expected {}, found {}",
+        display_token_kind(.expected.as_ref()),
+        display_token_kind(.found.as_ref())
+    )]
     ExpectedToken {
         expected: Box<TokenKind>,
         found: Box<TokenKind>,
     },
-    #[error("import does not support 'as' aliasing; use a let binding")]
+    #[error("import does not support 'as' aliasing; use let binding")]
     ImportAliasNotSupported,
     #[error("expected expression, found {}", display_token_kind(.found.as_ref()))]
     ExpectedExpression { found: Box<TokenKind> },
@@ -37,6 +41,10 @@ pub enum ParseErrorKind {
     ExpectedOperatorMemberName { found: Box<TokenKind> },
     #[error("expected effect item, found {}", display_token_kind(.found.as_ref()))]
     ExpectedEffectItem { found: Box<TokenKind> },
+    #[error("expected effect row remainder name after '...', found {}", display_token_kind(.found.as_ref()))]
+    ExpectedEffectRemainderName { found: Box<TokenKind> },
+    #[error("effect row remainder must be final entry in effect set")]
+    EffectRemainderMustBeLast,
     #[error("expected foreign binding, found {}", display_token_kind(.found.as_ref()))]
     ExpectedForeignBinding { found: Box<TokenKind> },
     #[error("expected data member, found {}", display_token_kind(.found.as_ref()))]
@@ -52,7 +60,7 @@ pub enum ParseErrorKind {
     #[error("non-associative comparison chain")]
     NonAssociativeChain,
     #[error(
-        "record literal starts with '{{' ('.{{' is record update syntax and requires a receiver)"
+        "record literal starts with '{{' ('.{{' is record update syntax and requires receiver)"
     )]
     RecordLiteralUsesDotBrace,
     #[error("record pattern starts with '{{'")]

@@ -599,10 +599,10 @@ impl Parser<'_, '_> {
             children.push(comma);
         }
 
+        let mut saw_remainder = false;
+
         if !self.at(&TokenKind::RBrace) {
-            if let Some(item) = self.parse_effect_item_or_error() {
-                children.push(SyntaxElementId::Node(item));
-            }
+            self.parse_effect_entry_or_error(&mut children, &mut saw_remainder);
 
             loop {
                 let mut comma_count = 0usize;
@@ -637,9 +637,16 @@ impl Parser<'_, '_> {
                     break;
                 }
 
-                if let Some(item) = self.parse_effect_item_or_error() {
-                    children.push(SyntaxElementId::Node(item));
+                if saw_remainder {
+                    // The remainder is syntactically last; recover by skipping the rest.
+                    self.error(ParseError {
+                        kind: ParseErrorKind::EffectRemainderMustBeLast,
+                        span: self.span(),
+                    });
+                    break;
                 }
+
+                self.parse_effect_entry_or_error(&mut children, &mut saw_remainder);
             }
         }
         let close = self.expect_token(&TokenKind::RBrace)?;
@@ -647,6 +654,56 @@ impl Parser<'_, '_> {
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::EffectSet, children))
+    }
+
+    fn parse_effect_entry_or_error(&mut self, out: &mut Vec<SyntaxElementId>, saw_remainder: &mut bool) {
+        if self.at(&TokenKind::DotDotDot) && !*saw_remainder {
+            let dots = self.advance_element();
+            out.push(dots);
+            let name = match self.peek_kind() {
+                TokenKind::Ident | TokenKind::EscapedIdent => self.advance_element(),
+                _ => {
+                    self.error(ParseError {
+                        kind: ParseErrorKind::ExpectedEffectRemainderName {
+                            found: Box::new(self.peek_kind().clone()),
+                        },
+                        span: self.span(),
+                    });
+                    return;
+                }
+            };
+            out.push(name);
+            *saw_remainder = true;
+            return;
+        }
+
+        if self.at(&TokenKind::DotDotDot) && *saw_remainder {
+            self.error(ParseError {
+                kind: ParseErrorKind::ExpectedEffectItem {
+                    found: Box::new(TokenKind::DotDotDot),
+                },
+                span: self.span(),
+            });
+            let bad = self.advance_element();
+            out.push(SyntaxElementId::Node(self.builder.push_error_node([bad])));
+            return;
+        }
+
+        match self.parse_effect_item() {
+            Ok(item) => out.push(SyntaxElementId::Node(item)),
+            Err(error) => {
+                self.error(error);
+                if self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
+                    return;
+                }
+
+                let mut bad = vec![];
+                while !self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
+                    bad.push(self.advance_element());
+                }
+                out.push(SyntaxElementId::Node(self.builder.push_error_node(bad)));
+            }
+        }
     }
 
     fn parse_effect_item(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -666,24 +723,6 @@ impl Parser<'_, '_> {
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::EffectItem, children))
-    }
-
-    fn parse_effect_item_or_error(&mut self) -> Option<SyntaxNodeId> {
-        match self.parse_effect_item() {
-            Ok(item) => Some(item),
-            Err(error) => {
-                self.error(error);
-                if self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
-                    return None;
-                }
-
-                let mut bad = vec![];
-                while !self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
-                    bad.push(self.advance_element());
-                }
-                Some(self.builder.push_error_node(bad))
-            }
-        }
     }
 }
 

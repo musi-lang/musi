@@ -176,6 +176,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         let params_node = cursor.eat_node(SyntaxNodeKind::ParamList);
         let type_params_node = cursor.eat_node(SyntaxNodeKind::TypeParamList);
+        let has_params = params_node.is_some();
 
         let where_node = cursor
             .eat_token(&TokenKind::KwWhere)
@@ -241,6 +242,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 mods,
                 mutable,
                 pat,
+                has_params,
                 params,
                 type_params,
                 where_,
@@ -563,9 +565,26 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .filter(|n| n.kind() == SyntaxNodeKind::EffectItem)
             .map(|n| self.lower_effect_item(n))
             .collect();
+
+        let mut rest = None;
+        let mut saw_dots = false;
+        for tok in node.child_tokens() {
+            if saw_dots {
+                if matches!(tok.kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
+                    let ident = self.intern_ident_token(tok);
+                    rest = Some(ident);
+                    break;
+                }
+            }
+            if matches!(tok.kind(), TokenKind::DotDotDot) {
+                saw_dots = true;
+            }
+        }
+
         HirEffectSet {
             origin,
             items: items.into_boxed_slice(),
+            rest,
         }
     }
 
@@ -1111,6 +1130,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let handler = handler_tok
             .map(|t| self.intern_ident_token(t))
             .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
+        self.check_use(handler);
 
         let _ = cursor.eat_token(&TokenKind::KwOf);
         let _ = cursor.eat_token(&TokenKind::LParen);
@@ -1146,7 +1166,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         )
     }
 
-    fn lower_handle_clause(&mut self, node: SyntaxNode<'tree>, handler: Ident) -> HirHandleClause {
+    fn lower_handle_clause(&mut self, node: SyntaxNode<'tree>, _handler: Ident) -> HirHandleClause {
         let origin = self.origin_node(node);
         let mut cursor = AstCursor::new(node);
 
@@ -1158,7 +1178,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             .unwrap_or_else(|| Ident::dummy(Symbol::synthetic(u32::MAX)));
 
         let mut params = Vec::new();
-        if cursor.eat_token(&TokenKind::LParen).is_some() {
+        let is_value = cursor.eat_token(&TokenKind::LParen).is_none();
+        if !is_value {
             while !cursor.at_token(&TokenKind::RParen) {
                 let Some(tok) = cursor.bump_token() else {
                     break;
@@ -1173,9 +1194,12 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
         let _ = cursor.eat_token(&TokenKind::EqGt);
 
         self.push_scope();
-        self.define(NameBindingKind::HandleClauseResult, handler);
-        for p in &params {
-            self.define(NameBindingKind::HandleClauseParam, *p);
+        if is_value {
+            self.define(NameBindingKind::HandleClauseResult, name);
+        } else {
+            for p in &params {
+                self.define(NameBindingKind::HandleClauseParam, *p);
+            }
         }
 
         let body = cursor
@@ -1188,6 +1212,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         HirHandleClause {
             origin,
+            is_value,
             name,
             params: params.into_boxed_slice(),
             body,
@@ -1247,11 +1272,19 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
 fn sequence_yields_unit(node: SyntaxNode<'_>) -> bool {
     let mut last_semi = false;
-    for tok in node.child_tokens() {
-        match tok.kind() {
-            TokenKind::Semi => last_semi = true,
-            TokenKind::RParen => return last_semi,
-            _ => {}
+    for el in node.children() {
+        match el {
+            music_ast::SyntaxElement::Token(tok) => match tok.kind() {
+                TokenKind::Semi => last_semi = true,
+                TokenKind::RParen => return last_semi,
+                _ => {}
+            },
+            music_ast::SyntaxElement::Node(n) => {
+                if n.kind().is_expr() {
+                    // An expr after the last ';' means the sequence yields that expr's value.
+                    last_semi = false;
+                }
+            }
         }
     }
     last_semi

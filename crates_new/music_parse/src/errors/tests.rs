@@ -30,7 +30,7 @@ fn test_token_expectation_renders_source_spelling() {
         found: Box::new(TokenKind::RParen),
     };
 
-    assert_eq!(error.to_string(), "expected token '{', found ')'");
+    assert_eq!(error.to_string(), "expected '{', found ')'");
 }
 
 #[test]

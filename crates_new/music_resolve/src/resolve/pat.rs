@@ -6,7 +6,7 @@ use music_hir::{HirLit, HirPat, HirPatId, HirPatKind, HirPatKind::*, HirRecordPa
 use music_lex::TokenKind;
 use music_names::{NameBindingKind, Symbol};
 
-use crate::{SemaError, SemaErrorKind};
+use crate::{ResolveError, ResolveErrorKind};
 
 use super::Resolver;
 
@@ -220,8 +220,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
 
         for binds in &binds_per_alt[1..] {
             if binds.keys().ne(first.keys()) {
-                self.errors.push(SemaError {
-                    kind: SemaErrorKind::OrPatternBindingsMismatch,
+                self.errors.push(ResolveError {
+                    kind: ResolveErrorKind::OrPatternBindingsMismatch,
                     source_id: self.source_id,
                     span: alt_nodes[0].span(),
                 });
@@ -252,8 +252,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                 }
                 let ident = self.intern_ident_token(name_tok);
                 if let Some(first) = out.insert(ident.name, ident.span) {
-                    self.errors.push(SemaError {
-                        kind: SemaErrorKind::DuplicateBinding {
+                    self.errors.push(ResolveError {
+                        kind: ResolveErrorKind::DuplicateBinding {
                             name: self.interner.resolve(ident.name).to_string(),
                             first,
                         },
@@ -305,8 +305,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
                         }
                     } else {
                         if let Some(first) = out.insert(ident.name, ident.span) {
-                            self.errors.push(SemaError {
-                                kind: SemaErrorKind::DuplicateBinding {
+                            self.errors.push(ResolveError {
+                                kind: ResolveErrorKind::DuplicateBinding {
                                     name: self.interner.resolve(ident.name).to_string(),
                                     first,
                                 },
