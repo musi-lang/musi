@@ -986,7 +986,7 @@ impl Checker<'_> {
     ) -> (SemTyId, EffectRow) {
         let (callee_ty, mut effs) = self.synth_expr(callee);
 
-        let mut arg_tys = vec![];
+        let mut arg_tys = Vec::new();
         for arg in args {
             match arg {
                 HirArg::Expr(id) => {

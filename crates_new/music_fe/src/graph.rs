@@ -90,7 +90,7 @@ fn collect_import_paths(
     from_path: &Path,
     parsed: &ParsedSource,
 ) -> Vec<String> {
-    let mut out = vec![];
+    let mut out = Vec::new();
     let tree = parsed.tree();
     let root = tree.root();
     let mut stack = vec![root];
@@ -127,7 +127,7 @@ fn collect_import_paths(
 
 fn topo_sort(nodes: &[ModuleNode], node_by_path: &HashMap<String, usize>) -> Option<Vec<usize>> {
     let mut indeg = vec![0usize; nodes.len()];
-    let mut edges: Vec<Vec<usize>> = vec![vec![]; nodes.len()];
+    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
 
     for (i, node) in nodes.iter().enumerate() {
         for dep in &node.imports {

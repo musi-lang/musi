@@ -2,11 +2,6 @@ use music_il::descriptors;
 use music_il::{TypeDescriptor, TypeDescriptors, TypeKind};
 use music_ir::{IrScalarTy, IrTypeRef};
 
-pub(super) const fn builtin_ty_descriptors() -> TypeDescriptors {
-    // Keep builtin table empty for now; SEAM reserves ids in `music_il::descriptors::builtins`.
-    Vec::new()
-}
-
 pub(super) fn ensure_tuple_ty(types: &mut TypeDescriptors, arity: usize) -> u16 {
     let id =
         descriptors::FIRST_EMITTED_TYPE_ID.saturating_add(u16::try_from(types.len()).unwrap_or(0));

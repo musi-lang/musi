@@ -277,7 +277,7 @@ impl Checker<'_> {
             return;
         }
 
-        let mut seen: Vec<(&'static str, u32)> = vec![];
+        let mut seen: Vec<(&'static str, u32)> = Vec::new();
         let mut positional_index = 0usize;
 
         for arg in &attr.args {

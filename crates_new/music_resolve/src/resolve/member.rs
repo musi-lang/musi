@@ -158,7 +158,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     pub(super) fn lower_param_list(&mut self, node: SyntaxNode<'tree>) -> HirParams {
-        let mut params = vec![];
+        let mut params = Vec::new();
         for param_node in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::Param)

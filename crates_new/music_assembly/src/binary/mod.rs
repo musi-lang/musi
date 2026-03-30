@@ -39,8 +39,14 @@ pub fn decode_binary(data: &[u8]) -> CodecResult<SeamArtifact> {
     let mut strings = DecodedStrings::new();
     let mut offsets = StringOffsets::new();
     let mut constants = ConstantPool::new();
-    let (mut methods, mut globals, mut types, mut effects, mut classes, mut foreigns) =
-        (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let (mut methods, mut globals, mut types, mut effects, mut classes, mut foreigns) = (
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
 
     let mut position = HEADER_SIZE;
     for _ in 0..section_count {

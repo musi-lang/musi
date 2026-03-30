@@ -29,7 +29,7 @@ impl ConstantPool {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: vec![],
+            entries: Vec::new(),
             dedup: HashMap::new(),
         }
     }

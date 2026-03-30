@@ -152,8 +152,8 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             store,
             error_ty,
             names,
-            exports: vec![],
-            errors: vec![],
+            exports: Vec::new(),
+            errors: Vec::new(),
             scopes: vec![root],
         }
     }
@@ -167,7 +167,7 @@ impl<'a, 'tree, 'env> Resolver<'a, 'tree, 'env> {
             );
         }
 
-        let mut exprs = vec![];
+        let mut exprs = Vec::new();
 
         for node in root.child_nodes() {
             if is_stmt_wrapper(node) {

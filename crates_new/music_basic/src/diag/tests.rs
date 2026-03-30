@@ -9,7 +9,7 @@ fn test_make_source_map() -> (SourceMap, SourceId) {
 }
 
 fn test_emit_to_string(diag: &Diag, sources: &SourceMap, use_color: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
     emit(&mut buf, diag, sources, use_color).expect("emit succeeds");
     String::from_utf8(buf).expect("valid utf8")
 }

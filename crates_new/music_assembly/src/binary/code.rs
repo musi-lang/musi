@@ -6,7 +6,7 @@ use super::*;
 
 pub(super) fn decode_instruction_stream(code: &[u8]) -> CodecResult<InstructionStream> {
     let mut position = 0_usize;
-    let mut instructions = vec![];
+    let mut instructions = Vec::new();
 
     while position < code.len() {
         let opcode_byte = *code.get(position).ok_or(CodecError::TruncatedSection)?;

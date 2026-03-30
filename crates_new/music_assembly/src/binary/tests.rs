@@ -18,13 +18,13 @@ fn test_binary_codec_round_trips_minimal_module() {
                 Instruction::basic(Opcode::Ret),
             ],
             locals_count: 1,
-            absolute_global_loads: vec![],
+            absolute_global_loads: Vec::new(),
         }],
-        globals: vec![],
-        types: vec![],
-        effects: vec![],
-        classes: vec![],
-        foreigns: vec![],
+        globals: Vec::new(),
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
 
     let bytes = encode_binary(&module).expect("module should encode");

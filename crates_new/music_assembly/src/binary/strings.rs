@@ -11,7 +11,7 @@ pub(super) struct StringIndex {
 impl StringIndex {
     pub(super) fn build(artifact: &SeamArtifact) -> CodecResult<Self> {
         let mut table = Self {
-            bytes: vec![],
+            bytes: Vec::new(),
             offsets_by_text: TextOffsets::new(),
             constant_offsets: ConstantOffsets::new(),
         };

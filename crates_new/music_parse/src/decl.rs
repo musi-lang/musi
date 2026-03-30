@@ -29,7 +29,7 @@ impl Parser<'_, '_, '_> {
     }
 
     pub(crate) fn parse_attrs(&mut self) -> ParseResult<Vec<SyntaxElementId>> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         while self.at(&TokenKind::At) {
             let attr = self.parse_attr()?;
             children.push(SyntaxElementId::Node(attr));
@@ -66,7 +66,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_attr_arg(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent)
             && matches!(self.nth_kind(1), TokenKind::ColonEq)
         {
@@ -94,7 +94,7 @@ impl Parser<'_, '_, '_> {
             _ => {
                 self.error(self.expected_attr_value());
 
-                let mut children = vec![];
+                let mut children = Vec::new();
                 if !self.at(&TokenKind::Eof) {
                     children.push(self.advance_element());
                 }
@@ -175,7 +175,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_attr_record_item(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
 
         if !matches!(self.peek_kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
             self.error(ParseError {
@@ -227,7 +227,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_attr_value_list(&mut self, close: &TokenKind) -> ParseResult<Vec<SyntaxElementId>> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         children.push(SyntaxElementId::Node(self.parse_attr_value()?));
         while let Some(comma) = self.eat(&TokenKind::Comma) {
             children.push(comma);
@@ -240,7 +240,7 @@ impl Parser<'_, '_, '_> {
     }
 
     pub(crate) fn parse_export_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        self.parse_export_expr_with_attrs(vec![])
+        self.parse_export_expr_with_attrs(Vec::new())
     }
 
     fn parse_export_expr_with_attrs(
@@ -437,7 +437,7 @@ impl Parser<'_, '_, '_> {
 
             // Recover by consuming the unsupported alias tail so callers don't cascade
             // into unrelated "expected token" errors.
-            let mut tail = vec![];
+            let mut tail = Vec::new();
             while !self.at_any(&[
                 TokenKind::Semi,
                 TokenKind::Comma,
@@ -679,7 +679,7 @@ impl Parser<'_, '_, '_> {
         &mut self,
         close: &TokenKind,
     ) -> ParseResult<Vec<SyntaxElementId>> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if self.at(close) {
             return Ok(children);
         }
@@ -699,7 +699,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_param(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if let Some(mut_kw) = self.eat(&TokenKind::KwMut) {
             children.push(mut_kw);
         }
@@ -721,7 +721,7 @@ impl Parser<'_, '_, '_> {
         &mut self,
         close: &TokenKind,
     ) -> ParseResult<Vec<SyntaxElementId>> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if self.at(close) {
             return Ok(children);
         }
@@ -881,7 +881,7 @@ impl Parser<'_, '_, '_> {
                     return;
                 }
 
-                let mut bad = vec![];
+                let mut bad = Vec::new();
                 while !self.at_any(&[TokenKind::Comma, TokenKind::RBrace, TokenKind::Eof]) {
                     bad.push(self.advance_element());
                 }

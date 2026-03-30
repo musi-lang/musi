@@ -69,7 +69,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_named_ty_base(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         children.push(self.expect_ident_element()?);
         if self.at(&TokenKind::LBracket) {
             let open = self.advance_element();

@@ -6,7 +6,7 @@ use super::{Resolver, cursor::AstCursor};
 
 impl<'tree> Resolver<'_, 'tree, '_> {
     pub(super) fn lower_attr_prefix(&mut self, cursor: &mut AstCursor<'tree>) -> Vec<HirAttrId> {
-        let mut out = vec![];
+        let mut out = Vec::new();
         while let Some(node) = cursor.peek().and_then(SyntaxElement::into_node) {
             if node.kind() != SyntaxNodeKind::Attr {
                 break;
@@ -18,14 +18,14 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     pub(super) fn lower_attr(&mut self, node: SyntaxNode<'tree>) -> HirAttrId {
-        let mut segments = vec![];
+        let mut segments = Vec::new();
         for token in node.child_tokens() {
             if matches!(token.kind(), TokenKind::Ident | TokenKind::EscapedIdent) {
                 segments.push(self.intern_ident_token(token));
             }
         }
 
-        let mut args = vec![];
+        let mut args = Vec::new();
         for arg_node in node.child_nodes() {
             if arg_node.kind() != SyntaxNodeKind::AttrArg {
                 continue;

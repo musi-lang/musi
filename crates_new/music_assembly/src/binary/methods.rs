@@ -30,7 +30,7 @@ pub(super) fn decode_methods(
             name,
             instructions: code::decode_instruction_stream(&raw_code)?,
             locals_count,
-            absolute_global_loads: vec![],
+            absolute_global_loads: Vec::new(),
         });
     }
 
@@ -42,10 +42,10 @@ pub(super) fn encode_methods(
     strings: &StringIndex,
 ) -> CodecResult<SectionBytes> {
     if methods.is_empty() {
-        return Ok(vec![]);
+        return Ok(Vec::new());
     }
 
-    let mut output = vec![];
+    let mut output = Vec::new();
     let count = u16::try_from(methods.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     output.extend_from_slice(&count.to_le_bytes());
 

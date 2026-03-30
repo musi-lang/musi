@@ -64,10 +64,10 @@ pub(super) fn encode_constants(
 ) -> CodecResult<SectionBytes> {
     let entries = constants.entries();
     if entries.is_empty() {
-        return Ok(vec![]);
+        return Ok(Vec::new());
     }
 
-    let mut output = vec![];
+    let mut output = Vec::new();
     let count = u16::try_from(entries.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     output.extend_from_slice(&count.to_le_bytes());
 

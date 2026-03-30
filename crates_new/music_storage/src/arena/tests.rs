@@ -142,7 +142,7 @@ fn test_into_iter_shared_ref() {
     let a = arena.alloc(10);
     let b = arena.alloc(20);
 
-    let mut items = vec![];
+    let mut items = Vec::new();
     for (idx, val) in &arena {
         items.push((idx, *val));
     }

@@ -8,15 +8,15 @@ fn test_validator_accepts_small_modules() {
         constants: ConstantPool::new(),
         methods: vec![MethodEntry {
             name: MethodName::Entry,
-            instructions: vec![],
+            instructions: Vec::new(),
             locals_count: 0,
-            absolute_global_loads: vec![],
+            absolute_global_loads: Vec::new(),
         }],
-        globals: vec![],
-        types: vec![],
-        effects: vec![],
-        classes: vec![],
-        foreigns: vec![],
+        globals: Vec::new(),
+        types: Vec::new(),
+        effects: Vec::new(),
+        classes: Vec::new(),
+        foreigns: Vec::new(),
     };
 
     validate_module(&module).expect("small modules should validate");

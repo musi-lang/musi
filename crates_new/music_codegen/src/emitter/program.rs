@@ -18,7 +18,6 @@ use crate::model::EmitModule;
 
 use super::context::{EmitMaps, EmitPools, ModuleExportKey};
 use super::function::FunctionEmitter;
-use super::ty::builtin_ty_descriptors;
 
 pub(super) struct ProgramEmitter<'a> {
     interner: &'a Interner,
@@ -42,9 +41,9 @@ impl<'a> ProgramEmitter<'a> {
             sources,
             entry_path,
             constants: ConstantPool::new(),
-            methods: vec![],
-            globals: vec![],
-            types: builtin_ty_descriptors(),
+            methods: Vec::new(),
+            globals: Vec::new(),
+            types: Vec::new(),
             global_by_binding: HashMap::new(),
             import_global_by_binding: HashMap::new(),
             module_export_globals: HashMap::new(),
@@ -150,9 +149,9 @@ impl<'a> ProgramEmitter<'a> {
             methods: mem::take(&mut self.methods),
             globals: mem::take(&mut self.globals),
             types: mem::take(&mut self.types),
-            effects: vec![],
-            classes: vec![],
-            foreigns: vec![],
+            effects: Vec::new(),
+            classes: Vec::new(),
+            foreigns: Vec::new(),
         })
     }
 
@@ -160,9 +159,9 @@ impl<'a> ProgramEmitter<'a> {
         let idx = self.methods.len();
         self.methods.push(MethodEntry {
             name: MethodName::Entry,
-            instructions: vec![],
+            instructions: Vec::new(),
             locals_count: 0,
-            absolute_global_loads: vec![],
+            absolute_global_loads: Vec::new(),
         });
         idx
     }
@@ -183,7 +182,7 @@ impl<'a> ProgramEmitter<'a> {
             return Ok(());
         };
 
-        let mut entry_instructions = vec![];
+        let mut entry_instructions = Vec::new();
         let mut entry_locals_max = 0usize;
 
         {
@@ -304,7 +303,7 @@ fn find_def_binding(
 }
 
 fn collect_import_exprs(module: &HirModule) -> Vec<(Span, Span, SymbolSlice)> {
-    let mut out = vec![];
+    let mut out = Vec::new();
     for (_id, expr) in &module.store.exprs {
         let HirExprKind::Import { path, exports } = &expr.kind else {
             continue;

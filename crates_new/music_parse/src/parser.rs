@@ -36,7 +36,7 @@ pub fn parse(source_id: SourceId, lexed: &LexedSource<'_>) -> ParsedSource {
     let source = lexed.source();
     let mut builder =
         SyntaxTreeBuilder::with_capacity(source_id, tokens.len().saturating_mul(2), tokens.len());
-    let mut errors = vec![];
+    let mut errors = Vec::new();
 
     let mut parser = Parser::new(source_id, source, tokens, &mut builder, &mut errors);
     let mut children = parser.parse_root_children();
@@ -73,14 +73,14 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
             pos: 0,
             builder,
             errors,
-            comparison_exprs: vec![],
+            comparison_exprs: Vec::new(),
             lparen_match,
             quote_depth: 0,
         }
     }
 
     pub(crate) fn parse_root_children(&mut self) -> SyntaxElementIds {
-        let mut children = vec![];
+        let mut children = Vec::new();
 
         while !self.at(&TokenKind::Eof) {
             let before = self.pos;
@@ -111,7 +111,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
     }
 
     fn parse_error_stmt(&mut self) -> SyntaxNodeId {
-        let mut children = vec![];
+        let mut children = Vec::new();
         while !self.at(&TokenKind::Semi) && !self.at(&TokenKind::Eof) {
             children.push(self.advance_element());
         }
@@ -348,7 +348,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
     }
 
     pub(crate) fn parse_expr_list(&mut self, close: &TokenKind) -> ParseResult<SyntaxElementIds> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if self.at(close) {
             return Ok(children);
         }
@@ -368,7 +368,7 @@ impl<'a, 't, 'src> Parser<'a, 't, 'src> {
     }
 
     pub(crate) fn parse_ident_list_opt(&mut self, close: &TokenKind) -> SyntaxElementIds {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if self.at(close) {
             return children;
         }
@@ -513,7 +513,7 @@ fn same_kind(left: &TokenKind, right: &TokenKind) -> bool {
 
 fn compute_lparen_matches(tokens: &[Token]) -> Vec<Option<usize>> {
     let mut matches = vec![None; tokens.len()];
-    let mut stack = vec![];
+    let mut stack = Vec::new();
 
     for (index, token) in tokens.iter().enumerate() {
         match token.kind {

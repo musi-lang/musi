@@ -61,8 +61,8 @@ impl SemTys {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            tys: vec![],
-            infer: vec![],
+            tys: Vec::new(),
+            infer: Vec::new(),
         }
     }
 

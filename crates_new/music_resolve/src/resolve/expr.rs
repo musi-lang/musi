@@ -110,7 +110,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
 
-        let mut hir_parts = vec![];
+        let mut hir_parts = Vec::new();
         for part in parts {
             match part.kind {
                 FStringPartKind::Literal => {
@@ -151,7 +151,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         }
 
         let yields_unit = sequence_yields_unit(node);
-        let mut exprs = vec![];
+        let mut exprs = Vec::new();
         let mut last_stmt_expr: Option<SyntaxNode<'tree>> = None;
 
         for el in node.children() {
@@ -261,17 +261,17 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         self.push_scope();
 
         let ty_params = ty_params_node.map_or_else(
-            || vec![].into_boxed_slice(),
+            || Vec::new().into_boxed_slice(),
             |list| self.lower_ty_params(list),
         );
 
         let params = params_node.map_or_else(
-            || vec![].into_boxed_slice(),
+            || Vec::new().into_boxed_slice(),
             |list| self.lower_param_list(list),
         );
 
         let where_ = where_node.map_or_else(
-            || vec![].into_boxed_slice(),
+            || Vec::new().into_boxed_slice(),
             |list| self.lower_constraint_list(list),
         );
 
@@ -359,7 +359,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         let _ = cursor.eat_token(&TokenKind::LParen);
 
-        let mut items = vec![];
+        let mut items = Vec::new();
         while !cursor.at_token(&TokenKind::RParen) {
             let Some(el) = cursor.bump() else {
                 break;
@@ -516,7 +516,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
             .map_or_else(
-                || vec![].into_boxed_slice(),
+                || Vec::new().into_boxed_slice(),
                 |list| self.lower_constraint_list(list),
             );
 
@@ -544,7 +544,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         self.push_scope();
 
         let ty_params = cursor.eat_node(SyntaxNodeKind::TypeParamList).map_or_else(
-            || vec![].into_boxed_slice(),
+            || Vec::new().into_boxed_slice(),
             |list| self.lower_ty_params(list),
         );
 
@@ -552,7 +552,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             .eat_token(&TokenKind::KwWhere)
             .and_then(|_| cursor.eat_node(SyntaxNodeKind::ConstraintList))
             .map_or_else(
-                || vec![].into_boxed_slice(),
+                || Vec::new().into_boxed_slice(),
                 |list| self.lower_constraint_list(list),
             );
 
@@ -581,7 +581,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     fn lower_ty_params(&mut self, node: SyntaxNode<'tree>) -> HirTypeParams {
-        let mut params = vec![];
+        let mut params = Vec::new();
         for tp in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::TypeParam)
@@ -601,7 +601,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     fn lower_constraint_list(&mut self, node: SyntaxNode<'tree>) -> Box<[HirConstraint]> {
-        let mut items = vec![];
+        let mut items = Vec::new();
         for c in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::Constraint)
@@ -744,7 +744,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
     }
 
     fn lower_record_items(&mut self, node: SyntaxNode<'tree>) -> HirRecordItems {
-        let mut out = vec![];
+        let mut out = Vec::new();
         for item_node in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::RecordItem)
@@ -840,7 +840,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
         self.push_scope();
         let params =
-            params_node.map_or_else(|| vec![].into_boxed_slice(), |n| self.lower_param_list(n));
+            params_node.map_or_else(|| Vec::new().into_boxed_slice(), |n| self.lower_param_list(n));
 
         let ret = node
             .child_nodes()
@@ -1116,7 +1116,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let _ = cursor.eat_token(&TokenKind::LParen);
         let _ = cursor.eat_token(&TokenKind::Pipe);
 
-        let mut arms = vec![];
+        let mut arms = Vec::new();
 
         while !cursor.at_token(&TokenKind::RParen) {
             let attrs = self.lower_attr_prefix(&mut cursor).into_boxed_slice();
@@ -1230,7 +1230,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         let _ = cursor.eat_token(&TokenKind::LParen);
         let _ = cursor.eat_token(&TokenKind::Pipe);
 
-        let mut clauses = vec![];
+        let mut clauses = Vec::new();
         while !cursor.at_token(&TokenKind::RParen) {
             let Some(clause_node) = cursor
                 .bump_node()
@@ -1272,7 +1272,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             |t| self.intern_ident_token(t),
         );
 
-        let mut params = vec![];
+        let mut params = Vec::new();
         let is_value = cursor.eat_token(&TokenKind::LParen).is_none();
         if !is_value {
             while !cursor.at_token(&TokenKind::RParen) {
@@ -1325,7 +1325,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
 
     fn lower_quote_expr(&mut self, node: SyntaxNode<'tree>) -> HirExprId {
         let origin = Self::origin_node(node);
-        let mut splice_nodes = vec![];
+        let mut splice_nodes = Vec::new();
         collect_quote_splices(node, &mut splice_nodes);
         let mut splices = Vec::with_capacity(splice_nodes.len());
         for splice_node in splice_nodes {

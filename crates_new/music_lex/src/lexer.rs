@@ -112,7 +112,7 @@ impl<'src> Lexer<'src> {
     #[must_use]
     pub fn lex(mut self) -> LexedSource<'src> {
         let mut tokens = Vec::with_capacity(self.cursor.source_len() / 4);
-        let mut errors = vec![];
+        let mut errors = Vec::new();
 
         for result in self.by_ref() {
             match result {

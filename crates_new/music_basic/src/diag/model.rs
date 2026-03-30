@@ -82,8 +82,8 @@ impl Diag {
             code: None,
             message,
             hint: None,
-            labels: vec![],
-            notes: vec![],
+            labels: Vec::new(),
+            notes: Vec::new(),
         }
     }
 

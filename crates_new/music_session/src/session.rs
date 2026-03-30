@@ -206,7 +206,7 @@ impl Session {
 }
 
 fn collect_top_level_opaque_exports(module: &HirModule, interner: &Interner) -> Vec<String> {
-    let mut out = vec![];
+    let mut out = Vec::new();
     let root = module.store.exprs.get(module.root);
     let HirExprKind::Sequence { exprs, .. } = &root.kind else {
         return out;

@@ -121,7 +121,7 @@ fn test_support_wrappers_cast_exact_kinds() {
         })
     };
 
-    let mut ids = vec![];
+    let mut ids = Vec::new();
     ids.push(nodes.alloc(SyntaxNodeData {
         kind: SyntaxNodeKind::Attr,
         span: Span::new(0, 1),

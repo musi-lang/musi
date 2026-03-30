@@ -30,7 +30,7 @@ pub type ArenaIterMut<'storage, T> = Map<
 impl<T> Arena<T> {
     #[must_use]
     pub const fn new() -> Self {
-        Self { data: vec![] }
+        Self { data: Vec::new() }
     }
 
     #[must_use]

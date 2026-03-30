@@ -42,10 +42,10 @@ pub(super) fn encode_types(
     strings: &StringIndex,
 ) -> CodecResult<SectionBytes> {
     if ty_descs.is_empty() {
-        return Ok(vec![]);
+        return Ok(Vec::new());
     }
 
-    let mut output = vec![];
+    let mut output = Vec::new();
     let count = u16::try_from(ty_descs.len()).map_err(|_| CodecError::ModuleTooLarge)?;
     output.extend_from_slice(&count.to_le_bytes());
 

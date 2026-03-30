@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use music_ast::{SyntaxNode, SyntaxNodeKind, SyntaxToken};
+use music_ast::{SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken};
 use music_basic::Span;
 use music_hir::{
     HirExprKind, HirFStringPart, HirLit, HirLitKind, HirOrigin, HirPat, HirPatId, HirPatKind,
@@ -129,7 +129,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         bind_names: bool,
         bind_kind: NameBindingKind,
     ) -> HirPatKind {
-        let mut fields = vec![];
+        let mut fields = Vec::new();
         let mut it = node.children().peekable();
         while let Some(el) = it.next() {
             let Some(tok) = el.into_token() else {
@@ -142,8 +142,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 continue;
             }
             let (mutable, name_tok) = if matches!(tok.kind(), TokenKind::KwMut) {
-                let Some(name_tok) = it.next().and_then(music_ast::SyntaxElement::into_token)
-                else {
+                let Some(name_tok) = it.next().and_then(SyntaxElement::into_token) else {
                     self.error(node.span(), "expected record pattern field name");
                     break;
                 };
@@ -229,7 +228,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
         bind_names: bool,
         bind_kind: NameBindingKind,
     ) -> HirPatKind {
-        let mut alt_nodes = vec![];
+        let mut alt_nodes = Vec::new();
         Self::collect_or_pat_nodes(node, &mut alt_nodes);
         let alts = self.lower_or_pat_alts(bind_names, bind_kind, &alt_nodes);
         HirPatKind::Or { alts }
@@ -265,7 +264,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             return out.into_boxed_slice();
         }
 
-        let mut binds_per_alt: Vec<BTreeMap<Symbol, Span>> = vec![];
+        let mut binds_per_alt: Vec<BTreeMap<Symbol, Span>> = Vec::new();
         for alt in alt_nodes {
             let mut binds = BTreeMap::new();
             self.collect_pat_binds(*alt, &mut binds);
@@ -341,7 +340,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                         continue;
                     }
                     let name_tok = if matches!(tok.kind(), TokenKind::KwMut) {
-                        it.next().and_then(music_ast::SyntaxElement::into_token)
+                        it.next().and_then(SyntaxElement::into_token)
                     } else {
                         Some(tok)
                     };
@@ -405,7 +404,7 @@ impl<'tree> Resolver<'_, 'tree, '_> {
                 HirLitKind::String(HirStringLit::new(token.span(), Some(token.id())))
             }
             TokenKind::FStringLit(parts) => {
-                let mut hir_parts = vec![];
+                let mut hir_parts = Vec::new();
                 for part in parts {
                     match part.kind {
                         FStringPartKind::Literal => {

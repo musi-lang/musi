@@ -91,16 +91,16 @@ impl Parser<'_, '_, '_> {
             }
             TokenKind::Dot => self.parse_dot_prefix_expr(),
             TokenKind::KwCase => self.parse_case_expr(),
-            TokenKind::KwLet => self.parse_let_expr_required_body(vec![]),
+            TokenKind::KwLet => self.parse_let_expr_required_body(Vec::new()),
             TokenKind::KwResume => self.parse_resume_expr(),
             TokenKind::KwImport => self.parse_import_expr(),
             TokenKind::KwData => self.parse_data_expr(),
             TokenKind::KwEffect => self.parse_effect_expr(),
             TokenKind::KwClass => self.parse_class_expr(),
-            TokenKind::KwInstance => self.parse_instance_expr(vec![]),
+            TokenKind::KwInstance => self.parse_instance_expr(Vec::new()),
             TokenKind::KwPerform => self.parse_perform_expr(),
             TokenKind::KwHandle => self.parse_handle_expr(),
-            TokenKind::KwForeign => self.parse_foreign_expr(vec![]),
+            TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),
             TokenKind::KwQuote => self.parse_quote_expr(),
             TokenKind::Hash | TokenKind::SpliceLParen | TokenKind::SpliceLBracket => {
                 self.parse_splice_expr()
@@ -195,7 +195,7 @@ impl Parser<'_, '_, '_> {
             }
             Err(error) => {
                 parser.error(error);
-                let mut junk = vec![];
+                let mut junk = Vec::new();
                 while !parser.at(&TokenKind::Eof) {
                     junk.push(parser.advance_element());
                 }
@@ -316,7 +316,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_array_item(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if let Some(spread) = self.eat(&TokenKind::DotDotDot) {
             children.push(spread);
         }
@@ -364,7 +364,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_record_item(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if let Some(spread) = self.eat(&TokenKind::DotDotDot) {
             children.push(spread);
             let expr = self.parse_expr(0)?;
@@ -661,7 +661,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_arg_list(&mut self) -> ParseResult<Vec<SyntaxElementId>> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if self.at(&TokenKind::RParen) {
             return Ok(children);
         }
@@ -680,7 +680,7 @@ impl Parser<'_, '_, '_> {
     }
 
     fn parse_arg(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = vec![];
+        let mut children = Vec::new();
         if let Some(spread) = self.eat(&TokenKind::DotDotDot) {
             children.push(spread);
             let expr = self.parse_expr(0)?;

@@ -72,7 +72,7 @@ impl<'a> MethodEmitter<'a> {
             constants,
             methods,
             types,
-            instructions: vec![],
+            instructions: Vec::new(),
             locals: HashMap::new(),
             next_local_slot: 0,
         }
@@ -88,7 +88,7 @@ impl<'a> MethodEmitter<'a> {
             name,
             instructions: mem::take(&mut self.instructions),
             locals_count,
-            absolute_global_loads: vec![],
+            absolute_global_loads: Vec::new(),
         });
         index
     }

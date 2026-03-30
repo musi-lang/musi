@@ -221,7 +221,7 @@ impl Checker<'_> {
     }
 
     pub fn mark_pat_bindings_mut(&mut self, pat: HirPatId, mutable: bool) {
-        let mut sites = vec![];
+        let mut sites = Vec::new();
         self.collect_bind_sites(pat, &mut sites);
         for span in sites {
             if let Some(binding) = self.binding_for_def(span) {

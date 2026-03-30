@@ -441,8 +441,8 @@ impl Checker<'_> {
         ty_params: &HashMap<Symbol, u32>,
         members: &[HirMemberDef],
     ) {
-        // Only supports `let EffectName := effect { ... }` bindings for now.
-        let mut bind_sites = vec![];
+        // Supports `let EffectName := effect { ... }` bindings.
+        let mut bind_sites = Vec::new();
         self.collect_bind_sites(pat, &mut bind_sites);
         let Some(first_bind_span) = bind_sites.first().copied() else {
             return;
@@ -463,7 +463,7 @@ impl Checker<'_> {
             else {
                 continue;
             };
-            let mut param_tys = vec![];
+            let mut param_tys = Vec::new();
             for p in params {
                 let ty = p.annot.map_or(self.state.builtins.unknown, |t| {
                     self.lower_hir_ty(t, ty_params)
@@ -493,8 +493,8 @@ impl Checker<'_> {
         ty_params: &HashMap<Symbol, u32>,
         members: &[HirMemberDef],
     ) {
-        // Only supports `let ClassName := class { ... }` bindings for now.
-        let mut bind_sites = vec![];
+        // Supports `let ClassName := class { ... }` bindings.
+        let mut bind_sites = Vec::new();
         self.collect_bind_sites(pat, &mut bind_sites);
         let Some(first_bind_span) = bind_sites.first().copied() else {
             return;
@@ -517,7 +517,7 @@ impl Checker<'_> {
                 continue;
             };
 
-            let mut param_tys = vec![];
+            let mut param_tys = Vec::new();
             for p in params {
                 let ty = p.annot.map_or(self.state.builtins.unknown, |t| {
                     self.lower_hir_ty(t, ty_params)
@@ -573,8 +573,8 @@ impl Checker<'_> {
         variants: Option<&[HirVariantDef]>,
         fields: Option<&[HirFieldDef]>,
     ) {
-        // Only supports `let TypeName := data { ... }` bindings for now.
-        let mut bind_sites = vec![];
+        // Supports `let TypeName := data { ... }` bindings.
+        let mut bind_sites = Vec::new();
         self.collect_bind_sites(pat, &mut bind_sites);
         let Some(first_bind_span) = bind_sites.first().copied() else {
             return;
