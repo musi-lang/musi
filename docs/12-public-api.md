@@ -1,4 +1,4 @@
-# Public API Map (crates_new)
+# Public API Map (crates)
 
 This document is a practical inventory of what each clean-room crate exports today and what is considered its public Rust surface.
 
@@ -10,8 +10,8 @@ Policy:
 
 Notes:
 
-- There is no `music_shared` crate in `crates_new/`. Shared foundation types live in `music_basic`.
-- There is no `music_arena` crate in `crates_new/`. Arena and typed index storage live in `music_storage`.
+- There is no `music_shared` crate in `crates/`. Shared foundation types live in `music_basic`.
+- There is no `music_arena` crate in `crates/`. Arena and typed index storage live in `music_storage`.
 
 ## `music_basic`
 

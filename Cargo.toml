@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates_new/*"]
+members = ["crates/*"]
 resolver = "2"
 
 # https://doc.rust-lang.org/cargo/reference/manifest.html

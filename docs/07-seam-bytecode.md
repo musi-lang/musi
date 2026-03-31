@@ -1,6 +1,6 @@
 # SEAM Bytecode Reference
 
-SEAM bytecode is the binary execution contract for the clean-room SEAM layer in `crates_new/`.
+SEAM bytecode is the binary execution contract for the clean-room SEAM layer in `crates/`.
 
 - `music_il` owns the SEAM ISA, metadata descriptors, and artifact model.
 - `music_assembly` owns binary encoding/decoding, text IL transport, wire constants, and validation.
@@ -213,7 +213,7 @@ Pinning is not a public opcode. If the runtime needs to pin values for FFI, that
 
 ## Removed From The Clean-Room ISA
 
-These are intentionally absent from `crates_new/music_il`:
+These are intentionally absent from `crates/music_il`:
 
 - `ld.nil`
 - `ld.one`

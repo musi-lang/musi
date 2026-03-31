@@ -17,7 +17,7 @@ The VM that eventually executes SEAM is downstream of that boundary. The SEAM do
 | IR level            | typed runtime IR                        |
 | Binary artifact     | `.seam`                                 |
 | Human-readable form | SEAM text IL                            |
-| Contract crates     | `crates_new/music_il`, `music_assembly` |
+| Contract crates     | `crates/music_il`, `music_assembly` |
 
 SEAM stays small by lowering source sugar away. It stays expressive by keeping explicit operations for the runtime concepts the VM actually owns.
 

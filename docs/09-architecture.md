@@ -17,7 +17,7 @@ The architecture stays honest when:
 
 ## Locked Crate Structure
 
-The clean-room workspace in `crates_new/` uses bounded-context crate names and this structure is locked.
+The clean-room workspace in `crates/` uses bounded-context crate names and this structure is locked.
 
 Notes:
 

@@ -89,7 +89,7 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 
 ## Clean-Room Naming Rule (HARD)
 
-- In `crates_new/`, public names must be domain-specific when imported unqualified
+- In `crates/`, public names must be domain-specific when imported unqualified
 - Avoid std-like or generic exported names such as `Color`, `Label`, `List`, `Map`, `Table`, `Pool`, or `Result` when a bounded-context name is clearer
 - Keep established compiler-domain names like `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
 - Apply the same rule to internal helpers when the generic name obscures ownership
@@ -103,7 +103,7 @@ Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/
 
 ```mermaid
 graph TD
-    A["crates_new/music_basic/"] --> B["src/"]
+    A["crates/music_basic/"] --> B["src/"]
     A --> C["tests/"]
     B --> D["lib.rs"]
     B --> E["span.rs"]

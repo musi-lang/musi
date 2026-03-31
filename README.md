@@ -136,7 +136,7 @@ The canonical grammar lives in `grammar.abnf`. Historical pre-reduction docs liv
 
 ## Project Structure
 
-The clean-room crate structure lives under `crates_new/` and is the authoritative ownership map.
+The clean-room crate structure lives under `crates/` and is the authoritative ownership map.
 
 | Crate            | Role                                        |
 | ---------------- | ------------------------------------------- |

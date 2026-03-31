@@ -1,6 +1,6 @@
-# Feature Matrix (crates_new)
+# Feature Matrix (crates)
 
-This document tracks reduced-core language feature coverage across the clean-room crates in `crates_new/`.
+This document tracks reduced-core language feature coverage across the clean-room crates in `crates/`.
 
 The canonical feature definitions live in:
 
@@ -16,7 +16,7 @@ Status legend:
 
 - `done`: implemented and covered by tests/fixtures
 - `partial`: implemented but missing edge cases or cross-layer integration
-- `missing`: not implemented in `crates_new/`
+- `missing`: not implemented in `crates/`
 
 ## Surface Syntax
 

@@ -22,4 +22,4 @@ Historical pre-reduction material lives in `docs/legacy/`.
 
 Anything under `docs/legacy/` is archived, not normative.
 
-The clean-room crate structure in `crates_new/` is also locked. The canonical subsystem names are documented in `09-architecture.md`.
+The clean-room crate structure in `crates/` is also locked. The canonical subsystem names are documented in `09-architecture.md`.
