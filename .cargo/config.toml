@@ -2,3 +2,4 @@
 CARGO_INCREMENTAL = "0"
 CARGO_BUILD_JOBS = "3"
 RUSTFLAGS = "-Cdebuginfo=1"
+CC = { value = "cc", force = true }
