@@ -1,0 +1,25 @@
+[package]
+name = "music_base"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Compiler foundation: spans, sources, diagnostics, and shared utilities"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "bench_source"
+harness = false
+
+[[bench]]
+name = "bench_diag"
+harness = false
