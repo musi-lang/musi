@@ -100,6 +100,7 @@ impl Checker<'_> {
                     generic_count: 0,
                     ty: scrut_ty,
                     declared_effects: None,
+                    constraints: Box::new([]),
                 },
             );
         }
@@ -198,6 +199,7 @@ impl Checker<'_> {
                             generic_count: 0,
                             ty: field_ty.unwrap_or(self.state.builtins.unknown),
                             declared_effects: None,
+                            constraints: Box::new([]),
                         },
                     );
                 }
@@ -416,6 +418,7 @@ impl Checker<'_> {
                     generic_count: 0,
                     ty,
                     declared_effects: None,
+                    constraints: Box::new([]),
                 },
             );
         }
@@ -429,6 +432,7 @@ impl Checker<'_> {
                     generic_count: 0,
                     ty,
                     declared_effects: None,
+                    constraints: Box::new([]),
                 },
             );
         }
@@ -547,6 +551,7 @@ impl Checker<'_> {
                                 generic_count: 0,
                                 ty: p_ty,
                                 declared_effects: None,
+                                constraints: Box::new([]),
                             },
                         );
                     }

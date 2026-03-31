@@ -16,6 +16,18 @@ pub enum SemaErrorKind {
     #[error("expected type '{expected}', found '{found}'")]
     TypeMismatch { expected: String, found: String },
 
+    #[error("instance missing for class '{class}'")]
+    InstanceMissingForClass { class: String },
+
+    #[error("subtype constraint not satisfied; found '{found}' not subtype of '{bound}'")]
+    SubtypeConstraintNotSatisfied { found: String, bound: String },
+
+    #[error("constraint refers to unknown type parameter '{name}'")]
+    ConstraintUnknownTypeParam { name: String },
+
+    #[error("constraint requires named type")]
+    ConstraintRequiresNamedType,
+
     #[error("opaque type '{name}' blocks representation access")]
     OpaqueTypeBlocksRepresentation { name: String },
 
@@ -251,6 +263,10 @@ impl SemaErrorKind {
     const fn diag_code(&self) -> DiagCode {
         match self {
             Self::TypeMismatch { .. } => DiagCode::new(3006),
+            Self::InstanceMissingForClass { .. } => DiagCode::new(3069),
+            Self::SubtypeConstraintNotSatisfied { .. } => DiagCode::new(3070),
+            Self::ConstraintUnknownTypeParam { .. } => DiagCode::new(3071),
+            Self::ConstraintRequiresNamedType => DiagCode::new(3072),
             Self::MissingWithClause => DiagCode::new(3007),
             Self::InvalidPerformTarget => DiagCode::new(3008),
             Self::UnknownEffect { .. } => DiagCode::new(3009),

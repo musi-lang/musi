@@ -51,7 +51,7 @@ pub enum SemTy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InferVarId(u32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SemTys {
     tys: Vec<SemTy>,
     infer: Vec<Option<SemTyId>>,

@@ -1,12 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use music_basic::SourceId;
+use music_check::iface::{ModuleExportSummary, SemaImportEnv};
 use music_resolve::ImportEnv;
 
 #[derive(Debug, Clone)]
 pub struct SessionImportModule {
     exports: Box<[String]>,
     opaque_exports: HashSet<String>,
+    export_summary: Option<ModuleExportSummary>,
 }
 
 impl SessionImportModule {
@@ -15,6 +17,7 @@ impl SessionImportModule {
         Self {
             exports: exports.into_iter().collect(),
             opaque_exports: HashSet::new(),
+            export_summary: None,
         }
     }
 
@@ -26,6 +29,20 @@ impl SessionImportModule {
         Self {
             exports: exports.into_iter().collect(),
             opaque_exports: opaque_exports.into_iter().collect(),
+            export_summary: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_export_summary(
+        exports: impl IntoIterator<Item = String>,
+        opaque_exports: impl IntoIterator<Item = String>,
+        export_summary: ModuleExportSummary,
+    ) -> Self {
+        Self {
+            exports: exports.into_iter().collect(),
+            opaque_exports: opaque_exports.into_iter().collect(),
+            export_summary: Some(export_summary),
         }
     }
 
@@ -83,5 +100,13 @@ impl ImportEnv for SessionImportEnv {
         self.modules
             .get(path)
             .is_some_and(|m| m.is_export_opaque(name))
+    }
+}
+
+impl SemaImportEnv for SessionImportEnv {
+    fn module_summary(&self, _from: SourceId, path: &str) -> Option<&ModuleExportSummary> {
+        self.modules
+            .get(path)
+            .and_then(|m| m.export_summary.as_ref())
     }
 }

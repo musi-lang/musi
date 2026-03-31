@@ -95,6 +95,10 @@ fn collect_import_paths(
     let root = tree.root();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
+        // Imports inside quoted syntax are inert and do not participate in module discovery.
+        if node.kind() == SyntaxNodeKind::QuoteExpr {
+            continue;
+        }
         if node.kind() == SyntaxNodeKind::ImportExpr {
             let path_tok = node
                 .child_tokens()

@@ -37,13 +37,11 @@ impl Checker<'_> {
                     );
                 }
 
-                let ty = self
-                    .state
-                    .env
-                    .get_value(binding)
-                    .map_or(self.state.builtins.unknown, |scheme| {
-                        scheme.instantiate(&mut self.state.semtys, ident.span)
-                    });
+                let scheme = self.state.env.get_value(binding).cloned();
+                let ty = match scheme.as_ref() {
+                    Some(scheme) => self.instantiate_scheme(ident.span, scheme).ty,
+                    None => self.state.builtins.unknown,
+                };
                 (ty, EffectRow::empty())
             }
             HirExprKind::Member { base, chain, key } => {

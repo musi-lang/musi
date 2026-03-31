@@ -102,7 +102,7 @@ Exports:
 
 - `analyze_module`, `AnalyzedModule`
 - errors: `SemaError`, `SemaErrorKind`, `SemaErrorKinds`, `SemaErrors`
-- effect/type surface used by sema: `EffectRow`, `EffectKey`, `SemTy*`
+- semantic interface model: `music_check::iface` (`ModuleExportSummary`, `Export*`, `SemaImportEnv`)
 
 ## `music_ir`
 
@@ -111,6 +111,16 @@ Exports:
 - layout: `IrDataLayout`, `IrDataLayouts`
 - module facts: `IrModuleInfo`
 - expression typing surface: `IrExprTy`, `IrScalarTy`, `IrTypeRef`
+
+## `music_irgen`
+
+Exports:
+
+- `build_ir_module_info`
+
+Contracts:
+
+- Produces `music_ir::IrModuleInfo` from typed HIR (post-check) without depending on `music_check`.
 
 ## `music_codegen`
 

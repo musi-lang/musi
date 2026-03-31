@@ -25,6 +25,7 @@ pub(crate) fn analyze_text_full(text: &str) -> SemaErrors {
         &sources,
         &mut interner,
         ResolveOptions::default(),
+        None,
     );
     assert!(
         analyzed.resolve_errors.is_empty(),

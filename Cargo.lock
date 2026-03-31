@@ -279,7 +279,6 @@ dependencies = [
  "music_ast",
  "music_basic",
  "music_hir",
- "music_ir",
  "music_known",
  "music_lex",
  "music_names",
@@ -297,6 +296,7 @@ dependencies = [
  "music_hir",
  "music_il",
  "music_ir",
+ "music_irgen",
  "music_known",
  "music_lex",
  "music_names",
@@ -339,6 +339,17 @@ version = "0.1.0-alpha.1"
 name = "music_ir"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "music_names",
+]
+
+[[package]]
+name = "music_irgen"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_basic",
+ "music_hir",
+ "music_ir",
+ "music_known",
  "music_names",
 ]
 

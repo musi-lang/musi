@@ -155,6 +155,7 @@ impl Session {
             &self.sources,
             &mut self.interner,
             options,
+            Some(&self.import_env),
         );
 
         self.register_analyzed_module(source_id, &analyzed);
@@ -174,6 +175,7 @@ impl Session {
             &self.sources,
             &mut self.interner,
             options,
+            Some(&self.import_env),
         );
 
         self.register_analyzed_module(source_id, &analyzed);
@@ -200,7 +202,11 @@ impl Session {
         let opaque_exports = collect_top_level_opaque_exports(&analyzed.module, &self.interner);
         self.import_env.insert(
             path,
-            SessionImportModule::with_opaque_exports(exports, opaque_exports),
+            SessionImportModule::with_export_summary(
+                exports,
+                opaque_exports,
+                analyzed.interface.clone(),
+            ),
         );
     }
 }

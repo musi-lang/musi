@@ -65,6 +65,7 @@ pub fn compile_entry(session: &mut Session, entry: SourceId) -> FrontendResult<C
     let program = EmitProgram {
         interner: session.interner(),
         sources: session.sources(),
+        known: session.known(),
         modules_in_order,
         entry_path: entry_path.as_str(),
     };

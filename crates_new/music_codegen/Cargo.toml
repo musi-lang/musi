@@ -12,12 +12,13 @@ music_basic = { path = "../music_basic" }
 music_check = { path = "../music_check" }
 music_hir = { path = "../music_hir" }
 music_ir = { path = "../music_ir" }
+music_irgen = { path = "../music_irgen" }
 music_il = { path = "../music_il" }
+music_known = { path = "../music_known" }
 music_names = { path = "../music_names" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-music_known = { path = "../music_known" }
 music_lex = { path = "../music_lex" }
 music_parse = { path = "../music_parse" }
 music_resolve = { path = "../music_resolve" }

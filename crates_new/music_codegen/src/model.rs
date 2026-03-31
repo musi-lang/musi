@@ -1,6 +1,7 @@
 use music_basic::SourceMap;
 use music_check::AnalyzedModule;
 use music_il::SeamArtifact;
+use music_known::KnownSymbols;
 use music_names::Interner;
 
 #[derive(Debug)]
@@ -13,6 +14,7 @@ pub struct EmitModule<'a> {
 pub struct EmitProgram<'a> {
     pub interner: &'a Interner,
     pub sources: &'a SourceMap,
+    pub known: KnownSymbols,
     pub modules_in_order: Box<[EmitModule<'a>]>,
     pub entry_path: &'a str,
 }

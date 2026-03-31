@@ -4,6 +4,7 @@ use music_basic::SourceMap;
 use music_check::AnalyzedModule;
 use music_hir::{HirExprId, HirExprKind};
 use music_il::{ConstantPool, Instruction, MethodEntry, MethodName, Opcode, TypeDescriptor};
+use music_ir::IrModuleInfo;
 use music_names::{Interner, NameBindingId};
 
 use crate::errors::{EmitError, EmitErrorKind, EmitResult};
@@ -15,6 +16,7 @@ pub(super) struct FunctionEmitter<'a> {
     interner: &'a Interner,
     sources: &'a SourceMap,
     analyzed: &'a AnalyzedModule,
+    ir: &'a IrModuleInfo,
     globals_by_binding: &'a HashMap<NameBindingId, u16>,
     import_globals_by_binding: &'a HashMap<NameBindingId, u16>,
     module_export_globals: &'a HashMap<ModuleExportKey, u16>,
@@ -28,6 +30,7 @@ impl<'a> FunctionEmitter<'a> {
         interner: &'a Interner,
         sources: &'a SourceMap,
         analyzed: &'a AnalyzedModule,
+        ir: &'a IrModuleInfo,
         maps: EmitMaps<'a>,
         pools: EmitPools<'a>,
     ) -> Self {
@@ -40,6 +43,7 @@ impl<'a> FunctionEmitter<'a> {
             interner,
             sources,
             analyzed,
+            ir,
             globals_by_binding: maps.globals_by_binding,
             import_globals_by_binding: maps.import_globals_by_binding,
             module_export_globals: maps.module_export_globals,
@@ -69,7 +73,7 @@ impl<'a> FunctionEmitter<'a> {
                 source_id: self.analyzed.module.source_id,
                 store: &self.analyzed.module.store,
                 names: &self.analyzed.names,
-                ir: &self.analyzed.ir,
+                ir: self.ir,
                 maps: EmitMaps {
                     globals_by_binding: self.globals_by_binding,
                     import_globals_by_binding: self.import_globals_by_binding,
@@ -102,7 +106,7 @@ impl<'a> FunctionEmitter<'a> {
                 source_id: self.analyzed.module.source_id,
                 store: &self.analyzed.module.store,
                 names: &self.analyzed.names,
-                ir: &self.analyzed.ir,
+                ir: self.ir,
                 maps: EmitMaps {
                     globals_by_binding: self.globals_by_binding,
                     import_globals_by_binding: self.import_globals_by_binding,

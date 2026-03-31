@@ -9,6 +9,8 @@ use music_il::{
     ConstantPool, GlobalEntry, Instruction, MethodEntry, MethodName, Opcode, SeamArtifact,
     TypeDescriptor,
 };
+use music_irgen::build_ir_module_info;
+use music_known::KnownSymbols;
 use music_names::{
     Interner, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol, SymbolSlice,
 };
@@ -23,6 +25,7 @@ pub(super) struct ProgramEmitter<'a> {
     interner: &'a Interner,
     sources: &'a SourceMap,
     entry_path: &'a str,
+    known: KnownSymbols,
 
     constants: ConstantPool,
     methods: Vec<MethodEntry>,
@@ -35,11 +38,17 @@ pub(super) struct ProgramEmitter<'a> {
 }
 
 impl<'a> ProgramEmitter<'a> {
-    pub(super) fn new(interner: &'a Interner, sources: &'a SourceMap, entry_path: &'a str) -> Self {
+    pub(super) fn new(
+        interner: &'a Interner,
+        sources: &'a SourceMap,
+        entry_path: &'a str,
+        known: KnownSymbols,
+    ) -> Self {
         Self {
             interner,
             sources,
             entry_path,
+            known,
             constants: ConstantPool::new(),
             methods: Vec::new(),
             globals: Vec::new(),
@@ -172,6 +181,8 @@ impl<'a> ProgramEmitter<'a> {
         analyzed: &AnalyzedModule,
         entry_index: usize,
     ) -> EmitResult {
+        let ir = build_ir_module_info(self.known, self.interner, &analyzed.module, &analyzed.names);
+
         let root = analyzed
             .module
             .store
@@ -190,6 +201,7 @@ impl<'a> ProgramEmitter<'a> {
                 self.interner,
                 self.sources,
                 analyzed,
+                &ir,
                 EmitMaps {
                     globals_by_binding: &self.global_by_binding,
                     import_globals_by_binding: &self.import_global_by_binding,

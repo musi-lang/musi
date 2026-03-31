@@ -8,13 +8,34 @@ use crate::{
     unify,
 };
 
-use super::{EffectRow, SemTy, SemTyId, SemTys};
+use super::{EffectKey, EffectRow, SemTy, SemTyId, SemTys};
 
 #[derive(Debug, Clone)]
 pub struct ValueScheme {
     pub generic_count: u32,
     pub ty: SemTyId,
     pub declared_effects: Option<EffectRow>,
+    pub constraints: Box<[SemConstraint]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemTyNamed {
+    pub name: Symbol,
+    pub args: SemTyIds,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SemConstraint {
+    Subtype {
+        name: Symbol,
+        idx: u32,
+        bound: SemTyNamed,
+    },
+    Implements {
+        name: Symbol,
+        idx: u32,
+        class: SemTyNamed,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +63,13 @@ pub struct ClassFamily {
 }
 
 #[derive(Debug, Clone)]
+pub struct InstanceScheme {
+    pub generic_count: u32,
+    pub args: SemTyIds,
+    pub constraints: Box<[SemConstraint]>,
+}
+
+#[derive(Debug, Clone)]
 pub struct DataDef {
     pub generic_count: u32,
     pub variants: Option<HashMap<Symbol, Option<SemTyId>>>,
@@ -58,7 +86,7 @@ pub struct TypeEnv {
     values: HashMap<NameBindingId, ValueScheme>,
     effects: HashMap<NameBindingId, EffectFamily>,
     classes: HashMap<NameBindingId, ClassFamily>,
-    instances: HashMap<NameBindingId, Vec<SemTyIds>>,
+    instances: HashMap<Symbol, Vec<InstanceScheme>>,
     data_defs: HashMap<Symbol, DataDef>,
 }
 
@@ -115,8 +143,8 @@ impl TypeEnv {
         self.classes.get(&binding)
     }
 
-    pub fn insert_instance(&mut self, class: NameBindingId, args: SemTyIds) {
-        self.instances.entry(class).or_default().push(args);
+    pub fn insert_instance(&mut self, class: Symbol, scheme: InstanceScheme) {
+        self.instances.entry(class).or_default().push(scheme);
     }
 
     pub fn insert_data_def(&mut self, name: Symbol, def: DataDef) {
@@ -127,12 +155,27 @@ impl TypeEnv {
     pub fn get_data_def(&self, name: Symbol) -> Option<&DataDef> {
         self.data_defs.get(&name)
     }
+
+    #[must_use]
+    pub fn instances_for_class(&self, class: Symbol) -> Option<&[InstanceScheme]> {
+        self.instances.get(&class).map(|v| v.as_slice())
+    }
 }
 
 impl ValueScheme {
-    pub fn instantiate(&self, tys: &mut SemTys, span: Span) -> SemTyId {
+    pub fn instantiate(&self, tys: &mut SemTys, span: Span) -> InstantiatedScheme {
         if self.generic_count == 0 {
-            return self.ty;
+            return InstantiatedScheme {
+                ty: self.ty,
+                declared_effects: self.declared_effects.clone(),
+                obligations: self
+                    .constraints
+                    .iter()
+                    .cloned()
+                    .map(|c| instantiate_constraint(tys, span, c, &[]))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            };
         }
 
         let cap = usize::try_from(self.generic_count).unwrap_or(0);
@@ -140,8 +183,106 @@ impl ValueScheme {
         for _ in 0..self.generic_count {
             subst.push(tys.fresh_infer_var(span));
         }
-        substitute_generics(tys, self.ty, &subst)
+
+        let ty = substitute_generics(tys, self.ty, &subst);
+        let declared_effects = self
+            .declared_effects
+            .as_ref()
+            .map(|row| substitute_effect_row(tys, row, &subst));
+
+        let obligations = self
+            .constraints
+            .iter()
+            .cloned()
+            .map(|c| instantiate_constraint(tys, span, c, &subst))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        InstantiatedScheme {
+            ty,
+            declared_effects,
+            obligations,
+        }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct InstantiatedScheme {
+    pub ty: SemTyId,
+    pub declared_effects: Option<EffectRow>,
+    pub obligations: Box<[SemObligation]>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SemObligationKind {
+    Subtype { left: SemTyId, right: SemTyNamed },
+    Implements { ty: SemTyId, class: SemTyNamed },
+}
+
+#[derive(Debug, Clone)]
+pub struct SemObligation {
+    pub span: Span,
+    pub kind: SemObligationKind,
+}
+
+pub(crate) fn instantiate_constraint(
+    tys: &mut SemTys,
+    span: Span,
+    c: SemConstraint,
+    subst: &[SemTyId],
+) -> SemObligation {
+    match c {
+        SemConstraint::Subtype { idx, bound, .. } => {
+            let left = subst
+                .get(usize::try_from(idx).unwrap_or(usize::MAX))
+                .copied()
+                .unwrap_or_else(|| tys.fresh_infer_var(span));
+            let right = SemTyNamed {
+                name: bound.name,
+                args: bound
+                    .args
+                    .iter()
+                    .copied()
+                    .map(|t| substitute_generics(tys, t, subst))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            };
+            SemObligation {
+                span,
+                kind: SemObligationKind::Subtype { left, right },
+            }
+        }
+        SemConstraint::Implements { idx, class, .. } => {
+            let ty = subst
+                .get(usize::try_from(idx).unwrap_or(usize::MAX))
+                .copied()
+                .unwrap_or_else(|| tys.fresh_infer_var(span));
+            let class = SemTyNamed {
+                name: class.name,
+                args: class
+                    .args
+                    .iter()
+                    .copied()
+                    .map(|t| substitute_generics(tys, t, subst))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            };
+            SemObligation {
+                span,
+                kind: SemObligationKind::Implements { ty, class },
+            }
+        }
+    }
+}
+
+fn substitute_effect_row(tys: &mut SemTys, row: &EffectRow, subst: &[SemTyId]) -> EffectRow {
+    let mut out = EffectRow::empty();
+    out.is_open = row.is_open;
+    for EffectKey { name, arg } in row.items.iter().cloned() {
+        let arg = arg.map(|t| substitute_generics(tys, t, subst));
+        out.add(EffectKey { name, arg });
+    }
+    out
 }
 
 pub fn substitute_generics(tys: &mut SemTys, ty: SemTyId, subst: &[SemTyId]) -> SemTyId {

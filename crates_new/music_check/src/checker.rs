@@ -1,15 +1,17 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use music_basic::{SourceId, SourceMap, Span, string_lit};
 use music_hir::{HirExprId, HirPatId, HirStore};
-use music_ir::IrModuleInfo;
 use music_known::KnownSymbols;
 use music_names::{Interner, NameBindingId, NameBindingKind, NameResolution, NameSite, Symbol};
 
+use crate::iface::{ModuleExportSummary, SemaImportEnv};
 use crate::{SemaError, SemaErrorKind};
 
-use super::env::{EffectOpSig, TypeEnv, ValueScheme};
-use super::ir;
+use super::env::{
+    EffectOpSig, InstanceScheme, InstantiatedScheme, SemObligation, SemObligationKind, SemTyNamed,
+    TypeEnv, ValueScheme, substitute_generics,
+};
 use super::lang::LangItems;
 use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
 
@@ -17,6 +19,18 @@ use super::{EffectRow, SemTy, SemTyId, SemTys, binding_by_site, site};
 pub struct ResumeCtx {
     pub arg: SemTyId,
     pub result: SemTyId,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ImportRecordEntry {
+    pub scheme: ValueScheme,
+    pub effect_family: Option<super::env::EffectFamily>,
+    pub class_family: Option<super::env::ClassFamily>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ImportRecord {
+    pub entries: HashMap<Symbol, ImportRecordEntry>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +56,8 @@ pub struct BuiltinTys {
 pub struct FlowState {
     pub expr_tys: HashMap<HirExprId, SemTyId>,
     pub callable_effs: HashMap<HirExprId, EffectRow>,
+    pub import_records: HashMap<HirExprId, ImportRecord>,
+    pub instance_schemes: HashMap<HirExprId, InstanceScheme>,
     pub resume_stack: Vec<ResumeCtx>,
 }
 
@@ -50,7 +66,9 @@ pub struct CheckerCtx<'a> {
     pub sources: &'a SourceMap,
     pub interner: &'a mut Interner,
     pub names: &'a NameResolution,
+    pub import_env: Option<&'a dyn SemaImportEnv>,
     pub binding_by_site: HashMap<NameSite, NameBindingId>,
+    pub import_binding_by_key: HashMap<(Span, Symbol), NameBindingId>,
     pub store: &'a mut HirStore,
     pub errors: &'a mut Vec<SemaError>,
 }
@@ -62,8 +80,10 @@ pub struct CheckerState {
     pub lang: LangItems,
     pub builtins: BuiltinTys,
     pub flow: FlowState,
+    pub obligations: Vec<SemObligation>,
     pub binding_mut: HashMap<NameBindingId, bool>,
     pub opaque_imports: HashSet<Symbol>,
+    pub imported_modules: HashSet<String>,
 }
 
 pub struct Checker<'a> {
@@ -79,6 +99,7 @@ impl Checker<'_> {
         names: &'a NameResolution,
         store: &'a mut HirStore,
         errors: &'a mut Vec<SemaError>,
+        import_env: Option<&'a dyn SemaImportEnv>,
     ) -> Checker<'a> {
         let known = KnownSymbols::new(interner);
         let mut semtys = SemTys::new();
@@ -103,7 +124,9 @@ impl Checker<'_> {
                 sources,
                 interner,
                 names,
+                import_env,
                 binding_by_site: binding_by_site(names),
+                import_binding_by_key: HashMap::new(),
                 store,
                 errors,
             },
@@ -128,10 +151,22 @@ impl Checker<'_> {
                     cptr,
                 },
                 flow: FlowState::default(),
+                obligations: Vec::new(),
                 binding_mut: HashMap::new(),
                 opaque_imports: HashSet::new(),
+                imported_modules: HashSet::new(),
             },
         };
+
+        for (id, binding) in &checker.ctx.names.bindings {
+            if !matches!(binding.kind, NameBindingKind::Import { .. }) {
+                continue;
+            }
+            let _prev = checker
+                .ctx
+                .import_binding_by_key
+                .insert((binding.site.span, binding.name), id);
+        }
 
         for (_id, binding) in &checker.ctx.names.bindings {
             let NameBindingKind::Import { opaque: true } = binding.kind else {
@@ -145,19 +180,178 @@ impl Checker<'_> {
         checker
     }
 
-    pub fn check_module(&mut self, root: HirExprId) -> IrModuleInfo {
+    pub fn check_module(&mut self, root: HirExprId) -> ModuleExportSummary {
         self.validate_public_attrs();
         let _ = self.synth_expr(root);
+        self.solve_obligations();
         self.finalize_expr_types();
-        ir::build_ir_module(
-            self.state.known,
-            self.ctx.interner,
-            &self.state.semtys,
-            &self.state.flow.expr_tys,
-            self.ctx.store,
-            self.ctx.names,
-            self.ctx.source_id,
-        )
+        self.build_export_summary(root)
+    }
+
+    pub(crate) fn instantiate_scheme(
+        &mut self,
+        span: Span,
+        scheme: &ValueScheme,
+    ) -> InstantiatedScheme {
+        let inst = scheme.instantiate(&mut self.state.semtys, span);
+        self.state
+            .obligations
+            .extend(inst.obligations.iter().cloned());
+        inst
+    }
+
+    fn solve_obligations(&mut self) {
+        let mut queue = VecDeque::from(std::mem::take(&mut self.state.obligations));
+        while let Some(ob) = queue.pop_front() {
+            match ob.kind {
+                SemObligationKind::Subtype { left, right } => {
+                    if self.obligation_satisfied_subtype(left, &right) {
+                        continue;
+                    }
+
+                    let found = crate::ty::SemTyDisplay {
+                        tys: &self.state.semtys,
+                        interner: self.ctx.interner,
+                        ty: crate::unify::resolve(&self.state.semtys, left),
+                    }
+                    .to_string();
+
+                    let bound_ty = self.state.semtys.alloc(SemTy::Named {
+                        name: right.name,
+                        args: right.args.clone(),
+                    });
+                    let bound = crate::ty::SemTyDisplay {
+                        tys: &self.state.semtys,
+                        interner: self.ctx.interner,
+                        ty: bound_ty,
+                    }
+                    .to_string();
+
+                    self.error(
+                        ob.span,
+                        SemaErrorKind::SubtypeConstraintNotSatisfied { found, bound },
+                    );
+                }
+                SemObligationKind::Implements { ty, class } => {
+                    if self.obligation_is_trivially_satisfied(ty) {
+                        continue;
+                    }
+
+                    if let Some(new_obs) = self.try_apply_instance(ob.span, ty, &class) {
+                        for ob in new_obs {
+                            queue.push_back(ob);
+                        }
+                        continue;
+                    }
+
+                    self.error(
+                        ob.span,
+                        SemaErrorKind::InstanceMissingForClass {
+                            class: String::from(self.ctx.interner.resolve(class.name)),
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    fn obligation_is_trivially_satisfied(&self, ty: SemTyId) -> bool {
+        let ty = crate::unify::resolve(&self.state.semtys, ty);
+        match self.state.semtys.get(ty) {
+            SemTy::Error | SemTy::Unknown | SemTy::Any => true,
+            SemTy::InferVar(var) => self.state.semtys.infer_binding(*var).is_none(),
+            _ => false,
+        }
+    }
+
+    fn obligation_satisfied_subtype(&self, left: SemTyId, right: &SemTyNamed) -> bool {
+        let left = crate::unify::resolve(&self.state.semtys, left);
+        match self.state.semtys.get(left) {
+            SemTy::Error | SemTy::Unknown | SemTy::Any => return true,
+            SemTy::InferVar(var) => {
+                if self.state.semtys.infer_binding(*var).is_none() {
+                    return true;
+                }
+            }
+            SemTy::Mut { base } => {
+                return self.obligation_satisfied_subtype(*base, right);
+            }
+            _ => {}
+        }
+
+        let mut tmp = self.state.semtys.clone();
+        let left = crate::unify::resolve(&tmp, left);
+        let right_ty = tmp.alloc(SemTy::Named {
+            name: right.name,
+            args: right.args.clone(),
+        });
+        crate::unify::unify(&mut tmp, left, right_ty).is_ok()
+    }
+
+    fn try_apply_instance(
+        &mut self,
+        span: Span,
+        ty: SemTyId,
+        class: &SemTyNamed,
+    ) -> Option<Box<[SemObligation]>> {
+        let ty = crate::unify::resolve(&self.state.semtys, ty);
+        let mut target_args = Vec::with_capacity(1 + class.args.len());
+        target_args.push(ty);
+        target_args.extend(class.args.iter().copied());
+
+        let instances = self
+            .state
+            .env
+            .instances_for_class(class.name)
+            .map(<[InstanceScheme]>::to_vec)?;
+
+        for scheme in instances.iter() {
+            let obs = self.try_apply_instance_scheme(span, scheme, &target_args);
+            if obs.is_some() {
+                return obs;
+            }
+        }
+        None
+    }
+
+    fn try_apply_instance_scheme(
+        &mut self,
+        span: Span,
+        scheme: &InstanceScheme,
+        target_args: &[SemTyId],
+    ) -> Option<Box<[SemObligation]>> {
+        if scheme.args.len() != target_args.len() {
+            return None;
+        }
+
+        let cap = usize::try_from(scheme.generic_count).unwrap_or(0);
+        let mut subst = Vec::with_capacity(cap);
+        for _ in 0..scheme.generic_count {
+            subst.push(self.state.semtys.fresh_infer_var(span));
+        }
+
+        let inst_args = scheme
+            .args
+            .iter()
+            .copied()
+            .map(|t| substitute_generics(&mut self.state.semtys, t, &subst))
+            .collect::<Vec<_>>();
+
+        for (&need, &have) in target_args.iter().zip(inst_args.iter()) {
+            if crate::unify::unify(&mut self.state.semtys, need, have).is_err() {
+                return None;
+            }
+        }
+
+        let obs = scheme
+            .constraints
+            .iter()
+            .cloned()
+            .map(|c| super::env::instantiate_constraint(&mut self.state.semtys, span, c, &subst))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        Some(obs)
     }
 
     fn finalize_expr_types(&mut self) {
@@ -258,6 +452,7 @@ impl Checker<'_> {
                     generic_count: 0,
                     ty: self.state.builtins.type_,
                     declared_effects: None,
+                    constraints: Box::new([]),
                 },
             );
         }

@@ -15,12 +15,13 @@ impl Checker<'_> {
             let splice = self.ctx.store.splices.get(splice_id).clone();
             match splice.kind {
                 HirSpliceKind::Name(ident) => {
-                    let ty = self
+                    let scheme = self
                         .binding_for_use(ident.span)
-                        .and_then(|binding| self.state.env.get_value(binding))
-                        .map_or(self.state.builtins.unknown, |scheme| {
-                            scheme.instantiate(&mut self.state.semtys, ident.span)
-                        });
+                        .and_then(|binding| self.state.env.get_value(binding).cloned());
+                    let ty = match scheme.as_ref() {
+                        Some(scheme) => self.instantiate_scheme(ident.span, scheme).ty,
+                        None => self.state.builtins.unknown,
+                    };
                     let _ = self.unify_or_report(ident.span, self.state.builtins.syntax, ty);
                 }
                 HirSpliceKind::Expr(expr) => {

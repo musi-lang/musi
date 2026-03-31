@@ -12,8 +12,10 @@ mod checker;
 mod effects;
 mod env;
 mod errors;
+mod export_build;
 mod expr;
-mod ir;
+pub mod iface;
+mod import_build;
 mod lang;
 mod lower;
 mod ty;
@@ -24,15 +26,13 @@ use std::collections::HashMap;
 use music_ast::SyntaxTree;
 use music_basic::{SourceId, SourceMap, Span};
 use music_hir::{HirModule, HirOrigin};
-use music_ir::IrModuleInfo;
 use music_names::{Interner, NameBindingId, NameResolution, NameSite, SymbolSlice};
 use music_resolve::{ResolveError, ResolveOptions, ResolvedModule};
 
-pub use effects::{EffectKey, EffectRow};
+pub(crate) use effects::{EffectKey, EffectRow};
 pub use errors::{SemaError, SemaErrorKind, SemaErrorKinds, SemaErrors};
-pub use ty::{SemTy, SemTyId, SemTys};
-
-pub use ty::SemTyDisplay;
+pub(crate) use ty::SemTyDisplay;
+pub(crate) use ty::{SemTy, SemTyId, SemTys};
 
 use crate::checker::Checker;
 
@@ -44,7 +44,7 @@ pub struct AnalyzedModule {
     pub names: NameResolution,
     pub resolve_errors: Vec<ResolveError>,
     pub check_errors: Vec<SemaError>,
-    pub ir: IrModuleInfo,
+    pub interface: iface::ModuleExportSummary,
 }
 
 #[must_use]
@@ -53,6 +53,7 @@ pub fn analyze_module(
     sources: &SourceMap,
     interner: &mut Interner,
     options: ResolveOptions<'_>,
+    sema_import_env: Option<&dyn iface::SemaImportEnv>,
 ) -> AnalyzedModule {
     let ResolvedModule {
         mut module,
@@ -69,8 +70,9 @@ pub fn analyze_module(
         &names,
         &mut module.store,
         &mut check_errors,
+        sema_import_env,
     );
-    let ir = checker.check_module(module.root);
+    let interface = checker.check_module(module.root);
 
     AnalyzedModule {
         module,
@@ -78,7 +80,7 @@ pub fn analyze_module(
         names,
         resolve_errors,
         check_errors,
-        ir,
+        interface,
     }
 }
 

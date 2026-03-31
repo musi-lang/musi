@@ -839,8 +839,10 @@ impl<'tree> Resolver<'_, 'tree, '_> {
             .find(|n| n.kind() == SyntaxNodeKind::ParamList);
 
         self.push_scope();
-        let params =
-            params_node.map_or_else(|| Vec::new().into_boxed_slice(), |n| self.lower_param_list(n));
+        let params = params_node.map_or_else(
+            || Vec::new().into_boxed_slice(),
+            |n| self.lower_param_list(n),
+        );
 
         let ret = node
             .child_nodes()

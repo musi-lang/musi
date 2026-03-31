@@ -1,5 +1,6 @@
 use music_basic::SourceMap;
 use music_check::AnalyzedModule;
+use music_known::KnownSymbols;
 use music_names::Interner;
 
 use crate::errors::EmitResult;
@@ -22,11 +23,13 @@ pub fn emit_single_program(
     path: &str,
     interner: &Interner,
     sources: &SourceMap,
+    known: KnownSymbols,
     analyzed: &AnalyzedModule,
 ) -> EmitResult<ProgramArtifact> {
     let program = EmitProgram {
         interner,
         sources,
+        known,
         modules_in_order: Box::new([EmitModule { path, analyzed }]),
         entry_path: path,
     };
@@ -38,7 +41,12 @@ pub fn emit_single_program(
 /// # Errors
 /// Returns `Err` when emission fails.
 pub fn emit_program(program: &EmitProgram<'_>) -> EmitResult<ProgramArtifact> {
-    let mut emitter = ProgramEmitter::new(program.interner, program.sources, program.entry_path);
+    let mut emitter = ProgramEmitter::new(
+        program.interner,
+        program.sources,
+        program.entry_path,
+        program.known,
+    );
     for module in &program.modules_in_order {
         emitter.register_module(module.path, module.analyzed);
     }

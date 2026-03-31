@@ -32,6 +32,7 @@ impl Checker<'_> {
                         generic_count: 0,
                         ty,
                         declared_effects: None,
+                        constraints: Box::new([]),
                     },
                 );
                 if p.mutable {

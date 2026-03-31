@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, HashMap};
 
 use music_basic::{Span, int_lit};
 use music_hir::{
-    HirArg, HirArrayItem, HirArrowFlavor, HirBinaryOp, HirCaseArm, HirChainKind, HirDeclMods,
-    HirDim, HirEffectSet, HirExprId, HirExprKind, HirFStringPart, HirLitKind, HirMemberDef,
-    HirMemberKey, HirOrigin, HirParam, HirPatId, HirPrefixOp, HirRecordItem, HirTyId, HirTyKind,
-    HirTyParam,
+    HirArg, HirArrayItem, HirArrowFlavor, HirBinaryOp, HirCaseArm, HirChainKind, HirConstraint,
+    HirConstraintKind, HirDeclMods, HirDim, HirEffectSet, HirExprId, HirExprKind, HirFStringPart,
+    HirLitKind, HirMemberDef, HirMemberKey, HirOrigin, HirParam, HirPatId, HirPatKind, HirPrefixOp,
+    HirRecordItem, HirStringLit, HirTyId, HirTyKind, HirTyParam,
 };
 use music_names::{Ident, NameBindingId, Symbol, SymbolSlice};
 
@@ -34,6 +34,7 @@ struct LetExpr<'a> {
     has_params: bool,
     params: &'a [HirParam],
     ty_params: &'a [HirTyParam],
+    where_: &'a [HirConstraint],
     effects: Option<&'a HirEffectSet>,
     annot: Option<HirTyId>,
     value: Option<HirExprId>,
@@ -41,20 +42,7 @@ struct LetExpr<'a> {
 
 impl Checker<'_> {
     fn union_call_effects(&self, callee: HirExprId, effs: &mut EffectRow) {
-        // Named bindings may carry declared `with { ... }` effects (or inferred effects when
-        // aliases are created via `let x := f;` and `let x := (..) => ...;`).
-        if let HirExprKind::Named { ident } = self.ctx.store.exprs.get(callee).kind.clone() {
-            if let Some(binding) = self.binding_for_use(ident.span) {
-                if let Some(scheme) = self.state.env.get_value(binding) {
-                    if let Some(declared) = scheme.declared_effects.as_ref() {
-                        effs.union_with(declared);
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Inline lambdas carry latent effects that only happen when called.
+        // Callables may carry latent effects that only happen when called.
         if let Some(latent) = self.state.flow.callable_effs.get(&callee).cloned() {
             effs.union_with(&latent);
         }
@@ -100,7 +88,7 @@ impl Checker<'_> {
                 has_params,
                 params,
                 ty_params,
-                where_: _where,
+                where_,
                 effects,
                 annot,
                 value,
@@ -112,11 +100,14 @@ impl Checker<'_> {
                 has_params,
                 params: &params,
                 ty_params: &ty_params,
+                where_: &where_,
                 effects: effects.as_ref(),
                 annot,
                 value,
             }),
-            HirExprKind::Import { exports, .. } => self.synth_import(&exports),
+            HirExprKind::Import { path, exports } => {
+                self.synth_import(expr_id, origin, path, &exports)
+            }
             HirExprKind::ForeignBlock { items, .. } => self.synth_foreign_block(&items),
             HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Class { .. } => {
                 (self.state.builtins.type_, EffectRow::empty())
@@ -129,10 +120,9 @@ impl Checker<'_> {
                 members,
             } => {
                 let _ = mods;
-                let _ = where_;
-                self.synth_instance(origin, &ty_params, target, &members)
+                self.synth_instance(expr_id, origin, &ty_params, &where_, target, &members)
             }
-            HirExprKind::Named { ident } => self.synth_named(ident),
+            HirExprKind::Named { ident } => self.synth_named_expr(expr_id, ident),
             HirExprKind::Lit { lit } => self.synth_lit(lit.kind),
             HirExprKind::Tuple { items } => self.synth_tuple(origin, &items),
             HirExprKind::Array { items } => self.synth_array(origin, &items),
@@ -153,7 +143,9 @@ impl Checker<'_> {
                 (fn_ty, EffectRow::empty())
             }
             HirExprKind::Call { callee, args } => self.synth_call(origin, callee, &args),
-            HirExprKind::Member { base, chain, key } => self.synth_member(origin, base, chain, key),
+            HirExprKind::Member { base, chain, key } => {
+                self.synth_member(expr_id, origin, base, chain, key)
+            }
             HirExprKind::Index { base, indices } => self.synth_index(origin, base, &indices),
             HirExprKind::RecordUpdate { base, items } => {
                 self.synth_record_update(origin, base, &items)
@@ -196,12 +188,44 @@ impl Checker<'_> {
         (ty, effs)
     }
 
-    fn synth_import(&mut self, exports: &SymbolSlice) -> (SemTyId, EffectRow) {
+    fn synth_import(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        path: HirStringLit,
+        exports: &SymbolSlice,
+    ) -> (SemTyId, EffectRow) {
+        let mut record = None;
+        if let Some(env) = self.ctx.import_env {
+            let raw = self.decode_string_span(path.span);
+            let key = self.normalize_import_key(raw.as_str());
+            if let Some(summary) = env.module_summary(self.ctx.source_id, key.as_str()) {
+                self.import_module_semantics(key.as_str(), summary);
+                let built = self.build_import_record(summary);
+                self.import_opened_bindings(origin.span, exports.as_ref(), &built);
+                record = Some(built);
+            }
+        }
+
         let mut fields = BTreeMap::new();
         for sym in exports.iter().copied() {
-            let _prev = fields.insert(sym, self.state.builtins.unknown);
+            let ty = record
+                .as_ref()
+                .and_then(|r| r.entries.get(&sym))
+                .map(|e| {
+                    if e.scheme.generic_count == 0 {
+                        e.scheme.ty
+                    } else {
+                        self.state.builtins.unknown
+                    }
+                })
+                .unwrap_or(self.state.builtins.unknown);
+            let _prev = fields.insert(sym, ty);
         }
         let ty = self.state.semtys.alloc(SemTy::Record { fields });
+        if let Some(record) = record {
+            let _prev = self.state.flow.import_records.insert(expr_id, record);
+        }
         (ty, EffectRow::empty())
     }
 
@@ -214,14 +238,23 @@ impl Checker<'_> {
         (self.state.builtins.unit, effs)
     }
 
-    fn synth_named(&mut self, ident: Ident) -> (SemTyId, EffectRow) {
-        let ty = self
-            .binding_for_use(ident.span)
-            .and_then(|binding| self.state.env.get_value(binding))
-            .map_or(self.state.builtins.unknown, |scheme| {
-                scheme.instantiate(&mut self.state.semtys, ident.span)
-            });
-        (ty, EffectRow::empty())
+    fn synth_named_expr(&mut self, expr_id: HirExprId, ident: Ident) -> (SemTyId, EffectRow) {
+        let Some(binding) = self.binding_for_use(ident.span) else {
+            return (self.state.builtins.unknown, EffectRow::empty());
+        };
+        let Some(scheme) = self.state.env.get_value(binding).cloned() else {
+            return (self.state.builtins.unknown, EffectRow::empty());
+        };
+
+        let inst = self.instantiate_scheme(ident.span, &scheme);
+        if let Some(latent) = inst.declared_effects.as_ref() {
+            let _prev = self
+                .state
+                .flow
+                .callable_effs
+                .insert(expr_id, latent.clone());
+        }
+        (inst.ty, EffectRow::empty())
     }
 
     fn synth_lit(&mut self, kind: HirLitKind) -> (SemTyId, EffectRow) {
@@ -308,6 +341,7 @@ impl Checker<'_> {
                         generic_count: 0,
                         ty,
                         declared_effects: None,
+                        constraints: Box::new([]),
                     },
                 );
             }
@@ -378,12 +412,13 @@ impl Checker<'_> {
                     let (t, e) = if let Some(expr) = value {
                         self.synth_expr(*expr)
                     } else {
-                        let ty = self
+                        let scheme = self
                             .binding_for_use(name.span)
-                            .and_then(|binding| self.state.env.get_value(binding))
-                            .map_or(self.state.builtins.unknown, |scheme| {
-                                scheme.instantiate(&mut self.state.semtys, name.span)
-                            });
+                            .and_then(|binding| self.state.env.get_value(binding).cloned());
+                        let ty = match scheme.as_ref() {
+                            Some(scheme) => self.instantiate_scheme(name.span, scheme).ty,
+                            None => self.state.builtins.unknown,
+                        };
                         (ty, EffectRow::empty())
                     };
                     effs.union_with(&e);
@@ -401,26 +436,118 @@ impl Checker<'_> {
         (ty, effs)
     }
 
+    fn lower_where_constraints(
+        &mut self,
+        span: Span,
+        where_: &[HirConstraint],
+        ty_params_map: &HashMap<Symbol, u32>,
+    ) -> Box<[crate::env::SemConstraint]> {
+        if where_.is_empty() {
+            return Box::new([]);
+        }
+
+        let mut out = Vec::with_capacity(where_.len());
+        for c in where_ {
+            let (name, idx, kind) = match &c.kind {
+                HirConstraintKind::Subtype { name, bound } => {
+                    let Some(&idx) = ty_params_map.get(&name.name) else {
+                        self.error(
+                            name.span,
+                            SemaErrorKind::ConstraintUnknownTypeParam {
+                                name: self.ctx.interner.resolve(name.name).to_owned(),
+                            },
+                        );
+                        continue;
+                    };
+                    let Some(bound) = self.lower_constraint_named_ty(*bound, ty_params_map) else {
+                        self.error(c.origin.span, SemaErrorKind::ConstraintRequiresNamedType);
+                        continue;
+                    };
+                    (
+                        name.name,
+                        idx,
+                        crate::env::SemConstraint::Subtype {
+                            name: name.name,
+                            idx,
+                            bound,
+                        },
+                    )
+                }
+                HirConstraintKind::Implements { name, class } => {
+                    let Some(&idx) = ty_params_map.get(&name.name) else {
+                        self.error(
+                            name.span,
+                            SemaErrorKind::ConstraintUnknownTypeParam {
+                                name: self.ctx.interner.resolve(name.name).to_owned(),
+                            },
+                        );
+                        continue;
+                    };
+                    let Some(class) = self.lower_constraint_named_ty(*class, ty_params_map) else {
+                        self.error(c.origin.span, SemaErrorKind::ConstraintRequiresNamedType);
+                        continue;
+                    };
+                    (
+                        name.name,
+                        idx,
+                        crate::env::SemConstraint::Implements {
+                            name: name.name,
+                            idx,
+                            class,
+                        },
+                    )
+                }
+            };
+            let _ = (name, idx);
+            out.push(kind);
+        }
+
+        let _ = span;
+        out.into_boxed_slice()
+    }
+
+    fn lower_constraint_named_ty(
+        &mut self,
+        ty: HirTyId,
+        ty_params_map: &HashMap<Symbol, u32>,
+    ) -> Option<crate::env::SemTyNamed> {
+        let ty = self.ctx.store.tys.get(ty).clone();
+        let HirTyKind::Named { name, args } = ty.kind else {
+            return None;
+        };
+        let mut lowered = Vec::with_capacity(args.len());
+        for a in args.iter().copied() {
+            lowered.push(self.lower_hir_ty(a, ty_params_map));
+        }
+        Some(crate::env::SemTyNamed {
+            name: name.name,
+            args: lowered.into_boxed_slice(),
+        })
+    }
+
     fn synth_let(&mut self, let_: LetExpr<'_>) -> (SemTyId, EffectRow) {
         self.register_lang_items_on_let(let_.mods, let_.pat, let_.value);
         self.mark_pat_bindings_mut(let_.pat, let_.mutable);
 
         let ty_params_map = ty_params_map(let_.ty_params);
+        let constraints =
+            self.lower_where_constraints(let_.origin.span, let_.where_, &ty_params_map);
         let declared_effects = let_
             .effects
             .map(|set| self.lower_effect_set(set, &ty_params_map));
 
         if let_.has_params {
-            return self.synth_fn_let(&let_, &ty_params_map, declared_effects);
+            return self.synth_fn_let(&let_, &ty_params_map, constraints, declared_effects);
         }
 
-        self.synth_value_let(&let_, &ty_params_map)
+        self.synth_value_let(&let_, &ty_params_map, constraints)
     }
 
     fn synth_fn_let(
         &mut self,
         let_: &LetExpr<'_>,
         ty_params_map: &HashMap<Symbol, u32>,
+        constraints: Box<[crate::env::SemConstraint]>,
         declared_effects: Option<EffectRow>,
     ) -> (SemTyId, EffectRow) {
         let (fn_ty, body_effs) = self.check_callable(
@@ -442,6 +569,7 @@ impl Checker<'_> {
             generic_count: base_generic_count + extra_generic_count,
             ty: fn_ty,
             declared_effects,
+            constraints,
         };
         self.bind_pat_to_scheme(let_.pat, &scheme);
 
@@ -486,6 +614,7 @@ impl Checker<'_> {
         &mut self,
         let_: &LetExpr<'_>,
         ty_params_map: &HashMap<Symbol, u32>,
+        constraints: Box<[crate::env::SemConstraint]>,
     ) -> (SemTyId, EffectRow) {
         let mut effs = EffectRow::empty();
 
@@ -515,7 +644,25 @@ impl Checker<'_> {
             generic_count: scheme_generic_count,
             ty: scheme_ty,
             declared_effects: latent,
+            constraints,
         };
+
+        if matches!(
+            self.ctx.store.exprs.get(value).kind,
+            HirExprKind::Import { .. }
+        ) {
+            let record = self.state.flow.import_records.get(&value).cloned();
+            if let Some(record) = record {
+                if matches!(
+                    self.ctx.store.pats.get(let_.pat).kind,
+                    HirPatKind::Record { .. }
+                ) {
+                    self.bind_import_record_pat(let_.pat, &record);
+                    return (self.state.builtins.unit, effs);
+                }
+            }
+        }
+
         self.bind_pat_to_scheme(let_.pat, &scheme);
 
         (self.state.builtins.unit, effs)
@@ -609,8 +756,10 @@ impl Checker<'_> {
 
     fn synth_instance(
         &mut self,
+        expr_id: HirExprId,
         origin: HirOrigin,
         ty_params: &[HirTyParam],
+        where_: &[HirConstraint],
         target: HirTyId,
         members: &[HirMemberDef],
     ) -> (SemTyId, EffectRow) {
@@ -634,9 +783,18 @@ impl Checker<'_> {
         );
         self.check_unknown_instance_ops(class_name, &class_family, members);
 
+        let constraints = self.lower_where_constraints(origin.span, where_, &ty_params_map);
+
+        let _ = class_binding;
+        let scheme = crate::env::InstanceScheme {
+            generic_count: u32::try_from(ty_params.len()).unwrap_or(0),
+            args: arg_tys.into_boxed_slice(),
+            constraints,
+        };
         self.state
             .env
-            .insert_instance(class_binding, arg_tys.into_boxed_slice());
+            .insert_instance(class_name.name, scheme.clone());
+        let _prev = self.state.flow.instance_schemes.insert(expr_id, scheme);
         (self.state.builtins.unit, EffectRow::empty())
     }
 
@@ -803,6 +961,7 @@ impl Checker<'_> {
                         generic_count: 0,
                         ty: actual,
                         declared_effects: None,
+                        constraints: Box::new([]),
                     },
                 );
             }
@@ -874,12 +1033,13 @@ impl Checker<'_> {
                                 self.synth_expr(*expr)
                             }
                         } else {
-                            let ty = self
+                            let scheme = self
                                 .binding_for_use(name.span)
-                                .and_then(|binding| self.state.env.get_value(binding))
-                                .map_or(self.state.builtins.unknown, |scheme| {
-                                    scheme.instantiate(&mut self.state.semtys, name.span)
-                                });
+                                .and_then(|binding| self.state.env.get_value(binding).cloned());
+                            let ty = match scheme.as_ref() {
+                                Some(scheme) => self.instantiate_scheme(name.span, scheme).ty,
+                                None => self.state.builtins.unknown,
+                            };
                             (ty, EffectRow::empty())
                         };
                         effs.union_with(&e);
@@ -933,12 +1093,13 @@ impl Checker<'_> {
                             self.synth_expr(*expr)
                         }
                     } else {
-                        let ty = self
+                        let scheme = self
                             .binding_for_use(name.span)
-                            .and_then(|binding| self.state.env.get_value(binding))
-                            .map_or(self.state.builtins.unknown, |scheme| {
-                                scheme.instantiate(&mut self.state.semtys, name.span)
-                            });
+                            .and_then(|binding| self.state.env.get_value(binding).cloned());
+                        let ty = match scheme.as_ref() {
+                            Some(scheme) => self.instantiate_scheme(name.span, scheme).ty,
+                            None => self.state.builtins.unknown,
+                        };
                         (ty, EffectRow::empty())
                     };
                     effs.union_with(&e);
@@ -1026,12 +1187,36 @@ impl Checker<'_> {
 
     fn synth_member(
         &mut self,
+        expr_id: HirExprId,
         origin: HirOrigin,
         base: HirExprId,
         chain: HirChainKind,
         key: HirMemberKey,
     ) -> (SemTyId, EffectRow) {
         let (mut base_ty, effs) = self.synth_expr(base);
+        if chain == HirChainKind::Normal {
+            if let HirMemberKey::Name(field) = &key {
+                let scheme = self
+                    .state
+                    .flow
+                    .import_records
+                    .get(&base)
+                    .and_then(|r| r.entries.get(&field.name))
+                    .map(|e| e.scheme.clone());
+                if let Some(scheme) = scheme {
+                    let inst = self.instantiate_scheme(field.span, &scheme);
+                    if let Some(latent) = inst.declared_effects.as_ref() {
+                        let _prev = self
+                            .state
+                            .flow
+                            .callable_effs
+                            .insert(expr_id, latent.clone());
+                    }
+                    return (inst.ty, effs);
+                }
+            }
+        }
+
         base_ty = unify::resolve(&self.state.semtys, base_ty);
         loop {
             let SemTy::Mut { base } = self.state.semtys.get(base_ty).clone() else {
@@ -1511,11 +1696,13 @@ impl Checker<'_> {
     }
 
     fn record_shorthand_value(&mut self, name: Ident) -> SemTyId {
-        self.binding_for_use(name.span)
-            .and_then(|binding| self.state.env.get_value(binding))
-            .map_or(self.state.builtins.unknown, |scheme| {
-                scheme.instantiate(&mut self.state.semtys, name.span)
-            })
+        let scheme = self
+            .binding_for_use(name.span)
+            .and_then(|binding| self.state.env.get_value(binding).cloned());
+        match scheme.as_ref() {
+            Some(scheme) => self.instantiate_scheme(name.span, scheme).ty,
+            None => self.state.builtins.unknown,
+        }
     }
 
     fn synth_binary(
@@ -1618,18 +1805,19 @@ impl Checker<'_> {
         let (r_ty, r_effs) = self.synth_expr(right);
         effs.union_with(&r_effs);
 
-        let mut declared = None::<EffectRow>;
         let callee_ty = self
             .binding_for_use(op_ident.span)
-            .and_then(|binding| self.state.env.get_value(binding))
-            .map_or(self.state.builtins.unknown, |scheme| {
-                declared.clone_from(&scheme.declared_effects);
-                scheme.instantiate(&mut self.state.semtys, op_ident.span)
-            });
-
-        if let Some(declared) = declared.as_ref() {
-            effs.union_with(declared);
-        }
+            .and_then(|binding| self.state.env.get_value(binding).cloned());
+        let callee_ty = match callee_ty.as_ref() {
+            Some(scheme) => {
+                let inst = self.instantiate_scheme(op_ident.span, scheme);
+                if let Some(declared) = inst.declared_effects.as_ref() {
+                    effs.union_with(declared);
+                }
+                inst.ty
+            }
+            None => self.state.builtins.unknown,
+        };
 
         let input = self.state.semtys.alloc(SemTy::Tuple {
             items: Box::new([l_ty, r_ty]),

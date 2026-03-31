@@ -24,6 +24,7 @@ fn test_array_dim_out_of_range_reports_error() {
             prelude: known.compiler_prelude().to_vec(),
             import_env: None,
         },
+        None,
     );
 
     assert!(

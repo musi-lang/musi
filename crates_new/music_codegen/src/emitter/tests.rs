@@ -65,11 +65,12 @@ fn test_emit_single_module_decodes_numeric_separators() {
         prelude: known.compiler_prelude().to_vec(),
         import_env: None,
     };
-    let analyzed = music_check::analyze_module(parsed.tree(), &sources, &mut interner, options);
+    let analyzed =
+        music_check::analyze_module(parsed.tree(), &sources, &mut interner, options, None);
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, known, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -95,11 +96,12 @@ fn test_emit_record_fields_are_canonicalized_by_name() {
         prelude: known.compiler_prelude().to_vec(),
         import_env: None,
     };
-    let analyzed = music_check::analyze_module(parsed.tree(), &sources, &mut interner, options);
+    let analyzed =
+        music_check::analyze_module(parsed.tree(), &sources, &mut interner, options, None);
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, known, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -133,11 +135,12 @@ fn test_emit_record_update_copies_unchanged_fields() {
         prelude: known.compiler_prelude().to_vec(),
         import_env: None,
     };
-    let analyzed = music_check::analyze_module(parsed.tree(), &sources, &mut interner, options);
+    let analyzed =
+        music_check::analyze_module(parsed.tree(), &sources, &mut interner, options, None);
     assert!(analyzed.resolve_errors.is_empty());
     assert!(analyzed.check_errors.is_empty());
 
-    let artifact = super::emit_single_program(path, &interner, &sources, &analyzed)
+    let artifact = super::emit_single_program(path, &interner, &sources, known, &analyzed)
         .expect("emit")
         .artifact;
 
@@ -171,8 +174,13 @@ fn test_emit_import_expr_builds_export_record() {
         prelude: known.compiler_prelude().to_vec(),
         import_env: None,
     };
-    let dep_analyzed =
-        music_check::analyze_module(dep_parsed.tree(), &sources, &mut interner, dep_options);
+    let dep_analyzed = music_check::analyze_module(
+        dep_parsed.tree(),
+        &sources,
+        &mut interner,
+        dep_options,
+        None,
+    );
     assert!(dep_analyzed.resolve_errors.is_empty());
     assert!(dep_analyzed.check_errors.is_empty());
 
@@ -194,8 +202,13 @@ fn test_emit_import_expr_builds_export_record() {
         prelude: known.compiler_prelude().to_vec(),
         import_env: Some(&env),
     };
-    let entry_analyzed =
-        music_check::analyze_module(entry_parsed.tree(), &sources, &mut interner, entry_options);
+    let entry_analyzed = music_check::analyze_module(
+        entry_parsed.tree(),
+        &sources,
+        &mut interner,
+        entry_options,
+        None,
+    );
     assert!(entry_analyzed.resolve_errors.is_empty());
     assert!(entry_analyzed.check_errors.is_empty());
 
@@ -213,6 +226,7 @@ fn test_emit_import_expr_builds_export_record() {
     let program = EmitProgram {
         interner: &interner,
         sources: &sources,
+        known,
         modules_in_order,
         entry_path,
     };
