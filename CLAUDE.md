@@ -1,5 +1,9 @@
-# Compatibility Note
+# Rewrite Notes
 
-`AGENTS.md` is the source of truth for this repository's project instructions.
+Follow `AGENTS.md` (source of truth).
 
-This file exists only for tool compatibility. Do not maintain a second copy of the instructions here.
+Fast reminders:
+
+- Edit `crates_new/` only; `crates/` is legacy reference-only.
+- No stubs: new crates/modules must be real and tested.
+- Use longform naming (`syntax`, `sema`, `lexer.rs`, `parser.rs`).

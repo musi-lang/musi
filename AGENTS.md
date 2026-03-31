@@ -1,214 +1,56 @@
-# Project Instructions
+## Project Instructions (compressed)
 
-## Musi Language Reference
+### Pointers (source of truth)
 
-Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files, use Musi syntax exclusively. Never substitute C/JS/Rust operators or keywords.
+- Musi surface syntax: `docs/00-syntax.md` and `grammar.abnf`
+- Compiler ownership + crate map: `docs/09-architecture.md`
+- Rewrite tracking (checkboxes): `docs/13-crates_new-rewrite-tracker.md`
+- Public Rust API inventory: `docs/12-public-api.md`
 
-### Forbidden C-isms
+### Canonical workspace
 
-| Wrong (C/JS/Rust)         | Correct (Musi)                              | Notes                                              |
-| ------------------------- | ------------------------------------------- | -------------------------------------------------- |
-| `&&`                      | `and`                                       | Type-directed: logical on Bool, bitwise on Int     |
-| `\|\|`                    | `or`                                        | Type-directed: logical on Bool, bitwise on Int     |
-| `!x`                      | `not x`                                     | Type-directed: logical on Bool, bitwise on Int     |
-| `&`                       | `and`                                       | No separate bitwise operators                      |
-| `\|` (bitwise)            | `or`                                        | No separate bitwise operators                      |
-| `^`                       | `xor`                                       | No separate bitwise operators                      |
-| `~`                       | `not`                                       | No separate bitwise operators                      |
-| `==`                      | `=`                                         | Single equals is comparison                        |
-| `!=`                      | `/=`                                        | Slash-equals                                       |
-| `x = 5` (assign)          | `x := 5` or `x <- 5`                        | `:=` binds, `<-` mutates                           |
-| `if (c) a else b`         | `case c of (\| .True => a \| .False => b);` | `if` is guard-only, not standalone branching       |
-| `{ ... }` (ordinary body) | `( ... )`                                   | Parens for sequences and grouped expression bodies |
-| `fn f()`                  | `let f := () => ...`                        | No fn keyword                                      |
-| `null`/`nil`              | `.None`                                     | Variant, dot-prefixed                              |
-| `true`/`false`            | `.True`/`.False`                            | Variants, dot-prefixed, capitalized                |
-| `enum`                    | `data { A \| B : T }`                       | `\|` separates variants, `:` for payload           |
-| `struct`                  | `data { x : T; y : U }`                     | Fields separated by `;`                            |
-| `x.field` (obj lit)       | `{ field := value }`                        | Record literals use `{}`. Record update uses `x.{` |
-| `#[attr]`                 | `@attr`                                     | Rust-style attributes replaced by `@` prefix       |
-| `'T`                      | `T` (declared in `[T]`)                     | No tick prefix for type variables                  |
-| `A \| B` (type sum)       | `A + B`                                     | `+` for sums, `*` for products                     |
-| `x!`                      | `x!.field` or explicit unwrap helper        | No postfix force operator in the reduced core      |
+- Edit `crates_new/` only.
+- Treat `crates/` as legacy reference-only.
+- No “stubs”: placeholder implementations (EOF-only lexers, empty parsers, TODO pipelines) are not acceptable once a crate/module exists—either implement it fully or delete it.
 
-### Key Syntax Rules
+### Rust layout + tests (HARD)
 
-- **Comments**: `//`, `///` (doc), `/** */` (doc), `/* */`
-- **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
-- **Runes**: `'a'` (single character)
-- **Keywords** (28): `let`, `mut`, `case`, `if`, `in`, `and`, `or`, `xor`, `not`, `data`, `of`, `as`, `where`, `class`, `instance`, `law`, `effect`, `perform`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`, `shl`, `shr`
-- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `match`, `while`, `for`, `loop`, `return`, `via`, `record`, `choice`
-- **Semicolons** separate statements in sequences; trailing `;` makes value `Unit`
-- **Variants** are dot-prefixed: `.Some(x)`, `.None`, `.Ok(v)`, `.Err(e)`
-- **Type params** use `[T]` brackets: `let id[T] := (x : T) : T => x`
-- **Attributes**: `@name` or `@name(args)` for public attrs, compiler-only attrs, or inert metadata
-- **Data variants** use `|` separator and `:` for payload: `data { Some : T | None }`
-- **Quote/splice**: `quote (expr)` captures syntax. `#name`, `#(expr)`, `#[exprs]` splice into quotes.
-- **Mut model**: `let`/`let mut` for binding mutability. `mut` on values for data writability.
-- **Anonymous sums**: `A + B` in type position. **Products**: `A * B`. `|` is variant separator in `data`, not a type operator.
-- **Types as values**: Types bind via `let`. `data`, `effect`, and `class` are anonymous expressions usually bound through `let`.
-- **Opaque exports**: `export opaque let T := ...` hides internal representation
-- **Pipeline**: `x |> f` equals `f(x)`
-- **Spread**: `...arr`
-- **Optional chain**: `x?.field`, **forced access**: `x!.field`
-- **Type test**: `x :? Type`, **Type cast**: `x :?> Type`
-- **Branching**: `case ... of (...)`; `if` appears on guarded arms only
-- **Not in the reduced core**: comprehensions, matrix literals, ranges, `::`, postfix `!`, postfix `?`
+- `src/` is production code only (no `#[test]` functions).
+- Unit tests live in `module/tests.rs` and are included via `#[cfg(test)] mod tests;`.
+- Integration/e2e tests live in `tests/` alongside `src/`.
+- Benchmarks live in `benches/` and use Criterion; benchmark functions use `bench_` prefix.
+- No Rust file may exceed 2000 LOC (including tests and benches).
 
-### Before Editing `.ms` Files
+### Naming + imports (HARD)
 
-1. Read `grammar.abnf` first if syntax is uncertain.
-2. Follow the canonical docs order:
-   `00-syntax`, `01-type-system`, `02-effect-system`, `03-metaprogramming`, `04-compiler-attributes`, `05-ffi`, `06-seam-vm`, `07-seam-bytecode`, `08-runtime-api`, `09-architecture`, `10-toolchain`
-3. Check existing stdlib files for idiomatic patterns.
-4. Never use C/JS/Rust operators. Musi has its own operator set.
+- Prefer longform: `sema`, `syntax`, `lexer.rs` (struct `Lexer`), `parser.rs` (struct `Parser`).
+- Crate/module path carries the domain: prefer `music_bc::Opcode` over `BytecodeOpcode`.
+- Reserve `Syntax*` for syntax tree artifacts (`SyntaxTree`, `SyntaxNodeKind`, …), not for the token stream.
+- Tokenization uses unprefixed nouns: `Token`, `TokenKind`, `Trivia`, `Lexer`, `Parser`.
+- Avoid absolute paths in expression position; prefer `use` imports. Absolute paths are OK for singletons (`crate::CONST`, `crate::func()`, macros).
 
-## Toolchain Split
+### Phase DAG (HARD)
 
-The intended tooling model is split:
+Dependencies must form a DAG. The intended compiler flow is:
 
-- `music` is the low-level compiler/runtime driver
-- `musi` is the package-aware operator tool
+`music_base -> music_names -> music_syntax -> music_module -> music_resolve -> music_sema -> music_ir -> music_bc -> music_assembly -> music_codegen -> music_session`
 
-Treat that split as the design direction when discussing command surfaces, manifests, or package workflows.
+### Phase Ownership (no cycles)
 
-## Rust Test Convention (IMPORTANT)
+- Each compiler phase owns one transformation and depends only on earlier representations.
+- Service/orchestration concerns (caching, config, filesystem/project integration) live only in the session/service layer.
+- Pre-resolve module lookup contracts use neutral naming (`ImportEnv`/`ModuleEnv`), not `*Resolver`.
 
-Unit tests are NEVER inside source files. No `#[cfg(test)] mod tests { }` blocks.
+### Naming Conventions (enterprise clarity)
 
-Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/` alongside `src/`. This applies to ALL Rust crates in this project.
+- **Domain by path**: prefer `music_bc::Opcode`, `music_syntax::Token`, `music_sema::ErrorKind` over redundant domain prefixes.
+- **`Syntax*` is tree/AST only**: `SyntaxTree`, `SyntaxNodeKind`, `SyntaxToken` are syntax tree artifacts, not lexer token stream artifacts.
+- **Tokenizer nouns stay short**: `Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `Parser`, `ParseCtx`.
+- **Trivia is its own module**: `trivia.rs` defines trivia types; it does not live in `token.rs`.
+- **File name matches primary type**: `lexer.rs`→`Lexer`, `parser.rs`→`Parser`, `opcode.rs`→`Opcode`.
+- **Function naming is categorical**: `emit_case_expr`, `lower_import_expr`, `check_record_update_expr`.
+- **Avoid absolute paths in expression position** except true singletons (`crate::CONST`, `crate::func()`, macros).
 
-## Rust Crate Layout Rule (HARD)
+### “Stubs” Policy For The Rewrite
 
-- `src/` is production code only
-- `benches/` is Criterion-only
-- `module.rs` or `module/mod.rs` owns the module surface
-- `module/tests.rs` owns unit tests and closely related test helpers
-- `tests/` is for integration and e2e only
-- No Rust file may exceed 2000 LOC, including tests and benches
-
-## Clean-Room Naming Rule (HARD)
-
-- In `crates/`, public names must be domain-specific when imported unqualified
-- Avoid std-like or generic exported names such as `Color`, `Label`, `List`, `Map`, `Table`, `Pool`, or `Result` when a bounded-context name is clearer
-- Keep established compiler-domain names like `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
-- Apply the same rule to internal helpers when the generic name obscures ownership
-- Benchmarks (`/benches`) use `bench_` prefix on functions, while tests of any kind (`/tests` and/or `tests.rs`) use `test_` prefix on functions.
-
-## Clean-Room Boundary Rule (HARD)
-
-- `music_basic` owns spans, sources, diagnostics, and other non-binding foundation types
-- `music_names` owns `Symbol`, `Interner`, `Ident`, and later name/binding infrastructure
-- `music_lex` must not depend on `music_names`; identifier tokens stay span-based in the lexer
-
-```mermaid
-graph TD
-    A["crates/music_basic/"] --> B["src/"]
-    A --> C["tests/"]
-    B --> D["lib.rs"]
-    B --> E["span.rs"]
-    B --> F["span/"]
-    B --> G["ident.rs"]
-    B --> H["ident/"]
-    B --> I["diag/"]
-    F --> K["tests.rs<br/>(unit tests for span.rs)"]
-    H --> L["tests.rs<br/>(unit tests for ident.rs)"]
-    I --> M["tests.rs<br/>(unit tests for diag/)"]
-    C --> N["integration_test.rs<br/>(integration/e2e tests)"]
-
-    style K fill:#e1f5ff
-    style L fill:#e1f5ff
-    style M fill:#e1f5ff
-    style N fill:#fff3e0
-```
-
-## Error Testing Convention
-
-- Tests in `errors/tests.rs` or `diag/tests.rs` MAY check Display output strings -- they test the Display impl itself
-- Tests OUTSIDE error/diag modules MUST check error variants via `matches!`, never message strings
-- Error messages are implementation details; the variant is the contract
-
-```rust
-// CORRECT (lexer test):
-assert!(matches!(errors[0], LexError::InvalidHexEscape { .. }));
-
-// WRONG (lexer test):
-assert_eq!(errors[0].to_string(), "invalid hex escape...");
-```
-
-## API Stability Convention
-
-Stabilise the public API early, even during initial development. Breaking changes are cheaper now than later, but that means getting the API right NOW:
-
-- Drop owned `String` from token types when a `Span` index into source suffices
-- Use `Span`-carrying structs (like `Trivia { kind, span }`) instead of `String`-carrying enums
-- Store positions as native `usize` internally, convert to `u32` only at the `Span` boundary
-- Use `PhantomData<fn() -> T>` to avoid trait bounds on generic wrappers (enables derives)
-- Collapse redundant enum variants using flags and mode enums (`AccessMode`, `PostfixOp`, etc.)
-- Suffix convention: `Lit` for value construction, `Def` for type definition, no suffix for operations
-
-## Micro-Optimisation Conventions
-
-Apply these during initial implementation, not as afterthoughts:
-
-- Avoid allocating `String` when borrowing from source via `Span` is sufficient
-- Check conditions before allocating (e.g., only filter number strings when they contain `_`)
-- Use table-driven dispatch (const arrays of `(&[u8], TokenKind)`) over nested match arms
-- Prefer `usize` for internal indices, convert to `u32` at boundaries only
-- Use `derive` over manual trait impls wherever possible (saves LOC, reduces bugs)
-
-## Rust Import Hygiene
-
-- Avoid noisy absolute paths in expression position: prefer `use std::mem;` then `mem::take(x)` over `std::mem::take(x)`.
-- Prefer importing types used in signatures: `use music_basic::Span;` then `Span`, not `music_basic::Span`.
-- Prefer importing struct/enum items directly when used unqualified improves clarity.
-- Do not alias `std` items; if disambiguation is needed, rename the local/project import instead.
-- Absolute paths are OK for singletons and “name anchors”: `log::info!(...)`, `music_parse::parse(...)`, `crate::BIG_CONSTANT`.
-
-## Collaboration Protocol
-
-### Adaptive Depth
-
-- Default to the level the conversation establishes
-- If user asks "why": go deeper with technical evidence
-- If user asks "simplify" or seems unfamiliar: shift to plain-language analogies
-- Never assume the user already knows your reasoning - state it
-
-### Decision Protocol
-
-- **Low stakes** (naming, formatting, imports, obvious fixes): act, mention in summary
-- **Medium stakes** (data structure choice, API shape, dependencies, public naming, pattern deviation): present 2-3 options with one tradeoff each, recommend one, wait
-- **High stakes** (deleting working code, schema changes, public API changes, new architecture, contradicting plan, security): present analysis + recommendation, wait for explicit approval
-- **Default**: when unsure which tier, go one level up
-- When a plan exists, follow it - the plan already made the high-stakes decisions
-- End decision prompts with "which direction resonates?" not "what do you think?"
-
-### Finish or Flag
-
-- Complete the task entirely, or name the specific part you cannot complete and why
-- NEVER silently drop scope. NEVER leave stubs
-- NEVER say "for now..." - either do it or explain why not
-
-### Evidence Over Empathy
-
-- State flaws with evidence (file:line), not softened for social reasons
-- Do not praise code quality unless asked
-- Do not begin responses with agreement/validation phrases
-- Focus on the codebase, not the user's emotional state
-
-## Behavioral Constraints
-
-- No filler words: "robust", "seamless", "comprehensive", "cutting-edge", "leverage", "utilize", "facilitate", "enhance", "ensure", "empower"
-- No stub code, no unfinished markers, no "in a real implementation", no incomplete function bodies
-- No obvious comments: code that needs "what" comments needs renaming
-- Evidence-based claims only: "this breaks X because Y at file:line" not "this might cause issues"
-- Don't add features beyond what was asked - but do finish everything that WAS asked
-
-## What Not To Do
-
-- Don't silently reduce scope - if something can't be completed, say so and let user decide
-- Don't assume user already knows your reasoning - state rationale for medium/high stakes decisions
-- Don't narrate trivial steps - DO explain non-obvious choices
-- Don't pad with preamble or recap
-- Don't praise or filler
-- Don't present a single option as the only way for non-trivial decisions
+- New `crates_new/` crates may start as minimal compileable skeletons, but must not contain `todo!()`, `unimplemented!()`, or placeholder panics.
