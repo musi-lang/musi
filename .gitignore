@@ -185,6 +185,7 @@ target
 .claude/worktrees/
 .claude/session-handoff.md
 .worktrees/
+local/
 
 # Logs
 logs
