@@ -208,12 +208,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "intaglio"
-version = "1.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4271d1532513fd3671b4a768fc5f189d5365621d2fb844cfb341ef4b67afaff"
-
-[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -230,9 +224,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "js-sys"
-version = "0.3.92"
+version = "0.3.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc4c90f45aa2e6eacbe8645f77fdea542ac97a494bcd117a67df9ff4d611f995"
+checksum = "797146bb2677299a1eb6b7b50a890f4c361b29ef967addf5b2fa45dae1bb6d7d"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -251,178 +245,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
-name = "music_assembly"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_il",
- "thiserror",
-]
-
-[[package]]
-name = "music_ast"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_basic",
- "music_lex",
- "music_storage",
- "smallvec",
-]
-
-[[package]]
-name = "music_basic"
-version = "0.1.0-alpha.1"
-
-[[package]]
-name = "music_check"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_ast",
- "music_basic",
- "music_hir",
- "music_known",
- "music_lex",
- "music_names",
- "music_parse",
- "music_resolve",
- "thiserror",
-]
-
-[[package]]
-name = "music_codegen"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_basic",
- "music_check",
- "music_hir",
- "music_il",
- "music_ir",
- "music_irgen",
- "music_known",
- "music_lex",
- "music_names",
- "music_parse",
- "music_resolve",
- "thiserror",
-]
-
-[[package]]
-name = "music_fe"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_assembly",
- "music_ast",
- "music_basic",
- "music_check",
- "music_codegen",
- "music_il",
- "music_lex",
- "music_parse",
- "music_session",
- "thiserror",
-]
-
-[[package]]
-name = "music_hir"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_ast",
- "music_basic",
- "music_names",
- "music_storage",
-]
-
-[[package]]
-name = "music_il"
-version = "0.1.0-alpha.1"
-
-[[package]]
-name = "music_ir"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_names",
-]
-
-[[package]]
-name = "music_irgen"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_basic",
- "music_hir",
- "music_ir",
- "music_known",
- "music_names",
-]
-
-[[package]]
-name = "music_known"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_names",
-]
-
-[[package]]
-name = "music_lex"
+name = "music_base"
 version = "0.1.0-alpha.1"
 dependencies = [
  "criterion",
- "music_basic",
- "smallvec",
  "thiserror",
 ]
 
 [[package]]
-name = "music_names"
+name = "music_syntax"
 version = "0.1.0-alpha.1"
 dependencies = [
  "criterion",
- "intaglio",
- "music_basic",
- "music_storage",
-]
-
-[[package]]
-name = "music_parse"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_ast",
- "music_basic",
- "music_lex",
+ "music_base",
  "thiserror",
-]
-
-[[package]]
-name = "music_resolve"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_ast",
- "music_basic",
- "music_hir",
- "music_known",
- "music_lex",
- "music_names",
- "music_parse",
- "thiserror",
-]
-
-[[package]]
-name = "music_session"
-version = "0.1.0-alpha.1"
-dependencies = [
- "music_basic",
- "music_check",
- "music_hir",
- "music_known",
- "music_lex",
- "music_names",
- "music_parse",
- "music_resolve",
-]
-
-[[package]]
-name = "music_storage"
-version = "0.1.0-alpha.1"
-dependencies = [
- "criterion",
 ]
 
 [[package]]
@@ -616,12 +452,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "smallvec"
-version = "1.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
-
-[[package]]
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -680,9 +510,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.115"
+version = "0.2.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6523d69017b7633e396a89c5efab138161ed5aafcbc8d3e5c5a42ae38f50495a"
+checksum = "7dc0882f7b5bb01ae8c5215a1230832694481c1a4be062fd410e12ea3da5b631"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -693,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.115"
+version = "0.2.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e3a6c758eb2f701ed3d052ff5737f5bfe6614326ea7f3bbac7156192dc32e67"
+checksum = "75973d3066e01d035dbedaad2864c398df42f8dd7b1ea057c35b8407c015b537"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -703,9 +533,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.115"
+version = "0.2.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "921de2737904886b52bcbb237301552d05969a6f9c40d261eb0533c8b055fedf"
+checksum = "91af5e4be765819e0bcfee7322c14374dc821e35e72fa663a830bbc7dc199eac"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -716,18 +546,18 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.115"
+version = "0.2.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a93e946af942b58934c604527337bad9ae33ba1d5c6900bbb41c2c07c2364a93"
+checksum = "c9bf0406a78f02f336bf1e451799cca198e8acde4ffa278f0fb20487b150a633"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "web-sys"
-version = "0.3.92"
+version = "0.3.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84cde8507f4d7cfcb1185b8cb5890c494ffea65edbe1ba82cfd63661c805ed94"
+checksum = "749466a37ee189057f54748b200186b59a03417a117267baf3fd89cecc9fb837"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
