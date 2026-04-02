@@ -47,6 +47,9 @@ Current implementation status (Cargo workspace members):
 - `music_arena`
 - `music_names`
 - `music_syntax` (lexer + parser + CST/AST views)
+- `music_module`
+- `music_hir`
+- `music_resolve`
 
 The intended dependency shape is a DAG:
 

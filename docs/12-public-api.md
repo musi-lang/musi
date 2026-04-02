@@ -16,6 +16,7 @@ Policy:
 - `music_syntax`: token/trivia + parsing (`Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `LexedSource`, `LexError*`, `ParseError*`, `ParsedSource`, `parse`, `SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`, `SyntaxNodeKind`, `Program`, `canonical_name_text`)
 - `music_module`: module/specifier + import environment (`ModuleSpecifier`, `ModuleKey`, `ImportMap`, `ImportEnv`, `ImportError*`, `collect_import_sites`, `collect_export_summary`, `ImportSite*`, `ModuleExportSummary` (incl. exported instance tracking))
 - `music_hir`: HIR model (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
+- `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
 
 Notes:
 
@@ -27,7 +28,7 @@ Notes:
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_resolve`, `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
+- `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
 - `musi_project`
 
 ## Legacy (`crates/`)

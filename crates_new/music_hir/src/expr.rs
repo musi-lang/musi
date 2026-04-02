@@ -3,6 +3,7 @@ use music_names::Ident;
 
 use crate::module::{HirExprId, HirLitId, HirPatId, HirTyId};
 use crate::origin::HirOrigin;
+use crate::ty::HirDim;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirExpr {
@@ -33,8 +34,28 @@ pub enum HirExprKind {
     Array {
         items: SliceRange<HirArrayItem>,
     },
+    ArrayTy {
+        dims: SliceRange<HirDim>,
+        item: HirExprId,
+    },
     Record {
         items: SliceRange<HirRecordItem>,
+    },
+    Variant {
+        tag: Ident,
+        args: SliceRange<HirExprId>,
+    },
+
+    Pi {
+        binder: Ident,
+        binder_ty: HirExprId,
+        ret: HirExprId,
+        is_effectful: bool,
+    },
+    Lambda {
+        params: SliceRange<HirParam>,
+        ret_ty: Option<HirExprId>,
+        body: HirExprId,
     },
 
     Call {
@@ -51,11 +72,21 @@ pub enum HirExprKind {
     },
     Field {
         base: HirExprId,
+        access: HirAccessKind,
         name: Ident,
     },
     RecordUpdate {
         base: HirExprId,
         items: SliceRange<HirRecordItem>,
+    },
+    TypeTest {
+        base: HirExprId,
+        ty: HirExprId,
+        as_name: Option<Ident>,
+    },
+    TypeCast {
+        base: HirExprId,
+        ty: HirExprId,
     },
 
     Prefix {
@@ -69,15 +100,21 @@ pub enum HirExprKind {
     },
 
     Let {
+        mods: HirLetMods,
         pat: HirPatId,
+        type_params: SliceRange<Ident>,
+        params: SliceRange<HirParam>,
+        constraints: SliceRange<HirConstraint>,
+        effects: Option<HirEffectSet>,
+        sig: Option<HirExprId>,
         value: HirExprId,
-        body: HirExprId,
     },
     Import {
         arg: HirExprId,
     },
     Export {
         opaque: bool,
+        foreign_abi: Option<Box<str>>,
         expr: HirExprId,
     },
 
@@ -85,13 +122,56 @@ pub enum HirExprKind {
         scrutinee: HirExprId,
         arms: SliceRange<HirCaseArm>,
     },
+    Data {
+        variants: SliceRange<HirVariantDef>,
+        fields: SliceRange<HirFieldDef>,
+    },
+    Effect {
+        members: SliceRange<HirMemberDef>,
+    },
+    Class {
+        constraints: SliceRange<HirConstraint>,
+        members: SliceRange<HirMemberDef>,
+    },
+    Instance {
+        type_params: SliceRange<Ident>,
+        constraints: SliceRange<HirConstraint>,
+        class: HirExprId,
+        members: SliceRange<HirMemberDef>,
+    },
+    Foreign {
+        abi: Option<Box<str>>,
+        decls: SliceRange<HirForeignDecl>,
+    },
+    Perform {
+        expr: HirExprId,
+    },
+    Handle {
+        expr: HirExprId,
+        handler: Ident,
+        clauses: SliceRange<HirHandleClause>,
+    },
+    Resume {
+        expr: Option<HirExprId>,
+    },
 
     Quote {
-        expr: HirExprId,
+        kind: HirQuoteKind,
     },
     Splice {
+        kind: HirSpliceKind,
+    },
+    Attributed {
+        attrs: SliceRange<HirAttr>,
         expr: HirExprId,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirAccessKind {
+    Direct,
+    Optional,
+    Unwrap,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +214,20 @@ pub struct HirArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirParam {
+    pub is_mut: bool,
+    pub name: Ident,
+    pub ty: Option<HirExprId>,
+    pub default: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirLetMods {
+    pub is_mut: bool,
+    pub is_rec: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirArrayItem {
     pub spread: bool,
     pub expr: HirExprId,
@@ -153,10 +247,116 @@ pub enum HirTemplatePart {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirAttr {
+    pub origin: HirOrigin,
+    pub path: SliceRange<Ident>,
+    pub args: SliceRange<HirAttrArg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirAttrArg {
+    pub name: Option<Ident>,
+    pub value: HirExprId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirCaseArm {
+    pub attrs: SliceRange<HirAttr>,
     pub pat: HirPatId,
     pub guard: Option<HirExprId>,
     pub expr: HirExprId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirConstraintKind {
+    Subtype,
+    Implements,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirConstraint {
+    pub name: Ident,
+    pub kind: HirConstraintKind,
+    pub value: HirExprId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirEffectSet {
+    pub items: SliceRange<HirEffectItem>,
+    pub open: Option<Ident>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirEffectItem {
+    pub name: Ident,
+    pub arg: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HirMemberKind {
+    Let,
+    Law,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirMemberDef {
+    pub origin: HirOrigin,
+    pub attrs: SliceRange<HirAttr>,
+    pub kind: HirMemberKind,
+    pub name: Ident,
+    pub params: SliceRange<HirParam>,
+    pub sig: Option<HirExprId>,
+    pub value: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirVariantDef {
+    pub origin: HirOrigin,
+    pub attrs: SliceRange<HirAttr>,
+    pub name: Ident,
+    pub arg: Option<HirExprId>,
+    pub value: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirFieldDef {
+    pub origin: HirOrigin,
+    pub attrs: SliceRange<HirAttr>,
+    pub name: Ident,
+    pub ty: HirExprId,
+    pub value: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirForeignDecl {
+    pub origin: HirOrigin,
+    pub attrs: SliceRange<HirAttr>,
+    pub name: Ident,
+    pub type_params: SliceRange<Ident>,
+    pub params: SliceRange<HirParam>,
+    pub constraints: SliceRange<HirConstraint>,
+    pub sig: Option<HirExprId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirHandleClause {
+    pub op: Ident,
+    pub result: Option<Ident>,
+    pub params: SliceRange<Ident>,
+    pub body: HirExprId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HirQuoteKind {
+    Expr { expr: HirExprId },
+    Block { exprs: SliceRange<HirExprId> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HirSpliceKind {
+    Name { name: Ident },
+    Expr { expr: HirExprId },
+    Exprs { exprs: SliceRange<HirExprId> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -5,8 +5,11 @@ mod pat;
 mod ty;
 
 pub use expr::{
-    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirExpr, HirExprKind, HirLit, HirLitKind,
-    HirPrefixOp, HirRecordItem, HirTemplatePart,
+    HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
+    HirConstraint, HirConstraintKind, HirEffectItem, HirEffectSet, HirExpr, HirExprKind,
+    HirFieldDef, HirForeignDecl, HirHandleClause, HirLetMods, HirLit, HirLitKind, HirMemberDef,
+    HirMemberKind, HirParam, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind,
+    HirTemplatePart, HirVariantDef,
 };
 pub use module::{HirExprId, HirLitId, HirModule, HirPatId, HirStore, HirTyId};
 pub use origin::HirOrigin;

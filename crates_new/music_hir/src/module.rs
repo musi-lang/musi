@@ -1,8 +1,11 @@
 use music_arena::{Arena, Idx, SliceArena, SliceRange};
 use music_base::SourceId;
+use music_names::Ident;
 
 use crate::expr::{
-    HirArg, HirArrayItem, HirCaseArm, HirExpr, HirLit, HirRecordItem, HirTemplatePart,
+    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirCaseArm, HirConstraint, HirEffectItem, HirExpr,
+    HirFieldDef, HirForeignDecl, HirHandleClause, HirLit, HirMemberDef, HirParam, HirRecordItem,
+    HirTemplatePart, HirVariantDef,
 };
 use crate::pat::{HirPat, HirRecordPatField};
 use crate::ty::{HirDim, HirTy};
@@ -22,12 +25,23 @@ pub struct HirStore {
     pub expr_ids: SliceArena<HirExprId>,
     pub pat_ids: SliceArena<HirPatId>,
     pub ty_ids: SliceArena<HirTyId>,
+    pub idents: SliceArena<Ident>,
     pub args: SliceArena<HirArg>,
+    pub params: SliceArena<HirParam>,
     pub array_items: SliceArena<HirArrayItem>,
     pub record_items: SliceArena<HirRecordItem>,
     pub record_pat_fields: SliceArena<HirRecordPatField>,
     pub template_parts: SliceArena<HirTemplatePart>,
+    pub attrs: SliceArena<HirAttr>,
+    pub attr_args: SliceArena<HirAttrArg>,
     pub case_arms: SliceArena<HirCaseArm>,
+    pub constraints: SliceArena<HirConstraint>,
+    pub effect_items: SliceArena<HirEffectItem>,
+    pub members: SliceArena<HirMemberDef>,
+    pub variants: SliceArena<HirVariantDef>,
+    pub fields: SliceArena<HirFieldDef>,
+    pub foreign_decls: SliceArena<HirForeignDecl>,
+    pub handle_clauses: SliceArena<HirHandleClause>,
     pub dims: SliceArena<HirDim>,
 }
 
@@ -42,12 +56,23 @@ impl HirStore {
             expr_ids: SliceArena::new(),
             pat_ids: SliceArena::new(),
             ty_ids: SliceArena::new(),
+            idents: SliceArena::new(),
             args: SliceArena::new(),
+            params: SliceArena::new(),
             array_items: SliceArena::new(),
             record_items: SliceArena::new(),
             record_pat_fields: SliceArena::new(),
             template_parts: SliceArena::new(),
+            attrs: SliceArena::new(),
+            attr_args: SliceArena::new(),
             case_arms: SliceArena::new(),
+            constraints: SliceArena::new(),
+            effect_items: SliceArena::new(),
+            members: SliceArena::new(),
+            variants: SliceArena::new(),
+            fields: SliceArena::new(),
+            foreign_decls: SliceArena::new(),
+            handle_clauses: SliceArena::new(),
             dims: SliceArena::new(),
         }
     }

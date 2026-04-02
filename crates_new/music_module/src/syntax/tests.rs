@@ -30,6 +30,20 @@ fn collects_static_template_import_site() {
 }
 
 #[test]
+fn import_sites_ignore_quote_expr() {
+    let src = r#"
+        let A := import "a";
+        quote { let B := import "b"; };
+    "#;
+    let lexed = Lexer::new(src).lex();
+    let parsed = music_syntax::parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
+    assert_eq!(sites.len(), 1);
+    assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
+}
+
+#[test]
 fn collects_exports_and_marks_opaque() {
     let src = r"
         export let x := 1;

@@ -176,6 +176,9 @@ fn walk_nodes<'tree, 'src>(
     f: &mut impl FnMut(SyntaxNode<'tree, 'src>),
 ) {
     f(node);
+    if node.kind() == SyntaxNodeKind::QuoteExpr {
+        return;
+    }
     for child in node.children() {
         if let Some(node) = child.into_node() {
             walk_nodes(node, f);
