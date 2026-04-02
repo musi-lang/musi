@@ -308,7 +308,12 @@ fn unterminated_block_comment_reports_error() {
         lexed.trivia()[0].kind,
         TriviaKind::BlockComment { doc: false }
     );
-    assert_eq!(lexed.errors().len(), 1);
+    assert!(
+        lexed
+            .errors()
+            .iter()
+            .any(|e| e.kind == LexErrorKind::UnterminatedBlockComment)
+    );
 }
 
 #[test]
@@ -391,5 +396,49 @@ fn escape_errors_are_specific() {
             .errors()
             .iter()
             .any(|e| matches!(e.kind, LexErrorKind::InvalidUnicodeScalar { .. }))
+    );
+}
+
+#[test]
+fn unterminated_string_is_reported() {
+    let lexed = Lexer::new("\"abc").lex();
+    assert!(
+        lexed
+            .errors()
+            .iter()
+            .any(|e| e.kind == LexErrorKind::UnterminatedStringLiteral)
+    );
+}
+
+#[test]
+fn unterminated_rune_is_reported() {
+    let lexed = Lexer::new("'a").lex();
+    assert!(
+        lexed
+            .errors()
+            .iter()
+            .any(|e| e.kind == LexErrorKind::UnterminatedRuneLiteral)
+    );
+}
+
+#[test]
+fn unterminated_template_literal_is_reported() {
+    let lexed = Lexer::new("`abc").lex();
+    assert!(
+        lexed
+            .errors()
+            .iter()
+            .any(|e| e.kind == LexErrorKind::UnterminatedTemplateLiteral)
+    );
+}
+
+#[test]
+fn unexpected_underscore_in_number_literal_is_reported() {
+    let lexed = Lexer::new("0x_FF").lex();
+    assert!(
+        lexed
+            .errors()
+            .iter()
+            .any(|e| e.kind == LexErrorKind::UnexpectedUnderscoreInNumberLiteral)
     );
 }

@@ -263,41 +263,9 @@ impl<'a> Parser<'a> {
         let Some(close) = self.lbracket_match.get(self.pos).copied().flatten() else {
             return false;
         };
-        if !self
-            .tokens
+        self.tokens
             .get(close + 1)
             .is_some_and(|token| is_prefix_expr_start(token.kind))
-        {
-            return false;
-        }
-        let mut index = self.pos + 1;
-        if index == close {
-            return true;
-        }
-        loop {
-            if !matches!(
-                self.tokens.get(index).map(|token| token.kind),
-                Some(TokenKind::Int | TokenKind::Ident | TokenKind::Underscore)
-            ) {
-                return false;
-            }
-            index += 1;
-            if index == close {
-                return true;
-            }
-            if self
-                .tokens
-                .get(index)
-                .is_some_and(|token| token.kind == TokenKind::Comma)
-            {
-                index += 1;
-                if index == close {
-                    return true;
-                }
-                continue;
-            }
-            return false;
-        }
     }
 
     fn is_comparison_expr(&self, node: SyntaxNodeId) -> bool {
