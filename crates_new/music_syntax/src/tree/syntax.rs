@@ -1,5 +1,5 @@
-use music_base::Span;
 use music_arena::{Arena, Idx, SliceArena, SliceRange};
+use music_base::Span;
 
 use crate::{LexedSource, TokenKind, Trivia};
 

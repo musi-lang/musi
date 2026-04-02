@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use music_base::{SourceId, Span};
 use music_arena::{Arena, Idx};
+use music_base::{SourceId, Span};
 
 use crate::Symbol;
 

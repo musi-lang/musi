@@ -3,10 +3,9 @@ use super::*;
 impl Parser<'_> {
     pub(super) fn parse_atom_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         match self.peek_kind() {
-            TokenKind::Int
-            | TokenKind::Float
-            | TokenKind::String
-            | TokenKind::Rune => Ok(self.parse_literal_expr()),
+            TokenKind::Int | TokenKind::Float | TokenKind::String | TokenKind::Rune => {
+                Ok(self.parse_literal_expr())
+            }
             TokenKind::TemplateNoSubst | TokenKind::TemplateHead => self.parse_template_expr(),
             TokenKind::Ident | TokenKind::OpIdent => self.parse_name_expr(),
             TokenKind::Hash => self.parse_splice_expr(),

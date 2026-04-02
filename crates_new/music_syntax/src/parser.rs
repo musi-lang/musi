@@ -1,7 +1,7 @@
 use core::mem;
 
-use music_base::Span;
 use music_arena::{Arena, SliceArena};
+use music_base::Span;
 
 use crate::errors::{ParseError, ParseErrorKind, ParseResult};
 use crate::tree::{
