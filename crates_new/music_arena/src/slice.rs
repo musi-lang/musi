@@ -67,6 +67,11 @@ impl<T> SliceArena<T> {
         self.alloc_from_iter(values.iter().cloned())
     }
 
+    /// Appends `values` to the arena and returns the contiguous range covering the
+    /// newly-allocated items.
+    ///
+    /// # Panics
+    /// Panics if the arena exceeds `u32::MAX` items.
     pub fn alloc_from_iter<I>(&mut self, values: I) -> SliceRange<T>
     where
         I: IntoIterator<Item = T>,

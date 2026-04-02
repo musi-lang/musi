@@ -97,7 +97,6 @@ pub enum TokenKind {
     ColonQuestion,   // :?
     ColonQuestionGt, // :?>
     PipeGt,          // |>
-    DollarLBrace,    // ${
 
     // User-defined symbolic operator token (2+ sym-char).
     SymbolicOp,
@@ -119,7 +118,6 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b">=", TokenKind::GtEq),
     (b"?.", TokenKind::QDot),
     (b"|>", TokenKind::PipeGt),
-    (b"${", TokenKind::DollarLBrace),
     (b"~>", TokenKind::TildeGt),
     (b":=", TokenKind::ColonEq),
     (b":?", TokenKind::ColonQuestion),
@@ -236,12 +234,12 @@ impl TokenKind {
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", display_token_kind(self))
+        write!(f, "{}", display_token_kind(*self))
     }
 }
 
 #[must_use]
-pub const fn display_token_kind(kind: &TokenKind) -> &'static str {
+pub const fn display_token_kind(kind: TokenKind) -> &'static str {
     match kind {
         TokenKind::Eof => "end of file",
         TokenKind::Error => "invalid token",
@@ -323,7 +321,6 @@ pub const fn display_token_kind(kind: &TokenKind) -> &'static str {
         TokenKind::ColonQuestion => "`:?`",
         TokenKind::ColonQuestionGt => "`:?>`",
         TokenKind::PipeGt => "`|>`",
-        TokenKind::DollarLBrace => "`${`",
         TokenKind::SymbolicOp => "symbolic operator",
     }
 }

@@ -35,9 +35,9 @@ xor_expr: and_expr (KW_XOR and_expr)*;
 and_expr: compare_expr (KW_AND compare_expr)*;
 
 compare_expr:
-	shift_expr (
-		(EQ | SLASH_EQ | LT | GT | LT_EQ | GT_EQ) shift_expr
-	)?;
+		shift_expr (
+			(EQ | SLASH_EQ | LT | GT | LT_EQ | GT_EQ | KW_IN) shift_expr
+		)?;
 
 shift_expr: add_expr ((KW_SHL | KW_SHR) add_expr)*;
 

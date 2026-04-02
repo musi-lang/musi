@@ -2,6 +2,7 @@ use music_arena::{Arena, SliceArena};
 use music_base::Span;
 
 use crate::{LexedSource, Token, TokenKind};
+use crate::trivia::TriviaRange;
 
 use super::{
     SyntaxElement, SyntaxElementId, SyntaxNode, SyntaxNodeData, SyntaxNodeKind, SyntaxTokenId,
@@ -19,9 +20,9 @@ fn syntax_tree_exposes_root_and_token_text() {
         ],
         trivia: Vec::new(),
         token_trivia: vec![
-            crate::trivia::TriviaRange::EMPTY,
-            crate::trivia::TriviaRange::EMPTY,
-            crate::trivia::TriviaRange::EMPTY,
+            TriviaRange::EMPTY,
+            TriviaRange::EMPTY,
+            TriviaRange::EMPTY,
         ],
         errors: Vec::new(),
     };

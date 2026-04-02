@@ -805,7 +805,7 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::KwLet => attrs.push(SyntaxElementId::Node(self.parse_let_expr(Vec::new())?)),
             TokenKind::KwInstance => {
-                attrs.push(SyntaxElementId::Node(self.parse_instance_expr(Vec::new())?))
+                attrs.push(SyntaxElementId::Node(self.parse_instance_expr(Vec::new())?));
             }
             TokenKind::LParen => attrs.push(SyntaxElementId::Node(self.parse_foreign_group()?)),
             _ => attrs.push(SyntaxElementId::Node(self.parse_expr(0)?)),
@@ -1176,17 +1176,16 @@ impl Parser<'_> {
             return children;
         }
         loop {
-            match self.peek_kind() {
-                TokenKind::Ident => children.push(self.advance_element()),
-                _ => {
-                    self.error(ParseError {
-                        kind: ParseErrorKind::ExpectedIdentifier {
-                            found: self.found_token(),
-                        },
-                        span: self.span(),
-                    });
-                    break;
-                }
+            if self.peek_kind() == TokenKind::Ident {
+                children.push(self.advance_element());
+            } else {
+                self.error(ParseError {
+                    kind: ParseErrorKind::ExpectedIdentifier {
+                        found: self.found_token(),
+                    },
+                    span: self.span(),
+                });
+                break;
             }
             let mut saw_separator = false;
             while let Some(comma) = self.eat(TokenKind::Comma) {

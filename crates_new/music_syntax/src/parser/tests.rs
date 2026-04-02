@@ -168,3 +168,18 @@ fn error_splice_outside_quote_is_reported() {
 fn error_non_associative_chain_is_reported() {
     assert_has_parse_error("a < b < c;", |k| matches!(k, ParseErrorKind::NonAssociativeChain));
 }
+
+#[test]
+fn parses_in_membership_expr() {
+    let parsed = parse(Lexer::new("a in b;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn error_non_associative_chain_with_in_is_reported() {
+    assert_has_parse_error("a in b in c;", |k| matches!(k, ParseErrorKind::NonAssociativeChain));
+}

@@ -194,7 +194,8 @@ const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
         | TokenKind::Lt
         | TokenKind::Gt
         | TokenKind::LtEq
-        | TokenKind::GtEq => Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison)),
+        | TokenKind::GtEq
+        | TokenKind::KwIn => Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison)),
         TokenKind::KwShl | TokenKind::KwShr => Some((SHIFT_BP, SHIFT_BP + 1, InfixClass::Other)),
         TokenKind::Plus | TokenKind::Minus => Some((ADD_BP, ADD_BP + 1, InfixClass::Other)),
         TokenKind::Star | TokenKind::Slash | TokenKind::Percent => {

@@ -40,7 +40,7 @@ const fn is_digit_for_base_byte(base: u32, b: u8) -> bool {
 
 impl<'src> Lexer<'src> {
     #[must_use]
-    pub fn new(text: &'src str) -> Self {
+    pub const fn new(text: &'src str) -> Self {
         Self {
             cursor: Cursor::new(text),
             template_stack: Vec::new(),
@@ -387,7 +387,7 @@ impl<'src> Lexer<'src> {
         match code {
             b if b == closing_delim => self.cursor.bump_bytes(1),
             b'\\' | b'"' | b'\'' | b'`' | b'$' | b'n' | b'r' | b't' | b'0' => {
-                self.cursor.bump_bytes(1)
+                self.cursor.bump_bytes(1);
             }
             b'x' => {
                 self.cursor.bump_bytes(1);
@@ -515,7 +515,10 @@ impl<'src> Lexer<'src> {
                     }
                     self.cursor.bump_bytes(1);
                 }
-                _ => unreachable!(),
+                _ => {
+                    debug_assert!(matches!(b, b'`' | b'\\' | b'$'));
+                    self.cursor.bump_bytes(1);
+                }
             }
         }
     }

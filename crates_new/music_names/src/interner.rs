@@ -17,6 +17,12 @@ impl Interner {
         }
     }
 
+    /// Interns `s`, returning a stable [`Symbol`] for its spelling.
+    ///
+    /// If the string has already been interned, this returns the existing symbol.
+    ///
+    /// # Panics
+    /// Panics if the interner exceeds `u32::MAX` unique strings.
     pub fn intern(&mut self, s: &str) -> Symbol {
         if let Some(sym) = self.map.get(s).copied() {
             return sym;
@@ -32,9 +38,13 @@ impl Interner {
     #[must_use]
     pub fn try_resolve(&self, sym: Symbol) -> Option<&str> {
         let index = usize::try_from(sym.raw()).ok()?;
-        self.strings.get(index).map(|s| s.as_ref())
+        self.strings.get(index).map(Box::as_ref)
     }
 
+    /// Resolves `sym` back to its original spelling.
+    ///
+    /// # Panics
+    /// Panics if `sym` was not allocated by this interner.
     #[must_use]
     pub fn resolve(&self, sym: Symbol) -> &str {
         self.try_resolve(sym)

@@ -347,6 +347,7 @@ compare-op        = eq
                     / gt
                     / lt-eq
                     / gt-eq
+                    / kw-in
 
 compare-expr      = shift-expr [compare-op shift-expr]
 

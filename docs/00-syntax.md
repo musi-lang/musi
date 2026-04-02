@@ -163,7 +163,7 @@ Built-in word operators are:
 - `not`
 - `shl`
 - `shr`
-- `in`
+- `in` (set membership)
 
 Users may define symbolic operators. Users may not define word operators.
 

@@ -67,7 +67,7 @@ pub enum SyntaxElement<'tree, 'src> {
 
 impl<'src> SyntaxTree<'src> {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         lexed: LexedSource<'src>,
         nodes: Arena<SyntaxNodeData>,
         children: SliceArena<SyntaxElementId>,
@@ -84,7 +84,7 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub fn lexed(&self) -> &LexedSource<'src> {
+    pub const fn lexed(&self) -> &LexedSource<'src> {
         &self.lexed
     }
 
@@ -94,7 +94,7 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub fn root(&self) -> SyntaxNode<'_, 'src> {
+    pub const fn root(&self) -> SyntaxNode<'_, 'src> {
         SyntaxNode::new(self, self.root)
     }
 
@@ -119,8 +119,7 @@ impl<'src> SyntaxTree<'src> {
         self.lexed
             .tokens()
             .get(index)
-            .map(|token| token.kind)
-            .unwrap_or(TokenKind::Eof)
+            .map_or(TokenKind::Eof, |token| token.kind)
     }
 
     #[must_use]
@@ -152,7 +151,7 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub fn node_count(&self) -> usize {
+    pub const fn node_count(&self) -> usize {
         self.nodes.len()
     }
 

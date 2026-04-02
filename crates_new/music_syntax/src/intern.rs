@@ -3,7 +3,7 @@ use music_names::{Ident, Interner};
 use crate::{LexedSource, TokenKind};
 
 #[must_use]
-pub fn canonical_name_text<'src>(token_kind: TokenKind, raw: &'src str) -> &'src str {
+pub fn canonical_name_text(token_kind: TokenKind, raw: &str) -> &str {
     match token_kind {
         TokenKind::OpIdent => raw
             .strip_prefix('(')
@@ -14,8 +14,8 @@ pub fn canonical_name_text<'src>(token_kind: TokenKind, raw: &'src str) -> &'src
 }
 
 #[must_use]
-pub fn intern_name_token<'src>(
-    lexed: &LexedSource<'src>,
+pub fn intern_name_token(
+    lexed: &LexedSource<'_>,
     token_index: usize,
     interner: &mut Interner,
 ) -> Option<Ident> {

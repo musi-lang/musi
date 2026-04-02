@@ -50,7 +50,7 @@ impl<'src> ParsedSource<'src> {
 }
 
 #[must_use]
-pub fn parse<'src>(lexed: LexedSource<'src>) -> ParsedSource<'src> {
+pub fn parse(lexed: LexedSource<'_>) -> ParsedSource<'_> {
     let token_spans = lexed.tokens().iter().map(|token| token.span).collect();
     let mut builder = SyntaxTreeBuilder::new(token_spans);
     let mut errors = Vec::new();
@@ -136,7 +136,7 @@ impl SyntaxTreeBuilder {
         }
     }
 
-    fn finish<'src>(self, lexed: LexedSource<'src>, root: SyntaxNodeId) -> SyntaxTree<'src> {
+    fn finish(self, lexed: LexedSource<'_>, root: SyntaxNodeId) -> SyntaxTree<'_> {
         SyntaxTree::new(lexed, self.nodes, self.children, self.token_parents, root)
     }
 }

@@ -16,6 +16,7 @@ pub struct Stmt<'tree, 'src> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExprKind {
     Literal,
+    Template,
     Name,
     Pi,
     Lambda,
@@ -29,8 +30,6 @@ pub enum ExprKind {
     Index,
     RecordUpdate,
     FieldAccess,
-    OptionalChain,
-    ForceAccess,
     TypeTest,
     TypeCast,
     Prefix,
@@ -50,6 +49,7 @@ pub enum ExprKind {
     Foreign,
     Quote,
     Splice,
+    Other,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,6 +77,7 @@ pub enum PatternKind {
     Array,
     Or,
     As,
+    Other,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -186,7 +187,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
     }
 
     #[must_use]
-    pub fn syntax(self) -> SyntaxNode<'tree, 'src> {
+    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
         match self {
             Self::Array(expr) => expr.syntax,
             Self::Binary(expr) => expr.syntax,
@@ -203,8 +204,13 @@ impl<'tree, 'src> Expr<'tree, 'src> {
 
     #[must_use]
     pub fn kind(self) -> ExprKind {
-        match self.syntax().kind() {
+        let kind = self.syntax().kind();
+        if !kind.is_expr() {
+            return ExprKind::Other;
+        }
+        match kind {
             SyntaxNodeKind::LiteralExpr => ExprKind::Literal,
+            SyntaxNodeKind::TemplateExpr => ExprKind::Template,
             SyntaxNodeKind::NameExpr => ExprKind::Name,
             SyntaxNodeKind::PiExpr => ExprKind::Pi,
             SyntaxNodeKind::LambdaExpr => ExprKind::Lambda,
@@ -237,7 +243,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::ForeignBlockExpr => ExprKind::Foreign,
             SyntaxNodeKind::QuoteExpr => ExprKind::Quote,
             SyntaxNodeKind::SpliceExpr => ExprKind::Splice,
-            _ => unreachable!("Expr always wraps an expression node"),
+            _ => ExprKind::Other,
         }
     }
 }
@@ -255,7 +261,11 @@ impl<'tree, 'src> Pattern<'tree, 'src> {
 
     #[must_use]
     pub fn kind(self) -> PatternKind {
-        match self.syntax.kind() {
+        let kind = self.syntax.kind();
+        if !kind.is_pat() {
+            return PatternKind::Other;
+        }
+        match kind {
             SyntaxNodeKind::WildcardPat => PatternKind::Wildcard,
             SyntaxNodeKind::BindPat => PatternKind::Bind,
             SyntaxNodeKind::LiteralPat => PatternKind::Literal,
@@ -265,7 +275,7 @@ impl<'tree, 'src> Pattern<'tree, 'src> {
             SyntaxNodeKind::ArrayPat => PatternKind::Array,
             SyntaxNodeKind::OrPat => PatternKind::Or,
             SyntaxNodeKind::AsPat => PatternKind::As,
-            _ => unreachable!("Pattern always wraps a pattern node"),
+            _ => PatternKind::Other,
         }
     }
 }

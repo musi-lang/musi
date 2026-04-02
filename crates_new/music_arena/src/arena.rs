@@ -37,6 +37,10 @@ impl<T> Arena<T> {
         }
     }
 
+    /// Allocates `value` into the arena and returns its stable index.
+    ///
+    /// # Panics
+    /// Panics if the arena exceeds `u32::MAX` entries.
     pub fn alloc(&mut self, value: T) -> Idx<T> {
         let raw =
             u32::try_from(self.data.len()).expect("arena overflow: exceeded u32::MAX entries");
@@ -44,6 +48,11 @@ impl<T> Arena<T> {
         Idx::new(raw)
     }
 
+    /// Returns a shared reference to the value stored at `idx`.
+    ///
+    /// # Panics
+    /// Panics if `idx` is out of bounds for this arena (for example, an index from a
+    /// different arena type or instance).
     #[must_use]
     pub fn get(&self, idx: Idx<T>) -> &T {
         self.data
@@ -51,6 +60,11 @@ impl<T> Arena<T> {
             .expect("Idx out of bounds: used with wrong arena")
     }
 
+    /// Returns a mutable reference to the value stored at `idx`.
+    ///
+    /// # Panics
+    /// Panics if `idx` is out of bounds for this arena (for example, an index from a
+    /// different arena type or instance).
     #[must_use]
     pub fn get_mut(&mut self, idx: Idx<T>) -> &mut T {
         self.data
