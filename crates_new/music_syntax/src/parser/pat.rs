@@ -68,16 +68,11 @@ impl Parser<'_> {
         if self.at(TokenKind::LParen) {
             let open = self.advance_element();
             children.push(open);
-            if !self.at(TokenKind::RParen) {
-                children.push(SyntaxElementId::Node(self.parse_pattern()?));
-                while let Some(comma) = self.eat(TokenKind::Comma) {
-                    children.push(comma);
-                    if self.at(TokenKind::RParen) {
-                        break;
-                    }
-                    children.push(SyntaxElementId::Node(self.parse_pattern()?));
-                }
-            }
+            children.extend(self.parse_separated_nodes(
+                TokenKind::Comma,
+                TokenKind::RParen,
+                Parser::parse_pattern,
+            )?);
             children.push(self.expect_token(TokenKind::RParen)?);
         }
         Ok(self
@@ -115,40 +110,22 @@ impl Parser<'_> {
     }
 
     fn parse_tuple_pattern(&mut self) -> ParseResult<SyntaxNodeId> {
-        let open = self.expect_token(TokenKind::LParen)?;
-        let mut children = vec![open];
-        if !self.at(TokenKind::RParen) {
-            children.push(SyntaxElementId::Node(self.parse_pattern()?));
-            while let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                if self.at(TokenKind::RParen) {
-                    break;
-                }
-                children.push(SyntaxElementId::Node(self.parse_pattern()?));
-            }
-        }
-        children.push(self.expect_token(TokenKind::RParen)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::TuplePat, children))
+        self.parse_wrapped_nodes(
+            SyntaxNodeKind::TuplePat,
+            TokenKind::LParen,
+            TokenKind::Comma,
+            TokenKind::RParen,
+            Parser::parse_pattern,
+        )
     }
 
     fn parse_array_pattern(&mut self) -> ParseResult<SyntaxNodeId> {
-        let open = self.expect_token(TokenKind::LBracket)?;
-        let mut children = vec![open];
-        if !self.at(TokenKind::RBracket) {
-            children.push(SyntaxElementId::Node(self.parse_pattern()?));
-            while let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                if self.at(TokenKind::RBracket) {
-                    break;
-                }
-                children.push(SyntaxElementId::Node(self.parse_pattern()?));
-            }
-        }
-        children.push(self.expect_token(TokenKind::RBracket)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::ArrayPat, children))
+        self.parse_wrapped_nodes(
+            SyntaxNodeKind::ArrayPat,
+            TokenKind::LBracket,
+            TokenKind::Comma,
+            TokenKind::RBracket,
+            Parser::parse_pattern,
+        )
     }
 }

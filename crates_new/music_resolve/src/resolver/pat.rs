@@ -1,131 +1,21 @@
 use super::*;
 
 use music_syntax::SyntaxElement;
-
-use crate::string_lit::{decode_rune_lit, decode_string_lit, decode_template_no_subst};
+use music_syntax::pattern_binder_tokens;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn collect_pat_binders(&mut self, node: SyntaxNode<'tree, 'src>) -> Vec<Ident> {
         let mut out = Vec::new();
         let mut seen = std::collections::HashSet::<Symbol>::new();
-        self.collect_pat_binders_rec(node, &mut out, &mut seen);
-        out
-    }
-
-    fn collect_pat_binders_rec(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        out: &mut Vec<Ident>,
-        seen: &mut std::collections::HashSet<Symbol>,
-    ) {
-        match node.kind() {
-            music_syntax::SyntaxNodeKind::BindPat => self.collect_bind_pat_binders(node, out, seen),
-            music_syntax::SyntaxNodeKind::AsPat => self.collect_as_pat_binders(node, out, seen),
-            music_syntax::SyntaxNodeKind::OrPat => {
-                for child in node.child_nodes().filter(|n| n.kind().is_pat()) {
-                    self.collect_pat_binders_rec(child, out, seen);
-                }
-            }
-            music_syntax::SyntaxNodeKind::RecordPat => {
-                self.collect_record_pat_binders(node, out, seen)
-            }
-            kind if kind.is_pat() => {
-                for child in node.child_nodes().filter(|n| n.kind().is_pat()) {
-                    self.collect_pat_binders_rec(child, out, seen);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn collect_bind_pat_binders(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        out: &mut Vec<Ident>,
-        seen: &mut std::collections::HashSet<Symbol>,
-    ) {
-        let tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
-        let Some(ident) = tok.and_then(|t| self.intern_ident_token(t)) else {
-            return;
-        };
-        if seen.insert(ident.name) {
-            out.push(ident);
-        }
-    }
-
-    fn collect_as_pat_binders(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        out: &mut Vec<Ident>,
-        seen: &mut std::collections::HashSet<Symbol>,
-    ) {
-        if let Some(inner) = node.child_nodes().find(|n| n.kind().is_pat()) {
-            self.collect_pat_binders_rec(inner, out, seen);
-        }
-        let tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
-        let Some(ident) = tok.and_then(|t| self.intern_ident_token(t)) else {
-            return;
-        };
-        if seen.insert(ident.name) {
-            out.push(ident);
-        }
-    }
-
-    fn collect_record_pat_binders(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        out: &mut Vec<Ident>,
-        seen: &mut std::collections::HashSet<Symbol>,
-    ) {
-        let children: Vec<_> = node.children().collect();
-        let mut i: usize = 0;
-        while i < children.len() {
-            let is_mut = children
-                .get(i)
-                .copied()
-                .and_then(SyntaxElement::into_token)
-                .is_some_and(|t| t.kind() == TokenKind::KwMut);
-            if is_mut {
-                i += 1;
-            }
-
-            let Some(name_tok) = children
-                .get(i)
-                .copied()
-                .and_then(SyntaxElement::into_token)
-                .filter(|t| t.kind() == TokenKind::Ident)
-            else {
-                i += 1;
+        for token in pattern_binder_tokens(node) {
+            let Some(ident) = self.intern_ident_token(token) else {
                 continue;
             };
-            let name = self.intern_ident_token(name_tok);
-            i += 1;
-
-            let has_colon = children
-                .get(i)
-                .copied()
-                .and_then(SyntaxElement::into_token)
-                .is_some_and(|t| t.kind() == TokenKind::Colon);
-            if has_colon {
-                i += 1;
-                if let Some(pat) = children
-                    .get(i)
-                    .copied()
-                    .and_then(SyntaxElement::into_node)
-                    .filter(|n| n.kind().is_pat())
-                {
-                    self.collect_pat_binders_rec(pat, out, seen);
-                    i += 1;
-                }
-                continue;
-            }
-
-            if let Some(name) = name {
-                if seen.insert(name.name) {
-                    out.push(name);
-                }
+            if seen.insert(ident.name) {
+                out.push(ident);
             }
         }
+        out
     }
 
     pub(super) fn lower_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
@@ -164,32 +54,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let Some(tok) = node.child_tokens().next() else {
             return self.alloc_error_pat(node);
         };
-        let Some(raw) = tok.text() else {
+        let Some(lit) = self.alloc_lit_from_token(tok) else {
             return self.alloc_error_pat(node);
         };
-
-        let kind = match tok.kind() {
-            TokenKind::Int => music_hir::HirLitKind::Int { raw: raw.into() },
-            TokenKind::Float => music_hir::HirLitKind::Float { raw: raw.into() },
-            TokenKind::String => decode_string_lit(raw).map_or_else(
-                |_| music_hir::HirLitKind::String { value: "".into() },
-                |s| music_hir::HirLitKind::String { value: s.into() },
-            ),
-            TokenKind::Rune => decode_rune_lit(raw).map_or_else(
-                |_| music_hir::HirLitKind::Rune { value: 0 },
-                |v| music_hir::HirLitKind::Rune { value: v },
-            ),
-            TokenKind::TemplateNoSubst => decode_template_no_subst(raw).map_or_else(
-                |_| music_hir::HirLitKind::String { value: "".into() },
-                |s| music_hir::HirLitKind::String { value: s.into() },
-            ),
-            _ => music_hir::HirLitKind::Int { raw: "0".into() },
-        };
-
-        let lit = self.store.alloc_lit(music_hir::HirLit {
-            origin: self.origin_token(tok),
-            kind,
-        });
         let expr = self.alloc_expr(origin, HirExprKind::Lit { lit });
         self.store.alloc_pat(music_hir::HirPat {
             origin,

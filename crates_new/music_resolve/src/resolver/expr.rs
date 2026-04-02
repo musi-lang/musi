@@ -4,14 +4,14 @@ use music_arena::SliceRange;
 use music_hir::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
     HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirForeignDecl,
-    HirHandleClause, HirLetMods, HirLit, HirLitKind, HirMemberDef, HirMemberKind, HirParam,
-    HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
+    HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirParam, HirPrefixOp, HirQuoteKind,
+    HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
 use crate::string_lit::{
-    decode_rune_lit, decode_string_lit, decode_template_head, decode_template_middle,
-    decode_template_no_subst, decode_template_tail,
+    decode_string_lit, decode_template_head, decode_template_middle, decode_template_no_subst,
+    decode_template_tail,
 };
 
 use super::util::{parse_u32_lit, stmt_inner_expr};
@@ -107,26 +107,9 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let Some(tok) = node.child_tokens().next() else {
             return self.error_expr(origin);
         };
-        let Some(raw) = tok.text() else {
+        let Some(lit) = self.alloc_lit_from_token(tok) else {
             return self.error_expr(origin);
         };
-        let kind = match tok.kind() {
-            TokenKind::Int => HirLitKind::Int { raw: raw.into() },
-            TokenKind::Float => HirLitKind::Float { raw: raw.into() },
-            TokenKind::String => decode_string_lit(raw).map_or_else(
-                |_| HirLitKind::String { value: "".into() },
-                |s| HirLitKind::String { value: s.into() },
-            ),
-            TokenKind::Rune => decode_rune_lit(raw).map_or_else(
-                |_| HirLitKind::Rune { value: 0 },
-                |v| HirLitKind::Rune { value: v },
-            ),
-            _ => HirLitKind::Int { raw: "0".into() },
-        };
-        let lit = self.store.alloc_lit(HirLit {
-            origin: self.origin_token(tok),
-            kind,
-        });
         self.alloc_expr(origin, HirExprKind::Lit { lit })
     }
 
@@ -862,21 +845,9 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let _ = self.insert_binding(name, NameBindingKind::Let);
 
         self.push_scope();
-        let type_params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::TypeParamList)
-            .map(|n| self.lower_type_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ParamList)
-            .map(|n| self.lower_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let constraints = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
-            .map(|n| self.lower_constraint_list(n))
-            .unwrap_or(SliceRange::EMPTY);
+        let type_params = self.lower_type_params_clause(node);
+        let params = self.lower_params_clause(node);
+        let constraints = self.lower_constraints_clause(node);
         let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
             node.child_nodes()
                 .find(|n| n.kind().is_expr() && n.kind() != SyntaxNodeKind::ParamList)
@@ -992,11 +963,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
     fn lower_class_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
-        let constraints = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
-            .map(|n| self.lower_constraint_list(n))
-            .unwrap_or(SliceRange::EMPTY);
+        let constraints = self.lower_constraints_clause(node);
         let members = self.lower_members(node);
         self.pop_scope();
         self.alloc_expr(
@@ -1012,16 +979,8 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let origin = self.origin_node(node);
         self.push_scope();
 
-        let type_params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::TypeParamList)
-            .map(|n| self.lower_type_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let constraints = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
-            .map(|n| self.lower_constraint_list(n))
-            .unwrap_or(SliceRange::EMPTY);
+        let type_params = self.lower_type_params_clause(node);
+        let constraints = self.lower_constraints_clause(node);
         let class = node
             .child_nodes()
             .find(|n| n.kind().is_expr())
@@ -1129,24 +1088,11 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         }
 
         self.push_scope();
-        let type_params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::TypeParamList)
-            .map(|n| self.lower_type_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ParamList)
-            .map(|n| self.lower_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let constraints = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ConstraintList)
-            .map(|n| self.lower_constraint_list(n))
-            .unwrap_or(SliceRange::EMPTY);
-        let effects = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::EffectSet)
+        let type_params = self.lower_type_params_clause(node);
+        let params = self.lower_params_clause(node);
+        let constraints = self.lower_constraints_clause(node);
+        let effects = self
+            .child_of_kind(node, SyntaxNodeKind::EffectSet)
             .map(|n| self.lower_effect_set(n));
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
@@ -1192,7 +1138,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         )
     }
 
-    fn lower_type_param_list(&mut self, node: SyntaxNode<'tree, 'src>) -> SliceRange<Ident> {
+    pub(super) fn lower_type_param_list(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+    ) -> SliceRange<Ident> {
         let params: Vec<_> = node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::TypeParam)
@@ -1205,7 +1154,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         self.store.idents.alloc_from_iter(params)
     }
 
-    fn lower_param_list(&mut self, node: SyntaxNode<'tree, 'src>) -> SliceRange<HirParam> {
+    pub(super) fn lower_param_list(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+    ) -> SliceRange<HirParam> {
         let mut params = Vec::<HirParam>::new();
         for p in node
             .child_nodes()
@@ -1242,7 +1194,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         }
     }
 
-    fn lower_constraint_list(
+    pub(super) fn lower_constraint_list(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<HirConstraint> {

@@ -1,7 +1,7 @@
 use music_base::{SourceId, Span};
 use music_syntax::{
-    SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree, TokenKind,
-    canonical_name_text,
+    SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree, TokenKind, canonical_name_text,
+    pattern_binder_tokens,
 };
 
 use crate::ModuleSpecifier;
@@ -94,10 +94,10 @@ pub fn collect_export_summary(_source_id: SourceId, tree: &SyntaxTree<'_>) -> Mo
             let Some(pat) = let_expr.child_nodes().find(|n| n.kind().is_pat()) else {
                 return;
             };
-            let mut binders = Vec::<Box<str>>::new();
-            collect_binders_in_pattern(pat, &mut binders);
-            for name in binders {
-                summary.push_export(name.as_ref(), is_opaque);
+            for token in pattern_binder_tokens(pat) {
+                if let Some(name) = canonical_token_text(token) {
+                    summary.push_export(name, is_opaque);
+                }
             }
             return;
         }
@@ -183,79 +183,6 @@ fn walk_nodes<'tree, 'src>(
         if let Some(node) = child.into_node() {
             walk_nodes(node, f);
         }
-    }
-}
-
-fn collect_binders_in_pattern(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) {
-    match pat.kind() {
-        SyntaxNodeKind::BindPat => {
-            if let Some(name) = first_name_text(pat) {
-                out.push(name.into());
-            }
-        }
-        SyntaxNodeKind::AsPat => {
-            let mut nodes = pat.child_nodes();
-            if let Some(inner) = nodes.next() {
-                collect_binders_in_pattern(inner, out);
-            }
-            if let Some(alias) = first_name_text(pat) {
-                out.push(alias.into());
-            }
-        }
-        SyntaxNodeKind::OrPat => {
-            for child in pat.child_nodes() {
-                if child.kind().is_pat() {
-                    collect_binders_in_pattern(child, out);
-                }
-            }
-        }
-        SyntaxNodeKind::RecordPat => collect_record_pat_binders(pat, out),
-        kind if kind.is_pat() => {
-            for child in pat.child_nodes() {
-                if child.kind().is_pat() {
-                    collect_binders_in_pattern(child, out);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_record_pat_binders(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) {
-    let children: Vec<SyntaxElement<'_, '_>> = pat.children().collect();
-    let mut i: usize = 0;
-    while let Some(elem) = children.get(i).copied() {
-        let Some(tok) = elem.into_token() else {
-            i += 1;
-            continue;
-        };
-        if !is_name_token(tok.kind()) {
-            i += 1;
-            continue;
-        }
-        let name = canonical_token_text(tok);
-        let is_colon = children
-            .get(i + 1)
-            .copied()
-            .and_then(SyntaxElement::into_token)
-            .is_some_and(|t| t.kind() == TokenKind::Colon);
-        if is_colon {
-            let Some(value_pat) = children
-                .get(i + 2)
-                .copied()
-                .and_then(SyntaxElement::into_node)
-            else {
-                i += 1;
-                continue;
-            };
-            collect_binders_in_pattern(value_pat, out);
-            i += 3;
-            continue;
-        }
-        if let Some(name) = name {
-            out.push(name.into());
-        }
-        i += 1;
     }
 }
 

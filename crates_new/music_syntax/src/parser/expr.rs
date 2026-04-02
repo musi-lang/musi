@@ -83,16 +83,11 @@ impl Parser<'_> {
     fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::LParen)?;
         let mut children = vec![SyntaxElementId::Node(callee), open];
-        if !self.at(TokenKind::RParen) {
-            children.push(SyntaxElementId::Node(self.parse_arg()?));
-            while let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                if self.at(TokenKind::RParen) {
-                    break;
-                }
-                children.push(SyntaxElementId::Node(self.parse_arg()?));
-            }
-        }
+        children.extend(self.parse_separated_nodes(
+            TokenKind::Comma,
+            TokenKind::RParen,
+            Parser::parse_arg,
+        )?);
         children.push(self.expect_token(TokenKind::RParen)?);
         Ok(self
             .builder
@@ -113,7 +108,11 @@ impl Parser<'_> {
     fn parse_apply_expr(&mut self, callee: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::LBracket)?;
         let mut children = vec![SyntaxElementId::Node(callee), open];
-        children.extend(self.parse_expr_list(TokenKind::RBracket)?);
+        children.extend(self.parse_separated_nodes(
+            TokenKind::Comma,
+            TokenKind::RBracket,
+            Parser::parse_expr_node,
+        )?);
         children.push(self.expect_token(TokenKind::RBracket)?);
         Ok(self
             .builder
@@ -123,7 +122,11 @@ impl Parser<'_> {
     fn parse_index_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::DotLBracket)?;
         let mut children = vec![SyntaxElementId::Node(base), open];
-        children.extend(self.parse_expr_list(TokenKind::RBracket)?);
+        children.extend(self.parse_separated_nodes(
+            TokenKind::Comma,
+            TokenKind::RBracket,
+            Parser::parse_expr_node,
+        )?);
         children.push(self.expect_token(TokenKind::RBracket)?);
         Ok(self
             .builder
