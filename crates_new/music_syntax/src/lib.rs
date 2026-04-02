@@ -8,7 +8,7 @@ mod tree;
 mod trivia;
 
 pub use errors::{LexError, LexErrorKind, ParseError, ParseErrorKind, ParseResult};
-pub use intern::{canonical_name_text, intern_name_token};
+pub use intern::canonical_name_text;
 pub use lexer::Lexer;
 pub use parser::{ParsedSource, parse};
 pub use token::{Token, TokenKind};

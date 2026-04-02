@@ -271,7 +271,6 @@ dependencies = [
  "criterion",
  "music_arena",
  "music_base",
- "music_names",
  "thiserror",
 ]
 
