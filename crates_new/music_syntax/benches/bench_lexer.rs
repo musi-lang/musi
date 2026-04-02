@@ -46,7 +46,7 @@ let z := `escaped_ident_123`;
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_large_mixed_1mb", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -55,7 +55,7 @@ fn bench_lex_long_string_1mb(c: &mut Criterion) {
     let source = format!("let s := \"{inner}\";\n");
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_long_string_1mb", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -64,7 +64,7 @@ fn bench_lex_trivia_heavy(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_trivia_heavy", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -73,7 +73,7 @@ fn bench_lex_numeric_heavy(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_numeric_heavy", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -83,7 +83,7 @@ fn bench_lex_string_heavy(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_string_heavy", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -92,7 +92,7 @@ fn bench_lex_operator_heavy(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_operator_heavy", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -108,7 +108,7 @@ fn bench_lex_symbolic_op_long(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_symbolic_op_long", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 
@@ -118,7 +118,7 @@ fn bench_lex_unicode_string_heavy(c: &mut Criterion) {
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_unicode_string_heavy", |b| {
-        b.iter(|| run_lexer_once(text))
+        b.iter(|| run_lexer_once(text));
     });
 }
 

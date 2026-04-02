@@ -1,5 +1,12 @@
 [workspace]
-members = ["crates_new/*"]
+members = [
+  "crates_new/music_arena",
+  "crates_new/music_base",
+  "crates_new/music_hir",
+  "crates_new/music_module",
+  "crates_new/music_names",
+  "crates_new/music_syntax",
+]
 exclude = ["crates/*"]
 resolver = "2"
 

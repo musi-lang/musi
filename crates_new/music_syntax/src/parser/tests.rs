@@ -103,22 +103,30 @@ fn error_expected_token_semicolon() {
 
 #[test]
 fn error_expected_expression() {
-    assert_has_parse_error(";", |k| matches!(k, ParseErrorKind::ExpectedExpression { .. }));
+    assert_has_parse_error(";", |k| {
+        matches!(k, ParseErrorKind::ExpectedExpression { .. })
+    });
 }
 
 #[test]
 fn error_expected_pattern() {
-    assert_has_parse_error("let := 1;", |k| matches!(k, ParseErrorKind::ExpectedPattern { .. }));
+    assert_has_parse_error("let := 1;", |k| {
+        matches!(k, ParseErrorKind::ExpectedPattern { .. })
+    });
 }
 
 #[test]
 fn error_expected_member() {
-    assert_has_parse_error("effect { 1 };", |k| matches!(k, ParseErrorKind::ExpectedMember { .. }));
+    assert_has_parse_error("effect { 1 };", |k| {
+        matches!(k, ParseErrorKind::ExpectedMember { .. })
+    });
 }
 
 #[test]
 fn error_expected_identifier() {
-    assert_has_parse_error("@; 1;", |k| matches!(k, ParseErrorKind::ExpectedIdentifier { .. }));
+    assert_has_parse_error("@; 1;", |k| {
+        matches!(k, ParseErrorKind::ExpectedIdentifier { .. })
+    });
 }
 
 #[test]
@@ -144,7 +152,9 @@ fn error_expected_array_dimension() {
 
 #[test]
 fn error_expected_field_target() {
-    assert_has_parse_error("x.;", |k| matches!(k, ParseErrorKind::ExpectedFieldTarget { .. }));
+    assert_has_parse_error("x.;", |k| {
+        matches!(k, ParseErrorKind::ExpectedFieldTarget { .. })
+    });
 }
 
 #[test]
@@ -156,7 +166,9 @@ fn error_expected_constraint_operator() {
 
 #[test]
 fn error_expected_attr_value() {
-    assert_has_parse_error("@a(; ) 1;", |k| matches!(k, ParseErrorKind::ExpectedAttrValue { .. }));
+    assert_has_parse_error("@a(; ) 1;", |k| {
+        matches!(k, ParseErrorKind::ExpectedAttrValue { .. })
+    });
 }
 
 #[test]
@@ -166,7 +178,9 @@ fn error_splice_outside_quote_is_reported() {
 
 #[test]
 fn error_non_associative_chain_is_reported() {
-    assert_has_parse_error("a < b < c;", |k| matches!(k, ParseErrorKind::NonAssociativeChain));
+    assert_has_parse_error("a < b < c;", |k| {
+        matches!(k, ParseErrorKind::NonAssociativeChain)
+    });
 }
 
 #[test]
@@ -181,5 +195,7 @@ fn parses_in_membership_expr() {
 
 #[test]
 fn error_non_associative_chain_with_in_is_reported() {
-    assert_has_parse_error("a in b in c;", |k| matches!(k, ParseErrorKind::NonAssociativeChain));
+    assert_has_parse_error("a in b in c;", |k| {
+        matches!(k, ParseErrorKind::NonAssociativeChain)
+    });
 }

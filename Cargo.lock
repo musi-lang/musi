@@ -257,6 +257,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_hir"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_arena",
+ "music_base",
+ "music_names",
+]
+
+[[package]]
+name = "music_module"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_base",
+ "music_syntax",
+ "thiserror",
+]
+
+[[package]]
 name = "music_names"
 version = "0.1.0-alpha.1"
 dependencies = [

@@ -1,8 +1,8 @@
 use music_arena::{Arena, SliceArena};
 use music_base::Span;
 
-use crate::{LexedSource, Token, TokenKind};
 use crate::trivia::TriviaRange;
+use crate::{LexedSource, Token, TokenKind};
 
 use super::{
     SyntaxElement, SyntaxElementId, SyntaxNode, SyntaxNodeData, SyntaxNodeKind, SyntaxTokenId,
@@ -19,11 +19,7 @@ fn syntax_tree_exposes_root_and_token_text() {
             Token::new(TokenKind::Eof, Span::new(2, 2)),
         ],
         trivia: Vec::new(),
-        token_trivia: vec![
-            TriviaRange::EMPTY,
-            TriviaRange::EMPTY,
-            TriviaRange::EMPTY,
-        ],
+        token_trivia: vec![TriviaRange::EMPTY, TriviaRange::EMPTY, TriviaRange::EMPTY],
         errors: Vec::new(),
     };
     let mut nodes = Arena::new();
