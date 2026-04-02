@@ -1,4 +1,5 @@
 use music_base::Span;
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -11,8 +12,12 @@ pub enum TokenKind {
     Int,
     Float,
     String,
-    FString,
     Rune,
+
+    TemplateNoSubst,
+    TemplateHead,
+    TemplateMiddle,
+    TemplateTail,
 
     // Keywords (grammar/Musi.abnf)
     KwAnd,
@@ -92,13 +97,14 @@ pub enum TokenKind {
     ColonQuestion,   // :?
     ColonQuestionGt, // :?>
     PipeGt,          // |>
+    DollarLBrace,    // ${
 
     // User-defined symbolic operator token (2+ sym-char).
     SymbolicOp,
 }
 
 // Ordered by longest-to-shortest (maximal munch).
-pub const FIXED_TOKENS: &[(&[u8], TokenKind)] = &[
+pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b":?>", TokenKind::ColonQuestionGt),
     (b"...", TokenKind::DotDotDot),
     (b".{", TokenKind::DotLBrace),
@@ -113,6 +119,7 @@ pub const FIXED_TOKENS: &[(&[u8], TokenKind)] = &[
     (b">=", TokenKind::GtEq),
     (b"?.", TokenKind::QDot),
     (b"|>", TokenKind::PipeGt),
+    (b"${", TokenKind::DollarLBrace),
     (b"~>", TokenKind::TildeGt),
     (b":=", TokenKind::ColonEq),
     (b":?", TokenKind::ColonQuestion),
@@ -224,5 +231,99 @@ impl TokenKind {
                 | Self::KwWith
                 | Self::KwXor
         )
+    }
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", display_token_kind(self))
+    }
+}
+
+#[must_use]
+pub const fn display_token_kind(kind: &TokenKind) -> &'static str {
+    match kind {
+        TokenKind::Eof => "end of file",
+        TokenKind::Error => "invalid token",
+        TokenKind::Ident => "identifier",
+        TokenKind::OpIdent => "operator identifier",
+        TokenKind::Int => "integer literal",
+        TokenKind::Float => "float literal",
+        TokenKind::String => "string literal",
+        TokenKind::Rune => "rune literal",
+        TokenKind::TemplateNoSubst => "template literal",
+        TokenKind::TemplateHead => "template head",
+        TokenKind::TemplateMiddle => "template middle",
+        TokenKind::TemplateTail => "template tail",
+        TokenKind::KwAnd => "`and`",
+        TokenKind::KwAs => "`as`",
+        TokenKind::KwCase => "`case`",
+        TokenKind::KwClass => "`class`",
+        TokenKind::KwData => "`data`",
+        TokenKind::KwEffect => "`effect`",
+        TokenKind::KwExport => "`export`",
+        TokenKind::KwForeign => "`foreign`",
+        TokenKind::KwHandle => "`handle`",
+        TokenKind::KwIf => "`if`",
+        TokenKind::KwImport => "`import`",
+        TokenKind::KwIn => "`in`",
+        TokenKind::KwInstance => "`instance`",
+        TokenKind::KwLaw => "`law`",
+        TokenKind::KwLet => "`let`",
+        TokenKind::KwMut => "`mut`",
+        TokenKind::KwPerform => "`perform`",
+        TokenKind::KwNot => "`not`",
+        TokenKind::KwOf => "`of`",
+        TokenKind::KwOpaque => "`opaque`",
+        TokenKind::KwOr => "`or`",
+        TokenKind::KwQuote => "`quote`",
+        TokenKind::KwRec => "`rec`",
+        TokenKind::KwResume => "`resume`",
+        TokenKind::KwShl => "`shl`",
+        TokenKind::KwShr => "`shr`",
+        TokenKind::KwWhere => "`where`",
+        TokenKind::KwWith => "`with`",
+        TokenKind::KwXor => "`xor`",
+        TokenKind::At => "`@`",
+        TokenKind::Hash => "`#`",
+        TokenKind::LParen => "`(`",
+        TokenKind::RParen => "`)`",
+        TokenKind::LBracket => "`[`",
+        TokenKind::RBracket => "`]`",
+        TokenKind::LBrace => "`{`",
+        TokenKind::RBrace => "`}`",
+        TokenKind::Comma => "`,`",
+        TokenKind::Semicolon => "`;`",
+        TokenKind::Dot => "`.`",
+        TokenKind::Colon => "`:`",
+        TokenKind::Pipe => "`|`",
+        TokenKind::Underscore => "`_`",
+        TokenKind::Plus => "`+`",
+        TokenKind::Minus => "`-`",
+        TokenKind::Star => "`*`",
+        TokenKind::Slash => "`/`",
+        TokenKind::Percent => "`%`",
+        TokenKind::Eq => "`=`",
+        TokenKind::Lt => "`<`",
+        TokenKind::Gt => "`>`",
+        TokenKind::ColonEq => "`:=`",
+        TokenKind::LtMinus => "`<-`",
+        TokenKind::MinusGt => "`->`",
+        TokenKind::TildeGt => "`~>`",
+        TokenKind::EqGt => "`=>`",
+        TokenKind::SlashEq => "`/=`",
+        TokenKind::LtEq => "`<=`",
+        TokenKind::GtEq => "`>=`",
+        TokenKind::LtColon => "`<:`",
+        TokenKind::QDot => "`?.`",
+        TokenKind::BangDot => "`!.`",
+        TokenKind::DotDotDot => "`...`",
+        TokenKind::DotLBrace => "`.{`",
+        TokenKind::DotLBracket => "`.[`",
+        TokenKind::ColonQuestion => "`:?`",
+        TokenKind::ColonQuestionGt => "`:?>`",
+        TokenKind::PipeGt => "`|>`",
+        TokenKind::DollarLBrace => "`${`",
+        TokenKind::SymbolicOp => "symbolic operator",
     }
 }

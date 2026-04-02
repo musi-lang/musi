@@ -11,6 +11,12 @@ use crate::Span;
 pub struct SourceId(u32);
 
 impl SourceId {
+    /// Construct a `SourceId` from a raw `u32`.
+    #[must_use]
+    pub const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
     /// Return the raw `u32` index.
     #[must_use]
     pub const fn raw(self) -> u32 {

@@ -17,13 +17,13 @@ This tracker is for the remaining semantic clarifications needed to make the gra
 
 - [ ] Define whether block comments can nest; if not, state it normatively
 - [ ] Define whether rune/string literals may contain raw newlines normatively (current lexer allows it)
-- [ ] Define whether escaped identifiers may contain newlines
+- [ ] Define whether template literals may contain raw newlines normatively
 
-## f-strings
+## Template Literals
 
-- [ ] Decide whether `f"..."` supports `{ expr }` interpolation in the core syntax
+- [ ] Decide whether template literals support `${ expr }` interpolation in the core syntax
 - [ ] If yes: define brace escaping (`{{` / `}}`?) and nesting rules
-- [ ] If no (or later phase): specify how interpolation is parsed (post-lex / post-parse contract)
+- [ ] Specify how template interpolation is tokenized and parsed (current ANTLR grammar treats it as one literal token)
 
 ## Symbolic operators
 

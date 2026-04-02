@@ -5,8 +5,9 @@
 // Design goals: - expression-first, Pratt-friendly precedence structure - maximal munch
 // tokenization (see fixed tokens) - compact and mechanically checkable
 // 
-// Known gaps (tracked in `docs/14-antlr-grammar-tracker.md`): - symbolic operator “precedence by
-// family” (currently one tier) - f-string interpolation (currently lexed as a single literal token)
+// Known gaps (tracked in `docs/14-antlr-grammar-tracker.md`):
+// - symbolic operator “precedence by family” (currently one tier)
+// - template literal interpolation (currently lexed as a single literal token)
 
 grammar Musi;
 
@@ -114,10 +115,10 @@ literal:
 	INT_LIT
 	| FLOAT_LIT
 	| STRING_LIT
-	| FSTRING_LIT
+	| TEMPLATE_LIT
 	| RUNE_LIT;
 
-ident: IDENT | ESCAPED_IDENT;
+ident: IDENT;
 
 op_ident: LPAREN (SYMBOLIC_OP | op_single) RPAREN;
 
@@ -444,15 +445,13 @@ INT_LIT:
 	| '0b' BIN_DIGITS
 	| DEC_DIGITS;
 
-FSTRING_LIT: 'f"' (ESC_SEQ | ~["\\])* '"';
-
 STRING_LIT: '"' (ESC_SEQ | ~["\\])* '"';
+
+TEMPLATE_LIT: '`' (ESC_SEQ | ~[`\\])* '`';
 
 RUNE_LIT: '\'' (ESC_SEQ | ~['\\])* '\'';
 
 // Idents.
-ESCAPED_IDENT: '`' (~'`')* '`';
-
 IDENT: LETTER (LETTER | DIGIT | UNDERSCORE)*;
 
 // User-defined symbolic operators.
@@ -486,7 +485,7 @@ fragment EXP_PART: [eE] [+-]? DEC_DIGITS;
 
 fragment ESC_SEQ:
 	'\\\\' (
-		['"\\\\nrt0]
+		['"`$\\\\nrt0]
 		| 'x' HEXDIGIT HEXDIGIT
 		| 'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT (
 			HEXDIGIT HEXDIGIT

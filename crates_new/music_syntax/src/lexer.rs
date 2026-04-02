@@ -3,12 +3,25 @@ use music_base::Span;
 use crate::LexedSource;
 use crate::cursor::Cursor;
 use crate::errors::{LexError, LexErrorKind, LexErrorList};
-use crate::token::{FIXED_TOKENS, Token, TokenKind};
+use crate::token::{TOKEN_PATTERNS, Token, TokenKind};
 use crate::trivia::{Trivia, TriviaKind, TriviaList, TriviaRange};
 
 #[derive(Debug)]
 pub struct Lexer<'src> {
     cursor: Cursor<'src>,
+    template_stack: Vec<TemplateContext>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TemplateContext {
+    brace_depth: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TemplateChunkEnd {
+    Tail,
+    NextExpr,
+    Eof,
 }
 
 const fn is_sym_byte(b: u8) -> bool {
@@ -27,15 +40,19 @@ const fn is_digit_for_base_byte(base: u32, b: u8) -> bool {
 
 impl<'src> Lexer<'src> {
     #[must_use]
-    pub const fn new(text: &'src str) -> Self {
+    pub fn new(text: &'src str) -> Self {
         Self {
             cursor: Cursor::new(text),
+            template_stack: Vec::new(),
         }
     }
 
     #[must_use]
-    pub fn lex(mut self) -> LexedSource {
-        let mut out = LexedSource::default();
+    pub fn lex(mut self) -> LexedSource<'src> {
+        let mut out = LexedSource {
+            text: self.cursor.text(),
+            ..LexedSource::default()
+        };
         let mut trivia_start = 0;
 
         while !self.cursor.is_eof() {
@@ -57,6 +74,10 @@ impl<'src> Lexer<'src> {
         }
 
         let eof_pos = self.cursor.pos();
+        if !self.template_stack.is_empty() {
+            let kind = LexErrorKind::UnterminatedTemplateLiteral;
+            Self::push_error(&mut out.errors, kind, eof_pos, eof_pos);
+        }
         let trivia_end = out.trivia.len();
         out.token_trivia
             .push(TriviaRange::new(trivia_start, trivia_end));
@@ -140,36 +161,50 @@ impl<'src> Lexer<'src> {
     }
 
     fn lex_token_kind(&mut self, errors: &mut LexErrorList) -> TokenKind {
+        if self
+            .template_stack
+            .last()
+            .is_some_and(|ctx| ctx.brace_depth == 0)
+            && self.cursor.peek_byte() == Some(b'}')
+        {
+            return self.lex_template_continuation(errors);
+        }
+
         let Some(first) = self.cursor.peek_byte() else {
             return TokenKind::Eof;
         };
         let second = self.cursor.peek_byte_n(1);
 
-        match (first, second) {
+        let mut kind = match (first, second) {
             (b'.', Some(b'0'..=b'9')) | (b'0'..=b'9', _) => return self.lex_number(errors),
-            (b'f', Some(b'"')) => {
-                self.cursor.bump_bytes(1);
-                return self.lex_string(errors, TokenKind::FString);
-            }
             (b'(', _) => {
                 if let Some(kind) = self.try_lex_op_ident() {
                     return kind;
                 }
+                TokenKind::Error
             }
             (b'A'..=b'Z' | b'a'..=b'z', _) => return self.lex_ident_or_keyword(),
-            (b'`', _) => return self.lex_escaped_ident(errors),
-            (b'"', _) => return self.lex_string(errors, TokenKind::String),
+            (b'`', _) => return self.lex_template_start(errors),
+            (b'"', _) => return self.lex_string(errors),
             (b'\'', _) => return self.lex_rune(errors),
-            _ => {}
+            _ => TokenKind::Error,
+        };
+
+        if kind != TokenKind::Error {
+            self.update_template_brace_depth(kind);
+            return kind;
         }
 
         if let Some(kind) = self.lex_fixed_token_kind() {
+            self.update_template_brace_depth(kind);
             return kind;
         }
 
         if is_sym_byte(first) && matches!(second, Some(next) if is_sym_byte(next)) {
             self.cursor.consume_while_byte(is_sym_byte);
-            return TokenKind::SymbolicOp;
+            kind = TokenKind::SymbolicOp;
+            self.update_template_brace_depth(kind);
+            return kind;
         }
 
         let start = self.cursor.pos();
@@ -182,9 +217,27 @@ impl<'src> Lexer<'src> {
         TokenKind::Error
     }
 
+    fn update_template_brace_depth(&mut self, kind: TokenKind) {
+        let Some(ctx) = self.template_stack.last_mut() else {
+            return;
+        };
+
+        match kind {
+            TokenKind::LBrace | TokenKind::DotLBrace => {
+                ctx.brace_depth = ctx.brace_depth.saturating_add(1);
+            }
+            TokenKind::RBrace => {
+                if ctx.brace_depth > 0 {
+                    ctx.brace_depth -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn lex_fixed_token_kind(&mut self) -> Option<TokenKind> {
         let first = self.cursor.peek_byte()?;
-        for (bytes, kind) in FIXED_TOKENS.iter().copied() {
+        for (bytes, kind) in TOKEN_PATTERNS.iter().copied() {
             if bytes[0] != first {
                 continue;
             }
@@ -210,19 +263,6 @@ impl<'src> Lexer<'src> {
         let end = self.cursor.pos();
         let s = self.cursor.text().get(start..end).unwrap_or("");
         TokenKind::keyword_from_str(s).unwrap_or(TokenKind::Ident)
-    }
-
-    fn lex_escaped_ident(&mut self, errors: &mut LexErrorList) -> TokenKind {
-        let start = self.cursor.pos();
-        self.cursor.bump();
-        self.cursor.consume_while(|c| c != '`');
-        if self.cursor.peek_char() == Some('`') {
-            self.cursor.bump();
-            return TokenKind::Ident;
-        }
-        let kind = LexErrorKind::UnterminatedEscapedIdent;
-        Self::push_error(errors, kind, start, self.cursor.pos());
-        TokenKind::Error
     }
 
     fn lex_number(&mut self, errors: &mut LexErrorList) -> TokenKind {
@@ -345,7 +385,10 @@ impl<'src> Lexer<'src> {
         };
 
         match code {
-            b'\\' | b'"' | b'\'' | b'n' | b'r' | b't' | b'0' => self.cursor.bump_bytes(1),
+            b if b == closing_delim => self.cursor.bump_bytes(1),
+            b'\\' | b'"' | b'\'' | b'`' | b'$' | b'n' | b'r' | b't' | b'0' => {
+                self.cursor.bump_bytes(1)
+            }
             b'x' => {
                 self.cursor.bump_bytes(1);
                 let _ = self.lex_hex_escape(
@@ -444,7 +487,91 @@ impl<'src> Lexer<'src> {
         self.lex_escape_tail(errors, escape_start, delimiter);
     }
 
-    fn lex_string(&mut self, errors: &mut LexErrorList, kind: TokenKind) -> TokenKind {
+    fn consume_template_chunk(&mut self, errors: &mut LexErrorList) -> TemplateChunkEnd {
+        loop {
+            let rest = self.cursor.slice().as_bytes();
+            let Some(i) = rest
+                .iter()
+                .position(|&b| b == b'`' || b == b'\\' || b == b'$')
+            else {
+                self.cursor.bump_bytes(rest.len());
+                return TemplateChunkEnd::Eof;
+            };
+
+            self.cursor.bump_bytes(i);
+            let b = self.cursor.peek_byte().unwrap();
+            match b {
+                b'`' => {
+                    self.cursor.bump_bytes(1);
+                    return TemplateChunkEnd::Tail;
+                }
+                b'\\' => {
+                    self.process_escape_sequence(errors, b'`');
+                }
+                b'$' => {
+                    if self.cursor.peek_byte_n(1) == Some(b'{') {
+                        self.cursor.bump_bytes(2);
+                        return TemplateChunkEnd::NextExpr;
+                    }
+                    self.cursor.bump_bytes(1);
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    fn lex_template_start(&mut self, errors: &mut LexErrorList) -> TokenKind {
+        debug_assert_eq!(self.cursor.peek_byte(), Some(b'`'));
+        let start = self.cursor.pos();
+        self.cursor.bump_bytes(1);
+        match self.consume_template_chunk(errors) {
+            TemplateChunkEnd::Tail => TokenKind::TemplateNoSubst,
+            TemplateChunkEnd::NextExpr => {
+                self.template_stack.push(TemplateContext { brace_depth: 0 });
+                TokenKind::TemplateHead
+            }
+            TemplateChunkEnd::Eof => {
+                let kind = LexErrorKind::UnterminatedTemplateLiteral;
+                Self::push_error(errors, kind, start, self.cursor.pos());
+                TokenKind::TemplateNoSubst
+            }
+        }
+    }
+
+    fn lex_template_continuation(&mut self, errors: &mut LexErrorList) -> TokenKind {
+        debug_assert_eq!(self.cursor.peek_byte(), Some(b'}'));
+        let start = self.cursor.pos();
+        self.cursor.bump_bytes(1);
+
+        let Some(ctx) = self.template_stack.last() else {
+            let kind = LexErrorKind::InvalidChar { ch: '}' };
+            Self::push_error(errors, kind, start, self.cursor.pos());
+            return TokenKind::Error;
+        };
+        debug_assert_eq!(ctx.brace_depth, 0);
+
+        let end = self.consume_template_chunk(errors);
+        match end {
+            TemplateChunkEnd::Tail => {
+                let _ = self.template_stack.pop();
+                TokenKind::TemplateTail
+            }
+            TemplateChunkEnd::NextExpr => {
+                if let Some(ctx) = self.template_stack.last_mut() {
+                    ctx.brace_depth = 0;
+                }
+                TokenKind::TemplateMiddle
+            }
+            TemplateChunkEnd::Eof => {
+                let _ = self.template_stack.pop();
+                let kind = LexErrorKind::UnterminatedTemplateLiteral;
+                Self::push_error(errors, kind, start, self.cursor.pos());
+                TokenKind::TemplateTail
+            }
+        }
+    }
+
+    fn lex_string(&mut self, errors: &mut LexErrorList) -> TokenKind {
         let start = self.cursor.pos();
         self.cursor.bump_bytes(1);
         loop {
@@ -453,13 +580,13 @@ impl<'src> Lexer<'src> {
                 self.cursor.bump_bytes(rest.len());
                 let err_kind = LexErrorKind::UnterminatedStringLiteral;
                 Self::push_error(errors, err_kind, start, self.cursor.pos());
-                return kind;
+                return TokenKind::String;
             };
             self.cursor.bump_bytes(i);
             let b = self.cursor.peek_byte().unwrap();
             if b == b'"' {
                 self.cursor.bump_bytes(1);
-                return kind;
+                return TokenKind::String;
             }
             debug_assert_eq!(b, b'\\');
             self.process_escape_sequence(errors, b'"');
@@ -531,7 +658,7 @@ impl<'src> Lexer<'src> {
         if op_end - op_start >= 2 {
             let text = self.cursor.text().as_bytes();
             let op_bytes = &text[op_start..op_end];
-            let is_reserved = FIXED_TOKENS
+            let is_reserved = TOKEN_PATTERNS
                 .iter()
                 .any(|(bytes, _)| bytes.len() >= 2 && *bytes == op_bytes);
             if is_reserved {

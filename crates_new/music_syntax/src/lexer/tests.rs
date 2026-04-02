@@ -114,6 +114,58 @@ fn lex_op_ident() {
 }
 
 #[test]
+fn lex_template_literal_no_substitutions() {
+    let lexed = Lexer::new("`hi`").lex();
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, [TokenKind::TemplateNoSubst, TokenKind::Eof]);
+    assert!(lexed.errors().is_empty());
+}
+
+#[test]
+fn lex_template_literal_with_substitution() {
+    let lexed = Lexer::new("`hi ${x} ok`").lex();
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            TokenKind::TemplateHead,
+            TokenKind::Ident,
+            TokenKind::TemplateTail,
+            TokenKind::Eof
+        ]
+    );
+    assert!(lexed.errors().is_empty());
+}
+
+#[test]
+fn lex_template_literal_does_not_end_interpolation_on_inner_rbrace() {
+    let lexed = Lexer::new("`a ${{x := 1}} b`").lex();
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            TokenKind::TemplateHead,
+            TokenKind::LBrace,
+            TokenKind::Ident,
+            TokenKind::ColonEq,
+            TokenKind::Int,
+            TokenKind::RBrace,
+            TokenKind::TemplateTail,
+            TokenKind::Eof
+        ]
+    );
+    assert!(lexed.errors().is_empty());
+}
+
+#[test]
+fn lex_template_literal_allows_escaped_dollar() {
+    let lexed = Lexer::new("`\\${x}`").lex();
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, [TokenKind::TemplateNoSubst, TokenKind::Eof]);
+    assert!(lexed.errors().is_empty());
+}
+
+#[test]
 fn dot_start_float_is_float() {
     let lexed = Lexer::new(".5").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();

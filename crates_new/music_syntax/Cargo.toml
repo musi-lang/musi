@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 music_base = { path = "../music_base" }
+music_names = { path = "../music_names" }
+music_arena = { path = "../music_arena" }
 thiserror = { workspace = true }
 
 [dev-dependencies]

@@ -22,13 +22,13 @@
 		"noUnusedParameters": true,
 		"noUncheckedSideEffectImports": true,
 		"outDir": "dist",
-		"rootDir": "client/src",
+		"rootDir": ".",
 		"sourceMap": true,
 		"skipLibCheck": true,
 		"strict": true,
 		"target": "ES2022",
 		"types": ["node", "vscode"]
 	},
-	"include": ["client/src/**/*.ts"],
+	"include": ["client/src/**/*.ts", "scripts/**/*.mjs"],
 	"exclude": ["node_modules", ".vscode-test", "dist"]
 }

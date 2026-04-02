@@ -33,6 +33,8 @@ backslash               = %x5C
 
 backtick                = %x60
 
+dollar                  = %x24
+
 alpha                   = %x41-5A
                           / %x61-7A
 
@@ -61,8 +63,9 @@ not-squote-or-backslash = %x00-26
                           / %x28-5B
                           / %x5D-FF
 
-not-backtick            = %x00-5F
-                          / %x61-FF
+not-backtick-or-backslash = %x00-5B
+                            / %x5D-5F
+                            / %x61-FF
 ; ---------------------------------------------------------------------------
 ; 1. Terminals
 ; ---------------------------------------------------------------------------
@@ -227,7 +230,9 @@ float-lit        = dec-digits dot dec-digits [exp-part]
 
 esc-simple       = squote
                    / dquote
+                   / backtick
                    / backslash
+                   / dollar
                    / %x6E
                    / %x72
                    / %x74
@@ -247,22 +252,31 @@ rune-body-char   = esc-seq
 
 string-lit       = dquote *(string-body-char) dquote
 
-fstring-lit      = %x66 dquote *(string-body-char) dquote  ; "f"
+template-body-char = esc-seq
+                    / not-backtick-or-backslash
+
+template-no-subst = backtick *(template-body-char) backtick
+
+template-head     = backtick *(template-body-char) "${"
+
+template-middle   = "}" *(template-body-char) "${"
+
+template-tail     = "}" *(template-body-char) backtick
+
+template-lit      = template-no-subst
+                    / (template-head expr *(template-middle expr) template-tail)
 
 rune-lit         = squote *(rune-body-char) squote
 
 literal          = int-lit
                    / float-lit
                    / string-lit
-                   / fstring-lit
+                   / template-lit
                    / rune-lit
 ; --- Idents ---
 plain-ident   = alpha *(alpha / digit / underscore)
 
-escaped-ident = backtick *(not-backtick) backtick
-
 ident         = plain-ident
-                / escaped-ident
 
 sym-char      = star
                 / plus

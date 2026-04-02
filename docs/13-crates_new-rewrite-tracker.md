@@ -7,7 +7,7 @@ Rules:
 - `crates_new/` is canonical; `crates/` is legacy reference-only.
 - Phase dependencies must form a DAG (no circular deps).
 - Naming is enterprise-clarity: categorical function names, no unnecessary prefixes, `Syntax*` reserved for syntax tree artifacts, trivia lives in `trivia.rs`.
-- No stubs: placeholder implementations are not acceptable once a crate/module exists (e.g. EOF-only lexers, parsers that never consume input, TODO pipelines).
+- No stub modules: once a crate/module exists, it must do real work (e.g. lexers that only emit EOF, parsers that never consume input, or other non-functional skeletons).
 
 ## Workspace + Tooling
 
@@ -19,8 +19,9 @@ Rules:
 ## Phase Crates (high level)
 
 - [x] `music_base` (Span/Source/Diag foundations)
-- [ ] `music_names` (Symbol/Interner/Ident/KnownSymbols + resolution data)
-- [x] `music_syntax` (Token/Trivia/Lexer now; parser/tree later)
+- [x] `music_arena` (typed ids + arenas + slice storage)
+- [x] `music_names` (Symbol/Interner/Ident/KnownSymbols + resolution data)
+- [x] `music_syntax` (Token/Trivia/Lexer/Parser/CST+AST views)
 - [ ] `music_module` (`ImportEnv` + module/specifier model)
 - [ ] `music_hir` (HIR model)
 - [ ] `music_resolve` (imports + name resolution + syntax→HIR lowering)
@@ -48,12 +49,26 @@ Rules:
 - [x] `token.rs` (`Token`, `TokenKind`)
 - [x] `trivia.rs` (`Trivia`, `TriviaKind`)
 - [x] `lexer.rs` (`Lexer`, `LexedSource`, `LexError*`)
+- [x] `LexedSource<'src>` retains source text for parser/tree consumers
 - [x] escape validation (`\\xHH`, `\\uXXXX`, `\\uXXXXXX`)
 - [x] numeric underscore errors (placement + missing digit)
 - [x] fixed-token inventory matches `grammar/Musi.g4` / `grammar/Musi.abnf` (no extra operators; bare `?`/`!` rejected)
 - [x] Criterion lexer benches cover mixed + stress cases
-- [ ] `parser.rs` (`Parser`, `ParseCtx`, `ParseError*`)
-- [ ] `tree/*` (`SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`, `SyntaxNodeKind`)
+- [x] `parser/*` (`Parser`, `ParseError*`, `ParsedSource`, `parse`)
+- [x] `tree/*` (`SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`, `SyntaxNodeKind`, CST-backed AST views)
+
+### `music_arena`
+
+- [x] `idx.rs` (`Idx<T>`)
+- [x] `arena.rs` (`Arena<T>`, iterator support, typed indexing)
+- [x] `slice.rs` (`SliceRange<T>`, `SliceArena<T>`)
+
+### `music_names`
+
+- [x] `symbol.rs` (`Symbol`)
+- [x] `interner.rs` (`Interner`)
+- [x] `resolution.rs` (`Ident`, `NameSite`, `NameResolution`, `NameBinding*`)
+- [x] `known.rs` (`KnownSymbols`)
 
 ### `music_bc`
 

@@ -187,11 +187,18 @@ Numeric literals:
 
 String literals use `"` and may contain literal newlines.
 
+Template literals use backticks and may contain `${ expr }` interpolations:
+
+```musi
+let name := "world";
+let msg := `hello ${name}`;
+```
+
 Rune literals use `'` and contain exactly one character (including via an escape).
 
 Supported escapes in strings and runes:
 
-- `\\`, `\"`, `\'`, `\n`, `\r`, `\t`, `\0`
+- `\\`, `\"`, `\'`, ``\````, `\$`, `\n`, `\r`, `\t`, `\0`
 - `\xHH` (2 hex digits)
 - `\uXXXX` (4 hex digits) and `\uXXXXXX` (6 hex digits)
 

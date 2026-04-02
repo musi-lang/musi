@@ -11,18 +11,20 @@ Policy:
 ## Implemented (workspace members)
 
 - `music_base`: `Span`, `Spanned`, `SourceId`, `SourceMap`, and `music_base::diag::*`
-- `music_syntax`: token/trivia + lexing (`Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `LexedSource`, `LexError*`)
+- `music_names`: `Symbol`, `Interner`, `Ident`, `NameSite`, `NameResolution`, `NameBinding*`, `KnownSymbols`
+- `music_arena`: `Idx`, `Arena`, `ArenaIter*`, `SliceRange`, `SliceArena`
+- `music_syntax`: token/trivia + parsing (`Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `LexedSource`, `LexError*`, `ParseError*`, `ParsedSource`, `parse`, `SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`, `SyntaxNodeKind`, `Program`, `canonical_name_text`, `intern_name_token`)
 
 Notes:
 
 - `music_base::Diag` / `DiagLabel` are accessor-driven (fields are not part of the public API).
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
+- `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
 
 ## Planned phase crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_names`
 - `music_module`, `music_hir`, `music_resolve`, `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_codegen`, `music_session`
 - `musi_project`
 

@@ -27,8 +27,8 @@ Singles:
 Literals:
 
 - `INT_LIT`, `FLOAT_LIT`
-- `STRING_LIT`, `FSTRING_LIT`, `RUNE_LIT`
-- `IDENT`, `ESCAPED_IDENT`
+- `STRING_LIT`, `TEMPLATE_LIT`, `RUNE_LIT`
+- `IDENT`
 
 ## Expression precedence (term expressions)
 

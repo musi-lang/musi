@@ -26,6 +26,7 @@ The canonical compiler implementation lives in `crates_new/` and is designed as 
 Canonical crate domains (new workspace):
 
 - `music_base`: spans, sources, diagnostics, and foundation utilities
+- `music_arena`: typed ids, arenas, and append-only slice storage shared by syntax/tree layers
 - `music_names`: interning, identifiers, known symbols, and name-resolution data structures
 - `music_syntax`: lexer + parser + full-fidelity syntax tree (grammar-aligned)
 - `music_module`: module/specifier model and `ImportEnv` query contract (pre-resolve)
@@ -42,13 +43,16 @@ Canonical crate domains (new workspace):
 Current implementation status (Cargo workspace members):
 
 - `music_base`
-- `music_syntax` (token/trivia/lexer only so far)
+- `music_arena`
+- `music_names`
+- `music_syntax` (lexer + parser + CST/AST views)
 
 The intended dependency shape is a DAG:
 
 ```mermaid
 graph TD
   base[music_base]
+  arena[music_arena]
   names[music_names]
   syntax[music_syntax]
   module[music_module]
@@ -61,7 +65,10 @@ graph TD
   session[music_session]
   project[musi_project]
 
-  base --> names --> syntax --> module --> resolve --> sema --> ir --> bc --> assembly --> codegen --> session
+  base --> arena
+  base --> names
+  arena --> syntax
+  names --> syntax --> module --> resolve --> sema --> ir --> bc --> assembly --> codegen --> session
   project --> session
 ```
 

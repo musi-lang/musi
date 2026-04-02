@@ -1,0 +1,16 @@
+use super::Interner;
+
+#[test]
+fn interns_same_string_to_same_symbol() {
+    let mut interner = Interner::new();
+    let a = interner.intern("foo");
+    let b = interner.intern("foo");
+    assert_eq!(a, b);
+    assert_eq!(interner.resolve(a), "foo");
+}
+
+#[test]
+fn resolves_unknown_symbol_returns_none_for_try() {
+    let interner = Interner::new();
+    assert!(interner.try_resolve(crate::Symbol::from_raw(0)).is_none());
+}
