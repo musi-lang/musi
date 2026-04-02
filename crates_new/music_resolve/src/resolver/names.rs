@@ -51,4 +51,3 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         Some(self.intern_ident_text(tok.kind(), raw, tok.span()))
     }
 }
-

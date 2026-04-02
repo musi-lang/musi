@@ -3,6 +3,7 @@ mod errors;
 mod intern;
 mod lexer;
 mod parser;
+pub mod string_lit;
 mod token;
 mod tree;
 mod trivia;

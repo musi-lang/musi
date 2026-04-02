@@ -26,7 +26,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                     self.collect_pat_binders_rec(child, out, seen);
                 }
             }
-            music_syntax::SyntaxNodeKind::RecordPat => self.collect_record_pat_binders(node, out, seen),
+            music_syntax::SyntaxNodeKind::RecordPat => {
+                self.collect_record_pat_binders(node, out, seen)
+            }
             kind if kind.is_pat() => {
                 for child in node.child_nodes().filter(|n| n.kind().is_pat()) {
                     self.collect_pat_binders_rec(child, out, seen);
@@ -271,12 +273,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     fn lower_pat_or(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
         let origin = self.origin_node(node);
         let mut pats = node.child_nodes().filter(|n| n.kind().is_pat());
-        let left = pats.next().map(|n| self.lower_pat(n)).unwrap_or_else(|| {
-            self.alloc_error_pat(node)
-        });
-        let right = pats.next().map(|n| self.lower_pat(n)).unwrap_or_else(|| {
-            self.alloc_error_pat(node)
-        });
+        let left = pats
+            .next()
+            .map(|n| self.lower_pat(n))
+            .unwrap_or_else(|| self.alloc_error_pat(node));
+        let right = pats
+            .next()
+            .map(|n| self.lower_pat(n))
+            .unwrap_or_else(|| self.alloc_error_pat(node));
         self.store.alloc_pat(music_hir::HirPat {
             origin,
             kind: music_hir::HirPatKind::Or { left, right },
@@ -329,9 +333,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                 i += 1;
                 continue;
             };
-            let name = self
-                .intern_ident_token(name_tok)
-                .unwrap_or_else(|| Ident::new(self.interner.intern("_"), name_tok.span()));
+            let name = self.intern_ident_token_or_placeholder(Some(name_tok), name_tok.span());
             i += 1;
 
             let has_colon = children
@@ -364,4 +366,3 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.store.record_pat_fields.alloc_from_iter(fields)
     }
 }
-

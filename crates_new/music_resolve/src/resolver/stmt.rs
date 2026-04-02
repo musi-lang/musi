@@ -22,7 +22,9 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             exprs.push(self.lower_expr(inner));
         }
         let range = self.store.alloc_expr_list(exprs);
-        self.alloc_expr(self.origin_node(root), HirExprKind::Sequence { exprs: range })
+        self.alloc_expr(
+            self.origin_node(root),
+            HirExprKind::Sequence { exprs: range },
+        )
     }
 }
-

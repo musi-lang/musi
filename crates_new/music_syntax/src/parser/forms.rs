@@ -1,6 +1,33 @@
 use super::*;
 
 impl Parser<'_> {
+    fn parse_punctuated_nodes<F>(
+        &mut self,
+        sep: TokenKind,
+        end: TokenKind,
+        mut parse_item: F,
+    ) -> ParseResult<Vec<SyntaxElementId>>
+    where
+        F: FnMut(&mut Self) -> ParseResult<SyntaxNodeId>,
+    {
+        let mut children = Vec::new();
+        while let Some(sep) = self.eat(sep) {
+            children.push(sep);
+        }
+        while !self.at(end) && !self.at(TokenKind::Eof) {
+            children.push(SyntaxElementId::Node(parse_item(self)?));
+            if let Some(sep) = self.eat(sep) {
+                children.push(sep);
+                continue;
+            }
+            break;
+        }
+        while let Some(sep) = self.eat(sep) {
+            children.push(sep);
+        }
+        Ok(children)
+    }
+
     pub(super) fn parse_atom_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         match self.peek_kind() {
             TokenKind::Int | TokenKind::Float | TokenKind::String | TokenKind::Rune => {
@@ -47,8 +74,7 @@ impl Parser<'_> {
 
     fn parse_literal_expr(&mut self) -> SyntaxNodeId {
         let literal = self.advance_element();
-        self.builder
-            .push_node_from_children(SyntaxNodeKind::LiteralExpr, vec![literal])
+        self.node1(SyntaxNodeKind::LiteralExpr, literal)
     }
 
     fn parse_template_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -56,9 +82,7 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::TemplateNoSubst => {
                 children.push(self.advance_element());
-                Ok(self
-                    .builder
-                    .push_node_from_children(SyntaxNodeKind::TemplateExpr, children))
+                Ok(self.node(SyntaxNodeKind::TemplateExpr, children))
             }
             TokenKind::TemplateHead => {
                 children.push(self.advance_element());
@@ -73,9 +97,7 @@ impl Parser<'_> {
                         _ => return Err(self.expected_expression()),
                     }
                 }
-                Ok(self
-                    .builder
-                    .push_node_from_children(SyntaxNodeKind::TemplateExpr, children))
+                Ok(self.node(SyntaxNodeKind::TemplateExpr, children))
             }
             _ => Err(self.expected_expression()),
         }
@@ -83,9 +105,7 @@ impl Parser<'_> {
 
     fn parse_name_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let name = self.expect_name_element()?;
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::NameExpr, vec![name]))
+        Ok(self.node1(SyntaxNodeKind::NameExpr, name))
     }
 
     fn parse_pi_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -135,23 +155,17 @@ impl Parser<'_> {
         let open = self.expect_token(TokenKind::LParen)?;
         if self.at(TokenKind::RParen) {
             let close = self.advance_element();
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::TupleExpr, vec![open, close]));
+            return Ok(self.node2(SyntaxNodeKind::TupleExpr, open, close));
         }
         if self.at(TokenKind::Comma) {
             let comma = self.advance_element();
             let close = self.expect_token(TokenKind::RParen)?;
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::TupleExpr, vec![open, comma, close]));
+            return Ok(self.node3(SyntaxNodeKind::TupleExpr, open, comma, close));
         }
         if self.at(TokenKind::Semicolon) {
             let semi = self.advance_element();
             let close = self.expect_token(TokenKind::RParen)?;
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::SequenceExpr, vec![open, semi, close]));
+            return Ok(self.node3(SyntaxNodeKind::SequenceExpr, open, semi, close));
         }
 
         let first = self.parse_expr(0)?;
@@ -165,9 +179,7 @@ impl Parser<'_> {
                 children.push(SyntaxElementId::Node(self.parse_expr(0)?));
             }
             children.push(self.expect_token(TokenKind::RParen)?);
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::TupleExpr, children));
+            return Ok(self.node(SyntaxNodeKind::TupleExpr, children));
         }
         if self.at(TokenKind::Semicolon) {
             let mut children = vec![open, SyntaxElementId::Node(first)];
@@ -179,9 +191,7 @@ impl Parser<'_> {
                 children.push(SyntaxElementId::Node(self.parse_expr(0)?));
             }
             children.push(self.expect_token(TokenKind::RParen)?);
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::SequenceExpr, children));
+            return Ok(self.node(SyntaxNodeKind::SequenceExpr, children));
         }
         let close = self.expect_token(TokenKind::RParen)?;
         Ok(self.rewrap_node(first, vec![open, SyntaxElementId::Node(first), close]))
@@ -202,9 +212,7 @@ impl Parser<'_> {
         }
         children.push(self.expect_token(TokenKind::RBracket)?);
         children.push(SyntaxElementId::Node(self.parse_expr(PREFIX_BP)?));
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::ArrayExpr, children))
+        Ok(self.node(SyntaxNodeKind::ArrayExpr, children))
     }
 
     fn parse_dim(&mut self) -> ParseResult<SyntaxElementId> {
@@ -217,24 +225,13 @@ impl Parser<'_> {
     fn parse_array_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::LBracket)?;
         let mut children = vec![open];
-        while let Some(comma) = self.eat(TokenKind::Comma) {
-            children.push(comma);
-        }
-        while !self.at(TokenKind::RBracket) && !self.at(TokenKind::Eof) {
-            children.push(SyntaxElementId::Node(self.parse_array_item()?));
-            if let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                continue;
-            }
-            break;
-        }
-        while let Some(comma) = self.eat(TokenKind::Comma) {
-            children.push(comma);
-        }
+        children.extend(self.parse_punctuated_nodes(
+            TokenKind::Comma,
+            TokenKind::RBracket,
+            Parser::parse_array_item,
+        )?);
         children.push(self.expect_token(TokenKind::RBracket)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::ArrayExpr, children))
+        Ok(self.node(SyntaxNodeKind::ArrayExpr, children))
     }
 
     fn parse_array_item(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -243,32 +240,19 @@ impl Parser<'_> {
             children.push(spread);
         }
         children.push(SyntaxElementId::Node(self.parse_expr(0)?));
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::ArrayItem, children))
+        Ok(self.node(SyntaxNodeKind::ArrayItem, children))
     }
 
     fn parse_record_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::LBrace)?;
         let mut children = vec![open];
-        while let Some(comma) = self.eat(TokenKind::Comma) {
-            children.push(comma);
-        }
-        while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
-            children.push(SyntaxElementId::Node(self.parse_record_item()?));
-            if let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                continue;
-            }
-            break;
-        }
-        while let Some(comma) = self.eat(TokenKind::Comma) {
-            children.push(comma);
-        }
+        children.extend(self.parse_punctuated_nodes(
+            TokenKind::Comma,
+            TokenKind::RBrace,
+            Parser::parse_record_item,
+        )?);
         children.push(self.expect_token(TokenKind::RBrace)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::RecordExpr, children))
+        Ok(self.node(SyntaxNodeKind::RecordExpr, children))
     }
 
     pub(super) fn parse_record_item(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -276,18 +260,14 @@ impl Parser<'_> {
         if let Some(spread) = self.eat(TokenKind::DotDotDot) {
             children.push(spread);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
-            return Ok(self
-                .builder
-                .push_node_from_children(SyntaxNodeKind::RecordItem, children));
+            return Ok(self.node(SyntaxNodeKind::RecordItem, children));
         }
         children.push(self.expect_ident_element()?);
         if let Some(bind) = self.eat(TokenKind::ColonEq) {
             children.push(bind);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         }
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::RecordItem, children))
+        Ok(self.node(SyntaxNodeKind::RecordItem, children))
     }
 
     fn parse_dot_prefix_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -300,9 +280,7 @@ impl Parser<'_> {
             children.extend(self.parse_expr_list(TokenKind::RParen)?);
             children.push(self.expect_token(TokenKind::RParen)?);
         }
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::VariantExpr, children))
+        Ok(self.node(SyntaxNodeKind::VariantExpr, children))
     }
 
     fn parse_case_expr(&mut self) -> ParseResult<SyntaxNodeId> {

@@ -135,6 +135,19 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         })
     }
 
+    fn error_expr(&mut self, origin: HirOrigin) -> music_hir::HirExprId {
+        self.alloc_expr(origin, HirExprKind::Error)
+    }
+
+    fn lower_opt_expr(
+        &mut self,
+        origin: HirOrigin,
+        node: Option<SyntaxNode<'tree, 'src>>,
+    ) -> music_hir::HirExprId {
+        node.map(|n| self.lower_expr(n))
+            .unwrap_or_else(|| self.error_expr(origin))
+    }
+
     fn origin_node(&self, node: SyntaxNode<'tree, 'src>) -> HirOrigin {
         HirOrigin::new(self.source_id, node.span())
     }
@@ -148,5 +161,17 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let sym = self.interner.intern(canon);
         Ident::new(sym, span)
     }
-}
 
+    fn placeholder_ident(&mut self, span: Span) -> Ident {
+        Ident::new(self.interner.intern("_"), span)
+    }
+
+    fn intern_ident_token_or_placeholder(
+        &mut self,
+        tok: Option<SyntaxToken<'tree, 'src>>,
+        span: Span,
+    ) -> Ident {
+        tok.and_then(|t| self.intern_ident_token(t))
+            .unwrap_or_else(|| self.placeholder_ident(span))
+    }
+}

@@ -28,11 +28,12 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
                     }
                 },
                 ImportSiteKind::InvalidStringLit => {
-                    self.diags.push(Diag::error("invalid import spec").with_label(
-                        site.span,
-                        self.source_id,
-                        "string literal invalid",
-                    ));
+                    self.diags
+                        .push(Diag::error("invalid import spec").with_label(
+                            site.span,
+                            self.source_id,
+                            "string literal invalid",
+                        ));
                 }
                 ImportSiteKind::Dynamic => {}
             }
@@ -40,4 +41,3 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         imports
     }
 }
-

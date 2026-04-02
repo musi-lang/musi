@@ -8,11 +8,11 @@ pub(super) fn stmt_inner_expr<'tree, 'src>(
     }
     let mut children = node.children();
     match (children.next(), children.next(), children.next()) {
-        (Some(music_syntax::SyntaxElement::Node(expr)), Some(music_syntax::SyntaxElement::Token(tok)), None)
-            if tok.kind() == music_syntax::TokenKind::Semicolon =>
-        {
-            Some(expr)
-        }
+        (
+            Some(music_syntax::SyntaxElement::Node(expr)),
+            Some(music_syntax::SyntaxElement::Token(tok)),
+            None,
+        ) if tok.kind() == music_syntax::TokenKind::Semicolon => Some(expr),
         _ => None,
     }
 }
@@ -39,4 +39,3 @@ pub(super) fn parse_u32_lit(raw: &str) -> Option<u32> {
         );
     u32::from_str_radix(digits, radix).ok()
 }
-
