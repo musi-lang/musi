@@ -36,7 +36,8 @@ Canonical crate domains (new workspace):
 - `music_ir`: codegen-facing facts derived from sema output
 - `music_bc`: SEAM bytecode contract (artifact tables + ISA)
 - `music_assembly`: encode/decode/format/validate for `music_bc`
-- `music_codegen`: lowering from sema/IR facts to `music_bc`
+- `music_emit`: SEAM emission (lowering from sema/IR facts to `music_bc`)
+- `music_jit`: native/JIT backend consuming `music_ir` (planned)
 - `music_session`: embeddable service layer (caching + orchestration)
 - `musi_project`: schema-backed project/manifest integration (`musi.json`)
 
@@ -61,14 +62,18 @@ graph TD
   ir[music_ir]
   bc[music_bc]
   assembly[music_assembly]
-  codegen[music_codegen]
+  emit[music_emit]
+  jit[music_jit]
   session[music_session]
   project[musi_project]
 
   base --> arena
   base --> names
   arena --> syntax
-  names --> syntax --> module --> resolve --> sema --> ir --> bc --> assembly --> codegen --> session
+  names --> syntax --> module --> resolve --> sema --> ir
+  ir --> bc --> assembly --> session
+  ir --> emit --> session
+  ir --> jit --> session
   project --> session
 ```
 

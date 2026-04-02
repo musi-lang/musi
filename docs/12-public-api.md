@@ -27,7 +27,7 @@ Notes:
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_resolve`, `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_codegen`, `music_session`
+- `music_resolve`, `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
 - `musi_project`
 
 ## Legacy (`crates/`)

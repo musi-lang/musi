@@ -29,7 +29,8 @@ Rules:
 - [ ] `music_ir` (codegen-facing facts)
 - [ ] `music_bc` (bytecode contract)
 - [ ] `music_assembly` (bytecode codec + validation)
-- [ ] `music_codegen` (lowering to bytecode)
+- [ ] `music_emit` (SEAM emission: lowering to bytecode contract)
+- [ ] `music_jit` (native/JIT backend consuming `music_ir`)
 - [ ] `music_session` (CaaS session: caching + orchestration)
 - [ ] `musi_project` (`musi.json` parsing + project integration)
 
