@@ -7,7 +7,7 @@
 // 
 // Known gaps (tracked in `docs/14-antlr-grammar-tracker.md`):
 // - symbolic operator “precedence by family” (currently one tier)
-// - template literal interpolation (currently lexed as a single literal token)
+// - template literal interpolation (lexer+parser in crates_new support it; this grammar is behind)
 
 grammar Musi;
 

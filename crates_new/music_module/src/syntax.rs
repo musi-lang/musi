@@ -1,8 +1,11 @@
 use music_base::{SourceId, Span};
-use music_syntax::{SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree, TokenKind};
+use music_syntax::{
+    SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree, TokenKind,
+    canonical_name_text,
+};
 
 use crate::ModuleSpecifier;
-use crate::string_lit::decode_string_lit;
+use crate::string_lit::{decode_string_lit, decode_template_lit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSiteKind {
@@ -22,11 +25,17 @@ pub struct ImportSite {
 pub struct ModuleExportSummary {
     exports: Vec<Box<str>>,
     opaque: Vec<Box<str>>,
+    exported_instances: usize,
 }
 
 impl ModuleExportSummary {
     pub fn exports(&self) -> impl Iterator<Item = &str> {
         self.exports.iter().map(Box::as_ref)
+    }
+
+    #[must_use]
+    pub const fn exported_instance_count(&self) -> usize {
+        self.exported_instances
     }
 
     #[must_use]
@@ -74,19 +83,40 @@ pub fn collect_export_summary(_source_id: SourceId, tree: &SyntaxTree<'_>) -> Mo
         let is_opaque = node
             .child_tokens()
             .any(|tok| tok.kind() == TokenKind::KwOpaque);
-        let Some(let_expr) = node
+        let has_foreign = node
+            .child_tokens()
+            .any(|tok| tok.kind() == TokenKind::KwForeign);
+
+        if let Some(let_expr) = node
             .child_nodes()
             .find(|child| child.kind() == SyntaxNodeKind::LetExpr)
-        else {
+        {
+            let Some(pat) = let_expr.child_nodes().find(|n| n.kind().is_pat()) else {
+                return;
+            };
+            let mut binders = Vec::<Box<str>>::new();
+            collect_binders_in_pattern(pat, &mut binders);
+            for name in binders {
+                summary.push_export(name.as_ref(), is_opaque);
+            }
             return;
-        };
-        let Some(pat) = let_expr.child_nodes().find(|n| n.kind().is_pat()) else {
-            return;
-        };
-        let mut binders = Vec::<Box<str>>::new();
-        collect_binders_in_pattern(pat, &mut binders);
-        for name in binders {
-            summary.push_export(name.as_ref(), is_opaque);
+        }
+
+        if has_foreign {
+            if let Some(group) = node
+                .child_nodes()
+                .find(|child| child.kind() == SyntaxNodeKind::MemberList)
+            {
+                collect_foreign_group_exports(group, &mut summary, is_opaque);
+                return;
+            }
+        }
+
+        if node
+            .child_nodes()
+            .any(|child| child.kind() == SyntaxNodeKind::InstanceExpr)
+        {
+            summary.exported_instances = summary.exported_instances.saturating_add(1);
         }
     });
     summary
@@ -97,19 +127,43 @@ fn classify_import_expr(node: SyntaxNode<'_, '_>) -> ImportSiteKind {
     let Some(expr) = children.next() else {
         return ImportSiteKind::Dynamic;
     };
-    if expr.kind() != SyntaxNodeKind::LiteralExpr {
+    match expr.kind() {
+        SyntaxNodeKind::LiteralExpr => {
+            let Some(tok) = expr.child_tokens().next() else {
+                return ImportSiteKind::Dynamic;
+            };
+            if tok.kind() != TokenKind::String {
+                return ImportSiteKind::Dynamic;
+            }
+            let Some(raw) = tok.text() else {
+                return ImportSiteKind::InvalidStringLit;
+            };
+            let Ok(decoded) = decode_string_lit(raw) else {
+                return ImportSiteKind::InvalidStringLit;
+            };
+            ImportSiteKind::Static {
+                spec: ModuleSpecifier::new(decoded),
+            }
+        }
+        SyntaxNodeKind::TemplateExpr => classify_static_template_import(expr),
+        _ => ImportSiteKind::Dynamic,
+    }
+}
+
+fn classify_static_template_import(template: SyntaxNode<'_, '_>) -> ImportSiteKind {
+    if template.child_nodes().next().is_some() {
         return ImportSiteKind::Dynamic;
     }
-    let Some(tok) = expr.child_tokens().next() else {
+    let Some(tok) = template.child_tokens().next() else {
         return ImportSiteKind::Dynamic;
     };
-    if tok.kind() != TokenKind::String {
+    if tok.kind() != TokenKind::TemplateNoSubst {
         return ImportSiteKind::Dynamic;
     }
     let Some(raw) = tok.text() else {
         return ImportSiteKind::InvalidStringLit;
     };
-    let Ok(decoded) = decode_string_lit(raw) else {
+    let Ok(decoded) = decode_template_lit(raw) else {
         return ImportSiteKind::InvalidStringLit;
     };
     ImportSiteKind::Static {
@@ -132,7 +186,7 @@ fn walk_nodes<'tree, 'src>(
 fn collect_binders_in_pattern(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) {
     match pat.kind() {
         SyntaxNodeKind::BindPat => {
-            if let Some(name) = first_ident_text(pat) {
+            if let Some(name) = first_name_text(pat) {
                 out.push(name.into());
             }
         }
@@ -141,11 +195,7 @@ fn collect_binders_in_pattern(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) 
             if let Some(inner) = nodes.next() {
                 collect_binders_in_pattern(inner, out);
             }
-            if let Some(alias) = pat
-                .child_tokens()
-                .find(|tok| tok.kind() == TokenKind::Ident)
-                .and_then(SyntaxToken::text)
-            {
+            if let Some(alias) = first_name_text(pat) {
                 out.push(alias.into());
             }
         }
@@ -176,11 +226,11 @@ fn collect_record_pat_binders(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) 
             i += 1;
             continue;
         };
-        if tok.kind() != TokenKind::Ident {
+        if !is_name_token(tok.kind()) {
             i += 1;
             continue;
         }
-        let name = tok.text();
+        let name = canonical_token_text(tok);
         let is_colon = children
             .get(i + 1)
             .copied()
@@ -206,10 +256,34 @@ fn collect_record_pat_binders(pat: SyntaxNode<'_, '_>, out: &mut Vec<Box<str>>) 
     }
 }
 
-fn first_ident_text<'src>(node: SyntaxNode<'_, 'src>) -> Option<&'src str> {
+fn collect_foreign_group_exports(
+    group: SyntaxNode<'_, '_>,
+    out: &mut ModuleExportSummary,
+    is_opaque: bool,
+) {
+    for member in group
+        .child_nodes()
+        .filter(|n| n.kind() == SyntaxNodeKind::Member)
+    {
+        if let Some(name) = first_name_text(member) {
+            out.push_export(name, is_opaque);
+        }
+    }
+}
+
+fn first_name_text<'src>(node: SyntaxNode<'_, 'src>) -> Option<&'src str> {
     node.child_tokens()
-        .find(|tok| tok.kind() == TokenKind::Ident)
-        .and_then(SyntaxToken::text)
+        .find(|tok| is_name_token(tok.kind()))
+        .and_then(canonical_token_text)
+}
+
+fn canonical_token_text<'src>(tok: SyntaxToken<'_, 'src>) -> Option<&'src str> {
+    let raw = tok.text()?;
+    Some(canonical_name_text(tok.kind(), raw))
+}
+
+const fn is_name_token(kind: TokenKind) -> bool {
+    matches!(kind, TokenKind::Ident | TokenKind::OpIdent)
 }
 
 #[cfg(test)]

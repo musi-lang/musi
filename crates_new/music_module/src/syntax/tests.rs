@@ -18,6 +18,18 @@ fn collects_static_and_dynamic_import_sites() {
 }
 
 #[test]
+fn collects_static_template_import_site() {
+    let src = r"
+        let IO := import `std/io`;
+    ";
+    let lexed = Lexer::new(src).lex();
+    let parsed = music_syntax::parse(lexed);
+    let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
+    assert_eq!(sites.len(), 1);
+    assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
+}
+
+#[test]
 fn collects_exports_and_marks_opaque() {
     let src = r"
         export let x := 1;
@@ -59,4 +71,33 @@ fn record_pattern_with_colon_binds_inner_pattern() {
     let exports: Vec<&str> = summary.exports().collect();
     assert!(!exports.contains(&"x"));
     assert!(exports.contains(&"y"));
+}
+
+#[test]
+fn export_foreign_group_collects_binding_names() {
+    let src = r#"
+        export foreign "c" (
+          let puts (msg : CString) : Int;
+          let gets (buf : CString) : Int;
+        );
+    "#;
+    let lexed = Lexer::new(src).lex();
+    let parsed = music_syntax::parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
+    let exports: Vec<&str> = summary.exports().collect();
+    assert!(exports.contains(&"puts"));
+    assert!(exports.contains(&"gets"));
+}
+
+#[test]
+fn export_instance_is_tracked_separately() {
+    let src = r"
+        export instance Eq[Int] { };
+    ";
+    let lexed = Lexer::new(src).lex();
+    let parsed = music_syntax::parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
+    assert_eq!(summary.exported_instance_count(), 1);
 }

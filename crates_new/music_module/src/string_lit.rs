@@ -22,14 +22,22 @@ impl fmt::Display for StringLitError {
 }
 
 pub fn decode_string_lit(raw: &str) -> Result<String, StringLitError> {
+    decode_delimited(raw, b'"')
+}
+
+pub fn decode_template_lit(raw: &str) -> Result<String, StringLitError> {
+    decode_delimited(raw, b'`')
+}
+
+fn decode_delimited(raw: &str, delim: u8) -> Result<String, StringLitError> {
     let raw_bytes = raw.as_bytes();
-    if raw_bytes.len() < 2 || raw_bytes[0] != b'"' {
+    if raw_bytes.len() < 2 || raw_bytes[0] != delim {
         return Err(StringLitError {
             kind: StringLitErrorKind::Unterminated,
             offset: 0,
         });
     }
-    if *raw_bytes.last().unwrap_or(&0) != b'"' {
+    if *raw_bytes.last().unwrap_or(&0) != delim {
         return Err(StringLitError {
             kind: StringLitErrorKind::Unterminated,
             offset: raw_bytes.len(),

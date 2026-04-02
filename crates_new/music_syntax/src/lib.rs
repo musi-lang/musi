@@ -12,10 +12,7 @@ pub use intern::canonical_name_text;
 pub use lexer::Lexer;
 pub use parser::{ParsedSource, parse};
 pub use token::{Token, TokenKind};
-pub use tree::{
-    Program, SyntaxElement, SyntaxElementId, SyntaxNode, SyntaxNodeData, SyntaxNodeId,
-    SyntaxNodeKind, SyntaxToken, SyntaxTokenId, SyntaxTree,
-};
+pub use tree::{Program, SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree};
 pub use trivia::{Trivia, TriviaKind};
 
 use music_base::Span;

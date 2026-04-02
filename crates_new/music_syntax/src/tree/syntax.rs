@@ -89,32 +89,22 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub const fn root_id(&self) -> SyntaxNodeId {
-        self.root
-    }
-
-    #[must_use]
     pub const fn root(&self) -> SyntaxNode<'_, 'src> {
         SyntaxNode::new(self, self.root)
     }
 
     #[must_use]
-    pub fn node_data(&self, id: SyntaxNodeId) -> &SyntaxNodeData {
+    pub(crate) fn node_data(&self, id: SyntaxNodeId) -> &SyntaxNodeData {
         self.nodes.get(id)
     }
 
     #[must_use]
-    pub fn node_data_mut(&mut self, id: SyntaxNodeId) -> &mut SyntaxNodeData {
-        self.nodes.get_mut(id)
-    }
-
-    #[must_use]
-    pub fn node_children(&self, id: SyntaxNodeId) -> &[SyntaxElementId] {
+    pub(crate) fn node_children(&self, id: SyntaxNodeId) -> &[SyntaxElementId] {
         self.children.get(self.node_data(id).children)
     }
 
     #[must_use]
-    pub fn token_kind(&self, id: SyntaxTokenId) -> TokenKind {
+    pub(crate) fn token_kind(&self, id: SyntaxTokenId) -> TokenKind {
         let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
         self.lexed
             .tokens()
@@ -123,7 +113,7 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub fn token_span(&self, id: SyntaxTokenId) -> Span {
+    pub(crate) fn token_span(&self, id: SyntaxTokenId) -> Span {
         let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
         self.lexed
             .tokens()
@@ -133,19 +123,19 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub fn token_text(&self, id: SyntaxTokenId) -> Option<&'src str> {
+    pub(crate) fn token_text(&self, id: SyntaxTokenId) -> Option<&'src str> {
         let index = usize::try_from(id.raw()).ok()?;
         self.lexed.token_text(index)
     }
 
     #[must_use]
-    pub fn token_trivia(&self, id: SyntaxTokenId) -> &[Trivia] {
+    pub(crate) fn token_trivia(&self, id: SyntaxTokenId) -> &[Trivia] {
         let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
         self.lexed.token_trivia(index)
     }
 
     #[must_use]
-    pub fn token_parent(&self, id: SyntaxTokenId) -> Option<SyntaxNodeId> {
+    pub(crate) fn token_parent(&self, id: SyntaxTokenId) -> Option<SyntaxNodeId> {
         let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
         self.token_parents.get(index).copied().flatten()
     }
@@ -163,13 +153,8 @@ impl<'src> SyntaxTree<'src> {
 
 impl<'tree, 'src> SyntaxNode<'tree, 'src> {
     #[must_use]
-    pub const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxNodeId) -> Self {
+    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxNodeId) -> Self {
         Self { tree, id }
-    }
-
-    #[must_use]
-    pub const fn id(self) -> SyntaxNodeId {
-        self.id
     }
 
     #[must_use]
@@ -209,13 +194,8 @@ impl<'tree, 'src> SyntaxNode<'tree, 'src> {
 
 impl<'tree, 'src> SyntaxToken<'tree, 'src> {
     #[must_use]
-    pub const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxTokenId) -> Self {
+    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxTokenId) -> Self {
         Self { tree, id }
-    }
-
-    #[must_use]
-    pub const fn id(self) -> SyntaxTokenId {
-        self.id
     }
 
     #[must_use]
@@ -248,7 +228,7 @@ impl<'tree, 'src> SyntaxToken<'tree, 'src> {
 
 impl<'tree, 'src> SyntaxElement<'tree, 'src> {
     #[must_use]
-    pub const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxElementId) -> Self {
+    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxElementId) -> Self {
         match id {
             SyntaxElementId::Node(node) => Self::Node(SyntaxNode::new(tree, node)),
             SyntaxElementId::Token(token) => Self::Token(SyntaxToken::new(tree, token)),
