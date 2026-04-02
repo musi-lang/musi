@@ -42,7 +42,10 @@ fn push_bind_pat_token<'tree, 'src>(
     node: SyntaxNode<'tree, 'src>,
     out: &mut Vec<SyntaxToken<'tree, 'src>>,
 ) {
-    if let Some(token) = node.child_tokens().find(|token| token.kind() == TokenKind::Ident) {
+    if let Some(token) = node
+        .child_tokens()
+        .find(|token| token.kind() == TokenKind::Ident)
+    {
         out.push(token);
     }
 }

@@ -8,7 +8,9 @@ mod token;
 mod tree;
 mod trivia;
 
-pub use errors::{LexError, LexErrorKind, ParseError, ParseErrorKind, ParseResult};
+pub use errors::{
+    LexError, LexErrorKind, LexErrorList, ParseError, ParseErrorKind, ParseErrorList, ParseResult,
+};
 pub use intern::canonical_name_text;
 pub use lexer::Lexer;
 pub use parser::{ParsedSource, parse};
@@ -17,7 +19,7 @@ pub use tree::{
     Program, SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, SyntaxTree,
     pattern_binder_tokens,
 };
-pub use trivia::{Trivia, TriviaKind};
+pub use trivia::{Trivia, TriviaKind, TriviaList};
 
 use music_base::Span;
 use trivia::TriviaRange;
@@ -26,9 +28,9 @@ use trivia::TriviaRange;
 pub struct LexedSource<'src> {
     pub(crate) text: &'src str,
     pub(crate) tokens: Vec<Token>,
-    pub(crate) trivia: Vec<Trivia>,
+    pub(crate) trivia: TriviaList,
     pub(crate) token_trivia: Vec<TriviaRange>,
-    pub(crate) errors: Vec<LexError>,
+    pub(crate) errors: LexErrorList,
 }
 
 impl<'src> LexedSource<'src> {

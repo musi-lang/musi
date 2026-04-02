@@ -25,13 +25,15 @@ impl ImportError {
     }
 }
 
+pub type ImportResolveResult = Result<ModuleKey, ImportError>;
+
 pub trait ImportEnv {
     /// Resolve `spec` as imported from `from`.
     ///
     /// # Errors
     ///
     /// Returns `ImportError` when the specifier is invalid or the environment cannot resolve it.
-    fn resolve(&self, from: &ModuleKey, spec: &ModuleSpecifier) -> Result<ModuleKey, ImportError>;
+    fn resolve(&self, from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult;
 
     /// Returns a cached export summary for a resolved module key, if available.
     fn module_summary(&self, key: &ModuleKey) -> Option<&ModuleExportSummary>;

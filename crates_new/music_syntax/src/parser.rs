@@ -3,7 +3,7 @@ use core::mem;
 use music_arena::{Arena, SliceArena};
 use music_base::Span;
 
-use crate::errors::{ParseError, ParseErrorKind, ParseResult};
+use crate::errors::{ParseError, ParseErrorKind, ParseErrorList, ParseResult};
 use crate::tree::{
     SyntaxElementId, SyntaxNodeData, SyntaxNodeId, SyntaxNodeKind, SyntaxTokenId, SyntaxTree,
 };
@@ -29,12 +29,12 @@ const ASSIGN_BP: u8 = 2;
 #[derive(Debug)]
 pub struct ParsedSource<'src> {
     tree: SyntaxTree<'src>,
-    errors: Vec<ParseError>,
+    errors: ParseErrorList,
 }
 
 impl<'src> ParsedSource<'src> {
     #[must_use]
-    pub const fn new(tree: SyntaxTree<'src>, errors: Vec<ParseError>) -> Self {
+    pub const fn new(tree: SyntaxTree<'src>, errors: ParseErrorList) -> Self {
         Self { tree, errors }
     }
 
@@ -48,6 +48,8 @@ impl<'src> ParsedSource<'src> {
         &self.errors
     }
 }
+
+type SyntaxElementList = Vec<SyntaxElementId>;
 
 #[must_use]
 pub fn parse(lexed: LexedSource<'_>) -> ParsedSource<'_> {
@@ -84,7 +86,7 @@ impl SyntaxTreeBuilder {
     fn push_node_from_children(
         &mut self,
         kind: SyntaxNodeKind,
-        children: Vec<SyntaxElementId>,
+        children: SyntaxElementList,
     ) -> SyntaxNodeId {
         let span = self.children_span(&children);
         let range = self.children.alloc_from_iter(children.iter().copied());
@@ -108,7 +110,7 @@ impl SyntaxTreeBuilder {
         node
     }
 
-    fn push_error_node(&mut self, children: Vec<SyntaxElementId>) -> SyntaxNodeId {
+    fn push_error_node(&mut self, children: SyntaxElementList) -> SyntaxNodeId {
         self.push_node_from_children(SyntaxNodeKind::Error, children)
     }
 
@@ -145,7 +147,7 @@ struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
     builder: &'a mut SyntaxTreeBuilder,
-    errors: &'a mut Vec<ParseError>,
+    errors: &'a mut ParseErrorList,
     comparison_exprs: Vec<SyntaxNodeId>,
     lparen_match: Vec<Option<usize>>,
     lbracket_match: Vec<Option<usize>>,
@@ -156,7 +158,7 @@ impl<'a> Parser<'a> {
     fn new(
         lexed: &'a LexedSource<'_>,
         builder: &'a mut SyntaxTreeBuilder,
-        errors: &'a mut Vec<ParseError>,
+        errors: &'a mut ParseErrorList,
     ) -> Self {
         let tokens = lexed.tokens();
         Self {
@@ -171,7 +173,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_root_children(&mut self) -> Vec<SyntaxElementId> {
+    fn parse_root_children(&mut self) -> SyntaxElementList {
         let mut children = Vec::new();
         while !self.at(TokenKind::Eof) {
             let before = self.pos;
@@ -218,7 +220,7 @@ impl<'a> Parser<'a> {
         self.builder.push_error_node(children)
     }
 
-    fn node(&mut self, kind: SyntaxNodeKind, children: Vec<SyntaxElementId>) -> SyntaxNodeId {
+    fn node(&mut self, kind: SyntaxNodeKind, children: SyntaxElementList) -> SyntaxNodeId {
         self.builder.push_node_from_children(kind, children)
     }
 
@@ -249,7 +251,7 @@ impl<'a> Parser<'a> {
         &mut self,
         kind: SyntaxNodeKind,
         open: SyntaxElementId,
-        mut inner: Vec<SyntaxElementId>,
+        mut inner: SyntaxElementList,
         close: SyntaxElementId,
     ) -> SyntaxNodeId {
         let mut children = vec![open];
@@ -258,7 +260,7 @@ impl<'a> Parser<'a> {
         self.node(kind, children)
     }
 
-    fn rewrap_node(&mut self, node: SyntaxNodeId, children: Vec<SyntaxElementId>) -> SyntaxNodeId {
+    fn rewrap_node(&mut self, node: SyntaxNodeId, children: SyntaxElementList) -> SyntaxNodeId {
         let kind = self.builder.node_kind(node);
         self.node(kind, children)
     }

@@ -4,7 +4,7 @@ mod specifier;
 mod string_lit;
 mod syntax;
 
-pub use env::{ImportEnv, ImportError, ImportErrorKind};
+pub use env::{ImportEnv, ImportError, ImportErrorKind, ImportResolveResult};
 pub use import_map::ImportMap;
 pub use specifier::{ModuleKey, ModuleSpecifier};
 pub use syntax::{

@@ -6,7 +6,7 @@ impl Parser<'_> {
         sep: TokenKind,
         end: TokenKind,
         mut parse_item: F,
-    ) -> ParseResult<Vec<SyntaxElementId>>
+    ) -> ParseResult<SyntaxElementList>
     where
         F: FnMut(&mut Self) -> ParseResult<SyntaxNodeId>,
     {
@@ -33,7 +33,7 @@ impl Parser<'_> {
         sep: TokenKind,
         end: TokenKind,
         mut parse_item: F,
-    ) -> ParseResult<Vec<SyntaxElementId>>
+    ) -> ParseResult<SyntaxElementList>
     where
         F: FnMut(&mut Self) -> ParseResult<SyntaxNodeId>,
     {
@@ -77,7 +77,7 @@ impl Parser<'_> {
         &mut self,
         close: TokenKind,
         mut parse_item: F,
-    ) -> ParseResult<Vec<SyntaxElementId>>
+    ) -> ParseResult<SyntaxElementList>
     where
         F: FnMut(&mut Self) -> ParseResult<SyntaxNodeId>,
     {
@@ -99,7 +99,7 @@ impl Parser<'_> {
         Ok(children)
     }
 
-    fn parse_member_body(&mut self, children: &mut Vec<SyntaxElementId>) -> ParseResult<()> {
+    fn parse_member_body(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
         children.push(self.expect_token(TokenKind::LBrace)?);
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
             children.push(SyntaxElementId::Node(self.parse_member()?));
@@ -417,7 +417,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_let_expr(&mut self, mut attrs: Vec<SyntaxElementId>) -> ParseResult<SyntaxNodeId> {
+    fn parse_let_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwLet)?);
         if self.at_any(&[TokenKind::KwMut, TokenKind::KwRec]) {
             attrs.push(self.advance_element());
@@ -598,10 +598,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::ClassExpr, children))
     }
 
-    fn parse_instance_expr(
-        &mut self,
-        mut attrs: Vec<SyntaxElementId>,
-    ) -> ParseResult<SyntaxNodeId> {
+    fn parse_instance_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwInstance)?);
         if self.at(TokenKind::LBracket) {
             let open = self.advance_element();
@@ -667,7 +664,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::HandlerClause, children))
     }
 
-    fn parse_foreign_expr(&mut self, mut attrs: Vec<SyntaxElementId>) -> ParseResult<SyntaxNodeId> {
+    fn parse_foreign_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwForeign)?);
         if self.at(TokenKind::String) {
             attrs.push(self.advance_element());
@@ -814,7 +811,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::AttributedExpr, children))
     }
 
-    fn parse_export_expr(&mut self, mut attrs: Vec<SyntaxElementId>) -> ParseResult<SyntaxNodeId> {
+    fn parse_export_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwExport)?);
         if let Some(opaque) = self.eat(TokenKind::KwOpaque) {
             attrs.push(opaque);
@@ -896,7 +893,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::Member, children))
     }
 
-    fn parse_attrs(&mut self) -> ParseResult<Vec<SyntaxElementId>> {
+    fn parse_attrs(&mut self) -> ParseResult<SyntaxElementList> {
         let mut children = Vec::new();
         while self.at(TokenKind::At) {
             children.push(SyntaxElementId::Node(self.parse_attr()?));
@@ -983,13 +980,23 @@ impl Parser<'_> {
     }
 
     fn parse_attr_record(&mut self) -> ParseResult<SyntaxNodeId> {
-        self.parse_wrapped_nodes(
-            SyntaxNodeKind::RecordExpr,
-            TokenKind::LBrace,
-            TokenKind::Comma,
-            TokenKind::RBrace,
-            Parser::parse_attr_record_field,
-        )
+        let open = self.expect_token(TokenKind::LBrace)?;
+        let mut children = vec![open];
+        if !self.at(TokenKind::RBrace) {
+            children.push(SyntaxElementId::Node(self.parse_attr_record_field()?));
+            while let Some(comma) = self.eat(TokenKind::Comma) {
+                children.push(comma);
+                while let Some(extra_comma) = self.eat(TokenKind::Comma) {
+                    children.push(extra_comma);
+                }
+                if self.at(TokenKind::RBrace) {
+                    break;
+                }
+                children.push(SyntaxElementId::Node(self.parse_attr_record_field()?));
+            }
+        }
+        children.push(self.expect_token(TokenKind::RBrace)?);
+        Ok(self.node(SyntaxNodeKind::RecordExpr, children))
     }
 
     fn parse_attr_record_field(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -1002,7 +1009,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_param_list_contents(&mut self, close: TokenKind) -> ParseResult<Vec<SyntaxElementId>> {
+    fn parse_param_list_contents(&mut self, close: TokenKind) -> ParseResult<SyntaxElementList> {
         self.parse_separated_nodes(TokenKind::Comma, close, Parser::parse_param)
     }
 
@@ -1028,7 +1035,7 @@ impl Parser<'_> {
     fn parse_type_param_list_contents(
         &mut self,
         close: TokenKind,
-    ) -> ParseResult<Vec<SyntaxElementId>> {
+    ) -> ParseResult<SyntaxElementList> {
         self.parse_separated_nodes(TokenKind::Comma, close, Parser::parse_type_param)
     }
 
@@ -1108,14 +1115,11 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::EffectItem, children))
     }
 
-    pub(super) fn parse_expr_list(
-        &mut self,
-        close: TokenKind,
-    ) -> ParseResult<Vec<SyntaxElementId>> {
+    pub(super) fn parse_expr_list(&mut self, close: TokenKind) -> ParseResult<SyntaxElementList> {
         self.parse_separated_nodes(TokenKind::Comma, close, Parser::parse_expr_node)
     }
 
-    fn parse_ident_list_opt(&mut self, close: TokenKind) -> Vec<SyntaxElementId> {
+    fn parse_ident_list_opt(&mut self, close: TokenKind) -> SyntaxElementList {
         let mut children = Vec::new();
         while let Some(comma) = self.eat(TokenKind::Comma) {
             children.push(comma);
@@ -1147,7 +1151,7 @@ impl Parser<'_> {
         children
     }
 
-    fn parse_op_or_ident_name(&mut self) -> ParseResult<Vec<SyntaxElementId>> {
+    fn parse_op_or_ident_name(&mut self) -> ParseResult<SyntaxElementList> {
         match self.peek_kind() {
             TokenKind::Ident | TokenKind::OpIdent => Ok(vec![self.advance_element()]),
             _ => Err(self.expected_operator_member_name()),

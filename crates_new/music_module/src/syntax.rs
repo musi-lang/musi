@@ -7,6 +7,8 @@ use music_syntax::{
 use crate::ModuleSpecifier;
 use crate::string_lit::{decode_string_lit, decode_template_lit};
 
+type ExportNameList = Vec<Box<str>>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSiteKind {
     Static { spec: ModuleSpecifier },
@@ -23,8 +25,8 @@ pub struct ImportSite {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModuleExportSummary {
-    exports: Vec<Box<str>>,
-    opaque: Vec<Box<str>>,
+    exports: ExportNameList,
+    opaque: ExportNameList,
     exported_instances: usize,
 }
 

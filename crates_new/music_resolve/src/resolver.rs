@@ -17,6 +17,9 @@ mod pat;
 mod stmt;
 mod util;
 
+pub type ResolvedImportList = Vec<ResolvedImport>;
+pub type ResolveDiagList = Vec<Diag>;
+
 #[derive(Default)]
 pub struct ResolveOptions<'env> {
     pub prelude: Vec<Symbol>,
@@ -33,9 +36,9 @@ pub struct ResolvedImport {
 #[derive(Debug)]
 pub struct ResolvedModule {
     pub module: HirModule,
-    pub imports: Vec<ResolvedImport>,
+    pub imports: ResolvedImportList,
     pub names: NameResolution,
-    pub diags: Vec<Diag>,
+    pub diags: ResolveDiagList,
 }
 
 #[must_use]
@@ -73,7 +76,7 @@ struct Resolver<'a, 'env, 'tree, 'src> {
     error_ty: HirTyId,
 
     names: NameResolution,
-    diags: Vec<Diag>,
+    diags: ResolveDiagList,
     scopes: Vec<Scope>,
 }
 

@@ -202,7 +202,8 @@ fn error_non_associative_chain_with_in_is_reported() {
 
 #[test]
 fn parses_case_and_handle_with_trailing_pipe() {
-    let parsed = parse(Lexer::new("case x of (| _ => 0 |); handle x with h of (| op(a, b) => a |);").lex());
+    let parsed =
+        parse(Lexer::new("case x of (| _ => 0 |); handle x with h of (| op(a, b) => a |);").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",
@@ -212,7 +213,18 @@ fn parses_case_and_handle_with_trailing_pipe() {
 
 #[test]
 fn parses_attr_values_and_patterns_with_trailing_commas() {
-    let parsed = parse(Lexer::new("@a(.Tag(1,), [1,], {x := 1,}) let (.Some(x,), [y,]) := z;").lex());
+    let parsed =
+        parse(Lexer::new("@a(.Tag(1,), [1,], {x := 1,}) let (.Some(x,), [y,]) := z;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_attr_record_with_repeated_trailing_commas() {
+    let parsed = parse(Lexer::new("@a({x := 1,,}) let y := z;").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",

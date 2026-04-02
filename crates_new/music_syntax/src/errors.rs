@@ -73,6 +73,7 @@ pub struct LexError {
 }
 
 pub type LexErrorList = Vec<LexError>;
+pub type ParseErrorList = Vec<ParseError>;
 
 pub type ParseResult<T> = Result<T, ParseError>;
 

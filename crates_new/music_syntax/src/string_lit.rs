@@ -17,17 +17,19 @@ pub struct StringLitError {
     pub offset: usize,
 }
 
+pub type StringLitResult<T> = Result<T, StringLitError>;
+
 impl fmt::Display for StringLitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} at byte {}", self.kind, self.offset)
     }
 }
 
-pub fn decode_string_lit(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_string_lit(raw: &str) -> StringLitResult<String> {
     decode_delimited(raw, b'"')
 }
 
-pub fn decode_rune_lit(raw: &str) -> Result<u32, StringLitError> {
+pub fn decode_rune_lit(raw: &str) -> StringLitResult<u32> {
     let s = decode_delimited(raw, b'\'')?;
     let mut chars = s.chars();
     let Some(ch) = chars.next() else {
@@ -45,23 +47,23 @@ pub fn decode_rune_lit(raw: &str) -> Result<u32, StringLitError> {
     Ok(u32::from(ch))
 }
 
-pub fn decode_template_lit(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_template_lit(raw: &str) -> StringLitResult<String> {
     decode_template_no_subst(raw)
 }
 
-pub fn decode_template_no_subst(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_template_no_subst(raw: &str) -> StringLitResult<String> {
     decode_delimited(raw, b'`')
 }
 
-pub fn decode_template_head(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_template_head(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Head)
 }
 
-pub fn decode_template_middle(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_template_middle(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Middle)
 }
 
-pub fn decode_template_tail(raw: &str) -> Result<String, StringLitError> {
+pub fn decode_template_tail(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Tail)
 }
 
@@ -72,7 +74,7 @@ enum TemplateChunkStyle {
     Tail,
 }
 
-fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> Result<String, StringLitError> {
+fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> StringLitResult<String> {
     let b = raw.as_bytes();
     match style {
         TemplateChunkStyle::Head => {
@@ -105,7 +107,7 @@ fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> Result<String,
     }
 }
 
-fn decode_delimited(raw: &str, delim: u8) -> Result<String, StringLitError> {
+fn decode_delimited(raw: &str, delim: u8) -> StringLitResult<String> {
     let raw_bytes = raw.as_bytes();
     if raw_bytes.len() < 2 || raw_bytes[0] != delim {
         return Err(StringLitError {
@@ -122,7 +124,7 @@ fn decode_delimited(raw: &str, delim: u8) -> Result<String, StringLitError> {
     decode_inner(raw_bytes, 1, raw_bytes.len().saturating_sub(1))
 }
 
-fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> Result<String, StringLitError> {
+fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> StringLitResult<String> {
     let mut out = String::new();
     let mut i: usize = start;
     while i < end {
@@ -181,7 +183,7 @@ fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> Result<String, St
     Ok(out)
 }
 
-fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> Result<(u8, usize), StringLitError> {
+fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(u8, usize)> {
     if start + 2 > end {
         return Err(StringLitError {
             kind: StringLitErrorKind::MissingHexDigits,
@@ -205,11 +207,7 @@ fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> Result<(u8, usize), 
     Ok(((hi << 4) | lo, start + 2))
 }
 
-fn decode_unicode_scalar(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-) -> Result<(char, usize), StringLitError> {
+fn decode_unicode_scalar(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(char, usize)> {
     let (mut value, mut i) = decode_hex_u32(bytes, start, end, 4)?;
     match (bytes.get(i).copied(), bytes.get(i + 1).copied()) {
         (Some(a), Some(b)) if a.is_ascii_hexdigit() && b.is_ascii_hexdigit() => {
@@ -251,7 +249,7 @@ fn decode_hex_u32(
     start: usize,
     end: usize,
     digits: usize,
-) -> Result<(u32, usize), StringLitError> {
+) -> StringLitResult<(u32, usize)> {
     if start + digits > end {
         return Err(StringLitError {
             kind: StringLitErrorKind::MissingHexDigits,

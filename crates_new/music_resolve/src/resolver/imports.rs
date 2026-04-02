@@ -3,7 +3,7 @@ use super::*;
 use music_module::{ImportSiteKind, collect_import_sites};
 
 impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
-    pub(super) fn discover_imports(&mut self, module_key: &ModuleKey) -> Vec<ResolvedImport> {
+    pub(super) fn discover_imports(&mut self, module_key: &ModuleKey) -> ResolvedImportList {
         let Some(env) = self.import_env else {
             return Vec::new();
         };
