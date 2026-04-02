@@ -27,14 +27,6 @@ pub fn decode_string_lit(raw: &str) -> Result<String, StringLitError> {
     decode_delimited(raw, b'"')
 }
 
-pub fn decode_template_lit(raw: &str) -> Result<String, StringLitError> {
-    decode_delimited(raw, b'`')
-}
-
-pub fn decode_template_chunk(raw: &str) -> Result<String, StringLitError> {
-    decode_inner(raw.as_bytes(), 0, raw.len())
-}
-
 pub fn decode_rune_lit(raw: &str) -> Result<u32, StringLitError> {
     let s = decode_delimited(raw, b'\'')?;
     let mut chars = s.chars();
@@ -51,6 +43,62 @@ pub fn decode_rune_lit(raw: &str) -> Result<u32, StringLitError> {
         });
     }
     Ok(u32::from(ch))
+}
+
+pub fn decode_template_no_subst(raw: &str) -> Result<String, StringLitError> {
+    decode_delimited(raw, b'`')
+}
+
+pub fn decode_template_head(raw: &str) -> Result<String, StringLitError> {
+    decode_template_chunk(raw, TemplateChunkStyle::Head)
+}
+
+pub fn decode_template_middle(raw: &str) -> Result<String, StringLitError> {
+    decode_template_chunk(raw, TemplateChunkStyle::Middle)
+}
+
+pub fn decode_template_tail(raw: &str) -> Result<String, StringLitError> {
+    decode_template_chunk(raw, TemplateChunkStyle::Tail)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TemplateChunkStyle {
+    Head,
+    Middle,
+    Tail,
+}
+
+fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> Result<String, StringLitError> {
+    let b = raw.as_bytes();
+    match style {
+        TemplateChunkStyle::Head => {
+            if b.len() < 3 || b[0] != b'`' || !raw.ends_with("${") {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::Unterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len() - 2)
+        }
+        TemplateChunkStyle::Middle => {
+            if b.len() < 3 || b[0] != b'}' || !raw.ends_with("${") {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::Unterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len() - 2)
+        }
+        TemplateChunkStyle::Tail => {
+            if b.len() < 2 || b[0] != b'}' || *b.last().unwrap_or(&0) != b'`' {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::Unterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len().saturating_sub(1))
+        }
+    }
 }
 
 fn decode_delimited(raw: &str, delim: u8) -> Result<String, StringLitError> {
@@ -228,3 +276,4 @@ const fn hex_value(b: u8) -> Option<u8> {
         _ => return None,
     })
 }
+

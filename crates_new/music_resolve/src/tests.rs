@@ -121,10 +121,7 @@ fn resolves_case_pat_binder_in_arm() {
         .get(&x_site)
         .copied()
         .expect("x binding");
-    assert_eq!(
-        resolved.names.bindings.get(x_binding).kind,
-        NameBindingKind::Let
-    );
+    assert_eq!(resolved.names.bindings.get(x_binding).kind, NameBindingKind::Let);
 }
 
 #[test]
@@ -145,10 +142,7 @@ fn resolves_lambda_param_in_body() {
     );
     let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
     let binding = resolved.names.refs.get(&site).copied().expect("binding");
-    assert_eq!(
-        resolved.names.bindings.get(binding).kind,
-        NameBindingKind::Param
-    );
+    assert_eq!(resolved.names.bindings.get(binding).kind, NameBindingKind::Param);
 }
 
 #[test]
@@ -174,3 +168,4 @@ fn resolves_pi_binder_in_ret() {
         NameBindingKind::PiBinder
     );
 }
+
