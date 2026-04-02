@@ -137,7 +137,9 @@ pub struct SourceMap {
 impl SourceMap {
     #[must_use]
     pub const fn new() -> Self {
-        Self { sources: Vec::new() }
+        Self {
+            sources: Vec::new(),
+        }
     }
 
     /// Register a source file and return its id.

@@ -1,0 +1,36 @@
+{
+	"Let Binding": {
+		"prefix": "let",
+		"body": [
+			"let ${1:name} := ${0:value};"
+		],
+		"description": "Immutable binding"
+	},
+	"Function Definition": {
+		"prefix": "fn",
+		"body": [
+			"let ${1:name} := (${2:param}: ${3:Int}) => (",
+			"\t$0",
+			");"
+		],
+		"description": "Named function definition"
+	},
+	"Match Expression": {
+		"prefix": "match",
+		"body": [
+			"match ${1:expr} (",
+			"\t| ${2:Variant}(${3:value}) => ${0:result}",
+			")"
+		],
+		"description": "Match expression"
+	},
+	"Effect Definition": {
+		"prefix": "effect",
+		"body": [
+			"let ${1:Name} := effect {",
+			"\tlet ${2:operation}(${3:payload}: ${4:Type}) : ${5:Return};",
+			"};"
+		],
+		"description": "Effect declaration"
+	}
+}

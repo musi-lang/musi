@@ -1,166 +1,31 @@
-# Public API Map (crates)
+# Public API Map (`crates_new/`)
 
-This document is a practical inventory of what each clean-room crate exports today and what is considered its public Rust surface.
+This document inventories the public Rust surface for the canonical compiler rewrite in `crates_new/`.
 
 Policy:
 
-- The `pub use ...` set from each crate root is treated as the primary stability boundary.
-- Diagnostics are user-facing: error kinds, diag codes, and message style are part of the API contract.
-- Internal modules may change freely as long as the crate root surface remains coherent.
+- The `pub use ...` set from each crate root is the primary stability boundary.
+- Diagnostics are user-facing: error kinds and message style are part of the API contract.
+- Internal modules may change as long as the crate root surface stays coherent.
+
+## Implemented (workspace members)
+
+- `music_base`: `Span`, `Spanned`, `SourceId`, `SourceMap`, and `music_base::diag::*`
+- `music_syntax`: token/trivia + lexing (`Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `LexedSource`, `LexError*`)
 
 Notes:
 
-- There is no `music_shared` crate in `crates/`. Shared foundation types live in `music_basic`.
-- There is no `music_arena` crate in `crates/`. Arena and typed index storage live in `music_storage`.
+- `music_base::Diag` / `DiagLabel` are accessor-driven (fields are not part of the public API).
+- `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
 
-## `music_basic`
+## Planned phase crates
 
-Exports (crate root):
+These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `Span`, `Spanned`
-- `Source`, `SourceId`, `SourceMap`
-- diagnostics: `Diag`, `DiagCode`, `DiagLevel`, `emit*`, `supports_color`
-- literals: `Literal`
-- string literal decoding: `string_lit` module
+- `music_names`
+- `music_module`, `music_hir`, `music_resolve`, `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_codegen`, `music_session`
+- `musi_project`
 
-Contracts:
+## Legacy (`crates/`)
 
-- Diagnostic text style is validated in debug/tests (no `": "` and no articles `a/an/the`).
-
-## `music_storage`
-
-Exports:
-
-- `Arena`
-- `Idx`
-
-## `music_names`
-
-Exports:
-
-- `Symbol`, `Interner`
-- `Ident`
-- resolution graph: `NameResolution`, `NameBinding*`, `NameSite`
-
-## `music_lex`
-
-Exports:
-
-- `Lexer`, `LexedSource`
-- `Token`, `TokenKind`, trivia kinds
-- `LexError`, `LexErrorKind`
-- `Cursor`
-
-## `music_ast`
-
-Exports:
-
-- green/red tree model (`SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`)
-- `SyntaxNodeKind`
-- typed views for syntax (`Expr`, `Pat`, `Ty`, `Attr`, etc.)
-
-## `music_parse`
-
-Exports:
-
-- `parse` and `ParsedSource`
-- `ParseError`, `ParseErrorKind`, `ParseResult`
-
-Contracts:
-
-- Parse error kinds are the stable contract; most tests should match variants, not strings.
-
-## `music_known`
-
-Exports:
-
-- `KnownSymbols`
-
-Contracts:
-
-- Canonical spelling and seeding set for compiler-known symbols and lang items.
-
-## `music_hir`
-
-Exports:
-
-- HIR node model (`HirModule`, `HirStore`, `HirExpr*`, `HirPat*`, `HirTy*`)
-- attr model (`HirAttr*`, `HirStringLit`)
-- origin/provenance (`HirOrigin`)
-
-## `music_resolve`
-
-Exports:
-
-- `resolve_module`, `ResolvedModule`
-- options: `ResolveOptions`, `ImportEnv`
-- errors: `ResolveError`, `ResolveErrorKind`
-
-## `music_check`
-
-Exports:
-
-- `analyze_module`, `AnalyzedModule`
-- errors: `SemaError`, `SemaErrorKind`, `SemaErrorKinds`, `SemaErrors`
-- semantic interface model: `music_check::iface` (`ModuleExportSummary`, `Export*`, `SemaImportEnv`)
-
-## `music_ir`
-
-Exports:
-
-- layout: `IrDataLayout`, `IrDataLayouts`
-- module facts: `IrModuleInfo`
-- expression typing surface: `IrExprTy`, `IrScalarTy`, `IrTypeRef`
-
-## `music_irgen`
-
-Exports:
-
-- `build_ir_module_info`
-
-Contracts:
-
-- Produces `music_ir::IrModuleInfo` from typed HIR (post-check) without depending on `music_check`.
-
-## `music_codegen`
-
-Exports:
-
-- entrypoints: `emit_single_program`, `emit_program`
-- model: `EmitProgram`, `EmitModule`, `ProgramArtifact`
-- errors: `EmitError`, `EmitErrorKind`, `EmitResult`
-
-Contracts:
-
-- `emit_program` takes `&EmitProgram` and does not take ownership of input.
-
-## `music_session`
-
-Exports:
-
-- session: `Session`
-- import env: `SessionImportEnv`, `SessionImportModule`
-- convenience results: `SessionParsedSource`, `SessionAnalyzedSource`
-
-## `music_fe`
-
-Exports:
-
-- compilation entrypoints: `compile_entry`, `compile_entry_binary`
-- model: `CompiledProgram`
-- errors: `FrontendError`, `FrontendErrorKind`, `FrontendResult`
-
-## `music_il`
-
-Exports:
-
-- SEAM artifact model + descriptors + ISA (instruction/opcode/operand tables)
-
-## `music_assembly`
-
-Exports:
-
-- binary encode/decode
-- text assemble/disassemble
-- validation
-- `CodecError`
+`crates/` is legacy reference-only. The rewrite does not add or stabilize new public API surface in legacy crates.

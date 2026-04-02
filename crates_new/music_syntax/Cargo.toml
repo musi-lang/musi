@@ -1,0 +1,22 @@
+[package]
+name = "music_syntax"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Syntax domain: tokenization, parsing, and full-fidelity syntax tree"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_base = { path = "../music_base" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "bench_lexer"
+harness = false

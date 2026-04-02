@@ -1,19 +1,19 @@
 use super::{Span, Spanned};
 
 #[test]
-fn test_span_len() {
+fn span_len() {
     let span = Span::new(5, 10);
     assert_eq!(span.len(), 5);
 }
 
 #[test]
-fn test_span_is_empty() {
+fn span_is_empty() {
     assert!(Span::new(5, 5).is_empty());
     assert!(!Span::new(5, 6).is_empty());
 }
 
 #[test]
-fn test_span_contains() {
+fn span_contains() {
     let span = Span::new(5, 10);
     assert!(!span.contains(4));
     assert!(span.contains(5));
@@ -22,7 +22,7 @@ fn test_span_contains() {
 }
 
 #[test]
-fn test_merge_spans() {
+fn merge_spans() {
     let a = Span::new(5, 10);
     let b = Span::new(1, 3);
     let merged = a.merge(b);
@@ -31,7 +31,7 @@ fn test_merge_spans() {
 }
 
 #[test]
-fn test_to_span() {
+fn to_span() {
     let a = Span::new(5, 10);
     let b = Span::new(20, 30);
     let combined = a.to(b);
@@ -40,7 +40,7 @@ fn test_to_span() {
 }
 
 #[test]
-fn test_spanned_eq_includes_span() {
+fn spanned_eq_includes_span() {
     let a = Spanned::new(123, Span::new(0, 1));
     let b = Spanned::new(123, Span::new(100, 200));
     assert_ne!(a, b);
@@ -50,7 +50,7 @@ fn test_spanned_eq_includes_span() {
 }
 
 #[test]
-fn test_spanned_map_preserves_span() {
+fn spanned_map_preserves_span() {
     let s = Spanned::new(10, Span::new(1, 2));
     let doubled = s.map(|x| x * 2);
     assert_eq!(doubled.kind, 20);
@@ -58,7 +58,7 @@ fn test_spanned_map_preserves_span() {
 }
 
 #[test]
-fn test_spanned_as_ref_borrows_kind() {
+fn spanned_as_ref_borrows_kind() {
     let s = Spanned::new(String::from("hello"), Span::new(0, 5));
     let r = s.as_ref();
     assert_eq!(r.kind, &String::from("hello"));
@@ -66,14 +66,14 @@ fn test_spanned_as_ref_borrows_kind() {
 }
 
 #[test]
-fn test_spanned_dummy_uses_dummy_span() {
+fn spanned_dummy_uses_dummy_span() {
     let s = Spanned::dummy(99);
     assert_eq!(s.kind, 99);
     assert_eq!(s.span, Span::DUMMY);
 }
 
 #[test]
-fn test_merge_with_dummy() {
+fn merge_with_dummy() {
     let span = Span::new(5, 10);
     let merged = span.merge(Span::DUMMY);
     assert_eq!(merged.start, 0);
@@ -85,18 +85,18 @@ fn test_merge_with_dummy() {
 }
 
 #[test]
-fn test_display_format() {
+fn display_format() {
     assert_eq!(format!("{}", Span::new(5, 10)), "5..10");
 }
 
 #[test]
-fn test_default_equals_dummy() {
+fn default_equals_dummy() {
     assert_eq!(Span::default(), Span::DUMMY);
 }
 
 #[cfg(not(debug_assertions))]
 #[test]
-fn test_inverted_span_len_is_zero() {
+fn inverted_span_len_is_zero() {
     let span = Span::new(10, 5);
     assert_eq!(span.len(), 0);
 }

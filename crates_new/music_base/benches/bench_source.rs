@@ -1,5 +1,5 @@
-use std::hint::black_box;
 use std::fmt::Write as _;
+use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 

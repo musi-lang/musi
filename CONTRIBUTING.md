@@ -4,7 +4,8 @@ Thanks for helping Musi grow. This guide keeps expectations clear and simple so 
 
 ## Before Starting
 
-- Read `grammar.abnf` to understand the canonical language syntax.
+- Read `grammar/Musi.g4` to understand the canonical surface syntax.
+- Use `grammar/Musi.abnf` as the strict RFC 5234 ABNF spec reference and discussion surface.
 - Read `CLAUDE.md` for the two non-negotiable design constraints (LL(1), mathematical purity).
 - Check open issues to avoid duplicating work.
 
@@ -75,7 +76,7 @@ Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB fr
 - [ ] Relevant crates build cleanly with no warnings.
 - [ ] `cargo clippy -p <crate>` passes for each changed crate.
 - [ ] Tests pass for changed crates.
-- [ ] Grammar changes verified LL(1) and documented in `grammar.abnf`.
+- [ ] Grammar changes update `grammar/Musi.g4` and relevant docs (`docs/00-syntax.md`, `grammar/Musi.abnf` if the spec reference changes).
 - [ ] Commit messages explain intent (the *why*, not the *what*).
 - [ ] PR description covers motivation, approach, and how it was tested.
 

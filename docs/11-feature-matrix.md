@@ -4,7 +4,8 @@ This document tracks reduced-core language feature coverage across the clean-roo
 
 The canonical feature definitions live in:
 
-- `grammar.abnf`
+- `grammar/Musi.abnf`
+- `grammar/Musi.g4`
 - `docs/00-syntax.md`
 - `docs/01-type-system.md`
 - `docs/02-effect-system.md`

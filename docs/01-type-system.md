@@ -6,10 +6,10 @@ Normative type-system reference for the reduced core language. Historical pre-re
 
 - types are first-class values
 - `data`, `effect`, and `class` are expressions bound through `let`
-- type application uses brackets: `Option[Int]`
+- `instance` is an ordinary expression form
+- type application is ordinary bracket application: `Option[Int]`
 - functions are expression-valued and yield the value of their final expression
 - effects are open from the start and are tracked through signature-side rows
-- classes and instances are part of the language core
 - `law` is class/effect specification syntax, not dispatch or precedence machinery
 
 ## Core Type Space
@@ -18,7 +18,9 @@ The language has these important built-in type roles:
 
 | Type      | Role                     |
 | --------- | ------------------------ |
-| `Type`    | universe of types        |
+| `Type0`   | universe of types        |
+| `Type1`   | universe of `Type0`      |
+| `Type`    | surface alias for `Type0` |
 | `Any`     | gradual/dynamic boundary |
 | `Unknown` | imprecise top-like type  |
 | `Syntax`  | syntax values            |
@@ -31,9 +33,15 @@ The language has these important built-in type roles:
 
 `Syntax` is used by `quote` and splice typing in v0.1. The long-term surface may evolve, but the role remains compiler-owned.
 
+Higher universes exist as `Type2`, `Type3`, … but most user code stays within `Type`/`Type0`.
+
+These universe names are ordinary identifiers in the grammar. Their built-in meaning is assigned semantically.
+
 The precise runtime layout of these types belongs to the SEAM docs, not this document.
 
-## Type Syntax
+## Type-Valued Expressions
+
+There is no separate `type_expr` grammar. Typed positions reuse the ordinary expression grammar, and later phases decide which expressions are valid as types, bounds, effects, or universes.
 
 ### Named And Applied Types
 
@@ -77,7 +85,7 @@ Int + String
 [n]T
 ```
 
-Arrays remain part of the type surface. Matrix syntax is not part of the language.
+Arrays remain ordinary expression forms. Matrix syntax is not part of the language.
 
 ### Mutability
 
@@ -194,7 +202,7 @@ let Ord[T] := class {
 ```
 
 ```musi
-instance Eq[Int] {
+let eqInt := instance Eq[Int] {
   let (=) (a : Int, b : Int) : Bool := int_eq(a, b);
 };
 ```
@@ -229,13 +237,13 @@ The type system distinguishes:
 - pure computations
 - effectful computations
 
-The effect system document defines how `perform`, `handle`, and `resume` interact with these rows. This document only fixes the type surface:
+The effect system document defines how `perform`, `handle`, and `resume` interact with these rows. This document only fixes the type-valued subset of the ordinary expression space:
 
 - pure arrows stay pure
 - effectful arrows participate in effect tracking
 - effect rows are open and carried by named remainders
 
-## What Is Out Of Scope For The Type Core
+## Excluded From The Type Core
 
 The reduced language does not include:
 
@@ -246,4 +254,4 @@ The reduced language does not include:
 - ranges
 - piecewise conditionals
 
-Those forms do not belong in the current type surface and should not appear in canonical examples.
+Those forms do not belong in the current type-valued core and should not appear in canonical examples.

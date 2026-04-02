@@ -1,6 +1,8 @@
 # Docs Index
 
-`grammar.abnf` is the canonical grammar for the current language surface.
+`grammar/Musi.g4` is the canonical, tool-supported grammar for the current language surface.
+
+`grammar/Musi.abnf` is a strict RFC 5234 ABNF specification of the Musi surface syntax (kept aligned with `grammar/Musi.g4`).
 
 Canonical docs are ordered from language, to runtime, to tooling:
 
@@ -17,9 +19,11 @@ Canonical docs are ordered from language, to runtime, to tooling:
 11. `10-toolchain.md`
 12. `11-feature-matrix.md` (tracking)
 13. `12-public-api.md` (tracking)
+14. `14-antlr-grammar-tracker.md` (tracking)
+15. `15-grammar-ebnf.md` (formal, compact)
 
 Historical pre-reduction material lives in `docs/legacy/`.
 
 Anything under `docs/legacy/` is archived, not normative.
 
-The clean-room crate structure in `crates/` is also locked. The canonical subsystem names are documented in `09-architecture.md`.
+The rewrite lives in `crates_new/` (canonical). `crates/` is legacy reference-only. The subsystem names are documented in `09-architecture.md`.

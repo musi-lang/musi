@@ -15,65 +15,61 @@ The architecture stays honest when:
 - SEAM owns runtime contracts, not source sugar
 - the runtime owns execution and embedding, not compile-time language decisions
 
-## Locked Crate Structure
+## Canonical Workspace (`crates_new/`)
 
-The clean-room workspace in `crates/` uses bounded-context crate names and this structure is locked.
+The canonical compiler implementation lives in `crates_new/` and is designed as an embeddable compiler-as-a-service (CaaS):
 
-Notes:
+- Phase crates expose domain APIs for tooling and embedding.
+- The service/orchestration layer owns caching, invalidation, and project integration.
+- Dependencies must form a DAG (no circular compiler-phase deps).
 
-- There is no `music_shared` crate. Shared foundation types live in `music_basic`.
-- There is no `music_arena` crate. Arena and typed index storage live in `music_storage`.
+Canonical crate domains (new workspace):
 
-Compiler and IL crates stay under `music_*`:
+- `music_base`: spans, sources, diagnostics, and foundation utilities
+- `music_names`: interning, identifiers, known symbols, and name-resolution data structures
+- `music_syntax`: lexer + parser + full-fidelity syntax tree (grammar-aligned)
+- `music_module`: module/specifier model and `ImportEnv` query contract (pre-resolve)
+- `music_hir`: semantic IR data model
+- `music_resolve`: import graph discovery + name resolution + syntax→HIR lowering
+- `music_sema`: type/effect/class semantic analysis
+- `music_ir`: codegen-facing facts derived from sema output
+- `music_bc`: SEAM bytecode contract (artifact tables + ISA)
+- `music_assembly`: encode/decode/format/validate for `music_bc`
+- `music_codegen`: lowering from sema/IR facts to `music_bc`
+- `music_session`: embeddable service layer (caching + orchestration)
+- `musi_project`: schema-backed project/manifest integration (`musi.json`)
 
-- `music_assembly`: text/binary IL encoding, decoding, printing, and validation
-- `music_ast`: full-fidelity green/red syntax tree, syntax only, with top-level expression sequences
-- `music_basic`: spans, sources, diagnostics, literals, and other non-binding foundation types
-- `music_codegen`: lowering from checked HIR into `music_il`
-- `music_fe`: frontend orchestration over lex/parse/ast/names/resolve/check/ir/codegen
-- `music_hir`: typed high-level IR data model produced by `music_check` and consumed by lowering, carrying spans and optional `music_ast` provenance ids
-- `music_il`: VM-facing bytecode / intermediate language contract
-- `music_known`: compiler-known builtins and intrinsic surface
-- `music_lex`: lossless lexing and token/trivia production
-- `music_names`: symbols, interning, identifiers, scopes, bindings, and name-resolution data
-- `music_parse`: parsing token streams into syntax structures (`music_ast`)
-- `music_resolve`: import graph discovery, name resolution, export collection, and AST to HIR lowering
-- `music_check`: type/effect/class semantic analysis and validation
-- `music_session`: compiler session state, loaded sources, and shared compile context
-- `music_storage`: arena/index storage and related typed storage mechanics
+Current implementation status (Cargo workspace members):
 
-Project, tooling, and runtime crates stay under `musi_*`:
+- `music_base`
+- `music_syntax` (token/trivia/lexer only so far)
 
-- These crates are part of the architecture naming contract, but they are not required to exist in the current Cargo workspace.
+The intended dependency shape is a DAG:
 
-- `musi_project`: manifests, package/workspace model, dependency config, and task metadata
-- `musi_rt`: runtime, VM, loading, and embedding boundary
-- `musi_tooling`: operator, editor, and higher-level tooling integration over project/compiler crates
+```mermaid
+graph TD
+  base[music_base]
+  names[music_names]
+  syntax[music_syntax]
+  module[music_module]
+  resolve[music_resolve]
+  sema[music_sema]
+  ir[music_ir]
+  bc[music_bc]
+  assembly[music_assembly]
+  codegen[music_codegen]
+  session[music_session]
+  project[musi_project]
 
-This naming is part of the architecture contract:
+  base --> names --> syntax --> module --> resolve --> sema --> ir --> bc --> assembly --> codegen --> session
+  project --> session
+```
 
-- domain nouns define the subsystem boundaries
-- `music_*` owns the compiler and IL boundary
-- `musi_*` owns project loading, tooling, and runtime embedding
-- diagnostics stay inside `music_basic`
-- symbols, interning, and identifiers stay inside `music_names`
-- `music_names` and `music_check` stay separate
-- `music_il` and `music_assembly` are the locked SEAM pair
+## Legacy Workspace (`crates/`)
 
-The clean-room crate layout is also locked:
+The legacy compiler lives in `crates/` and is reference-only.
 
-- `src/` is production code only
-- `benches/` is Criterion-only
-- `module.rs` or `module/mod.rs` owns the module surface
-- `module/tests.rs` owns unit tests and close test helpers
-- `tests/` is for integration and e2e only
-- no Rust file may exceed 2000 LOC, including tests and benches
-
-The clean-room naming rule is also locked:
-
-- public names must stay domain-specific when imported unqualified
-- avoid generic names that read like std or UI vocabulary when a bounded-context name is clearer
-- keep established compiler and IL terms such as `Span`, `Arena`, `Idx`, `TypeDescriptor`, and `ConstantPool`
+The rewrite does not add new public API surface to legacy crates. Use `crates/` as an implementation reference and for metrics (e.g. LOC comparisons), not as the canonical compiler.
 
 ## Ownership Chain
 

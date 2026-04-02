@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use music_base::{Diag, SourceMap, Span};
 use music_base::diag::emit;
+use music_base::{Diag, SourceMap, Span};
 
 fn bench_emit(c: &mut Criterion) {
     let mut sources = SourceMap::new();

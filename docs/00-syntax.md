@@ -2,7 +2,8 @@
 
 This document is the front-door overview of the current Musi surface syntax.
 
-`grammar.abnf` remains the canonical grammar. This file is the compact human guide to the same language.
+`grammar/Musi.g4` is the canonical, tool-supported grammar. `grammar/Musi.abnf` remains the compact spec reference.
+`grammar/Musi.abnf` is strict RFC 5234 ABNF (kept aligned with `grammar/Musi.g4`).
 
 ## Core Shape
 
@@ -11,13 +12,14 @@ Musi is expression-driven.
 - functions yield the value of their final expression
 - top-level evaluation is the startup model
 - effects are first-class
+- typed positions reuse the ordinary expression grammar
 - loops, comprehensions, piecewise conditionals, and `return` are not part of the core language
 
 ## Keywords
 
 The reduced core keeps these keyword families:
 
-- binding and structure: `let`, `mut`, `case`, `of`, `if`
+- binding and structure: `let`, `mut`, `rec`, `case`, `of`, `if`
 - type and abstraction: `data`, `class`, `instance`, `law`, `where`
 - effects: `effect`, `perform`, `handle`, `with`, `resume`
 - modules and interop: `import`, `export`, `foreign`, `opaque`, `as`
@@ -69,21 +71,26 @@ let {x, y} := p;
 
 ## Imports
 
-`import "path"` is an expression. Aliasing and selective binding use `let` patterns.
+`import expr` is an expression. Aliasing and selective binding use `let` patterns. Path validation is semantic, not parser-only.
 
 ```musi
 let IO := import "std/io";
 let {read, write} := IO;
+let dynamic := import module_path;
 ```
 
 ## Types
 
-Type application uses brackets:
+`Type`, `Type0`, `Type1`, ... are built-in names, not reserved syntax.
+
+Bracket application is an ordinary postfix form, so type application is just one use of `expr[...]`:
 
 ```musi
 Option[Int]
 Result[Int, CString]
 ```
+
+Indexing remains `expr.[...]`.
 
 Anonymous sums use `+`.
 
@@ -107,6 +114,10 @@ let Console := effect {
 let Eq[T] := class {
   let (=) (a : T, b : T) : Bool;
   law reflexive (x : T) := x = x;
+};
+
+let eqInt := instance Eq[Int] {
+  let (=) (a : Int, b : Int) : Bool := int_eq(a, b);
 };
 ```
 
@@ -155,6 +166,34 @@ Built-in word operators are:
 - `in`
 
 Users may define symbolic operators. Users may not define word operators.
+
+## Recursion
+
+Recursion uses `let rec`. `let` may take at most one modifier: `mut` or `rec`.
+
+```musi
+let rec fact (n : Int) : Int := /* ... */;
+```
+
+## Literals
+
+Numeric literals:
+
+- decimal: `123`, `1_000`
+- hex: `0xFF`, `0xff_ff`
+- octal: `0o755`, `0o7_5_5`
+- binary: `0b1010`, `0b1_0_1_0`
+- floats: `3.14`, `.5`, `2e10`, `.5e-2`
+
+String literals use `"` and may contain literal newlines.
+
+Rune literals use `'` and contain exactly one character (including via an escape).
+
+Supported escapes in strings and runes:
+
+- `\\`, `\"`, `\'`, `\n`, `\r`, `\t`, `\0`
+- `\xHH` (2 hex digits)
+- `\uXXXX` (4 hex digits) and `\uXXXXXX` (6 hex digits)
 
 ## FFI And Attrs
 

@@ -1,0 +1,307 @@
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { findCliPath } from "./bootstrap.ts";
+import { getConfig } from "./config.ts";
+import { buildExecutionRequest, executeInTerminal } from "./runner.ts";
+import type { StatusBar } from "./status.ts";
+import type { MsPackage, MsPackageTask } from "./types.ts";
+import { TERMINAL_NAME } from "./utils.ts";
+
+const _WHITESPACE_RE = /\s+/;
+
+let _cachedCliPath: string | undefined;
+
+type CommandHandler = (...args: unknown[]) => Promise<void> | void;
+
+interface Commands {
+	runFile: CommandHandler;
+	checkFile: CommandHandler;
+	runTask: CommandHandler;
+	runTaskCommand: CommandHandler;
+	runTest: CommandHandler;
+	debugTest: CommandHandler;
+	selectRunConfiguration: CommandHandler;
+	runWithArgs: CommandHandler;
+	buildFile: CommandHandler;
+	editRunConfigurations: CommandHandler;
+}
+
+export function clearCliCache() {
+	_cachedCliPath = undefined;
+}
+
+function _runInDir(cmd: string, dir: string) {
+	const terminal =
+		vscode.window.terminals.find((t) => t.name === TERMINAL_NAME) ??
+		vscode.window.createTerminal(TERMINAL_NAME);
+	terminal.show();
+	terminal.sendText(`cd ${JSON.stringify(dir)} && ${cmd}`);
+}
+
+async function _runCliOnFile(
+	subcommand: "run" | "build" | "check" | "test",
+	args: unknown[],
+): Promise<void> {
+	let file: string | undefined;
+	if (typeof args[0] === "string") {
+		file = args[0].startsWith("file://")
+			? vscode.Uri.parse(args[0]).fsPath
+			: args[0];
+	}
+	if (!file) {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage("No active editor.");
+			return;
+		}
+		file = editor.document.uri.fsPath;
+	}
+	const request = buildExecutionRequest(file);
+	await executeInTerminal(request, subcommand);
+}
+
+function _getTaskCommand(entry: string | MsPackageTask): string {
+	return typeof entry === "string" ? entry : entry.command;
+}
+
+async function _loadPackageTasks(): Promise<
+	{ tasks: Record<string, string | MsPackageTask>; pkgDir: string } | undefined
+> {
+	const pkgFiles = await vscode.workspace.findFiles(
+		"musi.json",
+		"**/node_modules/**",
+		1,
+	);
+	const pkgFile = pkgFiles[0];
+	if (!pkgFile) {
+		vscode.window.showWarningMessage("No musi.json found in workspace.");
+		return undefined;
+	}
+	let pkg: MsPackage;
+	try {
+		const raw = await vscode.workspace.fs.readFile(pkgFile);
+		pkg = JSON.parse(Buffer.from(raw).toString("utf8")) as MsPackage;
+	} catch {
+		vscode.window.showErrorMessage("Failed to parse musi.json.");
+		return undefined;
+	}
+	if (!(pkg.tasks && Object.keys(pkg.tasks).length > 0)) {
+		vscode.window.showWarningMessage("No tasks defined in musi.json.");
+		return undefined;
+	}
+	return { tasks: pkg.tasks, pkgDir: path.dirname(pkgFile.fsPath) };
+}
+
+function _createCommands(_statusBar: StatusBar): Commands {
+	return {
+		async runFile(...args: unknown[]) {
+			await _runCliOnFile("run", args);
+		},
+
+		async checkFile(...args: unknown[]) {
+			await _runCliOnFile("check", args);
+		},
+
+		async runTask(...args: unknown[]) {
+			const loaded = await _loadPackageTasks();
+			if (!loaded) {
+				return;
+			}
+			const { tasks, pkgDir } = loaded;
+
+			const quickName = typeof args[0] === "string" ? args[0] : undefined;
+			if (quickName && quickName in tasks) {
+				const entry = tasks[quickName];
+				if (entry) {
+					_runInDir(_getTaskCommand(entry), pkgDir);
+				}
+				return;
+			}
+
+			const items = Object.entries(tasks).map(([name, entry]) => ({
+				label: name,
+				description:
+					typeof entry === "string"
+						? entry
+						: (entry.description ?? entry.command),
+			}));
+			const pick = await vscode.window.showQuickPick(items, {
+				placeHolder: "Select task to run",
+			});
+			if (pick) {
+				const entry = tasks[pick.label];
+				if (entry) {
+					_runInDir(_getTaskCommand(entry), pkgDir);
+				}
+			}
+		},
+
+		async runTaskCommand(...args: unknown[]) {
+			const cmd = typeof args[0] === "string" ? args[0] : "";
+			const dir = typeof args[1] === "string" ? args[1] : ".";
+
+			if (cmd.includes("musi") && !_cachedCliPath) {
+				const cliPath = await findCliPath();
+				if (cliPath) {
+					_cachedCliPath = cliPath;
+				} else {
+					vscode.window.showWarningMessage(
+						"Musi CLI not found in PATH. Task may fail if it uses 'musi' command.",
+					);
+				}
+			}
+
+			_runInDir(cmd, dir);
+		},
+
+		async runTest(...args: unknown[]) {
+			const testName = typeof args[1] === "string" ? args[1] : undefined;
+			if (testName) {
+				let file: string | undefined;
+				if (typeof args[0] === "string") {
+					file = args[0].startsWith("file://")
+						? vscode.Uri.parse(args[0]).fsPath
+						: args[0];
+				}
+				if (!file) {
+					const editor = vscode.window.activeTextEditor;
+					if (!editor) {
+						vscode.window.showWarningMessage("No active editor.");
+						return;
+					}
+					file = editor.document.uri.fsPath;
+				}
+				const request = buildExecutionRequest(file);
+				await executeInTerminal(request, "test", testName);
+			} else {
+				await _runCliOnFile("test", args);
+			}
+		},
+
+		async debugTest(...args: unknown[]) {
+			const file =
+				typeof args[0] === "string"
+					? args[0]
+					: vscode.window.activeTextEditor?.document.uri.fsPath;
+			if (!file) {
+				vscode.window.showWarningMessage("No test file specified.");
+				return;
+			}
+			await vscode.debug.startDebugging(undefined, {
+				type: "musi",
+				request: "launch",
+				name: `Debug ${path.basename(file)}`,
+				file,
+				buildBeforeRun: true,
+			});
+		},
+
+		async selectRunConfiguration(..._args: unknown[]) {
+			const config = getConfig();
+			const configs = config.runConfigurations;
+			if (configs.length === 0) {
+				vscode.window.showWarningMessage(
+					"No run configurations defined. Add them in settings under musi.runConfigurations.",
+				);
+				return;
+			}
+			const items = configs.map((c) => ({
+				label: c.name,
+				description: c.file ?? "",
+			}));
+			const pick = await vscode.window.showQuickPick(items, {
+				placeHolder: "Select run configuration",
+			});
+			if (!pick) {
+				return;
+			}
+			const selected = configs.find((c) => c.name === pick.label);
+			if (!selected) {
+				return;
+			}
+			const editor = vscode.window.activeTextEditor;
+			const file = selected.file ?? editor?.document.uri.fsPath ?? "";
+			const request = buildExecutionRequest(file, selected);
+			await executeInTerminal(request, "run");
+		},
+
+		async runWithArgs(..._args: unknown[]) {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor.");
+				return;
+			}
+			const argsInput = await vscode.window.showInputBox({
+				prompt: "Enter runtime arguments",
+				placeHolder: "arg1 arg2 ...",
+			});
+			if (argsInput === undefined) {
+				return;
+			}
+			const runtimeArgs = argsInput.split(_WHITESPACE_RE).filter(Boolean);
+			const request = buildExecutionRequest(editor.document.uri.fsPath, {
+				name: "Run with Args",
+				runtimeArgs,
+			});
+			await executeInTerminal(request, "run");
+		},
+
+		async buildFile(...args: unknown[]) {
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const request = buildExecutionRequest(file);
+			await executeInTerminal(request, "build");
+		},
+
+		editRunConfigurations(..._args: unknown[]) {
+			vscode.commands.executeCommand(
+				"workbench.action.openSettings",
+				"musi.runConfigurations",
+			);
+		},
+	};
+}
+
+/**
+ * Register all Musi extension commands with VS Code.
+ * @param context Extension context for managing subscriptions.
+ * @param statusBar Status bar instance for visual feedback.
+ */
+export function registerCommands(
+	context: vscode.ExtensionContext,
+	statusBar: StatusBar,
+) {
+	const commands = _createCommands(statusBar);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand("musi.runFile", commands.runFile),
+		vscode.commands.registerCommand("musi.checkFile", commands.checkFile),
+		vscode.commands.registerCommand("musi.runTask", commands.runTask),
+		vscode.commands.registerCommand(
+			"musi.runTaskCommand",
+			commands.runTaskCommand,
+		),
+		vscode.commands.registerCommand("musi.runTest", commands.runTest),
+		vscode.commands.registerCommand("musi.debugTest", commands.debugTest),
+		vscode.commands.registerCommand(
+			"musi.selectRunConfiguration",
+			commands.selectRunConfiguration,
+		),
+		vscode.commands.registerCommand("musi.runWithArgs", commands.runWithArgs),
+		vscode.commands.registerCommand("musi.buildFile", commands.buildFile),
+		vscode.commands.registerCommand(
+			"musi.editRunConfigurations",
+			commands.editRunConfigurations,
+		),
+	);
+}

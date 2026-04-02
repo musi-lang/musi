@@ -132,11 +132,11 @@ let main : Int := (
 main();
 ```
 
-The canonical grammar lives in `grammar.abnf`. Historical pre-reduction docs live under `docs/legacy/`.
+The canonical grammar lives in `grammar/Musi.g4`. `grammar/Musi.abnf` is the strict RFC 5234 ABNF spec reference. Historical pre-reduction docs live under `docs/legacy/`.
 
 ## Project Structure
 
-The clean-room crate structure lives under `crates/` and is the authoritative ownership map.
+The legacy crate structure lives under `crates/`. The canonical rewrite lives under `crates_new/`.
 
 | Crate            | Role                                        |
 | ---------------- | ------------------------------------------- |
@@ -155,7 +155,7 @@ The clean-room crate structure lives under `crates/` and is the authoritative ow
 
 ## Editor Support
 
-VS Code syntax support lives under `tools/vscode/`.
+VS Code syntax support lives under `vscode-ext/`.
 
 ## Testing
 

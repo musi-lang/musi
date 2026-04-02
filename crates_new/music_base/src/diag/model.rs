@@ -58,20 +58,48 @@ impl Display for DiagCode {
 /// A source annotation pointing to a span with a message.
 #[derive(Debug)]
 pub struct DiagLabel {
-    pub span: Span,
-    pub source_id: SourceId,
-    pub message: String,
+    span: Span,
+    source_id: SourceId,
+    message: String,
+}
+
+impl DiagLabel {
+    #[must_use]
+    pub fn new(span: Span, source_id: SourceId, message: impl Into<String>) -> Self {
+        let message = message.into();
+        style::validate(message.as_str());
+        Self {
+            span,
+            source_id,
+            message,
+        }
+    }
+
+    #[must_use]
+    pub const fn span(&self) -> Span {
+        self.span
+    }
+
+    #[must_use]
+    pub const fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    #[must_use]
+    pub const fn message(&self) -> &str {
+        self.message.as_str()
+    }
 }
 
 /// A compiler diagnostic with severity, message, labels, and notes.
 #[derive(Debug)]
 pub struct Diag {
-    pub level: DiagLevel,
-    pub code: Option<DiagCode>,
-    pub message: String,
-    pub hint: Option<String>,
-    pub labels: Vec<DiagLabel>,
-    pub notes: Vec<String>,
+    level: DiagLevel,
+    code: Option<DiagCode>,
+    message: String,
+    hint: Option<String>,
+    labels: Vec<DiagLabel>,
+    notes: Vec<String>,
 }
 
 impl Diag {
@@ -108,7 +136,6 @@ impl Diag {
         Self::with_level(DiagLevel::Note, message)
     }
 
-
     /// Attach a source label to this diagnostic.
     #[must_use]
     pub fn with_label(
@@ -117,13 +144,7 @@ impl Diag {
         source_id: SourceId,
         message: impl Into<String>,
     ) -> Self {
-        let message = message.into();
-        style::validate(message.as_str());
-        self.labels.push(DiagLabel {
-            span,
-            source_id,
-            message,
-        });
+        self.labels.push(DiagLabel::new(span, source_id, message));
         self
     }
 
@@ -150,5 +171,35 @@ impl Diag {
         style::validate(message.as_str());
         self.notes.push(message);
         self
+    }
+
+    #[must_use]
+    pub const fn level(&self) -> DiagLevel {
+        self.level
+    }
+
+    #[must_use]
+    pub const fn code(&self) -> Option<DiagCode> {
+        self.code
+    }
+
+    #[must_use]
+    pub const fn message(&self) -> &str {
+        self.message.as_str()
+    }
+
+    #[must_use]
+    pub fn hint(&self) -> Option<&str> {
+        self.hint.as_deref()
+    }
+
+    #[must_use]
+    pub const fn labels(&self) -> &[DiagLabel] {
+        self.labels.as_slice()
+    }
+
+    #[must_use]
+    pub const fn notes(&self) -> &[String] {
+        self.notes.as_slice()
     }
 }

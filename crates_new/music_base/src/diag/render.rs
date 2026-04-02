@@ -38,7 +38,7 @@ impl DiagLevel {
             Self::Fatal => DiagColor::Purple,
             Self::Error => DiagColor::Red,
             Self::Warning => DiagColor::Yellow,
-            Self::Note  => DiagColor::Cyan,
+            Self::Note => DiagColor::Cyan,
         }
     }
 }
@@ -66,25 +66,26 @@ pub fn emit<W: Write>(
         }
     };
 
-    for label in &diag.labels {
-        if let Some(source) = sources.get(label.source_id) {
-            let (line, col) = source.line_col(label.span.start);
+    for label in diag.labels() {
+        if let Some(source) = sources.get(label.source_id()) {
+            let span = label.span();
+            let (line, col) = source.line_col(span.start);
             let path_display = source.path().display();
 
             let loc = format!("{path_display}:{line}:{col}:");
-            let level = diag.code.map_or_else(
-                || String::from(diag.level.label()),
-                |code| format!("{}[{code}]", diag.level.label()),
+            let level = diag.code().map_or_else(
+                || String::from(diag.level().label()),
+                |code| format!("{}[{code}]", diag.level().label()),
             );
-            let message = diag.hint.as_ref().map_or_else(
-                || diag.message.clone(),
-                |hint| format!("{}; {hint}", diag.message),
+            let message = diag.hint().map_or_else(
+                || String::from(diag.message()),
+                |hint| format!("{}; {hint}", diag.message()),
             );
             writeln!(
                 writer,
                 "{} {}: {}",
                 paint(DiagColor::Bold, loc.as_str()),
-                paint(diag.level.color(), level.as_str()),
+                paint(diag.level().color(), level.as_str()),
                 paint(DiagColor::Bold, message.as_str()),
             )?;
 
@@ -102,44 +103,44 @@ pub fn emit<W: Write>(
                     .count();
                 let total_chars = line_text.chars().count();
                 let remaining = total_chars.saturating_sub(caret_offset);
-                let span_len = usize::try_from(label.span.len()).unwrap_or(1).max(1);
+                let span_len = usize::try_from(span.len()).unwrap_or(1).max(1);
                 let caret_count = span_len.min(remaining.max(1)).max(1);
                 let caret_padding = " ".repeat(caret_offset);
                 let carets = "^".repeat(caret_count);
 
-                let caret_text = if label.message.is_empty() {
+                let caret_text = if label.message().is_empty() {
                     carets
                 } else {
-                    format!("{carets} {}", label.message)
+                    format!("{carets} {}", label.message())
                 };
 
                 writeln!(
                     writer,
                     "{padding} | {caret_padding}{}",
-                    paint(diag.level.color(), caret_text.as_str()),
+                    paint(diag.level().color(), caret_text.as_str()),
                 )?;
             }
         }
     }
 
-    if diag.labels.is_empty() {
-        let level = diag.code.map_or_else(
-            || String::from(diag.level.label()),
-            |code| format!("{}[{code}]", diag.level.label()),
+    if diag.labels().is_empty() {
+        let level = diag.code().map_or_else(
+            || String::from(diag.level().label()),
+            |code| format!("{}[{code}]", diag.level().label()),
         );
-        let message = diag.hint.as_ref().map_or_else(
-            || diag.message.clone(),
-            |hint| format!("{}; {hint}", diag.message),
+        let message = diag.hint().map_or_else(
+            || String::from(diag.message()),
+            |hint| format!("{}; {hint}", diag.message()),
         );
         writeln!(
             writer,
             "{}: {}",
-            paint(diag.level.color(), level.as_str()),
+            paint(diag.level().color(), level.as_str()),
             paint(DiagColor::Bold, message.as_str()),
         )?;
     }
 
-    for note_msg in &diag.notes {
+    for note_msg in diag.notes() {
         writeln!(
             writer,
             "{}: {}",
@@ -152,10 +153,14 @@ pub fn emit<W: Write>(
 }
 
 /// Emit a diagnostic to stderr, auto-detecting color support.
-pub fn emit_to_stderr(diag: &Diag, sources: &SourceMap) {
+///
+/// # Errors
+///
+/// Returns `io::Error` if writing to stderr fails.
+pub fn emit_to_stderr(diag: &Diag, sources: &SourceMap) -> io::Result<()> {
     let use_color = supports_color();
     let mut stderr = io::stderr();
-    let _result = emit(&mut stderr, diag, sources, use_color);
+    emit(&mut stderr, diag, sources, use_color)
 }
 
 /// Whether stderr is a terminal that likely supports ANSI colors.
@@ -163,4 +168,3 @@ pub fn emit_to_stderr(diag: &Diag, sources: &SourceMap) {
 pub fn supports_color() -> bool {
     io::stderr().is_terminal()
 }
-

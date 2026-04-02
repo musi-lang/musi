@@ -48,7 +48,11 @@ impl Span {
             } else {
                 other.start
             },
-            end: if self.end > other.end { self.end } else { other.end },
+            end: if self.end > other.end {
+                self.end
+            } else {
+                other.end
+            },
         }
     }
 

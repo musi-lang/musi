@@ -16,6 +16,8 @@ The core surface is:
 
 Effects are not an exception-only subsystem and they are not library sugar over ordinary functions.
 
+Effects are a computation feature. The grammar no longer reserves a separate type-only surface; semantic checking decides where effectful expressions are valid.
+
 ## Effect Declarations
 
 Effects are declared as expressions bound through `let`.
@@ -40,12 +42,13 @@ Effect members describe operations. Laws may also be attached as named propositi
 
 ## Performing Effects
 
-`perform` invokes an effect operation.
+`perform` invokes an effect operation and now accepts an ordinary expression operand.
 
 ```musi
 perform Console.writeln("hello");
 let line := perform Console.readln();
 perform Abort.abort("bad state");
+perform op(msg);
 ```
 
 The operation signature determines the value expected back from the handler continuation.
@@ -123,7 +126,7 @@ The current documentation model is:
 - purity is part of function-kind syntax
 - effect rows are part of signature syntax
 
-This keeps the source surface consistent with the current grammar direction.
+This keeps type-valued forms inside the same grammar as every other expression.
 
 ## Effect Handling And Rows
 
