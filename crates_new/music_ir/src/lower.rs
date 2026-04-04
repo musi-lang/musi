@@ -1,7 +1,7 @@
 use music_base::diag::Diag;
-use music_hir::{HirExprId, HirExprKind, HirForeignDecl, HirPatKind, HirTyKind};
+use music_hir::{HirExprId, HirExprKind, HirForeignDecl, HirPatId, HirPatKind, HirTyKind};
 use music_names::Interner;
-use music_sema::{SemaModule, SurfaceTy, SurfaceTyId, SurfaceTyKind};
+use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
 use crate::api::{
     IrCallable, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrForeignDef, IrGlobal,
@@ -106,11 +106,7 @@ fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
     }
 }
 
-fn validate_effect_row(
-    types: &[SurfaceTy],
-    row: &music_sema::SurfaceEffectRow,
-    diags: &mut IrDiagList,
-) {
+fn validate_effect_row(types: &[SurfaceTy], row: &SurfaceEffectRow, diags: &mut IrDiagList) {
     for item in &row.items {
         if let Some(arg) = item.arg {
             validate_surface_ty_id(types, arg, diags);
@@ -212,7 +208,7 @@ fn collect_top_level_items(
 
 fn collect_let_item(
     sema: &SemaModule,
-    pat: music_hir::HirPatId,
+    pat: HirPatId,
     value: HirExprId,
     is_callable: bool,
     interner: &Interner,

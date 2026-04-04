@@ -32,7 +32,7 @@ Rules:
 - [x] `music_emit` (SEAM emission: lowering to bytecode contract)
 - [ ] `music_jit` (native/JIT backend consuming `music_ir`)
 - [x] `music_session` (CaaS session: caching + orchestration)
-- [ ] `musi_project` (`musi.json` parsing + project integration)
+- [x] `musi_project` (`musi.json` parsing + project integration)
 
 ## Early Module Checklist (starter granularity)
 
@@ -97,3 +97,11 @@ Rules:
 - [x] session state model (sources + options + caches)
 - [x] invalidation strategy (edit-based)
 - [x] entrypoints: parse/check/compile
+
+### `musi_project`
+
+- [x] typed `musi.json` manifest model
+- [x] workspace-aware project loading
+- [x] lockfile loading and frozen-lock validation
+- [x] registry-to-cache package resolution
+- [x] package-aware compilation through `music_session`

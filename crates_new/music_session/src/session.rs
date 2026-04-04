@@ -4,7 +4,7 @@ use music_assembly::{encode_binary, format_text};
 use music_base::{SourceId, SourceMap};
 use music_bc::Artifact;
 use music_emit::{EmittedModule, EmittedProgram, lower_ir_module, lower_ir_program};
-use music_ir::IrModule;
+use music_ir::{IrModule, lower_module};
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportMap, ImportResolveResult, ModuleKey,
     ModuleSpecifier, collect_export_summary, collect_import_sites,
@@ -247,7 +247,7 @@ impl Session {
                     .sema
                     .as_ref()
                     .expect("sema cache missing after successful check");
-                music_ir::lower_module(sema, &self.interner).map_err(|diags| SessionError::Ir {
+                lower_module(sema, &self.interner).map_err(|diags| SessionError::Ir {
                     module: key.clone(),
                     diags: diags.into_boxed_slice(),
                 })?

@@ -39,7 +39,7 @@ Canonical crate domains (new workspace):
 - `music_emit`: SEAM emission (lowering from sema/IR facts to `music_bc`)
 - `music_jit`: native/JIT backend consuming `music_ir` (planned)
 - `music_session`: embeddable service layer (caching + orchestration)
-- `musi_project`: schema-backed project/manifest integration (`musi.json`)
+- `musi_project`: schema-backed project/manifest integration (`musi.json`, workspaces, package graph, registry/cache resolution)
 
 Current implementation status (Cargo workspace members):
 
@@ -56,6 +56,7 @@ Current implementation status (Cargo workspace members):
 - `music_assembly`
 - `music_emit`
 - `music_session`
+- `musi_project`
 
 The intended dependency shape is a DAG:
 

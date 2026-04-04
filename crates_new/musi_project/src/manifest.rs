@@ -1,0 +1,306 @@
+use std::collections::BTreeMap;
+
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PackageManifest {
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub main: Option<String>,
+    pub exports: Option<Exports>,
+    pub license: Option<String>,
+    pub author: Option<Author>,
+    pub contributors: Vec<Author>,
+    pub private: Option<bool>,
+    pub repository: Option<Repository>,
+    pub homepage: Option<String>,
+    pub bugs: Option<Bugs>,
+    pub keywords: Vec<String>,
+    pub imports: BTreeMap<String, String>,
+    pub scopes: BTreeMap<String, BTreeMap<String, String>>,
+    pub dependencies: BTreeMap<String, String>,
+    #[serde(rename = "devDependencies")]
+    pub dev_dependencies: BTreeMap<String, String>,
+    #[serde(rename = "peerDependencies")]
+    pub peer_dependencies: BTreeMap<String, String>,
+    #[serde(rename = "optionalDependencies")]
+    pub optional_dependencies: BTreeMap<String, String>,
+    pub overrides: BTreeMap<String, String>,
+    #[serde(rename = "compilerOptions")]
+    pub compiler_options: Option<CompilerOptions>,
+    pub tasks: BTreeMap<String, TaskDefinition>,
+    pub fmt: Option<FmtConfig>,
+    pub lint: Option<LintConfig>,
+    pub test: Option<TestConfig>,
+    pub bench: Option<BenchConfig>,
+    pub compile: Option<CompileConfig>,
+    pub publish: Option<PublishConfig>,
+    pub lock: Option<LockConfig>,
+    pub workspace: Option<WorkspaceConfig>,
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Exports {
+    Main(String),
+    Map(BTreeMap<String, String>),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Author {
+    Name(String),
+    Detailed(AuthorObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct AuthorObject {
+    pub name: String,
+    pub email: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Repository {
+    Url(String),
+    Detailed(RepositoryObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RepositoryObject {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub url: String,
+    pub directory: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Bugs {
+    Url(String),
+    Detailed(BugsObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct BugsObject {
+    pub url: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CompilerOptions {
+    pub strict: Option<bool>,
+    pub no_implicit_any: Option<bool>,
+    pub no_unused_locals: Option<bool>,
+    pub no_unused_parameters: Option<bool>,
+    pub no_implicit_returns: Option<bool>,
+    pub allow_unreachable_code: Option<bool>,
+    pub no_error_truncation: Option<bool>,
+    pub base_url: Option<String>,
+    pub paths: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum TaskDefinition {
+    Command(String),
+    Object(TaskDefinitionObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct TaskDefinitionObject {
+    pub description: Option<String>,
+    pub command: String,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskConfig {
+    pub description: Option<String>,
+    pub command: String,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct FmtConfig {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub use_tabs: Option<bool>,
+    pub line_width: Option<u32>,
+    pub indent_width: Option<u32>,
+    pub semi_colons: Option<bool>,
+    pub trailing_commas: Option<String>,
+    pub brace_position: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct TestConfig {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct BenchConfig {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LintConfig {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub rules: Option<LintRules>,
+    pub report: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct LintRules {
+    pub tags: Vec<String>,
+    pub exclude: Vec<String>,
+    pub include: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct CompileConfig {
+    pub target: Option<String>,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum PublishConfig {
+    Settings(PublishSettings),
+    Disabled(bool),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct PublishSettings {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum LockConfig {
+    Flag(bool),
+    Path(String),
+    Object(LockConfigObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct LockConfigObject {
+    pub path: Option<String>,
+    pub frozen: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum WorkspaceConfig {
+    Members(Vec<String>),
+    Object(WorkspaceMembersObject),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct WorkspaceMembersObject {
+    pub members: Vec<String>,
+}
+
+impl PackageManifest {
+    #[must_use]
+    pub fn main_entry(&self) -> &str {
+        self.main.as_deref().unwrap_or("index.ms")
+    }
+
+    #[must_use]
+    pub fn workspace_members(&self) -> &[String] {
+        match &self.workspace {
+            Some(WorkspaceConfig::Members(members)) => members,
+            Some(WorkspaceConfig::Object(object)) => &object.members,
+            None => &[],
+        }
+    }
+
+    #[must_use]
+    pub fn lock_path(&self) -> &str {
+        match &self.lock {
+            Some(LockConfig::Path(path)) => path,
+            Some(LockConfig::Object(object)) => object.path.as_deref().unwrap_or("musi.lock"),
+            _ => "musi.lock",
+        }
+    }
+
+    #[must_use]
+    pub const fn is_lock_enabled(&self) -> bool {
+        !matches!(self.lock, Some(LockConfig::Flag(false)))
+    }
+
+    #[must_use]
+    pub const fn is_lock_frozen(&self) -> bool {
+        matches!(
+            self.lock,
+            Some(LockConfig::Object(LockConfigObject {
+                frozen: Some(true),
+                ..
+            }))
+        )
+    }
+
+    #[must_use]
+    pub fn export_map(&self) -> BTreeMap<String, String> {
+        match &self.exports {
+            Some(Exports::Main(path)) => {
+                let mut map = BTreeMap::new();
+                let _ = map.insert(".".into(), path.clone());
+                map
+            }
+            Some(Exports::Map(map)) => map.clone(),
+            None => {
+                let mut map = BTreeMap::new();
+                let _ = map.insert(".".into(), format!("./{}", self.main_entry()));
+                map
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn dependency_maps(&self) -> [(&str, &BTreeMap<String, String>); 4] {
+        [
+            ("dependencies", &self.dependencies),
+            ("devDependencies", &self.dev_dependencies),
+            ("peerDependencies", &self.peer_dependencies),
+            ("optionalDependencies", &self.optional_dependencies),
+        ]
+    }
+
+    #[must_use]
+    pub fn task_config(&self, name: &str) -> Option<TaskConfig> {
+        match self.tasks.get(name) {
+            Some(TaskDefinition::Command(command)) => Some(TaskConfig {
+                description: None,
+                command: command.clone(),
+                dependencies: Vec::new(),
+            }),
+            Some(TaskDefinition::Object(object)) => Some(TaskConfig {
+                description: object.description.clone(),
+                command: object.command.clone(),
+                dependencies: object.dependencies.clone(),
+            }),
+            None => None,
+        }
+    }
+}

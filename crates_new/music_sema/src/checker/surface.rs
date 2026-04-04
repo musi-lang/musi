@@ -5,7 +5,7 @@ use music_base::Span;
 use music_hir::{
     HirCaseArm, HirDim, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl, HirHandleClause,
     HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem, HirRecordPatField, HirStore,
-    HirTyField, HirTyId, HirTyKind, HirVariantDef,
+    HirTemplatePart, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -407,7 +407,7 @@ fn collect_exports_from_expr(
         }
         HirExprKind::Template { parts } => {
             for part in module.resolved.module.store.template_parts.get(parts) {
-                if let music_hir::HirTemplatePart::Expr { expr } = part {
+                if let HirTemplatePart::Expr { expr } = part {
                     collect_exports_from_expr(module, interner, *expr, exports);
                 }
             }

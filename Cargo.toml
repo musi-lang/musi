@@ -8,6 +8,7 @@ members = [
   "crates_new/music_ir",
   "crates_new/music_assembly",
   "crates_new/music_module",
+  "crates_new/musi_project",
   "crates_new/music_names",
   "crates_new/music_resolve",
   "crates_new/music_sema",

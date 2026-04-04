@@ -5,7 +5,8 @@ use music_bc::descriptor::{
     ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
-    Artifact, CodeEntry, Instruction, Label, Opcode, Operand, OperandShape, StringId, TypeId,
+    Artifact, ClassId, CodeEntry, ConstantId, EffectId, ForeignId, GlobalId, Instruction, Label,
+    MethodId, Opcode, Operand, OperandShape, StringId, TypeId,
 };
 
 use crate::AssemblyError;
@@ -234,12 +235,12 @@ fn push_quoted(out: &mut String, text: &str) {
 struct TextBuilder {
     artifact: Artifact,
     types: HashMap<String, TypeId>,
-    constants: HashMap<String, music_bc::ConstantId>,
-    globals: HashMap<String, music_bc::GlobalId>,
-    methods: HashMap<String, music_bc::MethodId>,
-    effects: HashMap<String, music_bc::EffectId>,
-    classes: HashMap<String, music_bc::ClassId>,
-    foreigns: HashMap<String, music_bc::ForeignId>,
+    constants: HashMap<String, ConstantId>,
+    globals: HashMap<String, GlobalId>,
+    methods: HashMap<String, MethodId>,
+    effects: HashMap<String, EffectId>,
+    classes: HashMap<String, ClassId>,
+    foreigns: HashMap<String, ForeignId>,
     strings: HashMap<String, StringId>,
 }
 

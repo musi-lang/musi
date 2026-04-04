@@ -2,13 +2,17 @@ use std::collections::{BTreeSet, HashMap};
 use std::slice::from_ref;
 
 use music_arena::SliceRange;
-use music_base::diag::Diag;
+use music_base::{SourceId, Span, diag::Diag};
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
     ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
 };
-use music_bc::{Artifact, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode, Operand};
-use music_hir::{HirArg, HirBinaryOp, HirExprId, HirExprKind, HirLitKind, HirParam, HirPatKind};
+use music_bc::{
+    Artifact, CodeEntry, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode, Operand,
+};
+use music_hir::{
+    HirArg, HirBinaryOp, HirExprId, HirExprKind, HirLitId, HirLitKind, HirParam, HirPatKind,
+};
 use music_ir::IrModule;
 use music_module::ModuleKey;
 use music_names::Symbol;
@@ -48,7 +52,7 @@ struct MethodEmitter<'artifact, 'module> {
     unique_foreigns: &'module HashMap<Symbol, ForeignId>,
     locals: HashMap<Symbol, u16>,
     scratch_slot: u16,
-    code: Vec<music_bc::CodeEntry>,
+    code: Vec<CodeEntry>,
 }
 
 /// Lowers one IR module into a standalone SEAM artifact.
@@ -309,12 +313,10 @@ fn compile_callables(
             code: method_prologue(),
         };
         compile_expr(&mut emitter, binding.value, true, &mut state.diags);
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::Ret,
-                Operand::None,
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        )));
         finalize_method(
             emitter.artifact,
             method_id,
@@ -343,12 +345,10 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             code: method_prologue(),
         };
         compile_expr(&mut emitter, global.expr, true, &mut state.diags);
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::Ret,
-                Operand::None,
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        )));
         finalize_method(emitter.artifact, init_method, 1, emitter.code);
     }
 }
@@ -384,19 +384,19 @@ fn build_program_entry(
     method_id
 }
 
-fn entry_code(init_methods: &[MethodId]) -> Vec<music_bc::CodeEntry> {
+fn entry_code(init_methods: &[MethodId]) -> Vec<CodeEntry> {
     let mut code = method_prologue();
     for init_method in init_methods {
-        code.push(music_bc::CodeEntry::Instruction(Instruction::new(
+        code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Call,
             Operand::Method(*init_method),
         )));
-        code.push(music_bc::CodeEntry::Instruction(Instruction::new(
+        code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::StLoc,
             Operand::Local(0),
         )));
     }
-    code.push(music_bc::CodeEntry::Instruction(Instruction::new(
+    code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::Ret,
         Operand::None,
     )));
@@ -503,20 +503,14 @@ fn compile_expr(
         }
     }
     if !keep_result {
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::StLoc,
-                Operand::Local(emitter.scratch_slot),
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(emitter.scratch_slot),
+        )));
     }
 }
 
-fn compile_lit(
-    emitter: &mut MethodEmitter<'_, '_>,
-    lit: music_hir::HirLitId,
-    diags: &mut EmitDiagList,
-) {
+fn compile_lit(emitter: &mut MethodEmitter<'_, '_>, lit: HirLitId, diags: &mut EmitDiagList) {
     match &emitter.ir.hir.store.lits.get(lit).kind {
         HirLitKind::Int { raw } => compile_int_literal(emitter, raw, lit, diags),
         HirLitKind::String { value } => compile_string_literal(emitter, value),
@@ -538,7 +532,7 @@ fn compile_lit(
 fn compile_int_literal(
     emitter: &mut MethodEmitter<'_, '_>,
     raw: &str,
-    lit: music_hir::HirLitId,
+    lit: HirLitId,
     diags: &mut EmitDiagList,
 ) {
     if let Some(value) = parse_int_literal(raw) {
@@ -564,22 +558,18 @@ fn compile_string_literal(emitter: &mut MethodEmitter<'_, '_>, value: &str) {
         name: name_id,
         value: ConstantValue::String(string_id),
     });
-    emitter
-        .code
-        .push(music_bc::CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
-            Operand::Constant(constant_id),
-        )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdConst,
+        Operand::Constant(constant_id),
+    )));
 }
 
 fn compile_i64(emitter: &mut MethodEmitter<'_, '_>, value: i64) {
     if let Ok(short) = i16::try_from(value) {
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::LdSmi,
-                Operand::I16(short),
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdSmi,
+            Operand::I16(short),
+        )));
         return;
     }
     let const_name = format!("const:int:{}", emitter.artifact.constants.len());
@@ -588,12 +578,10 @@ fn compile_i64(emitter: &mut MethodEmitter<'_, '_>, value: i64) {
         name: name_id,
         value: ConstantValue::Int(value),
     });
-    emitter
-        .code
-        .push(music_bc::CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
-            Operand::Constant(constant_id),
-        )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdConst,
+        Operand::Constant(constant_id),
+    )));
 }
 
 fn compile_name(
@@ -603,12 +591,10 @@ fn compile_name(
     diags: &mut EmitDiagList,
 ) {
     if let Some(slot) = emitter.locals.get(&name).copied() {
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::LdLoc,
-                Operand::Local(slot),
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(slot),
+        )));
         return;
     }
     push_expr_diag(
@@ -654,12 +640,10 @@ fn compile_binary(
             Opcode::CmpEq
         }
     };
-    emitter
-        .code
-        .push(music_bc::CodeEntry::Instruction(Instruction::new(
-            opcode,
-            Operand::None,
-        )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        opcode,
+        Operand::None,
+    )));
 }
 
 fn compile_call(
@@ -706,12 +690,10 @@ fn compile_named_call(
         .copied()
         .or_else(|| emitter.unique_methods.get(&name).copied())
     {
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::Call,
-                Operand::Method(method),
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Call,
+            Operand::Method(method),
+        )));
         return;
     }
     if let Some(foreign) = emitter
@@ -721,12 +703,10 @@ fn compile_named_call(
         .copied()
         .or_else(|| emitter.unique_foreigns.get(&name).copied())
     {
-        emitter
-            .code
-            .push(music_bc::CodeEntry::Instruction(Instruction::new(
-                Opcode::FfiCall,
-                Operand::Foreign(foreign),
-            )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::FfiCall,
+            Operand::Foreign(foreign),
+        )));
         return;
     }
     push_expr_diag(
@@ -739,16 +719,14 @@ fn compile_named_call(
 }
 
 fn emit_zero(emitter: &mut MethodEmitter<'_, '_>) {
-    emitter
-        .code
-        .push(music_bc::CodeEntry::Instruction(Instruction::new(
-            Opcode::LdSmi,
-            Operand::I16(0),
-        )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdSmi,
+        Operand::I16(0),
+    )));
 }
 
-fn method_prologue() -> Vec<music_bc::CodeEntry> {
-    vec![music_bc::CodeEntry::Label(Label { id: 0 })]
+fn method_prologue() -> Vec<CodeEntry> {
+    vec![CodeEntry::Label(Label { id: 0 })]
 }
 
 fn alloc_method(artifact: &mut Artifact, name: &str, export: bool) -> MethodId {
@@ -767,7 +745,7 @@ fn finalize_method(
     artifact: &mut Artifact,
     method_id: MethodId,
     locals: u16,
-    code: Vec<music_bc::CodeEntry>,
+    code: Vec<CodeEntry>,
 ) {
     let method = artifact.methods.get_mut(method_id);
     method.locals = locals;
@@ -827,8 +805,8 @@ fn push_expr_diag(
 fn push_span_diag(
     diags: &mut EmitDiagList,
     module_key: &ModuleKey,
-    source_id: music_base::SourceId,
-    span: music_base::Span,
+    source_id: SourceId,
+    span: Span,
     message: String,
 ) {
     diags.push(Diag::error(message).with_label(span, source_id, module_key.as_str()));

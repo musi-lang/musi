@@ -23,6 +23,7 @@ Policy:
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `lower_ir_module`, `lower_ir_program`)
 - `music_session`: session orchestration + cached compile entrypoints (`Session`, `SessionOptions`, `SessionStats`, `ParsedModule`, `CompiledOutput`, `SessionDiagList`, `SessionError`, `compile_*`/phase entrypoints through `Session` methods)
+- `musi_project`: project/manifest integration over `music_session` (`Project`, `ProjectOptions`, `ProjectError`, `PackageId`, `PackageSource`, `ProjectEntry`, `ResolvedPackage`, `WorkspaceGraph`, `Lockfile`, `LockedPackage`, `LockedPackageSource`, `TaskSpec`, `PackageManifest`, manifest config/value types, `load_project`)
 
 Notes:
 
@@ -40,13 +41,13 @@ Notes:
 - `music_assembly` is transport-only over `music_bc`: it does not redefine the artifact or ISA.
 - `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values.
 - `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text.
+- `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, and constructs the exact `music_session` module/import view used for package-aware compilation.
 
 ## Planned phase crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
 - `music_jit`
-- `musi_project`
 
 ## Legacy (`crates/`)
 
