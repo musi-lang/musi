@@ -70,3 +70,18 @@ fn reuses_caches_and_invalidates_dependents_on_edit() {
     assert!(session.stats().resolve_runs > first_stats.resolve_runs);
     assert!(session.stats().emit_runs > first_stats.emit_runs);
 }
+
+#[test]
+fn resolve_reuses_cached_parse_product() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
+        .unwrap();
+
+    let _ = session.parse_module(&ModuleKey::new("main")).unwrap();
+    let after_parse = session.stats().clone();
+    let _ = session.resolve_module(&ModuleKey::new("main")).unwrap();
+
+    assert_eq!(session.stats().parse_runs, after_parse.parse_runs);
+    assert!(session.stats().resolve_runs > after_parse.resolve_runs);
+}
