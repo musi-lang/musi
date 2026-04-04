@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 
 use music_emit::{EmittedModule, lower_ir_module};
 use music_ir::{IrModule, lower_module};
-use music_module::{ModuleKey, collect_export_summary, collect_import_sites};
+use music_module::{ImportEnv, ModuleKey, collect_export_summary, collect_import_sites};
 use music_resolve::{ResolveOptions, ResolvedModule, resolve_module};
-use music_sema::{SemaModule, SemaOptions, check_module};
+use music_sema::{SemaEnv, SemaModule, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::api::{ParsedModule, SessionError};
@@ -232,7 +232,10 @@ impl Session {
     }
 
     fn build_resolved_module(&mut self, key: &ModuleKey) -> Result<ResolvedModule, SessionError> {
-        let source_id = self.parse_module(key)?.source_id;
+        let (source_id, has_imports) = {
+            let parsed = self.parse_module(key)?;
+            (parsed.source_id, !parsed.import_sites.is_empty())
+        };
         let parsed = self
             .module_record(key)?
             .parsed_source
@@ -245,6 +248,11 @@ impl Session {
             import_map: &import_map,
             module_keys: &module_keys,
         };
+        let import_env: Option<&dyn ImportEnv> = if has_imports {
+            Some(&import_env)
+        } else {
+            None
+        };
         Ok(resolve_module(
             source_id,
             key,
@@ -252,7 +260,7 @@ impl Session {
             &mut self.interner,
             ResolveOptions {
                 prelude: Vec::new(),
-                import_env: Some(&import_env),
+                import_env,
             },
         ))
     }
@@ -269,12 +277,17 @@ impl Session {
             let sema = self.check_module(&imported)?;
             let _ = surfaces.surfaces.insert(imported, sema.surface().clone());
         }
+        let env: Option<&dyn SemaEnv> = if surfaces.surfaces.is_empty() {
+            None
+        } else {
+            Some(&surfaces)
+        };
         Ok(check_module(
             resolved,
             &mut self.interner,
             SemaOptions {
                 target: self.options.target.clone(),
-                env: Some(&surfaces),
+                env,
             },
         ))
     }

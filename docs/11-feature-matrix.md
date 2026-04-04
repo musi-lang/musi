@@ -53,7 +53,7 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | Assignment (`<-`)                                 | done      | done        | done | done              | Local names, globals, and indexed sequence elements compile end-to-end |
 | Calls                                             | done      | done        | done | done              | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
 | Field/index/update access (`.`, `.[`, `.{`)       | done      | done        | done | partial           | Imported module members plus indexed sequence get/set compile; record/data field projection and richer updates remain reduced |
-| `case ... of` with guards                         | done      | done        | done | partial           | Literal, wildcard, and bind arms with guards compile; structural tuple/array/variant/or/as patterns remain reduced |
+| `case ... of` with guards                         | done      | done        | done | partial           | Literal, wildcard, bind, tuple, and array patterns with guards compile; structural variant/or/as patterns remain reduced |
 | `data`, `effect`, `class`, `instance` as exprs    | done      | done        | partial | partial         | Strong semantic support exists, but whole-language lowering/runtime is not complete |
 | `perform`, `handle`, `resume`                     | done      | done        | done | partial           | Handler clause shape, effect accounting, and resume typing are checked |
 | Static imports (`import "..."`)                   | done      | done        | done | done              | Static import discovery, module keys, and session/project integration exist |

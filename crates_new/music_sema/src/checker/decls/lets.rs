@@ -123,20 +123,6 @@ pub(in super::super) fn check_let_expr(
         ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
     }
 
-    let value_facts = if let Some(name) = bound_name {
-        match ctx.expr(value).kind {
-            HirExprKind::Data { variants, fields } => check_bound_data(ctx, name, variants, fields),
-            HirExprKind::Effect { members } => check_bound_effect(ctx, value, name, members),
-            HirExprKind::Class {
-                constraints,
-                members,
-            } => check_bound_class(ctx, value, name, constraints, members),
-            _ => check_expr(ctx, value),
-        }
-    } else {
-        check_expr(ctx, value)
-    };
-
     let final_ty = if has_param_clause {
         let (ty, callable_effects) =
             check_callable_let_binding(ctx, origin, params, effects.as_ref(), declared_ty, value);
@@ -145,6 +131,21 @@ pub(in super::super) fn check_let_expr(
         }
         ty
     } else {
+        let value_facts = if let Some(name) = bound_name {
+            match ctx.expr(value).kind {
+                HirExprKind::Data { variants, fields } => {
+                    check_bound_data(ctx, name, variants, fields)
+                }
+                HirExprKind::Effect { members } => check_bound_effect(ctx, value, name, members),
+                HirExprKind::Class {
+                    constraints,
+                    members,
+                } => check_bound_class(ctx, value, name, constraints, members),
+                _ => check_expr(ctx, value),
+            }
+        } else {
+            check_expr(ctx, value)
+        };
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);
         if let Some(binding) = binding {

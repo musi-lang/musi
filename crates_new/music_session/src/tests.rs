@@ -159,3 +159,28 @@ fn compiles_closures_and_higher_order_calls() {
     assert!(output.text.contains("call.cls"));
     assert!(output.text.contains("cls.new"));
 }
+
+#[test]
+fn compiles_case_tuple_and_array_patterns() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer () : Int := (
+              let pair := (1, 2);
+              let items := [3, 4];
+              let p : Int := case pair of (| (1, b) => b | _ => 0);
+              let q : Int := case items of (| [3, b] => b | _ => 0);
+              p + q
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("seq.get"));
+    assert!(output.text.contains("br.false"));
+}

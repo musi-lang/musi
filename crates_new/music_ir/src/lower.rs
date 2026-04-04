@@ -949,6 +949,34 @@ fn lower_case_pattern(
             name: interner.resolve(name.name).into(),
         }),
         HirPatKind::Lit { expr } => lower_lit_pattern(sema, *expr),
+        HirPatKind::Tuple { items } => {
+            let items = sema
+                .module()
+                .store
+                .pat_ids
+                .get(*items)
+                .iter()
+                .copied()
+                .map(|item| lower_case_pattern(sema, item, interner))
+                .collect::<Option<Vec<_>>>()?;
+            Some(IrCasePattern::Tuple {
+                items: items.into_boxed_slice(),
+            })
+        }
+        HirPatKind::Array { items } => {
+            let items = sema
+                .module()
+                .store
+                .pat_ids
+                .get(*items)
+                .iter()
+                .copied()
+                .map(|item| lower_case_pattern(sema, item, interner))
+                .collect::<Option<Vec<_>>>()?;
+            Some(IrCasePattern::Array {
+                items: items.into_boxed_slice(),
+            })
+        }
         _ => None,
     }
 }

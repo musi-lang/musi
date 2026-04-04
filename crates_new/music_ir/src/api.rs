@@ -84,6 +84,12 @@ pub enum IrCasePattern {
         name: Box<str>,
     },
     Lit(IrLit),
+    Tuple {
+        items: Box<[Self]>,
+    },
+    Array {
+        items: Box<[Self]>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

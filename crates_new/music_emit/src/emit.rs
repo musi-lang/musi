@@ -1022,6 +1022,29 @@ fn compile_case_pattern(
             )));
             true
         }
+        IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
+            for (idx, item) in items.iter().enumerate() {
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::LdLoc,
+                    Operand::Local(scrutinee_slot),
+                )));
+                let idx = i64::try_from(idx).unwrap_or(i64::MAX);
+                compile_i64(emitter, idx);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqGet,
+                    Operand::None,
+                )));
+                let item_slot = reserve_temp_slot(emitter);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::StLoc,
+                    Operand::Local(item_slot),
+                )));
+                if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
+                    return false;
+                }
+            }
+            true
+        }
     }
 }
 

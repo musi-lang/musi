@@ -134,6 +134,37 @@ fn emits_globals_locals_assignment_index_and_case() {
 }
 
 #[test]
+fn emits_case_tuple_and_array_patterns() {
+    let ir = lower_ir(
+        r"
+        export let answer () : Int := (
+          let pair := (1, 2);
+          let items := [3, 4];
+          let p : Int := case pair of (| (1, b) => b | _ => 0);
+          let q : Int := case items of (| [3, b] => b | _ => 0);
+          p + q
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(opcodes.contains(&music_bc::Opcode::SeqGet));
+    assert!(opcodes.contains(&music_bc::Opcode::BrFalse));
+}
+
+#[test]
 fn emits_foreign_calls() {
     let ir = lower_ir(
         r#"
