@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
 use music_hir::{HirExpr, HirExprId, HirExprKind, HirModule, HirOrigin, HirStore};
-use music_module::{ImportEnv, ModuleKey, ModuleSpecifier};
+use music_module::{
+    ImportEnv, ModuleExportSummary, ModuleKey, ModuleSpecifier, collect_export_summary,
+};
 use music_names::{
     Ident, Interner, KnownSymbols, NameBinding, NameBindingId, NameBindingKind, NameResolution,
     NameSite, Symbol,
@@ -35,8 +37,10 @@ pub struct ResolvedImport {
 
 #[derive(Debug)]
 pub struct ResolvedModule {
+    pub module_key: ModuleKey,
     pub module: HirModule,
     pub imports: ResolvedImportList,
+    pub export_summary: ModuleExportSummary,
     pub names: NameResolution,
     pub diags: ResolveDiagList,
 }
@@ -53,9 +57,12 @@ pub fn resolve_module(
     let imports = resolver.discover_imports(module_key);
     let root = resolver.lower_source_file();
     let module = HirModule::new(source_id, resolver.store, root);
+    let export_summary = collect_export_summary(source_id, tree);
     ResolvedModule {
+        module_key: module_key.clone(),
         module,
         imports,
+        export_summary,
         names: resolver.names,
         diags: resolver.diags,
     }

@@ -114,4 +114,26 @@ fn export_instance_is_tracked_separately() {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     assert_eq!(summary.exported_instance_count(), 1);
+    assert_eq!(summary.exported_instances().count(), 1);
+}
+
+#[test]
+fn opaque_export_marking_is_order_independent() {
+    let src = r#"
+        export let x := 1;
+        export foreign "c" (
+          let x (msg : CString) : Int;
+          let y (msg : CString) : Int;
+        );
+        export opaque let x := 2;
+    "#;
+    let lexed = Lexer::new(src).lex();
+    let parsed = music_syntax::parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
+    let exports: Vec<&str> = summary.exports().collect();
+    assert_eq!(exports.iter().filter(|name| **name == "x").count(), 1);
+    assert_eq!(exports.iter().filter(|name| **name == "y").count(), 1);
+    assert!(summary.is_export_opaque("x"));
+    assert!(!summary.is_export_opaque("y"));
 }

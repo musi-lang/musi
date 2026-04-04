@@ -9,7 +9,7 @@ use crate::context::CheckPass;
 use crate::normalize::lower_type_expr;
 
 pub fn validate_expr_attrs(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     attrs: SliceRange<HirAttr>,
     inner: HirExprId,
@@ -33,7 +33,7 @@ pub fn validate_expr_attrs(
     }
 }
 
-pub fn validate_foreign_decl(ctx: &mut CheckPass<'_, '_>, decl: &HirForeignDecl, abi: &str) {
+pub fn validate_foreign_decl(ctx: &mut CheckPass<'_, '_, '_>, decl: &HirForeignDecl, abi: &str) {
     let _ = abi;
     for param in ctx.params(decl.params.clone()) {
         if let Some(expr) = param.ty {
@@ -59,7 +59,7 @@ pub fn validate_foreign_decl(ctx: &mut CheckPass<'_, '_>, decl: &HirForeignDecl,
     }
 }
 
-fn validate_ffi_type(ctx: &mut CheckPass<'_, '_>, expr: HirExprId, ty: HirTyId) {
+fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTyId) {
     match ctx.ty(ty).kind {
         HirTyKind::Int
         | HirTyKind::Float
@@ -76,7 +76,7 @@ fn validate_ffi_type(ctx: &mut CheckPass<'_, '_>, expr: HirExprId, ty: HirTyId) 
     }
 }
 
-fn validate_link_attr(ctx: &mut CheckPass<'_, '_>, attr: &HirAttr, origin: HirOrigin) {
+fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
     let known = ctx.known();
     for arg in ctx.attr_args(attr.args.clone()) {
         if let Some(name) = arg.name.map(|ident| ident.name) {
@@ -90,7 +90,7 @@ fn validate_link_attr(ctx: &mut CheckPass<'_, '_>, attr: &HirAttr, origin: HirOr
     }
 }
 
-fn validate_when_attr(ctx: &mut CheckPass<'_, '_>, attr: &HirAttr, origin: HirOrigin) {
+fn validate_when_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
     let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
         .into_iter()
         .map(|name| ctx.intern(name))
@@ -105,14 +105,14 @@ fn validate_when_attr(ctx: &mut CheckPass<'_, '_>, attr: &HirAttr, origin: HirOr
             ctx.diag(origin.span, "attr invalid value", "");
         }
     }
-    let _ = ctx.options().target.as_ref();
+    let _ = ctx.target();
 }
 
-fn attr_value_is_string(ctx: &CheckPass<'_, '_>, arg: &HirAttrArg) -> bool {
+fn attr_value_is_string(ctx: &CheckPass<'_, '_, '_>, arg: &HirAttrArg) -> bool {
     matches!(ctx.expr(arg.value).kind, HirExprKind::Lit { lit } if ctx.lit_is_string(lit))
 }
 
-fn attr_value_is_string_array(ctx: &CheckPass<'_, '_>, arg: &HirAttrArg) -> bool {
+fn attr_value_is_string_array(ctx: &CheckPass<'_, '_, '_>, arg: &HirAttrArg) -> bool {
     let HirExprKind::Array { items } = ctx.expr(arg.value).kind else {
         return false;
     };
@@ -121,7 +121,7 @@ fn attr_value_is_string_array(ctx: &CheckPass<'_, '_>, arg: &HirAttrArg) -> bool
         .all(|item| matches!(ctx.expr(item.expr).kind, HirExprKind::Lit { lit } if ctx.lit_is_string(lit)))
 }
 
-fn attr_path<'a>(ctx: &'a CheckPass<'_, '_>, attr: &HirAttr) -> Vec<&'a str> {
+fn attr_path<'a>(ctx: &'a CheckPass<'_, '_, '_>, attr: &HirAttr) -> Vec<&'a str> {
     ctx.idents(attr.path)
         .into_iter()
         .map(|ident| ctx.resolve_symbol(ident.name))

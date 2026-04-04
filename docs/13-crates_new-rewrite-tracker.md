@@ -25,7 +25,7 @@ Rules:
 - [x] `music_module` (`ImportEnv` + module/specifier model)
 - [x] `music_hir` (HIR model)
 - [x] `music_resolve` (imports + name resolution + syntax→HIR lowering)
-- [ ] `music_sema` (type/effect/class checking)
+- [x] `music_sema` (type/effect/class checking)
 - [ ] `music_ir` (codegen-facing facts)
 - [ ] `music_bc` (bytecode contract)
 - [ ] `music_assembly` (bytecode codec + validation)

@@ -8,6 +8,7 @@ use crate::ModuleSpecifier;
 use crate::string_lit::{decode_string_lit, decode_template_lit};
 
 type ExportNameList = Vec<Box<str>>;
+type ExportedInstanceSiteList = Vec<ExportedInstanceSite>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSiteKind {
@@ -23,11 +24,17 @@ pub struct ImportSite {
     pub kind: ImportSiteKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExportedInstanceSite {
+    pub source_id: SourceId,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModuleExportSummary {
     exports: ExportNameList,
     opaque: ExportNameList,
-    exported_instances: usize,
+    exported_instances: ExportedInstanceSiteList,
 }
 
 impl ModuleExportSummary {
@@ -35,9 +42,13 @@ impl ModuleExportSummary {
         self.exports.iter().map(Box::as_ref)
     }
 
+    pub fn exported_instances(&self) -> impl Iterator<Item = ExportedInstanceSite> + '_ {
+        self.exported_instances.iter().copied()
+    }
+
     #[must_use]
     pub const fn exported_instance_count(&self) -> usize {
-        self.exported_instances
+        self.exported_instances.len()
     }
 
     #[must_use]
@@ -47,6 +58,9 @@ impl ModuleExportSummary {
 
     fn push_export(&mut self, name: &str, is_opaque: bool) {
         if self.exports.iter().any(|it| it.as_ref() == name) {
+            if is_opaque && !self.is_export_opaque(name) {
+                self.opaque.push(name.into());
+            }
             return;
         }
         let boxed: Box<str> = name.into();
@@ -76,7 +90,7 @@ pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree<'_>) -> Vec<I
 }
 
 #[must_use]
-pub fn collect_export_summary(_source_id: SourceId, tree: &SyntaxTree<'_>) -> ModuleExportSummary {
+pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree<'_>) -> ModuleExportSummary {
     let mut summary = ModuleExportSummary::default();
     walk_nodes(tree.root(), &mut |node| {
         if node.kind() != SyntaxNodeKind::ExportExpr {
@@ -118,7 +132,10 @@ pub fn collect_export_summary(_source_id: SourceId, tree: &SyntaxTree<'_>) -> Mo
             .child_nodes()
             .any(|child| child.kind() == SyntaxNodeKind::InstanceExpr)
         {
-            summary.exported_instances = summary.exported_instances.saturating_add(1);
+            summary.exported_instances.push(ExportedInstanceSite {
+                source_id,
+                span: node.span(),
+            });
         }
     });
     summary

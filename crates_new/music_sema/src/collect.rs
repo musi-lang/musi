@@ -12,12 +12,13 @@ use crate::context::{CollectPass, EffectDef, EffectOpDef};
 use crate::decls::member_signature;
 use crate::normalize::lower_constraints;
 use crate::patterns::bound_name_from_pat;
+use crate::surface::surface_key;
 
-pub fn collect_module(ctx: &mut CollectPass<'_, '_>) {
+pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     visit_expr(ctx, ctx.root_expr_id());
 }
 
-fn visit_expr(ctx: &mut CollectPass<'_, '_>, id: HirExprId) {
+fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
     match ctx.expr(id).kind {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
             visit_expr_ids(ctx, exprs);
@@ -98,19 +99,19 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_>, id: HirExprId) {
     }
 }
 
-fn visit_expr_ids(ctx: &mut CollectPass<'_, '_>, exprs: SliceRange<HirExprId>) {
+fn visit_expr_ids(ctx: &mut CollectPass<'_, '_, '_>, exprs: SliceRange<HirExprId>) {
     for expr in ctx.expr_ids(exprs) {
         visit_expr(ctx, expr);
     }
 }
 
-fn visit_array_items(ctx: &mut CollectPass<'_, '_>, items: SliceRange<HirArrayItem>) {
+fn visit_array_items(ctx: &mut CollectPass<'_, '_, '_>, items: SliceRange<HirArrayItem>) {
     for item in ctx.array_items(items) {
         visit_expr(ctx, item.expr);
     }
 }
 
-fn visit_template_parts(ctx: &mut CollectPass<'_, '_>, parts: SliceRange<HirTemplatePart>) {
+fn visit_template_parts(ctx: &mut CollectPass<'_, '_, '_>, parts: SliceRange<HirTemplatePart>) {
     for part in ctx.template_parts(parts) {
         if let HirTemplatePart::Expr { expr } = part {
             visit_expr(ctx, expr);
@@ -118,14 +119,18 @@ fn visit_template_parts(ctx: &mut CollectPass<'_, '_>, parts: SliceRange<HirTemp
     }
 }
 
-fn visit_call(ctx: &mut CollectPass<'_, '_>, callee: HirExprId, args: SliceRange<HirArg>) {
+fn visit_call(ctx: &mut CollectPass<'_, '_, '_>, callee: HirExprId, args: SliceRange<HirArg>) {
     visit_expr(ctx, callee);
     for arg in ctx.args(args) {
         visit_expr(ctx, arg.expr);
     }
 }
 
-fn visit_case(ctx: &mut CollectPass<'_, '_>, scrutinee: HirExprId, arms: SliceRange<HirCaseArm>) {
+fn visit_case(
+    ctx: &mut CollectPass<'_, '_, '_>,
+    scrutinee: HirExprId,
+    arms: SliceRange<HirCaseArm>,
+) {
     visit_expr(ctx, scrutinee);
     for arm in ctx.case_arms(arms) {
         if let Some(guard) = arm.guard {
@@ -136,7 +141,7 @@ fn visit_case(ctx: &mut CollectPass<'_, '_>, scrutinee: HirExprId, arms: SliceRa
 }
 
 fn visit_data(
-    ctx: &mut CollectPass<'_, '_>,
+    ctx: &mut CollectPass<'_, '_, '_>,
     variants: SliceRange<HirVariantDef>,
     fields: SliceRange<HirFieldDef>,
 ) {
@@ -156,7 +161,7 @@ fn visit_data(
     }
 }
 
-fn visit_foreign(ctx: &mut CollectPass<'_, '_>, decls: SliceRange<HirForeignDecl>) {
+fn visit_foreign(ctx: &mut CollectPass<'_, '_, '_>, decls: SliceRange<HirForeignDecl>) {
     for decl in ctx.foreign_decls(decls) {
         for param in ctx.params(decl.params.clone()) {
             if let Some(ty) = param.ty {
@@ -172,7 +177,7 @@ fn visit_foreign(ctx: &mut CollectPass<'_, '_>, decls: SliceRange<HirForeignDecl
     }
 }
 
-fn collect_bound_decl(ctx: &mut CollectPass<'_, '_>, value: HirExprId, name: Ident) {
+fn collect_bound_decl(ctx: &mut CollectPass<'_, '_, '_>, value: HirExprId, name: Ident) {
     match ctx.expr(value).kind {
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
@@ -184,12 +189,20 @@ fn collect_bound_decl(ctx: &mut CollectPass<'_, '_>, value: HirExprId, name: Ide
 }
 
 fn collect_effect_decl(
-    ctx: &mut CollectPass<'_, '_>,
+    ctx: &mut CollectPass<'_, '_, '_>,
     name: Ident,
     members: SliceRange<HirMemberDef>,
 ) {
-    if ctx.effect_def(name.name).is_some() {
+    let effect_name: Box<str> = ctx.resolve_symbol(name.name).into();
+    if ctx.effect_def(&effect_name).is_some() {
         return;
+    }
+    let mut seen_ops = HashMap::new();
+    for member in ctx.members(members.clone()) {
+        let op_name: Box<str> = ctx.resolve_symbol(member.name.name).into();
+        if member.kind == HirMemberKind::Let && seen_ops.insert(op_name, member.origin).is_some() {
+            ctx.diag(member.origin.span, "duplicate effect op", "");
+        }
     }
     let ops = ctx
         .members(members)
@@ -198,7 +211,7 @@ fn collect_effect_decl(
         .map(|member| {
             let facts = member_signature(ctx, &member, false);
             (
-                member.name.name,
+                Box::<str>::from(ctx.resolve_symbol(member.name.name)),
                 EffectOpDef {
                     params: facts.params.clone(),
                     result: facts.result,
@@ -206,11 +219,12 @@ fn collect_effect_decl(
             )
         })
         .collect::<HashMap<_, _>>();
-    ctx.insert_effect_def(name.name, EffectDef { ops });
+    let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
+    ctx.insert_effect_def(effect_name, EffectDef { key, ops });
 }
 
 fn collect_class_decl(
-    ctx: &mut CollectPass<'_, '_>,
+    ctx: &mut CollectPass<'_, '_, '_>,
     value: HirExprId,
     name: Ident,
     constraints: SliceRange<HirConstraint>,
@@ -220,6 +234,23 @@ fn collect_class_decl(
         return;
     }
     let members_vec = ctx.members(members);
+    let mut seen_members = HashMap::new();
+    let mut seen_laws = HashMap::new();
+    for member in &members_vec {
+        match member.kind {
+            HirMemberKind::Let
+                if seen_members
+                    .insert(member.name.name, member.origin)
+                    .is_some() =>
+            {
+                ctx.diag(member.origin.span, "duplicate class member", "");
+            }
+            HirMemberKind::Law if seen_laws.insert(member.name.name, member.origin).is_some() => {
+                ctx.diag(member.origin.span, "duplicate class law", "");
+            }
+            _ => {}
+        }
+    }
     let class_members = members_vec
         .iter()
         .filter(|member| member.kind == HirMemberKind::Let)
@@ -234,18 +265,18 @@ fn collect_class_decl(
         .into_boxed_slice();
     ctx.insert_class_id(name.name, value);
     let constraints = lower_constraints(ctx, constraints);
-    ctx.insert_class_facts(
-        value,
-        ClassFacts {
-            name: name.name,
-            constraints,
-            members: class_members,
-            laws,
-        },
-    );
+    let facts = ClassFacts {
+        key: surface_key(ctx.module_key(), ctx.interner(), name.name),
+        name: name.name,
+        constraints,
+        members: class_members,
+        laws,
+    };
+    ctx.insert_class_facts(value, facts.clone());
+    ctx.insert_class_facts_by_name(name.name, facts);
 }
 
-fn visit_member(ctx: &mut CollectPass<'_, '_>, member: &HirMemberDef) {
+fn visit_member(ctx: &mut CollectPass<'_, '_, '_>, member: &HirMemberDef) {
     for param in ctx.params(member.params.clone()) {
         if let Some(ty) = param.ty {
             visit_expr(ctx, ty);

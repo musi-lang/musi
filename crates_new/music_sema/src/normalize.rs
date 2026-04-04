@@ -12,7 +12,7 @@ use crate::context::{CheckPass, PassBase};
 use crate::effects::{EffectKey, EffectRow};
 use crate::exprs::check_expr;
 
-pub fn render_ty(ctx: &PassBase<'_, '_>, ty: HirTyId) -> String {
+pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
     match ctx.ty(ty).kind {
         HirTyKind::Error => "<error>".into(),
         HirTyKind::Unknown => "Unknown".into(),
@@ -104,7 +104,7 @@ pub fn render_ty(ctx: &PassBase<'_, '_>, ty: HirTyId) -> String {
 }
 
 pub fn type_mismatch(
-    ctx: &mut PassBase<'_, '_>,
+    ctx: &mut PassBase<'_, '_, '_>,
     origin: HirOrigin,
     expected: HirTyId,
     found: HirTyId,
@@ -120,7 +120,7 @@ pub fn type_mismatch(
     ctx.diag(origin.span, "type mismatch", &label);
 }
 
-pub fn ty_matches(ctx: &PassBase<'_, '_>, expected: HirTyId, found: HirTyId) -> bool {
+pub fn ty_matches(ctx: &PassBase<'_, '_, '_>, expected: HirTyId, found: HirTyId) -> bool {
     if expected == found {
         return true;
     }
@@ -205,7 +205,7 @@ pub fn ty_matches(ctx: &PassBase<'_, '_>, expected: HirTyId, found: HirTyId) -> 
 }
 
 fn list_tys_match(
-    ctx: &PassBase<'_, '_>,
+    ctx: &PassBase<'_, '_, '_>,
     left: SliceRange<HirTyId>,
     right: SliceRange<HirTyId>,
 ) -> bool {
@@ -219,7 +219,7 @@ fn list_tys_match(
 }
 
 fn named_tys_match(
-    ctx: &PassBase<'_, '_>,
+    ctx: &PassBase<'_, '_, '_>,
     left_name: Symbol,
     left_args: SliceRange<HirTyId>,
     right_name: Symbol,
@@ -229,7 +229,7 @@ fn named_tys_match(
 }
 
 fn arrow_tys_match(
-    ctx: &PassBase<'_, '_>,
+    ctx: &PassBase<'_, '_, '_>,
     left_params: SliceRange<HirTyId>,
     left_ret: HirTyId,
     left_effectful: bool,
@@ -243,7 +243,7 @@ fn arrow_tys_match(
 }
 
 fn record_tys_match(
-    ctx: &PassBase<'_, '_>,
+    ctx: &PassBase<'_, '_, '_>,
     left: SliceRange<HirTyField>,
     right: SliceRange<HirTyField>,
 ) -> bool {
@@ -261,7 +261,7 @@ fn record_tys_match(
         })
 }
 
-pub fn named_type_for_symbol(ctx: &mut PassBase<'_, '_>, symbol: Symbol) -> HirTyId {
+pub fn named_type_for_symbol(ctx: &mut PassBase<'_, '_, '_>, symbol: Symbol) -> HirTyId {
     let known = ctx.known();
     let builtins = ctx.builtins();
     if symbol == known.type_ {
@@ -294,7 +294,7 @@ pub fn named_type_for_symbol(ctx: &mut PassBase<'_, '_>, symbol: Symbol) -> HirT
     }
 }
 
-pub fn symbol_value_type(ctx: &PassBase<'_, '_>, symbol: Symbol) -> HirTyId {
+pub fn symbol_value_type(ctx: &PassBase<'_, '_, '_>, symbol: Symbol) -> HirTyId {
     let known = ctx.known();
     let builtins = ctx.builtins();
     if [
@@ -319,7 +319,10 @@ pub fn symbol_value_type(ctx: &PassBase<'_, '_>, symbol: Symbol) -> HirTyId {
     }
 }
 
-pub fn lower_params(ctx: &mut CheckPass<'_, '_>, range: SliceRange<HirParam>) -> Box<[HirTyId]> {
+pub fn lower_params(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    range: SliceRange<HirParam>,
+) -> Box<[HirTyId]> {
     let builtins = ctx.builtins();
     ctx.params(range)
         .into_iter()
@@ -342,7 +345,11 @@ pub fn lower_params(ctx: &mut CheckPass<'_, '_>, range: SliceRange<HirParam>) ->
         .into_boxed_slice()
 }
 
-pub fn lower_type_expr(ctx: &mut PassBase<'_, '_>, expr: HirExprId, origin: HirOrigin) -> HirTyId {
+pub fn lower_type_expr(
+    ctx: &mut PassBase<'_, '_, '_>,
+    expr: HirExprId,
+    origin: HirOrigin,
+) -> HirTyId {
     let builtins = ctx.builtins();
     match ctx.expr(expr).kind {
         HirExprKind::Error => builtins.error,
@@ -391,7 +398,7 @@ pub fn lower_type_expr(ctx: &mut PassBase<'_, '_>, expr: HirExprId, origin: HirO
     }
 }
 
-fn lower_tuple_type_expr(ctx: &mut PassBase<'_, '_>, items: SliceRange<HirExprId>) -> HirTyId {
+fn lower_tuple_type_expr(ctx: &mut PassBase<'_, '_, '_>, items: SliceRange<HirExprId>) -> HirTyId {
     let items = ctx
         .expr_ids(items)
         .into_iter()
@@ -405,7 +412,7 @@ fn lower_tuple_type_expr(ctx: &mut PassBase<'_, '_>, items: SliceRange<HirExprId
 }
 
 fn lower_apply_type_expr(
-    ctx: &mut PassBase<'_, '_>,
+    ctx: &mut PassBase<'_, '_, '_>,
     origin: HirOrigin,
     callee: HirExprId,
     args: SliceRange<HirExprId>,
@@ -430,7 +437,7 @@ fn lower_apply_type_expr(
 }
 
 fn lower_binary_type_expr(
-    ctx: &mut PassBase<'_, '_>,
+    ctx: &mut PassBase<'_, '_, '_>,
     origin: HirOrigin,
     op: &HirBinaryOp,
     left: HirExprId,
@@ -463,7 +470,10 @@ fn lower_binary_type_expr(
     }
 }
 
-fn lower_record_type_expr(ctx: &mut PassBase<'_, '_>, items: SliceRange<HirRecordItem>) -> HirTyId {
+fn lower_record_type_expr(
+    ctx: &mut PassBase<'_, '_, '_>,
+    items: SliceRange<HirRecordItem>,
+) -> HirTyId {
     let fields = ctx
         .record_items(items)
         .into_iter()
@@ -481,7 +491,7 @@ fn lower_record_type_expr(ctx: &mut PassBase<'_, '_>, items: SliceRange<HirRecor
     ctx.alloc_ty(HirTyKind::Record { fields })
 }
 
-pub fn lower_effect_row(ctx: &mut PassBase<'_, '_>, row: &HirEffectSet) -> EffectRow {
+pub fn lower_effect_row(ctx: &mut PassBase<'_, '_, '_>, row: &HirEffectSet) -> EffectRow {
     let mut out = EffectRow::empty();
     for item in ctx.effect_items(row) {
         let arg = item.arg.map(|expr| {
@@ -489,16 +499,18 @@ pub fn lower_effect_row(ctx: &mut PassBase<'_, '_>, row: &HirEffectSet) -> Effec
             lower_type_expr(ctx, expr, origin)
         });
         out.add(EffectKey {
-            name: item.name.name,
+            name: ctx.resolve_symbol(item.name.name).into(),
             arg,
         });
     }
-    out.open = row.open.map(|ident| ident.name);
+    out.open = row
+        .open
+        .map(|ident| Box::<str>::from(ctx.resolve_symbol(ident.name)));
     out
 }
 
 pub fn lower_constraints(
-    ctx: &mut PassBase<'_, '_>,
+    ctx: &mut PassBase<'_, '_, '_>,
     constraints: SliceRange<HirConstraint>,
 ) -> Box<[ConstraintFacts]> {
     ctx.constraints(constraints)

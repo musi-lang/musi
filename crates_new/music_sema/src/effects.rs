@@ -1,18 +1,17 @@
 use std::collections::BTreeSet;
 
 use music_hir::HirTyId;
-use music_names::Symbol;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EffectKey {
-    pub name: Symbol,
+    pub name: Box<str>,
     pub arg: Option<HirTyId>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EffectRow {
     pub items: BTreeSet<EffectKey>,
-    pub open: Option<Symbol>,
+    pub open: Option<Box<str>>,
 }
 
 impl EffectRow {
@@ -34,13 +33,13 @@ impl EffectRow {
     }
 
     pub fn union_with(&mut self, other: &Self) {
-        self.items.extend(other.items.iter().copied());
+        self.items.extend(other.items.iter().cloned());
         if self.open.is_none() {
-            self.open = other.open;
+            self.open = other.open.clone();
         }
     }
 
-    pub fn remove_by_name(&mut self, name: Symbol) {
-        self.items.retain(|key| key.name != name);
+    pub fn remove_by_name(&mut self, name: &str) {
+        self.items.retain(|key| key.name.as_ref() != name);
     }
 }

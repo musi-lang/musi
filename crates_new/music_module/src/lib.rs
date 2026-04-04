@@ -8,5 +8,6 @@ pub use env::{ImportEnv, ImportError, ImportErrorKind, ImportResolveResult};
 pub use import_map::ImportMap;
 pub use specifier::{ModuleKey, ModuleSpecifier};
 pub use syntax::{
-    ImportSite, ImportSiteKind, ModuleExportSummary, collect_export_summary, collect_import_sites,
+    ExportedInstanceSite, ImportSite, ImportSiteKind, ModuleExportSummary, collect_export_summary,
+    collect_import_sites,
 };

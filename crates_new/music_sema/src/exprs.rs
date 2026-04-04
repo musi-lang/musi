@@ -14,12 +14,14 @@ use crate::decls::{
     LetExprInput, call_effects_for_expr, check_attributed_expr, check_class_expr, check_data_expr,
     check_effect_expr, check_foreign_expr, check_handle_expr, check_import_expr,
     check_instance_expr, check_let_expr, check_perform_expr, check_resume_expr,
+    module_export_for_expr, module_target_for_expr,
 };
 use crate::effects::EffectRow;
 use crate::normalize::{lower_params, lower_type_expr, symbol_value_type, type_mismatch};
 use crate::patterns::bind_pat;
+use crate::surface::import_surface_ty;
 
-pub fn check_expr(ctx: &mut CheckPass<'_, '_>, id: HirExprId) -> ExprFacts {
+pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
     let builtins = ctx.builtins();
     let expr = ctx.expr(id);
     let facts = match expr.kind.clone() {
@@ -27,7 +29,7 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_>, id: HirExprId) -> ExprFacts {
             ty: builtins.error,
             effects: EffectRow::empty(),
         },
-        HirExprKind::Name { name } => check_name_expr(ctx, name),
+        HirExprKind::Name { name } => check_name_expr(ctx, id, name),
         HirExprKind::Lit { lit } => check_lit_expr(ctx, lit),
         HirExprKind::Template { parts } => check_template_expr(ctx, parts),
         HirExprKind::Sequence { exprs } => check_sequence_expr(ctx, exprs),
@@ -51,7 +53,7 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_>, id: HirExprId) -> ExprFacts {
         HirExprKind::Apply { callee, args } => check_apply_expr(ctx, callee, args),
         HirExprKind::Index { base, args } => check_index_expr(ctx, expr.origin, base, args),
         HirExprKind::Field { base, access, name } => {
-            check_field_expr(ctx, expr.origin, base, access, name)
+            check_field_expr(ctx, id, expr.origin, base, access, name)
         }
         HirExprKind::RecordUpdate { base, items } => {
             check_record_update_expr(ctx, expr.origin, base, items)
@@ -84,8 +86,8 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_>, id: HirExprId) -> ExprFacts {
                 value,
             },
         ),
-        HirExprKind::Import { arg } => check_import_expr(ctx, arg),
-        HirExprKind::Export { expr: inner, .. } => check_expr(ctx, inner),
+        HirExprKind::Import { arg } => check_import_expr(ctx, id, arg),
+        HirExprKind::Export { expr: inner, .. } => check_export_expr(ctx, id, inner),
         HirExprKind::Case { scrutinee, arms } => check_case_expr(ctx, scrutinee, arms),
         HirExprKind::Data { variants, fields } => check_data_expr(ctx, variants, fields),
         HirExprKind::Effect { members } => check_effect_expr(ctx, members),
@@ -117,7 +119,12 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_>, id: HirExprId) -> ExprFacts {
     facts
 }
 
-fn check_name_expr(ctx: &CheckPass<'_, '_>, name: Ident) -> ExprFacts {
+fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Ident) -> ExprFacts {
+    if let Some(binding) = ctx.binding_id_for_use(name)
+        && let Some(target) = ctx.binding_module_target(binding).cloned()
+    {
+        ctx.set_expr_module_target(expr_id, target);
+    }
     let ty = ctx
         .binding_id_for_use(name)
         .and_then(|binding| ctx.binding_type(binding))
@@ -128,7 +135,19 @@ fn check_name_expr(ctx: &CheckPass<'_, '_>, name: Ident) -> ExprFacts {
     }
 }
 
-fn check_lit_expr(ctx: &CheckPass<'_, '_>, lit: HirLitId) -> ExprFacts {
+fn check_export_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    expr_id: HirExprId,
+    inner: HirExprId,
+) -> ExprFacts {
+    let facts = check_expr(ctx, inner);
+    if let Some(target) = module_target_for_expr(ctx, inner) {
+        ctx.set_expr_module_target(expr_id, target);
+    }
+    facts
+}
+
+fn check_lit_expr(ctx: &CheckPass<'_, '_, '_>, lit: HirLitId) -> ExprFacts {
     let builtins = ctx.builtins();
     let ty = match ctx.lit_kind(lit) {
         HirLitKind::Int { .. } | HirLitKind::Rune { .. } => builtins.int_,
@@ -142,7 +161,7 @@ fn check_lit_expr(ctx: &CheckPass<'_, '_>, lit: HirLitId) -> ExprFacts {
 }
 
 fn check_template_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     parts: SliceRange<HirTemplatePart>,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
@@ -161,7 +180,7 @@ fn check_template_expr(
     }
 }
 
-fn check_sequence_expr(ctx: &mut CheckPass<'_, '_>, exprs: SliceRange<HirExprId>) -> ExprFacts {
+fn check_sequence_expr(ctx: &mut CheckPass<'_, '_, '_>, exprs: SliceRange<HirExprId>) -> ExprFacts {
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
     let mut ty = builtins.unit;
@@ -173,7 +192,7 @@ fn check_sequence_expr(ctx: &mut CheckPass<'_, '_>, exprs: SliceRange<HirExprId>
     ExprFacts { ty, effects }
 }
 
-fn check_tuple_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirExprId>) -> ExprFacts {
+fn check_tuple_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirExprId>) -> ExprFacts {
     let mut effects = EffectRow::empty();
     let item_types = ctx
         .expr_ids(items)
@@ -189,7 +208,7 @@ fn check_tuple_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirExprId>) -
     ExprFacts { ty, effects }
 }
 
-fn check_array_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirArrayItem>) -> ExprFacts {
+fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayItem>) -> ExprFacts {
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
     let mut item_ty = builtins.unknown;
@@ -212,7 +231,7 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirArrayItem>
 }
 
 fn check_array_ty_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     dims: SliceRange<HirDim>,
     item: HirExprId,
 ) -> ExprFacts {
@@ -228,7 +247,10 @@ fn check_array_ty_expr(
     }
 }
 
-fn check_record_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirRecordItem>) -> ExprFacts {
+fn check_record_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    items: SliceRange<HirRecordItem>,
+) -> ExprFacts {
     let mut effects = EffectRow::empty();
     let fields = ctx
         .record_items(items)
@@ -248,7 +270,7 @@ fn check_record_expr(ctx: &mut CheckPass<'_, '_>, items: SliceRange<HirRecordIte
 }
 
 fn check_variant_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     _tag: Ident,
     args: SliceRange<HirExprId>,
 ) -> ExprFacts {
@@ -265,7 +287,7 @@ fn check_variant_expr(
 }
 
 fn check_pi_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     binder: Ident,
     binder_ty: HirExprId,
     ret: HirExprId,
@@ -291,7 +313,7 @@ fn check_pi_expr(
 }
 
 fn check_lambda_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     params: SliceRange<HirParam>,
     ret_ty: Option<HirExprId>,
     body: HirExprId,
@@ -319,7 +341,7 @@ fn check_lambda_expr(
 }
 
 fn check_call_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     callee: HirExprId,
     args: SliceRange<HirArg>,
@@ -359,7 +381,7 @@ fn check_call_expr(
 }
 
 fn check_apply_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     callee: HirExprId,
     args: SliceRange<HirExprId>,
 ) -> ExprFacts {
@@ -377,7 +399,7 @@ fn check_apply_expr(
 }
 
 fn check_index_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     base: HirExprId,
     args: SliceRange<HirExprId>,
@@ -399,7 +421,8 @@ fn check_index_expr(
 }
 
 fn check_field_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
+    expr_id: HirExprId,
     origin: HirOrigin,
     base: HirExprId,
     access: HirAccessKind,
@@ -410,8 +433,10 @@ fn check_field_expr(
     let effects = base_facts.effects.clone();
 
     if let HirExprKind::Name { name: effect_name } = ctx.expr(base).kind {
-        if let Some(effect) = ctx.effect_def(effect_name.name) {
-            if let Some(op) = effect.ops.get(&name.name).cloned() {
+        let effect_name = ctx.resolve_symbol(effect_name.name);
+        let op_name = ctx.resolve_symbol(name.name);
+        if let Some(effect) = ctx.effect_def(effect_name) {
+            if let Some(op) = effect.ops.get(op_name).cloned() {
                 let params = ctx.alloc_ty_list(op.params.iter().copied());
                 let ty = ctx.alloc_ty(HirTyKind::Arrow {
                     params,
@@ -435,7 +460,17 @@ fn check_field_expr(
                 },
                 |field| field.ty,
             ),
-        HirTyKind::Module => builtins.unknown,
+        HirTyKind::Module => {
+            if let Some((surface, export)) = module_export_for_expr(ctx, base, name) {
+                if let Some(target) = export.module_target.clone() {
+                    ctx.set_expr_module_target(expr_id, target);
+                }
+                import_surface_ty(ctx, &surface, export.ty)
+            } else {
+                ctx.diag(origin.span, "unknown export", "");
+                builtins.unknown
+            }
+        }
         _ => {
             if !matches!(access, HirAccessKind::Direct) {
                 ctx.diag(origin.span, "invalid optional field access", "");
@@ -447,7 +482,7 @@ fn check_field_expr(
 }
 
 fn check_record_update_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     base: HirExprId,
     items: SliceRange<HirRecordItem>,
@@ -476,7 +511,7 @@ fn check_record_update_expr(
 }
 
 fn check_type_test_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     base: HirExprId,
     ty_expr: HirExprId,
     as_name: Option<Ident>,
@@ -495,7 +530,7 @@ fn check_type_test_expr(
 }
 
 fn check_type_cast_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     base: HirExprId,
     ty_expr: HirExprId,
 ) -> ExprFacts {
@@ -509,7 +544,7 @@ fn check_type_cast_expr(
 }
 
 fn check_prefix_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     op: &HirPrefixOp,
     inner: HirExprId,
@@ -533,7 +568,7 @@ fn check_prefix_expr(
 }
 
 fn check_binary_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     op: &HirBinaryOp,
     left: HirExprId,
@@ -599,7 +634,7 @@ fn check_binary_expr(
 }
 
 fn check_case_expr(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     scrutinee: HirExprId,
     arms: SliceRange<HirCaseArm>,
 ) -> ExprFacts {
@@ -630,21 +665,21 @@ fn check_case_expr(
     }
 }
 
-fn check_quote_expr(ctx: &CheckPass<'_, '_>, _kind: HirQuoteKind) -> ExprFacts {
+fn check_quote_expr(ctx: &CheckPass<'_, '_, '_>, _kind: HirQuoteKind) -> ExprFacts {
     ExprFacts {
         ty: ctx.builtins().syntax,
         effects: EffectRow::empty(),
     }
 }
 
-fn check_splice_expr(ctx: &CheckPass<'_, '_>, _kind: HirSpliceKind) -> ExprFacts {
+fn check_splice_expr(ctx: &CheckPass<'_, '_, '_>, _kind: HirSpliceKind) -> ExprFacts {
     ExprFacts {
         ty: ctx.builtins().syntax,
         effects: EffectRow::empty(),
     }
 }
 
-fn numeric_unary_type(ctx: &mut CheckPass<'_, '_>, origin: HirOrigin, ty: HirTyId) -> HirTyId {
+fn numeric_unary_type(ctx: &mut CheckPass<'_, '_, '_>, origin: HirOrigin, ty: HirTyId) -> HirTyId {
     let builtins = ctx.builtins();
     if ty == builtins.int_ || ty == builtins.float_ {
         ty
@@ -655,7 +690,7 @@ fn numeric_unary_type(ctx: &mut CheckPass<'_, '_>, origin: HirOrigin, ty: HirTyI
 }
 
 fn numeric_binary_type(
-    ctx: &mut CheckPass<'_, '_>,
+    ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
     left: HirTyId,
     right: HirTyId,

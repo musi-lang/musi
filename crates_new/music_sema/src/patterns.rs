@@ -8,14 +8,14 @@ use crate::context::{CheckPass, PassBase};
 use crate::exprs::check_expr;
 use crate::normalize::type_mismatch;
 
-pub fn bound_name_from_pat(ctx: &PassBase<'_, '_>, pat: HirPatId) -> Option<Ident> {
+pub fn bound_name_from_pat(ctx: &PassBase<'_, '_, '_>, pat: HirPatId) -> Option<Ident> {
     match ctx.pat(pat).kind {
         HirPatKind::Bind { name } => Some(name),
         _ => None,
     }
 }
 
-pub fn bind_pat(ctx: &mut CheckPass<'_, '_>, pat: HirPatId, ty: HirTyId) {
+pub fn bind_pat(ctx: &mut CheckPass<'_, '_, '_>, pat: HirPatId, ty: HirTyId) {
     let builtins = ctx.builtins();
     let pat_node = ctx.pat(pat);
     ctx.set_pat_facts(pat, PatFacts { ty });

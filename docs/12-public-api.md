@@ -17,7 +17,7 @@ Policy:
 - `music_module`: module/specifier + import environment (`ModuleSpecifier`, `ModuleKey`, `ImportMap`, `ImportEnv`, `ImportError*`, `collect_import_sites`, `collect_export_summary`, `ImportSite*`, `ModuleExportSummary` (incl. exported instance tracking))
 - `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
-- `music_sema`: semantic queries over resolved HIR (`SemaOptions`, `TargetInfo`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
+- `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
 
 Notes:
 
@@ -25,7 +25,10 @@ Notes:
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
 - `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
 - `music_module::ImportEnv` is resolve-only in `crates_new`: it maps import specifiers to module keys and does not expose opened-export visibility.
+- `music_resolve::ResolvedModule` carries both the current `ModuleKey` and syntax-level export summary so sema can build semantic module surfaces without reopening syntax.
 - `music_sema` is query-oriented: semantic facts are accessed through `SemaModule` methods rather than public storage fields.
+- `music_sema::SemaEnv` exchanges owned `ModuleSurface` snapshots rather than live foreign module references.
+- `music_sema::EffectKey` / `EffectRow` and sema-owned effect definitions are string-backed rather than `Symbol`-backed, so they are safe across interner boundaries.
 - `music_hir::HirTy*` is the authoritative typed boundary produced by sema. `music_sema` no longer exposes a parallel semantic type arena.
 
 ## Planned phase crates

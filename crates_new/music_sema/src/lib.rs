@@ -8,8 +8,14 @@ mod engine;
 mod exprs;
 mod normalize;
 mod patterns;
+mod surface;
 
-pub use api::{SemaDiagList, SemaModule, SemaOptions, TargetInfo};
+pub use api::{
+    ClassMemberSurface, ClassSurface, ConstraintSurface, DefinitionKey, EffectOpSurface,
+    EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SemaDiagList, SemaEnv,
+    SemaModule, SemaOptions, SurfaceDim, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
+    TargetInfo,
+};
 pub use effects::{EffectKey, EffectRow};
 pub use engine::check_module;
 

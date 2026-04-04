@@ -461,3 +461,28 @@ fn handle_clause_params_resolve_in_body() {
         NameBindingKind::HandleClauseParam
     );
 }
+
+#[test]
+fn resolved_module_keeps_module_key_and_export_summary() {
+    let src = r"
+        export let x := 1;
+        export instance Eq[Int] { };
+    ";
+    let source_id = SourceId::from_raw(14);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions::default(),
+    );
+
+    assert_eq!(resolved.module_key.as_str(), "main");
+    assert!(resolved.export_summary.exports().any(|name| name == "x"));
+    assert_eq!(resolved.export_summary.exported_instance_count(), 1);
+}

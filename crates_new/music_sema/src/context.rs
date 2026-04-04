@@ -10,13 +10,16 @@ use music_hir::{
     HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
     HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
+use music_module::ModuleKey;
 use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
 use music_resolve::ResolvedModule;
 
 use crate::api::{
-    ClassFacts, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaModule, SemaOptions,
+    ClassFacts, DefinitionKey, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv,
+    SemaModule, SemaModuleParts, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
+use crate::surface::build_module_surface;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
@@ -44,7 +47,8 @@ pub struct EffectOpDef {
 
 #[derive(Debug, Clone)]
 pub struct EffectDef {
-    pub ops: HashMap<Symbol, EffectOpDef>,
+    pub key: DefinitionKey,
+    pub ops: HashMap<Box<str>, EffectOpDef>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,27 +58,31 @@ pub struct ResumeCtx {
 }
 
 pub struct ModuleState {
-    resolved: ResolvedModule,
+    pub(crate) resolved: ResolvedModule,
     binding_ids: HashMap<NameSite, NameBindingId>,
+    import_targets: HashMap<Span, ModuleKey>,
 }
 
-pub struct RuntimeEnv<'a> {
-    interner: &'a mut Interner,
+pub struct RuntimeEnv<'interner, 'env> {
+    interner: &'interner mut Interner,
     known: KnownSymbols,
     builtins: Builtins,
-    options: SemaOptions,
+    target: Option<TargetInfo>,
+    env: Option<&'env dyn SemaEnv>,
 }
 
 #[derive(Default)]
 pub struct TypingState {
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_effects: HashMap<NameBindingId, EffectRow>,
+    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
 }
 
 #[derive(Default)]
 pub struct DeclState {
-    effect_defs: HashMap<Symbol, EffectDef>,
+    effect_defs: HashMap<Box<str>, EffectDef>,
     class_index: HashMap<Symbol, HirExprId>,
+    class_facts_by_name: HashMap<Symbol, ClassFacts>,
     class_facts: HashMap<HirExprId, ClassFacts>,
     instance_facts: HashMap<HirExprId, InstanceFacts>,
 }
@@ -83,6 +91,7 @@ pub struct FactState {
     diags: SemaDiagList,
     expr_facts: Vec<ExprFacts>,
     pat_facts: Vec<PatFacts>,
+    expr_module_targets: HashMap<HirExprId, ModuleKey>,
 }
 
 #[derive(Default)]
@@ -90,30 +99,30 @@ pub struct ResumeState {
     stack: Vec<ResumeCtx>,
 }
 
-pub struct PassBase<'a, 'env> {
-    module: &'a mut ModuleState,
-    runtime: &'a mut RuntimeEnv<'env>,
-    typing: &'a mut TypingState,
-    decls: &'a mut DeclState,
-    facts: &'a mut FactState,
+pub struct PassBase<'ctx, 'interner, 'env> {
+    module: &'ctx mut ModuleState,
+    runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+    typing: &'ctx mut TypingState,
+    decls: &'ctx mut DeclState,
+    facts: &'ctx mut FactState,
 }
 
-pub struct CollectPass<'a, 'env> {
-    base: PassBase<'a, 'env>,
+pub struct CollectPass<'ctx, 'interner, 'env> {
+    base: PassBase<'ctx, 'interner, 'env>,
 }
 
-pub struct CheckPass<'a, 'env> {
-    base: PassBase<'a, 'env>,
-    resume: &'a mut ResumeState,
+pub struct CheckPass<'ctx, 'interner, 'env> {
+    base: PassBase<'ctx, 'interner, 'env>,
+    resume: &'ctx mut ResumeState,
 }
 
-pub fn prepare_module(
+pub fn prepare_module<'interner, 'env>(
     mut resolved: ResolvedModule,
-    interner: &mut Interner,
-    options: SemaOptions,
+    interner: &'interner mut Interner,
+    options: SemaOptions<'env>,
 ) -> (
     ModuleState,
-    RuntimeEnv<'_>,
+    RuntimeEnv<'interner, 'env>,
     TypingState,
     DeclState,
     FactState,
@@ -142,6 +151,11 @@ pub fn prepare_module(
         .iter()
         .map(|(id, binding)| (binding.site, id))
         .collect::<HashMap<_, _>>();
+    let import_targets = resolved
+        .imports
+        .iter()
+        .map(|import| (import.span, import.to.clone()))
+        .collect::<HashMap<_, _>>();
     let expr_facts = vec![
         ExprFacts {
             ty: builtins.unknown,
@@ -160,12 +174,14 @@ pub fn prepare_module(
         ModuleState {
             resolved,
             binding_ids,
+            import_targets,
         },
         RuntimeEnv {
             interner,
             known,
             builtins,
-            options,
+            target: options.target,
+            env: options.env,
         },
         TypingState::default(),
         DeclState::default(),
@@ -173,29 +189,39 @@ pub fn prepare_module(
             diags: Vec::new(),
             expr_facts,
             pat_facts,
+            expr_module_targets: HashMap::new(),
         },
         ResumeState::default(),
     )
 }
 
-pub fn finish_module(module: ModuleState, decls: DeclState, facts: FactState) -> SemaModule {
-    SemaModule::from_parts(
-        module.resolved,
-        facts.expr_facts,
-        facts.pat_facts,
-        decls.class_facts,
-        decls.instance_facts,
-        facts.diags,
-    )
+pub fn finish_module(
+    module: ModuleState,
+    runtime: &RuntimeEnv<'_, '_>,
+    typing: &TypingState,
+    decls: DeclState,
+    facts: FactState,
+) -> SemaModule {
+    let surface = build_module_surface(&module, runtime, typing, &decls);
+    SemaModule::from_parts(SemaModuleParts {
+        resolved: module.resolved,
+        expr_facts: facts.expr_facts,
+        pat_facts: facts.pat_facts,
+        expr_module_targets: facts.expr_module_targets,
+        class_facts: decls.class_facts,
+        instance_facts: decls.instance_facts,
+        surface,
+        diags: facts.diags,
+    })
 }
 
-impl<'a, 'env> PassBase<'a, 'env> {
+impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     const fn new(
-        module: &'a mut ModuleState,
-        runtime: &'a mut RuntimeEnv<'env>,
-        typing: &'a mut TypingState,
-        decls: &'a mut DeclState,
-        facts: &'a mut FactState,
+        module: &'ctx mut ModuleState,
+        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+        typing: &'ctx mut TypingState,
+        decls: &'ctx mut DeclState,
+        facts: &'ctx mut FactState,
     ) -> Self {
         Self {
             module,
@@ -212,6 +238,23 @@ impl<'a, 'env> PassBase<'a, 'env> {
 
     pub const fn source_id(&self) -> SourceId {
         self.module.resolved.module.source_id
+    }
+
+    pub const fn module_key(&self) -> &ModuleKey {
+        &self.module.resolved.module_key
+    }
+
+    pub fn static_import_target(&self, span: Span) -> Option<ModuleKey> {
+        self.module.import_targets.get(&span).cloned()
+    }
+
+    pub fn static_imports(&self) -> Vec<ModuleKey> {
+        self.module
+            .resolved
+            .imports
+            .iter()
+            .map(|import| import.to.clone())
+            .collect()
     }
 
     pub fn expr(&self, id: HirExprId) -> HirExpr {
@@ -238,8 +281,16 @@ impl<'a, 'env> PassBase<'a, 'env> {
         self.runtime.known
     }
 
-    pub const fn options(&self) -> &SemaOptions {
-        &self.runtime.options
+    pub const fn target(&self) -> Option<&TargetInfo> {
+        self.runtime.target.as_ref()
+    }
+
+    pub const fn sema_env(&self) -> Option<&'env dyn SemaEnv> {
+        self.runtime.env
+    }
+
+    pub const fn interner(&self) -> &Interner {
+        self.runtime.interner
     }
 
     pub fn intern(&mut self, text: &str) -> Symbol {
@@ -444,6 +495,14 @@ impl<'a, 'env> PassBase<'a, 'env> {
         *slot = facts;
     }
 
+    pub fn expr_module_target(&self, id: HirExprId) -> Option<&ModuleKey> {
+        self.facts.expr_module_targets.get(&id)
+    }
+
+    pub fn set_expr_module_target(&mut self, id: HirExprId, target: ModuleKey) {
+        let _prev = self.facts.expr_module_targets.insert(id, target);
+    }
+
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {
         let slot = self
             .facts
@@ -517,12 +576,20 @@ impl<'a, 'env> PassBase<'a, 'env> {
         let _prev = self.typing.binding_effects.insert(id, effects);
     }
 
-    pub fn effect_def(&self, symbol: Symbol) -> Option<&EffectDef> {
-        self.decls.effect_defs.get(&symbol)
+    pub fn binding_module_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
+        self.typing.binding_module_targets.get(&id)
     }
 
-    pub fn insert_effect_def(&mut self, symbol: Symbol, def: EffectDef) {
-        let _prev = self.decls.effect_defs.insert(symbol, def);
+    pub fn insert_binding_module_target(&mut self, id: NameBindingId, target: ModuleKey) {
+        let _prev = self.typing.binding_module_targets.insert(id, target);
+    }
+
+    pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
+        self.decls.effect_defs.get(name)
+    }
+
+    pub fn insert_effect_def(&mut self, name: impl Into<Box<str>>, def: EffectDef) {
+        let _prev = self.decls.effect_defs.insert(name.into(), def);
     }
 
     pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {
@@ -537,12 +604,24 @@ impl<'a, 'env> PassBase<'a, 'env> {
         let _prev = self.decls.class_facts.insert(id, facts);
     }
 
+    pub fn insert_class_facts_by_name(&mut self, name: Symbol, facts: ClassFacts) {
+        let _prev = self.decls.class_facts_by_name.insert(name, facts);
+    }
+
     pub fn class_facts(&self, id: HirExprId) -> Option<&ClassFacts> {
         self.decls.class_facts.get(&id)
     }
 
+    pub fn class_facts_by_name(&self, name: Symbol) -> Option<&ClassFacts> {
+        self.decls.class_facts_by_name.get(&name)
+    }
+
     pub fn insert_instance_facts(&mut self, id: HirExprId, facts: InstanceFacts) {
         let _prev = self.decls.instance_facts.insert(id, facts);
+    }
+
+    pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
+        &self.decls.instance_facts
     }
 
     pub fn lit_kind(&self, lit: HirLitId) -> HirLitKind {
@@ -560,13 +639,43 @@ impl<'a, 'env> PassBase<'a, 'env> {
     }
 }
 
-impl<'a, 'env> CollectPass<'a, 'env> {
+impl RuntimeEnv<'_, '_> {
+    pub const fn interner(&self) -> &Interner {
+        self.interner
+    }
+}
+
+impl TypingState {
+    pub const fn binding_types(&self) -> &HashMap<NameBindingId, HirTyId> {
+        &self.binding_types
+    }
+
+    pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
+        &self.binding_module_targets
+    }
+}
+
+impl DeclState {
+    pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
+        self.effect_defs.get(name)
+    }
+
+    pub const fn class_facts_by_name(&self) -> &HashMap<Symbol, ClassFacts> {
+        &self.class_facts_by_name
+    }
+
+    pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
+        &self.instance_facts
+    }
+}
+
+impl<'ctx, 'interner, 'env> CollectPass<'ctx, 'interner, 'env> {
     pub const fn new(
-        module: &'a mut ModuleState,
-        runtime: &'a mut RuntimeEnv<'env>,
-        typing: &'a mut TypingState,
-        decls: &'a mut DeclState,
-        facts: &'a mut FactState,
+        module: &'ctx mut ModuleState,
+        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+        typing: &'ctx mut TypingState,
+        decls: &'ctx mut DeclState,
+        facts: &'ctx mut FactState,
     ) -> Self {
         Self {
             base: PassBase::new(module, runtime, typing, decls, facts),
@@ -574,28 +683,28 @@ impl<'a, 'env> CollectPass<'a, 'env> {
     }
 }
 
-impl<'a, 'env> Deref for CollectPass<'a, 'env> {
-    type Target = PassBase<'a, 'env>;
+impl<'ctx, 'interner, 'env> Deref for CollectPass<'ctx, 'interner, 'env> {
+    type Target = PassBase<'ctx, 'interner, 'env>;
 
     fn deref(&self) -> &Self::Target {
         &self.base
     }
 }
 
-impl DerefMut for CollectPass<'_, '_> {
+impl DerefMut for CollectPass<'_, '_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
     }
 }
 
-impl<'a, 'env> CheckPass<'a, 'env> {
+impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
     pub const fn new(
-        module: &'a mut ModuleState,
-        runtime: &'a mut RuntimeEnv<'env>,
-        typing: &'a mut TypingState,
-        decls: &'a mut DeclState,
-        facts: &'a mut FactState,
-        resume: &'a mut ResumeState,
+        module: &'ctx mut ModuleState,
+        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+        typing: &'ctx mut TypingState,
+        decls: &'ctx mut DeclState,
+        facts: &'ctx mut FactState,
+        resume: &'ctx mut ResumeState,
     ) -> Self {
         Self {
             base: PassBase::new(module, runtime, typing, decls, facts),
@@ -616,15 +725,15 @@ impl<'a, 'env> CheckPass<'a, 'env> {
     }
 }
 
-impl<'a, 'env> Deref for CheckPass<'a, 'env> {
-    type Target = PassBase<'a, 'env>;
+impl<'ctx, 'interner, 'env> Deref for CheckPass<'ctx, 'interner, 'env> {
+    type Target = PassBase<'ctx, 'interner, 'env>;
 
     fn deref(&self) -> &Self::Target {
         &self.base
     }
 }
 
-impl DerefMut for CheckPass<'_, '_> {
+impl DerefMut for CheckPass<'_, '_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
     }

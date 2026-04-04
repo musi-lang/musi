@@ -11,6 +11,7 @@ publish.workspace = true
 music_arena = { path = "../music_arena" }
 music_base = { path = "../music_base" }
 music_hir = { path = "../music_hir" }
+music_module = { path = "../music_module" }
 music_names = { path = "../music_names" }
 music_resolve = { path = "../music_resolve" }
 

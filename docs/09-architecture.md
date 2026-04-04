@@ -119,6 +119,7 @@ The resolution layer owns:
 
 - import graph discovery
 - resolved module targets for import expressions
+- module identity and export-policy summaries for downstream phases
 - explicit local visibility introduced by user bindings and patterns
 - binding and reference resolution
 - compiler-owned surface seeding
@@ -132,6 +133,8 @@ The semantic layer owns:
 - type checking
 - effect checking
 - class and instance resolution
+- imported-module member typing and explicit module destructuring through semantic module surfaces
+- whole-program instance coherence across the reachable static-import graph
 - law and attr validation where they affect language meaning
 - FFI surface validation at the language boundary
 
