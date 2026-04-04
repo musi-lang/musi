@@ -17,7 +17,7 @@ Policy:
 - `music_module`: module/specifier + import environment (`ModuleSpecifier`, `ModuleKey`, `ImportMap`, `ImportEnv`, `ImportError*`, `collect_import_sites`, `collect_export_summary`, `ImportSite*`, `ModuleExportSummary` (incl. exported instance tracking))
 - `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
-- `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
+- `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
 
 Notes:
 

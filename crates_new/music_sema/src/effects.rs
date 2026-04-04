@@ -35,7 +35,7 @@ impl EffectRow {
     pub fn union_with(&mut self, other: &Self) {
         self.items.extend(other.items.iter().cloned());
         if self.open.is_none() {
-            self.open = other.open.clone();
+            self.open.clone_from(&other.open);
         }
     }
 

@@ -219,12 +219,12 @@ fn imported_effect_alias_handles_perform_and_handle() {
 #[test]
 fn perform_effects_expose_textual_names() {
     let sema = check(
-        r#"
+        r"
         let Console := effect {
           let readln () : String;
         };
         perform Console.readln();
-    "#,
+    ",
     );
     let root = sema.module().root;
     let effects = sema.expr_effects(root);
@@ -233,10 +233,9 @@ fn perform_effects_expose_textual_names() {
             .items
             .iter()
             .any(|item| item.name.as_ref() == "Console"),
-        "{:?}",
-        effects
+        "{effects:?}"
     );
-    assert!(effects.open.is_none(), "{:?}", effects);
+    assert!(effects.open.is_none(), "{effects:?}");
 }
 
 #[test]
@@ -688,6 +687,7 @@ fn explicit_type_apply_instantiates_local_generic_lets() {
         );
     };
     let items = sema.module().store.ty_ids.get(items);
+    assert!(items.len() > 1);
     assert!(matches!(sema.ty(items[0]).kind, HirTyKind::Int));
     assert!(matches!(sema.ty(items[1]).kind, HirTyKind::String));
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
@@ -699,9 +699,9 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
     let base = check_module_src(
         34,
         "std/base",
-        r#"
+        r"
         export let id[T] (x : T) : T := x;
-    "#,
+    ",
         Some(&import_env),
         None,
     );
@@ -724,6 +724,7 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
         );
     };
     let items = sema.module().store.ty_ids.get(items);
+    assert!(items.len() > 1);
     assert!(matches!(sema.ty(items[0]).kind, HirTyKind::Int));
     assert!(matches!(sema.ty(items[1]).kind, HirTyKind::String));
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
@@ -732,7 +733,7 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
 #[test]
 fn generic_constraints_succeed_when_matching_instance_exists() {
     let sema = check(
-        r#"
+        r"
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
         };
@@ -741,7 +742,7 @@ fn generic_constraints_succeed_when_matching_instance_exists() {
         };
         let requireEq[T] (x : T) where T : Eq : T := x;
         requireEq[Int](1);
-    "#,
+    ",
     );
     assert!(
         !sema
@@ -779,7 +780,7 @@ fn generic_constraints_report_unsatisfied_instances() {
 #[test]
 fn generic_constraints_report_ambiguous_instances() {
     let sema = check(
-        r#"
+        r"
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
         };
@@ -791,7 +792,7 @@ fn generic_constraints_report_ambiguous_instances() {
         };
         let requireEq[T] (x : T) where T : Eq : T := x;
         requireEq[Int](1);
-    "#,
+    ",
     );
     assert!(
         sema.diags()
@@ -805,7 +806,7 @@ fn generic_constraints_report_ambiguous_instances() {
 #[test]
 fn open_effect_rows_absorb_extra_effects() {
     let sema = check(
-        r#"
+        r"
         let Console := effect {
           let readln () : String;
         };
@@ -814,7 +815,7 @@ fn open_effect_rows_absorb_extra_effects() {
         };
         let readOpen (x : Int) with { Console, ...r } : String := perform State.readln();
         readOpen(0);
-    "#,
+    ",
     );
     let root = sema.module().root;
     let effects = sema.expr_effects(root);
@@ -823,10 +824,9 @@ fn open_effect_rows_absorb_extra_effects() {
             .items
             .iter()
             .any(|item| item.name.as_ref() == "State"),
-        "{:?}",
-        effects
+        "{effects:?}"
     );
-    assert!(effects.open.is_some(), "{:?}", effects);
+    assert!(effects.open.is_some(), "{effects:?}");
     assert!(
         !sema
             .diags()
@@ -840,7 +840,7 @@ fn open_effect_rows_absorb_extra_effects() {
 #[test]
 fn closed_effect_rows_reject_extra_effects() {
     let sema = check(
-        r#"
+        r"
         let Console := effect {
           let readln () : String;
         };
@@ -849,7 +849,7 @@ fn closed_effect_rows_reject_extra_effects() {
         };
         let readClosed (x : Int) with { Console } : String := perform State.readln();
         readClosed(0);
-    "#,
+    ",
     );
     assert!(
         sema.diags()

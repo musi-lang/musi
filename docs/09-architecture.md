@@ -50,6 +50,7 @@ Current implementation status (Cargo workspace members):
 - `music_module`
 - `music_hir`
 - `music_resolve`
+- `music_sema`
 
 The intended dependency shape is a DAG:
 

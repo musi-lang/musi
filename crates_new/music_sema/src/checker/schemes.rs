@@ -415,9 +415,9 @@ fn solve_implements(
 }
 
 fn obligation_class_target(
-    ctx: &mut CheckPass<'_, '_, '_>,
+    ctx: &CheckPass<'_, '_, '_>,
     obligation: &ConstraintObligation,
-) -> Option<(crate::api::DefinitionKey, Box<[HirTyId]>)> {
+) -> Option<(DefinitionKey, Box<[HirTyId]>)> {
     let HirTyKind::Named { name, args } = ctx.ty(obligation.value).kind else {
         return None;
     };
@@ -490,43 +490,25 @@ fn unify_ty(
         HirTyKind::Named { name, args }
             if ctx.ty_ids(args).is_empty() && type_params.contains(&name) =>
         {
-            if let Some(bound) = subst.get(&name).copied() {
-                return ty_matches(ctx, bound, actual);
-            }
-            let _prev = subst.insert(name, actual);
-            true
+            unify_type_param(ctx, name, actual, subst)
         }
         HirTyKind::Named {
             name: left_name,
             args: left_args,
-        } => {
-            let HirTyKind::Named {
-                name: right_name,
-                args: right_args,
-            } = ctx.ty(actual).kind
-            else {
-                return false;
-            };
-            left_name == right_name
-                && unify_ty_lists(ctx, type_params, left_args, right_args, subst)
-        }
+        } => unify_named_ty(ctx, type_params, actual, subst, left_name, left_args),
         HirTyKind::Arrow {
             params: left_params,
             ret: left_ret,
             is_effectful: left_effectful,
-        } => {
-            let HirTyKind::Arrow {
-                params: right_params,
-                ret: right_ret,
-                is_effectful: right_effectful,
-            } = ctx.ty(actual).kind
-            else {
-                return false;
-            };
-            left_effectful == right_effectful
-                && unify_ty_lists(ctx, type_params, left_params, right_params, subst)
-                && unify_ty(ctx, type_params, left_ret, right_ret, subst)
-        }
+        } => unify_arrow_ty(
+            ctx,
+            type_params,
+            actual,
+            subst,
+            left_params,
+            left_ret,
+            left_effectful,
+        ),
         HirTyKind::Sum { left, right } => {
             let HirTyKind::Sum {
                 left: actual_left,
@@ -567,30 +549,91 @@ fn unify_ty(
             };
             unify_ty(ctx, type_params, inner, actual_inner, subst)
         }
-        HirTyKind::Record { fields } => {
-            let HirTyKind::Record {
-                fields: actual_fields,
-            } = ctx.ty(actual).kind
-            else {
-                return false;
-            };
-            let pattern_fields = ctx.ty_fields(fields);
-            let actual_fields = ctx.ty_fields(actual_fields);
-            if pattern_fields.len() != actual_fields.len() {
-                return false;
-            }
-            let actual_fields = actual_fields
-                .into_iter()
-                .map(|field| (field.name, field.ty))
-                .collect::<HashMap<_, _>>();
-            pattern_fields.into_iter().all(|field| {
-                actual_fields
-                    .get(&field.name)
-                    .is_some_and(|ty| unify_ty(ctx, type_params, field.ty, *ty, subst))
-            })
-        }
+        HirTyKind::Record { fields } => unify_record_ty(ctx, type_params, actual, subst, fields),
         _ => ty_matches(ctx, pattern, actual),
     }
+}
+
+fn unify_type_param(
+    ctx: &CheckPass<'_, '_, '_>,
+    name: Symbol,
+    actual: HirTyId,
+    subst: &mut HashMap<Symbol, HirTyId>,
+) -> bool {
+    if let Some(bound) = subst.get(&name).copied() {
+        return ty_matches(ctx, bound, actual);
+    }
+    let _prev = subst.insert(name, actual);
+    true
+}
+
+fn unify_named_ty(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    type_params: &[Symbol],
+    actual: HirTyId,
+    subst: &mut HashMap<Symbol, HirTyId>,
+    left_name: Symbol,
+    left_args: SliceRange<HirTyId>,
+) -> bool {
+    let HirTyKind::Named {
+        name: right_name,
+        args: right_args,
+    } = ctx.ty(actual).kind
+    else {
+        return false;
+    };
+    left_name == right_name && unify_ty_lists(ctx, type_params, left_args, right_args, subst)
+}
+
+fn unify_arrow_ty(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    type_params: &[Symbol],
+    actual: HirTyId,
+    subst: &mut HashMap<Symbol, HirTyId>,
+    left_params: SliceRange<HirTyId>,
+    left_ret: HirTyId,
+    left_effectful: bool,
+) -> bool {
+    let HirTyKind::Arrow {
+        params: right_params,
+        ret: right_ret,
+        is_effectful: right_effectful,
+    } = ctx.ty(actual).kind
+    else {
+        return false;
+    };
+    left_effectful == right_effectful
+        && unify_ty_lists(ctx, type_params, left_params, right_params, subst)
+        && unify_ty(ctx, type_params, left_ret, right_ret, subst)
+}
+
+fn unify_record_ty(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    type_params: &[Symbol],
+    actual: HirTyId,
+    subst: &mut HashMap<Symbol, HirTyId>,
+    fields: SliceRange<HirTyField>,
+) -> bool {
+    let HirTyKind::Record {
+        fields: actual_fields,
+    } = ctx.ty(actual).kind
+    else {
+        return false;
+    };
+    let pattern_fields = ctx.ty_fields(fields);
+    let actual_fields = ctx.ty_fields(actual_fields);
+    if pattern_fields.len() != actual_fields.len() {
+        return false;
+    }
+    let actual_fields = actual_fields
+        .into_iter()
+        .map(|field| (field.name, field.ty))
+        .collect::<HashMap<_, _>>();
+    pattern_fields.into_iter().all(|field| {
+        actual_fields
+            .get(&field.name)
+            .is_some_and(|ty| unify_ty(ctx, type_params, field.ty, *ty, subst))
+    })
 }
 
 fn unify_ty_lists(

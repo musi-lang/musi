@@ -10,7 +10,7 @@ use music_names::Symbol;
 use super::exprs::check_expr;
 use super::surface::surface_key;
 use super::{CheckPass, PassBase};
-use crate::api::{ConstraintFacts, ConstraintKind};
+use crate::api::{ConstraintFacts, ConstraintKind, DefinitionKey};
 use crate::effects::{EffectKey, EffectRow};
 
 pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
@@ -540,7 +540,7 @@ fn constraint_class_key(
     ctx: &PassBase<'_, '_, '_>,
     kind: ConstraintKind,
     value: HirTyId,
-) -> Option<crate::api::DefinitionKey> {
+) -> Option<DefinitionKey> {
     if kind != ConstraintKind::Implements {
         return None;
     }

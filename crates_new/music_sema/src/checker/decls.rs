@@ -7,7 +7,7 @@ use music_hir::{
     HirPatKind, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
-use music_names::Ident;
+use music_names::{Ident, NameBindingId, Symbol};
 
 use super::attrs::{validate_expr_attrs, validate_foreign_decl};
 use super::exprs::check_expr;
@@ -34,6 +34,66 @@ pub struct LetExprInput {
     pub effects: Option<HirEffectSet>,
     pub sig: Option<HirExprId>,
     pub value: HirExprId,
+}
+
+fn lower_let_type_params(
+    ctx: &CheckPass<'_, '_, '_>,
+    type_params: SliceRange<Ident>,
+) -> Box<[Symbol]> {
+    ctx.idents(type_params)
+        .into_iter()
+        .map(|ident| ident.name)
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn insert_let_binding_scheme(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    binding: NameBindingId,
+    ty: HirTyId,
+    effects: EffectRow,
+    type_params: Box<[Symbol]>,
+    constraints: Box<[ConstraintFacts]>,
+) {
+    ctx.insert_binding_type(binding, ty);
+    ctx.insert_binding_effects(binding, effects.clone());
+    ctx.insert_binding_scheme(
+        binding,
+        BindingScheme {
+            type_params,
+            constraints,
+            ty,
+            effects,
+        },
+    );
+}
+
+fn check_callable_let_binding(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
+    params: SliceRange<HirParam>,
+    effects: Option<&HirEffectSet>,
+    declared_ty: Option<HirTyId>,
+    value: HirExprId,
+) -> (HirTyId, EffectRow) {
+    let param_types = lower_params(ctx, params);
+    let mut callable_effects = effects.map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
+    let body_facts = check_expr(ctx, value);
+    if effects.is_none() {
+        callable_effects = body_facts.effects.clone();
+    } else {
+        callable_effects =
+            require_declared_effects(ctx, origin, &callable_effects, &body_facts.effects);
+    }
+    let result_ty = declared_ty.unwrap_or(body_facts.ty);
+    type_mismatch(ctx, origin, result_ty, body_facts.ty);
+    let params = ctx.alloc_ty_list(param_types.iter().copied());
+    let ty = ctx.alloc_ty(HirTyKind::Arrow {
+        params,
+        ret: result_ty,
+        is_effectful: !callable_effects.is_pure(),
+    });
+    (ty, callable_effects)
 }
 
 pub fn member_signature(
@@ -89,12 +149,8 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         value,
     } = input;
     let bound_name = bound_name_from_pat(ctx, pat);
-    let type_params = ctx
-        .idents(type_params)
-        .into_iter()
-        .map(|ident| ident.name)
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+    let binding = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident));
+    let type_params = lower_let_type_params(ctx, type_params);
     let constraints = lower_constraints(ctx, constraints);
     let declared_ty = sig.map(|expr| {
         let origin = ctx.expr(expr).origin;
@@ -102,10 +158,8 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
     });
 
     if mods.is_rec {
-        if let Some(name) = bound_name {
-            if let Some(binding) = ctx.binding_id_for_decl(name) {
-                ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
-            }
+        if let Some(binding) = binding {
+            ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
         }
     }
 
@@ -125,53 +179,23 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
 
     let has_params = !ctx.params(params.clone()).is_empty();
     let final_ty = if has_params {
-        let param_types = lower_params(ctx, params);
-        let mut callable_effects = effects
-            .as_ref()
-            .map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
-        let body_facts = check_expr(ctx, value);
-        if effects.is_none() {
-            callable_effects = body_facts.effects.clone();
-        } else {
-            callable_effects =
-                require_declared_effects(ctx, origin, &callable_effects, &body_facts.effects);
-        }
-        let result_ty = declared_ty.unwrap_or(body_facts.ty);
-        type_mismatch(ctx, origin, result_ty, body_facts.ty);
-        let params = ctx.alloc_ty_list(param_types.iter().copied());
-        let ty = ctx.alloc_ty(HirTyKind::Arrow {
-            params,
-            ret: result_ty,
-            is_effectful: !callable_effects.is_pure(),
-        });
-        if let Some(binding) = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
-            ctx.insert_binding_type(binding, ty);
-            ctx.insert_binding_effects(binding, callable_effects.clone());
-            ctx.insert_binding_scheme(
-                binding,
-                BindingScheme {
-                    type_params: type_params.clone(),
-                    constraints: constraints.clone(),
-                    ty,
-                    effects: callable_effects,
-                },
-            );
+        let (ty, callable_effects) =
+            check_callable_let_binding(ctx, origin, params, effects.as_ref(), declared_ty, value);
+        if let Some(binding) = binding {
+            insert_let_binding_scheme(ctx, binding, ty, callable_effects, type_params, constraints);
         }
         ty
     } else {
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);
-        if let Some(binding) = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
-            ctx.insert_binding_type(binding, ty);
-            ctx.insert_binding_effects(binding, EffectRow::empty());
-            ctx.insert_binding_scheme(
+        if let Some(binding) = binding {
+            insert_let_binding_scheme(
+                ctx,
                 binding,
-                BindingScheme {
-                    type_params: type_params.clone(),
-                    constraints: constraints.clone(),
-                    ty,
-                    effects: EffectRow::empty(),
-                },
+                ty,
+                EffectRow::empty(),
+                type_params,
+                constraints,
             );
         }
         ty
@@ -180,10 +204,10 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
     if !bind_module_pattern(ctx, pat, value) {
         bind_pat(ctx, pat, final_ty);
     }
-    if let Some(name) = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
-        if let Some(target) = module_target_for_expr(ctx, value) {
-            ctx.insert_binding_module_target(name, target);
-        }
+    if let Some(binding) = binding
+        && let Some(target) = module_target_for_expr(ctx, value)
+    {
+        ctx.insert_binding_module_target(binding, target);
     }
     if let Some(name) = bound_name {
         bind_imported_alias(ctx, name, value);
@@ -418,11 +442,93 @@ fn import_exported_value_binding(
     ctx.insert_binding_type(binding, imported_ty);
     ctx.insert_binding_effects(
         binding,
-        instantiated
-            .map(|instantiated| instantiated.effects)
-            .unwrap_or_else(|| scheme.effects.clone()),
+        instantiated.map_or_else(
+            || scheme.effects.clone(),
+            |instantiated| instantiated.effects,
+        ),
     );
     ctx.insert_binding_scheme(binding, scheme);
+}
+
+fn class_member_map(
+    ctx: &CheckPass<'_, '_, '_>,
+    class_name: Symbol,
+) -> HashMap<Symbol, ClassMemberFacts> {
+    ctx.class_facts_by_name(class_name)
+        .map(|facts| {
+            facts
+                .members
+                .iter()
+                .map(|member| (member.name, member.clone()))
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default()
+}
+
+fn check_instance_member(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    member: &HirMemberDef,
+    expected_members: &HashMap<Symbol, ClassMemberFacts>,
+) {
+    let signature = member_signature(ctx, member, true);
+    if let Some(expected) = expected_members.get(&member.name.name) {
+        if expected.params.len() != signature.params.len() {
+            ctx.diag(member.origin.span, "instance member arity mismatch", "");
+        }
+        for (expected_param, actual_param) in expected
+            .params
+            .iter()
+            .copied()
+            .zip(signature.params.iter().copied())
+        {
+            type_mismatch(ctx, member.origin, expected_param, actual_param);
+        }
+        type_mismatch(ctx, member.origin, expected.result, signature.result);
+    } else {
+        ctx.diag(member.origin.span, "unknown instance member", "");
+    }
+    if let Some(value) = member.value {
+        let params = ctx.alloc_ty_list(signature.params.iter().copied());
+        let expected = ctx.alloc_ty(HirTyKind::Arrow {
+            params,
+            ret: signature.result,
+            is_effectful: false,
+        });
+        let facts = check_expr(ctx, value);
+        let origin = ctx.expr(value).origin;
+        type_mismatch(ctx, origin, expected, facts.ty);
+    } else {
+        ctx.diag(member.origin.span, "instance member value required", "");
+    }
+}
+
+fn check_instance_member_set(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
+    members: &[HirMemberDef],
+    expected_members: &HashMap<Symbol, ClassMemberFacts>,
+) -> Box<[Symbol]> {
+    let member_names = members
+        .iter()
+        .filter(|member| member.kind == HirMemberKind::Let)
+        .map(|member| member.name.name)
+        .collect::<Vec<_>>();
+    let mut seen_members = BTreeSet::new();
+    for member in members {
+        if member.kind != HirMemberKind::Let {
+            continue;
+        }
+        if !seen_members.insert(member.name.name) {
+            ctx.diag(member.origin.span, "duplicate instance member", "");
+        }
+        check_instance_member(ctx, member, expected_members);
+    }
+    for expected in expected_members.keys() {
+        if !seen_members.contains(expected) {
+            ctx.diag(origin.span, "missing instance member", "");
+        }
+    }
+    member_names.into_boxed_slice()
 }
 
 pub fn check_data_expr(
@@ -534,65 +640,8 @@ pub fn check_instance_expr(
     }
 
     let members_vec = ctx.members((*members).clone());
-    let expected_members = ctx
-        .class_facts_by_name(class_name)
-        .map(|facts| {
-            facts
-                .members
-                .iter()
-                .map(|member| (member.name, member.clone()))
-                .collect::<HashMap<_, _>>()
-        })
-        .unwrap_or_default();
-    let member_names = members_vec
-        .iter()
-        .filter(|member| member.kind == HirMemberKind::Let)
-        .map(|member| member.name.name)
-        .collect::<Vec<_>>();
-    let mut seen_members = BTreeSet::new();
-    for member in &members_vec {
-        if member.kind != HirMemberKind::Let {
-            continue;
-        }
-        if !seen_members.insert(member.name.name) {
-            ctx.diag(member.origin.span, "duplicate instance member", "");
-        }
-        let signature = member_signature(ctx, member, true);
-        if let Some(expected) = expected_members.get(&member.name.name) {
-            if expected.params.len() != signature.params.len() {
-                ctx.diag(member.origin.span, "instance member arity mismatch", "");
-            }
-            for (expected_param, actual_param) in expected
-                .params
-                .iter()
-                .copied()
-                .zip(signature.params.iter().copied())
-            {
-                type_mismatch(ctx, member.origin, expected_param, actual_param);
-            }
-            type_mismatch(ctx, member.origin, expected.result, signature.result);
-        } else {
-            ctx.diag(member.origin.span, "unknown instance member", "");
-        }
-        if let Some(value) = member.value {
-            let params = ctx.alloc_ty_list(signature.params.iter().copied());
-            let expected = ctx.alloc_ty(HirTyKind::Arrow {
-                params,
-                ret: signature.result,
-                is_effectful: false,
-            });
-            let facts = check_expr(ctx, value);
-            let origin = ctx.expr(value).origin;
-            type_mismatch(ctx, origin, expected, facts.ty);
-        } else {
-            ctx.diag(member.origin.span, "instance member value required", "");
-        }
-    }
-    for expected in expected_members.keys() {
-        if !seen_members.contains(expected) {
-            ctx.diag(origin.span, "missing instance member", "");
-        }
-    }
+    let expected_members = class_member_map(ctx, class_name);
+    let member_names = check_instance_member_set(ctx, origin, &members_vec, &expected_members);
 
     let type_params = ctx
         .idents(type_params)
@@ -610,7 +659,7 @@ pub fn check_instance_expr(
             class_name,
             class_args,
             constraints,
-            member_names: member_names.into_boxed_slice(),
+            member_names,
         },
     );
     ExprFacts {

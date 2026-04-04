@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAccessKind, HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind,
-    HirLitId, HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirQuoteKind, HirRecordItem,
-    HirSpliceKind, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
+    HirAccessKind, HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirConstraint, HirDim, HirExprId,
+    HirExprKind, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPrefixOp,
+    HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::Ident;
 
@@ -26,9 +26,16 @@ use super::schemes::{
 use crate::effects::EffectRow;
 
 pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
+    let facts = check_expr_kind(ctx, id);
+    ctx.set_expr_facts(id, facts.clone());
+    facts
+}
+
+fn check_expr_kind(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
     let builtins = ctx.builtins();
     let expr = ctx.expr(id);
-    let facts = match expr.kind.clone() {
+    let kind = expr.kind.clone();
+    match kind {
         HirExprKind::Error => ExprFacts {
             ty: builtins.error,
             effects: EffectRow::empty(),
@@ -77,10 +84,81 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
             effects,
             sig,
             value,
-        } => check_let_expr(
+        } => check_let_kind(
             ctx,
             LetExprInput {
                 origin: expr.origin,
+                mods,
+                pat,
+                type_params,
+                params,
+                constraints,
+                effects,
+                sig,
+                value,
+            },
+        ),
+        other => check_decl_expr(ctx, id, expr.origin, other),
+    }
+}
+
+fn check_decl_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    id: HirExprId,
+    origin: HirOrigin,
+    kind: HirExprKind,
+) -> ExprFacts {
+    match kind {
+        HirExprKind::Error => ExprFacts {
+            ty: ctx.builtins().error,
+            effects: EffectRow::empty(),
+        },
+        HirExprKind::Name { name } => check_name_expr(ctx, id, name),
+        HirExprKind::Lit { lit } => check_lit_expr(ctx, lit),
+        HirExprKind::Template { parts } => check_template_expr(ctx, parts),
+        HirExprKind::Sequence { exprs } => check_sequence_expr(ctx, exprs),
+        HirExprKind::Tuple { items } => check_tuple_expr(ctx, items),
+        HirExprKind::Array { items } => check_array_expr(ctx, items),
+        HirExprKind::ArrayTy { dims, item } => check_array_ty_expr(ctx, dims, item),
+        HirExprKind::Record { items } => check_record_expr(ctx, items),
+        HirExprKind::Variant { tag, args } => check_variant_expr(ctx, tag, args),
+        HirExprKind::Pi {
+            binder,
+            binder_ty,
+            ret,
+            is_effectful,
+        } => check_pi_expr(ctx, binder, binder_ty, ret, is_effectful),
+        HirExprKind::Lambda {
+            params,
+            ret_ty,
+            body,
+        } => check_lambda_expr(ctx, params, ret_ty, body),
+        HirExprKind::Call { callee, args } => check_call_expr(ctx, origin, callee, args),
+        HirExprKind::Apply { callee, args } => check_apply_expr(ctx, id, origin, callee, args),
+        HirExprKind::Index { base, args } => check_index_expr(ctx, origin, base, args),
+        HirExprKind::Field { base, access, name } => {
+            check_field_expr(ctx, id, origin, base, access, name)
+        }
+        HirExprKind::RecordUpdate { base, items } => {
+            check_record_update_expr(ctx, origin, base, items)
+        }
+        HirExprKind::TypeTest { base, ty, as_name } => check_type_test_expr(ctx, base, ty, as_name),
+        HirExprKind::TypeCast { base, ty } => check_type_cast_expr(ctx, base, ty),
+        HirExprKind::Prefix { op, expr: inner } => check_prefix_expr(ctx, origin, &op, inner),
+        HirExprKind::Binary { op, left, right } => check_binary_expr(ctx, origin, &op, left, right),
+        HirExprKind::Let {
+            mods,
+            pat,
+            type_params,
+            params,
+            constraints,
+            effects,
+            sig,
+            value,
+        } => check_let_kind(
+            ctx,
+            LetExprInput {
+                origin,
                 mods,
                 pat,
                 type_params,
@@ -105,31 +183,45 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
             constraints,
             class,
             members,
-        } => check_instance_expr(
-            ctx,
-            id,
-            expr.origin,
-            type_params,
-            constraints,
-            class,
-            &members,
-        ),
+        } => check_instance_kind(ctx, id, origin, type_params, constraints, class, &members),
         HirExprKind::Foreign { abi, decls } => check_foreign_expr(ctx, abi, decls),
-        HirExprKind::Perform { expr: inner } => check_perform_expr(ctx, expr.origin, inner),
+        HirExprKind::Perform { expr: inner } => check_perform_expr(ctx, origin, inner),
         HirExprKind::Handle {
             expr: inner,
             handler,
             clauses,
-        } => check_handle_expr(ctx, expr.origin, inner, handler, clauses),
-        HirExprKind::Resume { expr: inner } => check_resume_expr(ctx, expr.origin, inner),
+        } => check_handle_expr(ctx, origin, inner, handler, clauses),
+        HirExprKind::Resume { expr: inner } => check_resume_expr(ctx, origin, inner),
         HirExprKind::Quote { kind } => check_quote_expr(ctx, kind),
         HirExprKind::Splice { kind } => check_splice_expr(ctx, kind),
         HirExprKind::Attributed { attrs, expr: inner } => {
-            check_attributed_expr(ctx, expr.origin, attrs, inner)
+            check_attributed_expr(ctx, origin, attrs, inner)
         }
-    };
-    ctx.set_expr_facts(id, facts.clone());
-    facts
+    }
+}
+
+fn check_let_kind(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> ExprFacts {
+    check_let_expr(ctx, input)
+}
+
+fn check_instance_kind(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    expr_id: HirExprId,
+    origin: HirOrigin,
+    type_params: SliceRange<Ident>,
+    constraints: SliceRange<HirConstraint>,
+    class: HirExprId,
+    members: &SliceRange<HirMemberDef>,
+) -> ExprFacts {
+    check_instance_expr(
+        ctx,
+        expr_id,
+        origin,
+        type_params,
+        constraints,
+        class,
+        members,
+    )
 }
 
 fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Ident) -> ExprFacts {

@@ -13,12 +13,12 @@ mod schemes;
 mod state;
 mod surface;
 
-pub(crate) use state::{
+use state::{
     CheckPass, CollectPass, DeclState, EffectDef, EffectOpDef, FactState, ModuleState, PassBase,
     ResumeCtx, ResumeState, RuntimeEnv, TypingState, finish_module, prepare_module,
 };
 
-pub(crate) struct Checker<'interner, 'env> {
+struct Checker<'interner, 'env> {
     module: ModuleState,
     runtime: RuntimeEnv<'interner, 'env>,
     typing: TypingState,

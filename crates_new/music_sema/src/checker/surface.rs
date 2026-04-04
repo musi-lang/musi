@@ -1,9 +1,11 @@
 use std::collections::{BTreeSet, HashMap};
 
+use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirDim, HirExprId, HirExprKind, HirPatId, HirPatKind, HirRecordPatField, HirStore, HirTyField,
-    HirTyId, HirTyKind,
+    HirCaseArm, HirDim, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl, HirHandleClause,
+    HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem, HirRecordPatField, HirStore,
+    HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -13,6 +15,7 @@ use crate::api::{
     EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SurfaceDim, SurfaceEffectItem,
     SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
 };
+use crate::effects::EffectRow;
 
 use super::{DeclState, ModuleState, PassBase, RuntimeEnv, TypingState};
 
@@ -66,31 +69,27 @@ fn collect_exported_values(
             Some(ExportedValue {
                 name: export.name.clone(),
                 ty: tys.lower(ty),
-                type_params: scheme
-                    .map(|scheme| {
-                        scheme
-                            .type_params
-                            .iter()
-                            .map(|symbol| tys.interner.resolve(*symbol).into())
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    })
-                    .unwrap_or_else(|| Box::new([])),
-                constraints: scheme
-                    .map(|scheme| {
-                        scheme
-                            .constraints
-                            .iter()
-                            .map(|constraint| ConstraintSurface {
-                                name: tys.interner.resolve(constraint.name).into(),
-                                kind: constraint.kind,
-                                value: tys.lower(constraint.value),
-                                class_key: constraint.class_key.clone(),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    })
-                    .unwrap_or_else(|| Box::new([])),
+                type_params: scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
+                    scheme
+                        .type_params
+                        .iter()
+                        .map(|symbol| tys.interner.resolve(*symbol).into())
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice()
+                }),
+                constraints: scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
+                    scheme
+                        .constraints
+                        .iter()
+                        .map(|constraint| ConstraintSurface {
+                            name: tys.interner.resolve(constraint.name).into(),
+                            kind: constraint.kind,
+                            value: tys.lower(constraint.value),
+                            class_key: constraint.class_key.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice()
+                }),
                 effects: scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
                     lower_surface_effect_row(tys, &scheme.effects)
                 }),
@@ -242,10 +241,7 @@ fn collect_exported_instances(
         .into_boxed_slice()
 }
 
-fn lower_surface_effect_row(
-    tys: &mut SurfaceTyBuilder<'_>,
-    row: &crate::effects::EffectRow,
-) -> SurfaceEffectRow {
+fn lower_surface_effect_row(tys: &mut SurfaceTyBuilder<'_>, row: &EffectRow) -> SurfaceEffectRow {
     SurfaceEffectRow {
         items: row
             .items
@@ -395,32 +391,19 @@ fn collect_exports_from_expr(
 ) {
     match module.resolved.module.store.exprs.get(expr_id).kind.clone() {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
-            for expr in module
-                .resolved
-                .module
-                .store
-                .expr_ids
-                .get(exprs)
-                .iter()
-                .copied()
-            {
-                collect_exports_from_expr(module, interner, expr, exports);
-            }
+            collect_expr_id_range(module, interner, exprs, exports);
         }
         HirExprKind::Array { items } => {
             for item in module.resolved.module.store.array_items.get(items) {
                 collect_exports_from_expr(module, interner, item.expr, exports);
             }
         }
-        HirExprKind::Record { items } | HirExprKind::RecordUpdate { items, .. } => {
-            for item in module.resolved.module.store.record_items.get(items) {
-                collect_exports_from_expr(module, interner, item.value, exports);
-            }
-            if let HirExprKind::RecordUpdate { base, .. } =
-                module.resolved.module.store.exprs.get(expr_id).kind
-            {
-                collect_exports_from_expr(module, interner, base, exports);
-            }
+        HirExprKind::Record { items } => {
+            collect_record_item_exports(module, interner, items, exports);
+        }
+        HirExprKind::RecordUpdate { base, items } => {
+            collect_record_item_exports(module, interner, items, exports);
+            collect_exports_from_expr(module, interner, base, exports);
         }
         HirExprKind::Template { parts } => {
             for part in module.resolved.module.store.template_parts.get(parts) {
@@ -447,17 +430,7 @@ fn collect_exports_from_expr(
         }
         HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
             collect_exports_from_expr(module, interner, callee, exports);
-            for arg in module
-                .resolved
-                .module
-                .store
-                .expr_ids
-                .get(args)
-                .iter()
-                .copied()
-            {
-                collect_exports_from_expr(module, interner, arg, exports);
-            }
+            collect_expr_id_range(module, interner, args, exports);
         }
         HirExprKind::Field { base, .. }
         | HirExprKind::TypeTest { base, .. }
@@ -470,106 +443,30 @@ fn collect_exports_from_expr(
             collect_exports_from_expr(module, interner, right, exports);
         }
         HirExprKind::Let { value, .. } => {
-            collect_exports_from_expr(module, interner, value, exports)
+            collect_exports_from_expr(module, interner, value, exports);
         }
         HirExprKind::Export { opaque, expr, .. } => {
             collect_direct_exports(module, interner, expr, opaque, exports);
             collect_exports_from_expr(module, interner, expr, exports);
         }
         HirExprKind::Case { scrutinee, arms } => {
-            collect_exports_from_expr(module, interner, scrutinee, exports);
-            for arm in module.resolved.module.store.case_arms.get(arms) {
-                if let Some(guard) = arm.guard {
-                    collect_exports_from_expr(module, interner, guard, exports);
-                }
-                collect_exports_from_expr(module, interner, arm.expr, exports);
-            }
+            collect_case_exports(module, interner, scrutinee, arms, exports);
         }
         HirExprKind::Data { variants, fields } => {
-            for variant in module.resolved.module.store.variants.get(variants) {
-                if let Some(arg) = variant.arg {
-                    collect_exports_from_expr(module, interner, arg, exports);
-                }
-                if let Some(value) = variant.value {
-                    collect_exports_from_expr(module, interner, value, exports);
-                }
-            }
-            for field in module.resolved.module.store.fields.get(fields) {
-                collect_exports_from_expr(module, interner, field.ty, exports);
-                if let Some(value) = field.value {
-                    collect_exports_from_expr(module, interner, value, exports);
-                }
-            }
+            collect_data_exports(module, interner, variants, fields, exports);
         }
         HirExprKind::Effect { members } | HirExprKind::Class { members, .. } => {
-            for member in module.resolved.module.store.members.get(members) {
-                for param in module
-                    .resolved
-                    .module
-                    .store
-                    .params
-                    .get(member.params.clone())
-                {
-                    if let Some(ty) = param.ty {
-                        collect_exports_from_expr(module, interner, ty, exports);
-                    }
-                    if let Some(default) = param.default {
-                        collect_exports_from_expr(module, interner, default, exports);
-                    }
-                }
-                if let Some(sig) = member.sig {
-                    collect_exports_from_expr(module, interner, sig, exports);
-                }
-                if let Some(value) = member.value {
-                    collect_exports_from_expr(module, interner, value, exports);
-                }
-            }
+            collect_member_exports(module, interner, members, exports);
         }
         HirExprKind::Instance { class, members, .. } => {
             collect_exports_from_expr(module, interner, class, exports);
-            for member in module.resolved.module.store.members.get(members) {
-                for param in module
-                    .resolved
-                    .module
-                    .store
-                    .params
-                    .get(member.params.clone())
-                {
-                    if let Some(ty) = param.ty {
-                        collect_exports_from_expr(module, interner, ty, exports);
-                    }
-                    if let Some(default) = param.default {
-                        collect_exports_from_expr(module, interner, default, exports);
-                    }
-                }
-                if let Some(sig) = member.sig {
-                    collect_exports_from_expr(module, interner, sig, exports);
-                }
-                if let Some(value) = member.value {
-                    collect_exports_from_expr(module, interner, value, exports);
-                }
-            }
+            collect_member_exports(module, interner, members, exports);
         }
         HirExprKind::Foreign { decls, .. } => {
-            for decl in module.resolved.module.store.foreign_decls.get(decls) {
-                for param in module.resolved.module.store.params.get(decl.params.clone()) {
-                    if let Some(ty) = param.ty {
-                        collect_exports_from_expr(module, interner, ty, exports);
-                    }
-                    if let Some(default) = param.default {
-                        collect_exports_from_expr(module, interner, default, exports);
-                    }
-                }
-                if let Some(sig) = decl.sig {
-                    collect_exports_from_expr(module, interner, sig, exports);
-                }
-            }
+            collect_foreign_exports(module, interner, decls, exports);
         }
         HirExprKind::Handle { expr, clauses, .. } => {
-            collect_exports_from_expr(module, interner, expr, exports);
-            for clause in module.resolved.module.store.handle_clauses.get(clauses) {
-                collect_exports_from_expr(module, interner, clause.body, exports);
-            }
+            collect_handle_exports(module, interner, expr, clauses, exports);
         }
         HirExprKind::Resume { expr } => {
             if let Some(expr) = expr {
@@ -583,6 +480,135 @@ fn collect_exports_from_expr(
         | HirExprKind::Lit { .. }
         | HirExprKind::ArrayTy { .. }
         | HirExprKind::Variant { .. } => {}
+    }
+}
+
+fn collect_expr_id_range(
+    module: &ModuleState,
+    interner: &Interner,
+    exprs: SliceRange<HirExprId>,
+    exports: &mut ModuleExports,
+) {
+    for expr in module
+        .resolved
+        .module
+        .store
+        .expr_ids
+        .get(exprs)
+        .iter()
+        .copied()
+    {
+        collect_exports_from_expr(module, interner, expr, exports);
+    }
+}
+
+fn collect_record_item_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    items: SliceRange<HirRecordItem>,
+    exports: &mut ModuleExports,
+) {
+    for item in module.resolved.module.store.record_items.get(items) {
+        collect_exports_from_expr(module, interner, item.value, exports);
+    }
+}
+
+fn collect_case_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    scrutinee: HirExprId,
+    arms: SliceRange<HirCaseArm>,
+    exports: &mut ModuleExports,
+) {
+    collect_exports_from_expr(module, interner, scrutinee, exports);
+    for arm in module.resolved.module.store.case_arms.get(arms) {
+        if let Some(guard) = arm.guard {
+            collect_exports_from_expr(module, interner, guard, exports);
+        }
+        collect_exports_from_expr(module, interner, arm.expr, exports);
+    }
+}
+
+fn collect_data_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    variants: SliceRange<HirVariantDef>,
+    fields: SliceRange<HirFieldDef>,
+    exports: &mut ModuleExports,
+) {
+    for variant in module.resolved.module.store.variants.get(variants) {
+        if let Some(arg) = variant.arg {
+            collect_exports_from_expr(module, interner, arg, exports);
+        }
+        if let Some(value) = variant.value {
+            collect_exports_from_expr(module, interner, value, exports);
+        }
+    }
+    for field in module.resolved.module.store.fields.get(fields) {
+        collect_exports_from_expr(module, interner, field.ty, exports);
+        if let Some(value) = field.value {
+            collect_exports_from_expr(module, interner, value, exports);
+        }
+    }
+}
+
+fn collect_param_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    params: SliceRange<HirParam>,
+    exports: &mut ModuleExports,
+) {
+    for param in module.resolved.module.store.params.get(params) {
+        if let Some(ty) = param.ty {
+            collect_exports_from_expr(module, interner, ty, exports);
+        }
+        if let Some(default) = param.default {
+            collect_exports_from_expr(module, interner, default, exports);
+        }
+    }
+}
+
+fn collect_member_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    members: SliceRange<HirMemberDef>,
+    exports: &mut ModuleExports,
+) {
+    for member in module.resolved.module.store.members.get(members) {
+        collect_param_exports(module, interner, member.params.clone(), exports);
+        if let Some(sig) = member.sig {
+            collect_exports_from_expr(module, interner, sig, exports);
+        }
+        if let Some(value) = member.value {
+            collect_exports_from_expr(module, interner, value, exports);
+        }
+    }
+}
+
+fn collect_foreign_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    decls: SliceRange<HirForeignDecl>,
+    exports: &mut ModuleExports,
+) {
+    for decl in module.resolved.module.store.foreign_decls.get(decls) {
+        collect_param_exports(module, interner, decl.params.clone(), exports);
+        if let Some(sig) = decl.sig {
+            collect_exports_from_expr(module, interner, sig, exports);
+        }
+    }
+}
+
+fn collect_handle_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    expr: HirExprId,
+    clauses: SliceRange<HirHandleClause>,
+    exports: &mut ModuleExports,
+) {
+    collect_exports_from_expr(module, interner, expr, exports);
+    for clause in module.resolved.module.store.handle_clauses.get(clauses) {
+        collect_exports_from_expr(module, interner, clause.body, exports);
     }
 }
 
@@ -638,16 +664,8 @@ fn collect_export_bindings_from_pat(
             }
         }
         HirPatKind::Record { fields } => {
-            for field in module
-                .resolved
-                .module
-                .store
-                .record_pat_fields
-                .get(fields)
-                .iter()
-                .cloned()
-            {
-                collect_export_binding_from_record_field(module, interner, &field, opaque, exports);
+            for field in module.resolved.module.store.record_pat_fields.get(fields) {
+                collect_export_binding_from_record_field(module, interner, field, opaque, exports);
             }
         }
         HirPatKind::Or { left, right } => {
