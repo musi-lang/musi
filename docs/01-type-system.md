@@ -20,7 +20,7 @@ The language has these important built-in type roles:
 | --------- | ------------------------ |
 | `Type0`   | universe of types        |
 | `Type1`   | universe of `Type0`      |
-| `Type`    | surface alias for `Type0` |
+| `Type`    | surface alias for `Type0`|
 | `Any`     | gradual/dynamic boundary |
 | `Unknown` | imprecise top-like type  |
 | `Syntax`  | syntax values            |
@@ -161,7 +161,7 @@ The current surface keeps effect rows on signatures.
 ```musi
 let f (x : Int) : Int := x + 1;
 let g (x : Int) with { Console } : Int := /* ... */;
-let h[T] (x : T) with { State[T], ...r } : T := /* /* ... */;
+let h[T] (x : T) with { State[T], ...r } : T := /* ... */;
 ```
 
 That means:

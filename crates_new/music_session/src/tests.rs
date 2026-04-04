@@ -85,3 +85,53 @@ fn resolve_reuses_cached_parse_product() {
     assert_eq!(session.stats().parse_runs, after_parse.parse_runs);
     assert!(session.stats().resolve_runs > after_parse.resolve_runs);
 }
+
+#[test]
+fn compiles_imported_generic_callable_calls() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("dep"), "export let id[T] (x : T) : T := x;")
+        .unwrap();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            let dep := import "dep";
+            export let answer () : Int := dep.id[Int](42);
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("@dep::id"));
+    assert!(output.text.contains("@main::answer"));
+}
+
+#[test]
+fn compiles_imported_globals_and_local_assignment() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
+        .unwrap();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            let dep := import "dep";
+            export let answer () : Int := (
+              let mut local := dep.base;
+              local <- local + 1;
+              local
+            );
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("ld.glob @dep::base"));
+    assert!(output.text.contains("@main::answer"));
+}

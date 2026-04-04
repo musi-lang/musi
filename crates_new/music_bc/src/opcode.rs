@@ -18,11 +18,22 @@ pub enum OpcodeFamily {
 pub enum Opcode {
     LdLoc,
     StLoc,
+    LdGlob,
+    StGlob,
     LdConst,
     LdSmi,
     LdStr,
     IAdd,
+    ISub,
+    IMul,
+    IDiv,
+    IRem,
     CmpEq,
+    CmpNe,
+    CmpLt,
+    CmpGt,
+    CmpLe,
+    CmpGe,
     Br,
     BrFalse,
     BrTbl,
@@ -31,6 +42,8 @@ pub enum Opcode {
     Ret,
     ClsNew,
     SeqNew,
+    SeqGet,
+    SeqSet,
     DataNew,
     DataTag,
     TyChk,
@@ -47,14 +60,20 @@ impl Opcode {
     #[must_use]
     pub const fn family(self) -> OpcodeFamily {
         match self {
-            Self::LdLoc | Self::StLoc | Self::LdConst | Self::LdSmi | Self::LdStr => {
-                OpcodeFamily::LoadStore
+            Self::LdLoc
+            | Self::StLoc
+            | Self::LdGlob
+            | Self::StGlob
+            | Self::LdConst
+            | Self::LdSmi
+            | Self::LdStr => OpcodeFamily::LoadStore,
+            Self::IAdd | Self::ISub | Self::IMul | Self::IDiv | Self::IRem => OpcodeFamily::Scalar,
+            Self::CmpEq | Self::CmpNe | Self::CmpLt | Self::CmpGt | Self::CmpLe | Self::CmpGe => {
+                OpcodeFamily::LogicCompare
             }
-            Self::IAdd => OpcodeFamily::Scalar,
-            Self::CmpEq => OpcodeFamily::LogicCompare,
             Self::Br | Self::BrFalse | Self::BrTbl => OpcodeFamily::Branch,
             Self::Call | Self::CallTail | Self::Ret | Self::ClsNew => OpcodeFamily::CallClosure,
-            Self::SeqNew => OpcodeFamily::Sequence,
+            Self::SeqNew | Self::SeqGet | Self::SeqSet => OpcodeFamily::Sequence,
             Self::DataNew | Self::DataTag => OpcodeFamily::Data,
             Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
             Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffResume => OpcodeFamily::Eff,
@@ -67,11 +86,22 @@ impl Opcode {
         match self {
             Self::LdLoc => "ld.loc",
             Self::StLoc => "st.loc",
+            Self::LdGlob => "ld.glob",
+            Self::StGlob => "st.glob",
             Self::LdConst => "ld.const",
             Self::LdSmi => "ld.smi",
             Self::LdStr => "ld.str",
             Self::IAdd => "i.add",
+            Self::ISub => "i.sub",
+            Self::IMul => "i.mul",
+            Self::IDiv => "i.div",
+            Self::IRem => "i.rem",
             Self::CmpEq => "cmp.eq",
+            Self::CmpNe => "cmp.ne",
+            Self::CmpLt => "cmp.lt",
+            Self::CmpGt => "cmp.gt",
+            Self::CmpLe => "cmp.le",
+            Self::CmpGe => "cmp.ge",
             Self::Br => "br",
             Self::BrFalse => "br.false",
             Self::BrTbl => "br.tbl",
@@ -80,6 +110,8 @@ impl Opcode {
             Self::Ret => "ret",
             Self::ClsNew => "cls.new",
             Self::SeqNew => "seq.new",
+            Self::SeqGet => "seq.get",
+            Self::SeqSet => "seq.set",
             Self::DataNew => "data.new",
             Self::DataTag => "data.tag",
             Self::TyChk => "ty.chk",
@@ -97,12 +129,26 @@ impl Opcode {
     pub const fn operand_shape(self) -> OperandShape {
         match self {
             Self::LdLoc | Self::StLoc => OperandShape::Local,
+            Self::LdGlob | Self::StGlob => OperandShape::Global,
             Self::LdConst => OperandShape::Constant,
             Self::LdSmi => OperandShape::I16,
             Self::LdStr => OperandShape::String,
-            Self::IAdd | Self::CmpEq | Self::Ret | Self::HdlPop | Self::EffResume => {
-                OperandShape::None
-            }
+            Self::IAdd
+            | Self::ISub
+            | Self::IMul
+            | Self::IDiv
+            | Self::IRem
+            | Self::CmpEq
+            | Self::CmpNe
+            | Self::CmpLt
+            | Self::CmpGt
+            | Self::CmpLe
+            | Self::CmpGe
+            | Self::Ret
+            | Self::SeqGet
+            | Self::SeqSet
+            | Self::HdlPop
+            | Self::EffResume => OperandShape::None,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
             Self::Call | Self::CallTail | Self::ClsNew => OperandShape::Method,
@@ -120,11 +166,22 @@ impl Opcode {
         match self {
             Self::LdLoc => 0x0001,
             Self::StLoc => 0x0002,
-            Self::LdConst => 0x0003,
-            Self::LdSmi => 0x0004,
-            Self::LdStr => 0x0005,
+            Self::LdGlob => 0x0003,
+            Self::StGlob => 0x0004,
+            Self::LdConst => 0x0005,
+            Self::LdSmi => 0x0006,
+            Self::LdStr => 0x0007,
             Self::IAdd => 0x0101,
+            Self::ISub => 0x0102,
+            Self::IMul => 0x0103,
+            Self::IDiv => 0x0104,
+            Self::IRem => 0x0105,
             Self::CmpEq => 0x0201,
+            Self::CmpNe => 0x0202,
+            Self::CmpLt => 0x0203,
+            Self::CmpGt => 0x0204,
+            Self::CmpLe => 0x0205,
+            Self::CmpGe => 0x0206,
             Self::Br => 0x0301,
             Self::BrFalse => 0x0302,
             Self::BrTbl => 0x0303,
@@ -133,6 +190,8 @@ impl Opcode {
             Self::Ret => 0x0403,
             Self::ClsNew => 0x0404,
             Self::SeqNew => 0x0501,
+            Self::SeqGet => 0x0502,
+            Self::SeqSet => 0x0503,
             Self::DataNew => 0x0601,
             Self::DataTag => 0x0602,
             Self::TyChk => 0x0701,
@@ -151,11 +210,22 @@ impl Opcode {
         Some(match text {
             "ld.loc" => Self::LdLoc,
             "st.loc" => Self::StLoc,
+            "ld.glob" => Self::LdGlob,
+            "st.glob" => Self::StGlob,
             "ld.const" => Self::LdConst,
             "ld.smi" => Self::LdSmi,
             "ld.str" => Self::LdStr,
             "i.add" => Self::IAdd,
+            "i.sub" => Self::ISub,
+            "i.mul" => Self::IMul,
+            "i.div" => Self::IDiv,
+            "i.rem" => Self::IRem,
             "cmp.eq" => Self::CmpEq,
+            "cmp.ne" => Self::CmpNe,
+            "cmp.lt" => Self::CmpLt,
+            "cmp.gt" => Self::CmpGt,
+            "cmp.le" => Self::CmpLe,
+            "cmp.ge" => Self::CmpGe,
             "br" => Self::Br,
             "br.false" => Self::BrFalse,
             "br.tbl" => Self::BrTbl,
@@ -164,6 +234,8 @@ impl Opcode {
             "ret" => Self::Ret,
             "cls.new" => Self::ClsNew,
             "seq.new" => Self::SeqNew,
+            "seq.get" => Self::SeqGet,
+            "seq.set" => Self::SeqSet,
             "data.new" => Self::DataNew,
             "data.tag" => Self::DataTag,
             "ty.chk" => Self::TyChk,
@@ -183,11 +255,22 @@ impl Opcode {
         Some(match code {
             0x0001 => Self::LdLoc,
             0x0002 => Self::StLoc,
-            0x0003 => Self::LdConst,
-            0x0004 => Self::LdSmi,
-            0x0005 => Self::LdStr,
+            0x0003 => Self::LdGlob,
+            0x0004 => Self::StGlob,
+            0x0005 => Self::LdConst,
+            0x0006 => Self::LdSmi,
+            0x0007 => Self::LdStr,
             0x0101 => Self::IAdd,
+            0x0102 => Self::ISub,
+            0x0103 => Self::IMul,
+            0x0104 => Self::IDiv,
+            0x0105 => Self::IRem,
             0x0201 => Self::CmpEq,
+            0x0202 => Self::CmpNe,
+            0x0203 => Self::CmpLt,
+            0x0204 => Self::CmpGt,
+            0x0205 => Self::CmpLe,
+            0x0206 => Self::CmpGe,
             0x0301 => Self::Br,
             0x0302 => Self::BrFalse,
             0x0303 => Self::BrTbl,
@@ -196,6 +279,8 @@ impl Opcode {
             0x0403 => Self::Ret,
             0x0404 => Self::ClsNew,
             0x0501 => Self::SeqNew,
+            0x0502 => Self::SeqGet,
+            0x0503 => Self::SeqSet,
             0x0601 => Self::DataNew,
             0x0602 => Self::DataTag,
             0x0701 => Self::TyChk,

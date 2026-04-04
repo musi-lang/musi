@@ -106,12 +106,16 @@ fn encode_constants(out: &mut Vec<u8>, artifact: &Artifact) {
                 out.push(0);
                 push_i64(out, value);
             }
-            ConstantValue::Bool(value) => {
+            ConstantValue::Float(value) => {
                 out.push(1);
+                push_u64(out, value.to_bits());
+            }
+            ConstantValue::Bool(value) => {
+                out.push(2);
                 out.push(u8::from(value));
             }
             ConstantValue::String(id) => {
-                out.push(2);
+                out.push(3);
                 push_u32(out, id.raw());
             }
         }
@@ -236,30 +240,34 @@ fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
             out.push(5);
             push_u32(out, id.raw());
         }
-        Operand::Method(id) => {
+        Operand::Global(id) => {
             out.push(6);
             push_u32(out, id.raw());
         }
-        Operand::Foreign(id) => {
+        Operand::Method(id) => {
             out.push(7);
             push_u32(out, id.raw());
         }
-        Operand::Effect { effect, op } => {
+        Operand::Foreign(id) => {
             out.push(8);
+            push_u32(out, id.raw());
+        }
+        Operand::Effect { effect, op } => {
+            out.push(9);
             push_u32(out, effect.raw());
             push_u16(out, *op);
         }
         Operand::Label(id) => {
-            out.push(9);
+            out.push(10);
             push_u16(out, *id);
         }
         Operand::TypeLen { ty, len } => {
-            out.push(10);
+            out.push(11);
             push_u32(out, ty.raw());
             push_u16(out, *len);
         }
         Operand::BranchTable(labels) => {
-            out.push(11);
+            out.push(12);
             push_u16(
                 out,
                 u16::try_from(labels.len()).expect("branch table overflow"),
@@ -297,8 +305,9 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<
         let kind = cursor.read_u8()?;
         let value = match kind {
             0 => ConstantValue::Int(cursor.read_i64()?),
-            1 => ConstantValue::Bool(cursor.read_u8()? != 0),
-            2 => ConstantValue::String(cursor.read_idx()?),
+            1 => ConstantValue::Float(f64::from_bits(cursor.read_u64()?)),
+            2 => ConstantValue::Bool(cursor.read_u8()? != 0),
+            3 => ConstantValue::String(cursor.read_idx()?),
             _ => return Err(AssemblyError::Text("unknown constant kind".into())),
         };
         let _ = artifact.constants.alloc(ConstantDescriptor { name, value });
@@ -416,18 +425,19 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
         3 => Operand::String(cursor.read_idx()?),
         4 => Operand::Type(cursor.read_idx()?),
         5 => Operand::Constant(cursor.read_idx()?),
-        6 => Operand::Method(cursor.read_idx()?),
-        7 => Operand::Foreign(cursor.read_idx()?),
-        8 => Operand::Effect {
+        6 => Operand::Global(cursor.read_idx()?),
+        7 => Operand::Method(cursor.read_idx()?),
+        8 => Operand::Foreign(cursor.read_idx()?),
+        9 => Operand::Effect {
             effect: cursor.read_idx()?,
             op: cursor.read_u16()?,
         },
-        9 => Operand::Label(cursor.read_u16()?),
-        10 => Operand::TypeLen {
+        10 => Operand::Label(cursor.read_u16()?),
+        11 => Operand::TypeLen {
             ty: cursor.read_idx()?,
             len: cursor.read_u16()?,
         },
-        11 => {
+        12 => {
             let count = usize::from(cursor.read_u16()?);
             let mut labels = Vec::with_capacity(count);
             for _ in 0..count {
@@ -478,6 +488,10 @@ fn push_u32(out: &mut Vec<u8>, value: u32) {
 }
 
 fn push_i64(out: &mut Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
@@ -538,6 +552,11 @@ impl<'bytes> Cursor<'bytes> {
     fn read_i64(&mut self) -> Result<i64, AssemblyError> {
         let bytes = self.read_array::<8>()?;
         Ok(i64::from_le_bytes(bytes))
+    }
+
+    fn read_u64(&mut self) -> Result<u64, AssemblyError> {
+        let bytes = self.read_array::<8>()?;
+        Ok(u64::from_le_bytes(bytes))
     }
 
     fn read_idx<T>(&mut self) -> Result<Idx<T>, AssemblyError> {

@@ -28,6 +28,10 @@ pub fn format_text(artifact: &Artifact) -> String {
                 out.push_str(" int ");
                 out.push_str(&value.to_string());
             }
+            ConstantValue::Float(value) => {
+                out.push_str(" float ");
+                out.push_str(&value.to_string());
+            }
             ConstantValue::Bool(value) => {
                 out.push_str(" bool ");
                 out.push_str(if value { "true" } else { "false" });
@@ -62,6 +66,18 @@ pub fn format_text(artifact: &Artifact) -> String {
         push_quoted(&mut out, artifact.string_text(descriptor.symbol));
         out.push('\n');
     }
+    for (_, descriptor) in artifact.globals.iter() {
+        out.push_str(".global @");
+        out.push_str(artifact.string_text(descriptor.name));
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        if let Some(method) = descriptor.initializer {
+            out.push_str(" @");
+            out.push_str(artifact.string_text(artifact.methods.get(method).name));
+        }
+        out.push('\n');
+    }
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method @");
         out.push_str(artifact.string_text(method.name));
@@ -89,18 +105,6 @@ pub fn format_text(artifact: &Artifact) -> String {
             }
         }
         out.push_str(".end\n");
-    }
-    for (_, descriptor) in artifact.globals.iter() {
-        out.push_str(".global @");
-        out.push_str(artifact.string_text(descriptor.name));
-        if descriptor.export {
-            out.push_str(" export");
-        }
-        if let Some(method) = descriptor.initializer {
-            out.push_str(" @");
-            out.push_str(artifact.string_text(artifact.methods.get(method).name));
-        }
-        out.push('\n');
     }
 
     out
@@ -183,6 +187,10 @@ fn format_operand(
         Operand::Constant(id) => {
             out.push('@');
             out.push_str(artifact.string_text(artifact.constants.get(*id).name));
+        }
+        Operand::Global(id) => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.globals.get(*id).name));
         }
         Operand::Method(id) => {
             out.push('@');
@@ -306,6 +314,11 @@ impl TextBuilder {
                     .parse()
                     .map_err(|_| AssemblyError::Text("invalid integer constant".into()))?,
             ),
+            "float" => ConstantValue::Float(
+                raw_value
+                    .parse()
+                    .map_err(|_| AssemblyError::Text("invalid float constant".into()))?,
+            ),
             "bool" => ConstantValue::Bool(match raw_value {
                 "true" => true,
                 "false" => false,
@@ -327,7 +340,6 @@ impl TextBuilder {
             return Err(AssemblyError::Text("expected `.global @Name ...`".into()));
         }
         let name = parse_symbol(&parts[1])?;
-        let name_id = self.intern_string(&name);
         let mut export = false;
         let mut initializer = None;
         for part in parts.iter().skip(2) {
@@ -335,17 +347,13 @@ impl TextBuilder {
                 export = true;
             } else {
                 let method_name = parse_symbol(part)?;
-                initializer = Some(*self.methods.get(&method_name).ok_or_else(|| {
-                    AssemblyError::Text(format!("unknown method @{method_name}"))
-                })?);
+                initializer = Some(self.ensure_method_symbol(&method_name));
             }
         }
-        let id = self.artifact.globals.alloc(GlobalDescriptor {
-            name: name_id,
-            export,
-            initializer,
-        });
-        let _ = self.globals.insert(name, id);
+        let id = self.ensure_global_symbol(&name);
+        let descriptor = self.artifact.globals.get_mut(id);
+        descriptor.export = export;
+        descriptor.initializer = initializer;
         Ok(())
     }
 
@@ -447,8 +455,8 @@ impl TextBuilder {
             labels: labels.into_boxed_slice(),
             code: code.into_boxed_slice(),
         };
-        let id = self.artifact.methods.alloc(method);
-        let _ = self.methods.insert(name, id);
+        let id = self.ensure_method_symbol(&name);
+        *self.artifact.methods.get_mut(id) = method;
         Ok(())
     }
 
@@ -483,6 +491,7 @@ impl TextBuilder {
             OperandShape::String => self.parse_string_operand(parts),
             OperandShape::Type => self.parse_type_operand(parts),
             OperandShape::Constant => self.parse_constant_operand(parts),
+            OperandShape::Global => self.parse_global_operand(parts),
             OperandShape::Method => self.parse_method_operand(parts),
             OperandShape::Foreign => self.parse_foreign_operand(parts),
             OperandShape::Effect => self.parse_effect_operand(parts),
@@ -522,6 +531,41 @@ impl TextBuilder {
             .get(&name)
             .ok_or_else(|| AssemblyError::Text(format!("unknown constant @{name}")))?;
         Ok(Operand::Constant(constant))
+    }
+
+    fn parse_global_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "global")?)?;
+        Ok(Operand::Global(self.ensure_global_symbol(&name)))
+    }
+
+    fn ensure_global_symbol(&mut self, name: &str) -> GlobalId {
+        if let Some(id) = self.globals.get(name).copied() {
+            return id;
+        }
+        let name_id = self.intern_string(name);
+        let id = self.artifact.globals.alloc(GlobalDescriptor {
+            name: name_id,
+            export: false,
+            initializer: None,
+        });
+        let _ = self.globals.insert(name.into(), id);
+        id
+    }
+
+    fn ensure_method_symbol(&mut self, name: &str) -> MethodId {
+        if let Some(id) = self.methods.get(name).copied() {
+            return id;
+        }
+        let name_id = self.intern_string(name);
+        let id = self.artifact.methods.alloc(MethodDescriptor {
+            name: name_id,
+            locals: 0,
+            export: false,
+            labels: Box::new([]),
+            code: Box::new([]),
+        });
+        let _ = self.methods.insert(name.into(), id);
+        id
     }
 
     fn parse_method_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {

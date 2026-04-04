@@ -2,7 +2,8 @@ use music_arena::Idx;
 
 use crate::artifact::StringRecord;
 use crate::descriptor::{
-    ConstantDescriptor, EffectDescriptor, ForeignDescriptor, MethodDescriptor, TypeDescriptor,
+    ConstantDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
+    TypeDescriptor,
 };
 use crate::opcode::Opcode;
 
@@ -16,6 +17,7 @@ pub enum OperandShape {
     String,
     Type,
     Constant,
+    Global,
     Method,
     Foreign,
     Effect,
@@ -37,6 +39,7 @@ pub enum Operand {
     String(Idx<StringRecord>),
     Type(Idx<TypeDescriptor>),
     Constant(Idx<ConstantDescriptor>),
+    Global(Idx<GlobalDescriptor>),
     Method(Idx<MethodDescriptor>),
     Foreign(Idx<ForeignDescriptor>),
     Effect {

@@ -62,3 +62,67 @@ fn text_roundtrip_preserves_artifact_shape() {
 
     assert_eq!(format_text(&decoded), text);
 }
+
+#[test]
+fn float_constants_roundtrip_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let float_name = artifact.intern_string("Float");
+    let constant_name = artifact.intern_string("pi.const");
+    let _ = artifact.types.alloc(TypeDescriptor { name: float_name });
+    let _ = artifact.constants.alloc(ConstantDescriptor {
+        name: constant_name,
+        value: ConstantValue::Float(3.5),
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}
+
+#[test]
+fn global_and_sequence_operands_roundtrip_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let entry = artifact.intern_string("entry");
+    let label = artifact.intern_string("L0");
+    let answer = artifact.intern_string("answer");
+    let int = artifact.intern_string("Int");
+    let int_ty = artifact.types.alloc(TypeDescriptor { name: int });
+    let global = artifact.globals.alloc(GlobalDescriptor {
+        name: answer,
+        export: true,
+        initializer: None,
+    });
+    let _ = artifact.methods.alloc(MethodDescriptor {
+        name: entry,
+        locals: 1,
+        export: false,
+        labels: Box::new([label]),
+        code: Box::new([
+            CodeEntry::Label(Label { id: 0 }),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdGlob, Operand::Global(global))),
+            CodeEntry::Instruction(Instruction::new(Opcode::StGlob, Operand::Global(global))),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::SeqNew,
+                Operand::TypeLen { ty: int_ty, len: 2 },
+            )),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+        ]),
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}

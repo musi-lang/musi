@@ -1,6 +1,6 @@
-# Feature Matrix (crates)
+# Feature Matrix (`crates_new/`)
 
-This document tracks reduced-core language feature coverage across the clean-room crates in `crates/`.
+This document tracks reduced-core language and toolchain coverage across the canonical compiler rewrite in `crates_new/`.
 
 The canonical feature definitions live in:
 
@@ -13,73 +13,105 @@ The canonical feature definitions live in:
 - `docs/04-compiler-attributes.md`
 - `docs/05-ffi.md`
 
+Primary implementation truth comes from:
+
+- `Cargo.toml`
+- `docs/09-architecture.md`
+- `docs/12-public-api.md`
+- `docs/13-crates_new-rewrite-tracker.md`
+- current tests in `music_syntax`, `music_resolve`, `music_sema`, `music_emit`, `music_session`, and `musi_project`
+
 Status legend:
 
-- `done`: implemented and covered by tests/fixtures
-- `partial`: implemented but missing edge cases or cross-layer integration
-- `missing`: not implemented in `crates/`
+- `done`: implemented in the canonical `crates_new` workspace and backed by current tests
+- `partial`: implemented, but intentionally reduced, incomplete across phases, or not fully lowered/executable yet
+- `missing`: not implemented in the canonical `crates_new` stack
 
-## Surface Syntax
+This matrix is language-first. It does not claim runtime or JIT completion.
 
-| Feature                                  | Lex  | Parse/AST | Resolve/HIR | Check   | Notes                                                                 |
-| ---------------------------------------- | ---- | --------- | ----------- | ------- | --------------------------------------------------------------------- |
-| Identifiers (plain/escaped)              | done | done      | done        | done    |                                                                       |
-| Symbolic operators (`SymOp`)             | done | done      | done        | done    | Symbolic infix typechecks like callable surface                       |
-| Integer literals (bases, `_`)            | done | done      | done        | done    | Type is `Int`; numeric-range validation is not modeled yet            |
-| Float literals (incl. exponent)          | done | done      | done        | done    | Type is `Float`; no numeric-range validation yet                      |
-| Strings                                  | done | done      | done        | done    | `music_basic::string_lit` supports decoding                           |
-| F-strings (syntax + interpolation exprs) | done | done      | done        | done    | Interpolations parsed into syntax subtree and typechecked as `String` |
-| Runes                                    | done | done      | done        | done    | Type is `Int` codepoint                                               |
-| Comments + trivia                        | done | done      | done        | n/a     | Trivia preserved in tokens/syntax tree                                |
+## Surface Syntax And Literals
 
-## Expressions
+| Feature                                  | Lex  | Parse/AST | Resolve/HIR | Sema | Notes                                                             |
+| ---------------------------------------- | ---- | --------- | ----------- | ---- | ----------------------------------------------------------------- |
+| Identifiers (plain/escaped)              | done | done      | done        | done |                                                                   |
+| Symbolic operators (`SymOp`)             | done | done      | done        | done | Symbolic infix surface resolves and typechecks like callable use  |
+| Integer literals (bases, `_`)            | done | done      | done        | done | Type is `Int`; numeric range modeling is still reduced-core       |
+| Float literals (incl. exponent)          | done | done      | done        | done | Type is `Float`; no range/NaN-policy modeling in sema             |
+| Strings                                  | done | done      | done        | done | Escape decoding is covered in `music_syntax::string_lit`          |
+| Template strings with interpolation      | done | done      | done        | done | Interpolations are ordinary expressions and typecheck as `String` |
+| Runes                                    | done | done      | done        | done | Typed as `Int` codepoints                                         |
+| Comments and trivia                      | done | done      | done        | n/a  | Trivia is preserved in the syntax tree                            |
+| Quote and splice surface                 | done | done      | done        | done | `Syntax`-typed metaprogramming surface exists in frontend + sema  |
 
-| Feature                                        | Lex  | Parse/AST | Resolve/HIR | Check   | Notes                                                         |
-| ---------------------------------------------- | ---- | --------- | ----------- | ------- | ------------------------------------------------------------- |
-| Sequences (`;`)                                | done | done      | done        | done    | Statement wrappers lowered as a top-level sequence            |
-| `let` bindings                                 | done | done      | done        | partial | Polymorphism and full generalization not complete             |
-| Mut bindings (`let mut`)                       | done | done      | done        | done    | Enforced for `name <- value`                                  |
-| Assignment (`<-`)                              | done | done      | done        | done    | Name update requires `let mut`; place update requires `mut T`  |
-| Calls                                          | done | done      | done        | done    | Call typing + effect propagation; dispatch not modeled        |
-| Field/index/update access (`.`, `.[`, `.{`)    | done | done      | done        | done    | Tuple `.0` supported; `.[\"field\"]` resolves record/data keys |
-| `case ... of` with guards                      | done | done      | done        | done    | Pattern/type interactions checked                             |
-| `data`, `effect`, `class`, `instance` as exprs | done | done      | done        | partial | Registered into type environment with reduced rules           |
-| `perform`, `handle`, `resume`                  | done | done      | done        | done    | Handler clause shape and arity checked                         |
-| `quote` and splice forms                       | done | done      | done        | done    | Quote/splice are typed as `Syntax` in v0.1                    |
+## Core Expressions And Modules
 
-## Types
+| Feature                                           | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                |
+| ------------------------------------------------- | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
+| Sequences (`;`)                                   | done      | done        | done | done              | Top-level statements lower as sequence expressions                   |
+| `let` bindings                                    | done      | done        | partial | partial         | Top-level lets and local bind/wildcard value lets compile; implicit HM-style generalization, local callable lets, and destructuring lets remain reduced |
+| Mutable bindings (`let mut`)                      | done      | done        | done | done              | Mutable local value binds compile end-to-end in the non-runtime backend |
+| Assignment (`<-`)                                 | done      | done        | done | done              | Local names, globals, and indexed sequence elements compile end-to-end |
+| Calls                                             | done      | done        | done | partial           | Direct named, imported, generic, and foreign calls compile; higher-order/local-callable closure calls remain reduced |
+| Field/index/update access (`.`, `.[`, `.{`)       | done      | done        | done | partial           | Imported module members plus indexed sequence get/set compile; record/data field projection and richer updates remain reduced |
+| `case ... of` with guards                         | done      | done        | done | partial           | Literal, wildcard, and bind arms with guards compile; structural tuple/array/variant/or/as patterns remain reduced |
+| `data`, `effect`, `class`, `instance` as exprs    | done      | done        | partial | partial         | Strong semantic support exists, but whole-language lowering/runtime is not complete |
+| `perform`, `handle`, `resume`                     | done      | done        | done | partial           | Handler clause shape, effect accounting, and resume typing are checked |
+| Static imports (`import "..."`)                   | done      | done        | done | done              | Static import discovery, module keys, and session/project integration exist |
+| Dynamic imports (`import expr`)                   | done      | done        | partial | partial         | Expression form exists; static graph participation is intentionally limited |
+| Export and opaque module surface                  | done      | done        | partial | partial         | Export collection and semantic module surfaces exist; full hiding/runtime implications remain reduced |
+| Imported module member typing                     | n/a       | done        | done | done              | Imported globals and generic callables compile through semantic module surfaces |
+| Destructured module imports and aliases           | done      | done        | done | done              | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation |
+| Class and effect laws                             | done      | done        | partial | missing         | Law surface is parsed, lowered, and tracked semantically; no runtime/property-check execution |
 
-| Feature                             | Parse/AST | Resolve/HIR | Check   | Notes                                                       |
-| ----------------------------------- | --------- | ----------- | ------- | ----------------------------------------------------------- |
-| Named types + application (`T[A]`)  | done      | done        | partial | Generic instantiation exists but is limited                 |
-| Functions (`->`, `~>`)              | done      | done        | partial | Effect rows live on signatures (`with {}`)                  |
-| Products (`*`, tuples)              | done      | done        | partial | Check models tuples; product types are still evolving       |
-| Sums (`+`)                          | done      | done        | partial | Check represents sum types but does not fully lower/dispatch |
-| Arrays (`[]T`, `[n]T`)              | done      | done        | partial | Shape/dimension checking not complete                       |
-| `mut T`                             | done      | done        | partial | Treated as prefix type op; enforcement incomplete           |
-| `where` constraints (`T <:`, `T :`) | done      | done        | partial | Stored and partially checked                                |
-| Effect rows (`with { ... }`)        | done      | done        | partial | Row openness modeled as `EffectRow::is_open`                |
+## Types, Constraints, And Effects
 
-## Attributes + FFI
+| Feature                              | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                |
+| ------------------------------------ | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
+| Named types and application (`T[A]`) | done      | done        | partial | partial         | Explicit generic type application works; type system remains reduced-core overall |
+| Functions (`->`, `~>`)               | done      | done        | partial | partial         | Function kinds and signature-side effect rows exist                  |
+| Tuples and products                  | done      | done        | partial | partial         | Tuple checking exists; broader product-system completeness is still reduced |
+| Anonymous sums (`+`)                 | done      | done        | partial | partial         | Represented semantically, but not fully lowered through the whole backend |
+| Arrays (`[]T`, `[n]T`)               | done      | done        | partial | partial         | Core shape exists; shape/dimension completeness remains reduced      |
+| `mut T`                              | done      | done        | partial | partial         | Writable-type surface exists; enforcement is not a full ownership system |
+| `where` constraints (`T :`, `T <:`)  | done      | done        | partial | partial         | Constraint lowering and solving exist; the overall type system is still reduced-core |
+| Open effect rows (`with { ... }`)    | done      | done        | partial | partial         | Named open remainders and declared-effect checks exist; backend/runtime story is still reduced |
+| Imported generic exports             | n/a       | done        | done | done              | Imported generic callable uses now compile through `music_session` end-to-end |
+| Instance coherence across imports    | n/a       | done        | done | n/a              | Reachable exported instances participate in sema coherence           |
 
-| Feature                     | Parse/AST | Resolve/HIR | Check   | Notes                                                             |
-| --------------------------- | --------- | ----------- | ------- | ----------------------------------------------------------------- |
-| Attribute syntax + args     | done      | done        | done    | Argument-model validation for `@link/@when/@repr/@layout/@diag.*` |
-| `foreign` decl surface      | done      | done        | done    | `foreign (...)` block attrs copied to inner decls                 |
-| `export` / `opaque` surface | done      | done        | partial | Export collection exists; representation hiding not implemented   |
+## Attributes, FFI, And Metaprogramming
 
-## SEAM Boundary
+| Feature                            | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                  |
+| ---------------------------------- | --------- | ----------- | ---- | ----------------- | ---------------------------------------------------------------------- |
+| Attribute syntax and data-only args | done     | done        | done | n/a               | `@link/@when/@repr/@layout/@diag.*` argument-model validation exists   |
+| `foreign` declaration surface      | done      | done        | done | done              | Foreign declarations and direct foreign calls lower into IR and SEAM metadata end-to-end |
+| `export foreign` surface           | done      | done        | partial | partial         | Declared surface exists in docs/grammar; backend/runtime completeness is still reduced |
+| `@link` validation                 | done      | done        | done | partial           | Invalid targets are diagnosed; runtime linking is outside the current non-runtime stack |
+| `@when` target gating              | done      | done        | done | partial           | Target metadata is modeled semantically; end-to-end target selection remains reduced |
+| `@repr` and `@layout` surface      | done      | done        | done | partial           | Layout-sensitive metadata exists; full runtime ABI contract is still reduced |
+| Compiler-only `@musi.*` attrs      | done      | done        | partial | partial         | Reserved surface exists; backend-specific meaning remains selective    |
+| Inert metadata attrs               | done      | done        | partial | n/a             | Preserved as metadata; not all downstream consumers exist yet          |
+| Quote as first-class syntax        | done      | done        | done | partial           | Frontend and sema support exist; emitter/runtime support is not the reduced-core focus |
+| Splice forms `#name/#()/#[]`       | done      | done        | done | partial           | Valid inside quote; backend/runtime execution path is not complete     |
 
-| Feature                     | Contract (`music_bc`) | Assembly (`music_assembly`) | Notes                          |
-| --------------------------- | --------------------- | --------------------------- | ------------------------------ |
-| SEAM descriptor + ISA model | done                  | n/a                         | Contract defined in `music_bc` |
-| Text encode/decode          | n/a                   | done                        |                                |
-| Binary encode/decode        | n/a                   | done                        |                                |
+## SEAM, Session, And Project Integration
 
-## Toolchain
+| Feature                                        | Status | Notes                                                                       |
+| ---------------------------------------------- | ------ | --------------------------------------------------------------------------- |
+| SEAM contract (`music_bc`)                     | done   | Artifact tables, descriptors, opcode families, and structural validation exist |
+| SEAM text transport (`music_assembly`)         | done   | Text format, parser, formatter, and validation exist                        |
+| SEAM binary transport (`music_assembly`)       | done   | Binary encode/decode and validation exist                                   |
+| Sema-to-IR lowering (`music_ir`)               | done   | Codegen-facing facts and owned executable IR exist                          |
+| IR-to-SEAM emission (`music_emit`)             | partial | Reduced-core emission exists; not every language feature lowers end-to-end  |
+| Module compilation through `music_session`     | done   | Artifact, bytes, and text outputs exist                                     |
+| Reachable entry-graph compilation              | done   | `music_session` compiles the static-import closure                          |
+| Parse/resolve/sema/IR/emit session caching     | done   | Cached phase products and edit invalidation exist                           |
+| Package/workspace loading (`musi_project`)     | done   | `musi.json`, workspaces, lockfiles, registry cache, and package-aware compile exist |
+| Package import remapping and registry resolution | done | `musi_project` builds the session view used for package-aware compilation   |
 
-| Feature                                  | Frontend (`music_fe`) | Emit (`music_emit`)       | Notes                                                      |
-| ---------------------------------------- | --------------------- | -------------------------- | ---------------------------------------------------------- |
-| Module graph discovery from loaded files | partial               | n/a                        | Works when all imported source paths exist in `SourceMap`   |
-| Compile entry source to SEAM artifact    | partial               | partial                    | Emits subset of checked HIR into `music_bc` (reduced core) |
-| Compile entry source to `.seam` bytes    | partial               | partial                    | Uses `music_assembly::encode_binary`                        |
+## Planned Or Missing
+
+| Feature                  | Status  | Notes                                                      |
+| ------------------------ | ------- | ---------------------------------------------------------- |
+| Native/JIT backend       | missing | `music_jit` is planned but not implemented                 |
+| Runtime execution/VM     | missing | Outside the current non-runtime `crates_new` completion bar |
+| Full-language backend parity | partial | The compiler path exists, but emission is still reduced-core overall |

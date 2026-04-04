@@ -182,8 +182,9 @@ impl Artifact {
         }
         for (_, descriptor) in self.constants.iter() {
             self.require_string(descriptor.name)?;
-            if let ConstantValue::String(id) = descriptor.value {
-                self.require_string(id)?;
+            match descriptor.value {
+                ConstantValue::String(id) => self.require_string(id)?,
+                ConstantValue::Int(_) | ConstantValue::Float(_) | ConstantValue::Bool(_) => {}
             }
         }
         for (_, descriptor) in self.globals.iter() {
@@ -263,6 +264,9 @@ impl Artifact {
             Operand::Constant(id) => {
                 self.require_constant(*id)?;
             }
+            Operand::Global(id) => {
+                self.require_global(*id)?;
+            }
             Operand::Method(id) => {
                 self.require_method(*id)?;
             }
@@ -327,6 +331,15 @@ impl Artifact {
         Ok(())
     }
 
+    fn require_global(&self, id: GlobalId) -> Result<(), ArtifactError> {
+        let _ = self
+            .globals
+            .as_slice()
+            .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
+            .ok_or(ArtifactError::InvalidReference { table: "globals" })?;
+        Ok(())
+    }
+
     fn require_foreign(&self, id: ForeignId) -> Result<(), ArtifactError> {
         let _ = self
             .foreigns
@@ -357,6 +370,7 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::String(_), OperandShape::String)
             | (Operand::Type(_), OperandShape::Type)
             | (Operand::Constant(_), OperandShape::Constant)
+            | (Operand::Global(_), OperandShape::Global)
             | (Operand::Method(_), OperandShape::Method)
             | (Operand::Foreign(_), OperandShape::Foreign)
             | (Operand::Effect { .. }, OperandShape::Effect)

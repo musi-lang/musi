@@ -1,4 +1,5 @@
 use music_base::SourceId;
+use music_bc::descriptor::ConstantValue;
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
@@ -72,4 +73,90 @@ fn emits_merged_program_for_reachable_modules() {
         .expect("program emit should succeed");
     assert!(program.artifact.validate().is_ok());
     assert_eq!(program.modules.len(), 2);
+}
+
+#[test]
+fn emits_float_tuple_array_and_type_apply() {
+    let ir = lower_ir(
+        r"
+        let id[T] (x : T) : T := x;
+        export let pair := (1, 2);
+        export let items := [1, 2, 3];
+        export let pi : Float := 3.5;
+        export let answer () : Int := id[Int](42);
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(
+        emitted
+            .artifact
+            .constants
+            .iter()
+            .any(|(_, constant)| matches!(constant.value, ConstantValue::Float(_)))
+    );
+}
+
+#[test]
+fn emits_globals_locals_assignment_index_and_case() {
+    let ir = lower_ir(
+        r"
+        export let base : Int := 41;
+        export let answer (x : Int) : Int := (
+          let mut items := [1, 2, 3];
+          items.[0] <- base;
+          case x of (| 0 => items.[0] | value => value + base);
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(opcodes.contains(&music_bc::Opcode::LdGlob));
+    assert!(opcodes.contains(&music_bc::Opcode::StGlob));
+    assert!(opcodes.contains(&music_bc::Opcode::SeqGet));
+    assert!(opcodes.contains(&music_bc::Opcode::SeqSet));
+    assert!(opcodes.contains(&music_bc::Opcode::BrFalse));
+}
+
+#[test]
+fn emits_foreign_calls() {
+    let ir = lower_ir(
+        r#"
+        foreign "c" (
+          let puts (value : CString) : Int;
+        );
+        export let answer () : Int := puts("hello");
+    "#,
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(
+        emitted
+            .artifact
+            .methods
+            .iter()
+            .flat_map(|(_, method)| method.code.iter())
+            .filter_map(|entry| match entry {
+                music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+                music_bc::CodeEntry::Label(_) => None,
+            })
+            .any(|opcode| opcode == music_bc::Opcode::FfiCall)
+    );
 }

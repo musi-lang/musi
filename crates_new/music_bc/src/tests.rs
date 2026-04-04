@@ -82,3 +82,54 @@ fn rejects_missing_label_reference() {
 
     assert!(artifact.validate().is_err());
 }
+
+#[test]
+fn validates_float_constants() {
+    let mut artifact = Artifact::new();
+    let name = artifact.intern_string("pi.const");
+    let _ = artifact.constants.alloc(ConstantDescriptor {
+        name,
+        value: ConstantValue::Float(3.5),
+    });
+
+    assert!(artifact.validate().is_ok());
+}
+
+#[test]
+fn validates_global_and_sequence_operands() {
+    let mut artifact = Artifact::new();
+    let entry_name = artifact.intern_string("entry");
+    let label_name = artifact.intern_string("L0");
+    let global_name = artifact.intern_string("answer");
+    let int_name = artifact.intern_string("Int");
+
+    let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
+    let global_id = artifact.globals.alloc(GlobalDescriptor {
+        name: global_name,
+        export: true,
+        initializer: None,
+    });
+    let _ = artifact.methods.alloc(MethodDescriptor {
+        name: entry_name,
+        locals: 1,
+        export: false,
+        labels: Box::new([label_name]),
+        code: Box::new([
+            CodeEntry::Label(Label { id: 0 }),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdGlob, Operand::Global(global_id))),
+            CodeEntry::Instruction(Instruction::new(Opcode::StGlob, Operand::Global(global_id))),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::SeqNew,
+                Operand::TypeLen { ty: int_ty, len: 2 },
+            )),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+        ]),
+    });
+
+    assert!(artifact.validate().is_ok());
+}

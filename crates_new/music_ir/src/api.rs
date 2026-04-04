@@ -1,6 +1,6 @@
 use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
-use music_names::Symbol;
+use music_names::{NameBindingId, Symbol};
 use music_sema::{
     ClassSurface, DefinitionKey, EffectRow, EffectSurface, ExportedValue, InstanceSurface,
     SurfaceTy,
@@ -16,6 +16,7 @@ pub struct IrOrigin {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrParam {
+    pub binding: NameBindingId,
     pub symbol: Symbol,
     pub name: Box<str>,
 }
@@ -37,7 +38,16 @@ pub enum IrLit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrBinaryOp {
     Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
     Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
     Other(Box<str>),
 }
 
@@ -48,19 +58,78 @@ pub struct IrExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrAssignTarget {
+    Binding {
+        binding: Option<NameBindingId>,
+        name: Box<str>,
+        module_target: Option<ModuleKey>,
+    },
+    Index {
+        base: Box<IrExpr>,
+        index: Box<IrExpr>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrCasePattern {
+    Wildcard,
+    Bind {
+        binding: NameBindingId,
+        name: Box<str>,
+    },
+    Lit(IrLit),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrCaseArm {
+    pub pattern: IrCasePattern,
+    pub guard: Option<IrExpr>,
+    pub expr: IrExpr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrExprKind {
+    Unit,
     Name {
+        binding: Option<NameBindingId>,
         symbol: Symbol,
         name: Box<str>,
+        module_target: Option<ModuleKey>,
     },
     Lit(IrLit),
     Sequence {
         exprs: Box<[IrExpr]>,
     },
+    Tuple {
+        ty_name: Box<str>,
+        items: Box<[IrExpr]>,
+    },
+    Array {
+        ty_name: Box<str>,
+        items: Box<[IrExpr]>,
+    },
+    Let {
+        binding: Option<NameBindingId>,
+        name: Box<str>,
+        is_mut: bool,
+        value: Box<IrExpr>,
+    },
+    Assign {
+        target: Box<IrAssignTarget>,
+        value: Box<IrExpr>,
+    },
+    Index {
+        base: Box<IrExpr>,
+        index: Box<IrExpr>,
+    },
     Binary {
         op: IrBinaryOp,
         left: Box<IrExpr>,
         right: Box<IrExpr>,
+    },
+    Case {
+        scrutinee: Box<IrExpr>,
+        arms: Box<[IrCaseArm]>,
     },
     Call {
         callee: Box<IrExpr>,
@@ -73,6 +142,7 @@ pub enum IrExprKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCallable {
+    pub binding: Option<NameBindingId>,
     pub symbol: Symbol,
     pub name: Box<str>,
     pub params: Box<[IrParam]>,
@@ -92,6 +162,7 @@ pub struct IrDataDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrForeignDef {
+    pub binding: Option<NameBindingId>,
     pub symbol: Symbol,
     pub name: Box<str>,
     pub abi: Box<str>,
@@ -100,6 +171,7 @@ pub struct IrForeignDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrGlobal {
+    pub binding: Option<NameBindingId>,
     pub symbol: Symbol,
     pub name: Box<str>,
     pub body: IrExpr,
