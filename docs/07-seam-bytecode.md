@@ -113,6 +113,7 @@ Current operand categories are:
 - `i16`
 - `wide(u16, u8)`
 - `type_len(u16, u16)`
+- `effect_id(u16)`
 - `effect(u16, u16)`
 - `effect_jump(u16, u16, i16)`
 - branch tables
@@ -126,6 +127,7 @@ Examples:
 - `seq.new @type:Bytes 64`
 - `data.new @type:Option 1`
 - `eff.invk @effect:Abort @op:abort`
+- `hdl.push @effect:Console`
 
 `data.new` uses the tag value from the stack. The operand carries only the aggregate type id and field count.
 
@@ -181,8 +183,8 @@ Fixed-index fast paths are not part of the stable ISA.
 `data.*` is the first-class family for ADTs and record-like aggregates:
 
 - construction
-- field access
-- field mutation
+- field access (`data.get`)
+- field mutation (`data.set`)
 - variant-tag inspection
 
 ADT tagging does not leak through `seq.*`.
@@ -201,7 +203,7 @@ The runtime type family is explicit:
 
 Resumable algebraic effects remain explicit SEAM instructions:
 
-- handler push/pop
+- handler push/pop (handler objects are stack values; `hdl.push` takes the handled effect id as its operand)
 - effect invoke
 - continuation resume
 

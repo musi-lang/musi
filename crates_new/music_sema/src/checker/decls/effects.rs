@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
-use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin};
+use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyKind};
 use music_names::Ident;
 
 use super::super::exprs::check_expr;
@@ -72,6 +72,9 @@ pub(in super::super) fn check_handle_expr(
         let clause_name: Box<str> = ctx.resolve_symbol(clause.op.name).into();
         if clause_name.as_ref() == value_name {
             seen_value = seen_value.saturating_add(1);
+            if let Some(binding) = ctx.binding_id_for_decl(clause.op) {
+                ctx.insert_binding_type(binding, handled_facts.ty);
+            }
             let facts = check_expr(ctx, clause.body);
             let origin = ctx.expr(clause.body).origin;
             type_mismatch(ctx, origin, handled_facts.ty, facts.ty);
@@ -90,19 +93,30 @@ pub(in super::super) fn check_handle_expr(
         };
 
         let params = ctx.idents(clause.params);
-        if params.len() != op_def.params.len() {
+        if params.len() != op_def.params.len().saturating_add(1) {
             ctx.diag(origin.span, "handler clause arity mismatch", "");
         }
-        for (ident, ty) in params.into_iter().zip(op_def.params.iter().copied()) {
+        let (args, cont) = if params.is_empty() {
+            (Vec::<Ident>::new(), None)
+        } else {
+            let split = params.len().saturating_sub(1);
+            (params[0..split].to_vec(), params.last().copied())
+        };
+        for (ident, ty) in args.into_iter().zip(op_def.params.iter().copied()) {
             if let Some(binding) = ctx.binding_id_for_decl(ident) {
                 ctx.insert_binding_type(binding, ty);
             }
         }
-        if let Some(result) = clause
-            .result
-            .and_then(|ident| ctx.binding_id_for_decl(ident))
+        if let Some(cont) = cont
+            && let Some(binding) = ctx.binding_id_for_decl(cont)
         {
-            ctx.insert_binding_type(result, op_def.result);
+            let params = ctx.alloc_ty_list([op_def.result]);
+            let cont_ty = ctx.alloc_ty(HirTyKind::Arrow {
+                params,
+                ret: handled_facts.ty,
+                is_effectful: true,
+            });
+            ctx.insert_binding_type(binding, cont_ty);
         }
         ctx.push_resume(ResumeCtx {
             arg: op_def.result,

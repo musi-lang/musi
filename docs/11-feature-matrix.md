@@ -52,10 +52,10 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | Mutable bindings (`let mut`)                      | done      | done        | done | done              | Mutable local value binds compile end-to-end in the non-runtime backend |
 | Assignment (`<-`)                                 | done      | done        | done | done              | Local names, globals, and indexed sequence elements compile end-to-end |
 | Calls                                             | done      | done        | done | done              | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
-| Field/index/update access (`.`, `.[`, `.{`)       | done      | done        | done | partial           | Imported module members plus indexed sequence get/set compile; record/data field projection and richer updates remain reduced |
-| `case ... of` with guards                         | done      | done        | done | partial           | Literal, wildcard, bind, tuple, and array patterns with guards compile; structural variant/or/as patterns remain reduced |
+| Field/index/update access (`.`, `.[`, `.{`)       | done      | done        | done | partial           | Imported module members plus indexed sequence get/set compile; record/data field projection and record update emission remain reduced (SEAM now exposes `data.get/data.set` and `data.new` uses `type_len`) |
+| `case ... of` with guards                         | done      | done        | done | partial           | Literal, wildcard, bind, tuple, and array patterns with guards compile; structural variant/or/as patterns remain reduced (needs typed variant lowering and `data.*` emission) |
 | `data`, `effect`, `class`, `instance` as exprs    | done      | done        | partial | partial         | Strong semantic support exists, but whole-language lowering/runtime is not complete |
-| `perform`, `handle`, `resume`                     | done      | done        | done | partial           | Handler clause shape, effect accounting, and resume typing are checked |
+| `perform`, `handle`, `resume`                     | done      | done        | done | partial           | Handler clauses bind params as written (`op(args, k) => ...`), `value => ...` has an implicit `value` binder, and `k` is typed as `op_result ~> handled_result`; end-to-end lowering/emission remains reduced |
 | Static imports (`import "..."`)                   | done      | done        | done | done              | Static import discovery, module keys, and session/project integration exist |
 | Dynamic imports (`import expr`)                   | done      | done        | partial | partial         | Expression form exists; static graph participation is intentionally limited |
 | Export and opaque module surface                  | done      | done        | partial | partial         | Export collection and semantic module surfaces exist; full hiding/runtime implications remain reduced |
@@ -97,11 +97,11 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 
 | Feature                                        | Status | Notes                                                                       |
 | ---------------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| SEAM contract (`music_bc`)                     | done   | Artifact tables, descriptors, opcode families, and structural validation exist |
+| SEAM contract (`music_bc`)                     | done   | Artifact tables, descriptors, opcode families, and structural validation exist; `data.new` uses `type_len`, `data.get/data.set` exist, and `hdl.push` takes an effect id (handler object is a stack value) |
 | SEAM text transport (`music_assembly`)         | done   | Text format, parser, formatter, and validation exist                        |
 | SEAM binary transport (`music_assembly`)       | done   | Binary encode/decode and validation exist                                   |
 | Sema-to-IR lowering (`music_ir`)               | done   | Codegen-facing facts and owned executable IR exist                          |
-| IR-to-SEAM emission (`music_emit`)             | partial | Reduced-core emission exists; not every language feature lowers end-to-end  |
+| IR-to-SEAM emission (`music_emit`)             | partial | Reduced-core emission exists; aggregates and effects are not yet emitted end-to-end (record/data projection and update, variant/or/as patterns, and `perform/handle/resume` lowering are still reduced) |
 | Module compilation through `music_session`     | done   | Artifact, bytes, and text outputs exist                                     |
 | Reachable entry-graph compilation              | done   | `music_session` compiles the static-import closure                          |
 | Parse/resolve/sema/IR/emit session caching     | done   | Cached phase products and edit invalidation exist                           |

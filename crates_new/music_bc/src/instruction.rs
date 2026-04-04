@@ -22,6 +22,7 @@ pub enum OperandShape {
     WideMethodCaptures,
     Foreign,
     Effect,
+    EffectId,
     Label,
     TypeLen,
     BranchTable,
@@ -51,6 +52,7 @@ pub enum Operand {
         effect: Idx<EffectDescriptor>,
         op: u16,
     },
+    EffectId(Idx<EffectDescriptor>),
     Label(LabelId),
     TypeLen {
         ty: Idx<TypeDescriptor>,

@@ -262,6 +262,10 @@ fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
             push_u32(out, effect.raw());
             push_u16(out, *op);
         }
+        Operand::EffectId(effect) => {
+            out.push(14);
+            push_u32(out, effect.raw());
+        }
         Operand::Label(id) => {
             out.push(10);
             push_u16(out, *id);
@@ -441,6 +445,7 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
             effect: cursor.read_idx()?,
             op: cursor.read_u16()?,
         },
+        14 => Operand::EffectId(cursor.read_idx()?),
         10 => Operand::Label(cursor.read_u16()?),
         11 => Operand::TypeLen {
             ty: cursor.read_idx()?,

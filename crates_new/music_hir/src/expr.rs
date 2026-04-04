@@ -341,7 +341,6 @@ pub struct HirForeignDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirHandleClause {
     pub op: Ident,
-    pub result: Option<Ident>,
     pub params: SliceRange<Ident>,
     pub body: HirExprId,
 }

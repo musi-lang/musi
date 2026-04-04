@@ -283,6 +283,9 @@ impl Artifact {
                     return Err(ArtifactError::InvalidEffectOp);
                 }
             }
+            Operand::EffectId(effect) => {
+                let _effect = self.effects.get(*effect);
+            }
             Operand::Label(id) => {
                 require_label(method, *id)?;
             }
@@ -378,6 +381,7 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::WideMethodCaptures { .. }, OperandShape::WideMethodCaptures)
             | (Operand::Foreign(_), OperandShape::Foreign)
             | (Operand::Effect { .. }, OperandShape::Effect)
+            | (Operand::EffectId(_), OperandShape::EffectId)
             | (Operand::Label(_), OperandShape::Label)
             | (Operand::TypeLen { .. }, OperandShape::TypeLen)
             | (Operand::BranchTable(_), OperandShape::BranchTable)

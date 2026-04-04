@@ -564,33 +564,24 @@ where
         let op = self.intern_ident_token_or_placeholder(op_tok, node.span());
         self.record_use(op);
 
-        let mut idents = node
+        let mut params = Vec::<Ident>::new();
+        for token in node
             .child_tokens()
             .filter(|t| t.kind() == TokenKind::Ident)
-            .collect::<Vec<_>>();
-        if !idents.is_empty() {
-            let _ = idents.remove(0);
-        }
-
-        let (params, result) = if idents.is_empty() {
-            (Vec::new(), None)
-        } else {
-            let mut ps = Vec::<Ident>::new();
-            for tok in &idents[0..idents.len().saturating_sub(1)] {
-                if let Some(id) = self.intern_ident_token(*tok) {
-                    ps.push(id);
-                }
+            .skip(1)
+        {
+            if let Some(ident) = self.intern_ident_token(token) {
+                params.push(ident);
             }
-            let result = idents.last().and_then(|t| self.intern_ident_token(*t));
-            (ps, result)
-        };
+        }
 
         self.push_scope();
+        if params.is_empty() && self.interner.resolve(op.name) == "value" {
+            // `value => ...` has an implicit `value` binder in its body scope.
+            let _ = self.insert_binding(op, NameBindingKind::HandleClauseParam);
+        }
         for p in &params {
             let _ = self.insert_binding(*p, NameBindingKind::HandleClauseParam);
-        }
-        if let Some(r) = result {
-            let _ = self.insert_binding(r, NameBindingKind::HandleClauseResult);
         }
         let body = match node.child_nodes().find(|n| n.kind().is_expr()) {
             Some(expr) => self.lower_expr(expr),
@@ -601,7 +592,6 @@ where
         let params = self.store.idents.alloc_from_iter(params);
         HirHandleClause {
             op,
-            result,
             params,
             body,
         }

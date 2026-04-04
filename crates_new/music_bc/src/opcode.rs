@@ -47,6 +47,8 @@ pub enum Opcode {
     SeqSet,
     DataNew,
     DataTag,
+    DataGet,
+    DataSet,
     TyChk,
     TyCast,
     TyId,
@@ -77,7 +79,7 @@ impl Opcode {
                 OpcodeFamily::CallClosure
             }
             Self::SeqNew | Self::SeqGet | Self::SeqSet => OpcodeFamily::Sequence,
-            Self::DataNew | Self::DataTag => OpcodeFamily::Data,
+            Self::DataNew | Self::DataTag | Self::DataGet | Self::DataSet => OpcodeFamily::Data,
             Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
             Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffResume => OpcodeFamily::Eff,
             Self::FfiCall => OpcodeFamily::Ffi,
@@ -118,6 +120,8 @@ impl Opcode {
             Self::SeqSet => "seq.set",
             Self::DataNew => "data.new",
             Self::DataTag => "data.tag",
+            Self::DataGet => "data.get",
+            Self::DataSet => "data.set",
             Self::TyChk => "ty.chk",
             Self::TyCast => "ty.cast",
             Self::TyId => "ty.id",
@@ -153,16 +157,17 @@ impl Opcode {
             | Self::SeqSet
             | Self::HdlPop
             | Self::EffResume
-            | Self::CallCls => OperandShape::None,
+            | Self::CallCls
+            | Self::DataGet
+            | Self::DataSet => OperandShape::None,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
             Self::Call | Self::CallTail => OperandShape::Method,
             Self::ClsNew => OperandShape::WideMethodCaptures,
-            Self::SeqNew => OperandShape::TypeLen,
-            Self::DataNew | Self::DataTag | Self::TyChk | Self::TyCast | Self::TyId => {
-                OperandShape::Type
-            }
-            Self::HdlPush | Self::EffInvk => OperandShape::Effect,
+            Self::SeqNew | Self::DataNew => OperandShape::TypeLen,
+            Self::DataTag | Self::TyChk | Self::TyCast | Self::TyId => OperandShape::Type,
+            Self::HdlPush => OperandShape::EffectId,
+            Self::EffInvk => OperandShape::Effect,
             Self::FfiCall => OperandShape::Foreign,
         }
     }
@@ -201,6 +206,8 @@ impl Opcode {
             Self::SeqSet => 0x0503,
             Self::DataNew => 0x0601,
             Self::DataTag => 0x0602,
+            Self::DataGet => 0x0603,
+            Self::DataSet => 0x0604,
             Self::TyChk => 0x0701,
             Self::TyCast => 0x0702,
             Self::TyId => 0x0703,
@@ -246,6 +253,8 @@ impl Opcode {
             "seq.set" => Self::SeqSet,
             "data.new" => Self::DataNew,
             "data.tag" => Self::DataTag,
+            "data.get" => Self::DataGet,
+            "data.set" => Self::DataSet,
             "ty.chk" => Self::TyChk,
             "ty.cast" => Self::TyCast,
             "ty.id" => Self::TyId,
@@ -292,6 +301,8 @@ impl Opcode {
             0x0503 => Self::SeqSet,
             0x0601 => Self::DataNew,
             0x0602 => Self::DataTag,
+            0x0603 => Self::DataGet,
+            0x0604 => Self::DataSet,
             0x0701 => Self::TyChk,
             0x0702 => Self::TyCast,
             0x0703 => Self::TyId,
