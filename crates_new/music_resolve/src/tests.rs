@@ -1,9 +1,34 @@
+use std::collections::BTreeMap;
+
 use music_base::SourceId;
-use music_module::ModuleKey;
+use music_module::{
+    ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
+};
 use music_names::{Interner, NameBindingKind, NameSite};
 use music_syntax::{Lexer, SyntaxNodeKind, canonical_name_text, parse};
 
 use crate::{ResolveOptions, resolve_module};
+
+#[derive(Default)]
+struct TestImportEnv {
+    modules: BTreeMap<String, ModuleKey>,
+}
+
+impl TestImportEnv {
+    fn with_module(mut self, spec: &str, key: &str) -> Self {
+        let _prev = self.modules.insert(spec.into(), ModuleKey::new(key));
+        self
+    }
+}
+
+impl ImportEnv for TestImportEnv {
+    fn resolve(&self, _from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult {
+        self.modules
+            .get(spec.as_str())
+            .cloned()
+            .ok_or_else(|| ImportError::new(ImportErrorKind::NotFound, spec.as_str()))
+    }
+}
 
 fn find_nth_name_site(
     source_id: SourceId,
@@ -172,5 +197,267 @@ fn resolves_pi_binder_in_ret() {
     assert_eq!(
         resolved.names.bindings.get(binding).kind,
         NameBindingKind::PiBinder
+    );
+}
+
+#[test]
+fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
+    let src = r"
+        let Option[T] := data { | Some : T | None | };
+        let Pair[T] := data { left : T; right : T; };
+    ";
+    let source_id = SourceId::from_raw(6);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions::default(),
+    );
+
+    let unbound_count = resolved
+        .diags
+        .iter()
+        .filter(|diag| diag.message() == "unbound name")
+        .count();
+    assert_eq!(unbound_count, 0, "{:?}", resolved.diags);
+}
+
+#[test]
+fn static_imports_resolve_but_do_not_open_export_names() {
+    let src = r#"
+        let IO := import "std/io";
+        IO;
+        read;
+    "#;
+    let source_id = SourceId::from_raw(7);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default().with_module("std/io", "std/io");
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    assert_eq!(resolved.imports.len(), 1);
+    assert_eq!(resolved.imports[0].spec.as_str(), "std/io");
+    assert_eq!(resolved.imports[0].to.as_str(), "std/io");
+
+    let io_site = find_nth_name_site(source_id, parsed.tree(), "IO", 0).expect("IO use site");
+    let io_binding = resolved
+        .names
+        .refs
+        .get(&io_site)
+        .copied()
+        .expect("IO binding");
+    assert_eq!(
+        resolved.names.bindings.get(io_binding).kind,
+        NameBindingKind::Let
+    );
+    assert!(
+        resolved
+            .diags
+            .iter()
+            .any(|diag| diag.message() == "unbound name")
+    );
+}
+
+#[test]
+fn import_resolution_only_creates_explicit_let_binding() {
+    let src = r#"
+        let IO := import "std/io";
+        IO;
+    "#;
+    let source_id = SourceId::from_raw(8);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default().with_module("std/io", "std/io");
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    let let_binding_count = resolved
+        .names
+        .bindings
+        .iter()
+        .filter(|(_, binding)| binding.kind == NameBindingKind::Let)
+        .count();
+    assert_eq!(let_binding_count, 1);
+}
+
+#[test]
+fn static_template_imports_resolve_from_import_env() {
+    let src = r"
+        let IO := import `std/io`;
+    ";
+    let source_id = SourceId::from_raw(9);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default().with_module("std/io", "std/io");
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    assert_eq!(resolved.imports.len(), 1);
+    assert_eq!(resolved.imports[0].spec.as_str(), "std/io");
+    assert_eq!(resolved.imports[0].to.as_str(), "std/io");
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+}
+
+#[test]
+fn unresolved_static_imports_emit_diag() {
+    let src = r#"
+        import "std/missing";
+    "#;
+    let source_id = SourceId::from_raw(10);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default();
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    assert!(resolved.imports.is_empty());
+    assert!(
+        resolved
+            .diags
+            .iter()
+            .any(|diag| diag.message() == "import resolve failed")
+    );
+}
+
+#[test]
+fn invalid_string_imports_emit_invalid_spec_diag() {
+    let src = r#"
+        import "\x0";
+    "#;
+    let source_id = SourceId::from_raw(11);
+    let module_key = ModuleKey::new("main");
+    let lexed = Lexer::new(src).lex();
+    assert!(!lexed.errors().is_empty(), "{:?}", lexed.errors());
+    let parsed = parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default();
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    assert!(resolved.imports.is_empty());
+    assert!(
+        resolved
+            .diags
+            .iter()
+            .any(|diag| diag.message() == "invalid import spec")
+    );
+}
+
+#[test]
+fn dynamic_imports_do_not_populate_resolved_imports() {
+    let src = r#"
+        let path := "std/io";
+        import path;
+    "#;
+    let source_id = SourceId::from_raw(12);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let env = TestImportEnv::default().with_module("std/io", "std/io");
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            prelude: Vec::new(),
+            import_env: Some(&env),
+        },
+    );
+
+    assert!(resolved.imports.is_empty());
+    assert!(
+        !resolved
+            .diags
+            .iter()
+            .any(|diag| diag.message() == "import resolve failed")
+    );
+}
+
+#[test]
+fn handle_clause_params_resolve_in_body() {
+    let src = "handle x with h of (| op(a, b) => a);";
+    let source_id = SourceId::from_raw(13);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions::default(),
+    );
+
+    let site = find_nth_name_site(source_id, parsed.tree(), "a", 0).expect("a use site");
+    let binding = resolved.names.refs.get(&site).copied().expect("binding");
+    assert_eq!(
+        resolved.names.bindings.get(binding).kind,
+        NameBindingKind::HandleClauseParam
     );
 }

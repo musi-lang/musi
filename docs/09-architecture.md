@@ -29,7 +29,7 @@ Canonical crate domains (new workspace):
 - `music_arena`: typed ids, arenas, and append-only slice storage shared by syntax/tree layers
 - `music_names`: interning, identifiers, known symbols, and name-resolution data structures
 - `music_syntax`: lexer + parser + full-fidelity syntax tree (grammar-aligned)
-- `music_module`: module/specifier model and `ImportEnv` query contract (pre-resolve)
+- `music_module`: module/specifier model and `ImportEnv::resolve` query contract (pre-resolve)
 - `music_hir`: semantic IR data model
 - `music_resolve`: import graph discovery + name resolution + syntax→HIR lowering
 - `music_sema`: type/effect/class semantic analysis
@@ -118,7 +118,8 @@ It does not decide meaning beyond what is necessary to represent the parsed prog
 The resolution layer owns:
 
 - import graph discovery
-- module-level visibility
+- resolved module targets for import expressions
+- explicit local visibility introduced by user bindings and patterns
 - binding and reference resolution
 - compiler-owned surface seeding
 

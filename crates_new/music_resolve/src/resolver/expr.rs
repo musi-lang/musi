@@ -16,13 +16,10 @@ use crate::string_lit::{
 
 use super::util::{parse_u32_lit, stmt_inner_expr};
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
         let origin = self.origin_node(node);
         match node.kind() {
-            SyntaxNodeKind::Error => self.error_expr(origin),
-            SyntaxNodeKind::SourceFile => self.error_expr(origin),
-
             SyntaxNodeKind::SequenceExpr => {
                 if let Some(inner) = stmt_inner_expr(node) {
                     self.lower_expr(inner)
@@ -248,7 +245,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             self.lower_opt_expr(origin, node.child_nodes().next())
         } else {
             self.record_use(name);
-            let name_origin = name_tok.map(|t| self.origin_token(t)).unwrap_or(origin);
+            let name_origin = name_tok.map_or(origin, |tok| self.origin_token(tok));
             self.alloc_expr(name_origin, HirExprKind::Name { name })
         };
 
@@ -300,9 +297,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ParamList);
         self.push_scope();
-        let params = param_list
-            .map(|n| self.lower_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
+        let params = param_list.map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
         let mut exprs = node
             .child_nodes()
@@ -312,10 +307,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         } else {
             None
         };
-        let body = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(origin));
+        let body = match exprs.next() {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(origin),
+        };
         self.pop_scope();
 
         self.alloc_expr(
@@ -425,9 +420,8 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
     fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
         let origin = self.origin_node(node);
         let op_tok = node.child_tokens().next();
-        let op = match op_tok.map(|t| t.kind()) {
+        let op = match op_tok.map(SyntaxToken::kind) {
             Some(TokenKind::Minus) => HirPrefixOp::Neg,
-            Some(TokenKind::KwNot) => HirPrefixOp::Not,
             Some(TokenKind::KwMut) => HirPrefixOp::Mut,
             _ => HirPrefixOp::Not,
         };
@@ -442,12 +436,11 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let right = self.lower_opt_expr(origin, nodes.next());
 
         let op_tok = node.child_tokens().find(|t| t.kind() != TokenKind::Eof);
-        let op = match op_tok.map(|t| t.kind()) {
+        let op = match op_tok.map(SyntaxToken::kind) {
             Some(TokenKind::LtMinus) => HirBinaryOp::Assign,
             Some(TokenKind::PipeGt) => HirBinaryOp::Pipe,
             Some(TokenKind::MinusGt) => HirBinaryOp::Arrow,
             Some(TokenKind::TildeGt) => HirBinaryOp::EffectArrow,
-            Some(TokenKind::KwOr) => HirBinaryOp::Or,
             Some(TokenKind::KwXor) => HirBinaryOp::Xor,
             Some(TokenKind::KwAnd) => HirBinaryOp::And,
             Some(TokenKind::Eq) => HirBinaryOp::Eq,
@@ -465,7 +458,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             Some(TokenKind::Slash) => HirBinaryOp::Div,
             Some(TokenKind::Percent) => HirBinaryOp::Rem,
             Some(TokenKind::SymbolicOp) => {
-                let tok = op_tok.unwrap();
+                let tok = op_tok.expect("symbolic op token must exist");
                 let raw = tok.text().unwrap_or("");
                 let ident = self.intern_ident_text(tok.kind(), raw, tok.span());
                 self.record_use(ident);
@@ -496,7 +489,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
 
         let attrs = self.lower_attrs(node);
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
-        let pat_node = pat_node.unwrap_or_else(|| node);
+        let pat_node = pat_node.unwrap_or(node);
         let binders = if pat_node.kind().is_pat() {
             self.collect_pat_binders(pat_node)
         } else {
@@ -520,10 +513,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         } else {
             None
         };
-        let expr = exprs
-            .next()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(self.origin_node(node)));
+        let expr = match exprs.next() {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(self.origin_node(node)),
+        };
 
         self.pop_scope();
         HirCaseArm {
@@ -600,11 +593,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         if let Some(r) = result {
             let _ = self.insert_binding(r, NameBindingKind::HandleClauseResult);
         }
-        let body = node
-            .child_nodes()
-            .find(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(self.origin_node(node)));
+        let body = match node.child_nodes().find(|n| n.kind().is_expr()) {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(self.origin_node(node)),
+        };
         self.pop_scope();
 
         let params = self.store.idents.alloc_from_iter(params);
@@ -726,11 +718,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         } else {
             None
         };
-        let value = node
-            .child_nodes()
-            .find(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(self.origin_node(node)));
+        let value = match node.child_nodes().find(|n| n.kind().is_expr()) {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(self.origin_node(node)),
+        };
         HirAttrArg { name, value }
     }
 
@@ -749,9 +740,9 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         {
             node.child_tokens()
                 .find(|t| t.kind() == TokenKind::String)
-                .and_then(|t| t.text())
+                .and_then(SyntaxToken::text)
                 .and_then(|raw| decode_string_lit(raw).ok())
-                .map(|s| s.into_boxed_str())
+                .map(String::into_boxed_str)
         } else {
             None
         };
@@ -759,7 +750,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let expr_node = node
             .child_nodes()
             .find(|n| n.kind() != SyntaxNodeKind::Attr);
-        let expr = match expr_node.map(|n| n.kind()) {
+        let expr = match expr_node.map(SyntaxNode::kind) {
             Some(SyntaxNodeKind::MemberList) => {
                 self.lower_foreign_group(expr_node.unwrap(), foreign_abi.clone())
             }
@@ -782,9 +773,9 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let abi = node
             .child_tokens()
             .find(|t| t.kind() == TokenKind::String)
-            .and_then(|t| t.text())
+            .and_then(SyntaxToken::text)
             .and_then(|raw| decode_string_lit(raw).ok())
-            .map(|s| s.into_boxed_str());
+            .map(String::into_boxed_str);
 
         let decls_node = node.child_nodes().find(|n| {
             matches!(
@@ -906,8 +897,6 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        self.record_use(name);
-
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let arg = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
             exprs.next().map(|n| self.lower_expr(n))
@@ -933,8 +922,6 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let attrs = self.lower_attrs(node);
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
-
-        self.record_use(name);
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let ty = self.lower_opt_expr(origin, exprs.next());
@@ -981,11 +968,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
 
         let type_params = self.lower_type_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let class = node
-            .child_nodes()
-            .find(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(origin));
+        let class = match node.child_nodes().find(|n| n.kind().is_expr()) {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(origin),
+        };
         let members = self.lower_members(node);
 
         self.pop_scope();
@@ -1028,8 +1014,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let params = node
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ParamList)
-            .map(|n| self.lower_param_list(n))
-            .unwrap_or(SliceRange::EMPTY);
+            .map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
@@ -1063,7 +1048,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let mods = HirLetMods { is_mut, is_rec };
 
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
-        let pat_node = pat_node.unwrap_or_else(|| node);
+        let pat_node = pat_node.unwrap_or(node);
         let binders = if pat_node.kind().is_pat() {
             self.collect_pat_binders(pat_node)
         } else {
@@ -1091,9 +1076,8 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         let type_params = self.lower_type_params_clause(node);
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let effects = self
-            .child_of_kind(node, SyntaxNodeKind::EffectSet)
-            .map(|n| self.lower_effect_set(n));
+        let effects = super::util::child_of_kind(node, SyntaxNodeKind::EffectSet)
+            .map(|effect_set| self.lower_effect_set(effect_set));
 
         let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
         let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
@@ -1101,10 +1085,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         } else {
             None
         };
-        let value = exprs
-            .last()
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(origin));
+        let value = match exprs.last() {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(origin),
+        };
         let pat = if pat_node.kind().is_pat() {
             self.lower_pat(pat_node)
         } else {
@@ -1216,11 +1200,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         } else {
             HirConstraintKind::Implements
         };
-        let value = node
-            .child_nodes()
-            .find(|n| n.kind().is_expr())
-            .map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(self.origin_node(node)));
+        let value = match node.child_nodes().find(|n| n.kind().is_expr()) {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(self.origin_node(node)),
+        };
         HirConstraint { name, kind, value }
     }
 
@@ -1244,7 +1227,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
                 SyntaxElement::Node(n) if n.kind() == SyntaxNodeKind::EffectItem => {
                     items.push(self.lower_effect_item(n));
                 }
-                _ => {}
+                SyntaxElement::Node(_) => {}
             }
         }
         let items = self.store.effect_items.alloc_from_iter(items);

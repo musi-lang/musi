@@ -147,8 +147,10 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         origin: HirOrigin,
         node: Option<SyntaxNode<'tree, 'src>>,
     ) -> music_hir::HirExprId {
-        node.map(|n| self.lower_expr(n))
-            .unwrap_or_else(|| self.error_expr(origin))
+        match node {
+            Some(node) => self.lower_expr(node),
+            None => self.error_expr(origin),
+        }
     }
 
     fn origin_node(&self, node: SyntaxNode<'tree, 'src>) -> HirOrigin {

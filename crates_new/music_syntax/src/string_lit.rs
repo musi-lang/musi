@@ -25,10 +25,22 @@ impl fmt::Display for StringLitError {
     }
 }
 
+/// Decode a quoted string literal into its cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated or contains an
+/// invalid escape sequence.
 pub fn decode_string_lit(raw: &str) -> StringLitResult<String> {
     decode_delimited(raw, b'"')
 }
 
+/// Decode a rune literal into its scalar value.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated, contains an
+/// invalid escape sequence, or does not decode to exactly one rune.
 pub fn decode_rune_lit(raw: &str) -> StringLitResult<u32> {
     let s = decode_delimited(raw, b'\'')?;
     let mut chars = s.chars();
@@ -47,22 +59,52 @@ pub fn decode_rune_lit(raw: &str) -> StringLitResult<u32> {
     Ok(u32::from(ch))
 }
 
+/// Decode a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is malformed or contains an
+/// invalid escape sequence.
 pub fn decode_template_lit(raw: &str) -> StringLitResult<String> {
     decode_template_no_subst(raw)
 }
 
+/// Decode a template literal without substitutions into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated or contains an
+/// invalid escape sequence.
 pub fn decode_template_no_subst(raw: &str) -> StringLitResult<String> {
     decode_delimited(raw, b'`')
 }
 
+/// Decode the head chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
 pub fn decode_template_head(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Head)
 }
 
+/// Decode a middle chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
 pub fn decode_template_middle(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Middle)
 }
 
+/// Decode the tail chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
 pub fn decode_template_tail(raw: &str) -> StringLitResult<String> {
     decode_template_chunk(raw, TemplateChunkStyle::Tail)
 }

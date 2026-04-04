@@ -2,7 +2,7 @@ use super::*;
 
 use super::util::stmt_inner_expr;
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
+impl Resolver<'_, '_, '_, '_> {
     pub(super) fn lower_source_file(&mut self) -> music_hir::HirExprId {
         let root = self.tree.root();
         if root.kind() != music_syntax::SyntaxNodeKind::SourceFile {

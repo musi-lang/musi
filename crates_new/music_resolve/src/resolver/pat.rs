@@ -1,12 +1,14 @@
 use super::*;
 
+use std::collections::HashSet;
+
 use music_syntax::SyntaxElement;
 use music_syntax::pattern_binder_tokens;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn collect_pat_binders(&mut self, node: SyntaxNode<'tree, 'src>) -> Vec<Ident> {
         let mut out = Vec::new();
-        let mut seen = std::collections::HashSet::<Symbol>::new();
+        let mut seen = HashSet::<Symbol>::new();
         for token in pattern_binder_tokens(node) {
             let Some(ident) = self.intern_ident_token(token) else {
                 continue;
@@ -140,14 +142,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     fn lower_pat_or(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
         let origin = self.origin_node(node);
         let mut pats = node.child_nodes().filter(|n| n.kind().is_pat());
-        let left = pats
-            .next()
-            .map(|n| self.lower_pat(n))
-            .unwrap_or_else(|| self.alloc_error_pat(node));
-        let right = pats
-            .next()
-            .map(|n| self.lower_pat(n))
-            .unwrap_or_else(|| self.alloc_error_pat(node));
+        let left = match pats.next() {
+            Some(pat) => self.lower_pat(pat),
+            None => self.alloc_error_pat(node),
+        };
+        let right = match pats.next() {
+            Some(pat) => self.lower_pat(pat),
+            None => self.alloc_error_pat(node),
+        };
         self.store.alloc_pat(music_hir::HirPat {
             origin,
             kind: music_hir::HirPatKind::Or { left, right },
@@ -158,9 +160,11 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let origin = self.origin_node(node);
         let pat = node
             .child_nodes()
-            .find(|n| n.kind().is_pat())
-            .map(|n| self.lower_pat(n))
-            .unwrap_or_else(|| self.alloc_error_pat(node));
+            .find(|n| n.kind().is_pat());
+        let pat = match pat {
+            Some(pat) => self.lower_pat(pat),
+            None => self.alloc_error_pat(node),
+        };
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = name_tok
             .and_then(|t| self.intern_ident_token(t))

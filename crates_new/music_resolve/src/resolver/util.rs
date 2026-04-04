@@ -48,40 +48,36 @@ pub(super) fn parse_u32_lit(raw: &str) -> Option<u32> {
     u32::from_str_radix(digits, radix).ok()
 }
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
-    pub(super) fn child_of_kind(
-        &self,
-        node: SyntaxNode<'tree, 'src>,
-        kind: music_syntax::SyntaxNodeKind,
-    ) -> Option<SyntaxNode<'tree, 'src>> {
-        node.child_nodes().find(|child| child.kind() == kind)
-    }
+pub(super) fn child_of_kind<'tree, 'src>(
+    node: SyntaxNode<'tree, 'src>,
+    kind: music_syntax::SyntaxNodeKind,
+) -> Option<SyntaxNode<'tree, 'src>> {
+    node.child_nodes().find(|child| child.kind() == kind)
+}
 
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn lower_type_params_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<Ident> {
-        self.child_of_kind(node, music_syntax::SyntaxNodeKind::TypeParamList)
-            .map(|child| self.lower_type_param_list(child))
-            .unwrap_or(SliceRange::EMPTY)
+        child_of_kind(node, music_syntax::SyntaxNodeKind::TypeParamList)
+            .map_or(SliceRange::EMPTY, |child| self.lower_type_param_list(child))
     }
 
     pub(super) fn lower_params_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<music_hir::HirParam> {
-        self.child_of_kind(node, music_syntax::SyntaxNodeKind::ParamList)
-            .map(|child| self.lower_param_list(child))
-            .unwrap_or(SliceRange::EMPTY)
+        child_of_kind(node, music_syntax::SyntaxNodeKind::ParamList)
+            .map_or(SliceRange::EMPTY, |child| self.lower_param_list(child))
     }
 
     pub(super) fn lower_constraints_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<music_hir::HirConstraint> {
-        self.child_of_kind(node, music_syntax::SyntaxNodeKind::ConstraintList)
-            .map(|child| self.lower_constraint_list(child))
-            .unwrap_or(SliceRange::EMPTY)
+        child_of_kind(node, music_syntax::SyntaxNodeKind::ConstraintList)
+            .map_or(SliceRange::EMPTY, |child| self.lower_constraint_list(child))
     }
 
     pub(super) fn alloc_lit_from_token(

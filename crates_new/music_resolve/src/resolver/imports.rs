@@ -1,8 +1,8 @@
 use super::*;
 
-use music_module::{ImportSiteKind, collect_import_sites};
+use music_module::{ImportErrorKind, ImportSiteKind, collect_import_sites};
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
+impl Resolver<'_, '_, '_, '_> {
     pub(super) fn discover_imports(&mut self, module_key: &ModuleKey) -> ResolvedImportList {
         let Some(env) = self.import_env else {
             return Vec::new();
@@ -19,11 +19,15 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
                         to,
                     }),
                     Err(err) => {
+                        let label = match err.kind {
+                            ImportErrorKind::NotFound => "module not found",
+                            ImportErrorKind::InvalidSpecifier => "invalid module specifier",
+                        };
                         self.diags
                             .push(Diag::error("import resolve failed").with_label(
                                 site.span,
                                 self.source_id,
-                                format!("{}", err),
+                                label,
                             ));
                     }
                 },

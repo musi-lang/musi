@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn push_scope(&mut self) {
         self.scopes.push(Scope::default());
     }

@@ -36,7 +36,6 @@ impl NameSite {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameBindingKind {
     Prelude,
-    Import { opaque: bool },
     Let,
     Param,
     PiBinder,

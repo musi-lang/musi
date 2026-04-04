@@ -23,6 +23,7 @@ Notes:
 - `music_base::Diag` / `DiagLabel` are accessor-driven (fields are not part of the public API).
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
 - `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
+- `music_module::ImportEnv` is resolve-only in `crates_new`: it maps import specifiers to module keys and does not expose opened-export visibility.
 
 ## Planned phase crates
 

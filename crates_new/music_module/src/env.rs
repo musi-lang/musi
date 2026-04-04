@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{ModuleExportSummary, ModuleKey, ModuleSpecifier};
+use crate::{ModuleKey, ModuleSpecifier};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportErrorKind {
@@ -34,7 +34,4 @@ pub trait ImportEnv {
     ///
     /// Returns `ImportError` when the specifier is invalid or the environment cannot resolve it.
     fn resolve(&self, from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult;
-
-    /// Returns a cached export summary for a resolved module key, if available.
-    fn module_summary(&self, key: &ModuleKey) -> Option<&ModuleExportSummary>;
 }
