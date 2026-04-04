@@ -15,7 +15,7 @@ pub type HirPatId = Idx<HirPat>;
 pub type HirTyId = Idx<HirTy>;
 pub type HirLitId = Idx<HirLit>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HirStore {
     pub exprs: Arena<HirExpr>,
     pub pats: Arena<HirPat>,
@@ -138,7 +138,7 @@ impl Default for HirStore {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HirModule {
     pub source_id: SourceId,
     pub store: HirStore,

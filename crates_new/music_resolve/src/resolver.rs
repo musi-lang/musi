@@ -35,7 +35,7 @@ pub struct ResolvedImport {
     pub to: ModuleKey,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedModule {
     pub module_key: ModuleKey,
     pub module: HirModule,

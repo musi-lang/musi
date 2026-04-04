@@ -28,7 +28,7 @@ fn lower(src: &str) -> crate::IrModule {
             env: None,
         },
     );
-    lower_module(&sema).expect("ir lowering should succeed")
+    lower_module(&sema, &interner).expect("ir lowering should succeed")
 }
 
 #[test]

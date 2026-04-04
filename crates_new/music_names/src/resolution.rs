@@ -54,7 +54,7 @@ pub struct NameBinding {
 
 pub type NameBindingId = Idx<NameBinding>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NameResolution {
     pub bindings: Arena<NameBinding>,
     pub refs: HashMap<NameSite, NameBindingId>,

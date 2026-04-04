@@ -56,7 +56,7 @@ impl Display for DiagCode {
 }
 
 /// A source annotation pointing to a span with a message.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagLabel {
     span: Span,
     source_id: SourceId,
@@ -92,7 +92,7 @@ impl DiagLabel {
 }
 
 /// A compiler diagnostic with severity, message, labels, and notes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Diag {
     level: DiagLevel,
     code: Option<DiagCode>,

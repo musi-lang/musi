@@ -74,6 +74,17 @@ impl<T> Table<T> {
             .expect("table id out of bounds")
     }
 
+    /// Returns a mutable reference to a previously allocated typed id.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` does not refer to an entry in this table.
+    pub fn get_mut(&mut self, id: Idx<T>) -> &mut T {
+        self.items
+            .get_mut(usize::try_from(id.raw()).unwrap_or(usize::MAX))
+            .expect("table id out of bounds")
+    }
+
     /// Iterates over all entries together with their typed ids.
     ///
     /// # Panics

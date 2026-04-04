@@ -1,11 +1,20 @@
 use music_base::diag::Diag;
 use music_hir::{HirExprId, HirExprKind, HirForeignDecl, HirPatKind, HirTyKind};
+use music_names::Interner;
 use music_sema::{SemaModule, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
 use crate::api::{
-    IrCallable, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrForeignDef, IrInstanceDef,
-    IrModule,
+    IrCallable, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrForeignDef, IrGlobal,
+    IrInstanceDef, IrModule,
 };
+
+#[derive(Default)]
+struct TopLevelItems {
+    callables: Vec<IrCallable>,
+    globals: Vec<IrGlobal>,
+    data_defs: Vec<IrDataDef>,
+    foreigns: Vec<IrForeignDef>,
+}
 
 /// Lowers sema-owned module facts into the codegen-facing IR surface.
 ///
@@ -13,34 +22,28 @@ use crate::api::{
 ///
 /// Returns semantic diagnostics when exported surface types or effect rows reference invalid
 /// sema-owned ids.
-pub fn lower_module(sema: &SemaModule) -> Result<IrModule, IrDiagList> {
+pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, IrDiagList> {
     let mut diags = Vec::<Diag>::new();
     validate_surface(sema, &mut diags);
     if !diags.is_empty() {
         return Err(diags);
     }
 
-    let mut callables = Vec::new();
-    let mut data_defs = Vec::new();
-    let mut foreigns = Vec::new();
-    collect_top_level_items(
-        sema,
-        sema.module().root,
-        &mut callables,
-        &mut data_defs,
-        &mut foreigns,
-    );
+    let mut items = TopLevelItems::default();
+    collect_top_level_items(sema, sema.module().root, interner, &mut items);
 
     Ok(IrModule {
         module_key: sema.resolved().module_key.clone(),
+        hir: sema.module().clone(),
         root: sema.module().root,
         root_ty: sema.expr_ty(sema.module().root),
         static_imports: sema.surface().static_imports.to_vec().into_boxed_slice(),
         types: sema.surface().tys.clone(),
         exports: sema.surface().exported_values.clone(),
-        callables: callables.into_boxed_slice(),
-        data_defs: data_defs.into_boxed_slice(),
-        foreigns: foreigns.into_boxed_slice(),
+        callables: items.callables.into_boxed_slice(),
+        globals: items.globals.into_boxed_slice(),
+        data_defs: items.data_defs.into_boxed_slice(),
+        foreigns: items.foreigns.into_boxed_slice(),
         effects: sema
             .surface()
             .exported_effects
@@ -173,18 +176,17 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
 fn collect_top_level_items(
     sema: &SemaModule,
     expr_id: HirExprId,
-    callables: &mut Vec<IrCallable>,
-    data_defs: &mut Vec<IrDataDef>,
-    foreigns: &mut Vec<IrForeignDef>,
+    interner: &Interner,
+    items: &mut TopLevelItems,
 ) {
     match sema.module().store.exprs.get(expr_id).kind.clone() {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
             for expr in sema.module().store.expr_ids.get(exprs).iter().copied() {
-                collect_top_level_items(sema, expr, callables, data_defs, foreigns);
+                collect_top_level_items(sema, expr, interner, items);
             }
         }
         HirExprKind::Export { expr, .. } => {
-            collect_top_level_items(sema, expr, callables, data_defs, foreigns);
+            collect_top_level_items(sema, expr, interner, items);
         }
         HirExprKind::Let {
             pat,
@@ -195,11 +197,13 @@ fn collect_top_level_items(
         } => {
             let is_callable =
                 has_param_clause || !sema.module().store.params.get(params).is_empty();
-            collect_let_item(sema, pat, value, is_callable, callables, data_defs);
+            collect_let_item(sema, pat, value, is_callable, interner, items);
         }
         HirExprKind::Foreign { abi, decls } => {
             for decl in sema.module().store.foreign_decls.get(decls) {
-                foreigns.push(lower_foreign_decl(sema, abi.as_deref(), decl));
+                items
+                    .foreigns
+                    .push(lower_foreign_decl(sema, abi.as_deref(), decl, interner));
             }
         }
         _ => {}
@@ -211,8 +215,8 @@ fn collect_let_item(
     pat: music_hir::HirPatId,
     value: HirExprId,
     is_callable: bool,
-    callables: &mut Vec<IrCallable>,
-    data_defs: &mut Vec<IrDataDef>,
+    interner: &Interner,
+    items: &mut TopLevelItems,
 ) {
     let HirPatKind::Bind { name } = sema.module().store.pats.get(pat).kind else {
         return;
@@ -221,31 +225,46 @@ fn collect_let_item(
     let ty = sema.expr_ty(value);
     let effects = sema.expr_effects(value).clone();
 
-    if is_callable || matches!(sema.ty(ty).kind, HirTyKind::Arrow { .. }) {
-        callables.push(IrCallable {
-            name: name.name,
-            expr: value,
-            ty,
-            effects,
-            module_target,
-        });
-    }
-
     if let HirExprKind::Data { variants, fields } = &sema.module().store.exprs.get(value).kind {
-        data_defs.push(IrDataDef {
-            name: name.name,
+        items.data_defs.push(IrDataDef {
+            symbol: name.name,
+            name: interner.resolve(name.name).into(),
             expr: value,
             variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
                 .expect("variant count overflow"),
             field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
                 .expect("field count overflow"),
         });
+    } else if is_callable || matches!(sema.ty(ty).kind, HirTyKind::Arrow { .. }) {
+        items.callables.push(IrCallable {
+            symbol: name.name,
+            name: interner.resolve(name.name).into(),
+            expr: value,
+            ty,
+            effects,
+            module_target,
+        });
+    } else {
+        items.globals.push(IrGlobal {
+            symbol: name.name,
+            name: interner.resolve(name.name).into(),
+            expr: value,
+            ty,
+            effects: sema.expr_effects(value).clone(),
+            module_target: sema.expr_module_target(value).cloned(),
+        });
     }
 }
 
-fn lower_foreign_decl(sema: &SemaModule, abi: Option<&str>, decl: &HirForeignDecl) -> IrForeignDef {
+fn lower_foreign_decl(
+    sema: &SemaModule,
+    abi: Option<&str>,
+    decl: &HirForeignDecl,
+    interner: &Interner,
+) -> IrForeignDef {
     IrForeignDef {
-        name: decl.name.name,
+        symbol: decl.name.name,
+        name: interner.resolve(decl.name.name).into(),
         abi: abi.unwrap_or("c").into(),
         sig: decl.sig,
         param_count: u32::try_from(sema.module().store.params.get(decl.params.clone()).len())

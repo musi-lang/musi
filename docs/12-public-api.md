@@ -18,9 +18,11 @@ Policy:
 - `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
 - `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
-- `music_ir`: codegen-facing lowered facts (`IrModule`, `IrCallable`, `IrDataDef`, `IrForeignDef`, `IrEffectDef`, `IrClassDef`, `IrInstanceDef`, `IrDiagList`, `lower_module`)
+- `music_ir`: codegen-facing lowered facts (`IrModule`, `IrCallable`, `IrGlobal`, `IrDataDef`, `IrForeignDef`, `IrEffectDef`, `IrClassDef`, `IrInstanceDef`, `IrDiagList`, `lower_module`)
 - `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
+- `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `lower_ir_module`, `lower_ir_program`)
+- `music_session`: session orchestration + cached compile entrypoints (`Session`, `SessionOptions`, `SessionStats`, `ParsedModule`, `CompiledOutput`, `SessionDiagList`, `SessionError`, `compile_*`/phase entrypoints through `Session` methods)
 
 Notes:
 
@@ -36,12 +38,14 @@ Notes:
 - `music_ir` lowers sema facts into codegen-facing tables and references HIR ids where expression-level ownership still lives in sema/HIR.
 - `music_bc` is the single source of truth for SEAM opcodes, operands, descriptor tables, section tags, and artifact validation.
 - `music_assembly` is transport-only over `music_bc`: it does not redefine the artifact or ISA.
+- `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values.
+- `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text.
 
 ## Planned phase crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_emit`, `music_jit`, `music_session`
+- `music_jit`
 - `musi_project`
 
 ## Legacy (`crates/`)

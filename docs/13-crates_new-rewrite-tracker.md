@@ -29,9 +29,9 @@ Rules:
 - [x] `music_ir` (codegen-facing facts)
 - [x] `music_bc` (bytecode contract)
 - [x] `music_assembly` (bytecode codec + validation)
-- [ ] `music_emit` (SEAM emission: lowering to bytecode contract)
+- [x] `music_emit` (SEAM emission: lowering to bytecode contract)
 - [ ] `music_jit` (native/JIT backend consuming `music_ir`)
-- [ ] `music_session` (CaaS session: caching + orchestration)
+- [x] `music_session` (CaaS session: caching + orchestration)
 - [ ] `musi_project` (`musi.json` parsing + project integration)
 
 ## Early Module Checklist (starter granularity)
@@ -94,6 +94,6 @@ Rules:
 
 ### `music_session`
 
-- [ ] session state model (sources + options + caches)
-- [ ] invalidation strategy (edit-based)
-- [ ] entrypoints: parse/check/compile
+- [x] session state model (sources + options + caches)
+- [x] invalidation strategy (edit-based)
+- [x] entrypoints: parse/check/compile

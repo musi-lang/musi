@@ -54,6 +54,8 @@ Current implementation status (Cargo workspace members):
 - `music_ir`
 - `music_bc`
 - `music_assembly`
+- `music_emit`
+- `music_session`
 
 The intended dependency shape is a DAG:
 
@@ -78,7 +80,7 @@ graph TD
   base --> names
   arena --> syntax
   names --> syntax --> module --> resolve --> sema --> ir
-  ir --> bc --> assembly --> session
+  bc --> assembly --> session
   ir --> emit --> session
   ir --> jit --> session
   project --> session

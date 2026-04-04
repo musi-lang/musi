@@ -274,6 +274,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_emit"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_arena",
+ "music_base",
+ "music_bc",
+ "music_hir",
+ "music_ir",
+ "music_module",
+ "music_names",
+ "music_resolve",
+ "music_sema",
+ "music_syntax",
+]
+
+[[package]]
 name = "music_hir"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -335,6 +351,23 @@ dependencies = [
  "music_names",
  "music_resolve",
  "music_syntax",
+]
+
+[[package]]
+name = "music_session"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_assembly",
+ "music_base",
+ "music_bc",
+ "music_emit",
+ "music_ir",
+ "music_module",
+ "music_names",
+ "music_resolve",
+ "music_sema",
+ "music_syntax",
+ "thiserror",
 ]
 
 [[package]]

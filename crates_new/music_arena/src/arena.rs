@@ -11,7 +11,7 @@ const fn widen(raw: u32) -> usize {
     raw as usize
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Arena<T> {
     data: Vec<T>,
 }

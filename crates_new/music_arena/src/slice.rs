@@ -42,7 +42,7 @@ impl<T> SliceRange<T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SliceArena<T> {
     data: Vec<T>,
 }

@@ -3,6 +3,7 @@ members = [
   "crates_new/music_arena",
   "crates_new/music_base",
   "crates_new/music_bc",
+  "crates_new/music_emit",
   "crates_new/music_hir",
   "crates_new/music_ir",
   "crates_new/music_assembly",
@@ -10,6 +11,7 @@ members = [
   "crates_new/music_names",
   "crates_new/music_resolve",
   "crates_new/music_sema",
+  "crates_new/music_session",
   "crates_new/music_syntax",
 ]
 exclude = ["crates/*"]
