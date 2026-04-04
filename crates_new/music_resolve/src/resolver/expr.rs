@@ -3,9 +3,10 @@ use super::*;
 use music_arena::SliceRange;
 use music_hir::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
-    HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirForeignDecl,
-    HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirParam, HirPrefixOp, HirQuoteKind,
-    HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
+    HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExprId, HirFieldDef,
+    HirForeignDecl, HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirParam, HirPat,
+    HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart,
+    HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
@@ -17,7 +18,7 @@ use crate::string_lit::{
 use super::util::{parse_u32_lit, stmt_inner_expr};
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
-    pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         match node.kind() {
             SyntaxNodeKind::SequenceExpr => {
@@ -72,14 +73,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_sequence_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_sequence_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let exprs: Vec<_> = node.child_nodes().map(|n| self.lower_expr(n)).collect();
         let exprs = self.store.alloc_expr_list(exprs);
         self.alloc_expr(origin, HirExprKind::Sequence { exprs })
     }
 
-    fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let Some(tok) = node
             .child_tokens()
@@ -99,7 +100,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Name { name: ident })
     }
 
-    fn lower_literal_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_literal_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let Some(tok) = node.child_tokens().next() else {
             return self.error_expr(origin);
@@ -110,7 +111,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Lit { lit })
     }
 
-    fn lower_template_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_template_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut parts = Vec::<HirTemplatePart>::new();
         for child in node.children() {
@@ -140,14 +141,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Template { parts })
     }
 
-    fn lower_tuple_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_tuple_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let items: Vec<_> = node.child_nodes().map(|n| self.lower_expr(n)).collect();
         let items = self.store.alloc_expr_list(items);
         self.alloc_expr(origin, HirExprKind::Tuple { items })
     }
 
-    fn lower_array_expr_or_ty(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_array_expr_or_ty(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         if node
             .child_nodes()
             .any(|n| n.kind() == SyntaxNodeKind::ArrayItem)
@@ -157,7 +158,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.lower_array_ty_expr(node)
     }
 
-    fn lower_array_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_array_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut items = Vec::<HirArrayItem>::new();
         for item in node
@@ -174,10 +175,10 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Array { items })
     }
 
-    fn lower_array_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_array_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut dims = Vec::<HirDim>::new();
-        let mut item_expr = None::<music_hir::HirExprId>;
+        let mut item_expr = None::<HirExprId>;
         for child in node.children() {
             match child {
                 SyntaxElement::Token(tok) => match tok.kind() {
@@ -210,7 +211,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::ArrayTy { dims, item })
     }
 
-    fn lower_record_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_record_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut items = Vec::<HirRecordItem>::new();
         for item in node
@@ -256,7 +257,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_variant_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_variant_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let tag_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let tag = self.intern_ident_token_or_placeholder(tag_tok, node.span());
@@ -266,7 +267,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Variant { tag, args })
     }
 
-    fn lower_pi_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_pi_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let binder_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let binder = self.intern_ident_token_or_placeholder(binder_tok, node.span());
@@ -291,7 +292,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_lambda_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_lambda_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let param_list = node
             .child_nodes()
@@ -323,7 +324,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_call_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_call_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let callee = self.lower_opt_expr(origin, nodes.next());
@@ -340,7 +341,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Call { callee, args })
     }
 
-    fn lower_apply_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_apply_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let callee = self.lower_opt_expr(origin, nodes.next());
@@ -349,7 +350,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Apply { callee, args })
     }
 
-    fn lower_index_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_index_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
@@ -358,7 +359,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Index { base, args })
     }
 
-    fn lower_record_update_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_record_update_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
@@ -370,7 +371,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::RecordUpdate { base, items })
     }
 
-    fn lower_field_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_field_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
@@ -396,7 +397,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Field { base, access, name })
     }
 
-    fn lower_type_test_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_type_test_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
@@ -409,7 +410,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::TypeTest { base, ty, as_name })
     }
 
-    fn lower_type_cast_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_type_cast_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
@@ -417,7 +418,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::TypeCast { base, ty })
     }
 
-    fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let op_tok = node.child_tokens().next();
         let op = match op_tok.map(SyntaxToken::kind) {
@@ -429,7 +430,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Prefix { op, expr })
     }
 
-    fn lower_binary_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_binary_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let left = self.lower_opt_expr(origin, nodes.next());
@@ -469,7 +470,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Binary { op, left, right })
     }
 
-    fn lower_case_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_case_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let scrutinee = self.lower_opt_expr(origin, node.child_nodes().next());
 
@@ -501,9 +502,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let pat = if pat_node.kind().is_pat() {
             self.lower_pat(pat_node)
         } else {
-            self.store.alloc_pat(music_hir::HirPat {
+            self.store.alloc_pat(HirPat {
                 origin: self.origin_node(node),
-                kind: music_hir::HirPatKind::Error,
+                kind: HirPatKind::Error,
             })
         };
 
@@ -527,13 +528,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_perform_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_perform_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let expr = self.lower_opt_expr(origin, node.child_nodes().next());
         self.alloc_expr(origin, HirExprKind::Perform { expr })
     }
 
-    fn lower_handle_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_handle_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let expr = self.lower_opt_expr(origin, nodes.next());
@@ -608,13 +609,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_resume_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_resume_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let expr = node.child_nodes().next().map(|n| self.lower_expr(n));
         self.alloc_expr(origin, HirExprKind::Resume { expr })
     }
 
-    fn lower_quote_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_quote_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         if node.child_tokens().any(|t| t.kind() == TokenKind::LParen) {
             let expr = self.lower_opt_expr(origin, node.child_nodes().find(|n| n.kind().is_expr()));
@@ -626,7 +627,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             );
         }
 
-        let mut exprs = Vec::<music_hir::HirExprId>::new();
+        let mut exprs = Vec::<HirExprId>::new();
         for stmt in node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::SequenceExpr)
@@ -644,7 +645,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_splice_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_splice_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         if let Some(tok) = node.child_tokens().find(|t| t.kind() == TokenKind::Ident) {
             let name = self.intern_ident_token_or_placeholder(Some(tok), tok.span());
@@ -675,7 +676,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_attributed_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_attributed_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
         let expr = self.lower_opt_expr(origin, node.child_nodes().find(|n| n.kind().is_expr()));
@@ -725,13 +726,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         HirAttrArg { name, value }
     }
 
-    fn lower_import_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_import_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let arg = self.lower_opt_expr(origin, node.child_nodes().next());
         self.alloc_expr(origin, HirExprKind::Import { arg })
     }
 
-    fn lower_export_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_export_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
         let foreign_abi = if node
@@ -768,7 +769,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let abi = node
             .child_tokens()
@@ -808,7 +809,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         &mut self,
         node: SyntaxNode<'tree, 'src>,
         abi: Option<Box<str>>,
-    ) -> music_hir::HirExprId {
+    ) -> HirExprId {
         let origin = self.origin_node(node);
         let decls = self.lower_foreign_group_decls(node);
         self.alloc_expr(origin, HirExprKind::Foreign { abi, decls })
@@ -859,10 +860,10 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_data_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_data_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut variants = Vec::<HirVariantDef>::new();
-        let mut fields = Vec::<music_hir::HirFieldDef>::new();
+        let mut fields = Vec::<HirFieldDef>::new();
         for child in node.child_nodes() {
             match child.kind() {
                 SyntaxNodeKind::Variant => variants.push(self.lower_variant_def(child)),
@@ -917,7 +918,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_field_def(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirFieldDef {
+    fn lower_field_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirFieldDef {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
@@ -930,7 +931,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         } else {
             None
         };
-        music_hir::HirFieldDef {
+        HirFieldDef {
             origin,
             attrs,
             name,
@@ -939,7 +940,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_effect_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_effect_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
         let members = self.lower_members(node);
@@ -947,7 +948,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         self.alloc_expr(origin, HirExprKind::Effect { members })
     }
 
-    fn lower_class_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_class_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
         let constraints = self.lower_constraints_clause(node);
@@ -962,7 +963,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         )
     }
 
-    fn lower_instance_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_instance_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
 
@@ -1040,7 +1041,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         }
     }
 
-    fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirExprId {
+    fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
 
         let is_mut = node.child_tokens().any(|t| t.kind() == TokenKind::KwMut);
@@ -1092,9 +1093,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let pat = if pat_node.kind().is_pat() {
             self.lower_pat(pat_node)
         } else {
-            self.store.alloc_pat(music_hir::HirPat {
+            self.store.alloc_pat(HirPat {
                 origin,
-                kind: music_hir::HirPatKind::Error,
+                kind: HirPatKind::Error,
             })
         };
         self.pop_scope();

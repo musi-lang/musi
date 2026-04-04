@@ -8,7 +8,7 @@ use crate::expr::{
     HirTemplatePart, HirVariantDef,
 };
 use crate::pat::{HirPat, HirRecordPatField};
-use crate::ty::{HirDim, HirTy};
+use crate::ty::{HirDim, HirTy, HirTyField};
 
 pub type HirExprId = Idx<HirExpr>;
 pub type HirPatId = Idx<HirPat>;
@@ -25,6 +25,7 @@ pub struct HirStore {
     pub expr_ids: SliceArena<HirExprId>,
     pub pat_ids: SliceArena<HirPatId>,
     pub ty_ids: SliceArena<HirTyId>,
+    pub ty_fields: SliceArena<HirTyField>,
     pub idents: SliceArena<Ident>,
     pub args: SliceArena<HirArg>,
     pub params: SliceArena<HirParam>,
@@ -56,6 +57,7 @@ impl HirStore {
             expr_ids: SliceArena::new(),
             pat_ids: SliceArena::new(),
             ty_ids: SliceArena::new(),
+            ty_fields: SliceArena::new(),
             idents: SliceArena::new(),
             args: SliceArena::new(),
             params: SliceArena::new(),
@@ -95,6 +97,22 @@ impl HirStore {
     #[must_use]
     pub fn alloc_lit(&mut self, lit: HirLit) -> HirLitId {
         self.lits.alloc(lit)
+    }
+
+    #[must_use]
+    pub fn alloc_ty_list<I>(&mut self, tys: I) -> SliceRange<HirTyId>
+    where
+        I: IntoIterator<Item = HirTyId>,
+    {
+        self.ty_ids.alloc_from_iter(tys)
+    }
+
+    #[must_use]
+    pub fn alloc_ty_field_list<I>(&mut self, fields: I) -> SliceRange<HirTyField>
+    where
+        I: IntoIterator<Item = HirTyField>,
+    {
+        self.ty_fields.alloc_from_iter(fields)
     }
 
     #[must_use]

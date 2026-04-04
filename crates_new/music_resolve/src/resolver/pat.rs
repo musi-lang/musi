@@ -2,8 +2,10 @@ use super::*;
 
 use std::collections::HashSet;
 
+use music_arena::SliceRange;
+use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField};
 use music_syntax::SyntaxElement;
-use music_syntax::pattern_binder_tokens;
+use music_syntax::{SyntaxNodeKind, pattern_binder_tokens};
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn collect_pat_binders(&mut self, node: SyntaxNode<'tree, 'src>) -> Vec<Ident> {
@@ -20,38 +22,38 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         out
     }
 
-    pub(super) fn lower_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    pub(super) fn lower_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         match node.kind() {
-            music_syntax::SyntaxNodeKind::WildcardPat => self.lower_pat_wildcard(node),
-            music_syntax::SyntaxNodeKind::LiteralPat => self.lower_pat_lit(node),
-            music_syntax::SyntaxNodeKind::BindPat => self.lower_pat_bind(node),
-            music_syntax::SyntaxNodeKind::VariantPat => self.lower_pat_variant(node),
-            music_syntax::SyntaxNodeKind::TuplePat => self.lower_pat_tuple(node),
-            music_syntax::SyntaxNodeKind::ArrayPat => self.lower_pat_array(node),
-            music_syntax::SyntaxNodeKind::RecordPat => self.lower_pat_record(node),
-            music_syntax::SyntaxNodeKind::OrPat => self.lower_pat_or(node),
-            music_syntax::SyntaxNodeKind::AsPat => self.lower_pat_as(node),
+            SyntaxNodeKind::WildcardPat => self.lower_pat_wildcard(node),
+            SyntaxNodeKind::LiteralPat => self.lower_pat_lit(node),
+            SyntaxNodeKind::BindPat => self.lower_pat_bind(node),
+            SyntaxNodeKind::VariantPat => self.lower_pat_variant(node),
+            SyntaxNodeKind::TuplePat => self.lower_pat_tuple(node),
+            SyntaxNodeKind::ArrayPat => self.lower_pat_array(node),
+            SyntaxNodeKind::RecordPat => self.lower_pat_record(node),
+            SyntaxNodeKind::OrPat => self.lower_pat_or(node),
+            SyntaxNodeKind::AsPat => self.lower_pat_as(node),
             _ => self.alloc_error_pat(node),
         }
     }
 
-    fn alloc_error_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn alloc_error_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Error,
+            kind: HirPatKind::Error,
         })
     }
 
-    fn lower_pat_wildcard(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_wildcard(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Wildcard,
+            kind: HirPatKind::Wildcard,
         })
     }
 
-    fn lower_pat_lit(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_lit(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let Some(tok) = node.child_tokens().next() else {
             return self.alloc_error_pat(node);
@@ -59,14 +61,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let Some(lit) = self.alloc_lit_from_token(tok) else {
             return self.alloc_error_pat(node);
         };
-        let expr = self.alloc_expr(origin, HirExprKind::Lit { lit });
-        self.store.alloc_pat(music_hir::HirPat {
+        let expr: HirExprId = self.alloc_expr(origin, HirExprKind::Lit { lit });
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Lit { expr },
+            kind: HirPatKind::Lit { expr },
         })
     }
 
-    fn lower_pat_bind(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_bind(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = tok
@@ -75,13 +77,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                 let sym = self.interner.intern("_");
                 Ident::new(sym, node.span())
             });
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Bind { name },
+            kind: HirPatKind::Bind { name },
         })
     }
 
-    fn lower_pat_variant(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_variant(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let tag_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let tag = tag_tok
@@ -96,13 +98,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             .map(|n| self.lower_pat(n))
             .collect();
         let args = self.store.alloc_pat_list(args);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Variant { tag, args },
+            kind: HirPatKind::Variant { tag, args },
         })
     }
 
-    fn lower_pat_tuple(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_tuple(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let items: Vec<_> = node
             .child_nodes()
@@ -110,13 +112,13 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             .map(|n| self.lower_pat(n))
             .collect();
         let items = self.store.alloc_pat_list(items);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Tuple { items },
+            kind: HirPatKind::Tuple { items },
         })
     }
 
-    fn lower_pat_array(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_array(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let items: Vec<_> = node
             .child_nodes()
@@ -124,22 +126,22 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             .map(|n| self.lower_pat(n))
             .collect();
         let items = self.store.alloc_pat_list(items);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Array { items },
+            kind: HirPatKind::Array { items },
         })
     }
 
-    fn lower_pat_record(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_record(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let fields = self.lower_record_pat_fields(node);
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Record { fields },
+            kind: HirPatKind::Record { fields },
         })
     }
 
-    fn lower_pat_or(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_or(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let mut pats = node.child_nodes().filter(|n| n.kind().is_pat());
         let left = match pats.next() {
@@ -150,17 +152,15 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             Some(pat) => self.lower_pat(pat),
             None => self.alloc_error_pat(node),
         };
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::Or { left, right },
+            kind: HirPatKind::Or { left, right },
         })
     }
 
-    fn lower_pat_as(&mut self, node: SyntaxNode<'tree, 'src>) -> music_hir::HirPatId {
+    fn lower_pat_as(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        let pat = node
-            .child_nodes()
-            .find(|n| n.kind().is_pat());
+        let pat = node.child_nodes().find(|n| n.kind().is_pat());
         let pat = match pat {
             Some(pat) => self.lower_pat(pat),
             None => self.alloc_error_pat(node),
@@ -172,18 +172,18 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                 let sym = self.interner.intern("_");
                 Ident::new(sym, node.span())
             });
-        self.store.alloc_pat(music_hir::HirPat {
+        self.store.alloc_pat(HirPat {
             origin,
-            kind: music_hir::HirPatKind::As { pat, name },
+            kind: HirPatKind::As { pat, name },
         })
     }
 
     fn lower_record_pat_fields(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> music_arena::SliceRange<music_hir::HirRecordPatField> {
+    ) -> SliceRange<HirRecordPatField> {
         let children: Vec<_> = node.children().collect();
-        let mut fields = Vec::<music_hir::HirRecordPatField>::new();
+        let mut fields = Vec::<HirRecordPatField>::new();
         let mut i: usize = 0;
         while i < children.len() {
             let is_mut = children
@@ -228,7 +228,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                 None
             };
 
-            fields.push(music_hir::HirRecordPatField {
+            fields.push(HirRecordPatField {
                 is_mut,
                 name,
                 value,

@@ -1,7 +1,7 @@
 use music_arena::SliceRange;
 use music_names::Ident;
 
-use crate::module::{HirExprId, HirLitId, HirPatId, HirTyId};
+use crate::module::{HirExprId, HirLitId, HirPatId};
 use crate::origin::HirOrigin;
 use crate::ty::HirDim;
 
@@ -9,7 +9,6 @@ use crate::ty::HirDim;
 pub struct HirExpr {
     pub origin: HirOrigin,
     pub kind: HirExprKind,
-    pub ty: HirTyId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

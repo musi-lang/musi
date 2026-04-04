@@ -295,6 +295,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_sema"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_arena",
+ "music_base",
+ "music_hir",
+ "music_module",
+ "music_names",
+ "music_resolve",
+ "music_syntax",
+]
+
+[[package]]
 name = "music_syntax"
 version = "0.1.0-alpha.1"
 dependencies = [

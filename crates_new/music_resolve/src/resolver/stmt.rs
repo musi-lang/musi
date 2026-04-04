@@ -1,11 +1,14 @@
 use super::*;
 
+use music_hir::HirExprId;
+use music_syntax::SyntaxNodeKind;
+
 use super::util::stmt_inner_expr;
 
 impl Resolver<'_, '_, '_, '_> {
-    pub(super) fn lower_source_file(&mut self) -> music_hir::HirExprId {
+    pub(super) fn lower_source_file(&mut self) -> HirExprId {
         let root = self.tree.root();
-        if root.kind() != music_syntax::SyntaxNodeKind::SourceFile {
+        if root.kind() != SyntaxNodeKind::SourceFile {
             return self.alloc_expr(self.origin_node(root), HirExprKind::Error);
         }
 

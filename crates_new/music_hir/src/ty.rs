@@ -1,5 +1,5 @@
 use music_arena::SliceRange;
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 
 use crate::module::HirTyId;
 use crate::origin::HirOrigin;
@@ -13,17 +13,31 @@ pub struct HirTy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirTyKind {
     Error,
+    Unknown,
+    Type,
+    Syntax,
+    Any,
+    Empty,
+    Unit,
+    Bool,
+    Int,
+    Float,
+    String,
+    CString,
+    CPtr,
+    Module,
     Named {
-        name: Ident,
-    },
-    Apply {
-        callee: HirTyId,
+        name: Symbol,
         args: SliceRange<HirTyId>,
     },
     Arrow {
-        from: HirTyId,
-        to: HirTyId,
+        params: SliceRange<HirTyId>,
+        ret: HirTyId,
         is_effectful: bool,
+    },
+    Sum {
+        left: HirTyId,
+        right: HirTyId,
     },
     Tuple {
         items: SliceRange<HirTyId>,
@@ -35,6 +49,9 @@ pub enum HirTyKind {
     Mut {
         inner: HirTyId,
     },
+    Record {
+        fields: SliceRange<HirTyField>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,4 +59,10 @@ pub enum HirDim {
     Unknown,
     Name(Ident),
     Int(u32),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirTyField {
+    pub name: Symbol,
+    pub ty: HirTyId,
 }

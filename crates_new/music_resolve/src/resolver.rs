@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
-use music_hir::{HirExpr, HirExprKind, HirModule, HirOrigin, HirStore, HirTy, HirTyId, HirTyKind};
+use music_hir::{HirExpr, HirExprId, HirExprKind, HirModule, HirOrigin, HirStore};
 use music_module::{ImportEnv, ModuleKey, ModuleSpecifier};
 use music_names::{
     Ident, Interner, KnownSymbols, NameBinding, NameBindingId, NameBindingKind, NameResolution,
@@ -73,7 +73,6 @@ struct Resolver<'a, 'env, 'tree, 'src> {
     import_env: Option<&'env dyn ImportEnv>,
 
     store: HirStore,
-    error_ty: HirTyId,
 
     names: NameResolution,
     diags: ResolveDiagList,
@@ -87,11 +86,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         interner: &'a mut Interner,
         options: ResolveOptions<'env>,
     ) -> Self {
-        let mut store = HirStore::new();
-        let error_ty = store.alloc_ty(HirTy {
-            origin: HirOrigin::dummy(),
-            kind: HirTyKind::Error,
-        });
+        let store = HirStore::new();
 
         let mut names = NameResolution::new();
         let mut root = Scope::default();
@@ -123,22 +118,17 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             interner,
             import_env: options.import_env,
             store,
-            error_ty,
             names,
             diags: Vec::new(),
             scopes: vec![root],
         }
     }
 
-    fn alloc_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> music_hir::HirExprId {
-        self.store.alloc_expr(HirExpr {
-            origin,
-            kind,
-            ty: self.error_ty,
-        })
+    fn alloc_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> HirExprId {
+        self.store.alloc_expr(HirExpr { origin, kind })
     }
 
-    fn error_expr(&mut self, origin: HirOrigin) -> music_hir::HirExprId {
+    fn error_expr(&mut self, origin: HirOrigin) -> HirExprId {
         self.alloc_expr(origin, HirExprKind::Error)
     }
 
@@ -146,7 +136,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
         &mut self,
         origin: HirOrigin,
         node: Option<SyntaxNode<'tree, 'src>>,
-    ) -> music_hir::HirExprId {
+    ) -> HirExprId {
         match node {
             Some(node) => self.lower_expr(node),
             None => self.error_expr(origin),

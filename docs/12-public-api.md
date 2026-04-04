@@ -15,8 +15,9 @@ Policy:
 - `music_arena`: `Idx`, `Arena`, `ArenaIter*`, `SliceRange`, `SliceArena`
 - `music_syntax`: token/trivia + parsing (`Token`, `TokenKind`, `Trivia`, `TriviaKind`, `Lexer`, `LexedSource`, `LexError*`, `ParseError*`, `ParsedSource`, `parse`, `SyntaxTree`, `SyntaxNode*`, `SyntaxToken*`, `SyntaxNodeKind`, `Program`, `canonical_name_text`)
 - `music_module`: module/specifier + import environment (`ModuleSpecifier`, `ModuleKey`, `ImportMap`, `ImportEnv`, `ImportError*`, `collect_import_sites`, `collect_export_summary`, `ImportSite*`, `ModuleExportSummary` (incl. exported instance tracking))
-- `music_hir`: HIR model (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
+- `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
+- `music_sema`: semantic queries over resolved HIR (`SemaOptions`, `TargetInfo`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
 
 Notes:
 
@@ -24,12 +25,14 @@ Notes:
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
 - `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
 - `music_module::ImportEnv` is resolve-only in `crates_new`: it maps import specifiers to module keys and does not expose opened-export visibility.
+- `music_sema` is query-oriented: semantic facts are accessed through `SemaModule` methods rather than public storage fields.
+- `music_hir::HirTy*` is the authoritative typed boundary produced by sema. `music_sema` no longer exposes a parallel semantic type arena.
 
 ## Planned phase crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_sema`, `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
+- `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
 - `musi_project`
 
 ## Legacy (`crates/`)

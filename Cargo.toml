@@ -6,6 +6,7 @@ members = [
   "crates_new/music_module",
   "crates_new/music_names",
   "crates_new/music_resolve",
+  "crates_new/music_sema",
   "crates_new/music_syntax",
 ]
 exclude = ["crates/*"]

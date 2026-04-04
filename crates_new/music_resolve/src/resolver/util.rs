@@ -1,7 +1,8 @@
 use super::*;
 
 use music_arena::SliceRange;
-use music_hir::{HirLit, HirLitKind};
+use music_hir::{HirConstraint, HirLit, HirLitId, HirLitKind, HirParam};
+use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
 use crate::string_lit::{
     decode_rune_lit, decode_string_lit, decode_template_head, decode_template_middle,
@@ -11,16 +12,16 @@ use crate::string_lit::{
 pub(super) fn stmt_inner_expr<'tree, 'src>(
     node: SyntaxNode<'tree, 'src>,
 ) -> Option<SyntaxNode<'tree, 'src>> {
-    if node.kind() != music_syntax::SyntaxNodeKind::SequenceExpr {
+    if node.kind() != SyntaxNodeKind::SequenceExpr {
         return None;
     }
     let mut children = node.children();
     match (children.next(), children.next(), children.next()) {
-        (
-            Some(music_syntax::SyntaxElement::Node(expr)),
-            Some(music_syntax::SyntaxElement::Token(tok)),
-            None,
-        ) if tok.kind() == music_syntax::TokenKind::Semicolon => Some(expr),
+        (Some(SyntaxElement::Node(expr)), Some(SyntaxElement::Token(tok)), None)
+            if tok.kind() == TokenKind::Semicolon =>
+        {
+            Some(expr)
+        }
         _ => None,
     }
 }
@@ -50,7 +51,7 @@ pub(super) fn parse_u32_lit(raw: &str) -> Option<u32> {
 
 pub(super) fn child_of_kind<'tree, 'src>(
     node: SyntaxNode<'tree, 'src>,
-    kind: music_syntax::SyntaxNodeKind,
+    kind: SyntaxNodeKind,
 ) -> Option<SyntaxNode<'tree, 'src>> {
     node.child_nodes().find(|child| child.kind() == kind)
 }
@@ -60,30 +61,30 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<Ident> {
-        child_of_kind(node, music_syntax::SyntaxNodeKind::TypeParamList)
+        child_of_kind(node, SyntaxNodeKind::TypeParamList)
             .map_or(SliceRange::EMPTY, |child| self.lower_type_param_list(child))
     }
 
     pub(super) fn lower_params_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> SliceRange<music_hir::HirParam> {
-        child_of_kind(node, music_syntax::SyntaxNodeKind::ParamList)
+    ) -> SliceRange<HirParam> {
+        child_of_kind(node, SyntaxNodeKind::ParamList)
             .map_or(SliceRange::EMPTY, |child| self.lower_param_list(child))
     }
 
     pub(super) fn lower_constraints_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> SliceRange<music_hir::HirConstraint> {
-        child_of_kind(node, music_syntax::SyntaxNodeKind::ConstraintList)
+    ) -> SliceRange<HirConstraint> {
+        child_of_kind(node, SyntaxNodeKind::ConstraintList)
             .map_or(SliceRange::EMPTY, |child| self.lower_constraint_list(child))
     }
 
     pub(super) fn alloc_lit_from_token(
         &mut self,
         tok: SyntaxToken<'tree, 'src>,
-    ) -> Option<music_hir::HirLitId> {
+    ) -> Option<HirLitId> {
         let raw = tok.text()?;
         let kind = match tok.kind() {
             TokenKind::Int => HirLitKind::Int { raw: raw.into() },

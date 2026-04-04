@@ -6,6 +6,7 @@ check:
 	cargo check --workspace && cargo check --workspace --tests
 
 lint:
+	bash scripts/audit_paths.sh crates_new
 	cargo clippy --workspace --tests -- -D warnings
 
 fmt:
