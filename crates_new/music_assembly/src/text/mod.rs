@@ -11,18 +11,31 @@ use music_bc::{
 
 use crate::AssemblyError;
 
+fn symbol_needs_quote(text: &str) -> bool {
+    text.chars().any(char::is_whitespace) || text.contains('"') || text.contains('\\')
+}
+
+fn push_symbol_ref(out: &mut String, text: &str) {
+    out.push('@');
+    if symbol_needs_quote(text) {
+        push_quoted(out, text);
+    } else {
+        out.push_str(text);
+    }
+}
+
 #[must_use]
 pub fn format_text(artifact: &Artifact) -> String {
     let mut out = String::new();
 
     for (_, descriptor) in artifact.types.iter() {
-        out.push_str(".type @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".type ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
     for (_, descriptor) in artifact.constants.iter() {
-        out.push_str(".const @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".const ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         match descriptor.value {
             ConstantValue::Int(value) => {
                 out.push_str(" int ");
@@ -44,22 +57,22 @@ pub fn format_text(artifact: &Artifact) -> String {
         out.push('\n');
     }
     for (_, descriptor) in artifact.effects.iter() {
-        out.push_str(".effect @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".effect ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         for op in &descriptor.ops {
-            out.push_str(" @");
-            out.push_str(artifact.string_text(op.name));
+            out.push(' ');
+            push_symbol_ref(&mut out, artifact.string_text(op.name));
         }
         out.push('\n');
     }
     for (_, descriptor) in artifact.classes.iter() {
-        out.push_str(".class @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".class ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
     for (_, descriptor) in artifact.foreigns.iter() {
-        out.push_str(".foreign @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".foreign ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         out.push_str(" abi ");
         push_quoted(&mut out, artifact.string_text(descriptor.abi));
         out.push_str(" symbol ");
@@ -67,20 +80,23 @@ pub fn format_text(artifact: &Artifact) -> String {
         out.push('\n');
     }
     for (_, descriptor) in artifact.globals.iter() {
-        out.push_str(".global @");
-        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(".global ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         if descriptor.export {
             out.push_str(" export");
         }
         if let Some(method) = descriptor.initializer {
-            out.push_str(" @");
-            out.push_str(artifact.string_text(artifact.methods.get(method).name));
+            out.push(' ');
+            push_symbol_ref(
+                &mut out,
+                artifact.string_text(artifact.methods.get(method).name),
+            );
         }
         out.push('\n');
     }
     for (_, method) in artifact.methods.iter() {
-        out.push_str(".method @");
-        out.push_str(artifact.string_text(method.name));
+        out.push_str(".method ");
+        push_symbol_ref(&mut out, artifact.string_text(method.name));
         out.push_str(" locals ");
         out.push_str(&method.locals.to_string());
         if method.export {
@@ -181,50 +197,40 @@ fn format_operand(
         }
         Operand::String(text) => push_quoted(out, artifact.string_text(*text)),
         Operand::Type(id) => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.types.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.types.get(*id).name));
         }
         Operand::Constant(id) => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.constants.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.constants.get(*id).name));
         }
         Operand::Global(id) => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.globals.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.globals.get(*id).name));
         }
         Operand::Method(id) => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.methods.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
         }
         Operand::WideMethodCaptures { method: id, captures } => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.methods.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
             out.push(' ');
             out.push_str(&captures.to_string());
         }
         Operand::Foreign(id) => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.foreigns.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.foreigns.get(*id).name));
         }
         Operand::Effect { effect, op } => {
             let effect = artifact.effects.get(*effect);
-            out.push('@');
-            out.push_str(artifact.string_text(effect.name));
+            push_symbol_ref(out, artifact.string_text(effect.name));
             out.push(' ');
-            out.push('@');
-            out.push_str(artifact.string_text(effect.ops[usize::from(*op)].name));
+            push_symbol_ref(out, artifact.string_text(effect.ops[usize::from(*op)].name));
         }
         Operand::EffectId(effect) => {
             let effect = artifact.effects.get(*effect);
-            out.push('@');
-            out.push_str(artifact.string_text(effect.name));
+            push_symbol_ref(out, artifact.string_text(effect.name));
         }
         Operand::Label(id) => {
             out.push_str(artifact.string_text(method.labels[usize::from(*id)]));
         }
         Operand::TypeLen { ty, len } => {
-            out.push('@');
-            out.push_str(artifact.string_text(artifact.types.get(*ty).name));
+            push_symbol_ref(out, artifact.string_text(artifact.types.get(*ty).name));
             out.push(' ');
             out.push_str(&len.to_string());
         }
@@ -707,10 +713,14 @@ fn ensure_label(
 }
 
 fn parse_symbol(token: &str) -> Result<String, AssemblyError> {
-    token
+    let body = token
         .strip_prefix('@')
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))
+        .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))?;
+    if body.starts_with('"') {
+        parse_quoted(body)
+    } else {
+        Ok(body.to_owned())
+    }
 }
 
 fn parse_local(token: Option<&String>) -> Result<u16, AssemblyError> {
@@ -743,10 +753,10 @@ fn must_get<'a>(token: Option<&'a String>, name: &str) -> Result<&'a str, Assemb
 fn tokenize(line: &str) -> Result<Vec<String>, AssemblyError> {
     let mut tokens = Vec::new();
     let mut current = String::new();
-    let chars = line.chars();
+    let mut chars = line.chars().peekable();
     let mut in_string = false;
 
-    for ch in chars {
+    while let Some(ch) = chars.next() {
         if in_string {
             current.push(ch);
             if ch == '"' && !current.ends_with("\\\"") {
@@ -763,6 +773,16 @@ fn tokenize(line: &str) -> Result<Vec<String>, AssemblyError> {
                     current.clear();
                 }
                 current.push(ch);
+                in_string = true;
+            }
+            '@' if matches!(chars.peek().copied(), Some('"')) => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+                current.push('@');
+                current.push('"');
+                let _ = chars.next();
                 in_string = true;
             }
             ' ' | '\t' => {

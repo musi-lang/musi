@@ -57,6 +57,19 @@ pub struct IrExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrRecordField {
+    pub name: Box<str>,
+    pub index: u16,
+    pub expr: IrExpr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrRecordLayoutField {
+    pub name: Box<str>,
+    pub index: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrNameRef {
     pub binding: Option<NameBindingId>,
     pub name: Box<str>,
@@ -118,6 +131,23 @@ pub enum IrExprKind {
     Array {
         ty_name: Box<str>,
         items: Box<[IrExpr]>,
+    },
+    Record {
+        ty_name: Box<str>,
+        field_count: u16,
+        fields: Box<[IrRecordField]>,
+    },
+    RecordGet {
+        base: Box<IrExpr>,
+        index: u16,
+    },
+    RecordUpdate {
+        ty_name: Box<str>,
+        field_count: u16,
+        base: Box<IrExpr>,
+        base_fields: Box<[IrRecordLayoutField]>,
+        result_fields: Box<[IrRecordLayoutField]>,
+        updates: Box<[IrRecordField]>,
     },
     Let {
         binding: Option<NameBindingId>,

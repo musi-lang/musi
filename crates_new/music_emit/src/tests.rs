@@ -165,6 +165,36 @@ fn emits_case_tuple_and_array_patterns() {
 }
 
 #[test]
+fn emits_records_with_projection_and_update() {
+    let ir = lower_ir(
+        r"
+        export let answer () : Int := (
+          let r := { y := 2, x := 1 };
+          let a : Int := r.x;
+          let s := r.{ x := 3 };
+          a + s.x
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(opcodes.contains(&music_bc::Opcode::DataNew));
+    assert!(opcodes.contains(&music_bc::Opcode::DataGet));
+}
+
+#[test]
 fn emits_foreign_calls() {
     let ir = lower_ir(
         r#"

@@ -74,6 +74,7 @@ SEAM text IL is directive-based and symbolic where possible.
 - labels are symbolic
 - locals use `%` slots
 - globals, methods, types, effects, and foreigns are symbolic in text form
+- symbolic references use `@name`, and may be quoted as `@"..."`
 - numeric immediates stay numeric only when they are truly machine data
 
 ### Intended Shape
@@ -128,6 +129,11 @@ Examples:
 - `data.new @type:Option 1`
 - `eff.invk @effect:Abort @op:abort`
 - `hdl.push @effect:Console`
+
+When a symbolic name contains whitespace (or needs escaping), it is written as a quoted symbol:
+
+- `.type @"{ x: Int; y: Int }"`
+- `data.new @"{ x: Int; y: Int }" 2`
 
 `data.new` uses the tag value from the stack. The operand carries only the aggregate type id and field count.
 
@@ -188,6 +194,11 @@ Fixed-index fast paths are not part of the stable ISA.
 - variant-tag inspection
 
 ADT tagging does not leak through `seq.*`.
+
+Stack contracts:
+
+- `data.get`: pops `index`, pops `aggregate`, pushes `field_value`
+- `data.set`: pops `new_value`, pops `index`, pops `aggregate`, pushes `updated_aggregate`
 
 ### Runtime Type Operations
 

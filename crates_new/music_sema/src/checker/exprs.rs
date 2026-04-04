@@ -372,19 +372,32 @@ fn check_record_expr(
     items: SliceRange<HirRecordItem>,
 ) -> ExprFacts {
     let mut effects = EffectRow::empty();
-    let fields = ctx
-        .record_items(items)
-        .into_iter()
-        .filter_map(|item| {
-            let facts = check_expr(ctx, item.value);
-            effects.union_with(&facts.effects);
-            item.name.map(|name| HirTyField {
+    let mut fields = BTreeMap::<Box<str>, HirTyField>::new();
+    for item in ctx.record_items(items) {
+        let facts = check_expr(ctx, item.value);
+        effects.union_with(&facts.effects);
+        if item.spread {
+            let span = ctx.expr(item.value).origin.span;
+            ctx.diag(span, "record spread not supported", "");
+            continue;
+        }
+        let Some(name) = item.name else {
+            continue;
+        };
+        let key: Box<str> = ctx.resolve_symbol(name.name).into();
+        let prev = fields.insert(
+            key,
+            HirTyField {
                 name: name.name,
                 ty: facts.ty,
-            })
-        })
-        .collect::<Vec<_>>();
-    let fields = ctx.alloc_ty_fields(fields);
+            },
+        );
+        if prev.is_some() {
+            let span = ctx.expr(item.value).origin.span;
+            ctx.diag(span, "duplicate record field", "");
+        }
+    }
+    let fields = ctx.alloc_ty_fields(fields.into_values());
     let ty = ctx.alloc_ty(HirTyKind::Record { fields });
     ExprFacts { ty, effects }
 }

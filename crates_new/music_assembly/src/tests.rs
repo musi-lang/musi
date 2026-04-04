@@ -64,6 +64,17 @@ fn text_roundtrip_preserves_artifact_shape() {
 }
 
 #[test]
+fn text_roundtrip_supports_quoted_symbolic_names() {
+    let mut artifact = sample_artifact();
+    let record_name = artifact.intern_string("{ x: Int; y: Int }");
+    let _ = artifact.types.alloc(TypeDescriptor { name: record_name });
+
+    let text = format_text(&artifact);
+    let decoded = parse_text(&text).unwrap();
+    assert_eq!(format_text(&decoded), text);
+}
+
+#[test]
 fn float_constants_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let float_name = artifact.intern_string("Float");

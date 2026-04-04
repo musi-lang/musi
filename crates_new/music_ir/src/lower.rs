@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirForeignDecl,
-    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirTyField, HirTyId,
-    HirTyKind,
+    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirRecordItem, HirTyField,
+    HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -14,7 +14,8 @@ use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTy
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
-    IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam,
+    IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    IrRecordLayoutField,
 };
 
 #[derive(Default)]
@@ -32,6 +33,8 @@ struct LetItemInput {
     is_callable: bool,
     exported: bool,
 }
+
+type RecordLayout = (BTreeMap<Symbol, u16>, Box<[IrRecordLayoutField]>, u16);
 
 struct LowerCtx<'a> {
     sema: &'a SemaModule,
@@ -371,6 +374,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Sequence { exprs } => lower_sequence_expr(ctx, *exprs),
         HirExprKind::Tuple { items } => lower_tuple_expr(ctx, expr_id, *items),
         HirExprKind::Array { items } => lower_array_expr(ctx, expr_id, items.clone()),
+        HirExprKind::Record { items } => lower_record_expr(ctx, expr_id, items.clone()),
         HirExprKind::Let {
             mods,
             pat,
@@ -390,7 +394,10 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         }
         HirExprKind::Index { base, args } => lower_index_expr(ctx, *base, *args),
         HirExprKind::Field { base, name, .. } => {
-            lower_field_expr(sema, expr_id, *base, name.name, &expr.kind, interner)
+            lower_field_expr(ctx, expr_id, *base, name.name, &expr.kind)
+        }
+        HirExprKind::RecordUpdate { base, items } => {
+            lower_record_update_expr(ctx, expr_id, *base, items.clone())
         }
         HirExprKind::Case { scrutinee, arms } => lower_case_expr(ctx, *scrutinee, arms),
         HirExprKind::Lambda { params, body, .. } => {
@@ -462,6 +469,81 @@ fn lower_array_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRang
             items,
         },
     )
+}
+
+fn record_layout_for_ty(
+    sema: &SemaModule,
+    ty: HirTyId,
+    interner: &Interner,
+) -> Option<RecordLayout> {
+    let HirTyKind::Record { fields } = &sema.ty(ty).kind else {
+        return None;
+    };
+    let mut items = sema
+        .module()
+        .store
+        .ty_fields
+        .get(fields.clone())
+        .iter()
+        .map(|field| (Box::<str>::from(interner.resolve(field.name)), field.name))
+        .collect::<Vec<_>>();
+    items.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    let field_count =
+        u16::try_from(items.len()).expect("record field count exceeds u16 in lowering");
+    let mut indices = BTreeMap::<Symbol, u16>::new();
+    let layout = items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (name, symbol))| {
+            let idx =
+                u16::try_from(idx).expect("record field index exceeds u16 in lowering");
+            let _ = indices.insert(symbol, idx);
+            IrRecordLayoutField { name, index: idx }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    Some((indices, layout, field_count))
+}
+
+fn lower_record_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRange<HirRecordItem>) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let ty = sema.expr_ty(expr_id);
+    let Some((indices, _layout, field_count)) = record_layout_for_ty(sema, ty, interner) else {
+        return IrExprKind::Unsupported {
+            description: "record without record type".into(),
+        };
+    };
+
+    let mut fields = Vec::new();
+    for item in sema.module().store.record_items.get(items) {
+        if item.spread {
+            return IrExprKind::Unsupported {
+                description: "record spread".into(),
+            };
+        }
+        let Some(name) = item.name else {
+            return IrExprKind::Unsupported {
+                description: "record item without name".into(),
+            };
+        };
+        let Some(index) = indices.get(&name.name).copied() else {
+            return IrExprKind::Unsupported {
+                description: "record item name missing from record type".into(),
+            };
+        };
+        fields.push(IrRecordField {
+            name: interner.resolve(name.name).into(),
+            index,
+            expr: lower_expr(ctx, item.value),
+        });
+    }
+    IrExprKind::Record {
+        ty_name: render_ty_name(sema, ty, interner),
+        field_count,
+        fields: fields.into_boxed_slice(),
+    }
 }
 
 fn lower_let_expr(
@@ -717,6 +799,11 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
                 collect_used_bindings(item, out);
             }
         }
+        IrExprKind::Record { fields, .. } => {
+            for field in fields {
+                collect_used_bindings(&field.expr, out);
+            }
+        }
         IrExprKind::Let { value, .. } => collect_used_bindings(value, out),
         IrExprKind::Assign { target, value } => {
             collect_used_bindings(value, out);
@@ -728,6 +815,13 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
         IrExprKind::Index { base, index } => {
             collect_used_bindings(base, out);
             collect_used_bindings(index, out);
+        }
+        IrExprKind::RecordGet { base, .. } => collect_used_bindings(base, out),
+        IrExprKind::RecordUpdate { base, updates, .. } => {
+            collect_used_bindings(base, out);
+            for update in updates {
+                collect_used_bindings(&update.expr, out);
+            }
         }
         IrExprKind::ClosureNew { captures, .. } => {
             for cap in captures {
@@ -783,9 +877,21 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
                 collect_local_decl_bindings(item, out);
             }
         }
+        IrExprKind::Record { fields, .. } => {
+            for field in fields {
+                collect_local_decl_bindings(&field.expr, out);
+            }
+        }
         IrExprKind::Index { base, index } => {
             collect_local_decl_bindings(base, out);
             collect_local_decl_bindings(index, out);
+        }
+        IrExprKind::RecordGet { base, .. } => collect_local_decl_bindings(base, out),
+        IrExprKind::RecordUpdate { base, updates, .. } => {
+            collect_local_decl_bindings(base, out);
+            for update in updates {
+                collect_local_decl_bindings(&update.expr, out);
+            }
         }
         IrExprKind::ClosureNew { captures, .. } => {
             for cap in captures {
@@ -884,13 +990,34 @@ fn lower_index_expr(ctx: &mut LowerCtx<'_>, base: HirExprId, args: SliceRange<Hi
 }
 
 fn lower_field_expr(
-    sema: &SemaModule,
+    ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     base: HirExprId,
     symbol: Symbol,
     kind: &HirExprKind,
-    interner: &Interner,
 ) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+
+    let base_ty = sema.expr_ty(base);
+    if matches!(sema.ty(base_ty).kind, HirTyKind::Record { .. }) {
+        let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, base_ty, interner)
+        else {
+            return IrExprKind::Unsupported {
+                description: "record field access without record layout".into(),
+            };
+        };
+        let Some(index) = indices.get(&symbol).copied() else {
+            return IrExprKind::Unsupported {
+                description: "record field access missing field".into(),
+            };
+        };
+        return IrExprKind::RecordGet {
+            base: Box::new(lower_expr(ctx, base)),
+            index,
+        };
+    }
+
     sema.expr_module_target(expr_id)
         .cloned()
         .or_else(|| sema.expr_module_target(base).cloned())
@@ -904,6 +1031,66 @@ fn lower_field_expr(
                 module_target: Some(module_target),
             },
         )
+}
+
+fn lower_record_update_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    base: HirExprId,
+    items: SliceRange<HirRecordItem>,
+) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+
+    let base_ty = sema.expr_ty(base);
+    let Some((_base_indices, base_fields, _base_count)) = record_layout_for_ty(sema, base_ty, interner)
+    else {
+        return IrExprKind::Unsupported {
+            description: "record update without record base".into(),
+        };
+    };
+
+    let result_ty = sema.expr_ty(expr_id);
+    let Some((result_indices, result_fields, result_count)) =
+        record_layout_for_ty(sema, result_ty, interner)
+    else {
+        return IrExprKind::Unsupported {
+            description: "record update without record result".into(),
+        };
+    };
+
+    let mut updates = Vec::new();
+    for item in sema.module().store.record_items.get(items) {
+        if item.spread {
+            return IrExprKind::Unsupported {
+                description: "record update spread".into(),
+            };
+        }
+        let Some(name) = item.name else {
+            return IrExprKind::Unsupported {
+                description: "record update item without name".into(),
+            };
+        };
+        let Some(index) = result_indices.get(&name.name).copied() else {
+            return IrExprKind::Unsupported {
+                description: "record update field missing from record type".into(),
+            };
+        };
+        updates.push(IrRecordField {
+            name: interner.resolve(name.name).into(),
+            index,
+            expr: lower_expr(ctx, item.value),
+        });
+    }
+
+    IrExprKind::RecordUpdate {
+        ty_name: render_ty_name(sema, result_ty, interner),
+        field_count: result_count,
+        base: Box::new(lower_expr(ctx, base)),
+        base_fields,
+        result_fields,
+        updates: updates.into_boxed_slice(),
+    }
 }
 
 fn lower_case_expr(ctx: &mut LowerCtx<'_>, scrutinee: HirExprId, arms: &SliceRange<HirCaseArm>) -> IrExprKind {

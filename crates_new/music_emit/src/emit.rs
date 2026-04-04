@@ -12,7 +12,7 @@ use music_bc::{
 };
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrExpr, IrExprKind, IrLit,
-    IrModule, IrNameRef, IrOrigin, IrParam,
+    IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField, IrRecordLayoutField,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
@@ -68,6 +68,16 @@ struct MethodEmitter<'artifact, 'module> {
     next_local: u16,
     labels: Vec<StringId>,
     code: CodeBuffer,
+}
+
+#[derive(Clone, Copy)]
+struct RecordUpdateInput<'a> {
+    ty_name: &'a str,
+    field_count: u16,
+    base: &'a IrExpr,
+    base_fields: &'a [IrRecordLayoutField],
+    result_fields: &'a [IrRecordLayoutField],
+    updates: &'a [IrRecordField],
 }
 
 /// Lowers one IR module into a standalone SEAM artifact.
@@ -273,6 +283,14 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
                 collect_expr_types(state, layout, item);
             }
         }
+        IrExprKind::Record {
+            ty_name, fields, ..
+        } => {
+            let _ = ensure_type(state, layout, ty_name);
+            for field in fields {
+                collect_expr_types(state, layout, &field.expr);
+            }
+        }
         IrExprKind::Let { value, .. } => collect_expr_types(state, layout, value),
         IrExprKind::Assign { target, value } => {
             collect_assign_target_types(state, layout, target);
@@ -281,6 +299,19 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         IrExprKind::Index { base, index } => {
             collect_expr_types(state, layout, base);
             collect_expr_types(state, layout, index);
+        }
+        IrExprKind::RecordGet { base, .. } => collect_expr_types(state, layout, base),
+        IrExprKind::RecordUpdate {
+            ty_name,
+            base,
+            updates,
+            ..
+        } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types(state, layout, base);
+            for update in updates {
+                collect_expr_types(state, layout, &update.expr);
+            }
         }
         IrExprKind::ClosureNew { captures, .. } => {
             for cap in captures {
@@ -590,6 +621,31 @@ fn compile_expr(
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             compile_sequence_literal(emitter, ty_name, items, diags);
         }
+        IrExprKind::Record {
+            ty_name,
+            field_count,
+            fields,
+        } => compile_record_literal(emitter, ty_name, *field_count, fields, diags),
+        IrExprKind::RecordGet { base, index } => compile_record_get(emitter, base, *index, diags),
+        IrExprKind::RecordUpdate {
+            ty_name,
+            field_count,
+            base,
+            base_fields,
+            result_fields,
+            updates,
+        } => compile_record_update(
+            emitter,
+            RecordUpdateInput {
+                ty_name,
+                field_count: *field_count,
+                base,
+                base_fields,
+                result_fields,
+                updates,
+            },
+            diags,
+        ),
         IrExprKind::Let {
             binding,
             name,
@@ -806,6 +862,168 @@ fn compile_sequence_literal(
         Operand::TypeLen {
             ty,
             len: u16::try_from(items.len()).unwrap_or(u16::MAX),
+        },
+    )));
+}
+
+fn compile_record_literal(
+    emitter: &mut MethodEmitter<'_, '_>,
+    ty_name: &str,
+    field_count: u16,
+    fields: &[IrRecordField],
+    diags: &mut EmitDiagList,
+) {
+    let field_count_usize = usize::from(field_count);
+    let mut field_slots = vec![None::<u16>; field_count_usize];
+    let missing_origin = fields.first().map_or_else(
+        || IrOrigin {
+            source_id: SourceId::from_raw(0),
+            span: Span::new(0, 0),
+        },
+        |field| field.expr.origin,
+    );
+
+    for field in fields {
+        compile_expr(emitter, &field.expr, true, diags);
+        let slot = reserve_temp_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+        if let Some(entry) = field_slots.get_mut(usize::from(field.index)) {
+            *entry = Some(slot);
+        }
+    }
+
+    let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &missing_origin,
+            format!("unknown emitted record type `{ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    for slot in &field_slots {
+        let Some(slot) = slot else {
+            push_expr_diag(
+                diags,
+                emitter.module_key,
+                &missing_origin,
+                "record literal missing field value".into(),
+            );
+            emit_zero(emitter);
+            continue;
+        };
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(*slot),
+        )));
+    }
+
+    compile_i64(emitter, 0);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataNew,
+        Operand::TypeLen { ty, len: field_count },
+    )));
+}
+
+fn compile_record_get(
+    emitter: &mut MethodEmitter<'_, '_>,
+    base: &IrExpr,
+    index: u16,
+    diags: &mut EmitDiagList,
+) {
+    compile_expr(emitter, base, true, diags);
+    compile_i64(emitter, i64::from(index));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataGet,
+        Operand::None,
+    )));
+}
+
+fn compile_record_update(
+    emitter: &mut MethodEmitter<'_, '_>,
+    input: RecordUpdateInput<'_>,
+    diags: &mut EmitDiagList,
+) {
+    let Some(ty) = emitter.layout.types.get(input.ty_name).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &input.base.origin,
+            format!("unknown emitted record type `{}`", input.ty_name),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    let base_slot = reserve_temp_slot(emitter);
+    compile_expr(emitter, input.base, true, diags);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(base_slot),
+    )));
+
+    let field_count_usize = usize::from(input.field_count);
+    let mut update_slots = vec![None::<u16>; field_count_usize];
+    for update in input.updates {
+        compile_expr(emitter, &update.expr, true, diags);
+        let slot = reserve_temp_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+        if let Some(entry) = update_slots.get_mut(usize::from(update.index)) {
+            *entry = Some(slot);
+        }
+    }
+
+    let mut base_index_by_name = HashMap::<&str, u16>::new();
+    for field in input.base_fields {
+        let _ = base_index_by_name.insert(field.name.as_ref(), field.index);
+    }
+
+    for field in input.result_fields {
+        if let Some(slot) = update_slots
+            .get(usize::from(field.index))
+            .and_then(|slot| *slot)
+        {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdLoc,
+                Operand::Local(slot),
+            )));
+            continue;
+        }
+        let Some(base_index) = base_index_by_name.get(field.name.as_ref()).copied() else {
+            push_expr_diag(
+                diags,
+                emitter.module_key,
+                &input.base.origin,
+                "record update missing field value".into(),
+            );
+            emit_zero(emitter);
+            continue;
+        };
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(base_slot),
+        )));
+        compile_i64(emitter, i64::from(base_index));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::DataGet,
+            Operand::None,
+        )));
+    }
+
+    compile_i64(emitter, 0);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataNew,
+        Operand::TypeLen {
+            ty,
+            len: input.field_count,
         },
     )));
 }

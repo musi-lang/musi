@@ -184,3 +184,28 @@ fn compiles_case_tuple_and_array_patterns() {
     assert!(output.text.contains("seq.get"));
     assert!(output.text.contains("br.false"));
 }
+
+#[test]
+fn compiles_records_with_projection_and_update() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer () : Int := (
+              let r := { y := 2, x := 1 };
+              let a : Int := r.x;
+              let s := r.{ x := 3 };
+              a + s.x
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.get"));
+    assert!(output.text.contains("data.new"));
+    assert!(output.text.contains(".type @\"{ x: Int; y: Int }\""));
+}
