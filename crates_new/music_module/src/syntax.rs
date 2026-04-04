@@ -72,7 +72,7 @@ impl ModuleExportSummary {
 }
 
 #[must_use]
-pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree<'_>) -> Vec<ImportSite> {
+pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree) -> Vec<ImportSite> {
     let mut out = Vec::new();
     walk_nodes(tree.root(), &mut |node| {
         if node.kind() != SyntaxNodeKind::ImportExpr {
@@ -90,7 +90,7 @@ pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree<'_>) -> Vec<I
 }
 
 #[must_use]
-pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree<'_>) -> ModuleExportSummary {
+pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleExportSummary {
     let mut summary = ModuleExportSummary::default();
     walk_nodes(tree.root(), &mut |node| {
         if node.kind() != SyntaxNodeKind::ExportExpr {
@@ -220,13 +220,13 @@ fn collect_foreign_group_exports(
     }
 }
 
-fn first_name_text<'src>(node: SyntaxNode<'_, 'src>) -> Option<&'src str> {
+fn first_name_text<'src>(node: SyntaxNode<'src, 'src>) -> Option<&'src str> {
     node.child_tokens()
         .find(|tok| is_name_token(tok.kind()))
         .and_then(canonical_token_text)
 }
 
-fn canonical_token_text<'src>(tok: SyntaxToken<'_, 'src>) -> Option<&'src str> {
+fn canonical_token_text<'src>(tok: SyntaxToken<'src, 'src>) -> Option<&'src str> {
     let raw = tok.text()?;
     Some(canonical_name_text(tok.kind(), raw))
 }

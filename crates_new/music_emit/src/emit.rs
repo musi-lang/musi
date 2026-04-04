@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::slice::from_ref;
 
-use music_arena::SliceRange;
 use music_base::{SourceId, Span, diag::Diag};
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
@@ -10,28 +9,23 @@ use music_bc::descriptor::{
 use music_bc::{
     Artifact, CodeEntry, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode, Operand,
 };
-use music_hir::{
-    HirArg, HirBinaryOp, HirExprId, HirExprKind, HirLitId, HirLitKind, HirParam, HirPatKind,
-};
-use music_ir::IrModule;
+use music_ir::{IrArg, IrBinaryOp, IrExpr, IrExprKind, IrLit, IrModule, IrOrigin, IrParam};
 use music_module::ModuleKey;
 use music_names::Symbol;
 
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TopLevelLet {
-    name: Symbol,
-    params: SliceRange<HirParam>,
-    value: HirExprId,
-    exported: bool,
-}
+type MethodTable = HashMap<Symbol, MethodId>;
+type ForeignTable = HashMap<Symbol, ForeignId>;
+type GlobalTable = HashMap<Symbol, GlobalId>;
+type LocalSlots = HashMap<Symbol, u16>;
+type CodeBuffer = Vec<CodeEntry>;
 
 #[derive(Debug, Default)]
 struct ModuleLayout {
-    callables: HashMap<Symbol, MethodId>,
-    foreigns: HashMap<Symbol, ForeignId>,
-    globals: HashMap<Symbol, GlobalId>,
+    callables: MethodTable,
+    foreigns: ForeignTable,
+    globals: GlobalTable,
     init_methods: Vec<MethodId>,
 }
 
@@ -39,20 +33,20 @@ struct ModuleLayout {
 struct ProgramState {
     artifact: Artifact,
     diags: EmitDiagList,
-    unique_methods: HashMap<Symbol, MethodId>,
-    unique_foreigns: HashMap<Symbol, ForeignId>,
+    unique_methods: MethodTable,
+    unique_foreigns: ForeignTable,
 }
 
 #[derive(Debug)]
 struct MethodEmitter<'artifact, 'module> {
     artifact: &'artifact mut Artifact,
-    ir: &'module IrModule,
+    module_key: &'module ModuleKey,
     layout: &'module ModuleLayout,
-    unique_methods: &'module HashMap<Symbol, MethodId>,
-    unique_foreigns: &'module HashMap<Symbol, ForeignId>,
-    locals: HashMap<Symbol, u16>,
+    unique_methods: &'module MethodTable,
+    unique_foreigns: &'module ForeignTable,
+    locals: LocalSlots,
     scratch_slot: u16,
-    code: Vec<CodeEntry>,
+    code: CodeBuffer,
 }
 
 /// Lowers one IR module into a standalone SEAM artifact.
@@ -67,10 +61,9 @@ pub fn lower_ir_module(
 ) -> Result<EmittedModule, EmitDiagList> {
     let modules = [module];
     let mut state = ProgramState::default();
-    let top_levels = scan_top_level_lets(module);
-    let layout = register_module(&mut state, module, &top_levels, options);
+    let layout = register_module(&mut state, module, options);
     build_unique_maps(&mut state, &modules, from_ref(&layout));
-    compile_module(&mut state, module, &layout, &top_levels);
+    compile_module(&mut state, module, &layout);
     if !state.diags.is_empty() {
         return Err(state.diags);
     }
@@ -97,16 +90,14 @@ pub fn lower_ir_program(
     options: EmitOptions,
 ) -> Result<EmittedProgram, EmitDiagList> {
     let mut state = ProgramState::default();
-    let top_levels = modules.iter().map(scan_top_level_lets).collect::<Vec<_>>();
     let layouts = modules
         .iter()
-        .zip(top_levels.iter())
-        .map(|(module, lets)| register_module(&mut state, module, lets, options))
+        .map(|module| register_module(&mut state, module, options))
         .collect::<Vec<_>>();
     let module_refs = modules.iter().collect::<Vec<_>>();
     build_unique_maps(&mut state, &module_refs, &layouts);
-    for ((module, layout), lets) in modules.iter().zip(layouts.iter()).zip(top_levels.iter()) {
-        compile_module(&mut state, module, layout, lets);
+    for (module, layout) in modules.iter().zip(layouts.iter()) {
+        compile_module(&mut state, module, layout);
     }
     let entry_method = build_program_entry(&mut state.artifact, entry_module, &layouts);
     if !state.diags.is_empty() {
@@ -127,7 +118,6 @@ pub fn lower_ir_program(
 fn register_module(
     state: &mut ProgramState,
     module: &IrModule,
-    top_levels: &HashMap<Symbol, TopLevelLet>,
     _options: EmitOptions,
 ) -> ModuleLayout {
     let mut layout = ModuleLayout::default();
@@ -137,7 +127,7 @@ fn register_module(
     register_classes(state, module);
     register_foreigns(state, module, &mut layout);
     register_callables(state, module, &mut layout);
-    register_globals(state, module, top_levels, &mut layout);
+    register_globals(state, module, &mut layout);
     layout
 }
 
@@ -208,30 +198,20 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
 fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for callable in &module.callables {
         let name = qualified_name(&module.module_key, &callable.name);
-        let export = module.exported_value(&callable.name).is_some();
-        let method_id = alloc_method(&mut state.artifact, name.as_ref(), export);
+        let method_id = alloc_method(&mut state.artifact, name.as_ref(), callable.exported);
         let _ = layout.callables.insert(callable.symbol, method_id);
     }
 }
 
-fn register_globals(
-    state: &mut ProgramState,
-    module: &IrModule,
-    top_levels: &HashMap<Symbol, TopLevelLet>,
-    layout: &mut ModuleLayout,
-) {
+fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for global in &module.globals {
         let name = qualified_name(&module.module_key, &global.name);
         let init_name = format!("{name}::init");
         let init_method = alloc_method(&mut state.artifact, &init_name, false);
-        let export = module.exported_value(&global.name).is_some()
-            || top_levels
-                .get(&global.symbol)
-                .is_some_and(|binding| binding.exported);
         let name_id = state.artifact.intern_string(name.as_ref());
         let global_id = state.artifact.globals.alloc(GlobalDescriptor {
             name: name_id,
-            export,
+            export: global.exported,
             initializer: Some(init_method),
         });
         layout.init_methods.push(init_method);
@@ -277,34 +257,21 @@ fn unique_candidate<T: Copy>((symbol, ids): (Symbol, Vec<T>)) -> Option<(Symbol,
         .map(|id| (symbol, id))
 }
 
-fn compile_module(
-    state: &mut ProgramState,
-    module: &IrModule,
-    layout: &ModuleLayout,
-    top_levels: &HashMap<Symbol, TopLevelLet>,
-) {
-    compile_callables(state, module, layout, top_levels);
+fn compile_module(state: &mut ProgramState, module: &IrModule, layout: &ModuleLayout) {
+    compile_callables(state, module, layout);
     compile_globals(state, module, layout);
 }
 
-fn compile_callables(
-    state: &mut ProgramState,
-    module: &IrModule,
-    layout: &ModuleLayout,
-    top_levels: &HashMap<Symbol, TopLevelLet>,
-) {
+fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &ModuleLayout) {
     for callable in &module.callables {
         let Some(method_id) = layout.callables.get(&callable.symbol).copied() else {
             continue;
         };
-        let Some(binding) = top_levels.get(&callable.symbol).cloned() else {
-            continue;
-        };
-        let locals = build_param_locals(module, binding.params);
+        let locals = build_param_locals(&callable.params);
         let scratch_slot = u16::try_from(locals.len()).unwrap_or(u16::MAX);
         let mut emitter = MethodEmitter {
             artifact: &mut state.artifact,
-            ir: module,
+            module_key: &module.module_key,
             layout,
             unique_methods: &state.unique_methods,
             unique_foreigns: &state.unique_foreigns,
@@ -312,7 +279,7 @@ fn compile_callables(
             scratch_slot,
             code: method_prologue(),
         };
-        compile_expr(&mut emitter, binding.value, true, &mut state.diags);
+        compile_expr(&mut emitter, &callable.body, true, &mut state.diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
             Operand::None,
@@ -336,7 +303,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
         };
         let mut emitter = MethodEmitter {
             artifact: &mut state.artifact,
-            ir: module,
+            module_key: &module.module_key,
             layout,
             unique_methods: &state.unique_methods,
             unique_foreigns: &state.unique_foreigns,
@@ -344,7 +311,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             scratch_slot: 0,
             code: method_prologue(),
         };
-        compile_expr(&mut emitter, global.expr, true, &mut state.diags);
+        compile_expr(&mut emitter, &global.body, true, &mut state.diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
             Operand::None,
@@ -384,7 +351,7 @@ fn build_program_entry(
     method_id
 }
 
-fn entry_code(init_methods: &[MethodId]) -> Vec<CodeEntry> {
+fn entry_code(init_methods: &[MethodId]) -> CodeBuffer {
     let mut code = method_prologue();
     for init_method in init_methods {
         code.push(CodeEntry::Instruction(Instruction::new(
@@ -423,81 +390,34 @@ fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBindi
         .collect()
 }
 
-fn scan_top_level_lets(module: &IrModule) -> HashMap<Symbol, TopLevelLet> {
-    let mut lets = HashMap::new();
-    collect_top_level_lets(module, module.root, false, &mut lets);
-    lets
-}
-
-fn collect_top_level_lets(
-    module: &IrModule,
-    expr_id: HirExprId,
-    exported: bool,
-    lets: &mut HashMap<Symbol, TopLevelLet>,
-) {
-    match module.hir.store.exprs.get(expr_id).kind.clone() {
-        HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
-            for expr in module.hir.store.expr_ids.get(exprs).iter().copied() {
-                collect_top_level_lets(module, expr, false, lets);
-            }
-        }
-        HirExprKind::Export { expr, .. } => collect_top_level_lets(module, expr, true, lets),
-        HirExprKind::Let {
-            pat, params, value, ..
-        } => {
-            let HirPatKind::Bind { name } = module.hir.store.pats.get(pat).kind else {
-                return;
-            };
-            let _ = lets.insert(
-                name.name,
-                TopLevelLet {
-                    name: name.name,
-                    params,
-                    value,
-                    exported,
-                },
-            );
-        }
-        _ => {}
-    }
-}
-
-fn build_param_locals(module: &IrModule, params: SliceRange<HirParam>) -> HashMap<Symbol, u16> {
-    module
-        .hir
-        .store
-        .params
-        .get(params)
+fn build_param_locals(params: &[IrParam]) -> LocalSlots {
+    params
         .iter()
         .enumerate()
-        .filter_map(|(index, param)| {
-            u16::try_from(index)
-                .ok()
-                .map(|slot| (param.name.name, slot))
-        })
+        .filter_map(|(index, param)| u16::try_from(index).ok().map(|slot| (param.symbol, slot)))
         .collect()
 }
 
 fn compile_expr(
     emitter: &mut MethodEmitter<'_, '_>,
-    expr_id: HirExprId,
+    expr: &IrExpr,
     keep_result: bool,
     diags: &mut EmitDiagList,
 ) {
-    match emitter.ir.hir.store.exprs.get(expr_id).kind.clone() {
-        HirExprKind::Lit { lit } => compile_lit(emitter, lit, diags),
-        HirExprKind::Name { name } => compile_name(emitter, name.name, expr_id, diags),
-        HirExprKind::Sequence { exprs } => compile_sequence(emitter, exprs, diags),
-        HirExprKind::Binary { op, left, right } => {
-            compile_binary(emitter, &op, left, right, diags);
+    match &expr.kind {
+        IrExprKind::Name { symbol, .. } => compile_name(emitter, *symbol, expr, diags),
+        IrExprKind::Lit(lit) => compile_lit(emitter, lit, &expr.origin, diags),
+        IrExprKind::Sequence { exprs } => compile_sequence(emitter, exprs, diags),
+        IrExprKind::Binary { op, left, right } => {
+            compile_binary(emitter, op, left, right, diags);
         }
-        HirExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
-        other => {
+        IrExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
+        IrExprKind::Unsupported { description } => {
             push_expr_diag(
                 diags,
-                emitter.ir,
-                expr_id,
-                format!("unsupported emitted expression `{other:?}`"),
+                emitter.module_key,
+                &expr.origin,
+                format!("unsupported emitted expression `{description}`"),
             );
             emit_zero(emitter);
         }
@@ -510,18 +430,21 @@ fn compile_expr(
     }
 }
 
-fn compile_lit(emitter: &mut MethodEmitter<'_, '_>, lit: HirLitId, diags: &mut EmitDiagList) {
-    match &emitter.ir.hir.store.lits.get(lit).kind {
-        HirLitKind::Int { raw } => compile_int_literal(emitter, raw, lit, diags),
-        HirLitKind::String { value } => compile_string_literal(emitter, value),
-        HirLitKind::Rune { value } => compile_i64(emitter, i64::from(*value)),
-        HirLitKind::Float { .. } => {
-            let origin = emitter.ir.hir.store.lits.get(lit).origin;
-            push_span_diag(
+fn compile_lit(
+    emitter: &mut MethodEmitter<'_, '_>,
+    lit: &IrLit,
+    origin: &IrOrigin,
+    diags: &mut EmitDiagList,
+) {
+    match lit {
+        IrLit::Int { raw } => compile_int_literal(emitter, raw, origin, diags),
+        IrLit::String { value } => compile_string_literal(emitter, value),
+        IrLit::Rune { value } => compile_i64(emitter, i64::from(*value)),
+        IrLit::Float { .. } => {
+            push_expr_diag(
                 diags,
-                &emitter.ir.module_key,
-                origin.source_id,
-                origin.span,
+                emitter.module_key,
+                origin,
                 "float literals are not yet emitted".into(),
             );
             emit_zero(emitter);
@@ -532,18 +455,16 @@ fn compile_lit(emitter: &mut MethodEmitter<'_, '_>, lit: HirLitId, diags: &mut E
 fn compile_int_literal(
     emitter: &mut MethodEmitter<'_, '_>,
     raw: &str,
-    lit: HirLitId,
+    origin: &IrOrigin,
     diags: &mut EmitDiagList,
 ) {
     if let Some(value) = parse_int_literal(raw) {
         compile_i64(emitter, value);
     } else {
-        let origin = emitter.ir.hir.store.lits.get(lit).origin;
-        push_span_diag(
+        push_expr_diag(
             diags,
-            &emitter.ir.module_key,
-            origin.source_id,
-            origin.span,
+            emitter.module_key,
+            origin,
             format!("invalid integer literal `{raw}`"),
         );
         emit_zero(emitter);
@@ -587,7 +508,7 @@ fn compile_i64(emitter: &mut MethodEmitter<'_, '_>, value: i64) {
 fn compile_name(
     emitter: &mut MethodEmitter<'_, '_>,
     name: Symbol,
-    expr_id: HirExprId,
+    expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) {
     if let Some(slot) = emitter.locals.get(&name).copied() {
@@ -599,8 +520,8 @@ fn compile_name(
     }
     push_expr_diag(
         diags,
-        emitter.ir,
-        expr_id,
+        emitter.module_key,
+        &expr.origin,
         format!("unsupported emitted name reference `{name}`"),
     );
     emit_zero(emitter);
@@ -608,34 +529,33 @@ fn compile_name(
 
 fn compile_sequence(
     emitter: &mut MethodEmitter<'_, '_>,
-    exprs: SliceRange<HirExprId>,
+    exprs: &[IrExpr],
     diags: &mut EmitDiagList,
 ) {
-    let items = emitter.ir.hir.store.expr_ids.get(exprs);
-    for (index, expr) in items.iter().copied().enumerate() {
-        let keep_result = index + 1 == items.len();
+    for (index, expr) in exprs.iter().enumerate() {
+        let keep_result = index + 1 == exprs.len();
         compile_expr(emitter, expr, keep_result, diags);
     }
 }
 
 fn compile_binary(
     emitter: &mut MethodEmitter<'_, '_>,
-    op: &HirBinaryOp,
-    left: HirExprId,
-    right: HirExprId,
+    op: &IrBinaryOp,
+    left: &IrExpr,
+    right: &IrExpr,
     diags: &mut EmitDiagList,
 ) {
     compile_expr(emitter, left, true, diags);
     compile_expr(emitter, right, true, diags);
     let opcode = match op {
-        HirBinaryOp::Add => Opcode::IAdd,
-        HirBinaryOp::Eq => Opcode::CmpEq,
-        _ => {
+        IrBinaryOp::Add => Opcode::IAdd,
+        IrBinaryOp::Eq => Opcode::CmpEq,
+        IrBinaryOp::Other(name) => {
             push_expr_diag(
                 diags,
-                emitter.ir,
-                left,
-                format!("unsupported emitted binary operator `{op:?}`"),
+                emitter.module_key,
+                &left.origin,
+                format!("unsupported emitted binary operator `{name}`"),
             );
             Opcode::CmpEq
         }
@@ -648,28 +568,37 @@ fn compile_binary(
 
 fn compile_call(
     emitter: &mut MethodEmitter<'_, '_>,
-    callee: HirExprId,
-    args: SliceRange<HirArg>,
+    callee: &IrExpr,
+    args: &[IrArg],
     diags: &mut EmitDiagList,
 ) {
-    for arg in emitter.ir.hir.store.args.get(args) {
+    for arg in args {
         if arg.spread {
             push_expr_diag(
                 diags,
-                emitter.ir,
-                arg.expr,
+                emitter.module_key,
+                &arg.expr.origin,
                 "spread call arguments are not yet emitted".into(),
             );
         }
-        compile_expr(emitter, arg.expr, true, diags);
+        compile_expr(emitter, &arg.expr, true, diags);
     }
-    match emitter.ir.hir.store.exprs.get(callee).kind.clone() {
-        HirExprKind::Name { name } => compile_named_call(emitter, name.name, callee, diags),
+    match &callee.kind {
+        IrExprKind::Name { symbol, .. } => compile_named_call(emitter, *symbol, callee, diags),
+        IrExprKind::Unsupported { description } => {
+            push_expr_diag(
+                diags,
+                emitter.module_key,
+                &callee.origin,
+                format!("unsupported emitted call target `{description}`"),
+            );
+            emit_zero(emitter);
+        }
         other => {
             push_expr_diag(
                 diags,
-                emitter.ir,
-                callee,
+                emitter.module_key,
+                &callee.origin,
                 format!("unsupported emitted call target `{other:?}`"),
             );
             emit_zero(emitter);
@@ -680,7 +609,7 @@ fn compile_call(
 fn compile_named_call(
     emitter: &mut MethodEmitter<'_, '_>,
     name: Symbol,
-    callee: HirExprId,
+    callee: &IrExpr,
     diags: &mut EmitDiagList,
 ) {
     if let Some(method) = emitter
@@ -711,8 +640,8 @@ fn compile_named_call(
     }
     push_expr_diag(
         diags,
-        emitter.ir,
-        callee,
+        emitter.module_key,
+        &callee.origin,
         format!("unknown emitted call target `{name}`"),
     );
     emit_zero(emitter);
@@ -725,7 +654,7 @@ fn emit_zero(emitter: &mut MethodEmitter<'_, '_>) {
     )));
 }
 
-fn method_prologue() -> Vec<CodeEntry> {
+fn method_prologue() -> CodeBuffer {
     vec![CodeEntry::Label(Label { id: 0 })]
 }
 
@@ -741,12 +670,7 @@ fn alloc_method(artifact: &mut Artifact, name: &str, export: bool) -> MethodId {
     })
 }
 
-fn finalize_method(
-    artifact: &mut Artifact,
-    method_id: MethodId,
-    locals: u16,
-    code: Vec<CodeEntry>,
-) {
+fn finalize_method(artifact: &mut Artifact, method_id: MethodId, locals: u16, code: CodeBuffer) {
     let method = artifact.methods.get_mut(method_id);
     method.locals = locals;
     method.code = code.into_boxed_slice();
@@ -788,18 +712,11 @@ fn parse_int_literal(raw: &str) -> Option<i64> {
 
 fn push_expr_diag(
     diags: &mut EmitDiagList,
-    module: &IrModule,
-    expr_id: HirExprId,
+    module_key: &ModuleKey,
+    origin: &IrOrigin,
     message: String,
 ) {
-    let origin = module.hir.store.exprs.get(expr_id).origin;
-    push_span_diag(
-        diags,
-        &module.module_key,
-        origin.source_id,
-        origin.span,
-        message,
-    );
+    push_span_diag(diags, module_key, origin.source_id, origin.span, message);
 }
 
 fn push_span_diag(

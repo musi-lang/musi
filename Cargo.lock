@@ -293,10 +293,8 @@ dependencies = [
 name = "music_emit"
 version = "0.1.0-alpha.1"
 dependencies = [
- "music_arena",
  "music_base",
  "music_bc",
- "music_hir",
  "music_ir",
  "music_module",
  "music_names",
@@ -318,6 +316,7 @@ dependencies = [
 name = "music_ir"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "music_arena",
  "music_base",
  "music_hir",
  "music_module",

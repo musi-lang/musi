@@ -25,18 +25,18 @@ use music_base::Span;
 use trivia::TriviaRange;
 
 #[derive(Debug, Clone, Default)]
-pub struct LexedSource<'src> {
-    pub(crate) text: &'src str,
+pub struct LexedSource {
+    pub(crate) text: Box<str>,
     pub(crate) tokens: Vec<Token>,
     pub(crate) trivia: TriviaList,
     pub(crate) token_trivia: Vec<TriviaRange>,
     pub(crate) errors: LexErrorList,
 }
 
-impl<'src> LexedSource<'src> {
+impl LexedSource {
     #[must_use]
-    pub const fn text(&self) -> &'src str {
-        self.text
+    pub fn text(&self) -> &str {
+        &self.text
     }
 
     #[must_use]
@@ -69,13 +69,13 @@ impl<'src> LexedSource<'src> {
     }
 
     #[must_use]
-    pub fn token_text(&self, token_index: usize) -> Option<&'src str> {
+    pub fn token_text(&self, token_index: usize) -> Option<&str> {
         let token = self.tokens.get(token_index)?;
         self.slice_span(token.span)
     }
 
     #[must_use]
-    pub fn slice_span(&self, span: Span) -> Option<&'src str> {
+    pub fn slice_span(&self, span: Span) -> Option<&str> {
         let start = usize::try_from(span.start).ok()?;
         let end = usize::try_from(span.end).ok()?;
         self.text.get(start..end)

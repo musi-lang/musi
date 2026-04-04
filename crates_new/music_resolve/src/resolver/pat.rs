@@ -7,7 +7,10 @@ use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField};
 use music_syntax::SyntaxElement;
 use music_syntax::{SyntaxNodeKind, pattern_binder_tokens};
 
-impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
+where
+    'tree: 'src,
+{
     pub(super) fn collect_pat_binders(&mut self, node: SyntaxNode<'tree, 'src>) -> Vec<Ident> {
         let mut out = Vec::new();
         let mut seen = HashSet::<Symbol>::new();

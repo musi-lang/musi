@@ -12,6 +12,8 @@ mod patterns;
 mod schemes;
 mod state;
 mod surface;
+mod surface_exports;
+mod surface_types;
 
 use state::{
     CheckPass, CollectPass, DeclState, EffectDef, EffectOpDef, FactState, ModuleState, PassBase,

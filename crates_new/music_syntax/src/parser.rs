@@ -26,20 +26,20 @@ const ARROW_BP: u8 = 7;
 const PIPE_BP: u8 = 6;
 const ASSIGN_BP: u8 = 2;
 
-#[derive(Debug)]
-pub struct ParsedSource<'src> {
-    tree: SyntaxTree<'src>,
+#[derive(Debug, Clone)]
+pub struct ParsedSource {
+    tree: SyntaxTree,
     errors: ParseErrorList,
 }
 
-impl<'src> ParsedSource<'src> {
+impl ParsedSource {
     #[must_use]
-    pub const fn new(tree: SyntaxTree<'src>, errors: ParseErrorList) -> Self {
+    pub const fn new(tree: SyntaxTree, errors: ParseErrorList) -> Self {
         Self { tree, errors }
     }
 
     #[must_use]
-    pub const fn tree(&self) -> &SyntaxTree<'src> {
+    pub const fn tree(&self) -> &SyntaxTree {
         &self.tree
     }
 
@@ -52,7 +52,7 @@ impl<'src> ParsedSource<'src> {
 type SyntaxElementList = Vec<SyntaxElementId>;
 
 #[must_use]
-pub fn parse(lexed: LexedSource<'_>) -> ParsedSource<'_> {
+pub fn parse(lexed: LexedSource) -> ParsedSource {
     let token_spans = lexed.tokens().iter().map(|token| token.span).collect();
     let mut builder = SyntaxTreeBuilder::new(token_spans);
     let mut errors = Vec::new();
@@ -138,7 +138,7 @@ impl SyntaxTreeBuilder {
         }
     }
 
-    fn finish(self, lexed: LexedSource<'_>, root: SyntaxNodeId) -> SyntaxTree<'_> {
+    fn finish(self, lexed: LexedSource, root: SyntaxNodeId) -> SyntaxTree {
         SyntaxTree::new(lexed, self.nodes, self.children, self.token_parents, root)
     }
 }
@@ -156,7 +156,7 @@ struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn new(
-        lexed: &'a LexedSource<'_>,
+        lexed: &'a LexedSource,
         builder: &'a mut SyntaxTreeBuilder,
         errors: &'a mut ParseErrorList,
     ) -> Self {

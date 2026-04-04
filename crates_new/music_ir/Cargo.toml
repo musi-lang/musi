@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+music_arena = { path = "../music_arena" }
 music_base = { path = "../music_base" }
 music_hir = { path = "../music_hir" }
 music_module = { path = "../music_module" }

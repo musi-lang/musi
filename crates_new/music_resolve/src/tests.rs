@@ -32,7 +32,7 @@ impl ImportEnv for TestImportEnv {
 
 fn find_nth_name_site(
     source_id: SourceId,
-    tree: &music_syntax::SyntaxTree<'_>,
+    tree: &music_syntax::SyntaxTree,
     spelling: &str,
     nth: usize,
 ) -> Option<NameSite> {

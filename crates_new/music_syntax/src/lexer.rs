@@ -48,9 +48,9 @@ impl<'src> Lexer<'src> {
     }
 
     #[must_use]
-    pub fn lex(mut self) -> LexedSource<'src> {
+    pub fn lex(mut self) -> LexedSource {
         let mut out = LexedSource {
-            text: self.cursor.text(),
+            text: self.cursor.text().into(),
             ..LexedSource::default()
         };
         let mut trivia_start = 0;

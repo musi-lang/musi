@@ -220,6 +220,12 @@ pub fn finish_module(
     })
 }
 
+impl ModuleState {
+    pub(super) fn binding_id_at_site(&self, site: NameSite) -> Option<NameBindingId> {
+        self.binding_ids.get(&site).copied()
+    }
+}
+
 impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     const fn new(
         module: &'ctx mut ModuleState,

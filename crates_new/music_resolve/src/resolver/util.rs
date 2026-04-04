@@ -56,7 +56,10 @@ pub(super) fn child_of_kind<'tree, 'src>(
     node.child_nodes().find(|child| child.kind() == kind)
 }
 
-impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
+where
+    'tree: 'src,
+{
     pub(super) fn lower_type_params_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,

@@ -1,6 +1,9 @@
 use super::*;
 
-impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
+where
+    'tree: 'src,
+{
     pub(super) fn push_scope(&mut self) {
         self.scopes.push(Scope::default());
     }

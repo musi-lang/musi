@@ -17,7 +17,10 @@ use crate::string_lit::{
 
 use super::util::{child_of_kind, parse_u32_lit, stmt_inner_expr};
 
-impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
+where
+    'tree: 'src,
+{
     pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         match node.kind() {

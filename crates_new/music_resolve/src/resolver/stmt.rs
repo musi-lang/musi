@@ -5,7 +5,10 @@ use music_syntax::SyntaxNodeKind;
 
 use super::util::stmt_inner_expr;
 
-impl Resolver<'_, '_, '_, '_> {
+impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
+where
+    'tree: 'src,
+{
     pub(super) fn lower_source_file(&mut self) -> HirExprId {
         let root = self.tree.root();
         if root.kind() != SyntaxNodeKind::SourceFile {

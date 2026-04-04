@@ -1,5 +1,4 @@
-use music_base::diag::Diag;
-use music_hir::{HirExprId, HirModule, HirTyId};
+use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
 use music_names::Symbol;
 use music_sema::{
@@ -9,12 +8,76 @@ use music_sema::{
 
 pub type IrDiagList = Vec<Diag>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IrOrigin {
+    pub source_id: SourceId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrParam {
+    pub symbol: Symbol,
+    pub name: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrArg {
+    pub spread: bool,
+    pub expr: IrExpr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrLit {
+    Int { raw: Box<str> },
+    Float { raw: Box<str> },
+    String { value: Box<str> },
+    Rune { value: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrBinaryOp {
+    Add,
+    Eq,
+    Other(Box<str>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrExpr {
+    pub origin: IrOrigin,
+    pub kind: IrExprKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrExprKind {
+    Name {
+        symbol: Symbol,
+        name: Box<str>,
+    },
+    Lit(IrLit),
+    Sequence {
+        exprs: Box<[IrExpr]>,
+    },
+    Binary {
+        op: IrBinaryOp,
+        left: Box<IrExpr>,
+        right: Box<IrExpr>,
+    },
+    Call {
+        callee: Box<IrExpr>,
+        args: Box<[IrArg]>,
+    },
+    Unsupported {
+        description: Box<str>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCallable {
     pub symbol: Symbol,
     pub name: Box<str>,
-    pub expr: HirExprId,
-    pub ty: HirTyId,
+    pub params: Box<[IrParam]>,
+    pub body: IrExpr,
+    pub exported: bool,
     pub effects: EffectRow,
     pub module_target: Option<ModuleKey>,
 }
@@ -23,7 +86,6 @@ pub struct IrCallable {
 pub struct IrDataDef {
     pub symbol: Symbol,
     pub name: Box<str>,
-    pub expr: HirExprId,
     pub variant_count: u32,
     pub field_count: u32,
 }
@@ -33,7 +95,6 @@ pub struct IrForeignDef {
     pub symbol: Symbol,
     pub name: Box<str>,
     pub abi: Box<str>,
-    pub sig: Option<HirExprId>,
     pub param_count: u32,
 }
 
@@ -41,8 +102,8 @@ pub struct IrForeignDef {
 pub struct IrGlobal {
     pub symbol: Symbol,
     pub name: Box<str>,
-    pub expr: HirExprId,
-    pub ty: HirTyId,
+    pub body: IrExpr,
+    pub exported: bool,
     pub effects: EffectRow,
     pub module_target: Option<ModuleKey>,
 }
@@ -68,9 +129,6 @@ pub struct IrInstanceDef {
 #[derive(Debug, Clone)]
 pub struct IrModule {
     pub module_key: ModuleKey,
-    pub hir: HirModule,
-    pub root: HirExprId,
-    pub root_ty: HirTyId,
     pub static_imports: Box<[ModuleKey]>,
     pub types: Box<[SurfaceTy]>,
     pub exports: Box<[ExportedValue]>,

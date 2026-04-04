@@ -12,7 +12,7 @@ use super::{
 #[test]
 fn syntax_tree_exposes_root_and_token_text() {
     let lexed = LexedSource {
-        text: "x;",
+        text: "x;".into(),
         tokens: vec![
             Token::new(TokenKind::Ident, Span::new(0, 1)),
             Token::new(TokenKind::Semicolon, Span::new(1, 2)),
@@ -60,7 +60,7 @@ fn syntax_tree_exposes_root_and_token_text() {
 #[test]
 fn syntax_element_span_matches_inner_item() {
     let lexed = LexedSource {
-        text: "",
+        text: "".into(),
         ..LexedSource::default()
     };
     let mut nodes = Arena::new();

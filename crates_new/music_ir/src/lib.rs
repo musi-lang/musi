@@ -2,8 +2,8 @@ mod api;
 mod lower;
 
 pub use api::{
-    IrCallable, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrForeignDef, IrGlobal,
-    IrInstanceDef, IrModule,
+    IrArg, IrBinaryOp, IrCallable, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr,
+    IrExprKind, IrForeignDef, IrGlobal, IrInstanceDef, IrLit, IrModule, IrOrigin, IrParam,
 };
 pub use lower::lower_module;
 

@@ -12,7 +12,7 @@ use music_module::{
 use music_names::Interner;
 use music_resolve::{ResolveOptions, ResolvedModule, resolve_module};
 use music_sema::{ModuleSurface, SemaEnv, SemaModule, SemaOptions, check_module};
-use music_syntax::{Lexer, parse};
+use music_syntax::{Lexer, ParsedSource as SyntaxParsedSource, parse};
 
 use crate::api::{CompiledOutput, ParsedModule, SessionError, SessionOptions, SessionStats};
 
@@ -22,6 +22,7 @@ struct ModuleRecord {
     revision: u64,
     source_id: Option<SourceId>,
     parsed: Option<ParsedModule>,
+    parsed_source: Option<SyntaxParsedSource>,
     resolved: Option<ResolvedModule>,
     sema: Option<SemaModule>,
     ir: Option<IrModule>,
@@ -31,19 +32,19 @@ struct ModuleRecord {
 
 struct SessionImportEnv<'session> {
     import_map: &'session ImportMap,
-    modules: &'session BTreeMap<ModuleKey, ModuleRecord>,
+    module_keys: &'session BTreeSet<ModuleKey>,
 }
 
 impl ImportEnv for SessionImportEnv<'_> {
     fn resolve(&self, from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult {
         if let Some(mapped) = self.import_map.resolve(from, spec) {
             let target = ModuleKey::new(mapped.as_str());
-            if self.modules.contains_key(&target) {
+            if self.module_keys.contains(&target) {
                 return Ok(target);
             }
         }
         let target = ModuleKey::new(spec.as_str());
-        if self.modules.contains_key(&target) {
+        if self.module_keys.contains(&target) {
             Ok(target)
         } else {
             Err(ImportError::new(
@@ -115,6 +116,7 @@ impl Session {
         self.next_revision = self.next_revision.saturating_add(1);
         record.source_id = None;
         record.parsed = None;
+        record.parsed_source = None;
         record.resolved = None;
         record.sema = None;
         record.ir = None;
@@ -392,6 +394,7 @@ impl Session {
         let lexed = Lexer::new(&text).lex();
         let lex_errors = lexed.errors().to_vec().into_boxed_slice();
         let parsed = parse(lexed);
+        self.module_record_mut(key)?.parsed_source = Some(parsed.clone());
         let import_sites = collect_import_sites(source_id, parsed.tree()).into_boxed_slice();
         let export_summary = collect_export_summary(source_id, parsed.tree());
         let parse_errors = parsed.errors().to_vec().into_boxed_slice();
@@ -407,11 +410,17 @@ impl Session {
 
     fn build_resolved_module(&mut self, key: &ModuleKey) -> Result<ResolvedModule, SessionError> {
         let source_id = self.parse_module(key)?.source_id;
-        let text = self.module_record(key)?.text.clone();
-        let parsed = parse(Lexer::new(&text).lex());
+        let parsed = self
+            .module_record(key)?
+            .parsed_source
+            .as_ref()
+            .expect("parsed source cache missing after successful parse")
+            .clone();
+        let module_keys = self.modules.keys().cloned().collect::<BTreeSet<_>>();
+        let import_map = self.options.import_map.clone();
         let import_env = SessionImportEnv {
-            import_map: &self.options.import_map,
-            modules: &self.modules,
+            import_map: &import_map,
+            module_keys: &module_keys,
         };
         Ok(resolve_module(
             source_id,

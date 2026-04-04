@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
@@ -49,7 +50,7 @@ pub struct ResolvedModule {
 pub fn resolve_module(
     source_id: SourceId,
     module_key: &ModuleKey,
-    tree: &SyntaxTree<'_>,
+    tree: &SyntaxTree,
     interner: &mut Interner,
     options: ResolveOptions<'_>,
 ) -> ResolvedModule {
@@ -75,9 +76,10 @@ struct Scope {
 
 struct Resolver<'a, 'env, 'tree, 'src> {
     source_id: SourceId,
-    tree: &'tree SyntaxTree<'src>,
+    tree: &'tree SyntaxTree,
     interner: &'a mut Interner,
     import_env: Option<&'env dyn ImportEnv>,
+    marker: PhantomData<&'src str>,
 
     store: HirStore,
 
@@ -86,10 +88,13 @@ struct Resolver<'a, 'env, 'tree, 'src> {
     scopes: Vec<Scope>,
 }
 
-impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
+impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src>
+where
+    'tree: 'src,
+{
     fn new(
         source_id: SourceId,
-        tree: &'tree SyntaxTree<'src>,
+        tree: &'tree SyntaxTree,
         interner: &'a mut Interner,
         options: ResolveOptions<'env>,
     ) -> Self {
@@ -124,6 +129,7 @@ impl<'a, 'env, 'tree, 'src> Resolver<'a, 'env, 'tree, 'src> {
             tree,
             interner,
             import_env: options.import_env,
+            marker: PhantomData,
             store,
             names,
             diags: Vec::new(),

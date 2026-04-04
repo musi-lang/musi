@@ -1,5 +1,6 @@
 use music_arena::{Arena, Idx, SliceArena, SliceRange};
 use music_base::Span;
+use std::marker::PhantomData;
 
 use crate::{LexedSource, TokenKind, Trivia};
 
@@ -38,9 +39,9 @@ pub struct SyntaxNodeData {
     pub children: SliceRange<SyntaxElementId>,
 }
 
-#[derive(Debug)]
-pub struct SyntaxTree<'src> {
-    lexed: LexedSource<'src>,
+#[derive(Debug, Clone)]
+pub struct SyntaxTree {
+    lexed: LexedSource,
     nodes: Arena<SyntaxNodeData>,
     children: SliceArena<SyntaxElementId>,
     token_parents: Vec<Option<SyntaxNodeId>>,
@@ -49,14 +50,16 @@ pub struct SyntaxTree<'src> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxNode<'tree, 'src> {
-    tree: &'tree SyntaxTree<'src>,
+    tree: &'tree SyntaxTree,
     id: SyntaxNodeId,
+    marker: PhantomData<&'src str>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxToken<'tree, 'src> {
-    tree: &'tree SyntaxTree<'src>,
+    tree: &'tree SyntaxTree,
     id: SyntaxTokenId,
+    marker: PhantomData<&'src str>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -65,10 +68,10 @@ pub enum SyntaxElement<'tree, 'src> {
     Token(SyntaxToken<'tree, 'src>),
 }
 
-impl<'src> SyntaxTree<'src> {
+impl SyntaxTree {
     #[must_use]
     pub const fn new(
-        lexed: LexedSource<'src>,
+        lexed: LexedSource,
         nodes: Arena<SyntaxNodeData>,
         children: SliceArena<SyntaxElementId>,
         token_parents: Vec<Option<SyntaxNodeId>>,
@@ -84,12 +87,12 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub const fn lexed(&self) -> &LexedSource<'src> {
+    pub const fn lexed(&self) -> &LexedSource {
         &self.lexed
     }
 
     #[must_use]
-    pub const fn root(&self) -> SyntaxNode<'_, 'src> {
+    pub const fn root(&self) -> SyntaxNode<'_, '_> {
         SyntaxNode::new(self, self.root)
     }
 
@@ -123,7 +126,7 @@ impl<'src> SyntaxTree<'src> {
     }
 
     #[must_use]
-    pub(crate) fn token_text(&self, id: SyntaxTokenId) -> Option<&'src str> {
+    pub(crate) fn token_text(&self, id: SyntaxTokenId) -> Option<&str> {
         let index = usize::try_from(id.raw()).ok()?;
         self.lexed.token_text(index)
     }
@@ -153,8 +156,12 @@ impl<'src> SyntaxTree<'src> {
 
 impl<'tree, 'src> SyntaxNode<'tree, 'src> {
     #[must_use]
-    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxNodeId) -> Self {
-        Self { tree, id }
+    pub(crate) const fn new(tree: &'tree SyntaxTree, id: SyntaxNodeId) -> Self {
+        Self {
+            tree,
+            id,
+            marker: PhantomData,
+        }
     }
 
     #[must_use]
@@ -194,8 +201,12 @@ impl<'tree, 'src> SyntaxNode<'tree, 'src> {
 
 impl<'tree, 'src> SyntaxToken<'tree, 'src> {
     #[must_use]
-    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxTokenId) -> Self {
-        Self { tree, id }
+    pub(crate) const fn new(tree: &'tree SyntaxTree, id: SyntaxTokenId) -> Self {
+        Self {
+            tree,
+            id,
+            marker: PhantomData,
+        }
     }
 
     #[must_use]
@@ -209,7 +220,10 @@ impl<'tree, 'src> SyntaxToken<'tree, 'src> {
     }
 
     #[must_use]
-    pub fn text(self) -> Option<&'src str> {
+    pub fn text(self) -> Option<&'src str>
+    where
+        'tree: 'src,
+    {
         self.tree.token_text(self.id)
     }
 
@@ -228,7 +242,7 @@ impl<'tree, 'src> SyntaxToken<'tree, 'src> {
 
 impl<'tree, 'src> SyntaxElement<'tree, 'src> {
     #[must_use]
-    pub(crate) const fn new(tree: &'tree SyntaxTree<'src>, id: SyntaxElementId) -> Self {
+    pub(crate) const fn new(tree: &'tree SyntaxTree, id: SyntaxElementId) -> Self {
         match id {
             SyntaxElementId::Node(node) => Self::Node(SyntaxNode::new(tree, node)),
             SyntaxElementId::Token(token) => Self::Token(SyntaxToken::new(tree, token)),
