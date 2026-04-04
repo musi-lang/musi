@@ -63,12 +63,14 @@ pub(in super::super) fn check_handle_expr(
     };
 
     let value_name = "value";
-    let mut result_ty = handled_facts.ty;
+    let mut result_ty = ctx.builtins().unknown;
     let mut clause_effects = EffectRow::empty();
     let mut seen_value = 0usize;
     let mut seen_ops = BTreeSet::new();
 
-    for clause in ctx.handle_clauses(clauses) {
+    let clauses_vec = ctx.handle_clauses(clauses);
+
+    for clause in &clauses_vec {
         let clause_name: Box<str> = ctx.resolve_symbol(clause.op.name).into();
         if clause_name.as_ref() == value_name {
             seen_value = seen_value.saturating_add(1);
@@ -76,10 +78,14 @@ pub(in super::super) fn check_handle_expr(
                 ctx.insert_binding_type(binding, handled_facts.ty);
             }
             let facts = check_expr(ctx, clause.body);
-            let origin = ctx.expr(clause.body).origin;
-            type_mismatch(ctx, origin, handled_facts.ty, facts.ty);
             clause_effects.union_with(&facts.effects);
             result_ty = facts.ty;
+        }
+    }
+
+    for clause in clauses_vec {
+        let clause_name: Box<str> = ctx.resolve_symbol(clause.op.name).into();
+        if clause_name.as_ref() == value_name {
             continue;
         }
 
@@ -113,21 +119,20 @@ pub(in super::super) fn check_handle_expr(
             let params = ctx.alloc_ty_list([op_def.result]);
             let cont_ty = ctx.alloc_ty(HirTyKind::Arrow {
                 params,
-                ret: handled_facts.ty,
+                ret: result_ty,
                 is_effectful: true,
             });
             ctx.insert_binding_type(binding, cont_ty);
         }
         ctx.push_resume(ResumeCtx {
             arg: op_def.result,
-            result: handled_facts.ty,
+            result: result_ty,
         });
         let body = check_expr(ctx, clause.body);
         let _ = ctx.pop_resume();
         let origin = ctx.expr(clause.body).origin;
-        type_mismatch(ctx, origin, handled_facts.ty, body.ty);
+        type_mismatch(ctx, origin, result_ty, body.ty);
         clause_effects.union_with(&body.effects);
-        result_ty = body.ty;
     }
 
     if seen_value != 1 {

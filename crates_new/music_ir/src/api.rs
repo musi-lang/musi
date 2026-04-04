@@ -275,14 +275,15 @@ impl IrModule {
 
 impl From<&EffectSurface> for IrEffectDef {
     fn from(value: &EffectSurface) -> Self {
+        let mut ops = value
+            .ops
+            .iter()
+            .map(|op| op.name.clone())
+            .collect::<Vec<_>>();
+        ops.sort();
         Self {
             key: value.key.clone(),
-            ops: value
-                .ops
-                .iter()
-                .map(|op| op.name.clone())
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+            ops: ops.into_boxed_slice(),
         }
     }
 }
