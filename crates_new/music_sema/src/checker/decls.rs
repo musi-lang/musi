@@ -9,24 +9,26 @@ use music_hir::{
 use music_module::ModuleKey;
 use music_names::Ident;
 
+use super::attrs::{validate_expr_attrs, validate_foreign_decl};
+use super::exprs::check_expr;
+use super::normalize::{
+    lower_constraints, lower_effect_row, lower_params, lower_type_expr, render_ty, type_mismatch,
+};
+use super::patterns::{bind_pat, bound_name_from_pat};
+use super::schemes::{BindingScheme, instantiate_monomorphic_scheme, scheme_from_export};
+use super::surface::{canonical_surface_ty, import_surface_ty, surface_key};
+use super::{CheckPass, EffectDef, EffectOpDef, PassBase, ResumeCtx};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ClassSurface, ConstraintFacts, DefinitionKey, EffectSurface,
     ExportedValue, ExprFacts, InstanceFacts, ModuleSurface, PatFacts,
 };
-use crate::attrs::{validate_expr_attrs, validate_foreign_decl};
-use crate::context::{CheckPass, EffectDef, EffectOpDef, PassBase, ResumeCtx};
 use crate::effects::{EffectKey, EffectRow};
-use crate::exprs::check_expr;
-use crate::normalize::{
-    lower_constraints, lower_effect_row, lower_params, lower_type_expr, render_ty, type_mismatch,
-};
-use crate::patterns::{bind_pat, bound_name_from_pat};
-use crate::surface::{canonical_surface_ty, import_surface_ty, surface_key};
 
 pub struct LetExprInput {
     pub origin: HirOrigin,
     pub mods: HirLetMods,
     pub pat: HirPatId,
+    pub type_params: SliceRange<Ident>,
     pub params: SliceRange<HirParam>,
     pub constraints: SliceRange<HirConstraint>,
     pub effects: Option<HirEffectSet>,
@@ -79,6 +81,7 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         origin,
         mods,
         pat,
+        type_params,
         params,
         constraints,
         effects,
@@ -86,6 +89,13 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         value,
     } = input;
     let bound_name = bound_name_from_pat(ctx, pat);
+    let type_params = ctx
+        .idents(type_params)
+        .into_iter()
+        .map(|ident| ident.name)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let constraints = lower_constraints(ctx, constraints);
     let declared_ty = sig.map(|expr| {
         let origin = ctx.expr(expr).origin;
         lower_type_expr(ctx, expr, origin)
@@ -123,7 +133,8 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         if effects.is_none() {
             callable_effects = body_facts.effects.clone();
         } else {
-            require_declared_effects(ctx, origin, &callable_effects, &body_facts.effects);
+            callable_effects =
+                require_declared_effects(ctx, origin, &callable_effects, &body_facts.effects);
         }
         let result_ty = declared_ty.unwrap_or(body_facts.ty);
         type_mismatch(ctx, origin, result_ty, body_facts.ty);
@@ -135,16 +146,37 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         });
         if let Some(binding) = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
             ctx.insert_binding_type(binding, ty);
-            ctx.insert_binding_effects(binding, callable_effects);
+            ctx.insert_binding_effects(binding, callable_effects.clone());
+            ctx.insert_binding_scheme(
+                binding,
+                BindingScheme {
+                    type_params: type_params.clone(),
+                    constraints: constraints.clone(),
+                    ty,
+                    effects: callable_effects,
+                },
+            );
         }
         ty
     } else {
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);
+        if let Some(binding) = bound_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
+            ctx.insert_binding_type(binding, ty);
+            ctx.insert_binding_effects(binding, EffectRow::empty());
+            ctx.insert_binding_scheme(
+                binding,
+                BindingScheme {
+                    type_params: type_params.clone(),
+                    constraints: constraints.clone(),
+                    ty,
+                    effects: EffectRow::empty(),
+                },
+            );
+        }
         ty
     };
 
-    let _constraints = lower_constraints(ctx, constraints);
     if !bind_module_pattern(ctx, pat, value) {
         bind_pat(ctx, pat, final_ty);
     }
@@ -268,6 +300,7 @@ fn bind_imported_module_member(
     surface: &ModuleSurface,
     export: &ExportedValue,
 ) {
+    import_exported_value_binding(ctx, alias, surface, export);
     if let Some(binding) = ctx.binding_id_for_decl(alias)
         && let Some(target) = export.module_target.clone()
     {
@@ -301,6 +334,7 @@ fn import_class_alias(
                 name: ctx.intern(&constraint.name),
                 kind: constraint.kind,
                 value: import_surface_ty(ctx, module_surface, constraint.value),
+                class_key: constraint.class_key.clone(),
             })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -363,6 +397,32 @@ fn import_effect_alias(
             ops,
         },
     );
+}
+
+fn import_exported_value_binding(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    alias: Ident,
+    surface: &ModuleSurface,
+    export: &ExportedValue,
+) {
+    let Some(binding) = ctx.binding_id_for_decl(alias) else {
+        return;
+    };
+    let scheme = scheme_from_export(ctx, surface, export);
+    let instantiated = if scheme.type_params.is_empty() {
+        Some(instantiate_monomorphic_scheme(ctx, &scheme))
+    } else {
+        None
+    };
+    let imported_ty = import_surface_ty(ctx, surface, export.ty);
+    ctx.insert_binding_type(binding, imported_ty);
+    ctx.insert_binding_effects(
+        binding,
+        instantiated
+            .map(|instantiated| instantiated.effects)
+            .unwrap_or_else(|| scheme.effects.clone()),
+    );
+    ctx.insert_binding_scheme(binding, scheme);
 }
 
 pub fn check_data_expr(
@@ -447,6 +507,7 @@ pub fn check_instance_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
     origin: HirOrigin,
+    type_params: SliceRange<Ident>,
     constraints: SliceRange<HirConstraint>,
     class: HirExprId,
     members: &SliceRange<HirMemberDef>,
@@ -533,11 +594,18 @@ pub fn check_instance_expr(
         }
     }
 
+    let type_params = ctx
+        .idents(type_params)
+        .into_iter()
+        .map(|ident| ident.name)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let constraints = lower_constraints(ctx, constraints);
     ctx.insert_instance_facts(
         expr_id,
         InstanceFacts {
             origin,
+            type_params,
             class_key,
             class_name,
             class_args,
@@ -736,6 +804,7 @@ pub fn call_effects_for_expr(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Op
         HirExprKind::Name { name } => ctx
             .binding_id_for_use(name)
             .and_then(|binding| ctx.binding_effects(binding)),
+        HirExprKind::Apply { .. } => ctx.expr_callable_effects(expr),
         _ => None,
     }
 }
@@ -745,16 +814,22 @@ pub fn require_declared_effects(
     origin: HirOrigin,
     declared: &EffectRow,
     actual: &EffectRow,
-) {
-    if declared.open.is_some() {
-        return;
-    }
+) -> EffectRow {
+    let mut final_row = declared.clone();
     for item in &actual.items {
         if declared.items.contains(item) {
             continue;
         }
+        if declared.open.is_some() {
+            final_row.add(item.clone());
+            continue;
+        }
         ctx.diag(origin.span, "effect not declared", "");
     }
+    if actual.open.is_some() && declared.open.is_none() {
+        ctx.diag(origin.span, "effect not declared", "");
+    }
+    final_row
 }
 
 fn check_bound_data(

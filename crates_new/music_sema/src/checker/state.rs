@@ -14,12 +14,13 @@ use music_module::ModuleKey;
 use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
 use music_resolve::ResolvedModule;
 
+use super::schemes::BindingScheme;
+use super::surface::build_module_surface;
 use crate::api::{
     ClassFacts, DefinitionKey, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv,
     SemaModule, SemaModuleParts, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
-use crate::surface::build_module_surface;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
@@ -75,7 +76,9 @@ pub struct RuntimeEnv<'interner, 'env> {
 pub struct TypingState {
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_effects: HashMap<NameBindingId, EffectRow>,
+    binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    next_open_row_id: u32,
 }
 
 #[derive(Default)]
@@ -91,6 +94,7 @@ pub struct FactState {
     diags: SemaDiagList,
     expr_facts: Vec<ExprFacts>,
     pat_facts: Vec<PatFacts>,
+    expr_callable_effects: HashMap<HirExprId, EffectRow>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
 }
 
@@ -189,6 +193,7 @@ pub fn prepare_module<'interner, 'env>(
             diags: Vec::new(),
             expr_facts,
             pat_facts,
+            expr_callable_effects: HashMap::new(),
             expr_module_targets: HashMap::new(),
         },
         ResumeState::default(),
@@ -503,6 +508,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.facts.expr_module_targets.insert(id, target);
     }
 
+    pub fn expr_callable_effects(&self, id: HirExprId) -> Option<EffectRow> {
+        self.facts.expr_callable_effects.get(&id).cloned()
+    }
+
+    pub fn set_expr_callable_effects(&mut self, id: HirExprId, effects: EffectRow) {
+        let _prev = self.facts.expr_callable_effects.insert(id, effects);
+    }
+
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {
         let slot = self
             .facts
@@ -576,6 +589,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.typing.binding_effects.insert(id, effects);
     }
 
+    pub fn binding_scheme(&self, id: NameBindingId) -> Option<&BindingScheme> {
+        self.typing.binding_schemes.get(&id)
+    }
+
+    pub fn insert_binding_scheme(&mut self, id: NameBindingId, scheme: BindingScheme) {
+        let _prev = self.typing.binding_schemes.insert(id, scheme);
+    }
+
     pub fn binding_module_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
         self.typing.binding_module_targets.get(&id)
     }
@@ -637,6 +658,12 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .diags
             .push(Diag::error(message).with_label(span, self.source_id(), label));
     }
+
+    pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {
+        let next = self.typing.next_open_row_id;
+        self.typing.next_open_row_id = self.typing.next_open_row_id.saturating_add(1);
+        format!("{base}#{next}").into_boxed_str()
+    }
 }
 
 impl RuntimeEnv<'_, '_> {
@@ -648,6 +675,10 @@ impl RuntimeEnv<'_, '_> {
 impl TypingState {
     pub const fn binding_types(&self) -> &HashMap<NameBindingId, HirTyId> {
         &self.binding_types
+    }
+
+    pub const fn binding_schemes(&self) -> &HashMap<NameBindingId, BindingScheme> {
+        &self.binding_schemes
     }
 
     pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {

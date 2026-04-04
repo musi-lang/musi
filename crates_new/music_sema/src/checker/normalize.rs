@@ -7,10 +7,11 @@ use music_hir::{
 };
 use music_names::Symbol;
 
+use super::exprs::check_expr;
+use super::surface::surface_key;
+use super::{CheckPass, PassBase};
 use crate::api::{ConstraintFacts, ConstraintKind};
-use crate::context::{CheckPass, PassBase};
 use crate::effects::{EffectKey, EffectRow};
-use crate::exprs::check_expr;
 
 pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
     match ctx.ty(ty).kind {
@@ -515,17 +516,39 @@ pub fn lower_constraints(
 ) -> Box<[ConstraintFacts]> {
     ctx.constraints(constraints)
         .into_iter()
-        .map(|constraint| ConstraintFacts {
-            name: constraint.name.name,
-            kind: match constraint.kind {
+        .map(|constraint| {
+            let kind = match constraint.kind {
                 HirConstraintKind::Subtype => ConstraintKind::Subtype,
                 HirConstraintKind::Implements => ConstraintKind::Implements,
-            },
-            value: {
+            };
+            let value = {
                 let origin = ctx.expr(constraint.value).origin;
                 lower_type_expr(ctx, constraint.value, origin)
-            },
+            };
+            ConstraintFacts {
+                name: constraint.name.name,
+                kind,
+                value,
+                class_key: constraint_class_key(ctx, kind, value),
+            }
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
+}
+
+fn constraint_class_key(
+    ctx: &PassBase<'_, '_, '_>,
+    kind: ConstraintKind,
+    value: HirTyId,
+) -> Option<crate::api::DefinitionKey> {
+    if kind != ConstraintKind::Implements {
+        return None;
+    }
+    let HirTyKind::Named { name, .. } = ctx.ty(value).kind else {
+        return None;
+    };
+    Some(ctx.class_facts_by_name(name).map_or_else(
+        || surface_key(ctx.module_key(), ctx.interner(), name),
+        |facts| facts.key.clone(),
+    ))
 }

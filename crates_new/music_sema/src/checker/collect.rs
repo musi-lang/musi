@@ -8,11 +8,12 @@ use music_hir::{
 use music_names::Ident;
 
 use crate::api::ClassFacts;
-use crate::context::{CollectPass, EffectDef, EffectOpDef};
-use crate::decls::member_signature;
-use crate::normalize::lower_constraints;
-use crate::patterns::bound_name_from_pat;
-use crate::surface::surface_key;
+
+use super::decls::member_signature;
+use super::normalize::lower_constraints;
+use super::patterns::bound_name_from_pat;
+use super::surface::surface_key;
+use super::{CollectPass, EffectDef, EffectOpDef};
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     visit_expr(ctx, ctx.root_expr_id());

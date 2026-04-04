@@ -673,6 +673,194 @@ fn imported_tuple_instances_match_local_coherence_keys() {
 }
 
 #[test]
+fn explicit_type_apply_instantiates_local_generic_lets() {
+    let sema = check(
+        r#"
+        let id[T] (x : T) : T := x;
+        (id[Int](1), id[String]("ok"));
+    "#,
+    );
+    let root = sema.module().root;
+    let HirTyKind::Tuple { items } = sema.ty(sema.expr_ty(root)).kind else {
+        panic!(
+            "expected tuple type, got {:?}",
+            sema.ty(sema.expr_ty(root)).kind
+        );
+    };
+    let items = sema.module().store.ty_ids.get(items);
+    assert!(matches!(sema.ty(items[0]).kind, HirTyKind::Int));
+    assert!(matches!(sema.ty(items[1]).kind, HirTyKind::String));
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn explicit_type_apply_instantiates_imported_generic_exports() {
+    let import_env = TestImportEnv::default().with_module("std/base", "std/base");
+    let base = check_module_src(
+        34,
+        "std/base",
+        r#"
+        export let id[T] (x : T) : T := x;
+    "#,
+        Some(&import_env),
+        None,
+    );
+    let sema_env = TestSemaEnv::default().with_surface("std/base", base.surface().clone());
+    let sema = check_module_src(
+        35,
+        "main",
+        r#"
+        let Base := import "std/base";
+        (Base.id[Int](1), Base.id[String]("ok"));
+    "#,
+        Some(&import_env),
+        Some(&sema_env),
+    );
+    let root = sema.module().root;
+    let HirTyKind::Tuple { items } = sema.ty(sema.expr_ty(root)).kind else {
+        panic!(
+            "expected tuple type, got {:?}",
+            sema.ty(sema.expr_ty(root)).kind
+        );
+    };
+    let items = sema.module().store.ty_ids.get(items);
+    assert!(matches!(sema.ty(items[0]).kind, HirTyKind::Int));
+    assert!(matches!(sema.ty(items[1]).kind, HirTyKind::String));
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn generic_constraints_succeed_when_matching_instance_exists() {
+    let sema = check(
+        r#"
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+        };
+        let eqInt := instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool := true;
+        };
+        let requireEq[T] (x : T) where T : Eq : T := x;
+        requireEq[Int](1);
+    "#,
+    );
+    assert!(
+        !sema
+            .diags()
+            .iter()
+            .any(|diag| diag.message() == "unsatisfied constraint"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn generic_constraints_report_unsatisfied_instances() {
+    let sema = check(
+        r#"
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+        };
+        let eqInt := instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool := true;
+        };
+        let requireEq[T] (x : T) where T : Eq : T := x;
+        requireEq[String]("ok");
+    "#,
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "unsatisfied constraint"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn generic_constraints_report_ambiguous_instances() {
+    let sema = check(
+        r#"
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+        };
+        instance[T] Eq[T] {
+          let (=) (a : T, b : T) : Bool := true;
+        };
+        let eqInt := instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool := true;
+        };
+        let requireEq[T] (x : T) where T : Eq : T := x;
+        requireEq[Int](1);
+    "#,
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "ambiguous instance match"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn open_effect_rows_absorb_extra_effects() {
+    let sema = check(
+        r#"
+        let Console := effect {
+          let readln () : String;
+        };
+        let State := effect {
+          let readln () : String;
+        };
+        let readOpen (x : Int) with { Console, ...r } : String := perform State.readln();
+        readOpen(0);
+    "#,
+    );
+    let root = sema.module().root;
+    let effects = sema.expr_effects(root);
+    assert!(
+        effects
+            .items
+            .iter()
+            .any(|item| item.name.as_ref() == "State"),
+        "{:?}",
+        effects
+    );
+    assert!(effects.open.is_some(), "{:?}", effects);
+    assert!(
+        !sema
+            .diags()
+            .iter()
+            .any(|diag| diag.message() == "effect not declared"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn closed_effect_rows_reject_extra_effects() {
+    let sema = check(
+        r#"
+        let Console := effect {
+          let readln () : String;
+        };
+        let State := effect {
+          let readln () : String;
+        };
+        let readClosed (x : Int) with { Console } : String := perform State.readln();
+        readClosed(0);
+    "#,
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "effect not declared"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn invalid_link_attr_target_reports_diag() {
     let sema = check("@link(name := \"c\") let x := 1;");
     assert!(

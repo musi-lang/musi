@@ -9,17 +9,21 @@ use music_hir::{
 use music_names::Ident;
 
 use crate::api::ExprFacts;
-use crate::context::CheckPass;
-use crate::decls::{
+
+use super::CheckPass;
+use super::decls::{
     LetExprInput, call_effects_for_expr, check_attributed_expr, check_class_expr, check_data_expr,
     check_effect_expr, check_foreign_expr, check_handle_expr, check_import_expr,
     check_instance_expr, check_let_expr, check_perform_expr, check_resume_expr,
     module_export_for_expr, module_target_for_expr,
 };
+use super::normalize::{lower_params, lower_type_expr, symbol_value_type, type_mismatch};
+use super::patterns::bind_pat;
+use super::schemes::{
+    BindingScheme, instantiate_binding_scheme, instantiate_monomorphic_scheme, scheme_from_export,
+    solve_obligations,
+};
 use crate::effects::EffectRow;
-use crate::normalize::{lower_params, lower_type_expr, symbol_value_type, type_mismatch};
-use crate::patterns::bind_pat;
-use crate::surface::import_surface_ty;
 
 pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
     let builtins = ctx.builtins();
@@ -50,7 +54,7 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
             body,
         } => check_lambda_expr(ctx, params, ret_ty, body),
         HirExprKind::Call { callee, args } => check_call_expr(ctx, expr.origin, callee, args),
-        HirExprKind::Apply { callee, args } => check_apply_expr(ctx, callee, args),
+        HirExprKind::Apply { callee, args } => check_apply_expr(ctx, id, expr.origin, callee, args),
         HirExprKind::Index { base, args } => check_index_expr(ctx, expr.origin, base, args),
         HirExprKind::Field { base, access, name } => {
             check_field_expr(ctx, id, expr.origin, base, access, name)
@@ -67,7 +71,7 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
         HirExprKind::Let {
             mods,
             pat,
-            type_params: _,
+            type_params,
             params,
             constraints,
             effects,
@@ -79,6 +83,7 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
                 origin: expr.origin,
                 mods,
                 pat,
+                type_params,
                 params,
                 constraints,
                 effects,
@@ -96,11 +101,19 @@ pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
             members,
         } => check_class_expr(ctx, id, constraints, members, None),
         HirExprKind::Instance {
-            type_params: _,
+            type_params,
             constraints,
             class,
             members,
-        } => check_instance_expr(ctx, id, expr.origin, constraints, class, &members),
+        } => check_instance_expr(
+            ctx,
+            id,
+            expr.origin,
+            type_params,
+            constraints,
+            class,
+            &members,
+        ),
         HirExprKind::Foreign { abi, decls } => check_foreign_expr(ctx, abi, decls),
         HirExprKind::Perform { expr: inner } => check_perform_expr(ctx, expr.origin, inner),
         HirExprKind::Handle {
@@ -124,6 +137,17 @@ fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Id
         && let Some(target) = ctx.binding_module_target(binding).cloned()
     {
         ctx.set_expr_module_target(expr_id, target);
+    }
+    if let Some(binding) = ctx.binding_id_for_use(name)
+        && let Some(scheme) = ctx.binding_scheme(binding).cloned()
+        && scheme.type_params.is_empty()
+    {
+        let instantiated = instantiate_monomorphic_scheme(ctx, &scheme);
+        solve_obligations(ctx, ctx.expr(expr_id).origin, &instantiated.obligations);
+        return ExprFacts {
+            ty: instantiated.ty,
+            effects: EffectRow::empty(),
+        };
     }
     let ty = ctx
         .binding_id_for_use(name)
@@ -376,25 +400,55 @@ fn check_call_expr(
     }
     if let Some(extra) = call_effects_for_expr(ctx, callee) {
         effects.union_with(&extra);
+    } else if let Some(scheme) = callable_scheme_for_expr(ctx, callee)
+        && scheme.type_params.is_empty()
+    {
+        let instantiated = instantiate_monomorphic_scheme(ctx, &scheme);
+        solve_obligations(ctx, origin, &instantiated.obligations);
+        effects.union_with(&instantiated.effects);
     }
     ExprFacts { ty: ret, effects }
 }
 
 fn check_apply_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
+    expr_id: HirExprId,
+    origin: HirOrigin,
     callee: HirExprId,
     args: SliceRange<HirExprId>,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let callee_facts = check_expr(ctx, callee);
-    let mut effects = callee_facts.effects;
-    for arg in ctx.expr_ids(args) {
-        let facts = check_expr(ctx, arg);
-        effects.union_with(&facts.effects);
+    let effectful_eval = callee_facts.effects;
+    let args = ctx
+        .expr_ids(args)
+        .into_iter()
+        .map(|arg| {
+            let origin = ctx.expr(arg).origin;
+            lower_type_expr(ctx, arg, origin)
+        })
+        .collect::<Vec<_>>();
+    let Some(scheme) = callable_scheme_for_expr(ctx, callee) else {
+        ctx.diag(origin.span, "invalid type application", "");
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects: effectful_eval,
+        };
+    };
+    let Some(instantiated) = instantiate_binding_scheme(ctx, origin, &scheme, &args) else {
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects: effectful_eval,
+        };
+    };
+    if let Some(target) = module_target_for_expr(ctx, callee) {
+        ctx.set_expr_module_target(expr_id, target);
     }
+    solve_obligations(ctx, origin, &instantiated.obligations);
+    ctx.set_expr_callable_effects(expr_id, instantiated.effects.clone());
     ExprFacts {
-        ty: builtins.unknown,
-        effects,
+        ty: instantiated.ty,
+        effects: effectful_eval,
     }
 }
 
@@ -418,6 +472,20 @@ fn check_index_expr(
         builtins.unknown
     };
     ExprFacts { ty, effects }
+}
+
+fn callable_scheme_for_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    expr: HirExprId,
+) -> Option<BindingScheme> {
+    match ctx.expr(expr).kind {
+        HirExprKind::Name { name } => ctx
+            .binding_id_for_use(name)
+            .and_then(|binding| ctx.binding_scheme(binding).cloned()),
+        HirExprKind::Field { base, name, .. } => module_export_for_expr(ctx, base, name)
+            .map(|(surface, export)| scheme_from_export(ctx, &surface, &export)),
+        _ => None,
+    }
 }
 
 fn check_field_expr(
@@ -465,7 +533,9 @@ fn check_field_expr(
                 if let Some(target) = export.module_target.clone() {
                     ctx.set_expr_module_target(expr_id, target);
                 }
-                import_surface_ty(ctx, &surface, export.ty)
+                let scheme = scheme_from_export(ctx, &surface, &export);
+                ctx.set_expr_callable_effects(expr_id, scheme.effects.clone());
+                scheme.ty
             } else {
                 ctx.diag(origin.span, "unknown export", "");
                 builtins.unknown

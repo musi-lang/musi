@@ -10,10 +10,11 @@ use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 
 use crate::api::{
     ClassMemberSurface, ClassSurface, ConstraintSurface, DefinitionKey, EffectOpSurface,
-    EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SurfaceDim, SurfaceTy,
-    SurfaceTyField, SurfaceTyId, SurfaceTyKind,
+    EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SurfaceDim, SurfaceEffectItem,
+    SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
 };
-use crate::context::{DeclState, ModuleState, PassBase, RuntimeEnv, TypingState};
+
+use super::{DeclState, ModuleState, PassBase, RuntimeEnv, TypingState};
 
 pub fn build_module_surface(
     module: &ModuleState,
@@ -61,9 +62,38 @@ fn collect_exported_values(
         .filter_map(|export| {
             let ty = typing.binding_types().get(&export.binding).copied()?;
             let symbol = module.resolved.names.bindings.get(export.binding).name;
+            let scheme = typing.binding_schemes().get(&export.binding);
             Some(ExportedValue {
                 name: export.name.clone(),
                 ty: tys.lower(ty),
+                type_params: scheme
+                    .map(|scheme| {
+                        scheme
+                            .type_params
+                            .iter()
+                            .map(|symbol| tys.interner.resolve(*symbol).into())
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice()
+                    })
+                    .unwrap_or_else(|| Box::new([])),
+                constraints: scheme
+                    .map(|scheme| {
+                        scheme
+                            .constraints
+                            .iter()
+                            .map(|constraint| ConstraintSurface {
+                                name: tys.interner.resolve(constraint.name).into(),
+                                kind: constraint.kind,
+                                value: tys.lower(constraint.value),
+                                class_key: constraint.class_key.clone(),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice()
+                    })
+                    .unwrap_or_else(|| Box::new([])),
+                effects: scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
+                    lower_surface_effect_row(tys, &scheme.effects)
+                }),
                 opaque: export.opaque,
                 module_target: typing
                     .binding_module_targets()
@@ -104,6 +134,7 @@ fn collect_exported_classes(
                         name: runtime.interner().resolve(constraint.name).into(),
                         kind: constraint.kind,
                         value: tys.lower(constraint.value),
+                        class_key: constraint.class_key.clone(),
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
@@ -181,6 +212,12 @@ fn collect_exported_instances(
         .values()
         .filter(|facts| exports.instance_spans.contains(&facts.origin.span))
         .map(|facts| InstanceSurface {
+            type_params: facts
+                .type_params
+                .iter()
+                .map(|symbol| tys.interner.resolve(*symbol).into())
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             class_key: facts.class_key.clone(),
             class_args: facts
                 .class_args
@@ -196,12 +233,31 @@ fn collect_exported_instances(
                     name: tys.interner.resolve(constraint.name).into(),
                     kind: constraint.kind,
                     value: tys.lower(constraint.value),
+                    class_key: constraint.class_key.clone(),
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
+}
+
+fn lower_surface_effect_row(
+    tys: &mut SurfaceTyBuilder<'_>,
+    row: &crate::effects::EffectRow,
+) -> SurfaceEffectRow {
+    SurfaceEffectRow {
+        items: row
+            .items
+            .iter()
+            .map(|item| SurfaceEffectItem {
+                name: item.name.clone(),
+                arg: item.arg.map(|ty| tys.lower(ty)),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+        open: row.open.clone(),
+    }
 }
 
 pub fn import_surface_ty(

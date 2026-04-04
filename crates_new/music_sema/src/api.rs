@@ -128,6 +128,9 @@ pub struct SurfaceTyField {
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
+    pub type_params: Box<[Box<str>]>,
+    pub constraints: Box<[ConstraintSurface]>,
+    pub effects: SurfaceEffectRow,
     pub opaque: bool,
     pub module_target: Option<ModuleKey>,
     pub class_key: Option<DefinitionKey>,
@@ -139,6 +142,19 @@ pub struct ConstraintSurface {
     pub name: Box<str>,
     pub kind: ConstraintKind,
     pub value: SurfaceTyId,
+    pub class_key: Option<DefinitionKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceEffectItem {
+    pub name: Box<str>,
+    pub arg: Option<SurfaceTyId>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SurfaceEffectRow {
+    pub items: Box<[SurfaceEffectItem]>,
+    pub open: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,6 +187,7 @@ pub struct EffectSurface {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceSurface {
+    pub type_params: Box<[Box<str>]>,
     pub class_key: DefinitionKey,
     pub class_args: Box<[SurfaceTyId]>,
     pub constraints: Box<[ConstraintSurface]>,
@@ -240,6 +257,7 @@ pub struct ConstraintFacts {
     pub name: Symbol,
     pub kind: ConstraintKind,
     pub value: HirTyId,
+    pub class_key: Option<DefinitionKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,6 +279,7 @@ pub struct ClassFacts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceFacts {
     pub origin: HirOrigin,
+    pub type_params: Box<[Symbol]>,
     pub class_key: DefinitionKey,
     pub class_name: Symbol,
     pub class_args: Box<[HirTyId]>,

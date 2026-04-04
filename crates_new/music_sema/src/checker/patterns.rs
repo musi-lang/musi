@@ -4,9 +4,10 @@ use music_hir::{HirPatId, HirPatKind, HirTyId, HirTyKind};
 use music_names::Ident;
 
 use crate::api::PatFacts;
-use crate::context::{CheckPass, PassBase};
-use crate::exprs::check_expr;
-use crate::normalize::type_mismatch;
+
+use super::exprs::check_expr;
+use super::normalize::type_mismatch;
+use super::{CheckPass, PassBase};
 
 pub fn bound_name_from_pat(ctx: &PassBase<'_, '_, '_>, pat: HirPatId) -> Option<Ident> {
     match ctx.pat(pat).kind {

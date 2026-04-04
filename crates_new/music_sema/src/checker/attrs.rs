@@ -5,8 +5,8 @@ use music_hir::{
     HirAttr, HirAttrArg, HirExprId, HirExprKind, HirForeignDecl, HirOrigin, HirTyId, HirTyKind,
 };
 
-use crate::context::CheckPass;
-use crate::normalize::lower_type_expr;
+use super::CheckPass;
+use super::normalize::lower_type_expr;
 
 pub fn validate_expr_attrs(
     ctx: &mut CheckPass<'_, '_, '_>,
