@@ -1,0 +1,16 @@
+[package]
+name = "music_assembly"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "SEAM text and binary transport over the music_bc artifact contract"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_arena = { path = "../music_arena" }
+music_bc = { path = "../music_bc" }
+thiserror.workspace = true
+
+[lints]
+workspace = true

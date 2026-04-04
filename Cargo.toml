@@ -2,7 +2,10 @@
 members = [
   "crates_new/music_arena",
   "crates_new/music_base",
+  "crates_new/music_bc",
   "crates_new/music_hir",
+  "crates_new/music_ir",
+  "crates_new/music_assembly",
   "crates_new/music_module",
   "crates_new/music_names",
   "crates_new/music_resolve",

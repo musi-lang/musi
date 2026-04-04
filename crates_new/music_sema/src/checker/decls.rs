@@ -29,6 +29,7 @@ pub struct LetExprInput {
     pub mods: HirLetMods,
     pub pat: HirPatId,
     pub type_params: SliceRange<Ident>,
+    pub has_param_clause: bool,
     pub params: SliceRange<HirParam>,
     pub constraints: SliceRange<HirConstraint>,
     pub effects: Option<HirEffectSet>,
@@ -142,6 +143,7 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         mods,
         pat,
         type_params,
+        has_param_clause,
         params,
         constraints,
         effects,
@@ -177,8 +179,7 @@ pub fn check_let_expr(ctx: &mut CheckPass<'_, '_, '_>, input: LetExprInput) -> E
         check_expr(ctx, value)
     };
 
-    let has_params = !ctx.params(params.clone()).is_empty();
-    let final_ty = if has_params {
+    let final_ty = if has_param_clause {
         let (ty, callable_effects) =
             check_callable_let_binding(ctx, origin, params, effects.as_ref(), declared_ty, value);
         if let Some(binding) = binding {

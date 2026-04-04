@@ -18,6 +18,9 @@ Policy:
 - `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
 - `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
+- `music_ir`: codegen-facing lowered facts (`IrModule`, `IrCallable`, `IrDataDef`, `IrForeignDef`, `IrEffectDef`, `IrClassDef`, `IrInstanceDef`, `IrDiagList`, `lower_module`)
+- `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
+- `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 
 Notes:
 
@@ -30,12 +33,15 @@ Notes:
 - `music_sema::SemaEnv` exchanges owned `ModuleSurface` snapshots rather than live foreign module references.
 - `music_sema::EffectKey` / `EffectRow` and sema-owned effect definitions are string-backed rather than `Symbol`-backed, so they are safe across interner boundaries.
 - `music_hir::HirTy*` is the authoritative typed boundary produced by sema. `music_sema` no longer exposes a parallel semantic type arena.
+- `music_ir` lowers sema facts into codegen-facing tables and references HIR ids where expression-level ownership still lives in sema/HIR.
+- `music_bc` is the single source of truth for SEAM opcodes, operands, descriptor tables, section tags, and artifact validation.
+- `music_assembly` is transport-only over `music_bc`: it does not redefine the artifact or ISA.
 
 ## Planned phase crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
-- `music_ir`, `music_bc`, `music_assembly`, `music_emit`, `music_jit`, `music_session`
+- `music_emit`, `music_jit`, `music_session`
 - `musi_project`
 
 ## Legacy (`crates/`)

@@ -1,0 +1,710 @@
+use std::collections::HashMap;
+
+use music_bc::descriptor::{
+    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
+    ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+};
+use music_bc::{
+    Artifact, CodeEntry, Instruction, Label, Opcode, Operand, OperandShape, StringId, TypeId,
+};
+
+use crate::AssemblyError;
+
+#[must_use]
+pub fn format_text(artifact: &Artifact) -> String {
+    let mut out = String::new();
+
+    for (_, descriptor) in artifact.types.iter() {
+        out.push_str(".type @");
+        out.push_str(artifact.string_text(descriptor.name));
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.constants.iter() {
+        out.push_str(".const @");
+        out.push_str(artifact.string_text(descriptor.name));
+        match descriptor.value {
+            ConstantValue::Int(value) => {
+                out.push_str(" int ");
+                out.push_str(&value.to_string());
+            }
+            ConstantValue::Bool(value) => {
+                out.push_str(" bool ");
+                out.push_str(if value { "true" } else { "false" });
+            }
+            ConstantValue::String(text) => {
+                out.push_str(" string ");
+                push_quoted(&mut out, artifact.string_text(text));
+            }
+        }
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.effects.iter() {
+        out.push_str(".effect @");
+        out.push_str(artifact.string_text(descriptor.name));
+        for op in &descriptor.ops {
+            out.push_str(" @");
+            out.push_str(artifact.string_text(op.name));
+        }
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.classes.iter() {
+        out.push_str(".class @");
+        out.push_str(artifact.string_text(descriptor.name));
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.foreigns.iter() {
+        out.push_str(".foreign @");
+        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(" abi ");
+        push_quoted(&mut out, artifact.string_text(descriptor.abi));
+        out.push_str(" symbol ");
+        push_quoted(&mut out, artifact.string_text(descriptor.symbol));
+        out.push('\n');
+    }
+    for (_, method) in artifact.methods.iter() {
+        out.push_str(".method @");
+        out.push_str(artifact.string_text(method.name));
+        out.push_str(" locals ");
+        out.push_str(&method.locals.to_string());
+        if method.export {
+            out.push_str(" export");
+        }
+        out.push('\n');
+        for entry in &method.code {
+            match entry {
+                CodeEntry::Label(label) => {
+                    out.push_str(artifact.string_text(method.labels[usize::from(label.id)]));
+                    out.push_str(":\n");
+                }
+                CodeEntry::Instruction(instruction) => {
+                    out.push_str("  ");
+                    out.push_str(instruction.opcode.mnemonic());
+                    if !matches!(instruction.operand, Operand::None) {
+                        out.push(' ');
+                        format_operand(&mut out, artifact, method, &instruction.operand);
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+        out.push_str(".end\n");
+    }
+    for (_, descriptor) in artifact.globals.iter() {
+        out.push_str(".global @");
+        out.push_str(artifact.string_text(descriptor.name));
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        if let Some(method) = descriptor.initializer {
+            out.push_str(" @");
+            out.push_str(artifact.string_text(artifact.methods.get(method).name));
+        }
+        out.push('\n');
+    }
+
+    out
+}
+
+/// Parses SEAM text into a validated artifact model.
+///
+/// # Errors
+///
+/// Returns [`AssemblyError`] if directives, operands, labels, references, or the final artifact
+/// structure are invalid.
+pub fn parse_text(text: &str) -> Result<Artifact, AssemblyError> {
+    let mut builder = TextBuilder::new();
+    let lines = text.lines().map(str::trim).collect::<Vec<_>>();
+    let mut index = 0usize;
+
+    while let Some(line) = lines.get(index).copied() {
+        index = index.saturating_add(1);
+        if line.is_empty() {
+            continue;
+        }
+        if line == ".end" {
+            return Err(AssemblyError::Text("unexpected .end".into()));
+        }
+        if line.starts_with(".method ") {
+            let method_lines = collect_method_lines(&lines, &mut index)?;
+            builder.parse_method(line, &method_lines)?;
+            continue;
+        }
+        builder.parse_directive(line)?;
+    }
+
+    let artifact = builder.finish();
+    artifact.validate()?;
+    Ok(artifact)
+}
+
+/// Validates SEAM text by parsing it and checking the resulting artifact.
+///
+/// # Errors
+///
+/// Returns [`AssemblyError`] if parsing or artifact validation fails.
+pub fn validate_text(text: &str) -> Result<(), AssemblyError> {
+    let _ = parse_text(text)?;
+    Ok(())
+}
+
+fn collect_method_lines<'text>(
+    lines: &'text [&'text str],
+    index: &mut usize,
+) -> Result<Vec<&'text str>, AssemblyError> {
+    let start = *index;
+    while let Some(line) = lines.get(*index).copied() {
+        *index = index.saturating_add(1);
+        if line == ".end" {
+            return Ok(lines[start..index.saturating_sub(1)].to_vec());
+        }
+    }
+    Err(AssemblyError::Text("unterminated .method block".into()))
+}
+
+fn format_operand(
+    out: &mut String,
+    artifact: &Artifact,
+    method: &MethodDescriptor,
+    operand: &Operand,
+) {
+    match operand {
+        Operand::None => {}
+        Operand::I16(value) => out.push_str(&value.to_string()),
+        Operand::Local(slot) => {
+            out.push('%');
+            out.push_str(&slot.to_string());
+        }
+        Operand::String(text) => push_quoted(out, artifact.string_text(*text)),
+        Operand::Type(id) => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.types.get(*id).name));
+        }
+        Operand::Constant(id) => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.constants.get(*id).name));
+        }
+        Operand::Method(id) => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.methods.get(*id).name));
+        }
+        Operand::Foreign(id) => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.foreigns.get(*id).name));
+        }
+        Operand::Effect { effect, op } => {
+            let effect = artifact.effects.get(*effect);
+            out.push('@');
+            out.push_str(artifact.string_text(effect.name));
+            out.push(' ');
+            out.push('@');
+            out.push_str(artifact.string_text(effect.ops[usize::from(*op)].name));
+        }
+        Operand::Label(id) => {
+            out.push_str(artifact.string_text(method.labels[usize::from(*id)]));
+        }
+        Operand::TypeLen { ty, len } => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.types.get(*ty).name));
+            out.push(' ');
+            out.push_str(&len.to_string());
+        }
+        Operand::BranchTable(labels) => {
+            for (idx, label) in labels.iter().copied().enumerate() {
+                if idx != 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(artifact.string_text(method.labels[usize::from(label)]));
+            }
+        }
+    }
+}
+
+fn push_quoted(out: &mut String, text: &str) {
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+}
+
+struct TextBuilder {
+    artifact: Artifact,
+    types: HashMap<String, TypeId>,
+    constants: HashMap<String, music_bc::ConstantId>,
+    globals: HashMap<String, music_bc::GlobalId>,
+    methods: HashMap<String, music_bc::MethodId>,
+    effects: HashMap<String, music_bc::EffectId>,
+    classes: HashMap<String, music_bc::ClassId>,
+    foreigns: HashMap<String, music_bc::ForeignId>,
+    strings: HashMap<String, StringId>,
+}
+
+impl TextBuilder {
+    fn new() -> Self {
+        Self {
+            artifact: Artifact::new(),
+            types: HashMap::new(),
+            constants: HashMap::new(),
+            globals: HashMap::new(),
+            methods: HashMap::new(),
+            effects: HashMap::new(),
+            classes: HashMap::new(),
+            foreigns: HashMap::new(),
+            strings: HashMap::new(),
+        }
+    }
+
+    fn finish(self) -> Artifact {
+        self.artifact
+    }
+
+    fn parse_directive(&mut self, line: &str) -> Result<(), AssemblyError> {
+        let parts = tokenize(line)?;
+        let Some(head) = parts.first() else {
+            return Ok(());
+        };
+        match head.as_str() {
+            ".type" => self.parse_type(&parts),
+            ".const" => self.parse_const(&parts),
+            ".global" => self.parse_global(&parts),
+            ".effect" => self.parse_effect(&parts),
+            ".class" => self.parse_class(&parts),
+            ".foreign" => self.parse_foreign(&parts),
+            other => Err(AssemblyError::Text(format!("unknown directive {other}"))),
+        }
+    }
+
+    fn parse_type(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() != 2 {
+            return Err(AssemblyError::Text("expected `.type @Name`".into()));
+        }
+        let name = parse_symbol(&parts[1])?;
+        let name_id = self.intern_string(&name);
+        let ty = self.artifact.types.alloc(TypeDescriptor { name: name_id });
+        let _ = self.types.insert(name, ty);
+        Ok(())
+    }
+
+    fn parse_const(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 4 {
+            return Err(AssemblyError::Text(
+                "expected `.const @Name <kind> <value>`".into(),
+            ));
+        }
+        let name = parse_symbol(must_get(parts.get(1), "constant name")?)?;
+        let name_id = self.intern_string(&name);
+        let kind = must_get(parts.get(2), "constant kind")?;
+        let raw_value = must_get(parts.get(3), "constant value")?;
+        let value = match kind {
+            "int" => ConstantValue::Int(
+                raw_value
+                    .parse()
+                    .map_err(|_| AssemblyError::Text("invalid integer constant".into()))?,
+            ),
+            "bool" => ConstantValue::Bool(match raw_value {
+                "true" => true,
+                "false" => false,
+                _ => return Err(AssemblyError::Text("invalid bool constant".into())),
+            }),
+            "string" => ConstantValue::String(self.intern_string(&parse_quoted(raw_value)?)),
+            _ => return Err(AssemblyError::Text("unknown constant kind".into())),
+        };
+        let id = self.artifact.constants.alloc(ConstantDescriptor {
+            name: name_id,
+            value,
+        });
+        let _ = self.constants.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_global(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 2 {
+            return Err(AssemblyError::Text("expected `.global @Name ...`".into()));
+        }
+        let name = parse_symbol(&parts[1])?;
+        let name_id = self.intern_string(&name);
+        let mut export = false;
+        let mut initializer = None;
+        for part in parts.iter().skip(2) {
+            if part == "export" {
+                export = true;
+            } else {
+                let method_name = parse_symbol(part)?;
+                initializer = Some(*self.methods.get(&method_name).ok_or_else(|| {
+                    AssemblyError::Text(format!("unknown method @{method_name}"))
+                })?);
+            }
+        }
+        let id = self.artifact.globals.alloc(GlobalDescriptor {
+            name: name_id,
+            export,
+            initializer,
+        });
+        let _ = self.globals.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_effect(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 2 {
+            return Err(AssemblyError::Text("expected `.effect @Name ...`".into()));
+        }
+        let name = parse_symbol(&parts[1])?;
+        let name_id = self.intern_string(&name);
+        let ops = parts
+            .iter()
+            .skip(2)
+            .map(|part| {
+                parse_symbol(part).map(|op_name| EffectOpDescriptor {
+                    name: self.intern_string(&op_name),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let id = self.artifact.effects.alloc(EffectDescriptor {
+            name: name_id,
+            ops: ops.into_boxed_slice(),
+        });
+        let _ = self.effects.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_class(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() != 2 {
+            return Err(AssemblyError::Text("expected `.class @Name`".into()));
+        }
+        let name = parse_symbol(&parts[1])?;
+        let name_id = self.intern_string(&name);
+        let id = self
+            .artifact
+            .classes
+            .alloc(ClassDescriptor { name: name_id });
+        let _ = self.classes.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_foreign(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() != 6
+            || must_get(parts.get(2), "foreign abi marker")? != "abi"
+            || must_get(parts.get(4), "foreign symbol marker")? != "symbol"
+        {
+            return Err(AssemblyError::Text(
+                "expected `.foreign @Name abi \"c\" symbol \"puts\"`".into(),
+            ));
+        }
+        let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
+        let descriptor = ForeignDescriptor {
+            name: self.intern_string(&name),
+            abi: self.intern_string(&parse_quoted(must_get(parts.get(3), "foreign abi")?)?),
+            symbol: self.intern_string(&parse_quoted(must_get(parts.get(5), "foreign symbol")?)?),
+        };
+        let id = self.artifact.foreigns.alloc(descriptor);
+        let _ = self.foreigns.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_method(&mut self, header: &str, lines: &[&str]) -> Result<(), AssemblyError> {
+        let parts = tokenize(header)?;
+        if parts.len() < 4 || parts[2] != "locals" {
+            return Err(AssemblyError::Text(
+                "expected `.method @Name locals <count> [export]`".into(),
+            ));
+        }
+        let name = parse_symbol(&parts[1])?;
+        let locals = parts[3]
+            .parse()
+            .map_err(|_| AssemblyError::Text("invalid locals count".into()))?;
+        let export = parts.iter().skip(4).any(|part| part == "export");
+
+        let mut labels = Vec::<StringId>::new();
+        let mut label_ids = HashMap::<String, u16>::new();
+        let mut code = Vec::<CodeEntry>::new();
+        for raw_line in lines {
+            if raw_line.is_empty() {
+                continue;
+            }
+            if let Some(label_name) = raw_line.strip_suffix(':') {
+                let label_id = ensure_label(
+                    &mut self.artifact,
+                    &mut labels,
+                    &mut label_ids,
+                    label_name.to_owned(),
+                )?;
+                code.push(CodeEntry::Label(Label { id: label_id }));
+                continue;
+            }
+            let entry = self.parse_instruction(raw_line, &mut labels, &mut label_ids)?;
+            code.push(CodeEntry::Instruction(entry));
+        }
+
+        let method = MethodDescriptor {
+            name: self.intern_string(&name),
+            locals,
+            export,
+            labels: labels.into_boxed_slice(),
+            code: code.into_boxed_slice(),
+        };
+        let id = self.artifact.methods.alloc(method);
+        let _ = self.methods.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_instruction(
+        &mut self,
+        line: &str,
+        labels: &mut Vec<StringId>,
+        label_ids: &mut HashMap<String, u16>,
+    ) -> Result<Instruction, AssemblyError> {
+        let parts = tokenize(line)?;
+        let Some(opcode_text) = parts.first() else {
+            return Err(AssemblyError::Text("empty instruction".into()));
+        };
+        let Some(opcode) = Opcode::from_mnemonic(opcode_text) else {
+            return Err(AssemblyError::Text(format!("unknown opcode {opcode_text}")));
+        };
+        let operand = self.parse_operand(opcode.operand_shape(), &parts, labels, label_ids)?;
+        Ok(Instruction::new(opcode, operand))
+    }
+
+    fn parse_operand(
+        &mut self,
+        shape: OperandShape,
+        parts: &[String],
+        labels: &mut Vec<StringId>,
+        label_ids: &mut HashMap<String, u16>,
+    ) -> Result<Operand, AssemblyError> {
+        match shape {
+            OperandShape::None => Ok(Operand::None),
+            OperandShape::I16 => Self::parse_i16_operand(parts),
+            OperandShape::Local => Ok(Operand::Local(parse_local(parts.get(1))?)),
+            OperandShape::String => self.parse_string_operand(parts),
+            OperandShape::Type => self.parse_type_operand(parts),
+            OperandShape::Constant => self.parse_constant_operand(parts),
+            OperandShape::Method => self.parse_method_operand(parts),
+            OperandShape::Foreign => self.parse_foreign_operand(parts),
+            OperandShape::Effect => self.parse_effect_operand(parts),
+            OperandShape::Label => self.parse_label_operand(parts, labels, label_ids),
+            OperandShape::TypeLen => self.parse_type_len_operand(parts),
+            OperandShape::BranchTable => self.parse_branch_table_operand(parts, labels, label_ids),
+        }
+    }
+
+    fn parse_i16_operand(parts: &[String]) -> Result<Operand, AssemblyError> {
+        Ok(Operand::I16(
+            must_get(parts.get(1), "i16 operand")?
+                .parse()
+                .map_err(|_| AssemblyError::Text("invalid i16 operand".into()))?,
+        ))
+    }
+
+    fn parse_string_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        Ok(Operand::String(self.intern_string(&parse_quoted(
+            must_get(parts.get(1), "string")?,
+        )?)))
+    }
+
+    fn parse_type_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "type")?)?;
+        let ty = *self
+            .types
+            .get(&name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown type @{name}")))?;
+        Ok(Operand::Type(ty))
+    }
+
+    fn parse_constant_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "constant")?)?;
+        let constant = *self
+            .constants
+            .get(&name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown constant @{name}")))?;
+        Ok(Operand::Constant(constant))
+    }
+
+    fn parse_method_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "method")?)?;
+        let method = *self
+            .methods
+            .get(&name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown method @{name}")))?;
+        Ok(Operand::Method(method))
+    }
+
+    fn parse_foreign_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "foreign")?)?;
+        let foreign = *self
+            .foreigns
+            .get(&name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown foreign @{name}")))?;
+        Ok(Operand::Foreign(foreign))
+    }
+
+    fn parse_effect_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
+        let op_name = parse_symbol(must_get(parts.get(2), "effect op")?)?;
+        let effect_id = *self
+            .effects
+            .get(&effect_name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown effect @{effect_name}")))?;
+        let effect = self.artifact.effects.get(effect_id);
+        let op = effect
+            .ops
+            .iter()
+            .position(|candidate| self.artifact.string_text(candidate.name) == op_name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown effect op @{op_name}")))?;
+        Ok(Operand::Effect {
+            effect: effect_id,
+            op: u16::try_from(op)
+                .map_err(|_| AssemblyError::Text("effect op index overflow".into()))?,
+        })
+    }
+
+    fn parse_label_operand(
+        &mut self,
+        parts: &[String],
+        labels: &mut Vec<StringId>,
+        label_ids: &mut HashMap<String, u16>,
+    ) -> Result<Operand, AssemblyError> {
+        let label_name = must_get(parts.get(1), "label")?.to_owned();
+        Ok(Operand::Label(ensure_label(
+            &mut self.artifact,
+            labels,
+            label_ids,
+            label_name,
+        )?))
+    }
+
+    fn parse_type_len_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+        let type_name = parse_symbol(must_get(parts.get(1), "type")?)?;
+        let ty = *self
+            .types
+            .get(&type_name)
+            .ok_or_else(|| AssemblyError::Text(format!("unknown type @{type_name}")))?;
+        let len = must_get(parts.get(2), "length")?
+            .parse()
+            .map_err(|_| AssemblyError::Text("invalid sequence length".into()))?;
+        Ok(Operand::TypeLen { ty, len })
+    }
+
+    fn parse_branch_table_operand(
+        &mut self,
+        parts: &[String],
+        labels: &mut Vec<StringId>,
+        label_ids: &mut HashMap<String, u16>,
+    ) -> Result<Operand, AssemblyError> {
+        let joined = parts.iter().skip(1).cloned().collect::<Vec<_>>().join(" ");
+        let labels = joined
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| ensure_label(&mut self.artifact, labels, label_ids, entry.to_owned()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Operand::BranchTable(labels.into_boxed_slice()))
+    }
+
+    fn intern_string(&mut self, text: &str) -> StringId {
+        if let Some(id) = self.strings.get(text).copied() {
+            return id;
+        }
+        let id = self.artifact.intern_string(text);
+        let _ = self.strings.insert(text.to_owned(), id);
+        id
+    }
+}
+
+fn ensure_label(
+    artifact: &mut Artifact,
+    labels: &mut Vec<StringId>,
+    label_ids: &mut HashMap<String, u16>,
+    name: String,
+) -> Result<u16, AssemblyError> {
+    if let Some(id) = label_ids.get(&name).copied() {
+        return Ok(id);
+    }
+    let name_id = artifact.intern_string(&name);
+    let id =
+        u16::try_from(labels.len()).map_err(|_| AssemblyError::Text("too many labels".into()))?;
+    labels.push(name_id);
+    let _ = label_ids.insert(name, id);
+    Ok(id)
+}
+
+fn parse_symbol(token: &str) -> Result<String, AssemblyError> {
+    token
+        .strip_prefix('@')
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))
+}
+
+fn parse_local(token: Option<&String>) -> Result<u16, AssemblyError> {
+    let token = must_get(token, "local")?;
+    token
+        .strip_prefix('%')
+        .ok_or_else(|| AssemblyError::Text("expected local slot like `%0`".into()))?
+        .parse()
+        .map_err(|_| AssemblyError::Text("invalid local slot".into()))
+}
+
+fn parse_quoted(token: &str) -> Result<String, AssemblyError> {
+    let Some(body) = token
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+    else {
+        return Err(AssemblyError::Text(format!(
+            "expected quoted string, got `{token}`"
+        )));
+    };
+    Ok(body.replace("\\\"", "\"").replace("\\\\", "\\"))
+}
+
+fn must_get<'a>(token: Option<&'a String>, name: &str) -> Result<&'a str, AssemblyError> {
+    token
+        .map(String::as_str)
+        .ok_or_else(|| AssemblyError::Text(format!("missing {name} operand")))
+}
+
+fn tokenize(line: &str) -> Result<Vec<String>, AssemblyError> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let chars = line.chars();
+    let mut in_string = false;
+
+    for ch in chars {
+        if in_string {
+            current.push(ch);
+            if ch == '"' && !current.ends_with("\\\"") {
+                in_string = false;
+                tokens.push(current.clone());
+                current.clear();
+            }
+            continue;
+        }
+        match ch {
+            '"' => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+                current.push(ch);
+                in_string = true;
+            }
+            ' ' | '\t' => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if in_string {
+        return Err(AssemblyError::Text("unterminated string literal".into()));
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    Ok(tokens)
+}

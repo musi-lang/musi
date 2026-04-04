@@ -1,0 +1,574 @@
+use music_arena::Idx;
+use music_bc::descriptor::{
+    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
+    ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+};
+use music_bc::{
+    Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
+    SectionTag,
+};
+
+use crate::AssemblyError;
+
+/// Encodes a validated SEAM artifact into the sectioned `.seam` binary format.
+///
+/// # Errors
+///
+/// Returns [`AssemblyError`] if the artifact fails structural validation before encoding.
+pub fn encode_binary(artifact: &Artifact) -> Result<Vec<u8>, AssemblyError> {
+    artifact.validate()?;
+    let mut out = Vec::new();
+    out.extend_from_slice(&SEAM_MAGIC);
+    push_u16(&mut out, BINARY_VERSION);
+    encode_strings(&mut out, artifact);
+    encode_types(&mut out, artifact);
+    encode_constants(&mut out, artifact);
+    encode_globals(&mut out, artifact);
+    encode_methods(&mut out, artifact);
+    encode_effects(&mut out, artifact);
+    encode_classes(&mut out, artifact);
+    encode_foreigns(&mut out, artifact);
+    Ok(out)
+}
+
+/// Decodes a sectioned `.seam` byte stream into a validated SEAM artifact.
+///
+/// # Errors
+///
+/// Returns [`AssemblyError`] if the header, sections, payload lengths, opcodes, or references are
+/// invalid.
+pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
+    let mut cursor = Cursor::new(bytes);
+    let magic = cursor.read_exact(4)?;
+    if magic != SEAM_MAGIC {
+        return Err(AssemblyError::InvalidBinaryHeader);
+    }
+    let version = cursor.read_u16()?;
+    if version != BINARY_VERSION {
+        return Err(AssemblyError::UnsupportedVersion(version));
+    }
+
+    let mut artifact = Artifact::new();
+    decode_strings(&mut cursor, &mut artifact)?;
+    decode_types(&mut cursor, &mut artifact)?;
+    decode_constants(&mut cursor, &mut artifact)?;
+    decode_globals(&mut cursor, &mut artifact)?;
+    decode_methods(&mut cursor, &mut artifact)?;
+    decode_effects(&mut cursor, &mut artifact)?;
+    decode_classes(&mut cursor, &mut artifact)?;
+    decode_foreigns(&mut cursor, &mut artifact)?;
+    artifact.validate()?;
+    Ok(artifact)
+}
+
+/// Validates a `.seam` binary blob by decoding and checking the resulting artifact.
+///
+/// # Errors
+///
+/// Returns [`AssemblyError`] if decoding or artifact validation fails.
+pub fn validate_binary(bytes: &[u8]) -> Result<(), AssemblyError> {
+    let _ = decode_binary(bytes)?;
+    Ok(())
+}
+
+fn encode_strings(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Strings);
+    push_u32(
+        out,
+        u32::try_from(artifact.strings.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.strings.iter() {
+        push_bytes(out, entry.text.as_bytes());
+    }
+}
+
+fn encode_types(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Types);
+    push_u32(
+        out,
+        u32::try_from(artifact.types.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.types.iter() {
+        push_u32(out, entry.name.raw());
+    }
+}
+
+fn encode_constants(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Constants);
+    push_u32(
+        out,
+        u32::try_from(artifact.constants.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.constants.iter() {
+        push_u32(out, entry.name.raw());
+        match entry.value {
+            ConstantValue::Int(value) => {
+                out.push(0);
+                push_i64(out, value);
+            }
+            ConstantValue::Bool(value) => {
+                out.push(1);
+                out.push(u8::from(value));
+            }
+            ConstantValue::String(id) => {
+                out.push(2);
+                push_u32(out, id.raw());
+            }
+        }
+    }
+}
+
+fn encode_globals(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Globals);
+    push_u32(
+        out,
+        u32::try_from(artifact.globals.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.globals.iter() {
+        push_u32(out, entry.name.raw());
+        out.push(u8::from(entry.export));
+        match entry.initializer {
+            Some(id) => {
+                out.push(1);
+                push_u32(out, id.raw());
+            }
+            None => out.push(0),
+        }
+    }
+}
+
+fn encode_methods(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Methods);
+    push_u32(
+        out,
+        u32::try_from(artifact.methods.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.methods.iter() {
+        push_u32(out, entry.name.raw());
+        push_u16(out, entry.locals);
+        out.push(u8::from(entry.export));
+        push_u16(
+            out,
+            u16::try_from(entry.labels.len()).expect("too many labels"),
+        );
+        for label in &entry.labels {
+            push_u32(out, label.raw());
+        }
+        push_u32(out, u32::try_from(entry.code.len()).expect("code overflow"));
+        for code in &entry.code {
+            match code {
+                CodeEntry::Label(label) => {
+                    out.push(0);
+                    push_u16(out, label.id);
+                }
+                CodeEntry::Instruction(instruction) => {
+                    out.push(1);
+                    push_u16(out, instruction.opcode.wire_code());
+                    encode_operand(out, &instruction.operand);
+                }
+            }
+        }
+    }
+}
+
+fn encode_effects(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Effects);
+    push_u32(
+        out,
+        u32::try_from(artifact.effects.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.effects.iter() {
+        push_u32(out, entry.name.raw());
+        push_u16(
+            out,
+            u16::try_from(entry.ops.len()).expect("too many effect ops"),
+        );
+        for op in &entry.ops {
+            push_u32(out, op.name.raw());
+        }
+    }
+}
+
+fn encode_classes(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Classes);
+    push_u32(
+        out,
+        u32::try_from(artifact.classes.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.classes.iter() {
+        push_u32(out, entry.name.raw());
+    }
+}
+
+fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Foreigns);
+    push_u32(
+        out,
+        u32::try_from(artifact.foreigns.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.foreigns.iter() {
+        push_u32(out, entry.name.raw());
+        push_u32(out, entry.abi.raw());
+        push_u32(out, entry.symbol.raw());
+    }
+}
+
+fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
+    match operand {
+        Operand::None => out.push(0),
+        Operand::I16(value) => {
+            out.push(1);
+            push_i16(out, *value);
+        }
+        Operand::Local(slot) => {
+            out.push(2);
+            push_u16(out, *slot);
+        }
+        Operand::String(id) => {
+            out.push(3);
+            push_u32(out, id.raw());
+        }
+        Operand::Type(id) => {
+            out.push(4);
+            push_u32(out, id.raw());
+        }
+        Operand::Constant(id) => {
+            out.push(5);
+            push_u32(out, id.raw());
+        }
+        Operand::Method(id) => {
+            out.push(6);
+            push_u32(out, id.raw());
+        }
+        Operand::Foreign(id) => {
+            out.push(7);
+            push_u32(out, id.raw());
+        }
+        Operand::Effect { effect, op } => {
+            out.push(8);
+            push_u32(out, effect.raw());
+            push_u16(out, *op);
+        }
+        Operand::Label(id) => {
+            out.push(9);
+            push_u16(out, *id);
+        }
+        Operand::TypeLen { ty, len } => {
+            out.push(10);
+            push_u32(out, ty.raw());
+            push_u16(out, *len);
+        }
+        Operand::BranchTable(labels) => {
+            out.push(11);
+            push_u16(
+                out,
+                u16::try_from(labels.len()).expect("branch table overflow"),
+            );
+            for label in labels.iter().copied() {
+                push_u16(out, label);
+            }
+        }
+    }
+}
+
+fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Strings)?;
+    for _ in 0..cursor.read_u32()? {
+        let bytes = cursor.read_bytes()?;
+        let text = String::from_utf8(bytes).map_err(|err| AssemblyError::Text(err.to_string()))?;
+        let _ = artifact.intern_string(&text);
+    }
+    Ok(())
+}
+
+fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Types)?;
+    for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let _ = artifact.types.alloc(TypeDescriptor { name });
+    }
+    Ok(())
+}
+
+fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Constants)?;
+    for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let kind = cursor.read_u8()?;
+        let value = match kind {
+            0 => ConstantValue::Int(cursor.read_i64()?),
+            1 => ConstantValue::Bool(cursor.read_u8()? != 0),
+            2 => ConstantValue::String(cursor.read_idx()?),
+            _ => return Err(AssemblyError::Text("unknown constant kind".into())),
+        };
+        let _ = artifact.constants.alloc(ConstantDescriptor { name, value });
+    }
+    Ok(())
+}
+
+fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Globals)?;
+    for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let export = cursor.read_u8()? != 0;
+        let initializer = if cursor.read_u8()? == 0 {
+            None
+        } else {
+            Some(cursor.read_idx()?)
+        };
+        let _ = artifact.globals.alloc(GlobalDescriptor {
+            name,
+            export,
+            initializer,
+        });
+    }
+    Ok(())
+}
+
+fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Methods)?;
+    for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let locals = cursor.read_u16()?;
+        let export = cursor.read_u8()? != 0;
+        let label_count = usize::from(cursor.read_u16()?);
+        let mut labels = Vec::with_capacity(label_count);
+        for _ in 0..label_count {
+            labels.push(cursor.read_idx()?);
+        }
+        let code_count = read_len(cursor, "code entry count")?;
+        let mut code = Vec::with_capacity(code_count);
+        for _ in 0..code_count {
+            let kind = cursor.read_u8()?;
+            let entry = match kind {
+                0 => CodeEntry::Label(Label {
+                    id: cursor.read_u16()?,
+                }),
+                1 => {
+                    let opcode_code = cursor.read_u16()?;
+                    let Some(opcode) = Opcode::from_wire_code(opcode_code) else {
+                        return Err(AssemblyError::UnknownOpcode(opcode_code));
+                    };
+                    let operand = decode_operand(cursor)?;
+                    CodeEntry::Instruction(Instruction::new(opcode, operand))
+                }
+                _ => return Err(AssemblyError::Text("unknown code entry kind".into())),
+            };
+            code.push(entry);
+        }
+        let _ = artifact.methods.alloc(MethodDescriptor {
+            name,
+            locals,
+            export,
+            labels: labels.into_boxed_slice(),
+            code: code.into_boxed_slice(),
+        });
+    }
+    Ok(())
+}
+
+fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Effects)?;
+    for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let ops_len = usize::from(cursor.read_u16()?);
+        let mut ops = Vec::with_capacity(ops_len);
+        for _ in 0..ops_len {
+            ops.push(EffectOpDescriptor {
+                name: cursor.read_idx()?,
+            });
+        }
+        let _ = artifact.effects.alloc(EffectDescriptor {
+            name,
+            ops: ops.into_boxed_slice(),
+        });
+    }
+    Ok(())
+}
+
+fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Classes)?;
+    for _ in 0..cursor.read_u32()? {
+        let _ = artifact.classes.alloc(ClassDescriptor {
+            name: cursor.read_idx()?,
+        });
+    }
+    Ok(())
+}
+
+fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Foreigns)?;
+    for _ in 0..cursor.read_u32()? {
+        let _ = artifact.foreigns.alloc(ForeignDescriptor {
+            name: cursor.read_idx()?,
+            abi: cursor.read_idx()?,
+            symbol: cursor.read_idx()?,
+        });
+    }
+    Ok(())
+}
+
+fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
+    Ok(match cursor.read_u8()? {
+        0 => Operand::None,
+        1 => Operand::I16(cursor.read_i16()?),
+        2 => Operand::Local(cursor.read_u16()?),
+        3 => Operand::String(cursor.read_idx()?),
+        4 => Operand::Type(cursor.read_idx()?),
+        5 => Operand::Constant(cursor.read_idx()?),
+        6 => Operand::Method(cursor.read_idx()?),
+        7 => Operand::Foreign(cursor.read_idx()?),
+        8 => Operand::Effect {
+            effect: cursor.read_idx()?,
+            op: cursor.read_u16()?,
+        },
+        9 => Operand::Label(cursor.read_u16()?),
+        10 => Operand::TypeLen {
+            ty: cursor.read_idx()?,
+            len: cursor.read_u16()?,
+        },
+        11 => {
+            let count = usize::from(cursor.read_u16()?);
+            let mut labels = Vec::with_capacity(count);
+            for _ in 0..count {
+                labels.push(cursor.read_u16()?);
+            }
+            Operand::BranchTable(labels.into_boxed_slice())
+        }
+        _ => return Err(AssemblyError::Text("unknown operand tag".into())),
+    })
+}
+
+fn push_section_tag(out: &mut Vec<u8>, tag: SectionTag) {
+    out.push(section_tag_byte(tag));
+}
+
+fn require_section(cursor: &mut Cursor<'_>, tag: SectionTag) -> Result<(), AssemblyError> {
+    let found = cursor.read_u8()?;
+    if found == section_tag_byte(tag) {
+        Ok(())
+    } else {
+        Err(AssemblyError::UnknownSection(found))
+    }
+}
+
+const fn section_tag_byte(tag: SectionTag) -> u8 {
+    match tag {
+        SectionTag::Strings => 1,
+        SectionTag::Types => 2,
+        SectionTag::Constants => 3,
+        SectionTag::Globals => 4,
+        SectionTag::Methods => 5,
+        SectionTag::Effects => 6,
+        SectionTag::Classes => 7,
+        SectionTag::Foreigns => 8,
+    }
+}
+
+fn push_u16(out: &mut Vec<u8>, value: u16) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_i16(out: &mut Vec<u8>, value: i16) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_i64(out: &mut Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+    push_u32(out, u32::try_from(bytes.len()).expect("payload overflow"));
+    out.extend_from_slice(bytes);
+}
+
+struct Cursor<'bytes> {
+    bytes: &'bytes [u8],
+    offset: usize,
+}
+
+impl<'bytes> Cursor<'bytes> {
+    const fn new(bytes: &'bytes [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<[u8; 4], AssemblyError> {
+        if len != 4 {
+            return Err(AssemblyError::TruncatedBinary);
+        }
+        let end = self.offset.saturating_add(4);
+        let slice = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(AssemblyError::TruncatedBinary)?;
+        self.offset = end;
+        let mut out = [0_u8; 4];
+        out.copy_from_slice(slice);
+        Ok(out)
+    }
+
+    fn read_u8(&mut self) -> Result<u8, AssemblyError> {
+        let value = *self
+            .bytes
+            .get(self.offset)
+            .ok_or(AssemblyError::TruncatedBinary)?;
+        self.offset = self.offset.saturating_add(1);
+        Ok(value)
+    }
+
+    fn read_u16(&mut self) -> Result<u16, AssemblyError> {
+        let bytes = self.read_array::<2>()?;
+        Ok(u16::from_le_bytes(bytes))
+    }
+
+    fn read_i16(&mut self) -> Result<i16, AssemblyError> {
+        let bytes = self.read_array::<2>()?;
+        Ok(i16::from_le_bytes(bytes))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, AssemblyError> {
+        let bytes = self.read_array::<4>()?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn read_i64(&mut self) -> Result<i64, AssemblyError> {
+        let bytes = self.read_array::<8>()?;
+        Ok(i64::from_le_bytes(bytes))
+    }
+
+    fn read_idx<T>(&mut self) -> Result<Idx<T>, AssemblyError> {
+        Ok(Idx::from_raw(self.read_u32()?))
+    }
+
+    fn read_bytes(&mut self) -> Result<Vec<u8>, AssemblyError> {
+        let len = read_len(self, "byte payload length")?;
+        let end = self.offset.saturating_add(len);
+        let slice = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(AssemblyError::TruncatedBinary)?;
+        self.offset = end;
+        Ok(slice.to_vec())
+    }
+
+    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], AssemblyError> {
+        let end = self.offset.saturating_add(N);
+        let slice = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(AssemblyError::TruncatedBinary)?;
+        self.offset = end;
+        let mut out = [0_u8; N];
+        out.copy_from_slice(slice);
+        Ok(out)
+    }
+}
+
+fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> Result<usize, AssemblyError> {
+    usize::try_from(cursor.read_u32()?)
+        .map_err(|_| AssemblyError::Text(format!("{what} does not fit in usize")))
+}

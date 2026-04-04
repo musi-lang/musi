@@ -102,6 +102,7 @@ pub enum HirExprKind {
         mods: HirLetMods,
         pat: HirPatId,
         type_params: SliceRange<Ident>,
+        has_param_clause: bool,
         params: SliceRange<HirParam>,
         constraints: SliceRange<HirConstraint>,
         effects: Option<HirEffectSet>,

@@ -1075,6 +1075,8 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
 
         self.push_scope();
         let type_params = self.lower_type_params_clause(node);
+        let has_param_clause =
+            super::util::child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
         let effects = super::util::child_of_kind(node, SyntaxNodeKind::EffectSet)
@@ -1114,6 +1116,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
                 mods,
                 pat,
                 type_params,
+                has_param_clause,
                 params,
                 constraints,
                 effects,

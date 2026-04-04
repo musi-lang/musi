@@ -249,10 +249,27 @@ name = "music_arena"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "music_assembly"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_arena",
+ "music_bc",
+ "thiserror",
+]
+
+[[package]]
 name = "music_base"
 version = "0.1.0-alpha.1"
 dependencies = [
  "criterion",
+ "thiserror",
+]
+
+[[package]]
+name = "music_bc"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_arena",
  "thiserror",
 ]
 
@@ -263,6 +280,19 @@ dependencies = [
  "music_arena",
  "music_base",
  "music_names",
+]
+
+[[package]]
+name = "music_ir"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_base",
+ "music_hir",
+ "music_module",
+ "music_names",
+ "music_resolve",
+ "music_sema",
+ "music_syntax",
 ]
 
 [[package]]

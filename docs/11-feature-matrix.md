@@ -70,16 +70,16 @@ Status legend:
 
 ## SEAM Boundary
 
-| Feature                     | IL (`music_il`) | Assembly (`music_assembly`) | Notes                          |
-| --------------------------- | --------------- | --------------------------- | ------------------------------ |
-| SEAM descriptor + ISA model | done            | n/a                         | Contract defined in `music_il` |
-| Text encode/decode          | n/a             | done                        |                                |
-| Binary encode/decode        | n/a             | done                        |                                |
+| Feature                     | Contract (`music_bc`) | Assembly (`music_assembly`) | Notes                          |
+| --------------------------- | --------------------- | --------------------------- | ------------------------------ |
+| SEAM descriptor + ISA model | done                  | n/a                         | Contract defined in `music_bc` |
+| Text encode/decode          | n/a                   | done                        |                                |
+| Binary encode/decode        | n/a                   | done                        |                                |
 
 ## Toolchain
 
 | Feature                                  | Frontend (`music_fe`) | Emit (`music_emit`)       | Notes                                                      |
 | ---------------------------------------- | --------------------- | -------------------------- | ---------------------------------------------------------- |
 | Module graph discovery from loaded files | partial               | n/a                        | Works when all imported source paths exist in `SourceMap`   |
-| Compile entry source to SEAM artifact    | partial               | partial                    | Emits subset of checked HIR into `music_il` (reduced core) |
+| Compile entry source to SEAM artifact    | partial               | partial                    | Emits subset of checked HIR into `music_bc` (reduced core) |
 | Compile entry source to `.seam` bytes    | partial               | partial                    | Uses `music_assembly::encode_binary`                        |

@@ -26,9 +26,9 @@ Rules:
 - [x] `music_hir` (HIR model)
 - [x] `music_resolve` (imports + name resolution + syntax→HIR lowering)
 - [x] `music_sema` (type/effect/class checking)
-- [ ] `music_ir` (codegen-facing facts)
-- [ ] `music_bc` (bytecode contract)
-- [ ] `music_assembly` (bytecode codec + validation)
+- [x] `music_ir` (codegen-facing facts)
+- [x] `music_bc` (bytecode contract)
+- [x] `music_assembly` (bytecode codec + validation)
 - [ ] `music_emit` (SEAM emission: lowering to bytecode contract)
 - [ ] `music_jit` (native/JIT backend consuming `music_ir`)
 - [ ] `music_session` (CaaS session: caching + orchestration)
@@ -73,10 +73,24 @@ Rules:
 
 ### `music_bc`
 
-- [ ] `opcode.rs` (`Opcode`, `OpcodeFamily` if needed)
-- [ ] `instruction.rs` (`Instruction`, `Operand`)
-- [ ] `artifact.rs` (`Artifact` + tables)
-- [ ] `descriptor/*` (type/effect/foreign/class descriptors)
+- [x] `opcode.rs` (`Opcode`, `OpcodeFamily`)
+- [x] `instruction.rs` (`Instruction`, `Operand`, `Label`)
+- [x] `artifact.rs` (`Artifact` + tables + structural validation)
+- [x] `descriptor/*` (type/effect/foreign/class/global/method/constant descriptors)
+
+### `music_assembly`
+
+- [x] `binary/*` (SEAM binary encode/decode + validation)
+- [x] `text/*` (SEAM text format/parse + validation)
+- [x] shared `AssemblyError` boundary
+- [x] text and binary roundtrip coverage
+
+### `music_ir`
+
+- [x] lowered module facts (`IrModule`)
+- [x] callable/data/foreign fact extraction
+- [x] exported effect/class/instance metadata lowering
+- [x] sema-surface validation before lowering
 
 ### `music_session`
 
