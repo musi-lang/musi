@@ -248,6 +248,11 @@ fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
             out.push(7);
             push_u32(out, id.raw());
         }
+        Operand::WideMethodCaptures { method, captures } => {
+            out.push(13);
+            push_u32(out, method.raw());
+            out.push(*captures);
+        }
         Operand::Foreign(id) => {
             out.push(8);
             push_u32(out, id.raw());
@@ -428,6 +433,10 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
         6 => Operand::Global(cursor.read_idx()?),
         7 => Operand::Method(cursor.read_idx()?),
         8 => Operand::Foreign(cursor.read_idx()?),
+        13 => Operand::WideMethodCaptures {
+            method: cursor.read_idx()?,
+            captures: cursor.read_u8()?,
+        },
         9 => Operand::Effect {
             effect: cursor.read_idx()?,
             op: cursor.read_u16()?,

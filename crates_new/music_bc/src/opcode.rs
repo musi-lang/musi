@@ -38,6 +38,7 @@ pub enum Opcode {
     BrFalse,
     BrTbl,
     Call,
+    CallCls,
     CallTail,
     Ret,
     ClsNew,
@@ -72,7 +73,9 @@ impl Opcode {
                 OpcodeFamily::LogicCompare
             }
             Self::Br | Self::BrFalse | Self::BrTbl => OpcodeFamily::Branch,
-            Self::Call | Self::CallTail | Self::Ret | Self::ClsNew => OpcodeFamily::CallClosure,
+            Self::Call | Self::CallCls | Self::CallTail | Self::Ret | Self::ClsNew => {
+                OpcodeFamily::CallClosure
+            }
             Self::SeqNew | Self::SeqGet | Self::SeqSet => OpcodeFamily::Sequence,
             Self::DataNew | Self::DataTag => OpcodeFamily::Data,
             Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
@@ -106,6 +109,7 @@ impl Opcode {
             Self::BrFalse => "br.false",
             Self::BrTbl => "br.tbl",
             Self::Call => "call",
+            Self::CallCls => "call.cls",
             Self::CallTail => "call.tail",
             Self::Ret => "ret",
             Self::ClsNew => "cls.new",
@@ -148,10 +152,12 @@ impl Opcode {
             | Self::SeqGet
             | Self::SeqSet
             | Self::HdlPop
-            | Self::EffResume => OperandShape::None,
+            | Self::EffResume
+            | Self::CallCls => OperandShape::None,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
-            Self::Call | Self::CallTail | Self::ClsNew => OperandShape::Method,
+            Self::Call | Self::CallTail => OperandShape::Method,
+            Self::ClsNew => OperandShape::WideMethodCaptures,
             Self::SeqNew => OperandShape::TypeLen,
             Self::DataNew | Self::DataTag | Self::TyChk | Self::TyCast | Self::TyId => {
                 OperandShape::Type
@@ -186,9 +192,10 @@ impl Opcode {
             Self::BrFalse => 0x0302,
             Self::BrTbl => 0x0303,
             Self::Call => 0x0401,
-            Self::CallTail => 0x0402,
-            Self::Ret => 0x0403,
-            Self::ClsNew => 0x0404,
+            Self::CallCls => 0x0402,
+            Self::CallTail => 0x0403,
+            Self::Ret => 0x0404,
+            Self::ClsNew => 0x0405,
             Self::SeqNew => 0x0501,
             Self::SeqGet => 0x0502,
             Self::SeqSet => 0x0503,
@@ -230,6 +237,7 @@ impl Opcode {
             "br.false" => Self::BrFalse,
             "br.tbl" => Self::BrTbl,
             "call" => Self::Call,
+            "call.cls" => Self::CallCls,
             "call.tail" => Self::CallTail,
             "ret" => Self::Ret,
             "cls.new" => Self::ClsNew,
@@ -275,9 +283,10 @@ impl Opcode {
             0x0302 => Self::BrFalse,
             0x0303 => Self::BrTbl,
             0x0401 => Self::Call,
-            0x0402 => Self::CallTail,
-            0x0403 => Self::Ret,
-            0x0404 => Self::ClsNew,
+            0x0402 => Self::CallCls,
+            0x0403 => Self::CallTail,
+            0x0404 => Self::Ret,
+            0x0405 => Self::ClsNew,
             0x0501 => Self::SeqNew,
             0x0502 => Self::SeqGet,
             0x0503 => Self::SeqSet,

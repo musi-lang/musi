@@ -1,6 +1,6 @@
 use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
-use music_names::{NameBindingId, Symbol};
+use music_names::NameBindingId;
 use music_sema::{
     ClassSurface, DefinitionKey, EffectRow, EffectSurface, ExportedValue, InstanceSurface,
     SurfaceTy,
@@ -17,7 +17,6 @@ pub struct IrOrigin {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrParam {
     pub binding: NameBindingId,
-    pub symbol: Symbol,
     pub name: Box<str>,
 }
 
@@ -58,6 +57,13 @@ pub struct IrExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrNameRef {
+    pub binding: Option<NameBindingId>,
+    pub name: Box<str>,
+    pub module_target: Option<ModuleKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrAssignTarget {
     Binding {
         binding: Option<NameBindingId>,
@@ -92,7 +98,6 @@ pub enum IrExprKind {
     Unit,
     Name {
         binding: Option<NameBindingId>,
-        symbol: Symbol,
         name: Box<str>,
         module_target: Option<ModuleKey>,
     },
@@ -122,6 +127,10 @@ pub enum IrExprKind {
         base: Box<IrExpr>,
         index: Box<IrExpr>,
     },
+    ClosureNew {
+        callee: IrNameRef,
+        captures: Box<[IrExpr]>,
+    },
     Binary {
         op: IrBinaryOp,
         left: Box<IrExpr>,
@@ -143,7 +152,6 @@ pub enum IrExprKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCallable {
     pub binding: Option<NameBindingId>,
-    pub symbol: Symbol,
     pub name: Box<str>,
     pub params: Box<[IrParam]>,
     pub body: IrExpr,
@@ -154,7 +162,6 @@ pub struct IrCallable {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataDef {
-    pub symbol: Symbol,
     pub name: Box<str>,
     pub variant_count: u32,
     pub field_count: u32,
@@ -163,7 +170,6 @@ pub struct IrDataDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrForeignDef {
     pub binding: Option<NameBindingId>,
-    pub symbol: Symbol,
     pub name: Box<str>,
     pub abi: Box<str>,
     pub param_count: u32,
@@ -172,7 +178,6 @@ pub struct IrForeignDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrGlobal {
     pub binding: Option<NameBindingId>,
-    pub symbol: Symbol,
     pub name: Box<str>,
     pub body: IrExpr,
     pub exported: bool,

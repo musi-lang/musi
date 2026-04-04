@@ -12,7 +12,7 @@ use music_bc::{
 };
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrExpr, IrExprKind, IrLit,
-    IrModule, IrOrigin, IrParam,
+    IrModule, IrNameRef, IrOrigin, IrParam,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
@@ -281,6 +281,11 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         IrExprKind::Index { base, index } => {
             collect_expr_types(state, layout, base);
             collect_expr_types(state, layout, index);
+        }
+        IrExprKind::ClosureNew { captures, .. } => {
+            for cap in captures {
+                collect_expr_types(state, layout, cap);
+            }
         }
         IrExprKind::Binary { left, right, .. } => {
             collect_expr_types(state, layout, left);
@@ -593,6 +598,9 @@ fn compile_expr(
         } => compile_let(emitter, *binding, name, value, diags),
         IrExprKind::Assign { target, value } => compile_assign(emitter, target, value, diags),
         IrExprKind::Index { base, index } => compile_index(emitter, base, index, diags),
+        IrExprKind::ClosureNew { callee, captures } => {
+            compile_closure_new(emitter, callee, captures, diags);
+        }
         IrExprKind::Binary { op, left, right } => {
             compile_binary(emitter, op, left, right, diags);
         }
@@ -740,7 +748,10 @@ fn compile_name(
     if let Some(method) = resolve_method(emitter, binding, name, module_target) {
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::ClsNew,
-            Operand::Method(method),
+            Operand::WideMethodCaptures {
+                method,
+                captures: 0,
+            },
         )));
         return;
     }
@@ -1031,70 +1042,82 @@ fn compile_call(
         }
         compile_expr(emitter, &arg.expr, true, diags);
     }
-    match &callee.kind {
-        IrExprKind::Name {
-            binding,
-            name,
-            module_target,
-            ..
-        } => compile_named_call(
-            emitter,
-            *binding,
-            name,
-            module_target.as_ref(),
-            callee,
-            diags,
-        ),
-        IrExprKind::Unsupported { description } => {
-            push_expr_diag(
-                diags,
-                emitter.module_key,
-                &callee.origin,
-                format!("unsupported emitted call target `{description}`"),
-            );
-            emit_zero(emitter);
+    if let IrExprKind::Name {
+        binding,
+        name,
+        module_target,
+        ..
+    } = &callee.kind
+    {
+        if let Some(binding) = binding
+            && let Some(slot) = emitter.locals.get(binding).copied()
+        {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdLoc,
+                Operand::Local(slot),
+            )));
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::CallCls,
+                Operand::None,
+            )));
+            return;
         }
-        other => {
-            push_expr_diag(
-                diags,
-                emitter.module_key,
-                &callee.origin,
-                format!("unsupported emitted call target `{other:?}`"),
-            );
-            emit_zero(emitter);
+        if let Some(method) = resolve_method(emitter, *binding, name, module_target.as_ref()) {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Call,
+                Operand::Method(method),
+            )));
+            return;
+        }
+        if let Some(foreign) = resolve_foreign(emitter, *binding, name, module_target.as_ref()) {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::FfiCall,
+                Operand::Foreign(foreign),
+            )));
+            return;
         }
     }
+
+    compile_expr(emitter, callee, true, diags);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::CallCls,
+        Operand::None,
+    )));
 }
 
-fn compile_named_call(
+fn compile_closure_new(
     emitter: &mut MethodEmitter<'_, '_>,
-    binding: Option<NameBindingId>,
-    name: &str,
-    module_target: Option<&ModuleKey>,
-    callee: &IrExpr,
+    callee: &IrNameRef,
+    captures: &[IrExpr],
     diags: &mut EmitDiagList,
 ) {
-    if let Some(method) = resolve_method(emitter, binding, name, module_target) {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::Call,
-            Operand::Method(method),
-        )));
-        return;
+    for cap in captures {
+        compile_expr(emitter, cap, true, diags);
     }
-    if let Some(foreign) = resolve_foreign(emitter, binding, name, module_target) {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::FfiCall,
-            Operand::Foreign(foreign),
-        )));
+    let Some(method) = resolve_method(
+        emitter,
+        callee.binding,
+        callee.name.as_ref(),
+        callee.module_target.as_ref(),
+    ) else {
+        let origin = captures.first().map_or_else(|| IrOrigin {
+            source_id: SourceId::from_raw(0),
+            span: Span::new(0, 0),
+        }, |expr| expr.origin);
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &origin,
+            format!("unknown emitted closure target `{}`", callee.name),
+        );
+        emit_zero(emitter);
         return;
-    }
-    push_expr_diag(
-        diags,
-        emitter.module_key,
-        &callee.origin,
-        format!("unknown emitted call target `{name}`"),
-    );
-    emit_zero(emitter);
+    };
+    let captures = u8::try_from(captures.len()).unwrap_or(u8::MAX);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::ClsNew,
+        Operand::WideMethodCaptures { method, captures },
+    )));
 }
 
 fn resolve_method(

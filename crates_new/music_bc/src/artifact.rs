@@ -270,6 +270,9 @@ impl Artifact {
             Operand::Method(id) => {
                 self.require_method(*id)?;
             }
+            Operand::WideMethodCaptures { method, .. } => {
+                self.require_method(*method)?;
+            }
             Operand::Foreign(id) => {
                 self.require_foreign(*id)?;
             }
@@ -372,6 +375,7 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::Constant(_), OperandShape::Constant)
             | (Operand::Global(_), OperandShape::Global)
             | (Operand::Method(_), OperandShape::Method)
+            | (Operand::WideMethodCaptures { .. }, OperandShape::WideMethodCaptures)
             | (Operand::Foreign(_), OperandShape::Foreign)
             | (Operand::Effect { .. }, OperandShape::Effect)
             | (Operand::Label(_), OperandShape::Label)

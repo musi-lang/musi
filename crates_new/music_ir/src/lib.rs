@@ -4,7 +4,7 @@ mod lower;
 pub use api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm, IrCasePattern, IrClassDef, IrDataDef,
     IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrInstanceDef, IrLit,
-    IrModule, IrOrigin, IrParam,
+    IrModule, IrNameRef, IrOrigin, IrParam,
 };
 pub use lower::lower_module;
 

@@ -160,3 +160,47 @@ fn emits_foreign_calls() {
             .any(|opcode| opcode == music_bc::Opcode::FfiCall)
     );
 }
+
+#[test]
+fn emits_closures_and_higher_order_calls() {
+    let ir = lower_ir(
+        r"
+        let apply (f : Int -> Int, x : Int) : Int := f(x);
+
+        export let answer (x : Int) : Int := (
+          let base : Int := 41;
+          let add_base (y : Int) : Int := y + base;
+          apply(add_base, x);
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+
+    let mut has_indirect_call = false;
+    let mut has_capturing_closure = false;
+    for (_, method) in emitted.artifact.methods.iter() {
+        for entry in &method.code {
+            let music_bc::CodeEntry::Instruction(instruction) = entry else {
+                continue;
+            };
+            if instruction.opcode == music_bc::Opcode::CallCls {
+                has_indirect_call = true;
+            }
+            if instruction.opcode == music_bc::Opcode::ClsNew {
+                if let music_bc::Operand::WideMethodCaptures { captures, .. } =
+                    &instruction.operand
+                {
+                    if *captures != 0 {
+                        has_capturing_closure = true;
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(has_indirect_call);
+    assert!(has_capturing_closure);
+}

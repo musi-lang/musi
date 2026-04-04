@@ -19,6 +19,7 @@ pub enum OperandShape {
     Constant,
     Global,
     Method,
+    WideMethodCaptures,
     Foreign,
     Effect,
     Label,
@@ -41,6 +42,10 @@ pub enum Operand {
     Constant(Idx<ConstantDescriptor>),
     Global(Idx<GlobalDescriptor>),
     Method(Idx<MethodDescriptor>),
+    WideMethodCaptures {
+        method: Idx<MethodDescriptor>,
+        captures: u8,
+    },
     Foreign(Idx<ForeignDescriptor>),
     Effect {
         effect: Idx<EffectDescriptor>,

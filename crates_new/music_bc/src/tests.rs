@@ -133,3 +133,45 @@ fn validates_global_and_sequence_operands() {
 
     assert!(artifact.validate().is_ok());
 }
+
+#[test]
+fn validates_closures_and_indirect_calls() {
+    let mut artifact = Artifact::new();
+    let entry_name = artifact.intern_string("entry");
+    let closure_name = artifact.intern_string("closure");
+    let label_name = artifact.intern_string("L0");
+
+    let closure_method = artifact.methods.alloc(MethodDescriptor {
+        name: closure_name,
+        locals: 0,
+        export: false,
+        labels: Box::new([]),
+        code: Box::new([CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        ))]),
+    });
+
+    let _ = artifact.methods.alloc(MethodDescriptor {
+        name: entry_name,
+        locals: 0,
+        export: false,
+        labels: Box::new([label_name]),
+        code: Box::new([
+            CodeEntry::Label(Label { id: 0 }),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::ClsNew,
+                Operand::WideMethodCaptures {
+                    method: closure_method,
+                    captures: 2,
+                },
+            )),
+            CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+        ]),
+    });
+
+    assert!(artifact.validate().is_ok());
+}

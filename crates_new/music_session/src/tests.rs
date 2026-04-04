@@ -135,3 +135,27 @@ fn compiles_imported_globals_and_local_assignment() {
     assert!(output.text.contains("ld.glob @dep::base"));
     assert!(output.text.contains("@main::answer"));
 }
+
+#[test]
+fn compiles_closures_and_higher_order_calls() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            let apply (f : Int -> Int, x : Int) : Int := f(x);
+            export let answer (x : Int) : Int := (
+              let base : Int := 41;
+              let add_base (y : Int) : Int := y + base;
+              apply(add_base, x)
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("call.cls"));
+    assert!(output.text.contains("cls.new"));
+}

@@ -126,3 +126,51 @@ fn global_and_sequence_operands_roundtrip_in_text_and_binary() {
     let decoded = decode_binary(&bytes).unwrap();
     assert_eq!(decoded, artifact);
 }
+
+#[test]
+fn closures_roundtrip_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let entry = artifact.intern_string("entry");
+    let closure = artifact.intern_string("closure");
+    let label = artifact.intern_string("L0");
+
+    let closure_method = artifact.methods.alloc(MethodDescriptor {
+        name: closure,
+        locals: 0,
+        export: false,
+        labels: Box::new([]),
+        code: Box::new([CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        ))]),
+    });
+
+    let _ = artifact.methods.alloc(MethodDescriptor {
+        name: entry,
+        locals: 0,
+        export: false,
+        labels: Box::new([label]),
+        code: Box::new([
+            CodeEntry::Label(Label { id: 0 }),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::ClsNew,
+                Operand::WideMethodCaptures {
+                    method: closure_method,
+                    captures: 2,
+                },
+            )),
+            CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+        ]),
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}

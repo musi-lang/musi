@@ -196,6 +196,12 @@ fn format_operand(
             out.push('@');
             out.push_str(artifact.string_text(artifact.methods.get(*id).name));
         }
+        Operand::WideMethodCaptures { method: id, captures } => {
+            out.push('@');
+            out.push_str(artifact.string_text(artifact.methods.get(*id).name));
+            out.push(' ');
+            out.push_str(&captures.to_string());
+        }
         Operand::Foreign(id) => {
             out.push('@');
             out.push_str(artifact.string_text(artifact.foreigns.get(*id).name));
@@ -493,6 +499,7 @@ impl TextBuilder {
             OperandShape::Constant => self.parse_constant_operand(parts),
             OperandShape::Global => self.parse_global_operand(parts),
             OperandShape::Method => self.parse_method_operand(parts),
+            OperandShape::WideMethodCaptures => self.parse_wide_method_captures_operand(parts),
             OperandShape::Foreign => self.parse_foreign_operand(parts),
             OperandShape::Effect => self.parse_effect_operand(parts),
             OperandShape::Label => self.parse_label_operand(parts, labels, label_ids),
@@ -568,13 +575,21 @@ impl TextBuilder {
         id
     }
 
-    fn parse_method_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_method_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
         let name = parse_symbol(must_get(parts.get(1), "method")?)?;
-        let method = *self
-            .methods
-            .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown method @{name}")))?;
-        Ok(Operand::Method(method))
+        Ok(Operand::Method(self.ensure_method_symbol(&name)))
+    }
+
+    fn parse_wide_method_captures_operand(
+        &mut self,
+        parts: &[String],
+    ) -> Result<Operand, AssemblyError> {
+        let name = parse_symbol(must_get(parts.get(1), "method")?)?;
+        let method = self.ensure_method_symbol(&name);
+        let captures = must_get(parts.get(2), "capture count")?
+            .parse::<u8>()
+            .map_err(|_| AssemblyError::Text("invalid capture count".into()))?;
+        Ok(Operand::WideMethodCaptures { method, captures })
     }
 
     fn parse_foreign_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
