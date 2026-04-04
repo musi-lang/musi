@@ -15,7 +15,7 @@ use crate::string_lit::{
     decode_template_tail,
 };
 
-use super::util::{parse_u32_lit, stmt_inner_expr};
+use super::util::{child_of_kind, parse_u32_lit, stmt_inner_expr};
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     pub(super) fn lower_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -213,13 +213,7 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
 
     fn lower_record_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let mut items = Vec::<HirRecordItem>::new();
-        for item in node
-            .child_nodes()
-            .filter(|n| n.kind() == SyntaxNodeKind::RecordItem)
-        {
-            items.push(self.lower_record_item(item));
-        }
+        let items = self.lower_record_items(node.child_nodes());
         let items = self.store.record_items.alloc_from_iter(items);
         self.alloc_expr(origin, HirExprKind::Record { items })
     }
@@ -296,18 +290,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let origin = self.origin_node(node);
         let param_list = node
             .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ParamList);
+            .find(|child| child.kind() == SyntaxNodeKind::ParamList);
         self.push_scope();
         let params = param_list.map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
         let mut exprs = node
             .child_nodes()
-            .filter(|n| n.kind() != SyntaxNodeKind::ParamList);
-        let ret_ty = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+            .filter(|child| child.kind() != SyntaxNodeKind::ParamList);
+        let ret_ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let body = match exprs.next() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
@@ -342,33 +332,42 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
     }
 
     fn lower_apply_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        let mut nodes = node.child_nodes();
-        let callee = self.lower_opt_expr(origin, nodes.next());
-        let args: Vec<_> = nodes.map(|n| self.lower_expr(n)).collect();
-        let args = self.store.expr_ids.alloc_from_iter(args);
-        self.alloc_expr(origin, HirExprKind::Apply { callee, args })
+        self.lower_apply_like_expr(node, |callee, args| HirExprKind::Apply { callee, args })
     }
 
     fn lower_index_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        let mut nodes = node.child_nodes();
-        let base = self.lower_opt_expr(origin, nodes.next());
-        let args: Vec<_> = nodes.map(|n| self.lower_expr(n)).collect();
-        let args = self.store.expr_ids.alloc_from_iter(args);
-        self.alloc_expr(origin, HirExprKind::Index { base, args })
+        self.lower_apply_like_expr(node, |base, args| HirExprKind::Index { base, args })
     }
 
     fn lower_record_update_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
-        let mut items = Vec::<HirRecordItem>::new();
-        for item in nodes.filter(|n| n.kind() == SyntaxNodeKind::RecordItem) {
-            items.push(self.lower_record_item(item));
-        }
+        let items = self.lower_record_items(nodes);
         let items = self.store.record_items.alloc_from_iter(items);
         self.alloc_expr(origin, HirExprKind::RecordUpdate { base, items })
+    }
+
+    fn lower_apply_like_expr<F>(&mut self, node: SyntaxNode<'tree, 'src>, build: F) -> HirExprId
+    where
+        F: FnOnce(HirExprId, SliceRange<HirExprId>) -> HirExprKind,
+    {
+        let origin = self.origin_node(node);
+        let mut nodes = node.child_nodes();
+        let base = self.lower_opt_expr(origin, nodes.next());
+        let args: Vec<_> = nodes.map(|child| self.lower_expr(child)).collect();
+        let args = self.store.expr_ids.alloc_from_iter(args);
+        self.alloc_expr(origin, build(base, args))
+    }
+
+    fn lower_record_items<I>(&mut self, nodes: I) -> Vec<HirRecordItem>
+    where
+        I: Iterator<Item = SyntaxNode<'tree, 'src>>,
+    {
+        nodes
+            .filter(|node| node.kind() == SyntaxNodeKind::RecordItem)
+            .map(|node| self.lower_record_item(node))
+            .collect()
     }
 
     fn lower_field_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -508,12 +507,8 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             })
         };
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let guard = if node.child_tokens().any(|t| t.kind() == TokenKind::KwIf) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let guard = self.lower_optional_expr_clause(node, TokenKind::KwIf, &mut exprs);
         let expr = match exprs.next() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
@@ -840,13 +835,10 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let type_params = self.lower_type_params_clause(node);
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            node.child_nodes()
-                .find(|n| n.kind().is_expr() && n.kind() != SyntaxNodeKind::ParamList)
-                .map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| child.kind().is_expr() && child.kind() != SyntaxNodeKind::ParamList);
+        let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         self.pop_scope();
 
         HirForeignDecl {
@@ -898,17 +890,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let arg = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
-        let value = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let arg = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirVariantDef {
             origin,
             attrs,
@@ -924,13 +908,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let ty = self.lower_opt_expr(origin, exprs.next());
-        let value = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirFieldDef {
             origin,
             attrs,
@@ -1012,22 +992,12 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let _ = self.insert_binding(name, NameBindingKind::Let);
 
         self.push_scope();
-        let params = node
-            .child_nodes()
-            .find(|n| n.kind() == SyntaxNodeKind::ParamList)
+        let params = child_of_kind(node, SyntaxNodeKind::ParamList)
             .map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
-        let value = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         self.pop_scope();
 
         HirMemberDef {
@@ -1075,19 +1045,14 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
 
         self.push_scope();
         let type_params = self.lower_type_params_clause(node);
-        let has_param_clause =
-            super::util::child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
+        let has_param_clause = child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let effects = super::util::child_of_kind(node, SyntaxNodeKind::EffectSet)
+        let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
             .map(|effect_set| self.lower_effect_set(effect_set));
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let sig = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let value = match exprs.last() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
@@ -1146,13 +1111,11 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<HirParam> {
-        let mut params = Vec::<HirParam>::new();
-        for p in node
+        let params: Vec<_> = node
             .child_nodes()
-            .filter(|n| n.kind() == SyntaxNodeKind::Param)
-        {
-            params.push(self.lower_param(p));
-        }
+            .filter(|child| child.kind() == SyntaxNodeKind::Param)
+            .map(|child| self.lower_param(child))
+            .collect();
         self.store.params.alloc_from_iter(params)
     }
 
@@ -1162,17 +1125,9 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Param);
 
-        let mut exprs = node.child_nodes().filter(|n| n.kind().is_expr());
-        let ty = if node.child_tokens().any(|t| t.kind() == TokenKind::Colon) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
-        let default = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
-            exprs.next().map(|n| self.lower_expr(n))
-        } else {
-            None
-        };
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
+        let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
 
         HirParam {
             is_mut,
@@ -1209,6 +1164,22 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src> {
             None => self.error_expr(self.origin_node(node)),
         };
         HirConstraint { name, kind, value }
+    }
+
+    fn lower_optional_expr_clause<I>(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+        token_kind: TokenKind,
+        exprs: &mut I,
+    ) -> Option<HirExprId>
+    where
+        I: Iterator<Item = SyntaxNode<'tree, 'src>>,
+    {
+        if node.child_tokens().any(|token| token.kind() == token_kind) {
+            exprs.next().map(|expr| self.lower_expr(expr))
+        } else {
+            None
+        }
     }
 
     fn lower_effect_set(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectSet {
