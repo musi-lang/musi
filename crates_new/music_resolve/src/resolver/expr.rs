@@ -258,7 +258,6 @@ where
         let origin = self.origin_node(node);
         let tag_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let tag = self.intern_ident_token_or_placeholder(tag_tok, node.span());
-        self.record_use(tag);
         let args: Vec<_> = node.child_nodes().map(|n| self.lower_expr(n)).collect();
         let args = self.store.alloc_expr_list(args);
         self.alloc_expr(origin, HirExprKind::Variant { tag, args })
@@ -562,7 +561,6 @@ where
     fn lower_handle_clause(&mut self, node: SyntaxNode<'tree, 'src>) -> HirHandleClause {
         let op_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let op = self.intern_ident_token_or_placeholder(op_tok, node.span());
-        self.record_use(op);
 
         let mut params = Vec::<Ident>::new();
         for token in node

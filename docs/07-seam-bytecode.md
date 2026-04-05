@@ -74,7 +74,7 @@ SEAM text IL is directive-based and symbolic where possible.
 - labels are symbolic
 - locals use `%` slots
 - globals, methods, types, effects, and foreigns are symbolic in text form
-- symbolic references use `@name`, and may be quoted as `@"..."`
+- symbolic references use `$name`, and may be quoted as `$"..."`
 - numeric immediates stay numeric only when they are truly machine data
 
 ### Intended Shape
@@ -122,18 +122,18 @@ Current operand categories are:
 Examples:
 
 - `ld.loc %0`
-- `ld.const @const:msg`
+- `ld.const $const:msg`
 - `br.false L_else`
-- `cls.new @fn:closure 2`
-- `seq.new @type:Bytes 64`
-- `data.new @type:Option 1`
-- `eff.invk @effect:Abort @op:abort`
-- `hdl.push @effect:Console`
+- `cls.new $fn:closure 2`
+- `seq.new $type:Bytes 64`
+- `data.new $type:Option 1`
+- `eff.invk $effect:Abort $op:abort`
+- `hdl.push $effect:Console`
 
 When a symbolic name contains whitespace (or needs escaping), it is written as a quoted symbol:
 
-- `.type @"{ x: Int; y: Int }"`
-- `data.new @"{ x: Int; y: Int }" 2`
+- `.type $"{ x: Int; y: Int }"`
+- `data.new $"{ x: Int; y: Int }" 2`
 
 `data.new` uses the tag value from the stack. The operand carries only the aggregate type id and field count.
 
@@ -199,6 +199,17 @@ Stack contracts:
 
 - `data.get`: pops `index`, pops `aggregate`, pushes `field_value`
 - `data.set`: pops `new_value`, pops `index`, pops `aggregate`, pushes `updated_aggregate`
+- `data.tag`: pops `aggregate`, pushes `tag` (an `Int`-valued variant tag)
+
+### Branch Tables
+
+`br.tbl` is the reduced-core multiway branch.
+
+Stack contract and selection rule:
+
+- `br.tbl`: pops `index`, branches to `labels[min(index, labels.len - 1)]`
+
+This makes jump tables total even when the scrutinee is malformed: the last label acts as the default target.
 
 ### Runtime Type Operations
 
@@ -217,6 +228,11 @@ Resumable algebraic effects remain explicit SEAM instructions:
 - handler push/pop (handler objects are stack values; `hdl.push` takes the handled effect id as its operand)
 - effect invoke
 - continuation resume
+
+Handler objects are ordinary `data` aggregates whose field layout is stable per effect:
+
+- field 0: value clause closure
+- fields 1..N: operation clause closures in lexicographic op order
 
 ### Foreign Boundary
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{
@@ -10,10 +10,10 @@ use music_names::Ident;
 use crate::api::ClassFacts;
 
 use super::decls::member_signature;
-use super::normalize::lower_constraints;
+use super::normalize::{lower_constraints, lower_type_expr};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
-use super::{CollectPass, EffectDef, EffectOpDef};
+use super::{CollectPass, DataDef, DataVariantDef, EffectDef, EffectOpDef};
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     visit_expr(ctx, ctx.root_expr_id());
@@ -180,6 +180,7 @@ fn visit_foreign(ctx: &mut CollectPass<'_, '_, '_>, decls: SliceRange<HirForeign
 
 fn collect_bound_decl(ctx: &mut CollectPass<'_, '_, '_>, value: HirExprId, name: Ident) {
     match ctx.expr(value).kind {
+        HirExprKind::Data { variants, fields: _ } => collect_data_decl(ctx, name, variants),
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
             constraints,
@@ -187,6 +188,35 @@ fn collect_bound_decl(ctx: &mut CollectPass<'_, '_, '_>, value: HirExprId, name:
         } => collect_class_decl(ctx, value, name, constraints, members),
         _ => {}
     }
+}
+
+fn collect_data_decl(ctx: &mut CollectPass<'_, '_, '_>, name: Ident, variants: SliceRange<HirVariantDef>) {
+    let data_name: Box<str> = ctx.resolve_symbol(name.name).into();
+    if ctx.data_def(&data_name).is_some() {
+        return;
+    }
+
+    let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
+    for variant in ctx.variants(variants) {
+        let tag: Box<str> = ctx.resolve_symbol(variant.name.name).into();
+        let payload = variant.arg.map(|expr| {
+            let origin = ctx.expr(expr).origin;
+            lower_type_expr(ctx, expr, origin)
+        });
+        let prev = variant_map.insert(tag, DataVariantDef { payload });
+        if prev.is_some() {
+            ctx.diag(variant.origin.span, "duplicate data variant", "");
+        }
+    }
+
+    let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
+    ctx.insert_data_def(
+        data_name,
+        DataDef {
+            key,
+            variants: variant_map,
+        },
+    );
 }
 
 fn collect_effect_decl(
@@ -219,7 +249,7 @@ fn collect_effect_decl(
                 },
             )
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
     ctx.insert_effect_def(effect_name, EffectDef { key, ops });
 }

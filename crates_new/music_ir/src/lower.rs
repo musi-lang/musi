@@ -4,17 +4,17 @@ use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirForeignDecl,
-    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirRecordItem, HirTyField,
-    HirTyId, HirTyKind,
+    HirHandleClause, HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind,
+    HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
-use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
+use music_sema::{DefinitionKey, SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
-    IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
     IrRecordLayoutField,
 };
 
@@ -81,13 +81,15 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
         globals: items.globals.into_boxed_slice(),
         data_defs: items.data_defs.into_boxed_slice(),
         foreigns: items.foreigns.into_boxed_slice(),
-        effects: sema
-            .surface()
-            .exported_effects
-            .iter()
-            .map(IrEffectDef::from)
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
+        effects: {
+            let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
+            for effect in sema.effect_defs().values() {
+                let _ = seen
+                    .entry(effect.key.clone())
+                    .or_insert_with(|| IrEffectDef::from(effect));
+            }
+            seen.into_values().collect::<Vec<_>>().into_boxed_slice()
+        },
         classes: sema
             .surface()
             .exported_classes
@@ -313,15 +315,26 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         return;
     }
 
-    if let HirExprKind::Data { variants, fields } = &sema.module().store.exprs.get(value).kind {
+    match &sema.module().store.exprs.get(value).kind {
+    HirExprKind::Data { variants, fields } => {
+        let name_text: Box<str> = interner.resolve(name.name).into();
+        let key = sema.data_def(name_text.as_ref()).map_or_else(
+            || DefinitionKey {
+                module: ctx.module_key.clone(),
+                name: name_text.clone(),
+            },
+            |data| data.key.clone(),
+        );
         items.data_defs.push(IrDataDef {
-            name: interner.resolve(name.name).into(),
+            key,
             variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
                 .expect("variant count overflow"),
             field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
                 .expect("field count overflow"),
         });
-    } else if is_callable {
+    }
+    HirExprKind::Effect { .. } | HirExprKind::Class { .. } | HirExprKind::Instance { .. } => {}
+    _ if is_callable => {
         items.callables.push(IrCallable {
             binding,
             name: interner.resolve(name.name).into(),
@@ -331,7 +344,8 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             effects,
             module_target,
         });
-    } else {
+    }
+    _ => {
         items.globals.push(IrGlobal {
             binding,
             name: interner.resolve(name.name).into(),
@@ -340,6 +354,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             effects,
             module_target,
         });
+    }
     }
 }
 
@@ -400,9 +415,19 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             lower_record_update_expr(ctx, expr_id, *base, items.clone())
         }
         HirExprKind::Case { scrutinee, arms } => lower_case_expr(ctx, *scrutinee, arms),
+        HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, *args),
         HirExprKind::Lambda { params, body, .. } => {
             lower_lambda_expr(ctx, origin, params, *body)
         }
+        HirExprKind::Perform { expr } => lower_perform_expr(ctx, *expr),
+        HirExprKind::Handle {
+            expr,
+            handler,
+            clauses,
+        } => lower_handle_expr(ctx, expr_id, *expr, *handler, clauses.clone()),
+        HirExprKind::Resume { expr } => IrExprKind::Resume {
+            expr: expr.map(|expr| Box::new(lower_expr(ctx, expr))),
+        },
         HirExprKind::Export { expr, .. } | HirExprKind::Attributed { expr, .. } => {
             return lower_expr(ctx, *expr);
         }
@@ -543,6 +568,270 @@ fn lower_record_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRan
         ty_name: render_ty_name(sema, ty, interner),
         field_count,
         fields: fields.into_boxed_slice(),
+    }
+}
+
+fn lower_variant_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    tag: Ident,
+    args: SliceRange<HirExprId>,
+) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let ty = sema.expr_ty(expr_id);
+    let HirTyKind::Named { name, .. } = sema.ty(ty).kind else {
+        return IrExprKind::Unsupported {
+            description: "variant without named type context".into(),
+        };
+    };
+    let data_name = interner.resolve(name);
+    let Some(data) = sema.data_def(data_name) else {
+        return IrExprKind::Unsupported {
+            description: "variant without data type definition".into(),
+        };
+    };
+    let tag_name = interner.resolve(tag.name);
+    let tag_index = data
+        .variants
+        .keys()
+        .position(|name| name.as_ref() == tag_name)
+        .and_then(|index| u16::try_from(index).ok())
+        .unwrap_or(u16::MAX);
+    let variant_count = u16::try_from(data.variants.len()).unwrap_or(u16::MAX);
+    if tag_index == u16::MAX {
+        return IrExprKind::Unsupported {
+            description: "unknown variant tag".into(),
+        };
+    }
+
+    let arg_exprs = sema.module().store.expr_ids.get(args);
+    let lowered_args = arg_exprs
+        .iter()
+        .copied()
+        .map(|expr| lower_expr(ctx, expr))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let field_count = u16::try_from(lowered_args.len()).unwrap_or(u16::MAX);
+    let _ = variant_count;
+    IrExprKind::VariantNew {
+        data_key: data.key.clone(),
+        tag_index,
+        field_count,
+        args: lowered_args,
+    }
+}
+
+fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
+        return IrExprKind::Unsupported {
+            description: "perform without call".into(),
+        };
+    };
+    let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
+        return IrExprKind::Unsupported {
+            description: "perform without effect op field access".into(),
+        };
+    };
+    let HirExprKind::Name { name: effect_name } = sema.module().store.exprs.get(base).kind else {
+        return IrExprKind::Unsupported {
+            description: "perform without effect name".into(),
+        };
+    };
+    let effect_name = interner.resolve(effect_name.name);
+    let op_name = interner.resolve(name.name);
+    let Some(effect) = sema.effect_def(effect_name) else {
+        return IrExprKind::Unsupported {
+            description: "perform with unknown effect".into(),
+        };
+    };
+    let op_index = effect
+        .ops
+        .keys()
+        .position(|name| name.as_ref() == op_name)
+        .and_then(|index| u16::try_from(index).ok())
+        .unwrap_or(u16::MAX);
+    if op_index == u16::MAX {
+        return IrExprKind::Unsupported {
+            description: "perform with unknown effect op".into(),
+        };
+    }
+    let lowered_args = sema
+        .module()
+        .store
+        .args
+        .get(args.clone())
+        .iter()
+        .map(|arg| {
+            if arg.spread {
+                return None;
+            }
+            Some(lower_expr(ctx, arg.expr))
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(Vec::into_boxed_slice);
+    let Some(lowered_args) = lowered_args else {
+        return IrExprKind::Unsupported {
+            description: "perform with spread args".into(),
+        };
+    };
+    IrExprKind::Perform {
+        effect_key: effect.key.clone(),
+        op_index,
+        args: lowered_args,
+    }
+}
+
+fn lower_handle_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    expr: HirExprId,
+    handler: Ident,
+    clauses: SliceRange<HirHandleClause>,
+) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let handler_name = interner.resolve(handler.name);
+    let Some(effect) = sema.effect_def(handler_name) else {
+        return IrExprKind::Unsupported {
+            description: "handle with unknown effect".into(),
+        };
+    };
+    let origin = sema.module().store.exprs.get(expr_id).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    };
+
+    let clauses_vec = sema.module().store.handle_clauses.get(clauses).to_vec();
+    let mut value_clause = None::<HirHandleClause>;
+    let mut op_clauses = Vec::<HirHandleClause>::new();
+    for clause in clauses_vec {
+        let op_name = interner.resolve(clause.op.name);
+        if op_name == "value" {
+            value_clause = Some(clause);
+        } else {
+            op_clauses.push(clause);
+        }
+    }
+    let Some(value_clause) = value_clause else {
+        return IrExprKind::Unsupported {
+            description: "handle without value clause".into(),
+        };
+    };
+
+    let value_closure = lower_handler_clause_closure(
+        ctx,
+        origin,
+        "hdl.value",
+        &[value_clause.op],
+        value_clause.body,
+    );
+
+    let mut ops_by_index = vec![None::<IrHandleOp>; effect.ops.len()];
+    for clause in op_clauses {
+        let op_name = interner.resolve(clause.op.name);
+        let Some(op_index) = effect.ops.keys().position(|name| name.as_ref() == op_name) else {
+            return IrExprKind::Unsupported {
+                description: "handle clause with unknown effect op".into(),
+            };
+        };
+        let closure = lower_handler_clause_closure(
+            ctx,
+            origin,
+            &format!("hdl.op.{op_name}"),
+            sema.module().store.idents.get(clause.params),
+            clause.body,
+        );
+        ops_by_index[op_index] = Some(IrHandleOp {
+            op_index: u16::try_from(op_index).unwrap_or(u16::MAX),
+            name: op_name.into(),
+            closure,
+        });
+    }
+
+    if ops_by_index.iter().any(Option::is_none) {
+        return IrExprKind::Unsupported {
+            description: "handle missing op clause".into(),
+        };
+    }
+
+    IrExprKind::Handle {
+        effect_key: effect.key.clone(),
+        value: Box::new(value_closure),
+        ops: ops_by_index.into_iter().flatten().collect::<Vec<_>>().into_boxed_slice(),
+        body: Box::new(lower_expr(ctx, expr)),
+    }
+}
+
+fn lower_handler_clause_closure(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    prefix: &str,
+    params: &[Ident],
+    body: HirExprId,
+) -> IrExpr {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+
+    let lowered_body = lower_expr(ctx, body);
+    let (user_params, user_param_bindings) = {
+        let mut lowered = Vec::<IrParam>::new();
+        let mut bindings = Vec::<NameBindingId>::new();
+        for param in params {
+            let binding = decl_binding_id(sema, *param).expect("handler clause param binding missing");
+            bindings.push(binding);
+            lowered.push(IrParam {
+                binding,
+                name: interner.resolve(param.name).into(),
+            });
+        }
+        (lowered, bindings)
+    };
+
+    let captures = compute_capture_bindings(ctx, &lowered_body, &user_param_bindings, None);
+    let capture_params = captures
+        .iter()
+        .copied()
+        .map(|cap| IrParam {
+            binding: cap,
+            name: binding_name(ctx, cap),
+        })
+        .collect::<Vec<_>>();
+    let capture_exprs = captures
+        .iter()
+        .copied()
+        .map(|cap| name_expr(ctx, origin, cap))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
+    let mut callable_params = Vec::new();
+    callable_params.extend(capture_params);
+    callable_params.extend(user_params);
+
+    let callable_name = fresh_lambda_name(ctx, prefix, origin);
+    ctx.extra_callables.push(IrCallable {
+        binding: None,
+        name: callable_name.clone(),
+        params: callable_params.into_boxed_slice(),
+        body: lowered_body,
+        exported: false,
+        effects: sema.expr_effects(body).clone(),
+        module_target: sema.expr_module_target(body).cloned(),
+    });
+
+    IrExpr {
+        origin,
+        kind: IrExprKind::ClosureNew {
+            callee: IrNameRef {
+                binding: None,
+                name: callable_name,
+                module_target: Some(ctx.module_key.clone()),
+            },
+            captures: capture_exprs,
+        },
     }
 }
 
@@ -847,6 +1136,23 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
                 collect_used_bindings(&arg.expr, out);
             }
         }
+        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
+            for arg in args {
+                collect_used_bindings(arg, out);
+            }
+        }
+        IrExprKind::Handle { value, ops, body, .. } => {
+            collect_used_bindings(value, out);
+            for op in ops {
+                collect_used_bindings(&op.closure, out);
+            }
+            collect_used_bindings(body, out);
+        }
+        IrExprKind::Resume { expr } => {
+            if let Some(expr) = expr {
+                collect_used_bindings(expr, out);
+            }
+        }
         IrExprKind::Unit
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. }
@@ -905,9 +1211,7 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
         IrExprKind::Case { scrutinee, arms } => {
             collect_local_decl_bindings(scrutinee, out);
             for arm in arms {
-                if let IrCasePattern::Bind { binding, .. } = &arm.pattern {
-                    let _ = out.insert(*binding);
-                }
+                collect_pattern_bindings(&arm.pattern, out);
                 if let Some(guard) = &arm.guard {
                     collect_local_decl_bindings(guard, out);
                 }
@@ -920,7 +1224,47 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
                 collect_local_decl_bindings(&arg.expr, out);
             }
         }
+        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
+            for arg in args {
+                collect_local_decl_bindings(arg, out);
+            }
+        }
+        IrExprKind::Handle { value, ops, body, .. } => {
+            collect_local_decl_bindings(value, out);
+            for op in ops {
+                collect_local_decl_bindings(&op.closure, out);
+            }
+            collect_local_decl_bindings(body, out);
+        }
+        IrExprKind::Resume { expr } => {
+            if let Some(expr) = expr {
+                collect_local_decl_bindings(expr, out);
+            }
+        }
         IrExprKind::Unit | IrExprKind::Name { .. } | IrExprKind::Lit(_) | IrExprKind::Unsupported { .. } => {}
+    }
+}
+
+fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut HashSet<NameBindingId>) {
+    match pattern {
+        IrCasePattern::Wildcard | IrCasePattern::Lit(_) => {}
+        IrCasePattern::Bind { binding, .. } => {
+            let _ = out.insert(*binding);
+        }
+        IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
+            for item in items {
+                collect_pattern_bindings(item, out);
+            }
+        }
+        IrCasePattern::Variant { args, .. } => {
+            for arg in args {
+                collect_pattern_bindings(arg, out);
+            }
+        }
+        IrCasePattern::As { pat, binding, .. } => {
+            let _ = out.insert(*binding);
+            collect_pattern_bindings(pat, out);
+        }
     }
 }
 
@@ -1095,14 +1439,10 @@ fn lower_record_update_expr(
 
 fn lower_case_expr(ctx: &mut LowerCtx<'_>, scrutinee: HirExprId, arms: &SliceRange<HirCaseArm>) -> IrExprKind {
     let sema = ctx.sema;
-    let lowered = sema
-        .module()
-        .store
-        .case_arms
-        .get(arms.clone())
-        .iter()
-        .filter_map(|arm| lower_case_arm(ctx, arm))
-        .collect::<Vec<_>>();
+    let mut lowered = Vec::<IrLoweredCaseArm>::new();
+    for arm in sema.module().store.case_arms.get(arms.clone()) {
+        lowered.extend(lower_case_arm(ctx, arm));
+    }
     if lowered.is_empty() {
         return IrExprKind::Unsupported {
             description: "case without emit-compatible arms".into(),
@@ -1114,58 +1454,139 @@ fn lower_case_expr(ctx: &mut LowerCtx<'_>, scrutinee: HirExprId, arms: &SliceRan
     }
 }
 
-fn lower_case_arm(ctx: &mut LowerCtx<'_>, arm: &HirCaseArm) -> Option<IrLoweredCaseArm> {
+fn lower_case_arm(ctx: &mut LowerCtx<'_>, arm: &HirCaseArm) -> Vec<IrLoweredCaseArm> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    Some(IrLoweredCaseArm {
-        pattern: lower_case_pattern(sema, arm.pat, interner)?,
-        guard: arm.guard.map(|guard| lower_expr(ctx, guard)),
-        expr: lower_expr(ctx, arm.expr),
-    })
+    let patterns = lower_case_patterns(sema, arm.pat, interner);
+    patterns
+        .into_iter()
+        .map(|pattern| IrLoweredCaseArm {
+            pattern,
+            guard: arm.guard.map(|guard| lower_expr(ctx, guard)),
+            expr: lower_expr(ctx, arm.expr),
+        })
+        .collect()
 }
 
-fn lower_case_pattern(
+fn lower_case_patterns(
     sema: &SemaModule,
     pat: HirPatId,
     interner: &Interner,
-) -> Option<IrCasePattern> {
+) -> Vec<IrCasePattern> {
     match &sema.module().store.pats.get(pat).kind {
-        HirPatKind::Wildcard => Some(IrCasePattern::Wildcard),
-        HirPatKind::Bind { name } => Some(IrCasePattern::Bind {
-            binding: decl_binding_id(sema, *name)?,
-            name: interner.resolve(name.name).into(),
-        }),
-        HirPatKind::Lit { expr } => lower_lit_pattern(sema, *expr),
-        HirPatKind::Tuple { items } => {
-            let items = sema
-                .module()
-                .store
-                .pat_ids
-                .get(*items)
-                .iter()
-                .copied()
-                .map(|item| lower_case_pattern(sema, item, interner))
-                .collect::<Option<Vec<_>>>()?;
-            Some(IrCasePattern::Tuple {
-                items: items.into_boxed_slice(),
+        HirPatKind::Wildcard => vec![IrCasePattern::Wildcard],
+        HirPatKind::Bind { name } => decl_binding_id(sema, *name)
+            .map(|binding| {
+                vec![IrCasePattern::Bind {
+                    binding,
+                    name: interner.resolve(name.name).into(),
+                }]
             })
+            .unwrap_or_default(),
+        HirPatKind::Lit { expr } => lower_lit_pattern(sema, *expr).into_iter().collect(),
+        HirPatKind::Tuple { items } => lower_product_patterns(
+            sema,
+            sema.module().store.pat_ids.get(*items),
+            interner,
+            |items| IrCasePattern::Tuple { items },
+        ),
+        HirPatKind::Array { items } => lower_product_patterns(
+            sema,
+            sema.module().store.pat_ids.get(*items),
+            interner,
+            |items| IrCasePattern::Array { items },
+        ),
+        HirPatKind::Variant { tag, args } => lower_variant_patterns(sema, pat, *tag, *args, interner),
+        HirPatKind::Or { left, right } => {
+            let mut out = lower_case_patterns(sema, *left, interner);
+            out.extend(lower_case_patterns(sema, *right, interner));
+            out
         }
-        HirPatKind::Array { items } => {
-            let items = sema
-                .module()
-                .store
-                .pat_ids
-                .get(*items)
-                .iter()
-                .copied()
-                .map(|item| lower_case_pattern(sema, item, interner))
-                .collect::<Option<Vec<_>>>()?;
-            Some(IrCasePattern::Array {
-                items: items.into_boxed_slice(),
+        HirPatKind::As { pat: inner, name } => decl_binding_id(sema, *name)
+            .map(|binding| {
+                lower_case_patterns(sema, *inner, interner)
+                    .into_iter()
+                    .map(|pat| IrCasePattern::As {
+                        pat: Box::new(pat),
+                        binding,
+                        name: interner.resolve(name.name).into(),
+                    })
+                    .collect::<Vec<_>>()
             })
-        }
-        _ => None,
+            .unwrap_or_default(),
+        _ => Vec::new(),
     }
+}
+
+fn lower_product_patterns<F>(
+    sema: &SemaModule,
+    items: &[HirPatId],
+    interner: &Interner,
+    ctor: F,
+) -> Vec<IrCasePattern>
+where
+    F: Fn(Box<[IrCasePattern]>) -> IrCasePattern,
+{
+    let mut acc = vec![Vec::<IrCasePattern>::new()];
+    for item in items.iter().copied() {
+        let alts = lower_case_patterns(sema, item, interner);
+        if alts.is_empty() {
+            return Vec::new();
+        }
+        let mut next = Vec::<Vec<IrCasePattern>>::new();
+        for prefix in &acc {
+            for alt in &alts {
+                let mut updated = prefix.clone();
+                updated.push(alt.clone());
+                next.push(updated);
+            }
+        }
+        acc = next;
+    }
+    acc.into_iter()
+        .map(|items| ctor(items.into_boxed_slice()))
+        .collect()
+}
+
+fn lower_variant_patterns(
+    sema: &SemaModule,
+    pat: HirPatId,
+    tag: Ident,
+    args: SliceRange<HirPatId>,
+    interner: &Interner,
+) -> Vec<IrCasePattern> {
+    let ty = sema.pat_ty(pat);
+    let HirTyKind::Named { name, .. } = sema.ty(ty).kind else {
+        return Vec::new();
+    };
+    let data_name = interner.resolve(name);
+    let Some(data) = sema.data_def(data_name) else {
+        return Vec::new();
+    };
+    let tag_name = interner.resolve(tag.name);
+    let Some(tag_index) = data
+        .variants
+        .keys()
+        .position(|name| name.as_ref() == tag_name)
+        .and_then(|index| u16::try_from(index).ok())
+    else {
+        return Vec::new();
+    };
+    let Some(variant_count) = u16::try_from(data.variants.len()).ok() else {
+        return Vec::new();
+    };
+
+    lower_product_patterns(
+        sema,
+        sema.module().store.pat_ids.get(args),
+        interner,
+        |items| IrCasePattern::Variant {
+            data_key: data.key.clone(),
+            variant_count,
+            tag_index,
+            args: items,
+        },
+    )
 }
 
 fn lower_lit_pattern(sema: &SemaModule, expr: HirExprId) -> Option<IrCasePattern> {

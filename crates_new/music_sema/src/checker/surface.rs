@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use crate::api::ModuleSurface;
 
 use super::surface_exports::{
-    collect_exported_classes, collect_exported_effects, collect_exported_instances,
-    collect_exported_values, collect_module_exports,
+    collect_exported_classes, collect_exported_data, collect_exported_effects,
+    collect_exported_instances, collect_exported_values, collect_module_exports,
 };
 use super::surface_types::SurfaceTyBuilder;
 pub use super::surface_types::{canonical_surface_ty, import_surface_ty, surface_key};
@@ -28,6 +28,7 @@ pub fn build_module_surface(
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let exported_values = collect_exported_values(module, typing, decls, &exports, &mut tys);
+    let exported_data = collect_exported_data(decls, &exports, &mut tys);
     let exported_classes = collect_exported_classes(module, runtime, decls, &exports, &mut tys);
     let exported_effects = collect_exported_effects(decls, &exports, &mut tys);
     let exported_instances = collect_exported_instances(decls, &exports, &mut tys);
@@ -37,6 +38,7 @@ pub fn build_module_surface(
         static_imports,
         tys: tys.finish(),
         exported_values,
+        exported_data,
         exported_classes,
         exported_effects,
         exported_instances,

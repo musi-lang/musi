@@ -73,7 +73,13 @@ fn check_callable_let_binding(
 ) -> (HirTyId, EffectRow) {
     let param_types = lower_params(ctx, params);
     let mut callable_effects = effects.map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
+    if let Some(expected) = declared_ty {
+        ctx.push_expected_ty(expected);
+    }
     let body_facts = check_expr(ctx, value);
+    if declared_ty.is_some() {
+        let _ = ctx.pop_expected_ty();
+    }
     if effects.is_none() {
         callable_effects = body_facts.effects.clone();
     } else {
@@ -141,10 +147,26 @@ pub(in super::super) fn check_let_expr(
                     constraints,
                     members,
                 } => check_bound_class(ctx, value, name, constraints, members),
-                _ => check_expr(ctx, value),
+                _ => {
+                    if let Some(expected) = declared_ty {
+                        ctx.push_expected_ty(expected);
+                    }
+                    let facts = check_expr(ctx, value);
+                    if declared_ty.is_some() {
+                        let _ = ctx.pop_expected_ty();
+                    }
+                    facts
+                }
             }
         } else {
-            check_expr(ctx, value)
+            if let Some(expected) = declared_ty {
+                ctx.push_expected_ty(expected);
+            }
+            let facts = check_expr(ctx, value);
+            if declared_ty.is_some() {
+                let _ = ctx.pop_expected_ty();
+            }
+            facts
         };
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);

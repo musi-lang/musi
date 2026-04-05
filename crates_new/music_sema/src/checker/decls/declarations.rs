@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
 use music_hir::{
@@ -164,10 +164,33 @@ pub(in super::super) fn check_foreign_expr(
 
 pub(super) fn check_bound_data(
     ctx: &mut CheckPass<'_, '_, '_>,
-    _name: Ident,
+    name: Ident,
     variants: SliceRange<HirVariantDef>,
     fields: SliceRange<HirFieldDef>,
 ) -> ExprFacts {
+    let data_name: Box<str> = ctx.resolve_symbol(name.name).into();
+    if ctx.data_def(&data_name).is_none() {
+        let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
+        for variant in ctx.variants(variants.clone()) {
+            let tag: Box<str> = ctx.resolve_symbol(variant.name.name).into();
+            let payload = variant.arg.map(|expr| {
+                let origin = ctx.expr(expr).origin;
+                lower_type_expr(ctx, expr, origin)
+            });
+            let prev = variant_map.insert(tag, super::super::DataVariantDef { payload });
+            if prev.is_some() {
+                ctx.diag(variant.origin.span, "duplicate data variant", "");
+            }
+        }
+        let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
+        ctx.insert_data_def(
+            data_name,
+            super::super::DataDef {
+                key,
+                variants: variant_map,
+            },
+        );
+    }
     check_data_expr(ctx, variants, fields)
 }
 
@@ -194,7 +217,7 @@ pub(super) fn check_bound_effect(
                     },
                 )
             })
-            .collect::<HashMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
         ctx.insert_effect_def(effect_name, EffectDef { key, ops });
     }

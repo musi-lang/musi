@@ -11,6 +11,7 @@ use music_names::Ident;
 use crate::api::ExprFacts;
 
 use super::CheckPass;
+use super::state::DataDef;
 use super::decls::{
     LetExprInput, call_effects_for_expr, check_attributed_expr, check_class_expr, check_data_expr,
     check_effect_expr, check_foreign_expr, check_handle_expr, check_import_expr,
@@ -304,8 +305,16 @@ fn check_sequence_expr(ctx: &mut CheckPass<'_, '_, '_>, exprs: SliceRange<HirExp
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
     let mut ty = builtins.unit;
-    for expr in ctx.expr_ids(exprs) {
+    let exprs = ctx.expr_ids(exprs);
+    let len = exprs.len();
+    let expected = ctx.expected_ty();
+    for (idx, expr) in exprs.into_iter().enumerate() {
+        let suppress_expected = expected.is_some() && idx + 1 != len;
+        let saved_expected = suppress_expected.then(|| ctx.pop_expected_ty()).flatten();
         let facts = check_expr(ctx, expr);
+        if let Some(saved) = saved_expected {
+            ctx.push_expected_ty(saved);
+        }
         effects.union_with(&facts.effects);
         ty = facts.ty;
     }
@@ -404,18 +413,120 @@ fn check_record_expr(
 
 fn check_variant_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
-    _tag: Ident,
+    tag: Ident,
     args: SliceRange<HirExprId>,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
-    for arg in ctx.expr_ids(args) {
-        let facts = check_expr(ctx, arg);
-        effects.union_with(&facts.effects);
+    let expected_ty = ctx.expected_ty().and_then(|ty| variant_context_ty(ctx, ty));
+    let expected_ty = expected_ty.or_else(|| infer_variant_context_ty(ctx, tag));
+    let Some(expected_ty) = expected_ty else {
+        for arg in ctx.expr_ids(args) {
+            let facts = check_expr(ctx, arg);
+            effects.union_with(&facts.effects);
+        }
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects,
+        };
+    };
+
+    let data_def = expected_data_def(ctx, expected_ty);
+    let Some(data_def) = data_def else {
+        for arg in ctx.expr_ids(args) {
+            let facts = check_expr(ctx, arg);
+            effects.union_with(&facts.effects);
+        }
+        ctx.diag(tag.span, "variant constructor missing data type context", "");
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects,
+        };
+    };
+
+    let tag_name = ctx.resolve_symbol(tag.name);
+    let Some(variant) = data_def.variants.get(tag_name) else {
+        for arg in ctx.expr_ids(args) {
+            let facts = check_expr(ctx, arg);
+            effects.union_with(&facts.effects);
+        }
+        ctx.diag(tag.span, "unknown data variant", "");
+        return ExprFacts {
+            ty: expected_ty,
+            effects,
+        };
+    };
+
+    let expected_payload = variant.payload;
+    let arg_exprs = ctx.expr_ids(args);
+    let expected_args: Vec<HirTyId> = expected_payload.map_or_else(Vec::new, |payload_ty| {
+        match &ctx.ty(payload_ty).kind {
+            HirTyKind::Tuple { items } => ctx.ty_ids(*items),
+            _ => vec![payload_ty],
+        }
+    });
+
+    if expected_args.len() != arg_exprs.len() {
+        ctx.diag(tag.span, "variant constructor arity mismatch", "");
     }
+
+    for (index, arg) in arg_exprs.into_iter().enumerate() {
+        let expected = expected_args
+            .get(index)
+            .copied()
+            .unwrap_or(builtins.unknown);
+        ctx.push_expected_ty(expected);
+        let facts = check_expr(ctx, arg);
+        let _ = ctx.pop_expected_ty();
+        effects.union_with(&facts.effects);
+        let origin = ctx.expr(arg).origin;
+        type_mismatch(ctx, origin, expected, facts.ty);
+    }
+
     ExprFacts {
-        ty: builtins.unknown,
+        ty: expected_ty,
         effects,
+    }
+}
+
+fn variant_context_ty(ctx: &CheckPass<'_, '_, '_>, ty: HirTyId) -> Option<HirTyId> {
+    expected_data_def(ctx, ty).map(|_| ty)
+}
+
+fn expected_data_def<'a>(ctx: &'a CheckPass<'_, '_, '_>, ty: HirTyId) -> Option<&'a DataDef> {
+    match ctx.ty(ty).kind {
+        HirTyKind::Named { name, .. } => ctx.data_def(ctx.resolve_symbol(name)),
+        _ => None,
+    }
+}
+
+fn infer_variant_context_ty(ctx: &mut CheckPass<'_, '_, '_>, tag: Ident) -> Option<HirTyId> {
+    let tag_name = ctx.resolve_symbol(tag.name);
+    let mut matches = ctx
+        .data_defs()
+        .iter()
+        .filter_map(|(name, data)| data.variants.contains_key(tag_name).then_some(name.clone()))
+        .collect::<Vec<Box<str>>>();
+
+    match matches.len() {
+        0 => {
+            ctx.diag(tag.span, "unknown data variant", "");
+            None
+        }
+        1 => {
+            let data_name = matches.pop()?;
+            let name = ctx.intern(data_name.as_ref());
+            let args = ctx.alloc_ty_list([]);
+            Some(ctx.alloc_ty(HirTyKind::Named { name, args }))
+        }
+        _ => {
+            ctx.diag(
+                tag.span,
+                "ambiguous variant tag; add type annotation to disambiguate",
+                "",
+            );
+            None
+        }
     }
 }
 
@@ -452,11 +563,18 @@ fn check_lambda_expr(
     body: HirExprId,
 ) -> ExprFacts {
     let param_types = lower_params(ctx, params);
-    let body_facts = check_expr(ctx, body);
-    let result_ty = ret_ty.map_or(body_facts.ty, |ret| {
+    let declared_ret = ret_ty.map(|ret| {
         let origin = ctx.expr(ret).origin;
         lower_type_expr(ctx, ret, origin)
     });
+    if let Some(expected) = declared_ret {
+        ctx.push_expected_ty(expected);
+    }
+    let body_facts = check_expr(ctx, body);
+    if declared_ret.is_some() {
+        let _ = ctx.pop_expected_ty();
+    }
+    let result_ty = declared_ret.unwrap_or(body_facts.ty);
     if let Some(ret) = ret_ty {
         let origin = ctx.expr(ret).origin;
         type_mismatch(ctx, origin, result_ty, body_facts.ty);
@@ -481,25 +599,28 @@ fn check_call_expr(
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let callee_facts = check_expr(ctx, callee);
-    let args = ctx.args(args);
-    let mut effects = callee_facts.effects.clone();
-    let arg_types = args
-        .iter()
-        .map(|arg| {
-            let facts = check_expr(ctx, arg.expr);
-            effects.union_with(&facts.effects);
-            facts.ty
-        })
-        .collect::<Vec<_>>();
     let (params, ret) = if let HirTyKind::Arrow { params, ret, .. } = ctx.ty(callee_facts.ty).kind {
         (ctx.ty_ids(params), ret)
     } else {
         ctx.diag(origin.span, "invalid call target", "");
         return ExprFacts {
             ty: builtins.unknown,
-            effects,
+            effects: callee_facts.effects,
         };
     };
+
+    let args = ctx.args(args);
+    let mut effects = callee_facts.effects;
+    let mut arg_types = Vec::with_capacity(args.len());
+    for (index, arg) in args.iter().enumerate() {
+        let expected = params.get(index).copied().unwrap_or(builtins.unknown);
+        ctx.push_expected_ty(expected);
+        let facts = check_expr(ctx, arg.expr);
+        let _ = ctx.pop_expected_ty();
+        effects.union_with(&facts.effects);
+        arg_types.push(facts.ty);
+    }
+
     if params.len() == arg_types.len() {
         for (expected, found) in params.into_iter().zip(arg_types) {
             type_mismatch(ctx, origin, expected, found);
@@ -678,7 +799,13 @@ fn check_record_update_expr(
         BTreeMap::new()
     };
     for item in ctx.record_items(items) {
+        let expected = item
+            .name
+            .and_then(|name| fields.get(&name.name).copied())
+            .unwrap_or_else(|| ctx.builtins().unknown);
+        ctx.push_expected_ty(expected);
         let facts = check_expr(ctx, item.value);
+        let _ = ctx.pop_expected_ty();
         effects.union_with(&facts.effects);
         if let Some(name) = item.name {
             let _prev = fields.insert(name.name, facts.ty);

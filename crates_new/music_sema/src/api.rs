@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use music_arena::Idx;
 use music_base::diag::Diag;
@@ -135,6 +135,19 @@ pub struct ExportedValue {
     pub module_target: Option<ModuleKey>,
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
+    pub data_key: Option<DefinitionKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataVariantSurface {
+    pub name: Box<str>,
+    pub payload: Option<SurfaceTyId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataSurface {
+    pub key: DefinitionKey,
+    pub variants: Box<[DataVariantSurface]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,6 +212,7 @@ pub struct ModuleSurface {
     pub static_imports: Box<[ModuleKey]>,
     pub tys: Box<[SurfaceTy]>,
     pub exported_values: Box<[ExportedValue]>,
+    pub exported_data: Box<[DataSurface]>,
     pub exported_classes: Box<[ClassSurface]>,
     pub exported_effects: Box<[EffectSurface]>,
     pub exported_instances: Box<[InstanceSurface]>,
@@ -228,6 +242,11 @@ impl ModuleSurface {
     }
 
     #[must_use]
+    pub fn exported_data(&self, key: &DefinitionKey) -> Option<&DataSurface> {
+        self.exported_data.iter().find(|data| &data.key == key)
+    }
+
+    #[must_use]
     pub fn exported_effect(&self, key: &DefinitionKey) -> Option<&EffectSurface> {
         self.exported_effects
             .iter()
@@ -239,6 +258,29 @@ impl ModuleSurface {
 pub struct ExprFacts {
     pub ty: HirTyId,
     pub effects: EffectRow,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemaEffectOpDef {
+    pub params: Box<[HirTyId]>,
+    pub result: HirTyId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemaEffectDef {
+    pub key: DefinitionKey,
+    pub ops: BTreeMap<Box<str>, SemaEffectOpDef>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SemaDataVariantDef {
+    pub payload: Option<HirTyId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemaDataDef {
+    pub key: DefinitionKey,
+    pub variants: BTreeMap<Box<str>, SemaDataVariantDef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,6 +335,8 @@ pub struct SemaModule {
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    effect_defs: HashMap<Box<str>, SemaEffectDef>,
+    data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
     instance_facts: HashMap<HirExprId, InstanceFacts>,
     surface: ModuleSurface,
@@ -304,6 +348,8 @@ pub struct SemaModuleParts {
     pub expr_facts: Vec<ExprFacts>,
     pub pat_facts: Vec<PatFacts>,
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    pub effect_defs: HashMap<Box<str>, SemaEffectDef>,
+    pub data_defs: HashMap<Box<str>, SemaDataDef>,
     pub class_facts: HashMap<HirExprId, ClassFacts>,
     pub instance_facts: HashMap<HirExprId, InstanceFacts>,
     pub surface: ModuleSurface,
@@ -373,6 +419,26 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn effect_def(&self, name: &str) -> Option<&SemaEffectDef> {
+        self.effect_defs.get(name)
+    }
+
+    #[must_use]
+    pub const fn effect_defs(&self) -> &HashMap<Box<str>, SemaEffectDef> {
+        &self.effect_defs
+    }
+
+    #[must_use]
+    pub fn data_def(&self, name: &str) -> Option<&SemaDataDef> {
+        self.data_defs.get(name)
+    }
+
+    #[must_use]
+    pub const fn data_defs(&self) -> &HashMap<Box<str>, SemaDataDef> {
+        &self.data_defs
+    }
+
+    #[must_use]
     pub fn instance_facts(&self, id: HirExprId) -> Option<&InstanceFacts> {
         self.instance_facts.get(&id)
     }
@@ -389,6 +455,8 @@ impl SemaModule {
             expr_facts: parts.expr_facts.into_boxed_slice(),
             pat_facts: parts.pat_facts.into_boxed_slice(),
             expr_module_targets: parts.expr_module_targets,
+            effect_defs: parts.effect_defs,
+            data_defs: parts.data_defs,
             class_facts: parts.class_facts,
             instance_facts: parts.instance_facts,
             surface: parts.surface,

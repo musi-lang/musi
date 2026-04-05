@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind};
 use music_module::ModuleKey;
@@ -7,11 +7,11 @@ use music_names::Ident;
 use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::schemes::{instantiate_monomorphic_scheme, scheme_from_export};
 use super::super::surface::import_surface_ty;
-use super::super::{CheckPass, EffectDef, EffectOpDef};
+use super::super::{CheckPass, DataDef, DataVariantDef, EffectDef, EffectOpDef};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ConstraintFacts, ExportedValue, ModuleSurface, PatFacts,
 };
-use crate::api::{ClassSurface, EffectSurface, ExprFacts};
+use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
 
 pub(in super::super) fn check_import_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
@@ -139,6 +139,11 @@ fn bind_imported_module_member(
     {
         import_effect_alias(ctx, alias, surface, effect);
     }
+    if let Some(data_key) = export.data_key.as_ref()
+        && let Some(data) = surface.exported_data(data_key)
+    {
+        import_data_alias(ctx, alias, surface, data);
+    }
 }
 
 fn import_class_alias(
@@ -211,13 +216,43 @@ fn import_effect_alias(
                 },
             )
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
     let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
     ctx.insert_effect_def(
         alias_name,
         EffectDef {
             key: surface.key.clone(),
             ops,
+        },
+    );
+}
+
+fn import_data_alias(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    alias: Ident,
+    module_surface: &ModuleSurface,
+    surface: &DataSurface,
+) {
+    let variants = surface
+        .variants
+        .iter()
+        .map(|variant| {
+            (
+                variant.name.clone(),
+                DataVariantDef {
+                    payload: variant
+                        .payload
+                        .map(|ty| import_surface_ty(ctx, module_surface, ty)),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
+    ctx.insert_data_def(
+        alias_name,
+        DataDef {
+            key: surface.key.clone(),
+            variants,
         },
     );
 }

@@ -10,8 +10,8 @@ use music_names::{Ident, Interner, NameBindingId, NameSite};
 use super::surface_types::{SurfaceTyBuilder, lower_surface_effect_row};
 use super::{DeclState, ModuleState, RuntimeEnv, TypingState};
 use crate::api::{
-    ClassMemberSurface, ClassSurface, ConstraintSurface, EffectOpSurface, EffectSurface,
-    ExportedValue, InstanceSurface, SurfaceEffectRow,
+    ClassMemberSurface, ClassSurface, ConstraintSurface, DataSurface, DataVariantSurface,
+    EffectOpSurface, EffectSurface, ExportedValue, InstanceSurface, SurfaceEffectRow,
 };
 
 #[derive(Debug, Clone)]
@@ -80,6 +80,36 @@ pub(super) fn collect_exported_values(
                 effect_key: decls
                     .effect_def(export.name.as_ref())
                     .map(|effect| effect.key.clone()),
+                data_key: decls
+                    .data_def(export.name.as_ref())
+                    .map(|data| data.key.clone()),
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+pub(super) fn collect_exported_data(
+    decls: &DeclState,
+    exports: &ModuleExports,
+    tys: &mut SurfaceTyBuilder<'_>,
+) -> Box<[DataSurface]> {
+    exports
+        .bindings
+        .iter()
+        .filter_map(|export| {
+            let data = decls.data_def(export.name.as_ref())?;
+            Some(DataSurface {
+                key: data.key.clone(),
+                variants: data
+                    .variants
+                    .iter()
+                    .map(|(name, variant)| DataVariantSurface {
+                        name: name.clone(),
+                        payload: variant.payload.map(|ty| tys.lower(ty)),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             })
         })
         .collect::<Vec<_>>()

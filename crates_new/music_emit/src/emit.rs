@@ -7,12 +7,13 @@ use music_bc::descriptor::{
     ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
-    Artifact, CodeEntry, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode, Operand,
-    StringId, TypeId,
+    Artifact, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode,
+    Operand, StringId, TypeId,
 };
 use music_ir::{
-    IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrExpr, IrExprKind, IrLit,
-    IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField, IrRecordLayoutField,
+    IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef, IrExpr, IrExprKind,
+    DefinitionKey, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    IrRecordLayoutField,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
@@ -20,6 +21,7 @@ use music_names::NameBindingId;
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
 
 type MethodTable = HashMap<NameBindingId, MethodId>;
+type MethodNameTable = HashMap<Box<str>, MethodId>;
 type ForeignTable = HashMap<NameBindingId, ForeignId>;
 type GlobalTable = HashMap<NameBindingId, GlobalId>;
 type TypeTable = HashMap<Box<str>, TypeId>;
@@ -31,13 +33,16 @@ type QualifiedGlobalTable = HashMap<(ModuleKey, Box<str>), GlobalId>;
 type UniqueMethodTable = HashMap<Box<str>, MethodId>;
 type UniqueForeignTable = HashMap<Box<str>, ForeignId>;
 type UniqueGlobalTable = HashMap<Box<str>, GlobalId>;
+type EffectTable = HashMap<DefinitionKey, EffectId>;
 
 #[derive(Debug, Default)]
 struct ModuleLayout {
     callables: MethodTable,
+    callables_by_name: MethodNameTable,
     foreigns: ForeignTable,
     globals: GlobalTable,
     types: TypeTable,
+    effects: EffectTable,
     init_methods: Vec<MethodId>,
 }
 
@@ -45,6 +50,8 @@ struct ModuleLayout {
 struct ProgramState {
     artifact: Artifact,
     diags: EmitDiagList,
+    types_by_name: HashMap<Box<str>, TypeId>,
+    effects_by_key: HashMap<DefinitionKey, EffectId>,
     unique_methods: UniqueMethodTable,
     unique_foreigns: UniqueForeignTable,
     unique_globals: UniqueGlobalTable,
@@ -153,8 +160,8 @@ fn register_module(
 ) -> ModuleLayout {
     let mut layout = ModuleLayout::default();
     register_types(state, module);
-    register_data_defs(state, module);
-    register_effects(state, module);
+    register_data_defs(state, module, &mut layout);
+    register_effects(state, module, &mut layout);
     register_classes(state, module);
     register_foreigns(state, module, &mut layout);
     register_callables(state, module, &mut layout);
@@ -174,30 +181,17 @@ fn register_types(state: &mut ProgramState, module: &IrModule) {
     }
 }
 
-fn register_data_defs(state: &mut ProgramState, module: &IrModule) {
+fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for data in &module.data_defs {
-        let name = qualified_name(&module.module_key, &data.name);
-        let name_id = state.artifact.intern_string(name.as_ref());
-        let _ = state.artifact.types.alloc(TypeDescriptor { name: name_id });
+        let name = qualified_name(&data.key.module, &data.key.name);
+        let _ = ensure_type(state, layout, name.as_ref());
     }
 }
 
-fn register_effects(state: &mut ProgramState, module: &IrModule) {
+fn register_effects(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for effect in &module.effects {
-        let name = qualified_name(&effect.key.module, &effect.key.name);
-        let name_id = state.artifact.intern_string(name.as_ref());
-        let ops = effect
-            .ops
-            .iter()
-            .map(|op| EffectOpDescriptor {
-                name: state.artifact.intern_string(op),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let _ = state
-            .artifact
-            .effects
-            .alloc(EffectDescriptor { name: name_id, ops });
+        let effect_id = ensure_effect(state, effect);
+        let _ = layout.effects.insert(effect.key.clone(), effect_id);
     }
 }
 
@@ -233,6 +227,9 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
     for callable in &module.callables {
         let name = qualified_name(&module.module_key, &callable.name);
         let method_id = alloc_method(&mut state.artifact, name.as_ref(), callable.exported);
+        let _ = layout
+            .callables_by_name
+            .insert(callable.name.clone(), method_id);
         if let Some(binding) = callable.binding {
             let _ = layout.callables.insert(binding, method_id);
         }
@@ -272,24 +269,13 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         | IrExprKind::Name { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. } => {}
-        IrExprKind::Sequence { exprs } => {
-            for expr in exprs {
-                collect_expr_types(state, layout, expr);
-            }
-        }
+        IrExprKind::Sequence { exprs } => collect_expr_types_slice(state, layout, exprs),
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             let _ = ensure_type(state, layout, ty_name);
-            for item in items {
-                collect_expr_types(state, layout, item);
-            }
+            collect_expr_types_slice(state, layout, items);
         }
-        IrExprKind::Record {
-            ty_name, fields, ..
-        } => {
-            let _ = ensure_type(state, layout, ty_name);
-            for field in fields {
-                collect_expr_types(state, layout, &field.expr);
-            }
+        IrExprKind::Record { ty_name, fields, .. } => {
+            collect_expr_types_record_fields(state, layout, ty_name, fields);
         }
         IrExprKind::Let { value, .. } => collect_expr_types(state, layout, value),
         IrExprKind::Assign { target, value } => {
@@ -306,38 +292,118 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             base,
             updates,
             ..
-        } => {
-            let _ = ensure_type(state, layout, ty_name);
-            collect_expr_types(state, layout, base);
-            for update in updates {
-                collect_expr_types(state, layout, &update.expr);
-            }
-        }
-        IrExprKind::ClosureNew { captures, .. } => {
-            for cap in captures {
-                collect_expr_types(state, layout, cap);
-            }
-        }
+        } => collect_expr_types_record_update(state, layout, ty_name, base, updates),
+        IrExprKind::ClosureNew { captures, .. } => collect_expr_types_slice(state, layout, captures),
         IrExprKind::Binary { left, right, .. } => {
             collect_expr_types(state, layout, left);
             collect_expr_types(state, layout, right);
         }
-        IrExprKind::Case { scrutinee, arms } => {
-            collect_expr_types(state, layout, scrutinee);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_expr_types(state, layout, guard);
-                }
-                collect_expr_types(state, layout, &arm.expr);
-            }
+        IrExprKind::Case { scrutinee, arms } => collect_expr_types_case(state, layout, scrutinee, arms),
+        IrExprKind::Call { callee, args } => collect_expr_types_call(state, layout, callee, args),
+        IrExprKind::VariantNew { data_key, args, .. } => {
+            collect_expr_types_variant_new(state, layout, data_key, args);
         }
-        IrExprKind::Call { callee, args } => {
-            collect_expr_types(state, layout, callee);
-            for arg in args {
-                collect_expr_types(state, layout, &arg.expr);
+        IrExprKind::Perform { args, .. } => collect_expr_types_slice(state, layout, args),
+        IrExprKind::Handle {
+            effect_key,
+            value,
+            ops,
+            body,
+            ..
+        } => collect_expr_types_handle(state, layout, effect_key, value, ops, body),
+        IrExprKind::Resume { expr } => {
+            if let Some(expr) = expr.as_deref() {
+                collect_expr_types(state, layout, expr);
             }
         }
     }
+}
+
+fn collect_expr_types_slice(state: &mut ProgramState, layout: &mut ModuleLayout, exprs: &[IrExpr]) {
+    for expr in exprs {
+        collect_expr_types(state, layout, expr);
+    }
+}
+
+fn collect_expr_types_record_fields(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    ty_name: &str,
+    fields: &[IrRecordField],
+) {
+    let _ = ensure_type(state, layout, ty_name);
+    for field in fields {
+        collect_expr_types(state, layout, &field.expr);
+    }
+}
+
+fn collect_expr_types_record_update(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    ty_name: &str,
+    base: &IrExpr,
+    updates: &[IrRecordField],
+) {
+    let _ = ensure_type(state, layout, ty_name);
+    collect_expr_types(state, layout, base);
+    for update in updates {
+        collect_expr_types(state, layout, &update.expr);
+    }
+}
+
+fn collect_expr_types_case(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    scrutinee: &IrExpr,
+    arms: &[IrCaseArm],
+) {
+    collect_expr_types(state, layout, scrutinee);
+    for arm in arms {
+        if let Some(guard) = &arm.guard {
+            collect_expr_types(state, layout, guard);
+        }
+        collect_expr_types(state, layout, &arm.expr);
+    }
+}
+
+fn collect_expr_types_call(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    callee: &IrExpr,
+    args: &[IrArg],
+) {
+    collect_expr_types(state, layout, callee);
+    for arg in args {
+        collect_expr_types(state, layout, &arg.expr);
+    }
+}
+
+fn collect_expr_types_variant_new(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    data_key: &DefinitionKey,
+    args: &[IrExpr],
+) {
+    let name = qualified_name(&data_key.module, &data_key.name);
+    let _ = ensure_type(state, layout, name.as_ref());
+    collect_expr_types_slice(state, layout, args);
+}
+
+fn collect_expr_types_handle(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    effect_key: &DefinitionKey,
+    value: &IrExpr,
+    ops: &[IrHandleOp],
+    body: &IrExpr,
+) {
+    let handler_ty = handler_type_name(effect_key);
+    let _ = ensure_type(state, layout, handler_ty.as_ref());
+    collect_expr_types(state, layout, value);
+    for op in ops {
+        collect_expr_types(state, layout, &op.closure);
+    }
+    collect_expr_types(state, layout, body);
 }
 
 fn collect_assign_target_types(
@@ -355,10 +421,37 @@ fn ensure_type(state: &mut ProgramState, layout: &mut ModuleLayout, ty_name: &st
     if let Some(id) = layout.types.get(ty_name).copied() {
         return id;
     }
+    if let Some(id) = state.types_by_name.get(ty_name).copied() {
+        let _ = layout.types.insert(ty_name.into(), id);
+        return id;
+    }
     let name_id = state.artifact.intern_string(ty_name);
     let type_id = state.artifact.types.alloc(TypeDescriptor { name: name_id });
+    let _ = state.types_by_name.insert(ty_name.into(), type_id);
     let _ = layout.types.insert(ty_name.into(), type_id);
     type_id
+}
+
+fn ensure_effect(state: &mut ProgramState, effect: &IrEffectDef) -> EffectId {
+    if let Some(id) = state.effects_by_key.get(&effect.key).copied() {
+        return id;
+    }
+    let name = qualified_name(&effect.key.module, &effect.key.name);
+    let name_id = state.artifact.intern_string(name.as_ref());
+    let ops = effect
+        .ops
+        .iter()
+        .map(|op| EffectOpDescriptor {
+            name: state.artifact.intern_string(op),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let id = state
+        .artifact
+        .effects
+        .alloc(EffectDescriptor { name: name_id, ops });
+    let _ = state.effects_by_key.insert(effect.key.clone(), id);
+    id
 }
 
 fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &[ModuleLayout]) {
@@ -434,10 +527,7 @@ fn compile_module(state: &mut ProgramState, module: &IrModule, layout: &ModuleLa
 
 fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &ModuleLayout) {
     for callable in &module.callables {
-        let Some(binding) = callable.binding else {
-            continue;
-        };
-        let Some(method_id) = layout.callables.get(&binding).copied() else {
+        let Some(method_id) = layout.callables_by_name.get(callable.name.as_ref()).copied() else {
             continue;
         };
         let locals = build_param_locals(&callable.params);
@@ -646,6 +736,12 @@ fn compile_expr(
             },
             diags,
         ),
+        IrExprKind::VariantNew {
+            data_key,
+            tag_index,
+            field_count,
+            args,
+        } => compile_variant_new(emitter, data_key, *tag_index, *field_count, args, diags),
         IrExprKind::Let {
             binding,
             name,
@@ -662,6 +758,18 @@ fn compile_expr(
         }
         IrExprKind::Case { scrutinee, arms } => compile_case(emitter, scrutinee, arms, diags),
         IrExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
+        IrExprKind::Perform {
+            effect_key,
+            op_index,
+            args,
+        } => compile_perform(emitter, effect_key, *op_index, args, diags),
+        IrExprKind::Handle {
+            effect_key,
+            value,
+            ops,
+            body,
+        } => compile_handle(emitter, effect_key, value, ops, body, diags),
+        IrExprKind::Resume { expr } => compile_resume(emitter, expr.as_deref(), diags),
         IrExprKind::Unsupported { description } => {
             push_expr_diag(
                 diags,
@@ -1028,6 +1136,146 @@ fn compile_record_update(
     )));
 }
 
+fn compile_variant_new(
+    emitter: &mut MethodEmitter<'_, '_>,
+    data_key: &DefinitionKey,
+    tag_index: u16,
+    field_count: u16,
+    args: &[IrExpr],
+    diags: &mut EmitDiagList,
+) {
+    for arg in args {
+        compile_expr(emitter, arg, true, diags);
+    }
+    compile_i64(emitter, i64::from(tag_index));
+
+    let ty_name = qualified_name(&data_key.module, &data_key.name);
+    let Some(ty) = emitter.layout.types.get(ty_name.as_ref()).copied() else {
+        let origin = args.first().map_or_else(
+            || IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            |expr| expr.origin,
+        );
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &origin,
+            format!("unknown emitted data type `{ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataNew,
+        Operand::TypeLen { ty, len: field_count },
+    )));
+}
+
+fn compile_perform(
+    emitter: &mut MethodEmitter<'_, '_>,
+    effect_key: &DefinitionKey,
+    op_index: u16,
+    args: &[IrExpr],
+    diags: &mut EmitDiagList,
+) {
+    for arg in args {
+        compile_expr(emitter, arg, true, diags);
+    }
+    let Some(effect) = emitter.layout.effects.get(effect_key).copied() else {
+        let origin = args.first().map_or_else(
+            || IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            |expr| expr.origin,
+        );
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &origin,
+            "unknown emitted effect".into(),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::EffInvk,
+        Operand::Effect { effect, op: op_index },
+    )));
+}
+
+fn compile_handle(
+    emitter: &mut MethodEmitter<'_, '_>,
+    effect_key: &DefinitionKey,
+    value: &IrExpr,
+    ops: &[IrHandleOp],
+    body: &IrExpr,
+    diags: &mut EmitDiagList,
+) {
+    compile_expr(emitter, value, true, diags);
+    for op in ops {
+        compile_expr(emitter, &op.closure, true, diags);
+    }
+
+    let handler_ty_name = handler_type_name(effect_key);
+    let Some(handler_ty) = emitter.layout.types.get(handler_ty_name.as_ref()).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &body.origin,
+            format!("unknown emitted handler type `{handler_ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    let field_count = u16::try_from(ops.len().saturating_add(1)).unwrap_or(u16::MAX);
+    compile_i64(emitter, 0);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataNew,
+        Operand::TypeLen {
+            ty: handler_ty,
+            len: field_count,
+        },
+    )));
+
+    let Some(effect) = emitter.layout.effects.get(effect_key).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &body.origin,
+            "unknown emitted effect".into(),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::HdlPush,
+        Operand::EffectId(effect),
+    )));
+
+    compile_expr(emitter, body, true, diags);
+
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::HdlPop,
+        Operand::None,
+    )));
+}
+
+fn compile_resume(emitter: &mut MethodEmitter<'_, '_>, expr: Option<&IrExpr>, diags: &mut EmitDiagList) {
+    if let Some(expr) = expr {
+        compile_expr(emitter, expr, true, diags);
+    } else {
+        emit_zero(emitter);
+    }
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::EffResume,
+        Operand::None,
+    )));
+}
+
 fn compile_let(
     emitter: &mut MethodEmitter<'_, '_>,
     binding: Option<NameBindingId>,
@@ -1169,6 +1417,45 @@ fn compile_case(
         Operand::Local(scrutinee_slot),
     )));
 
+    let (variant_start, variant_end) = variant_dispatch_span(arms);
+    if let Some((variant_start, variant_end)) = variant_start.zip(variant_end)
+        && variant_start <= variant_end
+        && arms[variant_start..=variant_end]
+            .iter()
+            .all(|arm| pattern_variantish(&arm.pattern).is_some())
+    {
+        for arm in &arms[0..variant_start] {
+            let next_label = alloc_label(emitter);
+            if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
+                continue;
+            }
+            if let Some(guard) = &arm.guard {
+                compile_expr(emitter, guard, true, diags);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::BrFalse,
+                    Operand::Label(next_label),
+                )));
+            }
+            compile_expr(emitter, &arm.expr, true, diags);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Br,
+                Operand::Label(end_label),
+            )));
+            emitter.code.push(CodeEntry::Label(Label { id: next_label }));
+        }
+
+        compile_case_variant_dispatch(
+            emitter,
+            scrutinee_slot,
+            &arms[variant_start..=variant_end],
+            &arms[(variant_end + 1)..],
+            end_label,
+            diags,
+        );
+        emitter.code.push(CodeEntry::Label(Label { id: end_label }));
+        return;
+    }
+
     for arm in arms {
         let next_label = alloc_label(emitter);
         if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
@@ -1186,13 +1473,297 @@ fn compile_case(
             Opcode::Br,
             Operand::Label(end_label),
         )));
-        emitter
-            .code
-            .push(CodeEntry::Label(Label { id: next_label }));
+        emitter.code.push(CodeEntry::Label(Label { id: next_label }));
     }
 
     emit_zero(emitter);
     emitter.code.push(CodeEntry::Label(Label { id: end_label }));
+}
+
+fn variant_dispatch_span(arms: &[IrCaseArm]) -> (Option<usize>, Option<usize>) {
+    let mut first = None::<usize>;
+    let mut last = None::<usize>;
+    for (idx, arm) in arms.iter().enumerate() {
+        if pattern_variantish(&arm.pattern).is_some() {
+            if first.is_none() {
+                first = Some(idx);
+            }
+            last = Some(idx);
+        }
+    }
+    (first, last)
+}
+
+struct Variantish<'a> {
+    data_key: &'a DefinitionKey,
+    variant_count: u16,
+    tag_index: u16,
+    args: &'a [IrCasePattern],
+    as_binding: Option<(NameBindingId, &'a str)>,
+}
+
+fn pattern_variantish(pattern: &IrCasePattern) -> Option<Variantish<'_>> {
+    match pattern {
+        IrCasePattern::Variant {
+            data_key,
+            variant_count,
+            tag_index,
+            args,
+        } => Some(Variantish {
+            data_key,
+            variant_count: *variant_count,
+            tag_index: *tag_index,
+            args,
+            as_binding: None,
+        }),
+        IrCasePattern::As { pat, binding, name } => match pat.as_ref() {
+            IrCasePattern::Variant {
+                data_key,
+                variant_count,
+                tag_index,
+                args,
+            } => Some(Variantish {
+                data_key,
+                variant_count: *variant_count,
+                tag_index: *tag_index,
+                args,
+                as_binding: Some((*binding, name.as_ref())),
+            }),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn compile_case_variant_dispatch(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    arms: &[IrCaseArm],
+    tail: &[IrCaseArm],
+    end_label: u16,
+    diags: &mut EmitDiagList,
+) {
+    let Some(first) = arms.first().and_then(|arm| pattern_variantish(&arm.pattern)) else {
+        return;
+    };
+    let origin = case_dispatch_origin(arms);
+    if arms
+        .iter()
+        .filter_map(|arm| pattern_variantish(&arm.pattern))
+        .any(|info| info.data_key != first.data_key || info.variant_count != first.variant_count)
+    {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &origin,
+            "case variant dispatch requires a single data type".into(),
+        );
+        emit_zero(emitter);
+        return;
+    }
+
+    let data_ty_name = qualified_name(&first.data_key.module, &first.data_key.name);
+    let Some(data_ty) = emitter.layout.types.get(data_ty_name.as_ref()).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &origin,
+            format!("unknown emitted data type `{data_ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    let default_label = alloc_label(emitter);
+    let tag_labels = (0..usize::from(first.variant_count))
+        .map(|_| alloc_label(emitter))
+        .collect::<Vec<_>>();
+    emit_variant_dispatch_table(emitter, scrutinee_slot, data_ty, &tag_labels, default_label);
+
+    let arms_by_tag = group_variant_arms_by_tag(arms, first.variant_count);
+    emit_variant_dispatch_tag_blocks(
+        emitter,
+        scrutinee_slot,
+        &tag_labels,
+        &arms_by_tag,
+        default_label,
+        end_label,
+        diags,
+    );
+
+    emitter.code.push(CodeEntry::Label(Label { id: default_label }));
+    emit_case_arms(
+        emitter,
+        scrutinee_slot,
+        tail,
+        Some(end_label),
+        diags,
+    );
+    emit_zero(emitter);
+}
+
+fn case_dispatch_origin(arms: &[IrCaseArm]) -> IrOrigin {
+    arms.first().map_or_else(
+        || IrOrigin {
+            source_id: SourceId::from_raw(0),
+            span: Span::new(0, 0),
+        },
+        |arm| arm.expr.origin,
+    )
+}
+
+fn emit_variant_dispatch_table(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    data_ty: TypeId,
+    tag_labels: &[u16],
+    default_label: u16,
+) {
+    let mut table = tag_labels.to_vec();
+    table.push(default_label);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataTag,
+        Operand::Type(data_ty),
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::BrTbl,
+        Operand::BranchTable(table.into_boxed_slice()),
+    )));
+}
+
+fn group_variant_arms_by_tag(arms: &[IrCaseArm], variant_count: u16) -> Vec<Vec<&IrCaseArm>> {
+    let mut out = vec![Vec::<&IrCaseArm>::new(); usize::from(variant_count)];
+    for arm in arms {
+        if let Some(info) = pattern_variantish(&arm.pattern) {
+            let idx = usize::from(info.tag_index);
+            if idx < out.len() {
+                out[idx].push(arm);
+            }
+        }
+    }
+    out
+}
+
+fn emit_variant_dispatch_tag_blocks(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    tag_labels: &[u16],
+    arms_by_tag: &[Vec<&IrCaseArm>],
+    default_label: u16,
+    end_label: u16,
+    diags: &mut EmitDiagList,
+) {
+    for (tag_index, label) in tag_labels.iter().copied().enumerate() {
+        emitter.code.push(CodeEntry::Label(Label { id: label }));
+        for arm in &arms_by_tag[tag_index] {
+            let Some(info) = pattern_variantish(&arm.pattern) else {
+                continue;
+            };
+            let next_label = alloc_label(emitter);
+            if !compile_variant_arm_payload(
+                emitter,
+                scrutinee_slot,
+                info.args,
+                info.as_binding,
+                next_label,
+                diags,
+            ) {
+                continue;
+            }
+            if let Some(guard) = &arm.guard {
+                compile_expr(emitter, guard, true, diags);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::BrFalse,
+                    Operand::Label(next_label),
+                )));
+            }
+            compile_expr(emitter, &arm.expr, true, diags);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Br,
+                Operand::Label(end_label),
+            )));
+            emitter.code.push(CodeEntry::Label(Label { id: next_label }));
+        }
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Br,
+            Operand::Label(default_label),
+        )));
+    }
+}
+
+fn emit_case_arms(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    arms: &[IrCaseArm],
+    end_label: Option<u16>,
+    diags: &mut EmitDiagList,
+) {
+    for arm in arms {
+        let next_label = alloc_label(emitter);
+        if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
+            continue;
+        }
+        if let Some(guard) = &arm.guard {
+            compile_expr(emitter, guard, true, diags);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::BrFalse,
+                Operand::Label(next_label),
+            )));
+        }
+        compile_expr(emitter, &arm.expr, true, diags);
+        if let Some(end_label) = end_label {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Br,
+                Operand::Label(end_label),
+            )));
+        }
+        emitter.code.push(CodeEntry::Label(Label { id: next_label }));
+    }
+}
+
+fn compile_variant_arm_payload(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    args: &[IrCasePattern],
+    as_binding: Option<(NameBindingId, &str)>,
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    for (idx, pat) in args.iter().enumerate() {
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(scrutinee_slot),
+        )));
+        compile_i64(emitter, i64::try_from(idx).unwrap_or(i64::MAX));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::DataGet,
+            Operand::None,
+        )));
+        let item_slot = reserve_temp_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(item_slot),
+        )));
+        if !compile_case_pattern(emitter, pat, item_slot, next_label, diags) {
+            return false;
+        }
+    }
+    if let Some((binding, _name)) = as_binding {
+        let slot = ensure_local_slot(emitter, binding);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(scrutinee_slot),
+        )));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+    }
+    true
 }
 
 fn compile_case_pattern(
@@ -1204,66 +1775,187 @@ fn compile_case_pattern(
 ) -> bool {
     match pattern {
         IrCasePattern::Wildcard => true,
-        IrCasePattern::Bind { binding, .. } => {
-            let slot = ensure_local_slot(emitter, *binding);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::LdLoc,
-                Operand::Local(scrutinee_slot),
-            )));
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::StLoc,
-                Operand::Local(slot),
-            )));
-            true
-        }
-        IrCasePattern::Lit(lit) => {
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::LdLoc,
-                Operand::Local(scrutinee_slot),
-            )));
-            compile_lit(
-                emitter,
-                lit,
-                &IrOrigin {
-                    source_id: SourceId::from_raw(0),
-                    span: Span::new(0, 0),
-                },
-                diags,
-            );
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::CmpEq,
-                Operand::None,
-            )));
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::BrFalse,
-                Operand::Label(next_label),
-            )));
-            true
-        }
+        IrCasePattern::Bind { binding, .. } => compile_case_bind(emitter, scrutinee_slot, *binding),
+        IrCasePattern::Lit(lit) => compile_case_lit(emitter, scrutinee_slot, lit, next_label, diags),
         IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
-            for (idx, item) in items.iter().enumerate() {
-                emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::LdLoc,
-                    Operand::Local(scrutinee_slot),
-                )));
-                let idx = i64::try_from(idx).unwrap_or(i64::MAX);
-                compile_i64(emitter, idx);
-                emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::SeqGet,
-                    Operand::None,
-                )));
-                let item_slot = reserve_temp_slot(emitter);
-                emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::StLoc,
-                    Operand::Local(item_slot),
-                )));
-                if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
-                    return false;
-                }
-            }
-            true
+            compile_case_seq_pattern(emitter, scrutinee_slot, items, next_label, diags)
+        }
+        IrCasePattern::Variant {
+            data_key,
+            tag_index,
+            args,
+            ..
+        } => compile_case_variant_pattern(
+            emitter,
+            scrutinee_slot,
+            data_key,
+            *tag_index,
+            args,
+            next_label,
+            diags,
+        ),
+        IrCasePattern::As { pat, binding, .. } => {
+            compile_case_as_pattern(emitter, scrutinee_slot, pat, *binding, next_label, diags)
         }
     }
+}
+
+fn compile_case_bind(emitter: &mut MethodEmitter<'_, '_>, scrutinee_slot: u16, binding: NameBindingId) -> bool {
+    let slot = ensure_local_slot(emitter, binding);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(slot),
+    )));
+    true
+}
+
+fn compile_case_lit(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    lit: &IrLit,
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    compile_lit(
+        emitter,
+        lit,
+        &IrOrigin {
+            source_id: SourceId::from_raw(0),
+            span: Span::new(0, 0),
+        },
+        diags,
+    );
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::CmpEq,
+        Operand::None,
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::BrFalse,
+        Operand::Label(next_label),
+    )));
+    true
+}
+
+fn compile_case_seq_pattern(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    items: &[IrCasePattern],
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    for (idx, item) in items.iter().enumerate() {
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(scrutinee_slot),
+        )));
+        let idx = i64::try_from(idx).unwrap_or(i64::MAX);
+        compile_i64(emitter, idx);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::SeqGet,
+            Operand::None,
+        )));
+        let item_slot = reserve_temp_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(item_slot),
+        )));
+        if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
+            return false;
+        }
+    }
+    true
+}
+
+fn compile_case_variant_pattern(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    data_key: &DefinitionKey,
+    tag_index: u16,
+    args: &[IrCasePattern],
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    let data_ty_name = qualified_name(&data_key.module, &data_key.name);
+    let Some(data_ty) = emitter.layout.types.get(data_ty_name.as_ref()).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            format!("unknown emitted data type `{data_ty_name}`"),
+        );
+        return false;
+    };
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataTag,
+        Operand::Type(data_ty),
+    )));
+    compile_i64(emitter, i64::from(tag_index));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::CmpEq,
+        Operand::None,
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::BrFalse,
+        Operand::Label(next_label),
+    )));
+    for (idx, item) in args.iter().enumerate() {
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(scrutinee_slot),
+        )));
+        compile_i64(emitter, i64::try_from(idx).unwrap_or(i64::MAX));
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::DataGet,
+            Operand::None,
+        )));
+        let item_slot = reserve_temp_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(item_slot),
+        )));
+        if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
+            return false;
+        }
+    }
+    true
+}
+
+fn compile_case_as_pattern(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    pat: &IrCasePattern,
+    binding: NameBindingId,
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    if !compile_case_pattern(emitter, pat, scrutinee_slot, next_label, diags) {
+        return false;
+    }
+    let slot = ensure_local_slot(emitter, binding);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(slot),
+    )));
+    true
 }
 
 fn compile_call(
@@ -1367,6 +2059,11 @@ fn resolve_method(
     name: &str,
     module_target: Option<&ModuleKey>,
 ) -> Option<MethodId> {
+    if module_target.is_none() || module_target.is_some_and(|target| target == emitter.module_key) {
+        if let Some(method) = emitter.layout.callables_by_name.get(name).copied() {
+            return Some(method);
+        }
+    }
     binding
         .and_then(|binding| emitter.layout.callables.get(&binding).copied())
         .or_else(|| {
@@ -1485,6 +2182,11 @@ fn alloc_label(emitter: &mut MethodEmitter<'_, '_>) -> u16 {
 
 fn qualified_name(module: &ModuleKey, local: &str) -> Box<str> {
     format!("{}::{local}", module.as_str()).into()
+}
+
+fn handler_type_name(effect: &DefinitionKey) -> Box<str> {
+    let base = qualified_name(&effect.module, &effect.name);
+    format!("{base}::handler").into()
 }
 
 fn parse_int_literal(raw: &str) -> Option<i64> {

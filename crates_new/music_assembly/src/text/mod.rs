@@ -16,7 +16,7 @@ fn symbol_needs_quote(text: &str) -> bool {
 }
 
 fn push_symbol_ref(out: &mut String, text: &str) {
-    out.push('@');
+    out.push('$');
     if symbol_needs_quote(text) {
         push_quoted(out, text);
     } else {
@@ -306,7 +306,7 @@ impl TextBuilder {
 
     fn parse_type(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
         if parts.len() != 2 {
-            return Err(AssemblyError::Text("expected `.type @Name`".into()));
+            return Err(AssemblyError::Text("expected `.type $Name`".into()));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
@@ -318,7 +318,7 @@ impl TextBuilder {
     fn parse_const(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
         if parts.len() < 4 {
             return Err(AssemblyError::Text(
-                "expected `.const @Name <kind> <value>`".into(),
+                "expected `.const $Name <kind> <value>`".into(),
             ));
         }
         let name = parse_symbol(must_get(parts.get(1), "constant name")?)?;
@@ -354,7 +354,7 @@ impl TextBuilder {
 
     fn parse_global(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
         if parts.len() < 2 {
-            return Err(AssemblyError::Text("expected `.global @Name ...`".into()));
+            return Err(AssemblyError::Text("expected `.global $Name ...`".into()));
         }
         let name = parse_symbol(&parts[1])?;
         let mut export = false;
@@ -376,7 +376,7 @@ impl TextBuilder {
 
     fn parse_effect(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
         if parts.len() < 2 {
-            return Err(AssemblyError::Text("expected `.effect @Name ...`".into()));
+            return Err(AssemblyError::Text("expected `.effect $Name ...`".into()));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
@@ -399,7 +399,7 @@ impl TextBuilder {
 
     fn parse_class(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
         if parts.len() != 2 {
-            return Err(AssemblyError::Text("expected `.class @Name`".into()));
+            return Err(AssemblyError::Text("expected `.class $Name`".into()));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
@@ -417,7 +417,7 @@ impl TextBuilder {
             || must_get(parts.get(4), "foreign symbol marker")? != "symbol"
         {
             return Err(AssemblyError::Text(
-                "expected `.foreign @Name abi \"c\" symbol \"puts\"`".into(),
+                "expected `.foreign $Name abi \"c\" symbol \"puts\"`".into(),
             ));
         }
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
@@ -435,7 +435,7 @@ impl TextBuilder {
         let parts = tokenize(header)?;
         if parts.len() < 4 || parts[2] != "locals" {
             return Err(AssemblyError::Text(
-                "expected `.method @Name locals <count> [export]`".into(),
+                "expected `.method $Name locals <count> [export]`".into(),
             ));
         }
         let name = parse_symbol(&parts[1])?;
@@ -539,7 +539,7 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown type @{name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
         Ok(Operand::Type(ty))
     }
 
@@ -548,7 +548,7 @@ impl TextBuilder {
         let constant = *self
             .constants
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown constant @{name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown constant ${name}")))?;
         Ok(Operand::Constant(constant))
     }
 
@@ -609,7 +609,7 @@ impl TextBuilder {
         let foreign = *self
             .foreigns
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown foreign @{name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
         Ok(Operand::Foreign(foreign))
     }
 
@@ -619,13 +619,13 @@ impl TextBuilder {
         let effect_id = *self
             .effects
             .get(&effect_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect @{effect_name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${effect_name}")))?;
         let effect = self.artifact.effects.get(effect_id);
         let op = effect
             .ops
             .iter()
             .position(|candidate| self.artifact.string_text(candidate.name) == op_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect op @{op_name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown effect op ${op_name}")))?;
         Ok(Operand::Effect {
             effect: effect_id,
             op: u16::try_from(op)
@@ -638,7 +638,7 @@ impl TextBuilder {
         let effect_id = *self
             .effects
             .get(&effect_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect @{effect_name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${effect_name}")))?;
         Ok(Operand::EffectId(effect_id))
     }
 
@@ -662,7 +662,7 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&type_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown type @{type_name}")))?;
+            .ok_or_else(|| AssemblyError::Text(format!("unknown type ${type_name}")))?;
         let len = must_get(parts.get(2), "length")?
             .parse()
             .map_err(|_| AssemblyError::Text("invalid sequence length".into()))?;
@@ -714,7 +714,7 @@ fn ensure_label(
 
 fn parse_symbol(token: &str) -> Result<String, AssemblyError> {
     let body = token
-        .strip_prefix('@')
+        .strip_prefix('$')
         .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))?;
     if body.starts_with('"') {
         parse_quoted(body)
@@ -775,12 +775,12 @@ fn tokenize(line: &str) -> Result<Vec<String>, AssemblyError> {
                 current.push(ch);
                 in_string = true;
             }
-            '@' if matches!(chars.peek().copied(), Some('"')) => {
+            '$' if matches!(chars.peek().copied(), Some('"')) => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
                 }
-                current.push('@');
+                current.push('$');
                 current.push('"');
                 let _ = chars.next();
                 in_string = true;

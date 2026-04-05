@@ -22,7 +22,7 @@ fn compiles_module_to_artifact_bytes_and_text() {
 
     assert!(output.artifact.validate().is_ok());
     assert!(!output.bytes.is_empty());
-    assert!(output.text.contains(".global @main::answer export"));
+    assert!(output.text.contains(".global $main::answer export"));
 }
 
 #[test]
@@ -41,8 +41,8 @@ fn compiles_reachable_entry_graph() {
     let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
 
     assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains(".global @dep::base export"));
-    assert!(output.text.contains(".global @main::answer export"));
+    assert!(output.text.contains(".global $dep::base export"));
+    assert!(output.text.contains(".global $main::answer export"));
 }
 
 #[test]
@@ -105,8 +105,8 @@ fn compiles_imported_generic_callable_calls() {
     let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
 
     assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("@dep::id"));
-    assert!(output.text.contains("@main::answer"));
+    assert!(output.text.contains("$dep::id"));
+    assert!(output.text.contains("$main::answer"));
 }
 
 #[test]
@@ -132,8 +132,8 @@ fn compiles_imported_globals_and_local_assignment() {
     let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
 
     assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("ld.glob @dep::base"));
-    assert!(output.text.contains("@main::answer"));
+    assert!(output.text.contains("ld.glob $dep::base"));
+    assert!(output.text.contains("$main::answer"));
 }
 
 #[test]
@@ -207,5 +207,88 @@ fn compiles_records_with_projection_and_update() {
     assert!(output.artifact.validate().is_ok());
     assert!(output.text.contains("data.get"));
     assert!(output.text.contains("data.new"));
-    assert!(output.text.contains(".type @\"{ x: Int; y: Int }\""));
+    assert!(output.text.contains(".type $\"{ x: Int; y: Int }\""));
+}
+
+#[test]
+fn compiles_variants_with_case_patterns() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            let Maybe := data { | Some : Int | None };
+            export let answer () : Int := (
+              let x : Maybe := .Some(1);
+              case x of (
+              | .Some(y) => y
+              | .None => 0
+              )
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.tag"));
+    assert!(output.text.contains("br.tbl"));
+    assert!(output.text.contains("data.get"));
+    assert!(output.text.contains("data.new"));
+    assert!(output.text.contains(".type $main::Maybe"));
+}
+
+#[test]
+fn compiles_variants_without_type_context_when_tag_unique() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            let Maybe := data { | Some : Int | None };
+            export let answer () : Int := (
+              let x := .Some(1);
+              case x of (
+              | .Some(y) => y
+              | .None => 0
+              )
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.tag"));
+    assert!(output.text.contains("br.tbl"));
+    assert!(output.text.contains("data.get"));
+    assert!(output.text.contains("data.new"));
+}
+
+#[test]
+fn compiles_effects_with_perform_handle_resume() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            let Console := effect { let readln () : String; };
+            export let answer () : String :=
+              handle perform Console.readln() with Console of (
+              | value => value
+              | readln(k) => resume "ok"
+              );
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("hdl.push"));
+    assert!(output.text.contains("hdl.pop"));
+    assert!(output.text.contains("eff.invk"));
+    assert!(output.text.contains("eff.resume"));
 }

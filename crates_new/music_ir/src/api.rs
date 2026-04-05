@@ -3,7 +3,7 @@ use music_module::ModuleKey;
 use music_names::NameBindingId;
 use music_sema::{
     ClassSurface, DefinitionKey, EffectRow, EffectSurface, ExportedValue, InstanceSurface,
-    SurfaceTy,
+    SemaEffectDef, SurfaceTy,
 };
 
 pub type IrDiagList = Vec<Diag>;
@@ -103,6 +103,17 @@ pub enum IrCasePattern {
     Array {
         items: Box<[Self]>,
     },
+    Variant {
+        data_key: DefinitionKey,
+        variant_count: u16,
+        tag_index: u16,
+        args: Box<[Self]>,
+    },
+    As {
+        pat: Box<Self>,
+        binding: NameBindingId,
+        name: Box<str>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,13 +187,40 @@ pub enum IrExprKind {
         scrutinee: Box<IrExpr>,
         arms: Box<[IrCaseArm]>,
     },
+    VariantNew {
+        data_key: DefinitionKey,
+        tag_index: u16,
+        field_count: u16,
+        args: Box<[IrExpr]>,
+    },
     Call {
         callee: Box<IrExpr>,
         args: Box<[IrArg]>,
     },
+    Perform {
+        effect_key: DefinitionKey,
+        op_index: u16,
+        args: Box<[IrExpr]>,
+    },
+    Handle {
+        effect_key: DefinitionKey,
+        value: Box<IrExpr>,
+        ops: Box<[IrHandleOp]>,
+        body: Box<IrExpr>,
+    },
+    Resume {
+        expr: Option<Box<IrExpr>>,
+    },
     Unsupported {
         description: Box<str>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrHandleOp {
+    pub op_index: u16,
+    pub name: Box<str>,
+    pub closure: IrExpr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,7 +236,7 @@ pub struct IrCallable {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataDef {
-    pub name: Box<str>,
+    pub key: DefinitionKey,
     pub variant_count: u32,
     pub field_count: u32,
 }
@@ -284,6 +322,15 @@ impl From<&EffectSurface> for IrEffectDef {
         Self {
             key: value.key.clone(),
             ops: ops.into_boxed_slice(),
+        }
+    }
+}
+
+impl From<&SemaEffectDef> for IrEffectDef {
+    fn from(value: &SemaEffectDef) -> Self {
+        Self {
+            key: value.key.clone(),
+            ops: value.ops.keys().cloned().collect::<Vec<_>>().into_boxed_slice(),
         }
     }
 }

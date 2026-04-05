@@ -16,8 +16,9 @@ mod surface_exports;
 mod surface_types;
 
 use state::{
-    CheckPass, CollectPass, DeclState, EffectDef, EffectOpDef, FactState, ModuleState, PassBase,
-    ResumeCtx, ResumeState, RuntimeEnv, TypingState, finish_module, prepare_module,
+    CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, EffectDef, EffectOpDef, FactState,
+    ModuleState, PassBase, ResumeCtx, ResumeState, RuntimeEnv, TypingState, finish_module,
+    prepare_module,
 };
 
 struct Checker<'interner, 'env> {

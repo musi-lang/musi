@@ -17,8 +17,9 @@ use music_resolve::ResolvedModule;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, DefinitionKey, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv,
-    SemaModule, SemaModuleParts, SemaOptions, TargetInfo,
+    ClassFacts, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv, SemaModule,
+    SemaDataDef, SemaDataVariantDef, SemaEffectDef, SemaEffectOpDef, SemaModuleParts, SemaOptions,
+    TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -40,17 +41,10 @@ pub struct Builtins {
     pub cptr: HirTyId,
 }
 
-#[derive(Debug, Clone)]
-pub struct EffectOpDef {
-    pub params: Box<[HirTyId]>,
-    pub result: HirTyId,
-}
-
-#[derive(Debug, Clone)]
-pub struct EffectDef {
-    pub key: DefinitionKey,
-    pub ops: HashMap<Box<str>, EffectOpDef>,
-}
+pub type EffectOpDef = SemaEffectOpDef;
+pub type EffectDef = SemaEffectDef;
+pub type DataVariantDef = SemaDataVariantDef;
+pub type DataDef = SemaDataDef;
 
 #[derive(Debug, Clone)]
 pub struct ResumeCtx {
@@ -84,6 +78,7 @@ pub struct TypingState {
 #[derive(Default)]
 pub struct DeclState {
     effect_defs: HashMap<Box<str>, EffectDef>,
+    data_defs: HashMap<Box<str>, DataDef>,
     class_index: HashMap<Symbol, HirExprId>,
     class_facts_by_name: HashMap<Symbol, ClassFacts>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -118,6 +113,7 @@ pub struct CollectPass<'ctx, 'interner, 'env> {
 pub struct CheckPass<'ctx, 'interner, 'env> {
     base: PassBase<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
+    expected: Vec<HirTyId>,
 }
 
 pub fn prepare_module<'interner, 'env>(
@@ -213,6 +209,8 @@ pub fn finish_module(
         expr_facts: facts.expr_facts,
         pat_facts: facts.pat_facts,
         expr_module_targets: facts.expr_module_targets,
+        effect_defs: decls.effect_defs,
+        data_defs: decls.data_defs,
         class_facts: decls.class_facts,
         instance_facts: decls.instance_facts,
         surface,
@@ -641,6 +639,18 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.decls.effect_defs.insert(name.into(), def);
     }
 
+    pub fn data_def(&self, name: &str) -> Option<&DataDef> {
+        self.decls.data_defs.get(name)
+    }
+
+    pub const fn data_defs(&self) -> &HashMap<Box<str>, DataDef> {
+        &self.decls.data_defs
+    }
+
+    pub fn insert_data_def(&mut self, name: impl Into<Box<str>>, def: DataDef) {
+        let _prev = self.decls.data_defs.insert(name.into(), def);
+    }
+
     pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {
         self.decls.class_index.get(&symbol).copied()
     }
@@ -719,6 +729,10 @@ impl DeclState {
         self.effect_defs.get(name)
     }
 
+    pub fn data_def(&self, name: &str) -> Option<&DataDef> {
+        self.data_defs.get(name)
+    }
+
     pub const fn class_facts_by_name(&self) -> &HashMap<Symbol, ClassFacts> {
         &self.class_facts_by_name
     }
@@ -768,6 +782,7 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
         Self {
             base: PassBase::new(module, runtime, typing, decls, facts),
             resume,
+            expected: Vec::new(),
         }
     }
 
@@ -781,6 +796,18 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 
     pub fn resume_top(&self) -> Option<ResumeCtx> {
         self.resume.stack.last().cloned()
+    }
+
+    pub fn push_expected_ty(&mut self, ty: HirTyId) {
+        self.expected.push(ty);
+    }
+
+    pub fn pop_expected_ty(&mut self) -> Option<HirTyId> {
+        self.expected.pop()
+    }
+
+    pub fn expected_ty(&self) -> Option<HirTyId> {
+        self.expected.last().copied()
     }
 }
 
