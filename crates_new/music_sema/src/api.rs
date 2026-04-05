@@ -332,6 +332,7 @@ pub struct InstanceFacts {
 #[derive(Debug)]
 pub struct SemaModule {
     resolved: ResolvedModule,
+    target: Option<TargetInfo>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -345,6 +346,7 @@ pub struct SemaModule {
 
 pub struct SemaModuleParts {
     pub resolved: ResolvedModule,
+    pub target: Option<TargetInfo>,
     pub expr_facts: Vec<ExprFacts>,
     pub pat_facts: Vec<PatFacts>,
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -452,6 +454,7 @@ impl SemaModule {
     pub(crate) fn from_parts(parts: SemaModuleParts) -> Self {
         Self {
             resolved: parts.resolved,
+            target: parts.target,
             expr_facts: parts.expr_facts.into_boxed_slice(),
             pat_facts: parts.pat_facts.into_boxed_slice(),
             expr_module_targets: parts.expr_module_targets,
@@ -462,6 +465,11 @@ impl SemaModule {
             surface: parts.surface,
             diags: parts.diags,
         }
+    }
+
+    #[must_use]
+    pub const fn target(&self) -> Option<&TargetInfo> {
+        self.target.as_ref()
     }
 }
 

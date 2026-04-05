@@ -132,7 +132,7 @@ fn bind_imported_module_member(
     if let Some(class_key) = export.class_key.as_ref()
         && let Some(class) = surface.exported_class(class_key)
     {
-        import_class_alias(ctx, alias, surface, class);
+        import_class_alias(ctx, alias, surface, class, export.opaque);
     }
     if let Some(effect_key) = export.effect_key.as_ref()
         && let Some(effect) = surface.exported_effect(effect_key)
@@ -151,7 +151,11 @@ fn import_class_alias(
     alias: Ident,
     module_surface: &ModuleSurface,
     surface: &ClassSurface,
+    is_opaque: bool,
 ) {
+    if is_opaque {
+        ctx.mark_sealed_class(surface.key.clone());
+    }
     let facts = ClassFacts {
         key: surface.key.clone(),
         name: alias.name,

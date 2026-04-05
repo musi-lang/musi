@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use music_arena::{Idx, SliceRange};
@@ -19,7 +19,7 @@ use super::surface::build_module_surface;
 use crate::api::{
     ClassFacts, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv, SemaModule,
     SemaDataDef, SemaDataVariantDef, SemaEffectDef, SemaEffectOpDef, SemaModuleParts, SemaOptions,
-    TargetInfo,
+    DefinitionKey, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -72,6 +72,8 @@ pub struct TypingState {
     binding_effects: HashMap<NameBindingId, EffectRow>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    sealed_classes: HashSet<DefinitionKey>,
+    gated_bindings: HashSet<NameBindingId>,
     next_open_row_id: u32,
 }
 
@@ -180,7 +182,7 @@ pub fn prepare_module<'interner, 'env>(
             interner,
             known,
             builtins,
-            target: options.target,
+            target: options.target.or_else(|| Some(host_target_info())),
             env: options.env,
         },
         TypingState::default(),
@@ -196,6 +198,19 @@ pub fn prepare_module<'interner, 'env>(
     )
 }
 
+fn host_target_info() -> TargetInfo {
+    use std::env::consts::{ARCH, OS};
+
+    TargetInfo {
+        os: Some(OS.into()),
+        arch: Some(ARCH.into()),
+        env: None,
+        abi: None,
+        vendor: None,
+        features: BTreeSet::default(),
+    }
+}
+
 pub fn finish_module(
     module: ModuleState,
     runtime: &RuntimeEnv<'_, '_>,
@@ -206,6 +221,7 @@ pub fn finish_module(
     let surface = build_module_surface(&module, runtime, typing, &decls);
     SemaModule::from_parts(SemaModuleParts {
         resolved: module.resolved,
+        target: runtime.target.clone(),
         expr_facts: facts.expr_facts,
         pat_facts: facts.pat_facts,
         expr_module_targets: facts.expr_module_targets,
@@ -631,6 +647,22 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.typing.binding_module_targets.insert(id, target);
     }
 
+    pub fn mark_sealed_class(&mut self, key: DefinitionKey) {
+        let _ = self.typing.sealed_classes.insert(key);
+    }
+
+    pub fn is_sealed_class(&self, key: &DefinitionKey) -> bool {
+        self.typing.sealed_classes.contains(key)
+    }
+
+    pub fn mark_gated_binding(&mut self, id: NameBindingId) {
+        let _ = self.typing.gated_bindings.insert(id);
+    }
+
+    pub fn is_gated_binding(&self, id: NameBindingId) -> bool {
+        self.typing.gated_bindings.contains(&id)
+    }
+
     pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
         self.decls.effect_defs.get(name)
     }
@@ -689,6 +721,13 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn lit_is_string(&self, lit: HirLitId) -> bool {
         matches!(self.lit_kind(lit), HirLitKind::String { .. })
+    }
+
+    pub fn lit_string_value(&self, lit: HirLitId) -> Option<String> {
+        match self.lit_kind(lit) {
+            HirLitKind::String { value } => Some(value.into()),
+            _ => None,
+        }
     }
 
     pub fn diag(&mut self, span: Span, message: &str, label: &str) {

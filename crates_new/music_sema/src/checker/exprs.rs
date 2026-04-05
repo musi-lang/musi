@@ -230,6 +230,14 @@ fn check_instance_kind(
 }
 
 fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Ident) -> ExprFacts {
+    let builtins = ctx.builtins();
+    if let Some(binding) = ctx.binding_id_for_use(name) && ctx.is_gated_binding(binding) {
+        ctx.diag(name.span, "unavailable on this target", "");
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects: EffectRow::empty(),
+        };
+    }
     if let Some(binding) = ctx.binding_id_for_use(name)
         && let Some(target) = ctx.binding_module_target(binding).cloned()
     {

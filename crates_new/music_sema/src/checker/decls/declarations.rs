@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirConstraint, HirExprId, HirFieldDef, HirForeignDecl, HirMemberDef, HirMemberKind,
-    HirOrigin, HirTyKind, HirVariantDef,
+    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl, HirMemberDef,
+    HirMemberKind, HirOrigin, HirTyKind, HirVariantDef,
 };
 use music_names::Ident;
 
@@ -12,7 +12,7 @@ use super::super::exprs::check_expr;
 use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
 use super::super::surface::surface_key;
 use super::super::{CheckPass, EffectDef, EffectOpDef, PassBase};
-use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts};
+use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts, TargetInfo};
 use crate::effects::EffectRow;
 
 pub(in super::super) fn member_signature(
@@ -140,6 +140,12 @@ pub(in super::super) fn check_foreign_expr(
     let builtins = ctx.builtins();
     let abi = abi.unwrap_or_else(|| Box::<str>::from("c"));
     for decl in ctx.foreign_decls(decls) {
+        if !when_attrs_match(ctx, &decl) {
+            if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
+                ctx.mark_gated_binding(binding);
+            }
+            continue;
+        }
         let params = lower_params(ctx, decl.params.clone());
         let result = decl.sig.map_or(builtins.unknown, |sig| {
             let origin = ctx.expr(sig).origin;
@@ -159,6 +165,77 @@ pub(in super::super) fn check_foreign_expr(
     ExprFacts {
         ty: builtins.unit,
         effects: EffectRow::empty(),
+    }
+}
+
+fn when_attrs_match(ctx: &CheckPass<'_, '_, '_>, decl: &HirForeignDecl) -> bool {
+    let target = ctx.target();
+    for attr in ctx.attrs(decl.attrs.clone()) {
+        let path = super::super::attrs::attr_path(ctx, &attr);
+        if path.as_slice() != ["when"] {
+            continue;
+        }
+        if !when_attr_matches(ctx, target, &attr) {
+            return false;
+        }
+    }
+    true
+}
+
+fn when_attr_matches(
+    ctx: &CheckPass<'_, '_, '_>,
+    target: Option<&TargetInfo>,
+    attr: &HirAttr,
+) -> bool {
+    let Some(target) = target else {
+        return false;
+    };
+
+    for arg in ctx.attr_args(attr.args.clone()) {
+        let Some(name) = arg.name.map(|ident| ctx.resolve_symbol(ident.name)) else {
+            continue;
+        };
+        let values = when_values(ctx, arg.value);
+        let Some(values) = values else {
+            continue;
+        };
+
+        let matched = match name {
+            "os" => target.os.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
+            "arch" => target.arch.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
+            "env" => target.env.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
+            "abi" => target.abi.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
+            "vendor" => target
+                .vendor
+                .as_deref()
+                .is_some_and(|t| values.iter().any(|v| v == t)),
+            "feature" => values
+                .iter()
+                .any(|v| target.features.contains(v.as_str())),
+            _ => true,
+        };
+        if !matched {
+            return false;
+        }
+    }
+    true
+}
+
+fn when_values(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<Vec<String>> {
+    match ctx.expr(expr).kind {
+        HirExprKind::Lit { lit } => ctx.lit_string_value(lit).map(|s| vec![s]),
+        HirExprKind::Array { items } => {
+            let mut out = Vec::<String>::new();
+            for item in ctx.array_items(items) {
+                if let HirExprKind::Lit { lit } = ctx.expr(item.expr).kind {
+                    if let Some(value) = ctx.lit_string_value(lit) {
+                        out.push(value);
+                    }
+                }
+            }
+            Some(out)
+        }
+        _ => None,
     }
 }
 

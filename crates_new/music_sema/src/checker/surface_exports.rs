@@ -101,15 +101,19 @@ pub(super) fn collect_exported_data(
             let data = decls.data_def(export.name.as_ref())?;
             Some(DataSurface {
                 key: data.key.clone(),
-                variants: data
-                    .variants
-                    .iter()
-                    .map(|(name, variant)| DataVariantSurface {
-                        name: name.clone(),
-                        payload: variant.payload.map(|ty| tys.lower(ty)),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                variants: export
+                    .opaque
+                    .then(Box::<[DataVariantSurface]>::default)
+                    .unwrap_or_else(|| {
+                        data.variants
+                            .iter()
+                            .map(|(name, variant)| DataVariantSurface {
+                                name: name.clone(),
+                                payload: variant.payload.map(|ty| tys.lower(ty)),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice()
+                    }),
             })
         })
         .collect::<Vec<_>>()
@@ -182,22 +186,27 @@ pub(super) fn collect_exported_effects(
             let effect = decls.effect_def(export.name.as_ref())?;
             Some(EffectSurface {
                 key: effect.key.clone(),
-                ops: effect
-                    .ops
-                    .iter()
-                    .map(|(name, op)| EffectOpSurface {
-                        name: name.clone(),
-                        params: op
-                            .params
+                ops: export
+                    .opaque
+                    .then(Box::<[EffectOpSurface]>::default)
+                    .unwrap_or_else(|| {
+                        effect
+                            .ops
                             .iter()
-                            .copied()
-                            .map(|ty| tys.lower(ty))
+                            .map(|(name, op)| EffectOpSurface {
+                                name: name.clone(),
+                                params: op
+                                    .params
+                                    .iter()
+                                    .copied()
+                                    .map(|ty| tys.lower(ty))
+                                    .collect::<Vec<_>>()
+                                    .into_boxed_slice(),
+                                result: tys.lower(op.result),
+                            })
                             .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                        result: tys.lower(op.result),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                            .into_boxed_slice()
+                    }),
             })
         })
         .collect::<Vec<_>>()
@@ -497,6 +506,9 @@ fn collect_direct_exports(
         }
         HirExprKind::Instance { .. } => {
             let span = module.resolved.module.store.exprs.get(expr_id).origin.span;
+            if opaque {
+                return;
+            }
             if !exports.instance_spans.contains(&span) {
                 exports.instance_spans.push(span);
             }

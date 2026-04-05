@@ -121,6 +121,9 @@ pub(in super::super) fn check_instance_expr(
         || surface_key(ctx.module_key(), ctx.interner(), class_name),
         |facts| facts.key.clone(),
     );
+    if ctx.is_sealed_class(&class_key) && class_key.module != *ctx.module_key() {
+        ctx.diag(origin.span, "sealed class", "");
+    }
 
     if ctx.class_id(class_name).is_none() && ctx.class_facts_by_name(class_name).is_none() {
         ctx.diag(origin.span, "unknown class", "");

@@ -121,7 +121,7 @@ fn attr_value_is_string_array(ctx: &CheckPass<'_, '_, '_>, arg: &HirAttrArg) -> 
         .all(|item| matches!(ctx.expr(item.expr).kind, HirExprKind::Lit { lit } if ctx.lit_is_string(lit)))
 }
 
-fn attr_path<'a>(ctx: &'a CheckPass<'_, '_, '_>, attr: &HirAttr) -> Vec<&'a str> {
+pub(super) fn attr_path<'a>(ctx: &'a CheckPass<'_, '_, '_>, attr: &HirAttr) -> Vec<&'a str> {
     ctx.idents(attr.path)
         .into_iter()
         .map(|ident| ctx.resolve_symbol(ident.name))
