@@ -48,7 +48,7 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | Feature                                           | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                |
 | ------------------------------------------------- | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
 | Sequences (`;`)                                   | done      | done        | done | done              | Top-level statements lower as sequence expressions                   |
-| `let` bindings                                    | done      | done        | partial | partial         | Top-level lets and local bind/wildcard value lets compile; implicit HM-style generalization and destructuring lets remain reduced |
+| `let` bindings                                    | done      | done        | done | done              | Destructuring patterns (`(x, y)`, `[x, y]`, `{x, y}`) compile end-to-end; generic `let` uses explicit type params, not implicit HM-style generalization |
 | Mutable bindings (`let mut`)                      | done      | done        | done | done              | Mutable local value binds compile end-to-end in the non-runtime backend |
 | Assignment (`<-`)                                 | done      | done        | done | done              | Local names, globals, and indexed sequence elements compile end-to-end |
 | Calls                                             | done      | done        | done | done              | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
@@ -85,7 +85,7 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | ---------------------------------- | --------- | ----------- | ---- | ----------------- | ---------------------------------------------------------------------- |
 | Attribute syntax and data-only args | done     | done        | done | n/a               | `@link/@when/@repr/@layout/@diag.*` argument-model validation exists   |
 | `foreign` declaration surface      | done      | done        | done | done              | Foreign declarations and direct foreign calls lower into IR and SEAM metadata end-to-end |
-| `export foreign` surface           | done      | done        | partial | partial         | Declared surface exists in docs/grammar; backend/runtime completeness is still reduced |
+| `export foreign` surface           | done      | done        | done | done              | `export foreign "abi" ( ... )` is carried into SEAM artifact foreign descriptors and text/binary transports |
 | `@link` validation                 | done      | done        | done | partial           | Invalid targets are diagnosed; runtime linking is outside the current non-runtime stack |
 | `@when` target gating              | done      | done        | done | partial           | Target metadata is modeled semantically; end-to-end target selection remains reduced |
 | `@repr` and `@layout` surface      | done      | done        | done | partial           | Layout-sensitive metadata exists; full runtime ABI contract is still reduced |

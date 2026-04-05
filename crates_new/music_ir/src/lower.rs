@@ -5,7 +5,7 @@ use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirForeignDecl,
     HirHandleClause, HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind,
-    HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    HirRecordItem, HirRecordPatField, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -15,7 +15,7 @@ use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
     IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
-    IrRecordLayoutField,
+    IrRecordLayoutField, IrTempId,
 };
 
 #[derive(Default)]
@@ -42,6 +42,7 @@ struct LowerCtx<'a> {
     module_key: ModuleKey,
     module_level_bindings: HashSet<NameBindingId>,
     next_lambda_id: u32,
+    next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
 }
 
@@ -65,6 +66,7 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
         module_key: sema.resolved().module_key.clone(),
         module_level_bindings,
         next_lambda_id: 0,
+        next_temp_id: 0,
         extra_callables: Vec::new(),
     };
 
@@ -283,6 +285,7 @@ fn collect_top_level_items(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, exported:
                     ctx.interner,
                     abi.as_deref(),
                     decl,
+                    exported,
                 ));
             }
         }
@@ -397,7 +400,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             params,
             value,
             ..
-        } => lower_let_expr(ctx, *mods, *pat, *has_param_clause, params, *value),
+        } => lower_let_expr(ctx, origin, *mods, *pat, *has_param_clause, params, *value),
         HirExprKind::Binary { op, left, right } => {
             lower_binary_expr(ctx, op, *left, *right)
         }
@@ -837,6 +840,7 @@ fn lower_handler_clause_closure(
 
 fn lower_let_expr(
     ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
     mods: HirLetMods,
     pat: HirPatId,
     has_param_clause: bool,
@@ -878,10 +882,353 @@ fn lower_let_expr(
             is_mut: false,
             value: Box::new(lower_expr(ctx, value)),
         },
-        other => IrExprKind::Unsupported {
+        _ => lower_destructure_let(ctx, origin, mods.is_mut, pat, value),
+    }
+}
+
+fn lower_destructure_let(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    is_mut: bool,
+    pat: HirPatId,
+    value: HirExprId,
+) -> IrExprKind {
+    let module_target = ctx.sema.expr_module_target(value);
+
+    let value_expr = lower_expr(ctx, value);
+    let temp = fresh_temp(ctx);
+    let mut exprs = Vec::<IrExpr>::new();
+    exprs.push(IrExpr {
+        origin,
+        kind: IrExprKind::TempLet {
+            temp,
+            value: Box::new(value_expr),
+        },
+    });
+
+    let base = IrExpr {
+        origin,
+        kind: IrExprKind::Temp { temp },
+    };
+    lower_irrefutable_pat_bindings(
+        ctx,
+        origin,
+        is_mut,
+        module_target,
+        pat,
+        base,
+        &mut exprs,
+    );
+    exprs.push(IrExpr {
+        origin,
+        kind: IrExprKind::Unit,
+    });
+    IrExprKind::Sequence {
+        exprs: exprs.into_boxed_slice(),
+    }
+}
+
+const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
+    let raw = ctx.next_temp_id;
+    ctx.next_temp_id = ctx.next_temp_id.saturating_add(1);
+    IrTempId::from_raw(raw)
+}
+
+#[derive(Clone, Copy)]
+struct IrrefutablePatInput<'a> {
+    origin: IrOrigin,
+    is_mut: bool,
+    module_target: Option<&'a ModuleKey>,
+}
+
+fn lower_irrefutable_pat_bindings(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    is_mut: bool,
+    module_target: Option<&ModuleKey>,
+    pat: HirPatId,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let input = IrrefutablePatInput {
+        origin,
+        is_mut,
+        module_target,
+    };
+    match &sema.module().store.pats.get(pat).kind {
+        HirPatKind::Error | HirPatKind::Wildcard => {}
+        HirPatKind::Bind { name } => lower_irrefutable_bind(ctx, input, *name, base, out),
+        HirPatKind::As { pat: inner, name } => {
+            lower_irrefutable_as(ctx, input, *inner, *name, base, out);
+        }
+        HirPatKind::Tuple { items } | HirPatKind::Array { items } => {
+            lower_irrefutable_sequence(ctx, input, *items, base, out);
+        }
+        HirPatKind::Record { fields } => {
+            lower_irrefutable_record(ctx, input, fields.clone(), pat, base, out);
+        }
+        other => push_unsupported_pat(origin, other, out),
+    }
+}
+
+fn lower_irrefutable_bind(
+    ctx: &LowerCtx<'_>,
+    input: IrrefutablePatInput<'_>,
+    name: Ident,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    out.push(IrExpr {
+        origin: input.origin,
+        kind: IrExprKind::Let {
+            binding: decl_binding_id(sema, name),
+            name: interner.resolve(name.name).into(),
+            is_mut: input.is_mut,
+            value: Box::new(base),
+        },
+    });
+}
+
+fn lower_irrefutable_as(
+    ctx: &mut LowerCtx<'_>,
+    input: IrrefutablePatInput<'_>,
+    inner: HirPatId,
+    name: Ident,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let stored = store_in_temp(ctx, input.origin, base, out);
+    out.push(IrExpr {
+        origin: input.origin,
+        kind: IrExprKind::Let {
+            binding: decl_binding_id(sema, name),
+            name: interner.resolve(name.name).into(),
+            is_mut: input.is_mut,
+            value: Box::new(stored.clone()),
+        },
+    });
+    lower_irrefutable_pat_bindings(
+        ctx,
+        input.origin,
+        input.is_mut,
+        input.module_target,
+        inner,
+        stored,
+        out,
+    );
+}
+
+fn lower_irrefutable_sequence(
+    ctx: &mut LowerCtx<'_>,
+    input: IrrefutablePatInput<'_>,
+    items: SliceRange<HirPatId>,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let stored = store_in_temp(ctx, input.origin, base, out);
+    for (index, item) in sema.module().store.pat_ids.get(items).iter().enumerate() {
+        let Ok(index_u32) = u32::try_from(index) else {
+            continue;
+        };
+        let proj = IrExpr {
+            origin: input.origin,
+            kind: IrExprKind::Index {
+                base: Box::new(stored.clone()),
+                index: Box::new(IrExpr {
+                    origin: input.origin,
+                    kind: IrExprKind::Lit(IrLit::Int {
+                        raw: index_u32.to_string().into(),
+                    }),
+                }),
+            },
+        };
+        lower_irrefutable_pat_bindings(
+            ctx,
+            input.origin,
+            input.is_mut,
+            input.module_target,
+            *item,
+            proj,
+            out,
+        );
+    }
+}
+
+fn lower_irrefutable_record(
+    ctx: &mut LowerCtx<'_>,
+    input: IrrefutablePatInput<'_>,
+    fields: SliceRange<HirRecordPatField>,
+    pat: HirPatId,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let pat_ty = sema.pat_ty(pat);
+    match &sema.ty(pat_ty).kind {
+        HirTyKind::Module => lower_irrefutable_module_record(
+            ctx,
+            input.origin,
+            input.is_mut,
+            input.module_target,
+            fields,
+            out,
+        ),
+        HirTyKind::Record { .. } => {
+            lower_irrefutable_value_record(ctx, input, fields, pat_ty, base, out);
+        }
+        _ => out.push(IrExpr {
+            origin: input.origin,
+            kind: IrExprKind::Unsupported {
+                description: "record destructuring without record base".into(),
+            },
+        }),
+    }
+}
+
+fn lower_irrefutable_module_record(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    is_mut: bool,
+    module_target: Option<&ModuleKey>,
+    fields: SliceRange<HirRecordPatField>,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let Some(module_target) = module_target else {
+        out.push(IrExpr {
+            origin,
+            kind: IrExprKind::Unsupported {
+                description: "module destructuring without module target".into(),
+            },
+        });
+        return;
+    };
+    for field in sema.module().store.record_pat_fields.get(fields) {
+        let name_text: Box<str> = interner.resolve(field.name.name).into();
+        let proj = IrExpr {
+            origin,
+            kind: IrExprKind::Name {
+                binding: None,
+                name: name_text.clone(),
+                module_target: Some(module_target.clone()),
+            },
+        };
+        if let Some(value_pat) = field.value {
+            lower_irrefutable_pat_bindings(
+                ctx,
+                origin,
+                is_mut || field.is_mut,
+                Some(module_target),
+                value_pat,
+                proj,
+                out,
+            );
+        } else {
+            out.push(IrExpr {
+                origin,
+                kind: IrExprKind::Let {
+                    binding: decl_binding_id(sema, field.name),
+                    name: name_text,
+                    is_mut: is_mut || field.is_mut,
+                    value: Box::new(proj),
+                },
+            });
+        }
+    }
+}
+
+fn lower_irrefutable_value_record(
+    ctx: &mut LowerCtx<'_>,
+    input: IrrefutablePatInput<'_>,
+    fields: SliceRange<HirRecordPatField>,
+    pat_ty: HirTyId,
+    base: IrExpr,
+    out: &mut Vec<IrExpr>,
+) {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let stored = store_in_temp(ctx, input.origin, base, out);
+    let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, pat_ty, interner) else {
+        out.push(IrExpr {
+            origin: input.origin,
+            kind: IrExprKind::Unsupported {
+                description: "record destructuring without record layout".into(),
+            },
+        });
+        return;
+    };
+    for field in sema.module().store.record_pat_fields.get(fields) {
+        let Some(index) = indices.get(&field.name.name).copied() else {
+            out.push(IrExpr {
+                origin: input.origin,
+                kind: IrExprKind::Unsupported {
+                    description: "record destructuring missing field".into(),
+                },
+            });
+            continue;
+        };
+        let proj = IrExpr {
+            origin: input.origin,
+            kind: IrExprKind::RecordGet {
+                base: Box::new(stored.clone()),
+                index,
+            },
+        };
+        if let Some(value_pat) = field.value {
+            lower_irrefutable_pat_bindings(
+                ctx,
+                input.origin,
+                input.is_mut || field.is_mut,
+                input.module_target,
+                value_pat,
+                proj,
+                out,
+            );
+        } else {
+            lower_irrefutable_bind(
+                ctx,
+                IrrefutablePatInput {
+                    origin: input.origin,
+                    is_mut: input.is_mut || field.is_mut,
+                    module_target: input.module_target,
+                },
+                field.name,
+                proj,
+                out,
+            );
+        }
+    }
+}
+
+fn store_in_temp(ctx: &mut LowerCtx<'_>, origin: IrOrigin, base: IrExpr, out: &mut Vec<IrExpr>) -> IrExpr {
+    let temp = fresh_temp(ctx);
+    out.push(IrExpr {
+        origin,
+        kind: IrExprKind::TempLet {
+            temp,
+            value: Box::new(base),
+        },
+    });
+    IrExpr {
+        origin,
+        kind: IrExprKind::Temp { temp },
+    }
+}
+
+fn push_unsupported_pat(origin: IrOrigin, other: &HirPatKind, out: &mut Vec<IrExpr>) {
+    out.push(IrExpr {
+        origin,
+        kind: IrExprKind::Unsupported {
             description: format!("local let pattern {other:?}").into(),
         },
-    }
+    });
 }
 
 fn lower_local_callable_let(
@@ -1093,7 +1440,9 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
                 collect_used_bindings(&field.expr, out);
             }
         }
-        IrExprKind::Let { value, .. } => collect_used_bindings(value, out),
+        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
+            collect_used_bindings(value, out);
+        }
         IrExprKind::Assign { target, value } => {
             collect_used_bindings(value, out);
             if let IrAssignTarget::Index { base, index } = target.as_ref() {
@@ -1154,6 +1503,7 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
             }
         }
         IrExprKind::Unit
+        | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. }
         | IrExprKind::Name { binding: None, .. } => {}
@@ -1170,7 +1520,9 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
             let _ = out.insert(*binding);
             collect_local_decl_bindings(value, out);
         }
-        IrExprKind::Let { value, .. } | IrExprKind::Assign { value, .. } => {
+        IrExprKind::Let { value, .. }
+        | IrExprKind::TempLet { value, .. }
+        | IrExprKind::Assign { value, .. } => {
             collect_local_decl_bindings(value, out);
         }
         IrExprKind::Sequence { exprs } => {
@@ -1241,7 +1593,11 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
                 collect_local_decl_bindings(expr, out);
             }
         }
-        IrExprKind::Unit | IrExprKind::Name { .. } | IrExprKind::Lit(_) | IrExprKind::Unsupported { .. } => {}
+        IrExprKind::Unit
+        | IrExprKind::Name { .. }
+        | IrExprKind::Temp { .. }
+        | IrExprKind::Lit(_)
+        | IrExprKind::Unsupported { .. } => {}
     }
 }
 
@@ -1702,13 +2058,17 @@ fn lower_foreign_decl(
     interner: &Interner,
     abi: Option<&str>,
     decl: &HirForeignDecl,
+    exported: bool,
 ) -> IrForeignDef {
+    let name: Box<str> = interner.resolve(decl.name.name).into();
     IrForeignDef {
         binding: decl_binding_id(sema, decl.name),
-        name: interner.resolve(decl.name.name).into(),
+        symbol: name.clone(),
+        name,
         abi: abi.unwrap_or("c").into(),
         param_count: u32::try_from(sema.module().store.params.get(decl.params.clone()).len())
             .expect("param count overflow"),
+        exported,
     }
 }
 

@@ -13,7 +13,7 @@ use music_bc::{
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef, IrExpr, IrExprKind,
     DefinitionKey, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
-    IrRecordLayoutField,
+    IrRecordLayoutField, IrTempId,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
@@ -72,6 +72,7 @@ struct MethodEmitter<'artifact, 'module> {
     qualified_foreigns: &'module QualifiedForeignTable,
     qualified_globals: &'module QualifiedGlobalTable,
     locals: LocalSlots,
+    temps: HashMap<IrTempId, u16>,
     next_local: u16,
     labels: Vec<StringId>,
     code: CodeBuffer,
@@ -211,11 +212,12 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
         let qualified = qualified_name(&module.module_key, &foreign.name);
         let name_id = state.artifact.intern_string(qualified.as_ref());
         let abi_id = state.artifact.intern_string(&foreign.abi);
-        let symbol_id = state.artifact.intern_string(&foreign.name);
+        let symbol_id = state.artifact.intern_string(&foreign.symbol);
         let foreign_id = state.artifact.foreigns.alloc(ForeignDescriptor {
             name: name_id,
             abi: abi_id,
             symbol: symbol_id,
+            export: foreign.exported,
         });
         if let Some(binding) = foreign.binding {
             let _ = layout.foreigns.insert(binding, foreign_id);
@@ -267,6 +269,7 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
     match &expr.kind {
         IrExprKind::Unit
         | IrExprKind::Name { .. }
+        | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. } => {}
         IrExprKind::Sequence { exprs } => collect_expr_types_slice(state, layout, exprs),
@@ -277,7 +280,9 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         IrExprKind::Record { ty_name, fields, .. } => {
             collect_expr_types_record_fields(state, layout, ty_name, fields);
         }
-        IrExprKind::Let { value, .. } => collect_expr_types(state, layout, value),
+        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
+            collect_expr_types(state, layout, value);
+        }
         IrExprKind::Assign { target, value } => {
             collect_assign_target_types(state, layout, target);
             collect_expr_types(state, layout, value);
@@ -544,6 +549,7 @@ fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &Modul
             qualified_foreigns: &state.qualified_foreigns,
             qualified_globals: &state.qualified_globals,
             locals,
+            temps: HashMap::new(),
             next_local,
             labels,
             code: method_prologue(),
@@ -586,6 +592,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             qualified_foreigns: &state.qualified_foreigns,
             qualified_globals: &state.qualified_globals,
             locals: HashMap::new(),
+            temps: HashMap::new(),
             next_local: 0,
             labels,
             code: method_prologue(),
@@ -706,6 +713,7 @@ fn compile_expr(
             module_target,
             ..
         } => compile_name(emitter, *binding, name, module_target.as_ref(), expr, diags),
+        IrExprKind::Temp { temp } => compile_temp(emitter, *temp),
         IrExprKind::Lit(lit) => compile_lit(emitter, lit, &expr.origin, diags),
         IrExprKind::Sequence { exprs } => compile_sequence(emitter, exprs, diags),
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
@@ -748,6 +756,7 @@ fn compile_expr(
             value,
             ..
         } => compile_let(emitter, *binding, name, value, diags),
+        IrExprKind::TempLet { temp, value } => compile_temp_let(emitter, *temp, value, diags),
         IrExprKind::Assign { target, value } => compile_assign(emitter, target, value, diags),
         IrExprKind::Index { base, index } => compile_index(emitter, base, index, diags),
         IrExprKind::ClosureNew { callee, captures } => {
@@ -1297,6 +1306,29 @@ fn compile_let(
             Operand::Local(slot),
         )));
     }
+    emit_zero(emitter);
+}
+
+fn compile_temp(emitter: &mut MethodEmitter<'_, '_>, temp: IrTempId) {
+    let slot = ensure_temp_slot(emitter, temp);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(slot),
+    )));
+}
+
+fn compile_temp_let(
+    emitter: &mut MethodEmitter<'_, '_>,
+    temp: IrTempId,
+    value: &IrExpr,
+    diags: &mut EmitDiagList,
+) {
+    compile_expr(emitter, value, true, diags);
+    let slot = ensure_temp_slot(emitter, temp);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(slot),
+    )));
     emit_zero(emitter);
 }
 
@@ -2160,6 +2192,15 @@ fn ensure_local_slot(emitter: &mut MethodEmitter<'_, '_>, binding: NameBindingId
     }
     let slot = reserve_temp_slot(emitter);
     let _ = emitter.locals.insert(binding, slot);
+    slot
+}
+
+fn ensure_temp_slot(emitter: &mut MethodEmitter<'_, '_>, temp: IrTempId) -> u16 {
+    if let Some(slot) = emitter.temps.get(&temp).copied() {
+        return slot;
+    }
+    let slot = reserve_temp_slot(emitter);
+    let _ = emitter.temps.insert(temp, slot);
     slot
 }
 

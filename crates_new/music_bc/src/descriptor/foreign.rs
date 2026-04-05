@@ -7,4 +7,5 @@ pub struct ForeignDescriptor {
     pub name: Idx<StringRecord>,
     pub abi: Idx<StringRecord>,
     pub symbol: Idx<StringRecord>,
+    pub export: bool,
 }

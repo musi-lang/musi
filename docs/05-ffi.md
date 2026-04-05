@@ -91,12 +91,14 @@ foreign let musi_io_read_text (path : CString) : CString;
 foreign let musi_io_write_text (path : CString, contents : CString) : Bool;
 ```
 
-## Outbound `export foreign`
+## `export foreign` Groups
 
-Outbound host-callable exports are part of the intended FFI surface and use the same ABI and attr model as inbound declarations:
+Foreign declarations can be part of the exported module surface. Use an `export foreign` group to re-export foreign symbols under an explicit ABI string:
 
 ```musi
-export foreign "c" let my_callback (x : Int) : Int := x * 2;
+export foreign "c" (
+  let puts (msg : CString) : Int;
+);
 ```
 
 ## Aggregate Interop

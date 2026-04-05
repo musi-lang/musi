@@ -211,6 +211,52 @@ fn compiles_records_with_projection_and_update() {
 }
 
 #[test]
+fn compiles_record_destructuring_let_patterns() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer () : Int := (
+              let r := { y := 2, x := 1 };
+              let {x, y} := r;
+              x + y
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.get"));
+}
+
+#[test]
+fn compiles_tuple_and_array_destructuring_let_patterns() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer () : Int := (
+              let pair := (1, 2);
+              let items := [3, 4];
+              let (a, b) := pair;
+              let [c, d] := items;
+              a + b + c + d
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("seq.get"));
+}
+
+#[test]
 fn compiles_variants_with_case_patterns() {
     let mut session = session();
     session
@@ -291,4 +337,27 @@ fn compiles_effects_with_perform_handle_resume() {
     assert!(output.text.contains("hdl.pop"));
     assert!(output.text.contains("eff.invk"));
     assert!(output.text.contains("eff.resume"));
+}
+
+#[test]
+fn compiles_exported_foreign_declarations_into_artifact() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            export foreign "c" (
+              let puts (msg : CString) : Int;
+            );
+            export let answer : Int := 1;
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output
+        .text
+        .contains(".foreign $main::puts abi \"c\" symbol \"puts\" export"));
 }

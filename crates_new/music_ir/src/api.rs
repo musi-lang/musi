@@ -14,6 +14,21 @@ pub struct IrOrigin {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IrTempId(u32);
+
+impl IrTempId {
+    #[must_use]
+    pub const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    #[must_use]
+    pub const fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrParam {
     pub binding: NameBindingId,
@@ -131,6 +146,9 @@ pub enum IrExprKind {
         name: Box<str>,
         module_target: Option<ModuleKey>,
     },
+    Temp {
+        temp: IrTempId,
+    },
     Lit(IrLit),
     Sequence {
         exprs: Box<[IrExpr]>,
@@ -164,6 +182,10 @@ pub enum IrExprKind {
         binding: Option<NameBindingId>,
         name: Box<str>,
         is_mut: bool,
+        value: Box<IrExpr>,
+    },
+    TempLet {
+        temp: IrTempId,
         value: Box<IrExpr>,
     },
     Assign {
@@ -246,7 +268,9 @@ pub struct IrForeignDef {
     pub binding: Option<NameBindingId>,
     pub name: Box<str>,
     pub abi: Box<str>,
+    pub symbol: Box<str>,
     pub param_count: u32,
+    pub exported: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

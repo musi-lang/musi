@@ -77,6 +77,9 @@ pub fn format_text(artifact: &Artifact) -> String {
         push_quoted(&mut out, artifact.string_text(descriptor.abi));
         out.push_str(" symbol ");
         push_quoted(&mut out, artifact.string_text(descriptor.symbol));
+        if descriptor.export {
+            out.push_str(" export");
+        }
         out.push('\n');
     }
     for (_, descriptor) in artifact.globals.iter() {
@@ -412,19 +415,26 @@ impl TextBuilder {
     }
 
     fn parse_foreign(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
-        if parts.len() != 6
+        if parts.len() < 6
             || must_get(parts.get(2), "foreign abi marker")? != "abi"
             || must_get(parts.get(4), "foreign symbol marker")? != "symbol"
         {
             return Err(AssemblyError::Text(
-                "expected `.foreign $Name abi \"c\" symbol \"puts\"`".into(),
+                "expected `.foreign $Name abi \"c\" symbol \"puts\" [export]`".into(),
             ));
         }
+        if parts.len() > 7 {
+            return Err(AssemblyError::Text(
+                "expected `.foreign $Name abi \"c\" symbol \"puts\" [export]`".into(),
+            ));
+        }
+        let export = parts.iter().skip(6).any(|part| part == "export");
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
         let descriptor = ForeignDescriptor {
             name: self.intern_string(&name),
             abi: self.intern_string(&parse_quoted(must_get(parts.get(3), "foreign abi")?)?),
             symbol: self.intern_string(&parse_quoted(must_get(parts.get(5), "foreign symbol")?)?),
+            export,
         };
         let id = self.artifact.foreigns.alloc(descriptor);
         let _ = self.foreigns.insert(name, id);

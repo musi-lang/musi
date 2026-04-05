@@ -60,6 +60,7 @@ fn validates_well_formed_artifact() {
         name: puts_name,
         abi: c_name,
         symbol: symbol_name,
+        export: false,
     });
 
     assert!(artifact.validate().is_ok());

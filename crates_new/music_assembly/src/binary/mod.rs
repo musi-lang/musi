@@ -214,6 +214,7 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u32(out, entry.name.raw());
         push_u32(out, entry.abi.raw());
         push_u32(out, entry.symbol.raw());
+        out.push(u8::from(entry.export));
     }
 }
 
@@ -421,6 +422,7 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(
             name: cursor.read_idx()?,
             abi: cursor.read_idx()?,
             symbol: cursor.read_idx()?,
+            export: cursor.read_u8()? != 0,
         });
     }
     Ok(())

@@ -80,9 +80,9 @@ SEAM text IL is directive-based and symbolic where possible.
 ### Intended Shape
 
 ```text
-.global answer export
+.global $answer export
 
-.method @entry locals 1
+.method $entry locals 1
 L0:
   ld.smi 41
   st.loc %0
