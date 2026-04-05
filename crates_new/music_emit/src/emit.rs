@@ -3,12 +3,13 @@ use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
 use music_bc::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
-    ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
-    Artifact, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId, Opcode,
-    Operand, StringId, TypeId,
+    Artifact, ClassId, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId,
+    Opcode, Operand, StringId, TypeId,
 };
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef, IrExpr, IrExprKind,
@@ -43,6 +44,7 @@ struct ModuleLayout {
     globals: GlobalTable,
     types: TypeTable,
     effects: EffectTable,
+    classes: HashMap<DefinitionKey, ClassId>,
     init_methods: Vec<MethodId>,
 }
 
@@ -163,10 +165,11 @@ fn register_module(
     register_types(state, module);
     register_data_defs(state, module, &mut layout);
     register_effects(state, module, &mut layout);
-    register_classes(state, module);
+    register_classes(state, module, &mut layout);
     register_foreigns(state, module, &mut layout);
     register_callables(state, module, &mut layout);
     register_globals(state, module, &mut layout);
+    register_exports(state, module, &mut layout);
     register_expr_types(state, module, &mut layout);
     layout
 }
@@ -185,7 +188,20 @@ fn register_types(state: &mut ProgramState, module: &IrModule) {
 fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for data in &module.data_defs {
         let name = qualified_name(&data.key.module, &data.key.name);
-        let _ = ensure_type(state, layout, name.as_ref());
+        let _ty = ensure_type(state, layout, name.as_ref());
+        let repr_kind = data
+            .repr_kind
+            .as_deref()
+            .map(|kind| state.artifact.intern_string(kind));
+        let name_id = state.artifact.intern_string(name.as_ref());
+        let _ = state.artifact.data.alloc(DataDescriptor {
+            name: name_id,
+            variant_count: data.variant_count,
+            field_count: data.field_count,
+            repr_kind,
+            layout_align: data.layout_align,
+            layout_pack: data.layout_pack,
+        });
     }
 }
 
@@ -196,14 +212,80 @@ fn register_effects(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     }
 }
 
-fn register_classes(state: &mut ProgramState, module: &IrModule) {
+fn register_classes(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for class in &module.classes {
         let name = qualified_name(&class.key.module, &class.key.name);
         let name_id = state.artifact.intern_string(name.as_ref());
-        let _ = state
+        let id = state
             .artifact
             .classes
             .alloc(ClassDescriptor { name: name_id });
+        let _ = layout.classes.insert(class.key.clone(), id);
+    }
+}
+
+fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
+    for export in &module.exports {
+        let name = qualified_name(&module.module_key, export.name.as_ref());
+        let name_id = state.artifact.intern_string(name.as_ref());
+        let opaque = export.opaque;
+
+        let target = module
+            .callables
+            .iter()
+            .find(|callable| callable.name.as_ref() == export.name.as_ref())
+            .and_then(|callable| callable.binding)
+            .and_then(|binding| layout.callables.get(&binding).copied())
+            .map(ExportTarget::Method)
+            .or_else(|| {
+                module
+                    .globals
+                    .iter()
+                    .find(|global| global.name.as_ref() == export.name.as_ref())
+                    .and_then(|global| global.binding)
+                    .and_then(|binding| layout.globals.get(&binding).copied())
+                    .map(ExportTarget::Global)
+            })
+            .or_else(|| {
+                module
+                    .foreigns
+                    .iter()
+                    .find(|foreign| foreign.name.as_ref() == export.name.as_ref())
+                    .and_then(|foreign| foreign.binding)
+                    .and_then(|binding| layout.foreigns.get(&binding).copied())
+                    .map(ExportTarget::Foreign)
+            })
+            .or_else(|| {
+                export.data_key.as_ref().map(|key| {
+                    let ty_name = qualified_name(&key.module, key.name.as_ref());
+                    ExportTarget::Type(ensure_type(state, layout, ty_name.as_ref()))
+                })
+            })
+            .or_else(|| {
+                export
+                    .effect_key
+                    .as_ref()
+                    .and_then(|key| layout.effects.get(key).copied())
+                    .map(ExportTarget::Effect)
+            })
+            .or_else(|| {
+                export
+                    .class_key
+                    .as_ref()
+                    .and_then(|key| layout.classes.get(key).copied())
+                    .map(ExportTarget::Class)
+            });
+
+        let Some(target) = target else {
+            state.diags.push(Diag::error("export target missing"));
+            continue;
+        };
+
+        let _ = state.artifact.exports.alloc(ExportDescriptor {
+            name: name_id,
+            opaque,
+            target,
+        });
     }
 }
 

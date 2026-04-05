@@ -327,6 +327,9 @@ pub(super) fn check_bound_data(
             super::super::DataDef {
                 key,
                 variants: variant_map,
+                repr_kind: None,
+                layout_align: None,
+                layout_pack: None,
             },
         );
     }

@@ -2,14 +2,15 @@ use std::collections::{BTreeMap, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirArg, HirArrayItem, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirForeignDecl, HirMemberDef, HirMemberKind, HirTemplatePart, HirVariantDef,
+    HirArg, HirArrayItem, HirAttr, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
+    HirForeignDecl, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
 };
 use music_names::Ident;
 
 use crate::api::ClassFacts;
 
 use super::decls::member_signature;
+use super::attrs::extract_data_layout_hints;
 use super::normalize::{lower_constraints, lower_type_expr};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
@@ -52,7 +53,14 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
             visit_expr(ctx, base);
             visit_expr(ctx, ty);
         }
-        HirExprKind::Prefix { expr, .. } | HirExprKind::Attributed { expr, .. } => {
+        HirExprKind::Prefix { expr, .. } => visit_expr(ctx, expr),
+        HirExprKind::Attributed { attrs, expr } => {
+            // `@repr/@layout` attach to the `let` declaration (see docs/05-ffi.md).
+            if let HirExprKind::Let { pat, value, .. } = ctx.expr(expr).kind
+                && let Some(name) = bound_name_from_pat(ctx, pat)
+            {
+                collect_bound_decl(ctx, value, name, Some((ctx.expr(id).origin, attrs)));
+            }
             visit_expr(ctx, expr);
         }
         HirExprKind::Binary { left, right, .. } => {
@@ -61,7 +69,7 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
         }
         HirExprKind::Let { pat, value, .. } => {
             if let Some(name) = bound_name_from_pat(ctx, pat) {
-                collect_bound_decl(ctx, value, name);
+                collect_bound_decl(ctx, value, name, None);
             }
             visit_expr(ctx, value);
         }
@@ -178,24 +186,63 @@ fn visit_foreign(ctx: &mut CollectPass<'_, '_, '_>, decls: SliceRange<HirForeign
     }
 }
 
-fn collect_bound_decl(ctx: &mut CollectPass<'_, '_, '_>, value: HirExprId, name: Ident) {
-    match ctx.expr(value).kind {
-        HirExprKind::Data { variants, fields: _ } => collect_data_decl(ctx, name, variants),
+fn collect_bound_decl(
+    ctx: &mut CollectPass<'_, '_, '_>,
+    value: HirExprId,
+    name: Ident,
+    outer_attrs: Option<(HirOrigin, SliceRange<HirAttr>)>,
+) {
+    let (origin, attrs, inner) = peel_decl_wrappers(ctx, value, outer_attrs);
+    match ctx.expr(inner).kind {
+        HirExprKind::Data { variants, fields: _ } => collect_data_decl(ctx, origin, &attrs, name, variants),
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
             constraints,
             members,
-        } => collect_class_decl(ctx, value, name, constraints, members),
+        } => collect_class_decl(ctx, inner, name, constraints, members),
         _ => {}
     }
 }
 
-fn collect_data_decl(ctx: &mut CollectPass<'_, '_, '_>, name: Ident, variants: SliceRange<HirVariantDef>) {
+fn peel_decl_wrappers(
+    ctx: &CollectPass<'_, '_, '_>,
+    mut expr: HirExprId,
+    outer_attrs: Option<(HirOrigin, SliceRange<HirAttr>)>,
+) -> (HirOrigin, Vec<SliceRange<HirAttr>>, HirExprId) {
+    let mut origin = ctx.expr(expr).origin;
+    let mut attrs = Vec::new();
+    if let Some((outer_origin, range)) = outer_attrs {
+        origin = outer_origin;
+        attrs.push(range);
+    }
+    loop {
+        match ctx.expr(expr).kind {
+            HirExprKind::Attributed { attrs: range, expr: inner } => {
+                attrs.push(range);
+                expr = inner;
+            }
+            HirExprKind::Export { expr: inner, .. } => {
+                expr = inner;
+            }
+            _ => break,
+        }
+    }
+    (origin, attrs, expr)
+}
+
+fn collect_data_decl(
+    ctx: &mut CollectPass<'_, '_, '_>,
+    origin: HirOrigin,
+    attrs: &[SliceRange<HirAttr>],
+    name: Ident,
+    variants: SliceRange<HirVariantDef>,
+) {
     let data_name: Box<str> = ctx.resolve_symbol(name.name).into();
     if ctx.data_def(&data_name).is_some() {
         return;
     }
 
+    let (repr_kind, layout_align, layout_pack) = extract_data_layout_hints(ctx, origin, attrs);
     let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
     for variant in ctx.variants(variants) {
         let tag: Box<str> = ctx.resolve_symbol(variant.name.name).into();
@@ -215,6 +262,9 @@ fn collect_data_decl(ctx: &mut CollectPass<'_, '_, '_>, name: Ident, variants: S
         DataDef {
             key,
             variants: variant_map,
+            repr_kind,
+            layout_align,
+            layout_pack,
         },
     );
 }

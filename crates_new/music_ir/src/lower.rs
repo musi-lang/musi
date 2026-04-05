@@ -327,23 +327,30 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
     }
 
     match &sema.module().store.exprs.get(value).kind {
-    HirExprKind::Data { variants, fields } => {
-        let name_text: Box<str> = interner.resolve(name.name).into();
-        let key = sema.data_def(name_text.as_ref()).map_or_else(
-            || DefinitionKey {
-                module: ctx.module_key.clone(),
-                name: name_text.clone(),
-            },
-            |data| data.key.clone(),
-        );
-        items.data_defs.push(IrDataDef {
-            key,
-            variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
-                .expect("variant count overflow"),
-            field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
-                .expect("field count overflow"),
-        });
-    }
+        HirExprKind::Data { variants, fields } => {
+            let name_text: Box<str> = interner.resolve(name.name).into();
+            let def = sema.data_def(name_text.as_ref());
+            let key = def.map_or_else(
+                || DefinitionKey {
+                    module: ctx.module_key.clone(),
+                    name: name_text.clone(),
+                },
+                |data| data.key.clone(),
+            );
+            let repr_kind = def.and_then(|data| data.repr_kind.clone());
+            let layout_align = def.and_then(|data| data.layout_align);
+            let layout_pack = def.and_then(|data| data.layout_pack);
+            items.data_defs.push(IrDataDef {
+                key,
+                variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
+                    .expect("variant count overflow"),
+                field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
+                    .expect("field count overflow"),
+                repr_kind,
+                layout_align,
+                layout_pack,
+            });
+        }
     HirExprKind::Effect { .. } | HirExprKind::Class { .. } | HirExprKind::Instance { .. } => {}
     _ if is_callable => {
         items.callables.push(IrCallable {

@@ -4,13 +4,14 @@ use music_arena::Idx;
 use thiserror::Error;
 
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, ForeignDescriptor,
-    GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
+    ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
+    TypeDescriptor,
 };
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 3;
+pub const BINARY_VERSION: u16 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -23,6 +24,8 @@ pub enum SectionTag {
     Effects = 6,
     Classes = 7,
     Foreigns = 8,
+    Exports = 9,
+    Data = 10,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +122,8 @@ pub type MethodId = Idx<MethodDescriptor>;
 pub type EffectId = Idx<EffectDescriptor>;
 pub type ClassId = Idx<ClassDescriptor>;
 pub type ForeignId = Idx<ForeignDescriptor>;
+pub type ExportId = Idx<ExportDescriptor>;
+pub type DataId = Idx<DataDescriptor>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Artifact {
@@ -130,6 +135,8 @@ pub struct Artifact {
     pub effects: Table<EffectDescriptor>,
     pub classes: Table<ClassDescriptor>,
     pub foreigns: Table<ForeignDescriptor>,
+    pub exports: Table<ExportDescriptor>,
+    pub data: Table<DataDescriptor>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -158,6 +165,8 @@ impl Artifact {
             effects: Table::new(),
             classes: Table::new(),
             foreigns: Table::new(),
+            exports: Table::new(),
+            data: Table::new(),
         }
     }
 
@@ -208,6 +217,35 @@ impl Artifact {
             self.require_string(descriptor.symbol)?;
             if let Some(link) = descriptor.link {
                 self.require_string(link)?;
+            }
+        }
+        for (_, descriptor) in self.data.iter() {
+            self.require_string(descriptor.name)?;
+            if let Some(repr) = descriptor.repr_kind {
+                self.require_string(repr)?;
+            }
+        }
+        for (_, descriptor) in self.exports.iter() {
+            self.require_string(descriptor.name)?;
+            match descriptor.target {
+                ExportTarget::Method(method) => self.require_method(method)?,
+                ExportTarget::Global(global) => self.require_global(global)?,
+                ExportTarget::Foreign(foreign) => self.require_foreign(foreign)?,
+                ExportTarget::Type(ty) => self.require_type(ty)?,
+                ExportTarget::Effect(effect) => {
+                    let _ = self
+                        .effects
+                        .as_slice()
+                        .get(usize::try_from(effect.raw()).unwrap_or(usize::MAX))
+                        .ok_or(ArtifactError::InvalidReference { table: "effects" })?;
+                }
+                ExportTarget::Class(class) => {
+                    let _ = self
+                        .classes
+                        .as_slice()
+                        .get(usize::try_from(class.raw()).unwrap_or(usize::MAX))
+                        .ok_or(ArtifactError::InvalidReference { table: "classes" })?;
+                }
             }
         }
         for (_, descriptor) in self.methods.iter() {

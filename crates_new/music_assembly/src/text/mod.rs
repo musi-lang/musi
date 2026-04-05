@@ -2,11 +2,12 @@ use std::collections::HashMap;
 
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
-    ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+    DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
-    Artifact, ClassId, CodeEntry, ConstantId, EffectId, ForeignId, GlobalId, Instruction, Label,
-    MethodId, Opcode, Operand, OperandShape, StringId, TypeId,
+    Artifact, ClassId, CodeEntry, ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId,
+    Instruction, Label, MethodId, Opcode, Operand, OperandShape, StringId, TypeId,
 };
 
 use crate::AssemblyError;
@@ -31,6 +32,27 @@ pub fn format_text(artifact: &Artifact) -> String {
     for (_, descriptor) in artifact.types.iter() {
         out.push_str(".type ");
         push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.data.iter() {
+        out.push_str(".data ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        out.push_str(" variants ");
+        out.push_str(&descriptor.variant_count.to_string());
+        out.push_str(" fields ");
+        out.push_str(&descriptor.field_count.to_string());
+        if let Some(repr) = descriptor.repr_kind {
+            out.push_str(" repr ");
+            push_quoted(&mut out, artifact.string_text(repr));
+        }
+        if let Some(align) = descriptor.layout_align {
+            out.push_str(" align ");
+            out.push_str(&align.to_string());
+        }
+        if let Some(pack) = descriptor.layout_pack {
+            out.push_str(" pack ");
+            out.push_str(&pack.to_string());
+        }
         out.push('\n');
     }
     for (_, descriptor) in artifact.constants.iter() {
@@ -72,6 +94,7 @@ pub fn format_text(artifact: &Artifact) -> String {
     }
     format_foreigns(&mut out, artifact);
     format_globals(&mut out, artifact);
+    format_exports(&mut out, artifact);
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method ");
         push_symbol_ref(&mut out, artifact.string_text(method.name));
@@ -133,6 +156,26 @@ fn format_globals(out: &mut String, artifact: &Artifact) {
         if let Some(method) = descriptor.initializer {
             out.push(' ');
             push_symbol_ref(out, artifact.string_text(artifact.methods.get(method).name));
+        }
+        out.push('\n');
+    }
+}
+
+fn format_exports(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.exports.iter() {
+        out.push_str(".export ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push(' ');
+        match descriptor.target {
+            ExportTarget::Method(_) => out.push_str("method"),
+            ExportTarget::Global(_) => out.push_str("global"),
+            ExportTarget::Foreign(_) => out.push_str("foreign"),
+            ExportTarget::Type(_) => out.push_str("type"),
+            ExportTarget::Effect(_) => out.push_str("effect"),
+            ExportTarget::Class(_) => out.push_str("class"),
+        }
+        if descriptor.opaque {
+            out.push_str(" opaque");
         }
         out.push('\n');
     }
@@ -278,6 +321,8 @@ struct TextBuilder {
     effects: HashMap<String, EffectId>,
     classes: HashMap<String, ClassId>,
     foreigns: HashMap<String, ForeignId>,
+    exports: HashMap<String, ExportId>,
+    data: HashMap<String, DataId>,
     strings: HashMap<String, StringId>,
 }
 
@@ -292,6 +337,8 @@ impl TextBuilder {
             effects: HashMap::new(),
             classes: HashMap::new(),
             foreigns: HashMap::new(),
+            exports: HashMap::new(),
+            data: HashMap::new(),
             strings: HashMap::new(),
         }
     }
@@ -307,11 +354,13 @@ impl TextBuilder {
         };
         match head.as_str() {
             ".type" => self.parse_type(&parts),
+            ".data" => self.parse_data(&parts),
             ".const" => self.parse_const(&parts),
             ".global" => self.parse_global(&parts),
             ".effect" => self.parse_effect(&parts),
             ".class" => self.parse_class(&parts),
             ".foreign" => self.parse_foreign(&parts),
+            ".export" => self.parse_export(&parts),
             other => Err(AssemblyError::Text(format!("unknown directive {other}"))),
         }
     }
@@ -324,6 +373,75 @@ impl TextBuilder {
         let name_id = self.intern_string(&name);
         let ty = self.artifact.types.alloc(TypeDescriptor { name: name_id });
         let _ = self.types.insert(name, ty);
+        Ok(())
+    }
+
+    fn parse_data(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 6 {
+            return Err(AssemblyError::Text(
+                "expected `.data $Name variants <count> fields <count> ...`".into(),
+            ));
+        }
+        let name = parse_symbol(must_get(parts.get(1), "data name")?)?;
+        if self.data.contains_key(&name) {
+            return Err(AssemblyError::Text("duplicate data".into()));
+        }
+        if must_get(parts.get(2), "variants keyword")? != "variants" {
+            return Err(AssemblyError::Text(
+                "expected `.data $Name variants <count> fields <count> ...`".into(),
+            ));
+        }
+        let variant_count: u32 = must_get(parts.get(3), "variant count")?
+            .parse()
+            .map_err(|_| AssemblyError::Text("invalid variant count".into()))?;
+        if must_get(parts.get(4), "fields keyword")? != "fields" {
+            return Err(AssemblyError::Text(
+                "expected `.data $Name variants <count> fields <count> ...`".into(),
+            ));
+        }
+        let field_count: u32 = must_get(parts.get(5), "field count")?
+            .parse()
+            .map_err(|_| AssemblyError::Text("invalid field count".into()))?;
+
+        let mut repr_kind: Option<StringId> = None;
+        let mut layout_align: Option<u32> = None;
+        let mut layout_pack: Option<u32> = None;
+        let mut idx = 6usize;
+        while let Some(key) = parts.get(idx).map(String::as_str) {
+            let value = must_get(parts.get(idx + 1), "data metadata value")?;
+            match key {
+                "repr" => {
+                    repr_kind = Some(self.intern_string(&parse_quoted(value)?));
+                }
+                "align" => {
+                    layout_align = Some(
+                        value
+                            .parse()
+                            .map_err(|_| AssemblyError::Text("invalid align".into()))?,
+                    );
+                }
+                "pack" => {
+                    layout_pack = Some(
+                        value
+                            .parse()
+                            .map_err(|_| AssemblyError::Text("invalid pack".into()))?,
+                    );
+                }
+                _ => return Err(AssemblyError::Text("unknown data metadata".into())),
+            }
+            idx = idx.saturating_add(2);
+        }
+
+        let name_id = self.intern_string(&name);
+        let id = self.artifact.data.alloc(DataDescriptor {
+            name: name_id,
+            variant_count,
+            field_count,
+            repr_kind,
+            layout_align,
+            layout_pack,
+        });
+        let _ = self.data.insert(name, id);
         Ok(())
     }
 
@@ -464,6 +582,66 @@ impl TextBuilder {
         };
         let id = self.artifact.foreigns.alloc(descriptor);
         let _ = self.foreigns.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_export(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 3 {
+            return Err(AssemblyError::Text(
+                "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`".into(),
+            ));
+        }
+        let name = parse_symbol(must_get(parts.get(1), "export name")?)?;
+        let kind = must_get(parts.get(2), "export kind")?;
+        let opaque = parts.iter().skip(3).any(|part| part == "opaque");
+        if self.exports.contains_key(&name) {
+            return Err(AssemblyError::Text("duplicate export".into()));
+        }
+        let name_id = self.intern_string(&name);
+        let target = match kind {
+            "method" => ExportTarget::Method(self.ensure_method_symbol(&name)),
+            "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
+            "foreign" => {
+                let foreign = *self
+                    .foreigns
+                    .get(&name)
+                    .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
+                ExportTarget::Foreign(foreign)
+            }
+            "type" => {
+                let ty = *self
+                    .types
+                    .get(&name)
+                    .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
+                ExportTarget::Type(ty)
+            }
+            "effect" => {
+                let effect = *self
+                    .effects
+                    .get(&name)
+                    .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${name}")))?;
+                ExportTarget::Effect(effect)
+            }
+            "class" => {
+                let class = *self
+                    .classes
+                    .get(&name)
+                    .ok_or_else(|| AssemblyError::Text(format!("unknown class ${name}")))?;
+                ExportTarget::Class(class)
+            }
+            _ => {
+                return Err(AssemblyError::Text(
+                    "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
+                        .into(),
+                ))
+            }
+        };
+        let id = self.artifact.exports.alloc(ExportDescriptor {
+            name: name_id,
+            opaque,
+            target,
+        });
+        let _ = self.exports.insert(name, id);
         Ok(())
     }
 

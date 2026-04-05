@@ -117,6 +117,9 @@ pub(super) fn collect_exported_data(
                             .collect::<Vec<_>>()
                             .into_boxed_slice()
                     }),
+                repr_kind: data.repr_kind.clone(),
+                layout_align: data.layout_align,
+                layout_pack: data.layout_pack,
             })
         })
         .collect::<Vec<_>>()
@@ -249,6 +252,12 @@ pub(super) fn collect_exported_instances(
                     value: tys.lower(constraint.value),
                     class_key: constraint.class_key.clone(),
                 })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            member_names: facts
+                .member_names
+                .iter()
+                .map(|symbol| tys.interner.resolve(*symbol).into())
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         })

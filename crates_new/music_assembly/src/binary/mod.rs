@@ -1,7 +1,8 @@
 use music_arena::Idx;
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
-    ForeignDescriptor, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+    DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
@@ -28,6 +29,8 @@ pub fn encode_binary(artifact: &Artifact) -> Result<Vec<u8>, AssemblyError> {
     encode_effects(&mut out, artifact);
     encode_classes(&mut out, artifact);
     encode_foreigns(&mut out, artifact);
+    encode_exports(&mut out, artifact);
+    encode_data(&mut out, artifact);
     Ok(out)
 }
 
@@ -57,6 +60,8 @@ pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
     decode_effects(&mut cursor, &mut artifact)?;
     decode_classes(&mut cursor, &mut artifact)?;
     decode_foreigns(&mut cursor, &mut artifact)?;
+    decode_exports(&mut cursor, &mut artifact)?;
+    decode_data(&mut cursor, &mut artifact)?;
     artifact.validate()?;
     Ok(artifact)
 }
@@ -221,6 +226,75 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
             out.push(0);
         }
         out.push(u8::from(entry.export));
+    }
+}
+
+fn encode_exports(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Exports);
+    push_u32(
+        out,
+        u32::try_from(artifact.exports.len()).expect("section overflow"),
+    );
+    for (_, entry) in artifact.exports.iter() {
+        push_u32(out, entry.name.raw());
+        match entry.target {
+            ExportTarget::Method(id) => {
+                out.push(0);
+                push_u32(out, id.raw());
+            }
+            ExportTarget::Global(id) => {
+                out.push(1);
+                push_u32(out, id.raw());
+            }
+            ExportTarget::Foreign(id) => {
+                out.push(2);
+                push_u32(out, id.raw());
+            }
+            ExportTarget::Type(id) => {
+                out.push(3);
+                push_u32(out, id.raw());
+            }
+            ExportTarget::Effect(id) => {
+                out.push(4);
+                push_u32(out, id.raw());
+            }
+            ExportTarget::Class(id) => {
+                out.push(5);
+                push_u32(out, id.raw());
+            }
+        }
+        out.push(u8::from(entry.opaque));
+    }
+}
+
+fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Data);
+    push_u32(out, u32::try_from(artifact.data.len()).expect("section overflow"));
+    for (_, entry) in artifact.data.iter() {
+        push_u32(out, entry.name.raw());
+        push_u32(out, entry.variant_count);
+        push_u32(out, entry.field_count);
+        match entry.repr_kind {
+            Some(id) => {
+                out.push(1);
+                push_u32(out, id.raw());
+            }
+            None => out.push(0),
+        }
+        match entry.layout_align {
+            Some(value) => {
+                out.push(1);
+                push_u32(out, value);
+            }
+            None => out.push(0),
+        }
+        match entry.layout_pack {
+            Some(value) => {
+                out.push(1);
+                push_u32(out, value);
+            }
+            None => out.push(0),
+        }
     }
 }
 
@@ -443,6 +517,66 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(
     Ok(())
 }
 
+fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Exports)?;
+    let count = cursor.read_u32()?;
+    for _ in 0..count {
+        let name = Idx::from_raw(cursor.read_u32()?);
+        let kind = cursor.read_u8()?;
+        let target_raw = cursor.read_u32()?;
+        let target = match kind {
+            0 => ExportTarget::Method(Idx::from_raw(target_raw)),
+            1 => ExportTarget::Global(Idx::from_raw(target_raw)),
+            2 => ExportTarget::Foreign(Idx::from_raw(target_raw)),
+            3 => ExportTarget::Type(Idx::from_raw(target_raw)),
+            4 => ExportTarget::Effect(Idx::from_raw(target_raw)),
+            5 => ExportTarget::Class(Idx::from_raw(target_raw)),
+            _ => return Err(AssemblyError::InvalidBinaryHeader),
+        };
+        let opaque = cursor.read_u8()? != 0;
+        let _ = artifact.exports.alloc(ExportDescriptor {
+            name,
+            opaque,
+            target,
+        });
+    }
+    Ok(())
+}
+
+fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Data)?;
+    let count = cursor.read_u32()?;
+    for _ in 0..count {
+        let name = Idx::from_raw(cursor.read_u32()?);
+        let variant_count = cursor.read_u32()?;
+        let field_count = cursor.read_u32()?;
+        let repr_kind = if cursor.read_u8()? != 0 {
+            Some(Idx::from_raw(cursor.read_u32()?))
+        } else {
+            None
+        };
+        let layout_align = if cursor.read_u8()? != 0 {
+            Some(cursor.read_u32()?)
+        } else {
+            None
+        };
+        let layout_pack = if cursor.read_u8()? != 0 {
+            Some(cursor.read_u32()?)
+        } else {
+            None
+        };
+        let _ = artifact.data.alloc(DataDescriptor {
+            name,
+            variant_count,
+            field_count,
+            repr_kind,
+            layout_align,
+            layout_pack,
+        });
+    }
+    Ok(())
+}
+
 fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
     Ok(match cursor.read_u8()? {
         0 => Operand::None,
@@ -503,6 +637,8 @@ const fn section_tag_byte(tag: SectionTag) -> u8 {
         SectionTag::Effects => 6,
         SectionTag::Classes => 7,
         SectionTag::Foreigns => 8,
+        SectionTag::Exports => 9,
+        SectionTag::Data => 10,
     }
 }
 

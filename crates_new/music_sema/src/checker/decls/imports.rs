@@ -257,6 +257,9 @@ fn import_data_alias(
         DataDef {
             key: surface.key.clone(),
             variants,
+            repr_kind: surface.repr_kind.clone(),
+            layout_align: surface.layout_align,
+            layout_pack: surface.layout_pack,
         },
     );
 }

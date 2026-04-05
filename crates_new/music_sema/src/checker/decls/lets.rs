@@ -6,6 +6,7 @@ use music_hir::{
 use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::CheckPass;
+use super::super::attrs::validate_expr_attrs;
 use super::super::exprs::check_expr;
 use super::super::normalize::{
     lower_constraints, lower_effect_row, lower_params, lower_type_expr, type_mismatch,
@@ -97,6 +98,7 @@ fn check_callable_let_binding(
     (ty, callable_effects)
 }
 
+#[allow(clippy::too_many_lines)]
 pub(in super::super) fn check_let_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     input: LetExprInput,
@@ -139,11 +141,12 @@ pub(in super::super) fn check_let_expr(
         ty
     } else {
         let value_facts = if let Some(name) = bound_name && is_module_stmt {
-            match ctx.expr(value).kind {
+            let (value_id, kind) = peel_let_value_wrappers(ctx, value);
+            match kind {
                 HirExprKind::Data { variants, fields } => check_bound_data(ctx, name, variants, fields),
-                HirExprKind::Effect { members } => check_bound_effect(ctx, value, name, members),
+                HirExprKind::Effect { members } => check_bound_effect(ctx, value_id, name, members),
                 HirExprKind::Class { constraints, members } => {
-                    check_bound_class(ctx, value, name, constraints, members)
+                    check_bound_class(ctx, value_id, name, constraints, members)
                 }
                 HirExprKind::Instance { .. } | HirExprKind::Foreign { .. } => {
                     ctx.diag(origin.span, "cannot bind declaration", "");
@@ -203,5 +206,22 @@ pub(in super::super) fn check_let_expr(
     ExprFacts {
         ty: builtins.unit,
         effects: EffectRow::empty(),
+    }
+}
+
+fn peel_let_value_wrappers(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    mut value: HirExprId,
+) -> (HirExprId, HirExprKind) {
+    loop {
+        match ctx.expr(value).kind {
+            HirExprKind::Attributed { attrs, expr } => {
+                let origin = ctx.expr(value).origin;
+                validate_expr_attrs(ctx, origin, attrs, expr);
+                value = expr;
+            }
+            HirExprKind::Export { expr, .. } => value = expr,
+            other => return (value, other),
+        }
     }
 }

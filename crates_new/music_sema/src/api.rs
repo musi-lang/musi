@@ -154,6 +154,9 @@ pub struct DataVariantSurface {
 pub struct DataSurface {
     pub key: DefinitionKey,
     pub variants: Box<[DataVariantSurface]>,
+    pub repr_kind: Option<Box<str>>,
+    pub layout_align: Option<u32>,
+    pub layout_pack: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +213,7 @@ pub struct InstanceSurface {
     pub class_key: DefinitionKey,
     pub class_args: Box<[SurfaceTyId]>,
     pub constraints: Box<[ConstraintSurface]>,
+    pub member_names: Box<[Box<str>]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -287,6 +291,9 @@ pub struct SemaDataVariantDef {
 pub struct SemaDataDef {
     pub key: DefinitionKey,
     pub variants: BTreeMap<Box<str>, SemaDataVariantDef>,
+    pub repr_kind: Option<Box<str>>,
+    pub layout_align: Option<u32>,
+    pub layout_pack: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

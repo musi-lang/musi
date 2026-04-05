@@ -261,6 +261,9 @@ pub struct IrDataDef {
     pub key: DefinitionKey,
     pub variant_count: u32,
     pub field_count: u32,
+    pub repr_kind: Option<Box<str>>,
+    pub layout_align: Option<u32>,
+    pub layout_pack: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -378,7 +381,7 @@ impl From<&InstanceSurface> for IrInstanceDef {
     fn from(value: &InstanceSurface) -> Self {
         Self {
             class_key: value.class_key.clone(),
-            member_names: Box::new([]),
+            member_names: value.member_names.clone(),
         }
     }
 }
