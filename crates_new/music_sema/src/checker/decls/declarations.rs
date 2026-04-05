@@ -83,23 +83,6 @@ pub(in super::super) fn check_data_expr(
     }
 }
 
-pub(in super::super) fn check_effect_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    members: SliceRange<HirMemberDef>,
-) -> ExprFacts {
-    let builtins = ctx.builtins();
-    for member in ctx.members(members) {
-        let _ = member_signature(ctx, &member, true);
-        if let Some(value) = member.value {
-            let _ = check_expr(ctx, value);
-        }
-    }
-    ExprFacts {
-        ty: builtins.type_,
-        effects: EffectRow::empty(),
-    }
-}
-
 pub(in super::super) fn check_class_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,

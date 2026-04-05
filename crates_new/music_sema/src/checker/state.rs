@@ -117,6 +117,7 @@ pub struct CheckPass<'ctx, 'interner, 'env> {
     base: PassBase<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
     expected: Vec<HirTyId>,
+    module_stmt_depth: u32,
 }
 
 pub fn prepare_module<'interner, 'env>(
@@ -837,7 +838,20 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
             base: PassBase::new(module, runtime, typing, decls, facts),
             resume,
             expected: Vec::new(),
+            module_stmt_depth: 0,
         }
+    }
+
+    pub const fn enter_module_stmt(&mut self) {
+        self.module_stmt_depth = self.module_stmt_depth.saturating_add(1);
+    }
+
+    pub const fn exit_module_stmt(&mut self) {
+        self.module_stmt_depth = self.module_stmt_depth.saturating_sub(1);
+    }
+
+    pub const fn in_module_stmt(&self) -> bool {
+        self.module_stmt_depth > 0
     }
 
     pub fn push_resume(&mut self, ctx: ResumeCtx) {

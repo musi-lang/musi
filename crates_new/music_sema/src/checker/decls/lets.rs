@@ -102,6 +102,7 @@ pub(in super::super) fn check_let_expr(
     input: LetExprInput,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
+    let is_module_stmt = ctx.in_module_stmt();
     let LetExprInput {
         origin,
         mods,
@@ -137,16 +138,21 @@ pub(in super::super) fn check_let_expr(
         }
         ty
     } else {
-        let value_facts = if let Some(name) = bound_name {
+        let value_facts = if let Some(name) = bound_name && is_module_stmt {
             match ctx.expr(value).kind {
-                HirExprKind::Data { variants, fields } => {
-                    check_bound_data(ctx, name, variants, fields)
-                }
+                HirExprKind::Data { variants, fields } => check_bound_data(ctx, name, variants, fields),
                 HirExprKind::Effect { members } => check_bound_effect(ctx, value, name, members),
-                HirExprKind::Class {
-                    constraints,
-                    members,
-                } => check_bound_class(ctx, value, name, constraints, members),
+                HirExprKind::Class { constraints, members } => {
+                    check_bound_class(ctx, value, name, constraints, members)
+                }
+                HirExprKind::Instance { .. } | HirExprKind::Foreign { .. } => {
+                    ctx.diag(origin.span, "cannot bind declaration", "");
+                    let _ = check_expr(ctx, value);
+                    ExprFacts {
+                        ty: builtins.unit,
+                        effects: EffectRow::empty(),
+                    }
+                }
                 _ => {
                     if let Some(expected) = declared_ty {
                         ctx.push_expected_ty(expected);

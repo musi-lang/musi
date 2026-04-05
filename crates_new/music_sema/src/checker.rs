@@ -85,7 +85,7 @@ impl<'interner, 'env> Checker<'interner, 'env> {
         } = self;
         let mut check = CheckPass::new(module, runtime, typing, decls, facts, resume);
         let root = check.root_expr_id();
-        let _root_facts = exprs::check_expr(&mut check, root);
+        let _root_facts = exprs::check_module_root(&mut check, root);
     }
 
     fn check_instance_coherence(&mut self) {
