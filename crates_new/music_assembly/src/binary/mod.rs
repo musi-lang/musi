@@ -214,6 +214,12 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u32(out, entry.name.raw());
         push_u32(out, entry.abi.raw());
         push_u32(out, entry.symbol.raw());
+        if let Some(link) = entry.link {
+            out.push(1);
+            push_u32(out, link.raw());
+        } else {
+            out.push(0);
+        }
         out.push(u8::from(entry.export));
     }
 }
@@ -418,10 +424,19 @@ fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
 fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
     require_section(cursor, SectionTag::Foreigns)?;
     for _ in 0..cursor.read_u32()? {
+        let name = cursor.read_idx()?;
+        let abi = cursor.read_idx()?;
+        let symbol = cursor.read_idx()?;
+        let link = match cursor.read_u8()? {
+            0 => None,
+            1 => Some(cursor.read_idx()?),
+            _ => return Err(AssemblyError::Text("invalid foreign link marker".into())),
+        };
         let _ = artifact.foreigns.alloc(ForeignDescriptor {
-            name: cursor.read_idx()?,
-            abi: cursor.read_idx()?,
-            symbol: cursor.read_idx()?,
+            name,
+            abi,
+            symbol,
+            link,
             export: cursor.read_u8()? != 0,
         });
     }

@@ -1,15 +1,21 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use music_arena::Idx;
 use music_base::diag::Diag;
 use music_hir::{HirExprId, HirModule, HirOrigin, HirPatId, HirTy, HirTyId};
 use music_module::ModuleKey;
-use music_names::Symbol;
+use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
 use crate::effects::EffectRow;
 
 pub type SemaDiagList = Vec<Diag>;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ForeignLinkInfo {
+    pub name: Option<Box<str>>,
+    pub symbol: Option<Box<str>>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TargetInfo {
@@ -333,6 +339,8 @@ pub struct InstanceFacts {
 pub struct SemaModule {
     resolved: ResolvedModule,
     target: Option<TargetInfo>,
+    gated_bindings: HashSet<NameBindingId>,
+    foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -347,6 +355,8 @@ pub struct SemaModule {
 pub struct SemaModuleParts {
     pub resolved: ResolvedModule,
     pub target: Option<TargetInfo>,
+    pub gated_bindings: HashSet<NameBindingId>,
+    pub foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     pub expr_facts: Vec<ExprFacts>,
     pub pat_facts: Vec<PatFacts>,
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -405,6 +415,16 @@ impl SemaModule {
         self.expr_module_targets.get(&id)
     }
 
+    #[must_use]
+    pub fn is_gated_binding(&self, binding: NameBindingId) -> bool {
+        self.gated_bindings.contains(&binding)
+    }
+
+    #[must_use]
+    pub fn foreign_link(&self, binding: NameBindingId) -> Option<&ForeignLinkInfo> {
+        self.foreign_links.get(&binding)
+    }
+
     /// # Panics
     /// Panics if `id` does not refer to a pattern in this module.
     #[must_use]
@@ -455,6 +475,8 @@ impl SemaModule {
         Self {
             resolved: parts.resolved,
             target: parts.target,
+            gated_bindings: parts.gated_bindings,
+            foreign_links: parts.foreign_links,
             expr_facts: parts.expr_facts.into_boxed_slice(),
             pat_facts: parts.pat_facts.into_boxed_slice(),
             expr_module_targets: parts.expr_module_targets,

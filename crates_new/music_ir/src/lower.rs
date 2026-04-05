@@ -137,6 +137,9 @@ fn collect_module_level_bindings_from_expr(
         HirExprKind::Foreign { decls, .. } => {
             for decl in sema.module().store.foreign_decls.get(decls.clone()) {
                 if let Some(binding) = decl_binding_id(sema, decl.name) {
+                    if sema.is_gated_binding(binding) {
+                        continue;
+                    }
                     let _ = out.insert(binding);
                 }
             }
@@ -280,6 +283,11 @@ fn collect_top_level_items(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, exported:
         }
         HirExprKind::Foreign { abi, decls } => {
             for decl in sema.module().store.foreign_decls.get(decls.clone()) {
+                if let Some(binding) = decl_binding_id(sema, decl.name)
+                    && sema.is_gated_binding(binding)
+                {
+                    continue;
+                }
                 items.foreigns.push(lower_foreign_decl(
                     sema,
                     ctx.interner,
@@ -2061,13 +2069,25 @@ fn lower_foreign_decl(
     exported: bool,
 ) -> IrForeignDef {
     let name: Box<str> = interner.resolve(decl.name.name).into();
+    let binding = decl_binding_id(sema, decl.name);
+    let mut symbol = name.clone();
+    let mut link = None::<Box<str>>;
+    if let Some(binding) = binding {
+        if let Some(attrs) = sema.foreign_link(binding) {
+            link.clone_from(&attrs.name);
+            if let Some(symbol_override) = attrs.symbol.as_ref() {
+                symbol = symbol_override.clone();
+            }
+        }
+    }
     IrForeignDef {
-        binding: decl_binding_id(sema, decl.name),
-        symbol: name.clone(),
+        binding,
+        symbol,
         name,
         abi: abi.unwrap_or("c").into(),
         param_count: u32::try_from(sema.module().store.params.get(decl.params.clone()).len())
             .expect("param count overflow"),
+        link,
         exported,
     }
 }

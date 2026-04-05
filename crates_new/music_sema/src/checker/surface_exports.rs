@@ -38,6 +38,9 @@ pub(super) fn collect_exported_values(
         .bindings
         .iter()
         .filter_map(|export| {
+            if typing.is_gated_binding(export.binding) {
+                return None;
+            }
             let ty = typing.binding_types().get(&export.binding).copied()?;
             let symbol = module.resolved.names.bindings.get(export.binding).name;
             let scheme = typing.binding_schemes().get(&export.binding);

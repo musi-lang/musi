@@ -76,7 +76,7 @@ fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTy
     }
 }
 
-fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+pub(super) fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
     let known = ctx.known();
     for arg in ctx.attr_args(attr.args.clone()) {
         if let Some(name) = arg.name.map(|ident| ident.name) {
@@ -90,7 +90,7 @@ fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: H
     }
 }
 
-fn validate_when_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+pub(super) fn validate_when_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
     let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
         .into_iter()
         .map(|name| ctx.intern(name))

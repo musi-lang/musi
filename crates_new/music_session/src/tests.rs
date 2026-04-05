@@ -1,4 +1,7 @@
+use std::collections::BTreeSet;
+
 use music_module::{ImportMap, ModuleKey};
+use music_sema::TargetInfo;
 
 use crate::{Session, SessionOptions};
 
@@ -9,6 +12,15 @@ fn session() -> Session {
         import_map,
         ..SessionOptions::default()
     })
+}
+
+fn session_with_target(target: TargetInfo) -> Session {
+    let mut options = SessionOptions::default();
+    let mut import_map = ImportMap::default();
+    let _ = import_map.imports.insert("dep".into(), "dep".into());
+    options.import_map = import_map;
+    options.target = Some(target);
+    Session::new(options)
 }
 
 #[test]
@@ -360,4 +372,55 @@ fn compiles_exported_foreign_declarations_into_artifact() {
     assert!(output
         .text
         .contains(".foreign $main::puts abi \"c\" symbol \"puts\" export"));
+}
+
+#[test]
+fn lowers_link_attrs_into_foreign_descriptors() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            @link(name := "m")
+            foreign "c" (
+              let sin (x : Float) : Float;
+            );
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+    assert!(output.artifact.validate().is_ok());
+    assert!(output
+        .text
+        .contains(".foreign $main::sin abi \"c\" symbol \"sin\" link \"m\""));
+}
+
+#[test]
+fn skips_gated_foreign_declarations_for_target() {
+    let mut session = session_with_target(TargetInfo {
+        os: Some("linux".into()),
+        arch: Some("x86_64".into()),
+        env: None,
+        abi: None,
+        vendor: None,
+        features: BTreeSet::default(),
+    });
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            @when(os := "linux")
+            foreign let clock_gettime (id : Int, out : CPtr) : Int;
+
+            @when(os := "windows")
+            foreign let QueryPerformanceCounter (out : CPtr) : Int;
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("clock_gettime"));
+    assert!(!output.text.contains("QueryPerformanceCounter"));
 }

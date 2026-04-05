@@ -70,33 +70,8 @@ pub fn format_text(artifact: &Artifact) -> String {
         push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
-    for (_, descriptor) in artifact.foreigns.iter() {
-        out.push_str(".foreign ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
-        out.push_str(" abi ");
-        push_quoted(&mut out, artifact.string_text(descriptor.abi));
-        out.push_str(" symbol ");
-        push_quoted(&mut out, artifact.string_text(descriptor.symbol));
-        if descriptor.export {
-            out.push_str(" export");
-        }
-        out.push('\n');
-    }
-    for (_, descriptor) in artifact.globals.iter() {
-        out.push_str(".global ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
-        if descriptor.export {
-            out.push_str(" export");
-        }
-        if let Some(method) = descriptor.initializer {
-            out.push(' ');
-            push_symbol_ref(
-                &mut out,
-                artifact.string_text(artifact.methods.get(method).name),
-            );
-        }
-        out.push('\n');
-    }
+    format_foreigns(&mut out, artifact);
+    format_globals(&mut out, artifact);
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method ");
         push_symbol_ref(&mut out, artifact.string_text(method.name));
@@ -127,6 +102,40 @@ pub fn format_text(artifact: &Artifact) -> String {
     }
 
     out
+}
+
+fn format_foreigns(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.foreigns.iter() {
+        out.push_str(".foreign ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push_str(" abi ");
+        push_quoted(out, artifact.string_text(descriptor.abi));
+        out.push_str(" symbol ");
+        push_quoted(out, artifact.string_text(descriptor.symbol));
+        if let Some(link) = descriptor.link {
+            out.push_str(" link ");
+            push_quoted(out, artifact.string_text(link));
+        }
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        out.push('\n');
+    }
+}
+
+fn format_globals(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.globals.iter() {
+        out.push_str(".global ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        if let Some(method) = descriptor.initializer {
+            out.push(' ');
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(method).name));
+        }
+        out.push('\n');
+    }
 }
 
 /// Parses SEAM text into a validated artifact model.
@@ -420,20 +429,37 @@ impl TextBuilder {
             || must_get(parts.get(4), "foreign symbol marker")? != "symbol"
         {
             return Err(AssemblyError::Text(
-                "expected `.foreign $Name abi \"c\" symbol \"puts\" [export]`".into(),
+                "expected `.foreign $Name abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
-        if parts.len() > 7 {
-            return Err(AssemblyError::Text(
-                "expected `.foreign $Name abi \"c\" symbol \"puts\" [export]`".into(),
-            ));
+        let mut export = false;
+        let mut link = None::<String>;
+        let mut idx = 6;
+        while idx < parts.len() {
+            match parts[idx].as_str() {
+                "export" => {
+                    export = true;
+                    idx += 1;
+                }
+                "link" => {
+                    let value = must_get(parts.get(idx + 1), "foreign link")?;
+                    link = Some(parse_quoted(value)?);
+                    idx += 2;
+                }
+                _ => {
+                    return Err(AssemblyError::Text(
+                        "expected `.foreign $Name abi \"c\" symbol \"puts\" [link \"c\"] [export]`"
+                            .into(),
+                    ));
+                }
+            }
         }
-        let export = parts.iter().skip(6).any(|part| part == "export");
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
         let descriptor = ForeignDescriptor {
             name: self.intern_string(&name),
             abi: self.intern_string(&parse_quoted(must_get(parts.get(3), "foreign abi")?)?),
             symbol: self.intern_string(&parse_quoted(must_get(parts.get(5), "foreign symbol")?)?),
+            link: link.as_deref().map(|text| self.intern_string(text)),
             export,
         };
         let id = self.artifact.foreigns.alloc(descriptor);

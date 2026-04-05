@@ -269,6 +269,7 @@ pub struct IrForeignDef {
     pub name: Box<str>,
     pub abi: Box<str>,
     pub symbol: Box<str>,
+    pub link: Option<Box<str>>,
     pub param_count: u32,
     pub exported: bool,
 }

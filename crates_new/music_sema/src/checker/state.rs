@@ -19,7 +19,7 @@ use super::surface::build_module_surface;
 use crate::api::{
     ClassFacts, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv, SemaModule,
     SemaDataDef, SemaDataVariantDef, SemaEffectDef, SemaEffectOpDef, SemaModuleParts, SemaOptions,
-    DefinitionKey, TargetInfo,
+    DefinitionKey, ForeignLinkInfo, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -74,6 +74,7 @@ pub struct TypingState {
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
     sealed_classes: HashSet<DefinitionKey>,
     gated_bindings: HashSet<NameBindingId>,
+    foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     next_open_row_id: u32,
 }
 
@@ -201,8 +202,12 @@ pub fn prepare_module<'interner, 'env>(
 fn host_target_info() -> TargetInfo {
     use std::env::consts::{ARCH, OS};
 
+    let os = match OS {
+        "macos" => "mac",
+        other => other,
+    };
     TargetInfo {
-        os: Some(OS.into()),
+        os: Some(os.into()),
         arch: Some(ARCH.into()),
         env: None,
         abi: None,
@@ -222,6 +227,8 @@ pub fn finish_module(
     SemaModule::from_parts(SemaModuleParts {
         resolved: module.resolved,
         target: runtime.target.clone(),
+        gated_bindings: typing.gated_bindings.clone(),
+        foreign_links: typing.foreign_links.clone(),
         expr_facts: facts.expr_facts,
         pat_facts: facts.pat_facts,
         expr_module_targets: facts.expr_module_targets,
@@ -663,6 +670,10 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.typing.gated_bindings.contains(&id)
     }
 
+    pub fn set_foreign_link(&mut self, binding: NameBindingId, link: ForeignLinkInfo) {
+        let _prev = self.typing.foreign_links.insert(binding, link);
+    }
+
     pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
         self.decls.effect_defs.get(name)
     }
@@ -760,6 +771,10 @@ impl TypingState {
 
     pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
         &self.binding_module_targets
+    }
+
+    pub(super) fn is_gated_binding(&self, id: NameBindingId) -> bool {
+        self.gated_bindings.contains(&id)
     }
 }
 

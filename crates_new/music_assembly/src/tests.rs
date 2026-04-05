@@ -1,5 +1,6 @@
 use music_bc::descriptor::{
-    ConstantDescriptor, ConstantValue, GlobalDescriptor, MethodDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
+    TypeDescriptor,
 };
 use music_bc::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand};
 
@@ -83,6 +84,30 @@ fn float_constants_roundtrip_in_text_and_binary() {
     let _ = artifact.constants.alloc(ConstantDescriptor {
         name: constant_name,
         value: ConstantValue::Float(3.5),
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}
+
+#[test]
+fn foreign_link_roundtrips_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let name = artifact.intern_string("main::puts");
+    let abi = artifact.intern_string("c");
+    let symbol = artifact.intern_string("puts");
+    let link = artifact.intern_string("c");
+    let _ = artifact.foreigns.alloc(ForeignDescriptor {
+        name,
+        abi,
+        symbol,
+        link: Some(link),
+        export: true,
     });
 
     let text = format_text(&artifact);

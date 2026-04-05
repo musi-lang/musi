@@ -73,6 +73,7 @@ fn lowers_data_and_foreign_facts() {
     assert_eq!(ir.foreigns.len(), 1);
     assert_eq!(ir.foreigns[0].abi.as_ref(), "c");
     assert_eq!(ir.foreigns[0].param_count, 1);
+    assert!(ir.foreigns[0].link.is_none());
     assert_eq!(ir.callables.len(), 1);
     assert_eq!(ir.exports.len(), 1);
 }

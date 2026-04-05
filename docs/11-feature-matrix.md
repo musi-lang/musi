@@ -86,8 +86,8 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | Attribute syntax and data-only args | done     | done        | done | n/a               | `@link/@when/@repr/@layout/@diag.*` argument-model validation exists   |
 | `foreign` declaration surface      | done      | done        | done | done              | Foreign declarations and direct foreign calls lower into IR and SEAM metadata end-to-end |
 | `export foreign` surface           | done      | done        | done | done              | `export foreign "abi" ( ... )` is carried into SEAM artifact foreign descriptors and text/binary transports |
-| `@link` validation                 | done      | done        | done | partial           | Invalid targets are diagnosed; runtime linking is outside the current non-runtime stack |
-| `@when` target gating              | done      | done        | done | partial           | Target metadata is modeled semantically; end-to-end target selection remains reduced |
+| `@link` validation                 | done      | done        | done | done              | Invalid targets are diagnosed; foreign descriptors carry `link` + `symbol` metadata (runtime linking is out-of-scope) |
+| `@when` target gating              | done      | done        | done | done              | Gated foreign declarations are excluded from IR lowering and SEAM emission for the active target |
 | `@repr` and `@layout` surface      | done      | done        | done | partial           | Layout-sensitive metadata exists; full runtime ABI contract is still reduced |
 | Compiler-only `@musi.*` attrs      | done      | done        | partial | partial         | Reserved surface exists; backend-specific meaning remains selective    |
 | Inert metadata attrs               | done      | done        | partial | n/a             | Preserved as metadata; not all downstream consumers exist yet          |

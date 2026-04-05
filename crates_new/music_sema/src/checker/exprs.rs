@@ -189,7 +189,7 @@ fn check_decl_expr(
             class,
             members,
         } => check_instance_kind(ctx, id, origin, type_params, constraints, class, &members),
-        HirExprKind::Foreign { abi, decls } => check_foreign_expr(ctx, abi, decls),
+        HirExprKind::Foreign { abi, decls } => check_foreign_expr(ctx, origin, abi, decls, None),
         HirExprKind::Perform { expr: inner } => check_perform_expr(ctx, origin, inner),
         HirExprKind::Handle {
             expr: inner,

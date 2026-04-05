@@ -8,11 +8,12 @@ use music_hir::{
 use music_names::Ident;
 
 use super::super::attrs::{validate_expr_attrs, validate_foreign_decl};
+use super::super::attrs::{validate_link_attr, validate_when_attr};
 use super::super::exprs::check_expr;
 use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
 use super::super::surface::surface_key;
 use super::super::{CheckPass, EffectDef, EffectOpDef, PassBase};
-use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts, TargetInfo};
+use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, TargetInfo};
 use crate::effects::EffectRow;
 
 pub(in super::super) fn member_signature(
@@ -134,17 +135,42 @@ pub(in super::super) fn check_class_expr(
 
 pub(in super::super) fn check_foreign_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
     abi: Option<Box<str>>,
     decls: SliceRange<HirForeignDecl>,
+    group_attrs: Option<SliceRange<HirAttr>>,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let abi = abi.unwrap_or_else(|| Box::<str>::from("c"));
+    let group_attrs = group_attrs
+        .map(|range| ctx.attrs(range))
+        .unwrap_or_default();
+    for attr in &group_attrs {
+        let path = super::super::attrs::attr_path(ctx, attr);
+        match path.as_slice() {
+            ["link"] => validate_link_attr(ctx, attr, origin),
+            ["when"] => validate_when_attr(ctx, attr, origin),
+            _ => {}
+        }
+    }
+    let group_link = link_info_from_attrs(ctx, &group_attrs);
     for decl in ctx.foreign_decls(decls) {
-        if !when_attrs_match(ctx, &decl) {
+        let decl_attrs = ctx.attrs(decl.attrs.clone());
+        let mut all_attrs = Vec::<HirAttr>::with_capacity(group_attrs.len() + decl_attrs.len());
+        all_attrs.extend_from_slice(&group_attrs);
+        all_attrs.extend_from_slice(&decl_attrs);
+
+        if !when_attrs_match(ctx, &all_attrs) {
             if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
                 ctx.mark_gated_binding(binding);
             }
             continue;
+        }
+        if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
+            let merged = merge_link_info(&group_link, &link_info_from_attrs(ctx, &decl_attrs));
+            if merged.name.is_some() || merged.symbol.is_some() {
+                ctx.set_foreign_link(binding, merged);
+            }
         }
         let params = lower_params(ctx, decl.params.clone());
         let result = decl.sig.map_or(builtins.unknown, |sig| {
@@ -168,14 +194,14 @@ pub(in super::super) fn check_foreign_expr(
     }
 }
 
-fn when_attrs_match(ctx: &CheckPass<'_, '_, '_>, decl: &HirForeignDecl) -> bool {
+fn when_attrs_match(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> bool {
     let target = ctx.target();
-    for attr in ctx.attrs(decl.attrs.clone()) {
-        let path = super::super::attrs::attr_path(ctx, &attr);
+    for attr in attrs {
+        let path = super::super::attrs::attr_path(ctx, attr);
         if path.as_slice() != ["when"] {
             continue;
         }
-        if !when_attr_matches(ctx, target, &attr) {
+        if !when_attr_matches(ctx, target, attr) {
             return false;
         }
     }
@@ -236,6 +262,59 @@ fn when_values(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<Vec<Strin
             Some(out)
         }
         _ => None,
+    }
+}
+
+fn link_info_from_attrs(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> ForeignLinkInfo {
+    let mut out = ForeignLinkInfo::default();
+    for attr in attrs {
+        let path = super::super::attrs::attr_path(ctx, attr);
+        if path.as_slice() != ["link"] {
+            continue;
+        }
+        let mut positional = Vec::<String>::new();
+        for arg in ctx.attr_args(attr.args.clone()) {
+            let Some(value) = string_lit_value(ctx, arg.value) else {
+                continue;
+            };
+            if let Some(name) = arg.name.map(|ident| ctx.resolve_symbol(ident.name)) {
+                match name {
+                    "name" => out.name = Some(value.into_boxed_str()),
+                    "symbol" => out.symbol = Some(value.into_boxed_str()),
+                    _ => {}
+                }
+            } else {
+                positional.push(value);
+            }
+        }
+        if out.name.is_none() {
+            if let Some(value) = positional.first().cloned() {
+                out.name = Some(value.into_boxed_str());
+            }
+        }
+        if out.symbol.is_none() {
+            if let Some(value) = positional.get(1).cloned() {
+                out.symbol = Some(value.into_boxed_str());
+            }
+        }
+    }
+    out
+}
+
+fn string_lit_value(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<String> {
+    match ctx.expr(expr).kind {
+        HirExprKind::Lit { lit } => ctx.lit_string_value(lit),
+        _ => None,
+    }
+}
+
+fn merge_link_info(group: &ForeignLinkInfo, decl: &ForeignLinkInfo) -> ForeignLinkInfo {
+    ForeignLinkInfo {
+        name: decl.name.clone().or_else(|| group.name.clone()),
+        symbol: decl
+            .symbol
+            .clone()
+            .or_else(|| group.symbol.clone()),
     }
 }
 
@@ -353,6 +432,22 @@ pub(in super::super) fn check_attributed_expr(
     attrs: SliceRange<HirAttr>,
     inner: HirExprId,
 ) -> ExprFacts {
-    validate_expr_attrs(ctx, origin, attrs, inner);
-    check_expr(ctx, inner)
+    validate_expr_attrs(ctx, origin, attrs.clone(), inner);
+    match ctx.expr(inner).kind {
+        HirExprKind::Foreign { abi, decls } => {
+            let facts = check_foreign_expr(ctx, origin, abi, decls, Some(attrs));
+            ctx.set_expr_facts(inner, facts.clone());
+            facts
+        }
+        HirExprKind::Export { expr, .. } => match ctx.expr(expr).kind {
+            HirExprKind::Foreign { abi, decls } => {
+                let facts = check_foreign_expr(ctx, origin, abi, decls, Some(attrs));
+                ctx.set_expr_facts(expr, facts.clone());
+                ctx.set_expr_facts(inner, facts.clone());
+                facts
+            }
+            _ => check_expr(ctx, inner),
+        },
+        _ => check_expr(ctx, inner),
+    }
 }

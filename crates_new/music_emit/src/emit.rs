@@ -213,10 +213,15 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
         let name_id = state.artifact.intern_string(qualified.as_ref());
         let abi_id = state.artifact.intern_string(&foreign.abi);
         let symbol_id = state.artifact.intern_string(&foreign.symbol);
+        let link_id = foreign
+            .link
+            .as_deref()
+            .map(|link| state.artifact.intern_string(link));
         let foreign_id = state.artifact.foreigns.alloc(ForeignDescriptor {
             name: name_id,
             abi: abi_id,
             symbol: symbol_id,
+            link: link_id,
             export: foreign.exported,
         });
         if let Some(binding) = foreign.binding {

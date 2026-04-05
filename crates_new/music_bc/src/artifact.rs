@@ -10,7 +10,7 @@ use crate::descriptor::{
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 2;
+pub const BINARY_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -206,6 +206,9 @@ impl Artifact {
             self.require_string(descriptor.name)?;
             self.require_string(descriptor.abi)?;
             self.require_string(descriptor.symbol)?;
+            if let Some(link) = descriptor.link {
+                self.require_string(link)?;
+            }
         }
         for (_, descriptor) in self.methods.iter() {
             self.validate_method(descriptor)?;
