@@ -60,7 +60,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | `data`, `effect`, `class`, `instance` declarations | done     | done        | done | done            | Declaration forms are supported at module scope; using them as value expressions is a semantic error (not a runtime feature) |
 | `perform`, `handle`, `resume`                     | done      | done        | done | done              | Handler clauses bind params as written (`op(args, k) => ...`), `value => ...` has an implicit `value` binder, and `k` is typed as `op_result ~> handled_result`; lowering emits handler objects plus `hdl.push/hdl.pop`, `eff.invk`, and `eff.resume` |
 | Static imports (`import "..."`)                   | done      | done        | done | done              | Static import discovery, module keys, and session/project integration exist |
-| Dynamic imports (`import expr`)                   | done      | done        | partial | partial         | Expression form exists; static graph participation is intentionally limited |
+| Dynamic imports (`import expr`)                   | done      | done        | done | done              | Typechecks as `Module` (argument checked against `String`), but does not add static graph edges; current IR lowering erases module-typed `import expr` to `()` (no runtime module loading) |
 | Export and opaque module surface                  | done      | done        | done | done            | Export collection, opaque marking, and SEAM metadata emission exist; runtime hiding implications remain out of scope |
 | Imported module member typing                     | n/a       | done        | done | done              | Imported globals and generic callables compile through semantic module surfaces |
 | Destructured module imports and aliases           | done      | done        | done | done              | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation |
@@ -105,17 +105,24 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | SEAM text transport (`music_assembly`)         | done   | Text format, parser, formatter, and validation exist                        |
 | SEAM binary transport (`music_assembly`)       | done   | Binary encode/decode and validation exist                                   |
 | Sema-to-IR lowering (`music_ir`)               | done   | Codegen-facing facts and owned executable IR exist                          |
-| IR-to-SEAM emission (`music_emit`)             | partial | Current emission includes records, variants, and effects (`data.*`, `br.tbl`, `hdl.*`, `eff.*`); remaining gaps include full sums, richer data-field op surface, and runtime execution |
+| IR-to-SEAM emission (`music_emit`)             | done   | Lowers current IR into SEAM artifacts and opcode streams (`data.*`, `br.tbl`, `hdl.*`, `eff.*`, `seq.*`); execution is tracked under Runtime/VM |
 | Module compilation through `music_session`     | done   | Artifact, bytes, and text outputs exist                                     |
 | Reachable entry-graph compilation              | done   | `music_session` compiles the static-import closure                          |
 | Parse/resolve/sema/IR/emit session caching     | done   | Cached phase products and edit invalidation exist                           |
 | Package/workspace loading (`musi_project`)     | done   | `musi.json`, workspaces, lockfiles, registry cache, and package-aware compile exist |
 | Package import remapping and registry resolution | done | `musi_project` builds the session view used for package-aware compilation   |
 
-## Planned Or Missing
+## Runtime / VM (Planned Or Missing)
+
+| Feature                                | Status  | Notes                                                                 |
+| -------------------------------------- | ------- | --------------------------------------------------------------------- |
+| SEAM runtime execution / VM            | missing | Interpreter/runtime for executing emitted opcodes does not exist       |
+| Runtime dynamic imports (module loading) | missing | `import expr` is typechecked but there is no runtime module loading    |
+| Runtime execution for quote/splice     | missing | Quote/splice execution is not implemented (toolchain-defined)          |
+
+## Backends (Planned Or Missing)
 
 | Feature                  | Status  | Notes                                                      |
 | ------------------------ | ------- | ---------------------------------------------------------- |
 | Native/JIT backend       | missing | `music_jit` is planned but not implemented                 |
-| Runtime execution/VM     | missing | Outside the current non-runtime `crates_new` completion bar |
 | Full-language backend parity | partial | The compiler path exists, but emission is still incomplete overall |
