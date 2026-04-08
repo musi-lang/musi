@@ -287,7 +287,7 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
 }
 
 fn collect_expr_types_seq_parts(state: &mut ProgramState, layout: &mut ModuleLayout, parts: &[IrSeqPart]) {
-    for part in parts.iter() {
+    for part in parts {
         match part {
             IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
                 collect_expr_types(state, layout, expr);

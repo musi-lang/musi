@@ -368,7 +368,7 @@ fn compile_seq_parts_any_append(
     parts: &[IrSeqPart],
     diags: &mut EmitDiagList,
 ) {
-    for part in parts.iter() {
+    for part in parts {
         match part {
             IrSeqPart::Expr(expr) => {
                 compile_expr(emitter, expr, true, diags);

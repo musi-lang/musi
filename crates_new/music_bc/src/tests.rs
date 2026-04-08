@@ -91,9 +91,9 @@ fn validates_well_formed_artifact() {
         export: true,
         initializer: Some(method_id),
     });
-    let _effect_id = effect_id;
+    let _ = effect_id;
     let _class_id = artifact.classes.alloc(ClassDescriptor { name: abort_name });
-    let _foreign_id = foreign_id;
+    let _ = foreign_id;
 
     assert!(artifact.validate().is_ok());
 }

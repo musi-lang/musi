@@ -203,7 +203,7 @@ pub(super) fn require_declared_effects(
 }
 
 fn effect_op_call(
-    ctx: &mut CheckPass<'_, '_, '_>,
+    ctx: &CheckPass<'_, '_, '_>,
     expr: HirExprId,
 ) -> Option<(Box<str>, super::super::EffectOpDef)> {
     let HirExprKind::Call { callee, args: _ } = ctx.expr(expr).kind else {

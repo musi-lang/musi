@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use music_arena::SliceRange;
 use music_base::Span;
@@ -398,15 +398,7 @@ fn check_tuple_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirExprId
 fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayItem>) -> ExprFacts {
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
-    let expected_array = ctx.expected_ty().and_then(|expected| {
-        let expected_inner = peel_mut_ty(ctx, expected);
-        match ctx.ty(expected_inner).kind {
-            HirTyKind::Array { dims, item } => Some((dims, item)),
-            _ => None,
-        }
-    });
-    let expected_dims = expected_array.as_ref().map(|(dims, _)| dims.clone());
-    let expected_item = expected_array.as_ref().map(|(_, item)| *item);
+    let (expected_dims, expected_item) = expected_array_contract(ctx);
     let mut item_ty = expected_item.unwrap_or(builtins.unknown);
 
     let mut has_runtime_spread = false;
@@ -436,11 +428,7 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
             HirTyKind::Tuple { items } => {
                 let item_tys = ctx.ty_ids(items);
                 for found in item_tys {
-                    if item_ty == builtins.unknown {
-                        item_ty = found;
-                    } else {
-                        type_mismatch(ctx, spread_origin, item_ty, found);
-                    }
+                    merge_array_item_ty(ctx, spread_origin, &mut item_ty, found);
                     known_len = known_len.saturating_add(1);
                 }
             }
@@ -448,11 +436,7 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
                 let dims_vec = ctx.dims(dims);
                 if dims_vec.is_empty() {
                     has_runtime_spread = true;
-                    if item_ty == builtins.unknown {
-                        item_ty = item;
-                    } else {
-                        type_mismatch(ctx, spread_origin, item_ty, item);
-                    }
+                    merge_array_item_ty(ctx, spread_origin, &mut item_ty, item);
                     continue;
                 }
                 if dims_vec.len() != 1 {
@@ -461,20 +445,12 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
                 }
                 match dims_vec[0] {
                     HirDim::Int(len) => {
-                        if item_ty == builtins.unknown {
-                            item_ty = item;
-                        } else {
-                            type_mismatch(ctx, spread_origin, item_ty, item);
-                        }
+                        merge_array_item_ty(ctx, spread_origin, &mut item_ty, item);
                         known_len = known_len.saturating_add(len);
                     }
                     HirDim::Unknown | HirDim::Name(_) => {
                         has_runtime_spread = true;
-                        if item_ty == builtins.unknown {
-                            item_ty = item;
-                        } else {
-                            type_mismatch(ctx, spread_origin, item_ty, item);
-                        }
+                        merge_array_item_ty(ctx, spread_origin, &mut item_ty, item);
                     }
                 }
             }
@@ -482,26 +458,7 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
         }
     }
 
-    if let Some(dims) = expected_dims.as_ref() {
-        let dims_vec = ctx.dims(dims.clone());
-        if dims_vec.len() == 1
-            && let HirDim::Int(expected_len) = dims_vec[0]
-        {
-            if has_runtime_spread {
-                let span = items_vec.first().map_or_else(
-                    || Span::new(0, 0),
-                    |array_item| ctx.expr(array_item.expr).origin.span,
-                );
-                ctx.diag(span, "array literal length unknown due to runtime spread", "");
-            } else if expected_len != known_len {
-                let span = items_vec.first().map_or_else(
-                    || Span::new(0, 0),
-                    |array_item| ctx.expr(array_item.expr).origin.span,
-                );
-                ctx.diag(span, "array literal length mismatch", "");
-            }
-        }
-    }
+    check_array_literal_expected_len(ctx, expected_dims.as_ref(), &items_vec, has_runtime_spread, known_len);
 
     let dims = expected_dims.unwrap_or_else(|| ctx.alloc_dims([HirDim::Unknown]));
     let ty = ctx.alloc_ty(HirTyKind::Array {
@@ -509,6 +466,61 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
         item: item_ty,
     });
     ExprFacts { ty, effects }
+}
+
+fn expected_array_contract(ctx: &CheckPass<'_, '_, '_>) -> (Option<SliceRange<HirDim>>, Option<HirTyId>) {
+    let expected_array = ctx.expected_ty().and_then(|expected| {
+        let expected_inner = peel_mut_ty(ctx, expected);
+        match ctx.ty(expected_inner).kind {
+            HirTyKind::Array { dims, item } => Some((dims, item)),
+            _ => None,
+        }
+    });
+    let expected_dims = expected_array.as_ref().map(|(dims, _)| dims.clone());
+    let expected_item = expected_array.as_ref().map(|(_, item)| *item);
+    (expected_dims, expected_item)
+}
+
+fn merge_array_item_ty(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
+    item_ty: &mut HirTyId,
+    found: HirTyId,
+) {
+    let builtins = ctx.builtins();
+    if *item_ty == builtins.unknown {
+        *item_ty = found;
+    } else {
+        type_mismatch(ctx, origin, *item_ty, found);
+    }
+}
+
+fn check_array_literal_expected_len(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    expected_dims: Option<&SliceRange<HirDim>>,
+    items: &[HirArrayItem],
+    has_runtime_spread: bool,
+    known_len: u32,
+) {
+    let Some(expected_dims) = expected_dims else {
+        return;
+    };
+    let dims_vec = ctx.dims(expected_dims.clone());
+    if dims_vec.len() != 1 {
+        return;
+    }
+    let HirDim::Int(expected_len) = dims_vec[0] else {
+        return;
+    };
+    let span = items.first().map_or_else(
+        || Span::new(0, 0),
+        |array_item| ctx.expr(array_item.expr).origin.span,
+    );
+    if has_runtime_spread {
+        ctx.diag(span, "array literal length unknown due to runtime spread", "");
+    } else if expected_len != known_len {
+        ctx.diag(span, "array literal length mismatch", "");
+    }
 }
 
 fn check_array_ty_expr(
@@ -546,7 +558,7 @@ fn check_record_expr(
         }
     });
 
-    let mut seen_explicit = BTreeMap::<Box<str>, ()>::new();
+    let mut seen_explicit = BTreeSet::<Box<str>>::new();
     let mut fields = BTreeMap::<Box<str>, HirTyField>::new();
     for record_item in ctx.record_items(items) {
         if record_item.spread {
@@ -560,13 +572,7 @@ fn check_record_expr(
             };
             for spread_field in ctx.ty_fields(spread_fields) {
                 let key: Box<str> = ctx.resolve_symbol(spread_field.name).into();
-                let _prev = fields.insert(
-                    key,
-                    HirTyField {
-                        name: spread_field.name,
-                        ty: spread_field.ty,
-                    },
-                );
+                let _prev = fields.insert(key, spread_field);
             }
             continue;
         }
@@ -586,7 +592,7 @@ fn check_record_expr(
         effects.union_with(&facts.effects);
 
         let key: Box<str> = ctx.resolve_symbol(name.name).into();
-        if seen_explicit.insert(key.clone(), ()).is_some() {
+        if !seen_explicit.insert(key.clone()) {
             let span = ctx.expr(record_item.value).origin.span;
             ctx.diag(span, "duplicate record field", "");
         }
@@ -609,60 +615,15 @@ fn check_variant_expr(
     args: SliceRange<HirExprId>,
 ) -> ExprFacts {
     let builtins = ctx.builtins();
-    let mut effects = EffectRow::empty();
-    let expected_sum_ty = ctx.expected_ty().and_then(|ty| {
-        let inner = peel_mut_ty(ctx, ty);
-        matches!(ctx.ty(inner).kind, HirTyKind::Sum { .. }).then_some(inner)
-    });
-    if let Some(sum_ty) = expected_sum_ty {
-        let HirTyKind::Sum { left, right } = ctx.ty(sum_ty).kind else {
-            return ExprFacts {
-                ty: builtins.unknown,
-                effects,
-            };
-        };
-        let tag_name = ctx.resolve_symbol(tag.name);
-        let chosen = match tag_name {
-            "Left" => Some(left),
-            "Right" => Some(right),
-            _ => None,
-        };
-        if let Some(chosen) = chosen {
-            let _sum_def = ctx.ensure_sum_data_def(left, right);
-            let arg_exprs = ctx.expr_ids(args);
-            let expected_args: Vec<HirTyId> = match &ctx.ty(chosen).kind {
-                HirTyKind::Tuple { items } => ctx.ty_ids(*items),
-                _ => vec![chosen],
-            };
-            if expected_args.len() != arg_exprs.len() {
-                ctx.diag(tag.span, "sum constructor arity mismatch", "");
-            }
-            for (index, arg) in arg_exprs.into_iter().enumerate() {
-                let expected = expected_args
-                    .get(index)
-                    .copied()
-                    .unwrap_or(builtins.unknown);
-                ctx.push_expected_ty(expected);
-                let facts = check_expr(ctx, arg);
-                let _ = ctx.pop_expected_ty();
-                effects.union_with(&facts.effects);
-                let origin = ctx.expr(arg).origin;
-                type_mismatch(ctx, origin, expected, facts.ty);
-            }
-            return ExprFacts {
-                ty: sum_ty,
-                effects,
-            };
-        }
+    if let Some(facts) = check_sum_constructor_variant(ctx, tag, args) {
+        return facts;
     }
 
+    let mut effects = EffectRow::empty();
     let expected_ty = ctx.expected_ty().and_then(|ty| variant_context_ty(ctx, ty));
     let expected_ty = expected_ty.or_else(|| infer_variant_context_ty(ctx, tag));
     let Some(expected_ty) = expected_ty else {
-        for arg in ctx.expr_ids(args) {
-            let facts = check_expr(ctx, arg);
-            effects.union_with(&facts.effects);
-        }
+        check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         return ExprFacts {
             ty: builtins.unknown,
             effects,
@@ -671,10 +632,7 @@ fn check_variant_expr(
 
     let data_def = expected_data_def(ctx, expected_ty);
     let Some(data_def) = data_def else {
-        for arg in ctx.expr_ids(args) {
-            let facts = check_expr(ctx, arg);
-            effects.union_with(&facts.effects);
-        }
+        check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         ctx.diag(tag.span, "variant constructor missing data type context", "");
         return ExprFacts {
             ty: builtins.unknown,
@@ -684,10 +642,7 @@ fn check_variant_expr(
 
     let tag_name = ctx.resolve_symbol(tag.name);
     let Some(variant) = data_def.variants.get(tag_name) else {
-        for arg in ctx.expr_ids(args) {
-            let facts = check_expr(ctx, arg);
-            effects.union_with(&facts.effects);
-        }
+        check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         ctx.diag(tag.span, "unknown data variant", "");
         return ExprFacts {
             ty: expected_ty,
@@ -704,10 +659,77 @@ fn check_variant_expr(
         }
     });
 
-    if expected_args.len() != arg_exprs.len() {
-        ctx.diag(tag.span, "variant constructor arity mismatch", "");
-    }
+    typecheck_positional_args(
+        ctx,
+        tag.span,
+        &expected_args,
+        arg_exprs,
+        &mut effects,
+        "variant constructor arity mismatch",
+    );
 
+    ExprFacts {
+        ty: expected_ty,
+        effects,
+    }
+}
+
+fn check_sum_constructor_variant(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    tag: Ident,
+    args: SliceRange<HirExprId>,
+) -> Option<ExprFacts> {
+    let builtins = ctx.builtins();
+    let mut effects = EffectRow::empty();
+    let expected_sum_ty = ctx.expected_ty().and_then(|ty| {
+        let inner = peel_mut_ty(ctx, ty);
+        matches!(ctx.ty(inner).kind, HirTyKind::Sum { .. }).then_some(inner)
+    })?;
+    let HirTyKind::Sum { left, right } = ctx.ty(expected_sum_ty).kind else {
+        return Some(ExprFacts {
+            ty: builtins.unknown,
+            effects,
+        });
+    };
+    let tag_name = ctx.resolve_symbol(tag.name);
+    let chosen = match tag_name {
+        "Left" => Some(left),
+        "Right" => Some(right),
+        _ => None,
+    }?;
+
+    let _sum_def = ctx.ensure_sum_data_def(left, right);
+    let arg_exprs = ctx.expr_ids(args);
+    let expected_args: Vec<HirTyId> = match &ctx.ty(chosen).kind {
+        HirTyKind::Tuple { items } => ctx.ty_ids(*items),
+        _ => vec![chosen],
+    };
+    typecheck_positional_args(
+        ctx,
+        tag.span,
+        &expected_args,
+        arg_exprs,
+        &mut effects,
+        "sum constructor arity mismatch",
+    );
+    Some(ExprFacts {
+        ty: expected_sum_ty,
+        effects,
+    })
+}
+
+fn typecheck_positional_args(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    diag_span: Span,
+    expected_args: &[HirTyId],
+    arg_exprs: Vec<HirExprId>,
+    effects: &mut EffectRow,
+    arity_diag: &str,
+) {
+    let builtins = ctx.builtins();
+    if expected_args.len() != arg_exprs.len() {
+        ctx.diag(diag_span, arity_diag, "");
+    }
     for (index, arg) in arg_exprs.into_iter().enumerate() {
         let expected = expected_args
             .get(index)
@@ -720,10 +742,16 @@ fn check_variant_expr(
         let origin = ctx.expr(arg).origin;
         type_mismatch(ctx, origin, expected, facts.ty);
     }
+}
 
-    ExprFacts {
-        ty: expected_ty,
-        effects,
+fn check_exprs_collect_effects(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    exprs: Vec<HirExprId>,
+    effects: &mut EffectRow,
+) {
+    for expr in exprs {
+        let facts = check_expr(ctx, expr);
+        effects.union_with(&facts.effects);
     }
 }
 

@@ -82,10 +82,10 @@ fn lowers_data_and_foreign_facts() {
 #[test]
 fn lowers_array_cat_for_runtime_spread() {
     let ir = lower(
-        r#"
+        r"
         let xs := [1, 2];
         export let ys := [0, ...xs, 3];
-    "#,
+    ",
     );
     let ys = ir
         .globals

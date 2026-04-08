@@ -351,10 +351,6 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.module.resolved.module.store.args.get(range).to_vec()
     }
 
-    pub fn arg_count(&self, range: SliceRange<HirArg>) -> usize {
-        self.module.resolved.module.store.args.get(range).len()
-    }
-
     pub fn dims(&self, range: SliceRange<HirDim>) -> Vec<HirDim> {
         self.module.resolved.module.store.dims.get(range).to_vec()
     }

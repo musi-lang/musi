@@ -980,10 +980,10 @@ fn invalid_link_attr_target_reports_diag() {
 #[test]
 fn any_expected_matches_concrete_types() {
     let sema = check(
-        r#"
+        r"
         let idAny (x : Any) : Any := x;
         idAny(1);
-    "#,
+    ",
     );
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
@@ -991,7 +991,7 @@ fn any_expected_matches_concrete_types() {
 #[test]
 fn array_and_record_spreads_typecheck() {
     let sema = check(
-        r#"
+        r"
         let xs := [1, 2];
         let ys := [0, ...xs, 3];
 
@@ -1002,7 +1002,7 @@ fn array_and_record_spreads_typecheck() {
         ys;
         q;
         r;
-    "#,
+    ",
     );
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
@@ -1026,13 +1026,13 @@ fn call_spreads_typecheck_for_tuples_and_any_seq() {
 #[test]
 fn sum_constructors_and_patterns_typecheck() {
     let sema = check(
-        r#"
+        r"
         let x : Int + String := .Left(1);
         case x of (
           | .Left(n) => n
           | .Right(_) => 0
         );
-    "#,
+    ",
     );
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
