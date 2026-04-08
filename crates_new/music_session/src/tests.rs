@@ -425,7 +425,7 @@ fn compiles_exported_foreign_declarations_into_artifact() {
     assert!(output.artifact.validate().is_ok());
     assert!(output
         .text
-        .contains(".foreign $main::puts abi \"c\" symbol \"puts\" export"));
+        .contains(".foreign $main::puts params 1 abi \"c\" symbol \"puts\" export"));
 }
 
 #[test]
@@ -447,7 +447,7 @@ fn lowers_link_attrs_into_foreign_descriptors() {
     assert!(output.artifact.validate().is_ok());
     assert!(output
         .text
-        .contains(".foreign $main::sin abi \"c\" symbol \"sin\" link \"m\""), "{}", output.text);
+        .contains(".foreign $main::sin params 1 abi \"c\" symbol \"sin\" link \"m\""), "{}", output.text);
 }
 
 #[test]

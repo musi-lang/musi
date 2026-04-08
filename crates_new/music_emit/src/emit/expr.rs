@@ -20,6 +20,7 @@ pub(super) fn compile_expr(
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             compile_sequence_literal(emitter, ty_name, items, diags);
         }
+        IrExprKind::ArrayCat { ty_name, parts } => compile_array_cat(emitter, ty_name, parts, diags),
         IrExprKind::Record {
             ty_name,
             field_count,
@@ -68,11 +69,17 @@ pub(super) fn compile_expr(
         }
         IrExprKind::Case { scrutinee, arms } => compile_case(emitter, scrutinee, arms, diags),
         IrExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
+        IrExprKind::CallSeq { callee, args } => compile_call_seq(emitter, callee, args, diags),
         IrExprKind::Perform {
             effect_key,
             op_index,
             args,
         } => compile_perform(emitter, effect_key, *op_index, args, diags),
+        IrExprKind::PerformSeq {
+            effect_key,
+            op_index,
+            args,
+        } => compile_perform_seq(emitter, effect_key, *op_index, args, diags),
         IrExprKind::Handle {
             effect_key,
             value,
@@ -282,6 +289,107 @@ fn compile_sequence_literal(
             len: u16::try_from(items.len()).unwrap_or(u16::MAX),
         },
     )));
+}
+
+fn compile_array_cat(
+    emitter: &mut MethodEmitter<'_, '_>,
+    ty_name: &str,
+    parts: &[IrSeqPart],
+    diags: &mut EmitDiagList,
+) {
+    let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            format!("unknown emitted sequence type `{ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    for (index, part) in parts.iter().enumerate() {
+        match part {
+            IrSeqPart::Expr(expr) => {
+                compile_expr(emitter, expr, true, diags);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqNew,
+                    Operand::TypeLen { ty, len: 1 },
+                )));
+            }
+            IrSeqPart::Spread(expr) => {
+                compile_expr(emitter, expr, true, diags);
+            }
+        }
+        if index != 0 {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::SeqCat,
+                Operand::None,
+            )));
+        }
+    }
+}
+
+fn compile_seq_parts_any(
+    emitter: &mut MethodEmitter<'_, '_>,
+    parts: &[IrSeqPart],
+    diags: &mut EmitDiagList,
+) {
+    // Runtime spread lowers via `IrSeqPart::Spread` and uses a sequence runtime contract.
+    // The SEAM metadata type chosen here is an emission detail.
+    let ty_name = "[]Any";
+    let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            format!("unknown emitted sequence type `{ty_name}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::SeqNew,
+        Operand::TypeLen { ty, len: 0 },
+    )));
+    compile_seq_parts_any_append(emitter, ty, parts, diags);
+}
+
+fn compile_seq_parts_any_append(
+    emitter: &mut MethodEmitter<'_, '_>,
+    ty: TypeId,
+    parts: &[IrSeqPart],
+    diags: &mut EmitDiagList,
+) {
+    for part in parts.iter() {
+        match part {
+            IrSeqPart::Expr(expr) => {
+                compile_expr(emitter, expr, true, diags);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqNew,
+                    Operand::TypeLen { ty, len: 1 },
+                )));
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqCat,
+                    Operand::None,
+                )));
+            }
+            IrSeqPart::Spread(expr) => {
+                compile_expr(emitter, expr, true, diags);
+                emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqCat,
+                    Operand::None,
+                )));
+            }
+        }
+    }
 }
 
 fn compile_record_literal(
@@ -1358,6 +1466,83 @@ fn compile_call(
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::CallCls,
         Operand::None,
+    )));
+}
+
+fn compile_call_seq(
+    emitter: &mut MethodEmitter<'_, '_>,
+    callee: &IrExpr,
+    args: &[IrSeqPart],
+    diags: &mut EmitDiagList,
+) {
+    compile_seq_parts_any(emitter, args, diags);
+    if let IrExprKind::Name {
+        binding,
+        name,
+        module_target,
+        ..
+    } = &callee.kind
+    {
+        if let Some(binding) = binding
+            && let Some(slot) = emitter.locals.get(binding).copied()
+        {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdLoc,
+                Operand::Local(slot),
+            )));
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::CallClsSeq,
+                Operand::None,
+            )));
+            return;
+        }
+        if let Some(method) = resolve_method(emitter, *binding, name, module_target.as_ref()) {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::CallSeq,
+                Operand::Method(method),
+            )));
+            return;
+        }
+        if let Some(foreign) = resolve_foreign(emitter, *binding, name, module_target.as_ref()) {
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::FfiCallSeq,
+                Operand::Foreign(foreign),
+            )));
+            return;
+        }
+    }
+
+    compile_expr(emitter, callee, true, diags);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::CallClsSeq,
+        Operand::None,
+    )));
+}
+
+fn compile_perform_seq(
+    emitter: &mut MethodEmitter<'_, '_>,
+    effect_key: &DefinitionKey,
+    op_index: u16,
+    args: &[IrSeqPart],
+    diags: &mut EmitDiagList,
+) {
+    compile_seq_parts_any(emitter, args, diags);
+    let Some(effect) = emitter.layout.effects.get(effect_key).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            &IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            },
+            "unknown emitted effect".into(),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::EffInvkSeq,
+        Operand::Effect { effect, op: op_index },
     )));
 }
 

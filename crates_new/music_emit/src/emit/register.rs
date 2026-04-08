@@ -158,8 +158,10 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
             .link
             .as_deref()
             .map(|link| state.artifact.intern_string(link));
+        let params = u16::try_from(foreign.param_count).unwrap_or(u16::MAX);
         let foreign_id = state.artifact.foreigns.alloc(ForeignDescriptor {
             name: name_id,
+            params,
             abi: abi_id,
             symbol: symbol_id,
             link: link_id,
@@ -174,7 +176,8 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
 fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for callable in &module.callables {
         let name = qualified_name(&module.module_key, &callable.name);
-        let method_id = alloc_method(&mut state.artifact, name.as_ref(), callable.exported);
+        let params = u16::try_from(callable.params.len()).unwrap_or(u16::MAX);
+        let method_id = alloc_method(&mut state.artifact, name.as_ref(), callable.exported, params);
         let _ = layout
             .callables_by_name
             .insert(callable.name.clone(), method_id);
@@ -188,7 +191,7 @@ fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     for global in &module.globals {
         let name = qualified_name(&module.module_key, &global.name);
         let init_name = format!("{name}::init");
-        let init_method = alloc_method(&mut state.artifact, &init_name, false);
+        let init_method = alloc_method(&mut state.artifact, &init_name, false, 0);
         let name_id = state.artifact.intern_string(name.as_ref());
         let global_id = state.artifact.globals.alloc(GlobalDescriptor {
             name: name_id,
@@ -223,6 +226,10 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_slice(state, layout, items);
         }
+        IrExprKind::ArrayCat { ty_name, parts } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types_seq_parts(state, layout, parts);
+        }
         IrExprKind::Record { ty_name, fields, .. } => {
             collect_expr_types_record_fields(state, layout, ty_name, fields);
         }
@@ -251,10 +258,19 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         }
         IrExprKind::Case { scrutinee, arms } => collect_expr_types_case(state, layout, scrutinee, arms),
         IrExprKind::Call { callee, args } => collect_expr_types_call(state, layout, callee, args),
+        IrExprKind::CallSeq { callee, args } => {
+            let _ = ensure_type(state, layout, "[]Any");
+            collect_expr_types(state, layout, callee);
+            collect_expr_types_seq_parts(state, layout, args);
+        }
         IrExprKind::VariantNew { data_key, args, .. } => {
             collect_expr_types_variant_new(state, layout, data_key, args);
         }
         IrExprKind::Perform { args, .. } => collect_expr_types_slice(state, layout, args),
+        IrExprKind::PerformSeq { args, .. } => {
+            let _ = ensure_type(state, layout, "[]Any");
+            collect_expr_types_seq_parts(state, layout, args);
+        }
         IrExprKind::Handle {
             effect_key,
             value,
@@ -264,6 +280,16 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         } => collect_expr_types_handle(state, layout, effect_key, value, ops, body),
         IrExprKind::Resume { expr } => {
             if let Some(expr) = expr.as_deref() {
+                collect_expr_types(state, layout, expr);
+            }
+        }
+    }
+}
+
+fn collect_expr_types_seq_parts(state: &mut ProgramState, layout: &mut ModuleLayout, parts: &[IrSeqPart]) {
+    for part in parts.iter() {
+        match part {
+            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
                 collect_expr_types(state, layout, expr);
             }
         }
@@ -397,7 +423,8 @@ fn ensure_effect(state: &mut ProgramState, effect: &IrEffectDef) -> EffectId {
         .ops
         .iter()
         .map(|op| EffectOpDescriptor {
-            name: state.artifact.intern_string(op),
+            name: state.artifact.intern_string(op.name.as_ref()),
+            params: op.params,
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();

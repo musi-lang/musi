@@ -75,7 +75,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | Tuples and products                  | done      | done        | done | done              | Tuple types and tuple expressions compile end-to-end in the non-runtime backend |
 | Anonymous sums (`+`)                 | done      | done        | done | done              | Sum types are represented semantically and emitted in exported signature metadata |
 | Arrays (`[]T`, `[n]T`)               | done      | done        | done | done              | Array literals and fixed-dimension annotations typecheck |
-| Array spread (`...expr` in `[...]`)  | done      | done        | missing | missing         | Spread surface is parsed and resolved but currently diagnosed as not implemented in sema/IR/emit |
+| Array spread (`...expr` in `[...]`)  | done      | done        | done | done              | Tuple and `[n]T` spreads expand into indexed reads; 1D `[]T` spreads with unknown dims lower via `seq.cat` |
 | `mut T`                              | done      | done        | done | done              | Writable types are enforced for write-through assignment (`base.[i] <-`, `base.field <-`) |
 | `where` constraints (`T :`, `T <:`)  | done      | done        | done | done              | Constraint lowering and solving exist; constraints are emitted in exported signature metadata |
 | Open effect rows (`with { ... }`)    | done      | done        | done | done              | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata |

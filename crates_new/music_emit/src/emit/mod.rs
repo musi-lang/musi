@@ -14,7 +14,7 @@ use music_bc::{
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef, IrExpr, IrExprKind,
     DefinitionKey, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
-    IrRecordLayoutField, IrTempId,
+    IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
@@ -326,7 +326,7 @@ fn build_module_entry(
         return None;
     }
     let entry_name = format!("{}::__module_init", module_key.as_str());
-    let method_id = alloc_method(artifact, &entry_name, false);
+    let method_id = alloc_method(artifact, &entry_name, false, 0);
     let labels = initial_labels(artifact);
     let code = entry_code(&layout.init_methods);
     finalize_method(artifact, method_id, 1, labels, code);
@@ -339,7 +339,7 @@ fn build_program_entry(
     layouts: &[ModuleLayout],
 ) -> MethodId {
     let entry_name = format!("{}::__entry", entry_module.as_str());
-    let method_id = alloc_method(artifact, &entry_name, false);
+    let method_id = alloc_method(artifact, &entry_name, false, 0);
     let init_methods = layouts
         .iter()
         .flat_map(|layout| layout.init_methods.iter().copied())
@@ -414,10 +414,11 @@ fn initial_labels(artifact: &mut Artifact) -> Vec<StringId> {
     vec![artifact.intern_string("L0")]
 }
 
-fn alloc_method(artifact: &mut Artifact, name: &str, export: bool) -> MethodId {
+fn alloc_method(artifact: &mut Artifact, name: &str, export: bool, params: u16) -> MethodId {
     let name_id = artifact.intern_string(name);
     artifact.methods.alloc(MethodDescriptor {
         name: name_id,
+        params,
         locals: 0,
         export,
         labels: Box::new([]),
