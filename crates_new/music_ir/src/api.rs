@@ -102,6 +102,10 @@ pub enum IrAssignTarget {
         base: Box<IrExpr>,
         index: Box<IrExpr>,
     },
+    RecordField {
+        base: Box<IrExpr>,
+        index: u16,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

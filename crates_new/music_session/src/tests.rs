@@ -1,9 +1,41 @@
 use std::collections::BTreeSet;
 
+use music_bc::Artifact;
 use music_module::{ImportMap, ModuleKey};
 use music_sema::TargetInfo;
 
 use crate::{Session, SessionOptions};
+
+fn meta_records(artifact: &Artifact) -> Vec<(String, String, Vec<String>)> {
+    artifact
+        .meta
+        .as_slice()
+        .iter()
+        .map(|record| {
+            (
+                artifact.string_text(record.target).to_owned(),
+                artifact.string_text(record.key).to_owned(),
+                record
+                    .values
+                    .iter()
+                    .map(|value| artifact.string_text(*value).to_owned())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>()
+}
+
+fn meta_has_exact(meta: &[(String, String, Vec<String>)], target: &str, key: &str, values: &[&str]) -> bool {
+    meta.iter().any(|(t, k, v)| {
+        t == target
+            && k == key
+            && v.len() == values.len()
+            && v.iter()
+                .map(String::as_str)
+                .zip(values.iter().copied())
+                .all(|(left, right)| left == right)
+    })
+}
 
 fn session() -> Session {
     let mut import_map = ImportMap::default();
@@ -220,6 +252,28 @@ fn compiles_records_with_projection_and_update() {
     assert!(output.text.contains("data.get"));
     assert!(output.text.contains("data.new"));
     assert!(output.text.contains(".type $\"{ x: Int; y: Int }\""));
+}
+
+#[test]
+fn compiles_record_field_assignment() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer () : Int := (
+              let r := mut { x := 1, y := 2 };
+              r.x <- 3;
+              r.x
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.set"), "{}", output.text);
 }
 
 #[test]
@@ -456,23 +510,7 @@ fn emits_meta_records_for_laws_and_attrs() {
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
     assert!(output.artifact.validate().is_ok());
 
-    let meta = output
-        .artifact
-        .meta
-        .as_slice()
-        .iter()
-        .map(|record| {
-            (
-                output.artifact.string_text(record.target).to_owned(),
-                output.artifact.string_text(record.key).to_owned(),
-                record
-                    .values
-                    .iter()
-                    .map(|value| output.artifact.string_text(*value).to_owned())
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<Vec<_>>();
+    let meta = meta_records(&output.artifact);
 
     assert!(
         meta.iter().any(|(target, key, values)| {
@@ -499,6 +537,73 @@ fn emits_meta_records_for_laws_and_attrs() {
             target == "main::meaning"
                 && key == "musi.attr"
                 && values == &vec!["@musi.codegen(mode := \"test\")".to_owned()]
+        }),
+        "{meta:?}"
+    );
+}
+
+#[test]
+fn emits_meta_records_for_exported_signatures() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            let Option[T] := data { | Some : Int | None };
+
+            let Eq[T] := class { };
+            let eqInt := instance Eq[Int] { };
+
+            let Console := effect { let readln () : String; };
+
+            export let f[T] (x : T) where T : Eq with { Console } : T := x;
+            export let sumId (x : Int + String) : Int + String := x;
+            export let tupId (x : (Int, String)) : (Int, String) := x;
+            export let arrId (x : [2]Int) : [2]Int := x;
+            export let mutArrId (x : mut [2]Int) : mut [2]Int := x;
+            export let noneInt () : Option[Int] := .None;
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+    assert!(output.artifact.validate().is_ok());
+
+    let meta = meta_records(&output.artifact);
+
+    assert!(meta_has_exact(&meta, "main::f", "value.type_params", &["T"]), "{meta:?}");
+    assert!(meta_has_exact(&meta, "main::f", "value.constraints", &["T : Eq"]), "{meta:?}");
+    assert!(
+        meta_has_exact(&meta, "main::f", "value.effects", &["with { Console }"]),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::sumId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("Int + String"))
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::tupId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("(Int, String)"))
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::arrId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("[2]Int"))
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::mutArrId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("mut [2]Int"))
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::noneInt" && key == "value.ty" && values.first().is_some_and(|value| value.contains("Option[Int]"))
         }),
         "{meta:?}"
     );

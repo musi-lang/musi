@@ -9,6 +9,7 @@ Source of truth:
 Hard rules:
 - Edit `crates_new/` only; treat `crates/` as legacy reference-only.
 - No placeholders in `crates_new/` (`todo!()`, `unimplemented!()`, placeholder panics, empty pipelines).
+- Documentation and feature-matrix notes describe current implementation behavior; do not declare language support policy.
 - `src/` is production-only; unit tests in `module/tests.rs`; benches in `benches/` using Criterion (`bench_` prefix).
 - Naming: longform (`lexer.rs`, `parser.rs`, `sema`, `syntax`); `Syntax*` reserved for syntax trees (not token stream); lexer nouns stay short (`Token`, `TokenKind`, `Trivia`, `Lexer`); trivia types live in `trivia.rs`.
 - Imports: prefer top-level `use` imports and local names in signatures and implementation code. Do not write fully qualified module paths such as `music_hir::Foo`, `music_arena::Bar`, or `crate::mod::Type` inside function bodies, match arms, or helper signatures just to name ordinary types or variants. Absolute/singleton uses are only OK for real singletons (`crate::CONST`, `crate::func()`, macros). Do not introduce new macros in this repo.

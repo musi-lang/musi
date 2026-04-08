@@ -171,7 +171,7 @@ fn bind_or_pat(
     bind_pat(ctx, right, ty);
 }
 
-fn binders_in_pat(ctx: &CheckPass<'_, '_, '_>, pat: HirPatId) -> BTreeSet<NameBindingId> {
+pub(super) fn binders_in_pat(ctx: &CheckPass<'_, '_, '_>, pat: HirPatId) -> BTreeSet<NameBindingId> {
     let mut out = BTreeSet::<NameBindingId>::new();
     collect_binders(ctx, pat, &mut out);
     out

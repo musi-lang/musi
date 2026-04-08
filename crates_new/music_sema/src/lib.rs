@@ -3,8 +3,9 @@ mod checker;
 mod effects;
 
 pub use api::{
-    Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintSurface,
-    DataSurface, DataVariantSurface, DefinitionKey, EffectOpSurface, EffectSurface, ExportedValue,
+    Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintKind,
+    ConstraintSurface, DataSurface, DataVariantSurface, DefinitionKey, EffectOpSurface,
+    EffectSurface, ExportedValue,
     InstanceSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef,
     SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem,
     SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind, TargetInfo,

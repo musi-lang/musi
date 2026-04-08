@@ -362,9 +362,13 @@ fn collect_assign_target_types(
     layout: &mut ModuleLayout,
     target: &IrAssignTarget,
 ) {
-    if let IrAssignTarget::Index { base, index } = target {
-        collect_expr_types(state, layout, base);
-        collect_expr_types(state, layout, index);
+    match target {
+        IrAssignTarget::Index { base, index } => {
+            collect_expr_types(state, layout, base);
+            collect_expr_types(state, layout, index);
+        }
+        IrAssignTarget::RecordField { base, .. } => collect_expr_types(state, layout, base),
+        IrAssignTarget::Binding { .. } => {}
     }
 }
 

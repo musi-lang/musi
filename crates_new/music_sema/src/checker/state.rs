@@ -72,6 +72,7 @@ pub struct TypingState {
     binding_effects: HashMap<NameBindingId, EffectRow>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    mutable_bindings: HashSet<NameBindingId>,
     sealed_classes: HashSet<DefinitionKey>,
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
@@ -629,6 +630,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn insert_binding_type(&mut self, id: NameBindingId, ty: HirTyId) {
         let _prev = self.typing.binding_types.insert(id, ty);
+    }
+
+    pub fn is_binding_mutable(&self, id: NameBindingId) -> bool {
+        self.typing.mutable_bindings.contains(&id)
+    }
+
+    pub fn mark_binding_mutable(&mut self, id: NameBindingId) {
+        let _ = self.typing.mutable_bindings.insert(id);
     }
 
     pub fn binding_effects(&self, id: NameBindingId) -> Option<EffectRow> {

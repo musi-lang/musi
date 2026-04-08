@@ -29,6 +29,8 @@ Status legend:
 
 This matrix is language-first. It does not claim runtime or JIT completion.
 
+Notes are descriptive: they reflect current `crates_new` behavior (accepted vs diagnosed), not language decisions.
+
 ## Surface Syntax And Literals
 
 | Feature                                  | Lex  | Parse/AST | Resolve/HIR | Sema | Notes                                                             |
@@ -68,14 +70,15 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 
 | Feature                              | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                |
 | ------------------------------------ | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
-| Named types and application (`T[A]`) | done      | done        | partial | partial         | Explicit generic type application works; the type system is still incomplete overall |
-| Functions (`->`, `~>`)               | done      | done        | partial | partial         | Function kinds and signature-side effect rows exist                  |
-| Tuples and products                  | done      | done        | partial | partial         | Tuple checking exists; broader product-system completeness is still incomplete |
-| Anonymous sums (`+`)                 | done      | done        | partial | partial         | Represented semantically, but not fully lowered through the whole backend |
-| Arrays (`[]T`, `[n]T`)               | done      | done        | partial | partial         | Core shape exists; shape/dimension completeness is still incomplete  |
-| `mut T`                              | done      | done        | partial | partial         | Writable-type surface exists; enforcement is not a full ownership system |
-| `where` constraints (`T :`, `T <:`)  | done      | done        | partial | partial         | Constraint lowering and solving exist; the overall type system is still incomplete |
-| Open effect rows (`with { ... }`)    | done      | done        | partial | partial         | Named open remainders and declared-effect checks exist; backend/runtime story is still incomplete |
+| Named types and application (`T[A]`) | done      | done        | done | done              | Explicit generic type application works and is emitted in exported signature metadata |
+| Functions (`->`, `~>`)               | done      | done        | done | done              | Function kinds exist; exported signature types and effect rows are emitted as metadata |
+| Tuples and products                  | done      | done        | done | done              | Tuple types and tuple expressions compile end-to-end in the non-runtime backend |
+| Anonymous sums (`+`)                 | done      | done        | done | done              | Sum types are represented semantically and emitted in exported signature metadata |
+| Arrays (`[]T`, `[n]T`)               | done      | done        | done | done              | Array literals and fixed-dimension annotations typecheck |
+| Array spread (`...expr` in `[...]`)  | done      | done        | missing | missing         | Spread surface is parsed and resolved but currently diagnosed as not implemented in sema/IR/emit |
+| `mut T`                              | done      | done        | done | done              | Writable types are enforced for write-through assignment (`base.[i] <-`, `base.field <-`) |
+| `where` constraints (`T :`, `T <:`)  | done      | done        | done | done              | Constraint lowering and solving exist; constraints are emitted in exported signature metadata |
+| Open effect rows (`with { ... }`)    | done      | done        | done | done              | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata |
 | Imported generic exports             | n/a       | done        | done | done              | Imported generic callable uses now compile through `music_session` end-to-end |
 | Instance coherence across imports    | n/a       | done        | done | n/a              | Reachable exported instances participate in sema coherence           |
 

@@ -334,6 +334,9 @@ pub fn lower_params(
             });
             if let Some(binding) = ctx.binding_id_for_decl(param.name) {
                 ctx.insert_binding_type(binding, ty);
+                if param.is_mut {
+                    ctx.mark_binding_mutable(binding);
+                }
             }
             if let Some(default) = param.default {
                 let facts = check_expr(ctx, default);

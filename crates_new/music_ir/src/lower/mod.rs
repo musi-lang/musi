@@ -4,7 +4,7 @@ use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirForeignDecl,
-    HirHandleClause, HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind,
+    HirHandleClause, HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp,
     HirRecordItem, HirRecordPatField, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
@@ -19,6 +19,7 @@ use crate::api::{
 };
 
 mod bindings;
+mod assign;
 mod meta;
 mod toplevel;
 mod validate;
@@ -145,6 +146,14 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args),
         HirExprKind::Apply { callee, .. } => {
             let mut lowered = lower_expr(ctx, *callee);
+            lowered.origin = origin;
+            return lowered;
+        }
+        HirExprKind::Prefix {
+            op: HirPrefixOp::Mut,
+            expr,
+        } => {
+            let mut lowered = lower_expr(ctx, *expr);
             lowered.origin = origin;
             return lowered;
         }
@@ -1438,8 +1447,12 @@ fn lower_field_expr(
     let interner = ctx.interner;
 
     let base_ty = sema.expr_ty(base);
-    if matches!(sema.ty(base_ty).kind, HirTyKind::Record { .. }) {
-        let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, base_ty, interner)
+    let record_ty = match sema.ty(base_ty).kind {
+        HirTyKind::Mut { inner } => inner,
+        _ => base_ty,
+    };
+    if matches!(sema.ty(record_ty).kind, HirTyKind::Record { .. }) {
+        let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, record_ty, interner)
         else {
             return IrExprKind::Unsupported {
                 description: "record field access without record layout".into(),
@@ -1699,35 +1712,7 @@ fn lower_lit_pattern(sema: &SemaModule, expr: HirExprId) -> Option<IrCasePattern
 }
 
 fn lower_assign_expr(ctx: &mut LowerCtx<'_>, left: HirExprId, right: HirExprId) -> IrExprKind {
-    let Some(target) = lower_assign_target(ctx, left) else {
-        return IrExprKind::Unsupported {
-            description: "unsupported assignment target".into(),
-        };
-    };
-    IrExprKind::Assign {
-        target: Box::new(target),
-        value: Box::new(lower_expr(ctx, right)),
-    }
-}
-
-fn lower_assign_target(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> Option<IrAssignTarget> {
-    let sema = ctx.sema;
-    let interner = ctx.interner;
-    match &sema.module().store.exprs.get(expr).kind {
-        HirExprKind::Name { name } => Some(IrAssignTarget::Binding {
-            binding: use_binding_id(sema, *name),
-            name: interner.resolve(name.name).into(),
-            module_target: sema.expr_module_target(expr).cloned(),
-        }),
-        HirExprKind::Index { base, args } => {
-            let IrExprKind::Index { base, index } = lower_index_expr(ctx, *base, *args)
-            else {
-                return None;
-            };
-            Some(IrAssignTarget::Index { base, index })
-        }
-        _ => None,
-    }
+    assign::lower_assign_expr(ctx, left, right)
 }
 
 fn lower_binary_expr(ctx: &mut LowerCtx<'_>, op: &HirBinaryOp, left: HirExprId, right: HirExprId) -> IrExprKind {

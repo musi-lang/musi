@@ -672,6 +672,16 @@ fn compile_assign(
             );
             emit_zero(emitter);
         }
+        IrAssignTarget::RecordField { base, index } => {
+            compile_expr(emitter, base, true, diags);
+            compile_i64(emitter, i64::from(*index));
+            compile_expr(emitter, value, true, diags);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::DataSet,
+                Operand::None,
+            )));
+            emit_zero(emitter);
+        }
         IrAssignTarget::Index { base, index } => {
             compile_expr(emitter, base, true, diags);
             compile_expr(emitter, index, true, diags);
