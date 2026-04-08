@@ -85,7 +85,7 @@ Int + String
 [n]T
 ```
 
-Arrays remain ordinary expression forms. Matrix syntax is not part of the language.
+Arrays are ordinary type and expression forms.
 
 ### Mutability
 
@@ -242,16 +242,3 @@ The effect system document defines how `perform`, `handle`, and `resume` interac
 - pure arrows stay pure
 - effectful arrows participate in effect tracking
 - effect rows are open and carried by named remainders
-
-## Excluded From The Type Core
-
-The reduced language does not include:
-
-- `return`
-- derivation syntax
-- comprehensions
-- matrix literals
-- ranges
-- piecewise conditionals
-
-Those forms do not belong in the current type-valued core and should not appear in canonical examples.

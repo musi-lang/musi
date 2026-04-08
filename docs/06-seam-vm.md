@@ -158,24 +158,6 @@ The stable embedding API sits above raw bytecode details, but the bytecode contr
 
 ## Design Boundaries
 
-SEAM does not own:
+SEAM defines runtime concepts that survive compiler lowering (values, control transfer, closures, aggregates, effects, and foreign calls).
 
-- piecewise conditionals
-- comprehensions
-- derivation
-- matrix literals
-- range syntax
-- optional/result sugar
-- built-in list cons
-- typeclass dispatch as a VM primitive
-
-SEAM does own:
-
-- values
-- control transfer
-- closures
-- sequences
-- aggregates
-- runtime typing
-- resumable effects
-- foreign calls
+Source-level sugar and higher-level language/library design decisions are outside the SEAM contract: if something does not survive lowering as a durable runtime concept, it is not a VM primitive.

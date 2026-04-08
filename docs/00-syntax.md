@@ -13,7 +13,7 @@ Musi is expression-driven.
 - top-level evaluation is the startup model
 - effects are first-class
 - typed positions reuse the ordinary expression grammar
-- loops, comprehensions, piecewise conditionals, and `return` are not part of the core language
+- control flow is sequences + `case` + handlers (the grammar has no loop statements)
 
 ## Keywords
 

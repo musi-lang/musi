@@ -158,28 +158,9 @@ They are not runtime enforcement and they do not change handler dispatch.
 
 ## Control Model
 
-The effect system sits inside the reduced control model:
+The effect system sits inside the current control model:
 
-- no loops
-- no `return`
-- no piecewise conditional syntax
+- control flow is expression-driven
 - `if` is guard-only
 - `case` remains the eliminator for branching
-
-That means non-local control belongs to resumable handlers, not to statement-like escape constructs.
-
-## What The Effect Core Does Not Include
-
-The reduced effect language does not include:
-
-- exception-only effects as the only model
-- closed-only effect sets
-- loop-specific control effects baked into syntax
-- `return`-based handler clauses
-
-The current design is explicitly:
-
-- algebraic
-- resumable
-- open-row
-- expression-oriented
+- non-local control belongs to resumable handlers, not statement-like escape constructs

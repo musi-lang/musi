@@ -280,15 +280,4 @@ This is enough metadata to keep the artifact typed and embeddable without encodi
 
 SEAM does not carry dedicated opcodes for removed or lowered-away source sugar.
 
-That includes:
-
-- piecewise conditionals
-- comprehensions
-- derivation
-- matrix literals
-- ranges
-- optional/result sugar
-- built-in list cons
-- typeclass dispatch as a VM primitive
-
 If a source feature survives into the language, it only becomes a bytecode concern when it survives lowering as a durable runtime concept.

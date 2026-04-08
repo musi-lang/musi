@@ -10,12 +10,7 @@ The core language keeps:
 - splice forms `#name`, `#(expr)`, `#[exprs]`
 - attributes as structured metadata and control surface
 
-The core language does not include:
-
-- a `macro` keyword
-- derivation syntax
-- comprehension-based code generation
-- special compile-time branching syntax beyond ordinary core expressions
+The current metaprogramming surface is limited to the constructs above.
 
 ## Quote
 
