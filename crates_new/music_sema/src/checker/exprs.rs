@@ -409,21 +409,76 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
     let expected_item = expected_array.as_ref().map(|(_, item)| *item);
     let mut item_ty = expected_item.unwrap_or(builtins.unknown);
 
+    let mut has_runtime_spread = false;
+    let mut known_len: u32 = 0;
     let items_vec = ctx.array_items(items);
-    for item in &items_vec {
-        if item.spread {
-            let span = ctx.expr(item.expr).origin.span;
-            ctx.diag(span, "array spread not implemented", "");
+    for array_item in &items_vec {
+        if !array_item.spread {
+            ctx.push_expected_ty(item_ty);
+            let facts = check_expr(ctx, array_item.expr);
+            let _ = ctx.pop_expected_ty();
+            effects.union_with(&facts.effects);
+            if item_ty == builtins.unknown {
+                item_ty = facts.ty;
+            } else {
+                let origin = ctx.expr(array_item.expr).origin;
+                type_mismatch(ctx, origin, item_ty, facts.ty);
+            }
+            known_len = known_len.saturating_add(1);
+            continue;
         }
-        ctx.push_expected_ty(item_ty);
-        let facts = check_expr(ctx, item.expr);
-        let _ = ctx.pop_expected_ty();
-        effects.union_with(&facts.effects);
-        if item_ty == builtins.unknown {
-            item_ty = facts.ty;
-        } else {
-            let origin = ctx.expr(item.expr).origin;
-            type_mismatch(ctx, origin, item_ty, facts.ty);
+
+        let spread_facts = check_expr(ctx, array_item.expr);
+        effects.union_with(&spread_facts.effects);
+        let spread_origin = ctx.expr(array_item.expr).origin;
+        let spread_ty = peel_mut_ty(ctx, spread_facts.ty);
+        match ctx.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                let item_tys = ctx.ty_ids(items);
+                for found in item_tys {
+                    if item_ty == builtins.unknown {
+                        item_ty = found;
+                    } else {
+                        type_mismatch(ctx, spread_origin, item_ty, found);
+                    }
+                    known_len = known_len.saturating_add(1);
+                }
+            }
+            HirTyKind::Array { dims, item } => {
+                let dims_vec = ctx.dims(dims);
+                if dims_vec.is_empty() {
+                    has_runtime_spread = true;
+                    if item_ty == builtins.unknown {
+                        item_ty = item;
+                    } else {
+                        type_mismatch(ctx, spread_origin, item_ty, item);
+                    }
+                    continue;
+                }
+                if dims_vec.len() != 1 {
+                    ctx.diag(spread_origin.span, "array spread requires 1D array", "");
+                    continue;
+                }
+                match dims_vec[0] {
+                    HirDim::Int(len) => {
+                        if item_ty == builtins.unknown {
+                            item_ty = item;
+                        } else {
+                            type_mismatch(ctx, spread_origin, item_ty, item);
+                        }
+                        known_len = known_len.saturating_add(len);
+                    }
+                    HirDim::Unknown | HirDim::Name(_) => {
+                        has_runtime_spread = true;
+                        if item_ty == builtins.unknown {
+                            item_ty = item;
+                        } else {
+                            type_mismatch(ctx, spread_origin, item_ty, item);
+                        }
+                    }
+                }
+            }
+            _ => ctx.diag(spread_origin.span, "invalid array spread source", ""),
         }
     }
 
@@ -432,11 +487,16 @@ fn check_array_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirArrayI
         if dims_vec.len() == 1
             && let HirDim::Int(expected_len) = dims_vec[0]
         {
-            let found_len = u32::try_from(items_vec.len()).unwrap_or(u32::MAX);
-            if expected_len != found_len {
+            if has_runtime_spread {
                 let span = items_vec.first().map_or_else(
                     || Span::new(0, 0),
-                    |item| ctx.expr(item.expr).origin.span,
+                    |array_item| ctx.expr(array_item.expr).origin.span,
+                );
+                ctx.diag(span, "array literal length unknown due to runtime spread", "");
+            } else if expected_len != known_len {
+                let span = items_vec.first().map_or_else(
+                    || Span::new(0, 0),
+                    |array_item| ctx.expr(array_item.expr).origin.span,
                 );
                 ctx.diag(span, "array literal length mismatch", "");
             }
@@ -473,30 +533,70 @@ fn check_record_expr(
     items: SliceRange<HirRecordItem>,
 ) -> ExprFacts {
     let mut effects = EffectRow::empty();
+    let expected_record = ctx.expected_ty().and_then(|expected| {
+        let expected_inner = peel_mut_ty(ctx, expected);
+        match ctx.ty(expected_inner).kind {
+            HirTyKind::Record { fields } => Some(
+                ctx.ty_fields(fields)
+                    .into_iter()
+                    .map(|field| (field.name, field.ty))
+                    .collect::<BTreeMap<_, _>>(),
+            ),
+            _ => None,
+        }
+    });
+
+    let mut seen_explicit = BTreeMap::<Box<str>, ()>::new();
     let mut fields = BTreeMap::<Box<str>, HirTyField>::new();
-    for item in ctx.record_items(items) {
-        let facts = check_expr(ctx, item.value);
-        effects.union_with(&facts.effects);
-        if item.spread {
-            let span = ctx.expr(item.value).origin.span;
-            ctx.diag(span, "record spread not implemented", "");
+    for record_item in ctx.record_items(items) {
+        if record_item.spread {
+            let facts = check_expr(ctx, record_item.value);
+            effects.union_with(&facts.effects);
+            let origin = ctx.expr(record_item.value).origin;
+            let spread_ty = peel_mut_ty(ctx, facts.ty);
+            let HirTyKind::Record { fields: spread_fields } = ctx.ty(spread_ty).kind else {
+                ctx.diag(origin.span, "invalid record spread source", "");
+                continue;
+            };
+            for spread_field in ctx.ty_fields(spread_fields) {
+                let key: Box<str> = ctx.resolve_symbol(spread_field.name).into();
+                let _prev = fields.insert(
+                    key,
+                    HirTyField {
+                        name: spread_field.name,
+                        ty: spread_field.ty,
+                    },
+                );
+            }
             continue;
         }
-        let Some(name) = item.name else {
+
+        let Some(name) = record_item.name else {
+            let facts = check_expr(ctx, record_item.value);
+            effects.union_with(&facts.effects);
             continue;
         };
+        let expected_field_ty = expected_record
+            .as_ref()
+            .and_then(|map| map.get(&name.name).copied())
+            .unwrap_or_else(|| ctx.builtins().unknown);
+        ctx.push_expected_ty(expected_field_ty);
+        let facts = check_expr(ctx, record_item.value);
+        let _ = ctx.pop_expected_ty();
+        effects.union_with(&facts.effects);
+
         let key: Box<str> = ctx.resolve_symbol(name.name).into();
-        let prev = fields.insert(
+        if seen_explicit.insert(key.clone(), ()).is_some() {
+            let span = ctx.expr(record_item.value).origin.span;
+            ctx.diag(span, "duplicate record field", "");
+        }
+        let _prev = fields.insert(
             key,
             HirTyField {
                 name: name.name,
                 ty: facts.ty,
             },
         );
-        if prev.is_some() {
-            let span = ctx.expr(item.value).origin.span;
-            ctx.diag(span, "duplicate record field", "");
-        }
     }
     let fields = ctx.alloc_ty_fields(fields.into_values());
     let ty = ctx.alloc_ty(HirTyKind::Record { fields });
@@ -510,6 +610,52 @@ fn check_variant_expr(
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let mut effects = EffectRow::empty();
+    let expected_sum_ty = ctx.expected_ty().and_then(|ty| {
+        let inner = peel_mut_ty(ctx, ty);
+        matches!(ctx.ty(inner).kind, HirTyKind::Sum { .. }).then_some(inner)
+    });
+    if let Some(sum_ty) = expected_sum_ty {
+        let HirTyKind::Sum { left, right } = ctx.ty(sum_ty).kind else {
+            return ExprFacts {
+                ty: builtins.unknown,
+                effects,
+            };
+        };
+        let tag_name = ctx.resolve_symbol(tag.name);
+        let chosen = match tag_name {
+            "Left" => Some(left),
+            "Right" => Some(right),
+            _ => None,
+        };
+        if let Some(chosen) = chosen {
+            let _sum_def = ctx.ensure_sum_data_def(left, right);
+            let arg_exprs = ctx.expr_ids(args);
+            let expected_args: Vec<HirTyId> = match &ctx.ty(chosen).kind {
+                HirTyKind::Tuple { items } => ctx.ty_ids(*items),
+                _ => vec![chosen],
+            };
+            if expected_args.len() != arg_exprs.len() {
+                ctx.diag(tag.span, "sum constructor arity mismatch", "");
+            }
+            for (index, arg) in arg_exprs.into_iter().enumerate() {
+                let expected = expected_args
+                    .get(index)
+                    .copied()
+                    .unwrap_or(builtins.unknown);
+                ctx.push_expected_ty(expected);
+                let facts = check_expr(ctx, arg);
+                let _ = ctx.pop_expected_ty();
+                effects.union_with(&facts.effects);
+                let origin = ctx.expr(arg).origin;
+                type_mismatch(ctx, origin, expected, facts.ty);
+            }
+            return ExprFacts {
+                ty: sum_ty,
+                effects,
+            };
+        }
+    }
+
     let expected_ty = ctx.expected_ty().and_then(|ty| variant_context_ty(ctx, ty));
     let expected_ty = expected_ty.or_else(|| infer_variant_context_ty(ctx, tag));
     let Some(expected_ty) = expected_ty else {
@@ -701,25 +847,79 @@ fn check_call_expr(
         };
     };
 
-    let args = ctx.args(args);
+    let args_vec = ctx.args(args);
     let mut effects = callee_facts.effects;
-    let mut arg_types = Vec::with_capacity(args.len());
-    for (index, arg) in args.iter().enumerate() {
-        let expected = params.get(index).copied().unwrap_or(builtins.unknown);
-        ctx.push_expected_ty(expected);
+    let mut param_index = 0usize;
+    let mut has_runtime_spread = false;
+
+    for arg in &args_vec {
+        if !arg.spread {
+            let expected = params.get(param_index).copied().unwrap_or(builtins.unknown);
+            ctx.push_expected_ty(expected);
+            let facts = check_expr(ctx, arg.expr);
+            let _ = ctx.pop_expected_ty();
+            effects.union_with(&facts.effects);
+            let arg_origin = ctx.expr(arg.expr).origin;
+            type_mismatch(ctx, arg_origin, expected, facts.ty);
+            param_index = param_index.saturating_add(1);
+            continue;
+        }
+
         let facts = check_expr(ctx, arg.expr);
-        let _ = ctx.pop_expected_ty();
         effects.union_with(&facts.effects);
-        arg_types.push(facts.ty);
+        let spread_origin = ctx.expr(arg.expr).origin;
+        let spread_ty = peel_mut_ty(ctx, facts.ty);
+
+        match ctx.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                let item_tys = ctx.ty_ids(items);
+                for found in item_tys {
+                    let expected = params.get(param_index).copied().unwrap_or(builtins.unknown);
+                    type_mismatch(ctx, spread_origin, expected, found);
+                    param_index = param_index.saturating_add(1);
+                }
+            }
+            HirTyKind::Array { dims, item } => {
+                let dims_vec = ctx.dims(dims);
+                if dims_vec.is_empty() {
+                    if ctx.ty(item).kind == HirTyKind::Any {
+                        has_runtime_spread = true;
+                    } else {
+                        ctx.diag(spread_origin.span, "call runtime spread requires `[]Any`", "");
+                    }
+                    continue;
+                }
+                if dims_vec.len() != 1 {
+                    ctx.diag(spread_origin.span, "call spread requires 1D array or tuple", "");
+                    continue;
+                }
+                match dims_vec[0] {
+                    HirDim::Int(len) => {
+                        for _ in 0..len {
+                            let expected =
+                                params.get(param_index).copied().unwrap_or(builtins.unknown);
+                            type_mismatch(ctx, spread_origin, expected, item);
+                            param_index = param_index.saturating_add(1);
+                        }
+                    }
+                    HirDim::Unknown | HirDim::Name(_) if ctx.ty(item).kind == HirTyKind::Any => {
+                        has_runtime_spread = true;
+                    }
+                    _ => ctx.diag(spread_origin.span, "call runtime spread requires `[]Any`", ""),
+                }
+            }
+            _ => ctx.diag(spread_origin.span, "invalid call spread source", ""),
+        }
     }
 
-    if params.len() == arg_types.len() {
-        for (expected, found) in params.into_iter().zip(arg_types) {
-            type_mismatch(ctx, origin, expected, found);
+    if !has_runtime_spread {
+        if param_index != params.len() {
+            ctx.diag(origin.span, "call arity mismatch", "");
         }
-    } else {
+    } else if param_index > params.len() {
         ctx.diag(origin.span, "call arity mismatch", "");
     }
+
     if let Some(extra) = call_effects_for_expr(ctx, callee) {
         effects.union_with(&extra);
     } else if let Some(scheme) = callable_scheme_for_expr(ctx, callee)
@@ -890,16 +1090,31 @@ fn check_record_update_expr(
         ctx.diag(origin.span, "invalid record update target", "");
         BTreeMap::new()
     };
-    for item in ctx.record_items(items) {
-        let expected = item
+    for record_item in ctx.record_items(items) {
+        if record_item.spread {
+            let facts = check_expr(ctx, record_item.value);
+            effects.union_with(&facts.effects);
+            let spread_origin = ctx.expr(record_item.value).origin;
+            let spread_ty = peel_mut_ty(ctx, facts.ty);
+            let HirTyKind::Record { fields: spread_fields } = ctx.ty(spread_ty).kind else {
+                ctx.diag(spread_origin.span, "invalid record spread source", "");
+                continue;
+            };
+            for spread_field in ctx.ty_fields(spread_fields) {
+                let _prev = fields.insert(spread_field.name, spread_field.ty);
+            }
+            continue;
+        }
+
+        let expected = record_item
             .name
             .and_then(|name| fields.get(&name.name).copied())
             .unwrap_or_else(|| ctx.builtins().unknown);
         ctx.push_expected_ty(expected);
-        let facts = check_expr(ctx, item.value);
+        let facts = check_expr(ctx, record_item.value);
         let _ = ctx.pop_expected_ty();
         effects.union_with(&facts.effects);
-        if let Some(name) = item.name {
+        if let Some(name) = record_item.name {
             let _prev = fields.insert(name.name, facts.ty);
         }
     }

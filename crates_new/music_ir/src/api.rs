@@ -42,6 +42,12 @@ pub struct IrArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrSeqPart {
+    Expr(IrExpr),
+    Spread(IrExpr),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrLit {
     Int { raw: Box<str> },
     Float { raw: Box<str> },
@@ -165,6 +171,10 @@ pub enum IrExprKind {
         ty_name: Box<str>,
         items: Box<[IrExpr]>,
     },
+    ArrayCat {
+        ty_name: Box<str>,
+        parts: Box<[IrSeqPart]>,
+    },
     Record {
         ty_name: Box<str>,
         field_count: u16,
@@ -223,10 +233,19 @@ pub enum IrExprKind {
         callee: Box<IrExpr>,
         args: Box<[IrArg]>,
     },
+    CallSeq {
+        callee: Box<IrExpr>,
+        args: Box<[IrSeqPart]>,
+    },
     Perform {
         effect_key: DefinitionKey,
         op_index: u16,
         args: Box<[IrExpr]>,
+    },
+    PerformSeq {
+        effect_key: DefinitionKey,
+        op_index: u16,
+        args: Box<[IrSeqPart]>,
     },
     Handle {
         effect_key: DefinitionKey,
@@ -294,7 +313,13 @@ pub struct IrGlobal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectDef {
     pub key: DefinitionKey,
-    pub ops: Box<[Box<str>]>,
+    pub ops: Box<[IrEffectOpDef]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrEffectOpDef {
+    pub name: Box<str>,
+    pub params: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,9 +381,12 @@ impl From<&EffectSurface> for IrEffectDef {
         let mut ops = value
             .ops
             .iter()
-            .map(|op| op.name.clone())
+            .map(|op| IrEffectOpDef {
+                name: op.name.clone(),
+                params: u16::try_from(op.params.len()).unwrap_or(u16::MAX),
+            })
             .collect::<Vec<_>>();
-        ops.sort();
+        ops.sort_by(|left, right| left.name.cmp(&right.name));
         Self {
             key: value.key.clone(),
             ops: ops.into_boxed_slice(),
@@ -370,7 +398,15 @@ impl From<&SemaEffectDef> for IrEffectDef {
     fn from(value: &SemaEffectDef) -> Self {
         Self {
             key: value.key.clone(),
-            ops: value.ops.keys().cloned().collect::<Vec<_>>().into_boxed_slice(),
+            ops: value
+                .ops
+                .iter()
+                .map(|(name, def)| IrEffectOpDef {
+                    name: name.clone(),
+                    params: u16::try_from(def.params.len()).unwrap_or(u16::MAX),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         }
     }
 }

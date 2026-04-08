@@ -29,19 +29,6 @@ pub(in super::super) fn check_perform_expr(
         name: effect_name,
         arg: None,
     });
-    if let HirExprKind::Call { args, .. } = ctx.expr(expr).kind {
-        for (arg, expected) in ctx
-            .args(args)
-            .into_iter()
-            .map(|arg| arg.expr)
-            .zip(op_def.params.iter().copied())
-        {
-            let facts = check_expr(ctx, arg);
-            let origin = ctx.expr(arg).origin;
-            type_mismatch(ctx, origin, expected, facts.ty);
-            effects.union_with(&facts.effects);
-        }
-    }
     ExprFacts {
         ty: op_def.result,
         effects,
@@ -219,7 +206,7 @@ fn effect_op_call(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr: HirExprId,
 ) -> Option<(Box<str>, super::super::EffectOpDef)> {
-    let HirExprKind::Call { callee, args } = ctx.expr(expr).kind else {
+    let HirExprKind::Call { callee, args: _ } = ctx.expr(expr).kind else {
         return None;
     };
     let HirExprKind::Field { base, name, .. } = ctx.expr(callee).kind else {
@@ -234,10 +221,5 @@ fn effect_op_call(
         .effect_def(&effect_name_text)
         .and_then(|effect| effect.ops.get(op_name))
         .cloned()?;
-    let found = ctx.arg_count(args);
-    if found != op.params.len() {
-        let span = ctx.expr(expr).origin.span;
-        ctx.diag(span, "perform arity mismatch", "");
-    }
     Some((effect_name_text, op))
 }

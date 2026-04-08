@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use music_arena::{Idx, SliceRange};
@@ -22,6 +22,8 @@ use crate::api::{
     DefinitionKey, ForeignLinkInfo, TargetInfo,
 };
 use crate::effects::EffectRow;
+
+const SYNTH_SUM_PREFIX: &str = "__sum__";
 
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
@@ -702,6 +704,30 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn insert_data_def(&mut self, name: impl Into<Box<str>>, def: DataDef) {
         let _prev = self.decls.data_defs.insert(name.into(), def);
+    }
+
+    pub fn ensure_sum_data_def(&mut self, left: HirTyId, right: HirTyId) -> Box<str> {
+        let name: Box<str> = format!("{SYNTH_SUM_PREFIX}{}_{}", left.raw(), right.raw()).into();
+        if self.decls.data_defs.contains_key(name.as_ref()) {
+            return name;
+        }
+
+        let key = DefinitionKey::new(self.module_key().clone(), name.clone());
+        let variants = BTreeMap::from([
+            ("Left".into(), SemaDataVariantDef { payload: Some(left) }),
+            ("Right".into(), SemaDataVariantDef { payload: Some(right) }),
+        ]);
+        let _prev = self.decls.data_defs.insert(
+            name.clone(),
+            SemaDataDef {
+                key,
+                variants,
+                repr_kind: None,
+                layout_align: None,
+                layout_pack: None,
+            },
+        );
+        name
     }
 
     pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {

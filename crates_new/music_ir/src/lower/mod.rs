@@ -15,7 +15,7 @@ use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
     IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam,
-    IrRecordField, IrRecordLayoutField, IrTempId,
+    IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 
 mod bindings;
@@ -79,6 +79,41 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
     let mut items = TopLevelItems::default();
     toplevel::collect_top_level_items(&mut ctx, sema.module().root, false, &mut items);
     items.callables.extend(ctx.extra_callables);
+
+    let mut seen_data_keys = HashSet::<DefinitionKey>::new();
+    for data_def in &items.data_defs {
+        let _ = seen_data_keys.insert(data_def.key.clone());
+    }
+    for data in sema.data_defs().values() {
+        if !data.key.name.starts_with("__sum__") {
+            continue;
+        }
+        if seen_data_keys.contains(&data.key) {
+            continue;
+        }
+        let mut max_field_count = 0u32;
+        for variant in data.variants.values() {
+            let arity = match variant.payload {
+                None => 0u32,
+                Some(payload_ty) => match &sema.ty(payload_ty).kind {
+                    HirTyKind::Tuple { items } => u32::try_from(
+                        sema.module().store.ty_ids.get(*items).len(),
+                    )
+                    .unwrap_or(u32::MAX),
+                    _ => 1u32,
+                },
+            };
+            max_field_count = max_field_count.max(arity);
+        }
+        items.data_defs.push(IrDataDef {
+            key: data.key.clone(),
+            variant_count: u32::try_from(data.variants.len()).unwrap_or(u32::MAX),
+            field_count: max_field_count,
+            repr_kind: data.repr_kind.clone(),
+            layout_align: data.layout_align,
+            layout_pack: data.layout_pack,
+        });
+    }
     let meta = meta::collect_meta(sema);
 
     Ok(IrModule {
@@ -235,15 +270,142 @@ fn lower_tuple_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRang
 fn lower_array_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRange<HirArrayItem>) -> IrExprKind {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    lower_array_items(ctx, items).map_or_else(
-        || IrExprKind::Unsupported {
-            description: "array spread".into(),
-        },
-        |items| IrExprKind::Array {
+    let array_items = sema.module().store.array_items.get(items);
+    if !array_items.iter().any(|array_item| array_item.spread) {
+        return IrExprKind::Array {
+            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            items: array_items
+                .iter()
+                .map(|array_item| lower_expr(ctx, array_item.expr))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        };
+    }
+
+    let origin = sema.module().store.exprs.get(expr_id).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    };
+    let mut prelude = Vec::<IrExpr>::new();
+    let mut parts = Vec::<IrSeqPart>::new();
+    let mut has_runtime_spread = false;
+
+    for array_item in array_items {
+        let temp = fresh_temp(ctx);
+        prelude.push(IrExpr {
+            origin,
+            kind: IrExprKind::TempLet {
+                temp,
+                value: Box::new(lower_expr(ctx, array_item.expr)),
+            },
+        });
+        let temp_expr = IrExpr {
+            origin,
+            kind: IrExprKind::Temp { temp },
+        };
+
+        if !array_item.spread {
+            parts.push(IrSeqPart::Expr(temp_expr));
+            continue;
+        }
+
+        let spread_ty = sema.expr_ty(array_item.expr);
+        match &sema.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
+                    let Ok(index_u32) = u32::try_from(index) else {
+                        continue;
+                    };
+                    parts.push(IrSeqPart::Expr(IrExpr {
+                        origin,
+                        kind: IrExprKind::Index {
+                            base: Box::new(temp_expr.clone()),
+                            index: Box::new(IrExpr {
+                                origin,
+                                kind: IrExprKind::Lit(IrLit::Int {
+                                    raw: index_u32.to_string().into(),
+                                }),
+                            }),
+                        },
+                    }));
+                }
+            }
+            HirTyKind::Array { dims, .. } => {
+                let dims_vec = sema.module().store.dims.get(dims.clone());
+                if dims_vec.is_empty() {
+                    has_runtime_spread = true;
+                    parts.push(IrSeqPart::Spread(temp_expr));
+                    continue;
+                }
+                if dims_vec.len() != 1 {
+                    return IrExprKind::Unsupported {
+                        description: "array spread requires 1D array".into(),
+                    };
+                }
+                match dims_vec[0] {
+                    HirDim::Int(len) => {
+                        for index_u32 in 0..len {
+                            parts.push(IrSeqPart::Expr(IrExpr {
+                                origin,
+                                kind: IrExprKind::Index {
+                                    base: Box::new(temp_expr.clone()),
+                                    index: Box::new(IrExpr {
+                                        origin,
+                                        kind: IrExprKind::Lit(IrLit::Int {
+                                            raw: index_u32.to_string().into(),
+                                        }),
+                                    }),
+                                },
+                            }));
+                        }
+                    }
+                    HirDim::Unknown | HirDim::Name(_) => {
+                        has_runtime_spread = true;
+                        parts.push(IrSeqPart::Spread(temp_expr));
+                    }
+                }
+            }
+            _ => {
+                return IrExprKind::Unsupported {
+                    description: "array spread source is not tuple/array".into(),
+                };
+            }
+        }
+    }
+
+    let tail_kind = if has_runtime_spread {
+        IrExprKind::ArrayCat {
+            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            parts: parts.into_boxed_slice(),
+        }
+    } else {
+        let items = parts
+            .into_iter()
+            .map(|part| match part {
+                IrSeqPart::Expr(expr) => Some(expr),
+                IrSeqPart::Spread(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(Vec::into_boxed_slice);
+        let Some(items) = items else {
+            return IrExprKind::Unsupported {
+                description: "array spread lowering invariant".into(),
+            };
+        };
+        IrExprKind::Array {
             ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
             items,
-        },
-    )
+        }
+    };
+
+    prelude.push(IrExpr {
+        origin,
+        kind: tail_kind,
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
+    }
 }
 
 fn record_layout_for_ty(
@@ -290,34 +452,106 @@ fn lower_record_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, items: SliceRan
             description: "record without record type".into(),
         };
     };
+    let origin = sema.module().store.exprs.get(expr_id).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    };
 
-    let mut fields = Vec::new();
-    for item in sema.module().store.record_items.get(items) {
-        if item.spread {
-            return IrExprKind::Unsupported {
-                description: "record spread".into(),
+    let mut prelude = Vec::<IrExpr>::new();
+    let mut sources = BTreeMap::<Symbol, IrExpr>::new();
+    for record_item in sema.module().store.record_items.get(items) {
+        let temp = fresh_temp(ctx);
+        prelude.push(IrExpr {
+            origin,
+            kind: IrExprKind::TempLet {
+                temp,
+                value: Box::new(lower_expr(ctx, record_item.value)),
+            },
+        });
+        let temp_expr = IrExpr {
+            origin,
+            kind: IrExprKind::Temp { temp },
+        };
+
+        if record_item.spread {
+            let spread_ty = sema.expr_ty(record_item.value);
+            let Some((spread_indices, _spread_layout, _spread_count)) =
+                record_layout_for_ty(sema, spread_ty, interner)
+            else {
+                return IrExprKind::Unsupported {
+                    description: "record spread without record type".into(),
+                };
             };
+            for (symbol, index) in spread_indices {
+                if !indices.contains_key(&symbol) {
+                    continue;
+                }
+                let _prev = sources.insert(
+                    symbol,
+                    IrExpr {
+                        origin,
+                        kind: IrExprKind::RecordGet {
+                            base: Box::new(temp_expr.clone()),
+                            index,
+                        },
+                    },
+                );
+            }
+            continue;
         }
-        let Some(name) = item.name else {
+
+        let Some(name) = record_item.name else {
             return IrExprKind::Unsupported {
                 description: "record item without name".into(),
             };
         };
-        let Some(index) = indices.get(&name.name).copied() else {
+        if !indices.contains_key(&name.name) {
             return IrExprKind::Unsupported {
                 description: "record item name missing from record type".into(),
             };
+        }
+        let _prev = sources.insert(name.name, temp_expr);
+    }
+
+    let mut symbol_by_index = vec![None::<Symbol>; usize::from(field_count)];
+    for (symbol, index) in &indices {
+        let idx = usize::from(*index);
+        if idx >= symbol_by_index.len() {
+            continue;
+        }
+        symbol_by_index[idx] = Some(*symbol);
+    }
+
+    let mut lowered_fields = Vec::<IrRecordField>::new();
+    for (idx, symbol) in symbol_by_index.into_iter().enumerate() {
+        let Some(symbol) = symbol else {
+            return IrExprKind::Unsupported {
+                description: "record layout missing symbol".into(),
+            };
         };
-        fields.push(IrRecordField {
-            name: interner.resolve(name.name).into(),
-            index,
-            expr: lower_expr(ctx, item.value),
+        let Some(expr) = sources.get(&symbol).cloned() else {
+            return IrExprKind::Unsupported {
+                description: "record missing field value".into(),
+            };
+        };
+        lowered_fields.push(IrRecordField {
+            name: interner.resolve(symbol).into(),
+            index: u16::try_from(idx).unwrap_or(u16::MAX),
+            expr,
         });
     }
-    IrExprKind::Record {
-        ty_name: render_ty_name(sema, ty, interner),
-        field_count,
-        fields: fields.into_boxed_slice(),
+
+    prelude.push(IrExpr {
+        origin,
+        kind: IrExprKind::Record {
+            ty_name: render_ty_name(sema, ty, interner),
+            field_count,
+            fields: lowered_fields.into_boxed_slice(),
+        },
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
     }
 }
 
@@ -330,13 +564,18 @@ fn lower_variant_expr(
     let sema = ctx.sema;
     let interner = ctx.interner;
     let ty = sema.expr_ty(expr_id);
-    let HirTyKind::Named { name, .. } = sema.ty(ty).kind else {
-        return IrExprKind::Unsupported {
-            description: "variant without named type context".into(),
-        };
+    let data = match &sema.ty(ty).kind {
+        HirTyKind::Named { name, .. } => {
+            let data_name = interner.resolve(*name);
+            sema.data_def(data_name)
+        }
+        HirTyKind::Sum { left, right } => {
+            let synth_name = format!("__sum__{}_{}", left.raw(), right.raw());
+            sema.data_def(synth_name.as_str())
+        }
+        _ => None,
     };
-    let data_name = interner.resolve(name);
-    let Some(data) = sema.data_def(data_name) else {
+    let Some(data) = data else {
         return IrExprKind::Unsupported {
             description: "variant without data type definition".into(),
         };
@@ -408,29 +647,155 @@ fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrExprKind {
             description: "perform with unknown effect op".into(),
         };
     }
-    let lowered_args = sema
-        .module()
-        .store
-        .args
-        .get(args.clone())
-        .iter()
-        .map(|arg| {
-            if arg.spread {
-                return None;
-            }
-            Some(lower_expr(ctx, arg.expr))
-        })
-        .collect::<Option<Vec<_>>>()
-        .map(Vec::into_boxed_slice);
-    let Some(lowered_args) = lowered_args else {
-        return IrExprKind::Unsupported {
-            description: "perform with spread args".into(),
+    let args_nodes = sema.module().store.args.get(args.clone());
+    if !args_nodes.iter().any(|arg| arg.spread) {
+        let lowered_args = args_nodes
+            .iter()
+            .map(|arg| lower_expr(ctx, arg.expr))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        return IrExprKind::Perform {
+            effect_key: effect.key.clone(),
+            op_index,
+            args: lowered_args,
         };
+    }
+
+    let origin = sema.module().store.exprs.get(expr).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
     };
-    IrExprKind::Perform {
-        effect_key: effect.key.clone(),
-        op_index,
-        args: lowered_args,
+    let mut prelude = Vec::<IrExpr>::new();
+    let mut parts = Vec::<IrSeqPart>::new();
+    let mut has_runtime_spread = false;
+
+    for arg in args_nodes {
+        let temp = fresh_temp(ctx);
+        prelude.push(IrExpr {
+            origin,
+            kind: IrExprKind::TempLet {
+                temp,
+                value: Box::new(lower_expr(ctx, arg.expr)),
+            },
+        });
+        let temp_expr = IrExpr {
+            origin,
+            kind: IrExprKind::Temp { temp },
+        };
+
+        if !arg.spread {
+            parts.push(IrSeqPart::Expr(temp_expr));
+            continue;
+        }
+
+        let spread_ty = sema.expr_ty(arg.expr);
+        match &sema.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
+                    let Ok(index_u32) = u32::try_from(index) else {
+                        continue;
+                    };
+                    parts.push(IrSeqPart::Expr(IrExpr {
+                        origin,
+                        kind: IrExprKind::Index {
+                            base: Box::new(temp_expr.clone()),
+                            index: Box::new(IrExpr {
+                                origin,
+                                kind: IrExprKind::Lit(IrLit::Int {
+                                    raw: index_u32.to_string().into(),
+                                }),
+                            }),
+                        },
+                    }));
+                }
+            }
+            HirTyKind::Array { dims, item } => {
+                let dims_vec = sema.module().store.dims.get(dims.clone());
+                if dims_vec.is_empty() {
+                    if matches!(sema.ty(*item).kind, HirTyKind::Any) {
+                        has_runtime_spread = true;
+                        parts.push(IrSeqPart::Spread(temp_expr));
+                        continue;
+                    }
+                    return IrExprKind::Unsupported {
+                        description: "perform runtime spread requires []Any".into(),
+                    };
+                }
+                if dims_vec.len() != 1 {
+                    return IrExprKind::Unsupported {
+                        description: "perform spread requires 1D array or tuple".into(),
+                    };
+                }
+                match dims_vec[0] {
+                    HirDim::Int(len) => {
+                        for index_u32 in 0..len {
+                            parts.push(IrSeqPart::Expr(IrExpr {
+                                origin,
+                                kind: IrExprKind::Index {
+                                    base: Box::new(temp_expr.clone()),
+                                    index: Box::new(IrExpr {
+                                        origin,
+                                        kind: IrExprKind::Lit(IrLit::Int {
+                                            raw: index_u32.to_string().into(),
+                                        }),
+                                    }),
+                                },
+                            }));
+                        }
+                    }
+                    HirDim::Unknown | HirDim::Name(_) if matches!(sema.ty(*item).kind, HirTyKind::Any) => {
+                        has_runtime_spread = true;
+                        parts.push(IrSeqPart::Spread(temp_expr));
+                    }
+                    _ => {
+                        return IrExprKind::Unsupported {
+                            description: "perform runtime spread requires []Any".into(),
+                        };
+                    }
+                }
+            }
+            _ => {
+                return IrExprKind::Unsupported {
+                    description: "perform spread source is not tuple/array".into(),
+                };
+            }
+        }
+    }
+
+    let tail_kind = if has_runtime_spread {
+        IrExprKind::PerformSeq {
+            effect_key: effect.key.clone(),
+            op_index,
+            args: parts.into_boxed_slice(),
+        }
+    } else {
+        let args = parts
+            .into_iter()
+            .map(|part| match part {
+                IrSeqPart::Expr(expr) => Some(expr),
+                IrSeqPart::Spread(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(Vec::into_boxed_slice);
+        let Some(args) = args else {
+            return IrExprKind::Unsupported {
+                description: "perform spread lowering invariant".into(),
+            };
+        };
+        IrExprKind::Perform {
+            effect_key: effect.key.clone(),
+            op_index,
+            args,
+        }
+    };
+
+    prelude.push(IrExpr {
+        origin,
+        kind: tail_kind,
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
     }
 }
 
@@ -1182,6 +1547,15 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
                 collect_used_bindings(item, out);
             }
         }
+        IrExprKind::ArrayCat { parts, .. } => {
+            for part in parts {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_used_bindings(expr, out);
+                    }
+                }
+            }
+        }
         IrExprKind::Record { fields, .. } => {
             for field in fields {
                 collect_used_bindings(&field.expr, out);
@@ -1232,9 +1606,28 @@ fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
                 collect_used_bindings(&arg.expr, out);
             }
         }
+        IrExprKind::CallSeq { callee, args } => {
+            collect_used_bindings(callee, out);
+            for part in args {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_used_bindings(expr, out);
+                    }
+                }
+            }
+        }
         IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
             for arg in args {
                 collect_used_bindings(arg, out);
+            }
+        }
+        IrExprKind::PerformSeq { args, .. } => {
+            for part in args {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_used_bindings(expr, out);
+                    }
+                }
             }
         }
         IrExprKind::Handle { value, ops, body, .. } => {
@@ -1282,6 +1675,15 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
                 collect_local_decl_bindings(item, out);
             }
         }
+        IrExprKind::ArrayCat { parts, .. } => {
+            for part in parts {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_local_decl_bindings(expr, out);
+                    }
+                }
+            }
+        }
         IrExprKind::Record { fields, .. } => {
             for field in fields {
                 collect_local_decl_bindings(&field.expr, out);
@@ -1323,9 +1725,28 @@ fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) 
                 collect_local_decl_bindings(&arg.expr, out);
             }
         }
+        IrExprKind::CallSeq { callee, args } => {
+            collect_local_decl_bindings(callee, out);
+            for part in args {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_local_decl_bindings(expr, out);
+                    }
+                }
+            }
+        }
         IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
             for arg in args {
                 collect_local_decl_bindings(arg, out);
+            }
+        }
+        IrExprKind::PerformSeq { args, .. } => {
+            for part in args {
+                match part {
+                    IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
+                        collect_local_decl_bindings(expr, out);
+                    }
+                }
             }
         }
         IrExprKind::Handle { value, ops, body, .. } => {
@@ -1401,20 +1822,168 @@ fn fresh_lambda_name(ctx: &mut LowerCtx<'_>, prefix: &str, origin: IrOrigin) -> 
 
 fn lower_call_expr(ctx: &mut LowerCtx<'_>, callee: HirExprId, args: &SliceRange<HirArg>) -> IrExprKind {
     let sema = ctx.sema;
-    IrExprKind::Call {
-        callee: Box::new(lower_expr(ctx, callee)),
-        args: sema
-            .module()
-            .store
-            .args
-            .get(args.clone())
-            .iter()
-            .map(|arg| IrArg {
-                spread: arg.spread,
-                expr: lower_expr(ctx, arg.expr),
+    let arg_nodes = sema.module().store.args.get(args.clone());
+    if !arg_nodes.iter().any(|arg| arg.spread) {
+        return IrExprKind::Call {
+            callee: Box::new(lower_expr(ctx, callee)),
+            args: arg_nodes
+                .iter()
+                .map(|arg| IrArg {
+                    spread: false,
+                    expr: lower_expr(ctx, arg.expr),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        };
+    }
+
+    let origin = sema.module().store.exprs.get(callee).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    };
+
+    let mut prelude = Vec::<IrExpr>::new();
+    let callee_temp = fresh_temp(ctx);
+    prelude.push(IrExpr {
+        origin,
+        kind: IrExprKind::TempLet {
+            temp: callee_temp,
+            value: Box::new(lower_expr(ctx, callee)),
+        },
+    });
+    let callee_expr = IrExpr {
+        origin,
+        kind: IrExprKind::Temp { temp: callee_temp },
+    };
+
+    let mut parts = Vec::<IrSeqPart>::new();
+    let mut has_runtime_spread = false;
+
+    for arg in arg_nodes {
+        let temp = fresh_temp(ctx);
+        prelude.push(IrExpr {
+            origin,
+            kind: IrExprKind::TempLet {
+                temp,
+                value: Box::new(lower_expr(ctx, arg.expr)),
+            },
+        });
+        let temp_expr = IrExpr {
+            origin,
+            kind: IrExprKind::Temp { temp },
+        };
+
+        if !arg.spread {
+            parts.push(IrSeqPart::Expr(temp_expr));
+            continue;
+        }
+
+        let spread_ty = sema.expr_ty(arg.expr);
+        match &sema.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
+                    let Ok(index_u32) = u32::try_from(index) else {
+                        continue;
+                    };
+                    parts.push(IrSeqPart::Expr(IrExpr {
+                        origin,
+                        kind: IrExprKind::Index {
+                            base: Box::new(temp_expr.clone()),
+                            index: Box::new(IrExpr {
+                                origin,
+                                kind: IrExprKind::Lit(IrLit::Int {
+                                    raw: index_u32.to_string().into(),
+                                }),
+                            }),
+                        },
+                    }));
+                }
+            }
+            HirTyKind::Array { dims, item } => {
+                let dims_vec = sema.module().store.dims.get(dims.clone());
+                if dims_vec.is_empty() {
+                    if matches!(sema.ty(*item).kind, HirTyKind::Any) {
+                        has_runtime_spread = true;
+                        parts.push(IrSeqPart::Spread(temp_expr));
+                        continue;
+                    }
+                    return IrExprKind::Unsupported {
+                        description: "call runtime spread requires []Any".into(),
+                    };
+                }
+                if dims_vec.len() != 1 {
+                    return IrExprKind::Unsupported {
+                        description: "call spread requires 1D array or tuple".into(),
+                    };
+                }
+                match dims_vec[0] {
+                    HirDim::Int(len) => {
+                        for index_u32 in 0..len {
+                            parts.push(IrSeqPart::Expr(IrExpr {
+                                origin,
+                                kind: IrExprKind::Index {
+                                    base: Box::new(temp_expr.clone()),
+                                    index: Box::new(IrExpr {
+                                        origin,
+                                        kind: IrExprKind::Lit(IrLit::Int {
+                                            raw: index_u32.to_string().into(),
+                                        }),
+                                    }),
+                                },
+                            }));
+                        }
+                    }
+                    HirDim::Unknown | HirDim::Name(_) if matches!(sema.ty(*item).kind, HirTyKind::Any) => {
+                        has_runtime_spread = true;
+                        parts.push(IrSeqPart::Spread(temp_expr));
+                    }
+                    _ => {
+                        return IrExprKind::Unsupported {
+                            description: "call runtime spread requires []Any".into(),
+                        };
+                    }
+                }
+            }
+            _ => {
+                return IrExprKind::Unsupported {
+                    description: "call spread source is not tuple/array".into(),
+                };
+            }
+        }
+    }
+
+    let tail_kind = if has_runtime_spread {
+        IrExprKind::CallSeq {
+            callee: Box::new(callee_expr),
+            args: parts.into_boxed_slice(),
+        }
+    } else {
+        let args = parts
+            .into_iter()
+            .map(|part| match part {
+                IrSeqPart::Expr(expr) => Some(IrArg { spread: false, expr }),
+                IrSeqPart::Spread(_) => None,
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
+            .collect::<Option<Vec<_>>>()
+            .map(Vec::into_boxed_slice);
+        let Some(args) = args else {
+            return IrExprKind::Unsupported {
+                description: "call spread lowering invariant".into(),
+            };
+        };
+        IrExprKind::Call {
+            callee: Box::new(callee_expr),
+            args,
+        }
+    };
+
+    prelude.push(IrExpr {
+        origin,
+        kind: tail_kind,
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
     }
 }
 
@@ -1510,14 +2079,100 @@ fn lower_record_update_expr(
         };
     };
 
-    let mut updates = Vec::new();
-    for item in sema.module().store.record_items.get(items) {
-        if item.spread {
-            return IrExprKind::Unsupported {
-                description: "record update spread".into(),
+    let update_items = sema.module().store.record_items.get(items);
+    if !update_items.iter().any(|record_item| record_item.spread) {
+        let mut updates = Vec::new();
+        for record_item in update_items {
+            let Some(name) = record_item.name else {
+                return IrExprKind::Unsupported {
+                    description: "record update item without name".into(),
+                };
             };
+            let Some(index) = result_indices.get(&name.name).copied() else {
+                return IrExprKind::Unsupported {
+                    description: "record update field missing from record type".into(),
+                };
+            };
+            updates.push(IrRecordField {
+                name: interner.resolve(name.name).into(),
+                index,
+                expr: lower_expr(ctx, record_item.value),
+            });
         }
-        let Some(name) = item.name else {
+        return IrExprKind::RecordUpdate {
+            ty_name: render_ty_name(sema, result_ty, interner),
+            field_count: result_count,
+            base: Box::new(lower_expr(ctx, base)),
+            base_fields,
+            result_fields,
+            updates: updates.into_boxed_slice(),
+        };
+    }
+
+    let origin = sema.module().store.exprs.get(expr_id).origin;
+    let origin = IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    };
+    let mut prelude = Vec::<IrExpr>::new();
+
+    let base_temp = fresh_temp(ctx);
+    prelude.push(IrExpr {
+        origin,
+        kind: IrExprKind::TempLet {
+            temp: base_temp,
+            value: Box::new(lower_expr(ctx, base)),
+        },
+    });
+    let base_expr = IrExpr {
+        origin,
+        kind: IrExprKind::Temp { temp: base_temp },
+    };
+
+    let mut updates = Vec::<IrRecordField>::new();
+    for record_item in update_items {
+        let temp = fresh_temp(ctx);
+        prelude.push(IrExpr {
+            origin,
+            kind: IrExprKind::TempLet {
+                temp,
+                value: Box::new(lower_expr(ctx, record_item.value)),
+            },
+        });
+        let temp_expr = IrExpr {
+            origin,
+            kind: IrExprKind::Temp { temp },
+        };
+
+        if record_item.spread {
+            let spread_ty = sema.expr_ty(record_item.value);
+            let Some((spread_indices, _spread_fields, _spread_count)) =
+                record_layout_for_ty(sema, spread_ty, interner)
+            else {
+                return IrExprKind::Unsupported {
+                    description: "record update spread without record type".into(),
+                };
+            };
+            for (symbol, spread_index) in spread_indices {
+                let Some(result_index) = result_indices.get(&symbol).copied() else {
+                    continue;
+                };
+                updates.push(IrRecordField {
+                    name: interner.resolve(symbol).into(),
+                    index: result_index,
+                    expr: IrExpr {
+                        origin,
+                        kind: IrExprKind::RecordGet {
+                            base: Box::new(temp_expr.clone()),
+                            index: spread_index,
+                        },
+                    },
+                });
+            }
+            continue;
+        }
+
+        let Some(name) = record_item.name else {
             return IrExprKind::Unsupported {
                 description: "record update item without name".into(),
             };
@@ -1530,17 +2185,23 @@ fn lower_record_update_expr(
         updates.push(IrRecordField {
             name: interner.resolve(name.name).into(),
             index,
-            expr: lower_expr(ctx, item.value),
+            expr: temp_expr,
         });
     }
 
-    IrExprKind::RecordUpdate {
-        ty_name: render_ty_name(sema, result_ty, interner),
-        field_count: result_count,
-        base: Box::new(lower_expr(ctx, base)),
-        base_fields,
-        result_fields,
-        updates: updates.into_boxed_slice(),
+    prelude.push(IrExpr {
+        origin,
+        kind: IrExprKind::RecordUpdate {
+            ty_name: render_ty_name(sema, result_ty, interner),
+            field_count: result_count,
+            base: Box::new(base_expr),
+            base_fields,
+            result_fields,
+            updates: updates.into_boxed_slice(),
+        },
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
     }
 }
 
@@ -1663,11 +2324,18 @@ fn lower_variant_patterns(
     interner: &Interner,
 ) -> Vec<IrCasePattern> {
     let ty = sema.pat_ty(pat);
-    let HirTyKind::Named { name, .. } = sema.ty(ty).kind else {
-        return Vec::new();
+    let data = match &sema.ty(ty).kind {
+        HirTyKind::Named { name, .. } => {
+            let data_name = interner.resolve(*name);
+            sema.data_def(data_name)
+        }
+        HirTyKind::Sum { left, right } => {
+            let synth_name = format!("__sum__{}_{}", left.raw(), right.raw());
+            sema.data_def(synth_name.as_str())
+        }
+        _ => None,
     };
-    let data_name = interner.resolve(name);
-    let Some(data) = sema.data_def(data_name) else {
+    let Some(data) = data else {
         return Vec::new();
     };
     let tag_name = interner.resolve(tag.name);
@@ -1805,18 +2473,6 @@ fn lower_foreign_decl(
         link,
         exported,
     }
-}
-
-fn lower_array_items(ctx: &mut LowerCtx<'_>, items: SliceRange<HirArrayItem>) -> Option<Box<[IrExpr]>> {
-    let sema = ctx.sema;
-    let mut lowered = Vec::new();
-    for item in sema.module().store.array_items.get(items) {
-        if item.spread {
-            return None;
-        }
-        lowered.push(lower_expr(ctx, item.expr));
-    }
-    Some(lowered.into_boxed_slice())
 }
 
 fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {

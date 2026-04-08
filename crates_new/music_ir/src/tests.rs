@@ -5,6 +5,7 @@ use music_resolve::{ResolveOptions, resolve_module};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
+use crate::{IrCasePattern, IrExprKind};
 use crate::lower_module;
 
 fn lower(src: &str) -> crate::IrModule {
@@ -76,4 +77,144 @@ fn lowers_data_and_foreign_facts() {
     assert!(ir.foreigns[0].link.is_none());
     assert_eq!(ir.callables.len(), 1);
     assert_eq!(ir.exports.len(), 1);
+}
+
+#[test]
+fn lowers_array_cat_for_runtime_spread() {
+    let ir = lower(
+        r#"
+        let xs := [1, 2];
+        export let ys := [0, ...xs, 3];
+    "#,
+    );
+    let ys = ir
+        .globals
+        .iter()
+        .find(|global| global.name.as_ref() == "ys")
+        .expect("ys global");
+    let IrExprKind::Sequence { exprs } = &ys.body.kind else {
+        panic!("expected sequence");
+    };
+    let Some(last) = exprs.last() else {
+        panic!("expected sequence tail");
+    };
+    assert!(matches!(last.kind, IrExprKind::ArrayCat { .. }));
+}
+
+#[test]
+fn lowers_call_seq_for_runtime_any_spread() {
+    let ir = lower(
+        r#"
+        let g (a : Any, b : Any) : Any := a;
+        let xs : []Any := [1, "x"];
+        export let y := g(...xs);
+    "#,
+    );
+    let y = ir
+        .globals
+        .iter()
+        .find(|global| global.name.as_ref() == "y")
+        .expect("y global");
+    let IrExprKind::Sequence { exprs } = &y.body.kind else {
+        panic!("expected sequence");
+    };
+    let Some(last) = exprs.last() else {
+        panic!("expected sequence tail");
+    };
+    assert!(matches!(last.kind, IrExprKind::CallSeq { .. }));
+}
+
+#[test]
+fn lowers_call_with_compile_time_tuple_spread() {
+    let ir = lower(
+        r#"
+        let f (a : Int, b : String) : Int := a;
+        let t := (1, "x");
+        export let y := f(...t);
+    "#,
+    );
+    let y = ir
+        .globals
+        .iter()
+        .find(|global| global.name.as_ref() == "y")
+        .expect("y global");
+    let IrExprKind::Sequence { exprs } = &y.body.kind else {
+        panic!("expected sequence");
+    };
+    let Some(last) = exprs.last() else {
+        panic!("expected sequence tail");
+    };
+    assert!(matches!(last.kind, IrExprKind::Call { .. }));
+}
+
+#[test]
+fn lowers_perform_seq_for_runtime_any_spread() {
+    let ir = lower(
+        r#"
+        let E := effect {
+          let op (a : Any, b : Any) : Unit;
+        };
+        let xs : []Any := [1, "x"];
+        export let y := perform E.op(...xs);
+    "#,
+    );
+    let y = ir
+        .globals
+        .iter()
+        .find(|global| global.name.as_ref() == "y")
+        .expect("y global");
+    let IrExprKind::Sequence { exprs } = &y.body.kind else {
+        panic!("expected sequence");
+    };
+    let Some(last) = exprs.last() else {
+        panic!("expected sequence tail");
+    };
+    assert!(matches!(last.kind, IrExprKind::PerformSeq { .. }));
+}
+
+#[test]
+fn lowers_sum_constructors_as_synthetic_variants() {
+    let ir = lower(
+        r#"
+        export let x : Int + String := .Left(1);
+        export let y : Int + String := .Right("x");
+        export let z (v : Int + String) : Int := case v of (
+          | .Left(n) => n
+          | .Right(_) => 0
+        );
+    "#,
+    );
+
+    let synth = ir
+        .data_defs
+        .iter()
+        .find(|data| data.key.name.starts_with("__sum__"))
+        .expect("synthetic sum data def");
+    assert_eq!(synth.variant_count, 2);
+
+    let x = ir
+        .globals
+        .iter()
+        .find(|global| global.name.as_ref() == "x")
+        .expect("x global");
+    let IrExprKind::VariantNew { data_key, .. } = &x.body.kind else {
+        panic!("expected variant new");
+    };
+    assert_eq!(data_key.name.as_ref(), synth.key.name.as_ref());
+
+    let z = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "z")
+        .expect("z callable");
+    let IrExprKind::Case { arms, .. } = &z.body.kind else {
+        panic!("expected case");
+    };
+    let Some(arm) = arms.first() else {
+        panic!("expected at least one arm");
+    };
+    let IrCasePattern::Variant { data_key, .. } = &arm.pattern else {
+        panic!("expected variant pattern");
+    };
+    assert_eq!(data_key.name.as_ref(), synth.key.name.as_ref());
 }

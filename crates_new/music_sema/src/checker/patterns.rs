@@ -127,6 +127,18 @@ fn bind_variant_pat(
 ) {
     let builtins = ctx.builtins();
     let expected_payload = match ctx.ty(ty).kind {
+        HirTyKind::Sum { left, right } => {
+            let tag_name = ctx.resolve_symbol(tag.name);
+            let chosen = match tag_name {
+                "Left" => Some(left),
+                "Right" => Some(right),
+                _ => None,
+            };
+            if chosen.is_some() {
+                let _sum_def = ctx.ensure_sum_data_def(left, right);
+            }
+            chosen
+        }
         HirTyKind::Named { name, .. } => {
             let data_name = ctx.resolve_symbol(name);
             let tag_name = ctx.resolve_symbol(tag.name);

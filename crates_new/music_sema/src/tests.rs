@@ -977,6 +977,66 @@ fn invalid_link_attr_target_reports_diag() {
     );
 }
 
+#[test]
+fn any_expected_matches_concrete_types() {
+    let sema = check(
+        r#"
+        let idAny (x : Any) : Any := x;
+        idAny(1);
+    "#,
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn array_and_record_spreads_typecheck() {
+    let sema = check(
+        r#"
+        let xs := [1, 2];
+        let ys := [0, ...xs, 3];
+
+        let p := { x := 1, y := 2 };
+        let q := { ...p, x := 3 };
+        let r := p.{ ...q, y := 9 };
+
+        ys;
+        q;
+        r;
+    "#,
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn call_spreads_typecheck_for_tuples_and_any_seq() {
+    let sema = check(
+        r#"
+        let f (a : Int, b : String) : Int := a;
+        let t := (1, "x");
+        f(...t);
+
+        let g (a : Any, b : Any) : Any := a;
+        let xs : []Any := [1, "x"];
+        g(...xs);
+    "#,
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn sum_constructors_and_patterns_typecheck() {
+    let sema = check(
+        r#"
+        let x : Int + String := .Left(1);
+        case x of (
+          | .Left(n) => n
+          | .Right(_) => 0
+        );
+    "#,
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
 fn find_expr(sema: &SemaModule, predicate: impl Fn(&HirExprKind) -> bool) -> Option<HirExprId> {
     sema.module()
         .store
