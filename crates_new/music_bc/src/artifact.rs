@@ -11,7 +11,7 @@ use crate::descriptor::{
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 5;
+pub const BINARY_VERSION: u16 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]

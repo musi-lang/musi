@@ -163,6 +163,7 @@ fn encode_methods(out: &mut Vec<u8>, artifact: &Artifact) {
     );
     for (_, entry) in artifact.methods.iter() {
         push_u32(out, entry.name.raw());
+        push_u16(out, entry.params);
         push_u16(out, entry.locals);
         out.push(u8::from(entry.export));
         push_u16(
@@ -203,6 +204,7 @@ fn encode_effects(out: &mut Vec<u8>, artifact: &Artifact) {
         );
         for op in &entry.ops {
             push_u32(out, op.name.raw());
+            push_u16(out, op.params);
         }
     }
 }
@@ -226,6 +228,7 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
     );
     for (_, entry) in artifact.foreigns.iter() {
         push_u32(out, entry.name.raw());
+        push_u16(out, entry.params);
         push_u32(out, entry.abi.raw());
         push_u32(out, entry.symbol.raw());
         if let Some(link) = entry.link {
@@ -456,6 +459,7 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     require_section(cursor, SectionTag::Methods)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
+        let params = cursor.read_u16()?;
         let locals = cursor.read_u16()?;
         let export = cursor.read_u8()? != 0;
         let label_count = usize::from(cursor.read_u16()?);
@@ -485,6 +489,7 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
         }
         let _ = artifact.methods.alloc(MethodDescriptor {
             name,
+            params,
             locals,
             export,
             labels: labels.into_boxed_slice(),
@@ -503,6 +508,7 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
         for _ in 0..ops_len {
             ops.push(EffectOpDescriptor {
                 name: cursor.read_idx()?,
+                params: cursor.read_u16()?,
             });
         }
         let _ = artifact.effects.alloc(EffectDescriptor {
@@ -527,6 +533,7 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(
     require_section(cursor, SectionTag::Foreigns)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
+        let params = cursor.read_u16()?;
         let abi = cursor.read_idx()?;
         let symbol = cursor.read_idx()?;
         let link = match cursor.read_u8()? {
@@ -536,6 +543,7 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(
         };
         let _ = artifact.foreigns.alloc(ForeignDescriptor {
             name,
+            params,
             abi,
             symbol,
             link,

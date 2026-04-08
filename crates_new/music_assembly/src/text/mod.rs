@@ -108,6 +108,8 @@ fn format_effects(out: &mut String, artifact: &Artifact) {
         for op in &descriptor.ops {
             out.push(' ');
             push_symbol_ref(out, artifact.string_text(op.name));
+            out.push_str(" params ");
+            out.push_str(&op.params.to_string());
         }
         out.push('\n');
     }
@@ -139,6 +141,8 @@ fn format_methods(out: &mut String, artifact: &Artifact) {
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method ");
         push_symbol_ref(out, artifact.string_text(method.name));
+        out.push_str(" params ");
+        out.push_str(&method.params.to_string());
         out.push_str(" locals ");
         out.push_str(&method.locals.to_string());
         if method.export {
@@ -170,6 +174,8 @@ fn format_foreigns(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.foreigns.iter() {
         out.push_str(".foreign ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push_str(" params ");
+        out.push_str(&descriptor.params.to_string());
         out.push_str(" abi ");
         push_quoted(out, artifact.string_text(descriptor.abi));
         out.push_str(" symbol ");
@@ -550,15 +556,23 @@ impl TextBuilder {
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
-        let ops = parts
-            .iter()
-            .skip(2)
-            .map(|part| {
-                parse_symbol(part).map(|op_name| EffectOpDescriptor {
-                    name: self.intern_string(&op_name),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut ops = Vec::<EffectOpDescriptor>::new();
+        let mut idx = 2;
+        while idx < parts.len() {
+            let op_name = parse_symbol(must_get(parts.get(idx), "effect op")?)?;
+            idx += 1;
+            let mut params = 0_u16;
+            if idx < parts.len() && parts[idx] == "params" {
+                params = must_get(parts.get(idx + 1), "effect op params")?
+                    .parse()
+                    .map_err(|_| AssemblyError::Text("invalid effect op params".into()))?;
+                idx += 2;
+            }
+            ops.push(EffectOpDescriptor {
+                name: self.intern_string(&op_name),
+                params,
+            });
+        }
         let id = self.artifact.effects.alloc(EffectDescriptor {
             name: name_id,
             ops: ops.into_boxed_slice(),
@@ -611,17 +625,31 @@ impl TextBuilder {
     }
 
     fn parse_foreign(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
-        if parts.len() < 6
-            || must_get(parts.get(2), "foreign abi marker")? != "abi"
-            || must_get(parts.get(4), "foreign symbol marker")? != "symbol"
-        {
+        if parts.len() < 6 {
             return Err(AssemblyError::Text(
-                "expected `.foreign $Name abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
         let mut export = false;
         let mut link = None::<String>;
-        let mut idx = 6;
+        let mut params = 0_u16;
+        let mut base = 2;
+        if parts.get(base).map(String::as_str) == Some("params") {
+            params = must_get(parts.get(base + 1), "foreign params")?
+                .parse()
+                .map_err(|_| AssemblyError::Text("invalid foreign params".into()))?;
+            base += 2;
+        }
+        if parts.get(base).map(String::as_str) != Some("abi")
+            || parts.get(base + 2).map(String::as_str) != Some("symbol")
+        {
+            return Err(AssemblyError::Text(
+                "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+            ));
+        }
+        let abi = parse_quoted(must_get(parts.get(base + 1), "foreign abi")?)?;
+        let symbol = parse_quoted(must_get(parts.get(base + 3), "foreign symbol")?)?;
+        let mut idx = base + 4;
         while idx < parts.len() {
             match parts[idx].as_str() {
                 "export" => {
@@ -635,8 +663,7 @@ impl TextBuilder {
                 }
                 _ => {
                     return Err(AssemblyError::Text(
-                        "expected `.foreign $Name abi \"c\" symbol \"puts\" [link \"c\"] [export]`"
-                            .into(),
+                        "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
                     ));
                 }
             }
@@ -644,8 +671,9 @@ impl TextBuilder {
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
         let descriptor = ForeignDescriptor {
             name: self.intern_string(&name),
-            abi: self.intern_string(&parse_quoted(must_get(parts.get(3), "foreign abi")?)?),
-            symbol: self.intern_string(&parse_quoted(must_get(parts.get(5), "foreign symbol")?)?),
+            params,
+            abi: self.intern_string(&abi),
+            symbol: self.intern_string(&symbol),
             link: link.as_deref().map(|text| self.intern_string(text)),
             export,
         };
@@ -716,16 +744,29 @@ impl TextBuilder {
 
     fn parse_method(&mut self, header: &str, lines: &[&str]) -> Result<(), AssemblyError> {
         let parts = tokenize(header)?;
-        if parts.len() < 4 || parts[2] != "locals" {
+        if parts.len() < 4 {
             return Err(AssemblyError::Text(
-                "expected `.method $Name locals <count> [export]`".into(),
+                "expected `.method $Name [params <count>] locals <count> [export]`".into(),
             ));
         }
         let name = parse_symbol(&parts[1])?;
-        let locals = parts[3]
+        let mut params = 0_u16;
+        let mut idx = 2;
+        if parts.get(idx).map(String::as_str) == Some("params") {
+            params = must_get(parts.get(idx + 1), "method params")?
+                .parse()
+                .map_err(|_| AssemblyError::Text("invalid params count".into()))?;
+            idx += 2;
+        }
+        if parts.get(idx).map(String::as_str) != Some("locals") {
+            return Err(AssemblyError::Text(
+                "expected `.method $Name [params <count>] locals <count> [export]`".into(),
+            ));
+        }
+        let locals = must_get(parts.get(idx + 1), "locals count")?
             .parse()
             .map_err(|_| AssemblyError::Text("invalid locals count".into()))?;
-        let export = parts.iter().skip(4).any(|part| part == "export");
+        let export = parts.iter().skip(idx + 2).any(|part| part == "export");
 
         let mut labels = Vec::<StringId>::new();
         let mut label_ids = HashMap::<String, u16>::new();
@@ -750,6 +791,7 @@ impl TextBuilder {
 
         let method = MethodDescriptor {
             name: self.intern_string(&name),
+            params,
             locals,
             export,
             labels: labels.into_boxed_slice(),
@@ -861,6 +903,7 @@ impl TextBuilder {
         let name_id = self.intern_string(name);
         let id = self.artifact.methods.alloc(MethodDescriptor {
             name: name_id,
+            params: 0,
             locals: 0,
             export: false,
             labels: Box::new([]),

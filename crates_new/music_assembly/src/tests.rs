@@ -1,6 +1,6 @@
 use music_bc::descriptor::{
-    ConstantDescriptor, ConstantValue, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
-    MethodDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor, ForeignDescriptor,
+    GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand};
 
@@ -20,6 +20,7 @@ fn sample_artifact() -> Artifact {
     });
     let method = artifact.methods.alloc(MethodDescriptor {
         name: entry,
+        params: 0,
         locals: 1,
         export: false,
         labels: Box::new([label]),
@@ -104,6 +105,7 @@ fn foreign_link_roundtrips_in_text_and_binary() {
     let link = artifact.intern_string("c");
     let _ = artifact.foreigns.alloc(ForeignDescriptor {
         name,
+        params: 0,
         abi,
         symbol,
         link: Some(link),
@@ -155,6 +157,7 @@ fn global_and_sequence_operands_roundtrip_in_text_and_binary() {
     });
     let _ = artifact.methods.alloc(MethodDescriptor {
         name: entry,
+        params: 0,
         locals: 1,
         export: false,
         labels: Box::new([label]),
@@ -193,6 +196,7 @@ fn closures_roundtrip_in_text_and_binary() {
 
     let closure_method = artifact.methods.alloc(MethodDescriptor {
         name: closure,
+        params: 0,
         locals: 0,
         export: false,
         labels: Box::new([]),
@@ -204,6 +208,7 @@ fn closures_roundtrip_in_text_and_binary() {
 
     let _ = artifact.methods.alloc(MethodDescriptor {
         name: entry,
+        params: 0,
         locals: 0,
         export: false,
         labels: Box::new([label]),
@@ -219,6 +224,81 @@ fn closures_roundtrip_in_text_and_binary() {
                 },
             )),
             CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+        ]),
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}
+
+#[test]
+fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let int = artifact.intern_string("Int");
+    let _int_ty = artifact.types.alloc(TypeDescriptor { name: int });
+
+    let callee_name = artifact.intern_string("callee");
+    let callee = artifact.methods.alloc(MethodDescriptor {
+        name: callee_name,
+        params: 2,
+        locals: 0,
+        export: false,
+        labels: Box::new([]),
+        code: Box::new([CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        ))]),
+    });
+
+    let effect_name = artifact.intern_string("Abort");
+    let op_name = artifact.intern_string("abort");
+    let effect = artifact.effects.alloc(EffectDescriptor {
+        name: effect_name,
+        ops: Box::new([EffectOpDescriptor {
+            name: op_name,
+            params: 1,
+        }]),
+    });
+
+    let foreign_name = artifact.intern_string("puts");
+    let c_abi = artifact.intern_string("c");
+    let symbol = artifact.intern_string("puts");
+    let foreign = artifact.foreigns.alloc(ForeignDescriptor {
+        name: foreign_name,
+        params: 1,
+        abi: c_abi,
+        symbol,
+        link: None,
+        export: false,
+    });
+
+    let entry_name = artifact.intern_string("entry");
+    let label = artifact.intern_string("L0");
+    let _ = artifact.methods.alloc(MethodDescriptor {
+        name: entry_name,
+        params: 0,
+        locals: 0,
+        export: false,
+        labels: Box::new([label]),
+        code: Box::new([
+            CodeEntry::Label(Label { id: 0 }),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(Opcode::CallSeq, Operand::Method(callee))),
+            CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::FfiCallSeq,
+                Operand::Foreign(foreign),
+            )),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::EffInvkSeq,
+                Operand::Effect { effect, op: 0 },
+            )),
             CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
         ]),
     });

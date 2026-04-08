@@ -18,14 +18,42 @@ fn validates_well_formed_artifact() {
     let puts_name = artifact.intern_string("puts");
     let c_name = artifact.intern_string("c");
     let symbol_name = artifact.intern_string("puts");
+    let callee_name = artifact.intern_string("callee");
 
     let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
     let const_id = artifact.constants.alloc(ConstantDescriptor {
         name: const_name,
         value: ConstantValue::Int(41),
     });
+    let effect_id = artifact.effects.alloc(EffectDescriptor {
+        name: abort_name,
+        ops: Box::new([EffectOpDescriptor {
+            name: abort_op_name,
+            params: 0,
+        }]),
+    });
+    let foreign_id = artifact.foreigns.alloc(ForeignDescriptor {
+        name: puts_name,
+        params: 1,
+        abi: c_name,
+        symbol: symbol_name,
+        link: None,
+        export: false,
+    });
+    let callee_id = artifact.methods.alloc(MethodDescriptor {
+        name: callee_name,
+        params: 0,
+        locals: 0,
+        export: false,
+        labels: Box::new([]),
+        code: Box::new([CodeEntry::Instruction(Instruction::new(
+            Opcode::Ret,
+            Operand::None,
+        ))]),
+    });
     let method_id = artifact.methods.alloc(MethodDescriptor {
         name: entry_name,
+        params: 0,
         locals: 1,
         export: false,
         labels: Box::new([entry_name]),
@@ -41,6 +69,20 @@ fn validates_well_formed_artifact() {
                 Opcode::SeqNew,
                 Operand::TypeLen { ty: int_ty, len: 2 },
             )),
+            CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::CallSeq,
+                Operand::Method(callee_id),
+            )),
+            CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::FfiCallSeq,
+                Operand::Foreign(foreign_id),
+            )),
+            CodeEntry::Instruction(Instruction::new(
+                Opcode::EffInvkSeq,
+                Operand::Effect { effect: effect_id, op: 0 },
+            )),
             CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
         ]),
     });
@@ -49,20 +91,9 @@ fn validates_well_formed_artifact() {
         export: true,
         initializer: Some(method_id),
     });
-    let _effect_id = artifact.effects.alloc(EffectDescriptor {
-        name: abort_name,
-        ops: Box::new([EffectOpDescriptor {
-            name: abort_op_name,
-        }]),
-    });
+    let _effect_id = effect_id;
     let _class_id = artifact.classes.alloc(ClassDescriptor { name: abort_name });
-    let _foreign_id = artifact.foreigns.alloc(ForeignDescriptor {
-        name: puts_name,
-        abi: c_name,
-        symbol: symbol_name,
-        link: None,
-        export: false,
-    });
+    let _foreign_id = foreign_id;
 
     assert!(artifact.validate().is_ok());
 }
@@ -73,6 +104,7 @@ fn rejects_missing_label_reference() {
     let entry_name = artifact.intern_string("entry");
     let _method_id = artifact.methods.alloc(MethodDescriptor {
         name: entry_name,
+        params: 0,
         locals: 0,
         export: false,
         labels: Box::new([entry_name]),
@@ -113,6 +145,7 @@ fn validates_global_and_sequence_operands() {
     });
     let _ = artifact.methods.alloc(MethodDescriptor {
         name: entry_name,
+        params: 0,
         locals: 1,
         export: false,
         labels: Box::new([label_name]),
@@ -145,6 +178,7 @@ fn validates_closures_and_indirect_calls() {
 
     let closure_method = artifact.methods.alloc(MethodDescriptor {
         name: closure_name,
+        params: 0,
         locals: 0,
         export: false,
         labels: Box::new([]),
@@ -156,6 +190,7 @@ fn validates_closures_and_indirect_calls() {
 
     let _ = artifact.methods.alloc(MethodDescriptor {
         name: entry_name,
+        params: 0,
         locals: 0,
         export: false,
         labels: Box::new([label_name]),
