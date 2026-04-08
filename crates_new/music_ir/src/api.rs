@@ -305,6 +305,13 @@ pub struct IrInstanceDef {
     pub member_names: Box<[Box<str>]>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrMetaRecord {
+    pub target: Box<str>,
+    pub key: Box<str>,
+    pub values: Box<[Box<str>]>,
+}
+
 #[derive(Debug, Clone)]
 pub struct IrModule {
     pub module_key: ModuleKey,
@@ -318,6 +325,7 @@ pub struct IrModule {
     pub effects: Box<[IrEffectDef]>,
     pub classes: Box<[IrClassDef]>,
     pub instances: Box<[IrInstanceDef]>,
+    pub meta: Box<[IrMetaRecord]>,
 }
 
 impl IrModule {

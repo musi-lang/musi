@@ -1,6 +1,6 @@
 # Type System Reference
 
-Normative type-system reference for the reduced core language. Historical pre-reduction material lives in `docs/legacy/01-type-system.md`.
+Normative type-system reference for the current language surface.
 
 ## Core Principles
 

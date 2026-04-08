@@ -7,6 +7,7 @@ use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::CheckPass;
 use super::super::attrs::validate_expr_attrs;
+use super::super::decls::check_foreign_expr;
 use super::super::exprs::check_expr;
 use super::super::normalize::{
     lower_constraints, lower_effect_row, lower_params, lower_type_expr, type_mismatch,
@@ -15,6 +16,7 @@ use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::schemes::BindingScheme;
 use super::declarations::{check_bound_class, check_bound_data, check_bound_effect};
 use super::effects::require_declared_effects;
+use super::instances::check_instance_expr;
 use super::imports::{bind_imported_alias, bind_module_pattern, module_target_for_expr};
 use crate::api::{ConstraintFacts, ExprFacts};
 use crate::effects::EffectRow;
@@ -148,9 +150,28 @@ pub(in super::super) fn check_let_expr(
                 HirExprKind::Class { constraints, members } => {
                     check_bound_class(ctx, value_id, name, constraints, members)
                 }
-                HirExprKind::Instance { .. } | HirExprKind::Foreign { .. } => {
-                    ctx.diag(origin.span, "cannot bind declaration", "");
-                    let _ = check_expr(ctx, value);
+                HirExprKind::Instance {
+                    type_params,
+                    constraints,
+                    class,
+                    members,
+                } => {
+                    let _ = check_instance_expr(
+                        ctx,
+                        value_id,
+                        origin,
+                        type_params,
+                        constraints,
+                        class,
+                        &members,
+                    );
+                    ExprFacts {
+                        ty: builtins.unit,
+                        effects: EffectRow::empty(),
+                    }
+                }
+                HirExprKind::Foreign { abi, decls } => {
+                    let _ = check_foreign_expr(ctx, origin, abi, decls, None);
                     ExprFacts {
                         ty: builtins.unit,
                         effects: EffectRow::empty(),

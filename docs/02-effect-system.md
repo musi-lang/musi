@@ -1,6 +1,6 @@
 # Effect System
 
-Normative effect-system reference for the reduced core language. Historical pre-reduction material lives in `docs/legacy/02-effect-system.md`.
+Normative effect-system reference for the current language surface.
 
 ## Core Model
 
@@ -73,7 +73,7 @@ The clauses are:
 - one value clause: `value => ...`
 - one clause per handled operation: `op(args, k) => ...`
 
-There is no `return x => ...` handler syntax in the reduced language.
+There is no `return x => ...` handler syntax in the current language.
 
 ## `resume`
 

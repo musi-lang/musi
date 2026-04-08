@@ -212,7 +212,7 @@ fn check_module_stmt(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFact
     let expr = ctx.expr(id);
     let origin = expr.origin;
     let facts = match expr.kind {
-        HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
+        HirExprKind::Sequence { exprs } => {
             let mut ty = ctx.builtins().unit;
             let mut effects = EffectRow::empty();
             for expr_id in ctx.expr_ids(exprs) {

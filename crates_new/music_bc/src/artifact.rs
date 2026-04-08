@@ -5,8 +5,8 @@ use thiserror::Error;
 
 use crate::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
-    TypeDescriptor,
+    ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
+    MethodDescriptor, TypeDescriptor,
 };
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
@@ -26,6 +26,7 @@ pub enum SectionTag {
     Foreigns = 8,
     Exports = 9,
     Data = 10,
+    Meta = 11,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +125,7 @@ pub type ClassId = Idx<ClassDescriptor>;
 pub type ForeignId = Idx<ForeignDescriptor>;
 pub type ExportId = Idx<ExportDescriptor>;
 pub type DataId = Idx<DataDescriptor>;
+pub type MetaId = Idx<MetaDescriptor>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Artifact {
@@ -137,6 +139,7 @@ pub struct Artifact {
     pub foreigns: Table<ForeignDescriptor>,
     pub exports: Table<ExportDescriptor>,
     pub data: Table<DataDescriptor>,
+    pub meta: Table<MetaDescriptor>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -167,6 +170,7 @@ impl Artifact {
             foreigns: Table::new(),
             exports: Table::new(),
             data: Table::new(),
+            meta: Table::new(),
         }
     }
 
@@ -250,6 +254,13 @@ impl Artifact {
         }
         for (_, descriptor) in self.methods.iter() {
             self.validate_method(descriptor)?;
+        }
+        for (_, descriptor) in self.meta.iter() {
+            self.require_string(descriptor.target)?;
+            self.require_string(descriptor.key)?;
+            for value in &descriptor.values {
+                self.require_string(*value)?;
+            }
         }
         Ok(())
     }

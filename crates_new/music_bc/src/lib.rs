@@ -5,7 +5,8 @@ mod opcode;
 
 pub use artifact::{
     Artifact, ArtifactError, BINARY_VERSION, ClassId, ConstantId, DataId, EffectId, ExportId,
-    ForeignId, GlobalId, MethodId, SEAM_MAGIC, SectionTag, StringId, StringRecord, Table, TypeId,
+    ForeignId, GlobalId, MetaId, MethodId, SEAM_MAGIC, SectionTag, StringId, StringRecord, Table,
+    TypeId,
 };
 pub use instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 pub use opcode::{Opcode, OpcodeFamily};

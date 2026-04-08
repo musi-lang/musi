@@ -2,7 +2,7 @@ use music_arena::Idx;
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
     DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MethodDescriptor, TypeDescriptor,
+    MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
@@ -31,6 +31,7 @@ pub fn encode_binary(artifact: &Artifact) -> Result<Vec<u8>, AssemblyError> {
     encode_foreigns(&mut out, artifact);
     encode_exports(&mut out, artifact);
     encode_data(&mut out, artifact);
+    encode_meta(&mut out, artifact);
     Ok(out)
 }
 
@@ -62,6 +63,14 @@ pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
     decode_foreigns(&mut cursor, &mut artifact)?;
     decode_exports(&mut cursor, &mut artifact)?;
     decode_data(&mut cursor, &mut artifact)?;
+    if !cursor.is_eof() {
+        let next = cursor.peek_u8().ok_or(AssemblyError::TruncatedBinary)?;
+        if next == SectionTag::Meta as u8 {
+            decode_meta(&mut cursor, &mut artifact)?;
+        } else {
+            return Err(AssemblyError::Text("unknown trailing section".into()));
+        }
+    }
     artifact.validate()?;
     Ok(artifact)
 }
@@ -294,6 +303,25 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
                 push_u32(out, value);
             }
             None => out.push(0),
+        }
+    }
+}
+
+fn encode_meta(out: &mut Vec<u8>, artifact: &Artifact) {
+    if artifact.meta.is_empty() {
+        return;
+    }
+    push_section_tag(out, SectionTag::Meta);
+    push_u32(out, u32::try_from(artifact.meta.len()).expect("section overflow"));
+    for (_, entry) in artifact.meta.iter() {
+        push_u32(out, entry.target.raw());
+        push_u32(out, entry.key.raw());
+        push_u16(
+            out,
+            u16::try_from(entry.values.len()).expect("too many meta values"),
+        );
+        for value in entry.values.iter().copied() {
+            push_u32(out, value.raw());
         }
     }
 }
@@ -577,6 +605,25 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), A
     Ok(())
 }
 
+fn decode_meta(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+    require_section(cursor, SectionTag::Meta)?;
+    for _ in 0..cursor.read_u32()? {
+        let target = cursor.read_idx()?;
+        let key = cursor.read_idx()?;
+        let value_len = usize::from(cursor.read_u16()?);
+        let mut values = Vec::with_capacity(value_len);
+        for _ in 0..value_len {
+            values.push(cursor.read_idx()?);
+        }
+        let _ = artifact.meta.alloc(MetaDescriptor {
+            target,
+            key,
+            values: values.into_boxed_slice(),
+        });
+    }
+    Ok(())
+}
+
 fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
     Ok(match cursor.read_u8()? {
         0 => Operand::None,
@@ -639,6 +686,7 @@ const fn section_tag_byte(tag: SectionTag) -> u8 {
         SectionTag::Foreigns => 8,
         SectionTag::Exports => 9,
         SectionTag::Data => 10,
+        SectionTag::Meta => 11,
     }
 }
 
@@ -675,6 +723,14 @@ struct Cursor<'bytes> {
 impl<'bytes> Cursor<'bytes> {
     const fn new(bytes: &'bytes [u8]) -> Self {
         Self { bytes, offset: 0 }
+    }
+
+    const fn is_eof(&self) -> bool {
+        self.offset >= self.bytes.len()
+    }
+
+    fn peek_u8(&self) -> Option<u8> {
+        self.bytes.get(self.offset).copied()
     }
 
     fn read_exact(&mut self, len: usize) -> Result<[u8; 4], AssemblyError> {

@@ -221,12 +221,19 @@ fn import_effect_alias(
             )
         })
         .collect::<BTreeMap<_, _>>();
+    let laws = surface
+        .laws
+        .iter()
+        .map(|law| ctx.intern(law))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
     ctx.insert_effect_def(
         alias_name,
         EffectDef {
             key: surface.key.clone(),
             ops,
+            laws,
         },
     );
 }

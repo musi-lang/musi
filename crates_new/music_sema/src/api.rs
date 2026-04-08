@@ -27,6 +27,34 @@ pub struct TargetInfo {
     pub features: BTreeSet<Box<str>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attr {
+    pub path: Box<[Box<str>]>,
+    pub args: Box<[AttrArg]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttrArg {
+    pub name: Option<Box<str>>,
+    pub value: AttrValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttrRecordField {
+    pub name: Box<str>,
+    pub value: AttrValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttrValue {
+    String(Box<str>),
+    Int(Box<str>),
+    Rune(u32),
+    Variant { tag: Box<str>, args: Box<[AttrValue]> },
+    Array { items: Box<[AttrValue]> },
+    Record { fields: Box<[AttrRecordField]> },
+}
+
 pub trait SemaEnv {
     fn module_surface(&self, key: &ModuleKey) -> Option<ModuleSurface>;
 }
@@ -142,6 +170,8 @@ pub struct ExportedValue {
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
+    pub inert_attrs: Box<[Attr]>,
+    pub musi_attrs: Box<[Attr]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +187,8 @@ pub struct DataSurface {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub inert_attrs: Box<[Attr]>,
+    pub musi_attrs: Box<[Attr]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,6 +224,8 @@ pub struct ClassSurface {
     pub constraints: Box<[ConstraintSurface]>,
     pub members: Box<[ClassMemberSurface]>,
     pub laws: Box<[Box<str>]>,
+    pub inert_attrs: Box<[Attr]>,
+    pub musi_attrs: Box<[Attr]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,6 +239,9 @@ pub struct EffectOpSurface {
 pub struct EffectSurface {
     pub key: DefinitionKey,
     pub ops: Box<[EffectOpSurface]>,
+    pub laws: Box<[Box<str>]>,
+    pub inert_attrs: Box<[Attr]>,
+    pub musi_attrs: Box<[Attr]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,6 +251,8 @@ pub struct InstanceSurface {
     pub class_args: Box<[SurfaceTyId]>,
     pub constraints: Box<[ConstraintSurface]>,
     pub member_names: Box<[Box<str>]>,
+    pub inert_attrs: Box<[Attr]>,
+    pub musi_attrs: Box<[Attr]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,6 +319,7 @@ pub struct SemaEffectOpDef {
 pub struct SemaEffectDef {
     pub key: DefinitionKey,
     pub ops: BTreeMap<Box<str>, SemaEffectOpDef>,
+    pub laws: Box<[Symbol]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

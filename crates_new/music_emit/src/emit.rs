@@ -5,7 +5,7 @@ use music_base::{SourceId, Span, diag::Diag};
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
     EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MethodDescriptor, TypeDescriptor,
+    MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
     Artifact, ClassId, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId,
@@ -170,6 +170,7 @@ fn register_module(
     register_callables(state, module, &mut layout);
     register_globals(state, module, &mut layout);
     register_exports(state, module, &mut layout);
+    register_meta(state, module);
     register_expr_types(state, module, &mut layout);
     layout
 }
@@ -286,6 +287,20 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
             opaque,
             target,
         });
+    }
+}
+
+fn register_meta(state: &mut ProgramState, module: &IrModule) {
+    for record in &module.meta {
+        let target = state.artifact.intern_string(record.target.as_ref());
+        let key = state.artifact.intern_string(record.key.as_ref());
+        let values = record
+            .values
+            .iter()
+            .map(|value| state.artifact.intern_string(value.as_ref()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let _ = state.artifact.meta.alloc(MetaDescriptor { target, key, values });
     }
 }
 

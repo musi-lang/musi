@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirForeignDecl, HirLitKind, HirOrigin, HirTyId,
-    HirTyKind,
+    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirForeignDecl, HirLitKind, HirOrigin, HirPatKind,
+    HirTyId, HirTyKind,
 };
 
 use super::{CheckPass, PassBase};
@@ -70,6 +70,49 @@ pub(super) fn extract_data_layout_hints(
     (repr_kind, align, pack)
 }
 
+fn validate_musi_lang_attr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    attr: &HirAttr,
+    origin: HirOrigin,
+    inner: HirExprId,
+) {
+    if !ctx.in_module_stmt() {
+        ctx.diag(origin.span, "attr invalid target", "");
+        return;
+    }
+    match ctx.expr(inner).kind {
+        HirExprKind::Let {
+            pat,
+            has_param_clause,
+            ..
+        } => {
+            if has_param_clause {
+                ctx.diag(origin.span, "attr invalid target", "");
+                return;
+            }
+            if !matches!(ctx.pat(pat).kind, HirPatKind::Bind { .. }) {
+                ctx.diag(origin.span, "attr invalid target", "");
+                return;
+            }
+        }
+        _ => {
+            ctx.diag(origin.span, "attr invalid target", "");
+            return;
+        }
+    }
+    let name = parse_named_string_arg(ctx, attr, "name");
+    if name.is_none() {
+        ctx.diag(origin.span, "attr invalid value", "");
+    }
+}
+
+fn validate_musi_intrinsic_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+    let opcode = parse_named_string_arg(ctx, attr, "opcode");
+    if opcode.is_none() {
+        ctx.diag(origin.span, "attr invalid value", "");
+    }
+}
+
 pub fn validate_expr_attrs(
     ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
@@ -97,6 +140,7 @@ pub fn validate_expr_attrs(
                     ctx.diag(origin.span, "attr invalid target", "");
                 }
             }
+            ["musi", "lang"] => validate_musi_lang_attr(ctx, &attr, origin, inner),
             _ => {}
         }
     }
@@ -123,6 +167,7 @@ pub fn validate_foreign_decl(ctx: &mut CheckPass<'_, '_, '_>, decl: &HirForeignD
         match path.as_slice() {
             ["link"] => validate_link_attr(ctx, &attr, decl.origin),
             ["when"] => validate_when_attr(ctx, &attr, decl.origin),
+            ["musi", "intrinsic"] => validate_musi_intrinsic_attr(ctx, &attr, decl.origin),
             _ => {}
         }
     }

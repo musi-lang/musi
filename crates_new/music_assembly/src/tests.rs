@@ -1,6 +1,6 @@
 use music_bc::descriptor::{
-    ConstantDescriptor, ConstantValue, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
-    TypeDescriptor,
+    ConstantDescriptor, ConstantValue, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
+    MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand};
 
@@ -108,6 +108,27 @@ fn foreign_link_roundtrips_in_text_and_binary() {
         symbol,
         link: Some(link),
         export: true,
+    });
+
+    let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}
+
+#[test]
+fn meta_roundtrips_in_text_and_binary() {
+    let mut artifact = sample_artifact();
+    let target = artifact.intern_string("main::answer");
+    let key = artifact.intern_string("inert.attr");
+    let value = artifact.intern_string("@foo.bar(baz := \"qux\")");
+    let _ = artifact.meta.alloc(MetaDescriptor {
+        target,
+        key,
+        values: Box::new([value]),
     });
 
     let text = format_text(&artifact);

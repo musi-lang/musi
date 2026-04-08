@@ -17,7 +17,7 @@ Musi is expression-driven.
 
 ## Keywords
 
-The reduced core keeps these keyword families:
+The language keeps these keyword families:
 
 - binding and structure: `let`, `mut`, `rec`, `case`, `of`, `if`
 - type and abstraction: `data`, `class`, `instance`, `law`, `where`
@@ -44,7 +44,7 @@ let mut counter := 0;
 counter <- counter + 1;
 ```
 
-`<-` writes value into target location. Borrow checking not part of reduced core.
+`<-` writes value into target location. Borrow checking is not implemented.
 
 `mut` has two separate roles:
 

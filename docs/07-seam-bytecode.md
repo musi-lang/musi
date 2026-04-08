@@ -203,7 +203,7 @@ Stack contracts:
 
 ### Branch Tables
 
-`br.tbl` is the reduced-core multiway branch.
+`br.tbl` is the multiway branch.
 
 Stack contract and selection rule:
 

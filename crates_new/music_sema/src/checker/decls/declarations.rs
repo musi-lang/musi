@@ -345,12 +345,12 @@ pub(super) fn check_bound_effect(
     let builtins = ctx.builtins();
     let effect_name: Box<str> = ctx.resolve_symbol(name.name).into();
     if ctx.effect_def(&effect_name).is_none() {
-        let ops = ctx
-            .members(members.clone())
-            .into_iter()
+        let members_vec = ctx.members(members.clone());
+        let ops = members_vec
+            .iter()
             .filter(|member| member.kind == HirMemberKind::Let)
             .map(|member| {
-                let facts = member_signature(ctx, &member, false);
+                let facts = member_signature(ctx, member, false);
                 (
                     Box::<str>::from(ctx.resolve_symbol(member.name.name)),
                     EffectOpDef {
@@ -360,14 +360,31 @@ pub(super) fn check_bound_effect(
                 )
             })
             .collect::<BTreeMap<_, _>>();
+        let laws = members_vec
+            .iter()
+            .filter(|member| member.kind == HirMemberKind::Law)
+            .map(|member| member.name.name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-        ctx.insert_effect_def(effect_name, EffectDef { key, ops });
+        ctx.insert_effect_def(effect_name, EffectDef { key, ops, laws });
     }
     let _ = expr_id;
     for member in ctx.members(members) {
-        let _ = member_signature(ctx, &member, true);
-        if let Some(value) = member.value {
-            let _ = check_expr(ctx, value);
+        match member.kind {
+            HirMemberKind::Let => {
+                let _ = member_signature(ctx, &member, true);
+                if let Some(value) = member.value {
+                    let _ = check_expr(ctx, value);
+                }
+            }
+            HirMemberKind::Law => {
+                if let Some(value) = member.value {
+                    let law_facts = check_expr(ctx, value);
+                    let origin = ctx.expr(value).origin;
+                    type_mismatch(ctx, origin, builtins.bool_, law_facts.ty);
+                }
+            }
         }
     }
     ExprFacts {

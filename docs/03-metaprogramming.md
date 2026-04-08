@@ -1,6 +1,6 @@
 # Metaprogramming Reference
 
-Current metaprogramming surface for the reduced core. Historical pre-reduction material lives in `docs/legacy/07-metaprogramming.md`.
+Current metaprogramming surface for the language.
 
 ## Scope
 

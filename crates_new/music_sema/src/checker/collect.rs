@@ -278,19 +278,29 @@ fn collect_effect_decl(
     if ctx.effect_def(&effect_name).is_some() {
         return;
     }
+    let members_vec = ctx.members(members);
     let mut seen_ops = HashMap::new();
-    for member in ctx.members(members.clone()) {
-        let op_name: Box<str> = ctx.resolve_symbol(member.name.name).into();
-        if member.kind == HirMemberKind::Let && seen_ops.insert(op_name, member.origin).is_some() {
-            ctx.diag(member.origin.span, "duplicate effect op", "");
+    let mut seen_laws = HashMap::new();
+    for member in &members_vec {
+        match member.kind {
+            HirMemberKind::Let => {
+                let op_name: Box<str> = ctx.resolve_symbol(member.name.name).into();
+                if seen_ops.insert(op_name, member.origin).is_some() {
+                    ctx.diag(member.origin.span, "duplicate effect op", "");
+                }
+            }
+            HirMemberKind::Law => {
+                if seen_laws.insert(member.name.name, member.origin).is_some() {
+                    ctx.diag(member.origin.span, "duplicate effect law", "");
+                }
+            }
         }
     }
-    let ops = ctx
-        .members(members)
-        .into_iter()
+    let ops = members_vec
+        .iter()
         .filter(|member| member.kind == HirMemberKind::Let)
         .map(|member| {
-            let facts = member_signature(ctx, &member, false);
+            let facts = member_signature(ctx, member, false);
             (
                 Box::<str>::from(ctx.resolve_symbol(member.name.name)),
                 EffectOpDef {
@@ -300,8 +310,14 @@ fn collect_effect_decl(
             )
         })
         .collect::<BTreeMap<_, _>>();
+    let laws = members_vec
+        .iter()
+        .filter(|member| member.kind == HirMemberKind::Law)
+        .map(|member| member.name.name)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-    ctx.insert_effect_def(effect_name, EffectDef { key, ops });
+    ctx.insert_effect_def(effect_name, EffectDef { key, ops, laws });
 }
 
 fn collect_class_decl(

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use music_bc::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
     DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MethodDescriptor, TypeDescriptor,
+    MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
     Artifact, ClassId, CodeEntry, ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId,
@@ -95,6 +95,17 @@ pub fn format_text(artifact: &Artifact) -> String {
     format_foreigns(&mut out, artifact);
     format_globals(&mut out, artifact);
     format_exports(&mut out, artifact);
+    for (_, descriptor) in artifact.meta.iter() {
+        out.push_str(".meta ");
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.target));
+        out.push(' ');
+        push_symbol_ref(&mut out, artifact.string_text(descriptor.key));
+        for value in &descriptor.values {
+            out.push(' ');
+            push_symbol_ref(&mut out, artifact.string_text(*value));
+        }
+        out.push('\n');
+    }
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method ");
         push_symbol_ref(&mut out, artifact.string_text(method.name));
@@ -361,6 +372,7 @@ impl TextBuilder {
             ".class" => self.parse_class(&parts),
             ".foreign" => self.parse_foreign(&parts),
             ".export" => self.parse_export(&parts),
+            ".meta" => self.parse_meta(&parts),
             other => Err(AssemblyError::Text(format!("unknown directive {other}"))),
         }
     }
@@ -538,6 +550,35 @@ impl TextBuilder {
             .classes
             .alloc(ClassDescriptor { name: name_id });
         let _ = self.classes.insert(name, id);
+        Ok(())
+    }
+
+    fn parse_meta_value(&self, token: &str) -> Result<String, AssemblyError> {
+        if token.starts_with('$') {
+            parse_symbol(token)
+        } else {
+            parse_quoted(token)
+        }
+    }
+
+    fn parse_meta(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+        if parts.len() < 3 {
+            return Err(AssemblyError::Text("expected `.meta $Target $Key ...`".into()));
+        }
+        let target = parse_symbol(must_get(parts.get(1), "meta target")?)?;
+        let key = parse_symbol(must_get(parts.get(2), "meta key")?)?;
+        let target_id = self.intern_string(&target);
+        let key_id = self.intern_string(&key);
+        let mut values = Vec::new();
+        for token in parts.iter().skip(3) {
+            let value = self.parse_meta_value(token)?;
+            values.push(self.intern_string(&value));
+        }
+        let _ = self.artifact.meta.alloc(MetaDescriptor {
+            target: target_id,
+            key: key_id,
+            values: values.into_boxed_slice(),
+        });
         Ok(())
     }
 

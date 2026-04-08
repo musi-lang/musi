@@ -393,7 +393,7 @@ fn lowers_link_attrs_into_foreign_descriptors() {
     assert!(output.artifact.validate().is_ok());
     assert!(output
         .text
-        .contains(".foreign $main::sin abi \"c\" symbol \"sin\" link \"m\""));
+        .contains(".foreign $main::sin abi \"c\" symbol \"sin\" link \"m\""), "{}", output.text);
 }
 
 #[test]
@@ -421,6 +421,85 @@ fn skips_gated_foreign_declarations_for_target() {
 
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
     assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("clock_gettime"));
+    assert!(output.text.contains("clock_gettime"), "{}", output.text);
     assert!(!output.text.contains("QueryPerformanceCounter"));
+}
+
+#[test]
+fn emits_meta_records_for_laws_and_attrs() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            foreign let musi_true () : Bool;
+
+            @foo.bar(baz := "qux")
+            export let answer : Int := 42;
+
+            @musi.codegen(mode := "test")
+            export let meaning : Int := 1;
+
+            export let Eq[T] := class {
+              let (=) (a : T, b : T) : Bool;
+              law reflexive (x : T) := musi_true();
+            };
+
+            export let Console := effect {
+              let readln () : String;
+              law total () := musi_true();
+            };
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+    assert!(output.artifact.validate().is_ok());
+
+    let meta = output
+        .artifact
+        .meta
+        .as_slice()
+        .iter()
+        .map(|record| {
+            (
+                output.artifact.string_text(record.target).to_string(),
+                output.artifact.string_text(record.key).to_string(),
+                record
+                    .values
+                    .iter()
+                    .map(|value| output.artifact.string_text(*value).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::Eq" && key == "class.laws" && values == &vec!["reflexive".to_string()]
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::Console" && key == "effect.laws" && values == &vec!["total".to_string()]
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::answer"
+                && key == "inert.attr"
+                && values == &vec!["@foo.bar(baz := \"qux\")".to_string()]
+        }),
+        "{meta:?}"
+    );
+    assert!(
+        meta.iter().any(|(target, key, values)| {
+            target == "main::meaning"
+                && key == "musi.attr"
+                && values == &vec!["@musi.codegen(mode := \"test\")".to_string()]
+        }),
+        "{meta:?}"
+    );
 }

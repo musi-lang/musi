@@ -1,6 +1,6 @@
 # Feature Matrix (`crates_new/`)
 
-This document tracks reduced-core language and toolchain coverage across the canonical compiler rewrite in `crates_new/`.
+This document tracks language and toolchain coverage across the canonical compiler rewrite in `crates_new/`.
 
 The canonical feature definitions live in:
 
@@ -24,7 +24,7 @@ Primary implementation truth comes from:
 Status legend:
 
 - `done`: implemented in the canonical `crates_new` workspace and backed by current tests
-- `partial`: implemented, but intentionally reduced, incomplete across phases, or not fully lowered/executable yet
+- `partial`: implemented, but intentionally limited, incomplete across phases, or not fully lowered/executable yet
 - `missing`: not implemented in the canonical `crates_new` stack
 
 This matrix is language-first. It does not claim runtime or JIT completion.
@@ -35,7 +35,7 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | ---------------------------------------- | ---- | --------- | ----------- | ---- | ----------------------------------------------------------------- |
 | Identifiers (plain/escaped)              | done | done      | done        | done |                                                                   |
 | Symbolic operators (`SymOp`)             | done | done      | done        | done | Symbolic infix surface resolves and typechecks like callable use  |
-| Integer literals (bases, `_`)            | done | done      | done        | done | Type is `Int`; numeric range modeling is still reduced-core       |
+| Integer literals (bases, `_`)            | done | done      | done        | done | Type is `Int`; numeric range modeling is not implemented in sema  |
 | Float literals (incl. exponent)          | done | done      | done        | done | Type is `Float`; no range/NaN-policy modeling in sema             |
 | Strings                                  | done | done      | done        | done | Escape decoding is covered in `music_syntax::string_lit`          |
 | Template strings with interpolation      | done | done      | done        | done | Interpolations are ordinary expressions and typecheck as `String` |
@@ -62,20 +62,20 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | Export and opaque module surface                  | done      | done        | done | done            | Export collection, opaque marking, and SEAM metadata emission exist; runtime hiding implications remain out of scope |
 | Imported module member typing                     | n/a       | done        | done | done              | Imported globals and generic callables compile through semantic module surfaces |
 | Destructured module imports and aliases           | done      | done        | done | done              | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation |
-| Class and effect laws                             | done      | done        | partial | missing         | Law surface is parsed, lowered, and tracked semantically; no runtime/property-check execution |
+| Class and effect laws                             | done      | done        | done | done         | Law surface is parsed, typechecked, and emitted as metadata; no runtime/property-check execution |
 
 ## Types, Constraints, And Effects
 
 | Feature                              | Parse/AST | Resolve/HIR | Sema | Backend/Toolchain | Notes                                                                |
 | ------------------------------------ | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
-| Named types and application (`T[A]`) | done      | done        | partial | partial         | Explicit generic type application works; type system remains reduced-core overall |
+| Named types and application (`T[A]`) | done      | done        | partial | partial         | Explicit generic type application works; the type system is still incomplete overall |
 | Functions (`->`, `~>`)               | done      | done        | partial | partial         | Function kinds and signature-side effect rows exist                  |
-| Tuples and products                  | done      | done        | partial | partial         | Tuple checking exists; broader product-system completeness is still reduced |
+| Tuples and products                  | done      | done        | partial | partial         | Tuple checking exists; broader product-system completeness is still incomplete |
 | Anonymous sums (`+`)                 | done      | done        | partial | partial         | Represented semantically, but not fully lowered through the whole backend |
-| Arrays (`[]T`, `[n]T`)               | done      | done        | partial | partial         | Core shape exists; shape/dimension completeness remains reduced      |
+| Arrays (`[]T`, `[n]T`)               | done      | done        | partial | partial         | Core shape exists; shape/dimension completeness is still incomplete  |
 | `mut T`                              | done      | done        | partial | partial         | Writable-type surface exists; enforcement is not a full ownership system |
-| `where` constraints (`T :`, `T <:`)  | done      | done        | partial | partial         | Constraint lowering and solving exist; the overall type system is still reduced-core |
-| Open effect rows (`with { ... }`)    | done      | done        | partial | partial         | Named open remainders and declared-effect checks exist; backend/runtime story is still reduced |
+| `where` constraints (`T :`, `T <:`)  | done      | done        | partial | partial         | Constraint lowering and solving exist; the overall type system is still incomplete |
+| Open effect rows (`with { ... }`)    | done      | done        | partial | partial         | Named open remainders and declared-effect checks exist; backend/runtime story is still incomplete |
 | Imported generic exports             | n/a       | done        | done | done              | Imported generic callable uses now compile through `music_session` end-to-end |
 | Instance coherence across imports    | n/a       | done        | done | n/a              | Reachable exported instances participate in sema coherence           |
 
@@ -89,9 +89,9 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | `@link` validation                 | done      | done        | done | done              | Invalid targets are diagnosed; foreign descriptors carry `link` + `symbol` metadata (runtime linking is out-of-scope) |
 | `@when` target gating              | done      | done        | done | done              | Gated foreign declarations are excluded from IR lowering and SEAM emission for the active target |
 | `@repr` and `@layout` surface      | done      | done        | done | done              | Layout-sensitive metadata is carried into SEAM artifacts (`.data` descriptors); runtime ABI execution remains out of scope |
-| Compiler-only `@musi.*` attrs      | done      | done        | partial | partial         | Reserved surface exists; backend-specific meaning remains selective    |
-| Inert metadata attrs               | done      | done        | partial | n/a             | Preserved as metadata; not all downstream consumers exist yet          |
-| Quote as first-class syntax        | done      | done        | done | partial           | Frontend and sema support exist; emitter/runtime support is not the reduced-core focus |
+| Compiler-only `@musi.*` attrs      | done      | done        | done | done         | Reserved surface exists and is emitted as metadata; consumers are toolchain-defined |
+| Inert metadata attrs               | done      | done        | done | done             | Preserved and emitted as metadata; downstream consumers are optional  |
+| Quote as first-class syntax        | done      | done        | done | partial           | Frontend and sema support exist; backend/runtime execution path is not complete |
 | Splice forms `#name/#()/#[]`       | done      | done        | done | partial           | Valid inside quote; backend/runtime execution path is not complete     |
 
 ## SEAM, Session, And Project Integration
@@ -102,7 +102,7 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | SEAM text transport (`music_assembly`)         | done   | Text format, parser, formatter, and validation exist                        |
 | SEAM binary transport (`music_assembly`)       | done   | Binary encode/decode and validation exist                                   |
 | Sema-to-IR lowering (`music_ir`)               | done   | Codegen-facing facts and owned executable IR exist                          |
-| IR-to-SEAM emission (`music_emit`)             | partial | Reduced-core emission includes records, variants, and effects (`data.*`, `br.tbl`, `hdl.*`, `eff.*`); remaining gaps are outside the current non-runtime completion bar (for example, full sums, richer data-field op surface, and runtime execution) |
+| IR-to-SEAM emission (`music_emit`)             | partial | Current emission includes records, variants, and effects (`data.*`, `br.tbl`, `hdl.*`, `eff.*`); remaining gaps include full sums, richer data-field op surface, and runtime execution |
 | Module compilation through `music_session`     | done   | Artifact, bytes, and text outputs exist                                     |
 | Reachable entry-graph compilation              | done   | `music_session` compiles the static-import closure                          |
 | Parse/resolve/sema/IR/emit session caching     | done   | Cached phase products and edit invalidation exist                           |
@@ -115,4 +115,4 @@ This matrix is language-first. It does not claim runtime or JIT completion.
 | ------------------------ | ------- | ---------------------------------------------------------- |
 | Native/JIT backend       | missing | `music_jit` is planned but not implemented                 |
 | Runtime execution/VM     | missing | Outside the current non-runtime `crates_new` completion bar |
-| Full-language backend parity | partial | The compiler path exists, but emission is still reduced-core overall |
+| Full-language backend parity | partial | The compiler path exists, but emission is still incomplete overall |

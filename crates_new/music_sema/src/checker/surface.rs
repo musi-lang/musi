@@ -28,10 +28,10 @@ pub fn build_module_surface(
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let exported_values = collect_exported_values(module, typing, decls, &exports, &mut tys);
-    let exported_data = collect_exported_data(decls, &exports, &mut tys);
+    let exported_data = collect_exported_data(module, decls, &exports, &mut tys);
     let exported_classes = collect_exported_classes(module, runtime, decls, &exports, &mut tys);
-    let exported_effects = collect_exported_effects(decls, &exports, &mut tys);
-    let exported_instances = collect_exported_instances(decls, &exports, &mut tys);
+    let exported_effects = collect_exported_effects(module, decls, &exports, &mut tys);
+    let exported_instances = collect_exported_instances(module, decls, &exports, &mut tys);
 
     ModuleSurface {
         module_key: module.resolved.module_key.clone(),

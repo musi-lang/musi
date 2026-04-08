@@ -5,6 +5,7 @@ mod effect;
 mod export;
 mod foreign;
 mod global;
+mod meta;
 mod method;
 mod type_desc;
 
@@ -15,5 +16,6 @@ pub use effect::{EffectDescriptor, EffectOpDescriptor};
 pub use export::{ExportDescriptor, ExportTarget};
 pub use foreign::ForeignDescriptor;
 pub use global::GlobalDescriptor;
+pub use meta::MetaDescriptor;
 pub use method::MethodDescriptor;
 pub use type_desc::TypeDescriptor;
