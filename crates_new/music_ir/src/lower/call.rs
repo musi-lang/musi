@@ -1,6 +1,10 @@
 use super::*;
 
-pub(super) fn lower_call_expr(ctx: &mut LowerCtx<'_>, callee: HirExprId, args: &SliceRange<HirArg>) -> IrExprKind {
+pub(super) fn lower_call_expr(
+    ctx: &mut LowerCtx<'_>,
+    callee: HirExprId,
+    args: &SliceRange<HirArg>,
+) -> IrExprKind {
     let sema = ctx.sema;
     let arg_nodes = sema.module().store.args.get(args.clone());
     if !arg_nodes.iter().any(|arg| arg.spread) {
@@ -32,11 +36,11 @@ pub(super) fn lower_call_expr(ctx: &mut LowerCtx<'_>, callee: HirExprId, args: &
         kind: IrExprKind::Temp { temp: callee_temp },
     };
 
-    let (arg_prelude, parts, has_runtime_spread) = match lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call)
-    {
-        Ok(value) => value,
-        Err(kind) => return kind,
-    };
+    let (arg_prelude, parts, has_runtime_spread) =
+        match lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call) {
+            Ok(value) => value,
+            Err(kind) => return kind,
+        };
     prelude.extend(arg_prelude);
 
     prelude.push(IrExpr {
@@ -50,7 +54,10 @@ pub(super) fn lower_call_expr(ctx: &mut LowerCtx<'_>, callee: HirExprId, args: &
             let args = parts
                 .into_iter()
                 .map(|part| match part {
-                    IrSeqPart::Expr(expr) => Some(IrArg { spread: false, expr }),
+                    IrSeqPart::Expr(expr) => Some(IrArg {
+                        spread: false,
+                        expr,
+                    }),
                     IrSeqPart::Spread(_) => None,
                 })
                 .collect::<Option<Vec<_>>>()
@@ -98,10 +105,11 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
     }
 
     let origin = lower_origin(sema, expr);
-    let (prelude, parts, has_runtime_spread) = match lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform) {
-        Ok(value) => value,
-        Err(kind) => return kind,
-    };
+    let (prelude, parts, has_runtime_spread) =
+        match lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform) {
+            Ok(value) => value,
+            Err(kind) => return kind,
+        };
     let mut exprs = prelude;
     exprs.push(IrExpr {
         origin,
@@ -232,7 +240,8 @@ fn lower_spread_args(
             parts.push(IrSeqPart::Expr(temp_expr));
             continue;
         }
-        has_runtime_spread |= lower_spread_arg(sema, arg.expr, &temp_expr, origin, &mut parts, mode)?;
+        has_runtime_spread |=
+            lower_spread_arg(sema, arg.expr, &temp_expr, origin, &mut parts, mode)?;
     }
     Ok((prelude, parts, has_runtime_spread))
 }
@@ -252,11 +261,17 @@ fn lower_spread_arg(
                 let Ok(index_u32) = u32::try_from(index) else {
                     continue;
                 };
-                parts.push(IrSeqPart::Expr(index_expr(origin, temp_expr.clone(), index_u32)));
+                parts.push(IrSeqPart::Expr(index_expr(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
             }
             Ok(false)
         }
-        HirTyKind::Array { dims, item } => lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode),
+        HirTyKind::Array { dims, item } => {
+            lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode)
+        }
         _ => Err(IrExprKind::Unsupported {
             description: mode.source_message().into(),
         }),
@@ -290,7 +305,11 @@ fn lower_spread_array_arg(
     match dims_vec[0] {
         HirDim::Int(len) => {
             for index_u32 in 0..len {
-                parts.push(IrSeqPart::Expr(index_expr(origin, temp_expr.clone(), index_u32)));
+                parts.push(IrSeqPart::Expr(index_expr(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
             }
             Ok(false)
         }

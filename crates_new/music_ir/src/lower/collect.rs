@@ -145,12 +145,16 @@ fn collect_used_in_exprs(exprs: &[IrExpr], out: &mut HashSet<NameBindingId>) {
     }
 }
 
-fn collect_used_in_seq_parts(parts: &[IrSeqPart], out: &mut HashSet<NameBindingId>) {
+fn for_each_seq_part_expr(parts: &[IrSeqPart], mut f: impl FnMut(&IrExpr)) {
     for part in parts {
         match part {
-            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => collect_used_bindings(expr, out),
+            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => f(expr),
         }
     }
+}
+
+fn collect_used_in_seq_parts(parts: &[IrSeqPart], out: &mut HashSet<NameBindingId>) {
+    for_each_seq_part_expr(parts, |expr| collect_used_bindings(expr, out));
 }
 
 fn collect_used_in_record_fields(fields: &[IrRecordField], out: &mut HashSet<NameBindingId>) {
@@ -181,11 +185,7 @@ fn collect_local_in_exprs(exprs: &[IrExpr], out: &mut HashSet<NameBindingId>) {
 }
 
 fn collect_local_in_seq_parts(parts: &[IrSeqPart], out: &mut HashSet<NameBindingId>) {
-    for part in parts {
-        match part {
-            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => collect_local_decl_bindings(expr, out),
-        }
-    }
+    for_each_seq_part_expr(parts, |expr| collect_local_decl_bindings(expr, out));
 }
 
 fn collect_local_in_record_fields(fields: &[IrRecordField], out: &mut HashSet<NameBindingId>) {
