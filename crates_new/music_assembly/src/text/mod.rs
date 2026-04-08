@@ -29,21 +29,39 @@ fn push_symbol_ref(out: &mut String, text: &str) {
 pub fn format_text(artifact: &Artifact) -> String {
     let mut out = String::new();
 
+    format_types(&mut out, artifact);
+    format_data(&mut out, artifact);
+    format_constants(&mut out, artifact);
+    format_effects(&mut out, artifact);
+    format_classes(&mut out, artifact);
+    format_foreigns(&mut out, artifact);
+    format_globals(&mut out, artifact);
+    format_exports(&mut out, artifact);
+    format_meta(&mut out, artifact);
+    format_methods(&mut out, artifact);
+
+    out
+}
+
+fn format_types(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.types.iter() {
         out.push_str(".type ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
+}
+
+fn format_data(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.data.iter() {
         out.push_str(".data ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push_str(" variants ");
         out.push_str(&descriptor.variant_count.to_string());
         out.push_str(" fields ");
         out.push_str(&descriptor.field_count.to_string());
         if let Some(repr) = descriptor.repr_kind {
             out.push_str(" repr ");
-            push_quoted(&mut out, artifact.string_text(repr));
+            push_quoted(out, artifact.string_text(repr));
         }
         if let Some(align) = descriptor.layout_align {
             out.push_str(" align ");
@@ -55,9 +73,12 @@ pub fn format_text(artifact: &Artifact) -> String {
         }
         out.push('\n');
     }
+}
+
+fn format_constants(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.constants.iter() {
         out.push_str(".const ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
         match descriptor.value {
             ConstantValue::Int(value) => {
                 out.push_str(" int ");
@@ -73,42 +94,51 @@ pub fn format_text(artifact: &Artifact) -> String {
             }
             ConstantValue::String(text) => {
                 out.push_str(" string ");
-                push_quoted(&mut out, artifact.string_text(text));
+                push_quoted(out, artifact.string_text(text));
             }
         }
         out.push('\n');
     }
+}
+
+fn format_effects(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.effects.iter() {
         out.push_str(".effect ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
         for op in &descriptor.ops {
             out.push(' ');
-            push_symbol_ref(&mut out, artifact.string_text(op.name));
+            push_symbol_ref(out, artifact.string_text(op.name));
         }
         out.push('\n');
     }
+}
+
+fn format_classes(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.classes.iter() {
         out.push_str(".class ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.name));
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
-    format_foreigns(&mut out, artifact);
-    format_globals(&mut out, artifact);
-    format_exports(&mut out, artifact);
+}
+
+fn format_meta(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.meta.iter() {
         out.push_str(".meta ");
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.target));
+        push_symbol_ref(out, artifact.string_text(descriptor.target));
         out.push(' ');
-        push_symbol_ref(&mut out, artifact.string_text(descriptor.key));
+        push_symbol_ref(out, artifact.string_text(descriptor.key));
         for value in &descriptor.values {
             out.push(' ');
-            push_symbol_ref(&mut out, artifact.string_text(*value));
+            push_symbol_ref(out, artifact.string_text(*value));
         }
         out.push('\n');
     }
+}
+
+fn format_methods(out: &mut String, artifact: &Artifact) {
     for (_, method) in artifact.methods.iter() {
         out.push_str(".method ");
-        push_symbol_ref(&mut out, artifact.string_text(method.name));
+        push_symbol_ref(out, artifact.string_text(method.name));
         out.push_str(" locals ");
         out.push_str(&method.locals.to_string());
         if method.export {
@@ -126,7 +156,7 @@ pub fn format_text(artifact: &Artifact) -> String {
                     out.push_str(instruction.opcode.mnemonic());
                     if !matches!(instruction.operand, Operand::None) {
                         out.push(' ');
-                        format_operand(&mut out, artifact, method, &instruction.operand);
+                        format_operand(out, artifact, method, &instruction.operand);
                     }
                     out.push('\n');
                 }
@@ -134,8 +164,6 @@ pub fn format_text(artifact: &Artifact) -> String {
         }
         out.push_str(".end\n");
     }
-
-    out
 }
 
 fn format_foreigns(out: &mut String, artifact: &Artifact) {
@@ -553,7 +581,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_meta_value(&self, token: &str) -> Result<String, AssemblyError> {
+    fn parse_meta_value(token: &str) -> Result<String, AssemblyError> {
         if token.starts_with('$') {
             parse_symbol(token)
         } else {
@@ -571,7 +599,7 @@ impl TextBuilder {
         let key_id = self.intern_string(&key);
         let mut values = Vec::new();
         for token in parts.iter().skip(3) {
-            let value = self.parse_meta_value(token)?;
+            let value = Self::parse_meta_value(token)?;
             values.push(self.intern_string(&value));
         }
         let _ = self.artifact.meta.alloc(MetaDescriptor {

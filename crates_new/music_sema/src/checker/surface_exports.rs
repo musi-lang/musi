@@ -1,7 +1,7 @@
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirAttr, HirAttrArg, HirCaseArm, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl,
+    HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl,
     HirHandleClause, HirLitKind, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
     HirRecordPatField, HirTemplatePart, HirVariantDef,
 };
@@ -91,9 +91,7 @@ fn lower_attr_value(
                 if item.spread {
                     return None;
                 }
-                let Some(name) = item.name else {
-                    return None;
-                };
+                let name = item.name?;
                 let value = lower_attr_value(module, interner, item.value)?;
                 fields.push(AttrRecordField {
                     name: interner.resolve(name.name).into(),
@@ -119,21 +117,16 @@ fn lower_attr(module: &ModuleState, interner: &Interner, attr: &HirAttr) -> Opti
         .map(|ident| interner.resolve(ident.name).into())
         .collect::<Vec<Box<str>>>()
         .into_boxed_slice();
-    let args = module
-        .resolved
-        .module
-        .store
-        .attr_args
-        .get(attr.args.clone())
-        .iter()
-        .filter_map(|arg: &HirAttrArg| {
-            let name = arg.name.map(|ident| interner.resolve(ident.name).into());
-            let value = lower_attr_value(module, interner, arg.value)?;
-            Some(AttrArg { name, value })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    Some(Attr { path, args })
+    let mut args = Vec::<AttrArg>::new();
+    for arg in module.resolved.module.store.attr_args.get(attr.args.clone()) {
+        let name = arg.name.map(|ident| interner.resolve(ident.name).into());
+        let value = lower_attr_value(module, interner, arg.value)?;
+        args.push(AttrArg { name, value });
+    }
+    Some(Attr {
+        path,
+        args: args.into_boxed_slice(),
+    })
 }
 
 fn split_export_attrs(

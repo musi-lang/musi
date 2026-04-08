@@ -65,7 +65,7 @@ pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
     decode_data(&mut cursor, &mut artifact)?;
     if !cursor.is_eof() {
         let next = cursor.peek_u8().ok_or(AssemblyError::TruncatedBinary)?;
-        if next == SectionTag::Meta as u8 {
+        if next == section_tag_byte(SectionTag::Meta) {
             decode_meta(&mut cursor, &mut artifact)?;
         } else {
             return Err(AssemblyError::Text("unknown trailing section".into()));

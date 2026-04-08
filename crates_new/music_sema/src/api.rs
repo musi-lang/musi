@@ -50,8 +50,8 @@ pub enum AttrValue {
     String(Box<str>),
     Int(Box<str>),
     Rune(u32),
-    Variant { tag: Box<str>, args: Box<[AttrValue]> },
-    Array { items: Box<[AttrValue]> },
+    Variant { tag: Box<str>, args: Box<[Self]> },
+    Array { items: Box<[Self]> },
     Record { fields: Box<[AttrRecordField]> },
 }
 

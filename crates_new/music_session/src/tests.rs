@@ -463,12 +463,12 @@ fn emits_meta_records_for_laws_and_attrs() {
         .iter()
         .map(|record| {
             (
-                output.artifact.string_text(record.target).to_string(),
-                output.artifact.string_text(record.key).to_string(),
+                output.artifact.string_text(record.target).to_owned(),
+                output.artifact.string_text(record.key).to_owned(),
                 record
                     .values
                     .iter()
-                    .map(|value| output.artifact.string_text(*value).to_string())
+                    .map(|value| output.artifact.string_text(*value).to_owned())
                     .collect::<Vec<_>>(),
             )
         })
@@ -476,13 +476,13 @@ fn emits_meta_records_for_laws_and_attrs() {
 
     assert!(
         meta.iter().any(|(target, key, values)| {
-            target == "main::Eq" && key == "class.laws" && values == &vec!["reflexive".to_string()]
+            target == "main::Eq" && key == "class.laws" && values == &vec!["reflexive".to_owned()]
         }),
         "{meta:?}"
     );
     assert!(
         meta.iter().any(|(target, key, values)| {
-            target == "main::Console" && key == "effect.laws" && values == &vec!["total".to_string()]
+            target == "main::Console" && key == "effect.laws" && values == &vec!["total".to_owned()]
         }),
         "{meta:?}"
     );
@@ -490,7 +490,7 @@ fn emits_meta_records_for_laws_and_attrs() {
         meta.iter().any(|(target, key, values)| {
             target == "main::answer"
                 && key == "inert.attr"
-                && values == &vec!["@foo.bar(baz := \"qux\")".to_string()]
+                && values == &vec!["@foo.bar(baz := \"qux\")".to_owned()]
         }),
         "{meta:?}"
     );
@@ -498,7 +498,7 @@ fn emits_meta_records_for_laws_and_attrs() {
         meta.iter().any(|(target, key, values)| {
             target == "main::meaning"
                 && key == "musi.attr"
-                && values == &vec!["@musi.codegen(mode := \"test\")".to_string()]
+                && values == &vec!["@musi.codegen(mode := \"test\")".to_owned()]
         }),
         "{meta:?}"
     );

@@ -80,25 +80,23 @@ fn validate_musi_lang_attr(
         ctx.diag(origin.span, "attr invalid target", "");
         return;
     }
-    match ctx.expr(inner).kind {
-        HirExprKind::Let {
-            pat,
-            has_param_clause,
-            ..
-        } => {
-            if has_param_clause {
-                ctx.diag(origin.span, "attr invalid target", "");
-                return;
-            }
-            if !matches!(ctx.pat(pat).kind, HirPatKind::Bind { .. }) {
-                ctx.diag(origin.span, "attr invalid target", "");
-                return;
-            }
-        }
-        _ => {
+    if let HirExprKind::Let {
+        pat,
+        has_param_clause,
+        ..
+    } = ctx.expr(inner).kind
+    {
+        if has_param_clause {
             ctx.diag(origin.span, "attr invalid target", "");
             return;
         }
+        if !matches!(ctx.pat(pat).kind, HirPatKind::Bind { .. }) {
+            ctx.diag(origin.span, "attr invalid target", "");
+            return;
+        }
+    } else {
+        ctx.diag(origin.span, "attr invalid target", "");
+        return;
     }
     let name = parse_named_string_arg(ctx, attr, "name");
     if name.is_none() {
