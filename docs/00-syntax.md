@@ -20,7 +20,8 @@ Musi is expression-driven.
 The language keeps these keyword families:
 
 - binding and structure: `let`, `mut`, `rec`, `case`, `of`, `if`
-- type and abstraction: `data`, `class`, `instance`, `law`, `where`
+- operator declarations: `infix`, `infixl`, `infixr`
+- type and abstraction: `data`, `class`, `instance`, `law`, `where`, `forall`
 - effects: `effect`, `perform`, `handle`, `with`, `resume`
 - modules and interop: `import`, `export`, `foreign`, `opaque`, `as`
 - metaprogramming: `quote`
@@ -34,25 +35,25 @@ Bindings use `:=`.
 
 ```musi
 let x := 41;
-let inc := (n : Int) : Int => n + 1;
+let inc := \(n : Int) : Int => n + 1;
 ```
 
 Mutable update uses `<-`.
 
 ```musi
-let mut counter := 0;
-counter <- counter + 1;
+let counter := mut 0;
+counter <- 1;
 ```
 
 `<-` writes value into target location. Borrow checking is not implemented.
 
 `mut` has two separate roles:
 
-- `let mut name := expr` marks binding as updatable via `<-`
-- `mut expr` produces writable value (`mut T` in type position), needed for writes through members and indices
+- `mut expr` produces a writable location/value (`mut T` in type position), needed for writes through members and indices
+- `let` bindings are immutable; mutation is performed by writing into locations
 
 ```musi
-let mut x := 0;
+let x := mut 0;
 x <- 1;
 
 let array := mut [1, 2, 3];
@@ -167,9 +168,19 @@ Built-in word operators are:
 
 Users may define symbolic operators. Users may not define word operators.
 
+Symbolic infix precedence/associativity is configured with fixity declarations:
+
+```musi
+infixl 6 (++);
+infixr 5 (**);
+infix 4 (<=>);
+```
+
+Parsing treats infix operators as a flat chain; fixity determines how the chain is folded into a tree.
+
 ## Recursion
 
-Recursion uses `let rec`. `let` may take at most one modifier: `mut` or `rec`.
+Recursion uses `let rec`.
 
 ```musi
 let rec fact (n : Int) : Int := /* ... */;
@@ -185,9 +196,9 @@ Numeric literals:
 - binary: `0b1010`, `0b1_0_1_0`
 - floats: `3.14`, `.5`, `2e10`, `.5e-2`
 
-String literals use `"` and may contain literal newlines.
+String literals use `"` and must not contain raw newlines. Multiline text uses template literals.
 
-Template literals use backticks and may contain `${ expr }` interpolations:
+Template literals use backticks, may contain raw newlines, and may contain `${ expr }` interpolations:
 
 ```musi
 let name := "world";

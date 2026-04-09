@@ -54,7 +54,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | ------------------------------------------------- | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
 | Sequences (`;`)                                   | ✅        | ✅          | ✅   | ✅                | Top-level statements lower as sequence expressions                   |
 | `let` bindings                                    | ✅        | ✅          | ✅   | ✅                | Destructuring patterns (`(x, y)`, `[x, y]`, `{x, y}`) compile end-to-end; generic `let` uses explicit type params, not implicit HM-style generalization |
-| Mutable bindings (`let mut`)                      | ✅        | ✅          | ✅   | ✅                | Mutable local value binds compile end-to-end in the non-runtime backend |
+| Writable locations (`mut expr`)                   | ✅        | ✅          | ✅   | ✅                | Names bind immutably; mutation is performed by writing into `mut` locations via `<-` |
 | Assignment (`<-`)                                 | ✅        | ✅          | ✅   | ✅                | Local names, globals, and indexed sequence elements compile end-to-end |
 | Calls                                             | ✅        | ✅          | ✅   | ✅                | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
 | Field/index/update access (`.`, `.[`, `.{`)       | ✅        | ✅          | ✅   | ✅                | Imported module members, indexed sequence get/set, record field projection, and record update now compile end-to-end; SEAM text transport supports quoted symbolic names for structural record types |
@@ -77,8 +77,8 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | Functions (`->`, `~>`)               | ✅        | ✅          | ✅   | ✅                | Function kinds exist; exported signature types and effect rows are emitted as metadata |
 | Tuples and products                  | ✅        | ✅          | ✅   | ✅                | Tuple types and tuple expressions compile end-to-end in the non-runtime backend |
 | Anonymous sums (`+`)                 | ✅        | ✅          | ✅   | ✅                | Sum types are represented semantically and emitted in exported signature metadata |
-| Arrays (`[]T`, `[n]T`)               | ✅        | ✅          | ✅   | ✅                | Array literals and fixed-dimension annotations typecheck |
-| Array spread (`...expr` in `[...]`)  | ✅        | ✅          | ✅   | ✅                | Tuple and `[n]T` spreads expand into indexed reads; 1D `[]T` spreads with unknown dims lower via `seq.cat` |
+| Arrays (`Array[T, n]`)               | ✅        | ✅          | ✅   | ✅                | Array literals and dimension-argument forms typecheck |
+| Array spread (`...expr` in `[...]`)  | ✅        | ✅          | ✅   | ✅                | Tuple and fixed-dimension array spreads expand into indexed reads; 1D spreads with unknown dims lower via `seq.cat` |
 | `mut T`                              | ✅        | ✅          | ✅   | ✅                | Writable types are enforced for write-through assignment (`base.[i] <-`, `base.field <-`) |
 | `where` constraints (`T :`, `T <:`)  | ✅        | ✅          | ✅   | ✅                | Constraint lowering and solving exist; constraints are emitted in exported signature metadata |
 | Open effect rows (`with { ... }`)    | ✅        | ✅          | ✅   | ✅                | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata |

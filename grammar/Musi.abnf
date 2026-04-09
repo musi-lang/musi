@@ -15,57 +15,73 @@
 ; ---------------------------------------------------------------------------
 ; 0. Core terminals (octets)
 ; ---------------------------------------------------------------------------
-octet                   = %x00-FF
+octet                              = %x00-FF
 
-lf                      = %x0A
+lf                                 = %x0A
 
-cr                      = %x0D
+cr                                 = %x0D
 
-htab                    = %x09
+htab                               = %x09
 
-sp                      = %x20
+sp                                 = %x20
 
-dquote                  = %x22
+dquote                             = %x22
 
-squote                  = %x27
+squote                             = %x27
 
-backslash               = %x5C
+backslash                          = %x5C
 
-backtick                = %x60
+backtick                           = %x60
 
-dollar                  = %x24
+dollar                             = %x24
 
-alpha                   = %x41-5A
-                          / %x61-7A
+alpha                              = %x41-5A
+                                     / %x61-7A
 
-digit                   = %x30-39
+digit                              = %x30-39
 
-hexdig                  = digit
-                          / %x41-46
-                          / %x61-66
+hexdig                             = digit
+                                     / %x41-46
+                                     / %x61-66
 
-underscore              = %x5F
+underscore                         = %x5F
 
-not-lf                  = %x00-09
-                          / %x0B-FF
+not-lf                             = %x00-09
+                                     / %x0B-FF
 
-not-star                = %x00-29
-                          / %x2B-FF  ; OCTET except "*"
+not-cr-or-lf                       = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-FF
 
-not-slash               = %x00-2E
-                          / %x30-FF  ; OCTET except "/"
+not-star                           = %x00-29
+                                     / %x2B-FF  ; OCTET except "*"
 
-not-dquote-or-backslash = %x00-21
-                          / %x23-5B
-                          / %x5D-FF
+not-slash                          = %x00-2E
+                                     / %x30-FF  ; OCTET except "/"
 
-not-squote-or-backslash = %x00-26
-                          / %x28-5B
-                          / %x5D-FF
+not-dquote-or-backslash            = %x00-21
+                                     / %x23-5B
+                                     / %x5D-FF
 
-not-backtick-or-backslash = %x00-5B
-                            / %x5D-5F
-                            / %x61-FF
+not-squote-or-backslash            = %x00-26
+                                     / %x28-5B
+                                     / %x5D-FF
+
+not-dquote-or-backslash-or-newline = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-21
+                                     / %x23-5B
+                                     / %x5D-FF
+
+not-squote-or-backslash-or-newline = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-26
+                                     / %x28-5B
+                                     / %x5D-FF
+
+not-backtick-or-backslash          = %x00-5B
+                                     / %x5D-5F
+                                     / %x61-FF
 ; ---------------------------------------------------------------------------
 ; 1. Terminals
 ; ---------------------------------------------------------------------------
@@ -86,6 +102,8 @@ kw-export   = %x65.78.70.6F.72.74
 
 kw-foreign  = %x66.6F.72.65.69.67.6E
 
+kw-forall   = %x66.6F.72.61.6C.6C
+
 kw-handle   = %x68.61.6E.64.6C.65
 
 kw-if       = %x69.66
@@ -93,6 +111,12 @@ kw-if       = %x69.66
 kw-import   = %x69.6D.70.6F.72.74
 
 kw-in       = %x69.6E
+
+kw-infix    = %x69.6E.66.69.78
+
+kw-infixl   = %x69.6E.66.69.78.6C
+
+kw-infixr   = %x69.6E.66.69.78.72
 
 kw-instance = %x69.6E.73.74.61.6E.63.65
 
@@ -162,9 +186,11 @@ colon-eq          = ":="
 
 colon-question    = ":?"
 ; --- Prefixes ---
-at   = "@"
+at     = "@"
 
-hash = "#"
+hash   = "#"
+
+bslash = %x5C
 ; --- Delimiters / separators ---
 lbrace    = "{"
 
@@ -204,109 +230,113 @@ lt      = "<"
 
 gt      = ">"
 ; --- Literals ---
-dec-digits       = digit *(digit / (underscore digit))
+dec-digits         = digit *(digit / (underscore digit))
 
-hex-digits       = hexdig *(hexdig / (underscore hexdig))
+hex-digits         = hexdig *(hexdig / (underscore hexdig))
 
-oct-digit        = %x30-37
+oct-digit          = %x30-37
 
-oct-digits       = oct-digit *(oct-digit / (underscore oct-digit))
+oct-digits         = oct-digit *(oct-digit / (underscore oct-digit))
 
-bin-digit        = %x30
-                   / %x31  ; "0" / "1"
+bin-digit          = %x30
+                     / %x31  ; "0" / "1"
 
-bin-digits       = bin-digit *(bin-digit / (underscore bin-digit))
+bin-digits         = bin-digit *(bin-digit / (underscore bin-digit))
 
-exp-part         = (%x65 / %x45) [plus / minus] dec-digits
+exp-part           = (%x65 / %x45) [plus / minus] dec-digits
 
-int-lit          = %x30.78 hex-digits  ; "0x"
-                   / %x30.6F oct-digits  ; "0o"
-                   / %x30.62 bin-digits  ; "0b"
-                   / dec-digits
+int-lit            = %x30.78 hex-digits  ; "0x"
+                     / %x30.6F oct-digits  ; "0o"
+                     / %x30.62 bin-digits  ; "0b"
+                     / dec-digits
 
-float-lit        = dec-digits dot dec-digits [exp-part]
-                   / dot dec-digits [exp-part]
-                   / dec-digits exp-part
+float-lit          = dec-digits dot dec-digits [exp-part]
+                     / dot dec-digits [exp-part]
+                     / dec-digits exp-part
 
-esc-simple       = squote
-                   / dquote
-                   / backtick
-                   / backslash
-                   / dollar
-                   / %x6E
-                   / %x72
-                   / %x74
-                   / %x30
+esc-simple         = squote
+                     / dquote
+                     / backtick
+                     / backslash
+                     / dollar
+                     / %x6E
+                     / %x72
+                     / %x74
+                     / %x30
 
-esc-hex          = %x78 2hexdig
+esc-hex            = %x78 2hexdig
 
-esc-uni          = %x75 4hexdig [2hexdig]
+esc-uni            = %x75 4hexdig [2hexdig]
 
-esc-seq          = backslash (esc-simple / esc-hex / esc-uni)
+esc-seq            = backslash (esc-simple / esc-hex / esc-uni)
 
-string-body-char = esc-seq
-                   / not-dquote-or-backslash
+string-body-char   = esc-seq
+                     / not-dquote-or-backslash-or-newline
 
-rune-body-char   = esc-seq
-                   / not-squote-or-backslash
+rune-body-char     = esc-seq
+                     / not-squote-or-backslash-or-newline
 
-string-lit       = dquote *(string-body-char) dquote
+string-lit         = dquote *(string-body-char) dquote
 
 template-body-char = esc-seq
-                    / not-backtick-or-backslash
+                     / not-backtick-or-backslash
 
-template-no-subst = backtick *(template-body-char) backtick
+template-no-subst  = backtick *(template-body-char) backtick
 
-template-head     = backtick *(template-body-char) "${"
+template-head      = backtick *(template-body-char) "${"
 
-template-middle   = "}" *(template-body-char) "${"
+template-middle    = "}" *(template-body-char) "${"
 
-template-tail     = "}" *(template-body-char) backtick
+template-tail      = "}" *(template-body-char) backtick
 
-template-lit      = template-no-subst
-                    / (template-head expr *(template-middle expr) template-tail)
+template-lit       = template-no-subst
+                     / (template-head expr *(template-middle expr)
+                       template-tail)
+;
+; Template literals are lexically stateful in the canonical ANTLR grammar:
+; - Template text may contain raw newlines.
+; - Interpolation ends at the `}` that closes the `${` (i.e. when brace depth returns to 0).
+; - This ABNF specifies the surface spelling only; it does not model brace-nesting or lexer modes.
+rune-lit = squote *(rune-body-char) squote
 
-rune-lit         = squote *(rune-body-char) squote
-
-literal          = int-lit
-                   / float-lit
-                   / string-lit
-                   / template-lit
-                   / rune-lit
+literal  = int-lit
+           / float-lit
+           / string-lit
+           / rune-lit
 ; --- Idents ---
-plain-ident   = alpha *(alpha / digit / underscore)
+plain-ident = alpha *(alpha / digit / underscore)
 
-ident         = plain-ident
+ident       = plain-ident
 
-sym-char      = star
-                / plus
-                / minus
-                / slash
-                / percent
-                / eq
-                / lt
-                / gt
+sym-char    = star
+              / plus
+              / minus
+              / slash
+              / percent
+              / eq
+              / lt
+              / gt
 
-symbolic-op   = 2*sym-char
+symbolic-op = 2*sym-char
 
-op-single     = plus
-                / minus
-                / star
-                / slash
-                / percent
-                / eq
-                / lt
-                / gt
+op-single   = plus
+              / minus
+              / star
+              / slash
+              / percent
+              / eq
+              / lt
+              / gt
 
-op-ident      = lparen (symbolic-op / op-single) rparen
+op-ident    = lparen (symbolic-op / op-single) rparen
 ; --- Trivia (skipped) ---
 newline           = lf
 
 ws                = 1*(sp / htab / cr)
 
-line-doc-comment  = "///" *(not-lf)
+line-doc-comment  = "///" *(not-cr-or-lf)
 
-line-comment      = "//" *(not-lf)
+line-comment      = "//" *(not-cr-or-lf)
 
 block-body        = *(not-star / (star not-slash))
 
@@ -323,51 +353,41 @@ trivia            = ws
 ; ---------------------------------------------------------------------------
 ; 2. Parser grammar (over the token stream, trivia-skipped)
 ; ---------------------------------------------------------------------------
-root = *(stmt)
+root        = *(root-stmt)
 
-stmt = expr semicolon
-; --- Expressions (precedence ladder; matches `grammar/Musi.g4`) ---
-expr              = assign-expr
+root-stmt   = fixity-decl
+              / stmt
 
-assign-expr       = pipe-expr [lt-minus assign-expr]
+stmt        = expr semicolon
 
-pipe-expr         = arrow-expr *(pipe-gt arrow-expr)
+fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
+; --- Expressions (semantic precedence; parse as flat infix chain) ---
+expr              = infix-expr
 
-arrow-expr        = or-expr [((minus-gt / tilde-gt) arrow-expr)]
-
-or-expr           = xor-expr *(kw-or xor-expr)
-
-xor-expr          = and-expr *(kw-xor and-expr)
-
-and-expr          = compare-expr *(kw-and compare-expr)
-
-compare-op        = eq
+infix-op          = lt-minus
+                    / pipe-gt
+                    / minus-gt
+                    / tilde-gt
+                    / kw-or
+                    / kw-xor
+                    / kw-and
+                    / eq
                     / slash-eq
                     / lt
                     / gt
                     / lt-eq
                     / gt-eq
                     / kw-in
-
-compare-expr      = shift-expr [compare-op shift-expr]
-
-shift-op          = kw-shl
+                    / kw-shl
                     / kw-shr
-
-shift-expr        = add-expr *(shift-op add-expr)
-
-add-op            = plus
+                    / plus
                     / minus
-
-add-expr          = mul-expr *(add-op mul-expr)
-
-mul-op            = star
+                    / star
                     / slash
                     / percent
+                    / symbolic-op
 
-mul-expr          = symop-expr *(mul-op symop-expr)
-
-symop-expr        = prefix-expr *(symbolic-op prefix-expr)
+infix-expr        = prefix-expr *(infix-op prefix-expr)
 
 prefix-op         = minus
                     / kw-not
@@ -402,21 +422,21 @@ optional-chain-op = q-dot field-target
 
 force-access-op   = bang-dot field-target
 
-type-test-op      = colon-question arrow-expr [kw-as ident]
+type-test-op      = colon-question expr [kw-as ident]
 
-type-cast-op      = colon-question-gt arrow-expr
+type-cast-op      = colon-question-gt expr
 
 field-target      = ident
                     / int-lit
 ; --- Atoms ---
 atom                  = literal
+                        / template-lit
                         / splice
                         / ident
                         / op-ident
                         / pi-expr
                         / lambda-expr
                         / paren-expr
-                        / array-type-expr
                         / array-expr
                         / record-literal-expr
                         / dot-prefix-expr
@@ -434,10 +454,10 @@ atom                  = literal
                         / quote-expr
                         / with-attrs-expr
 
-pi-expr               = lparen ident colon expr rparen (minus-gt / tilde-gt)
-                        expr
+pi-expr               = kw-forall lparen ident colon expr rparen (minus-gt /
+                        tilde-gt) expr
 
-lambda-expr           = lparen [param-list] rparen [colon expr] eq-gt expr
+lambda-expr           = bslash params [colon expr] eq-gt expr
 
 paren-expr            = lparen rparen
                         / lparen comma rparen
@@ -453,8 +473,6 @@ case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
                         case-arm) [pipe] rparen
 
 case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
-
-array-type-expr       = lbracket [dim-list] rbracket prefix-expr
 
 array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
 
@@ -478,8 +496,7 @@ resume-expr           = kw-resume [expr]
 
 import-expr           = kw-import expr
 
-let-modifier          = kw-mut
-                        / kw-rec
+let-modifier          = kw-rec
 
 let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
                         [where-clause] [with-clause] [type-annot] colon-eq expr
@@ -567,12 +584,6 @@ op-or-ident           = ident
 ; --- Unified annotation / constraint helpers ---
 type-annot     = colon expr
 
-dim-list       = dim *(comma dim)
-
-dim            = int-lit
-                 / ident
-                 / underscore
-
 effect-set     = lbrace comma-pad [effect-entries] comma-pad rbrace
 
 effect-entries = effect-list [comma effect-rest]
@@ -603,7 +614,7 @@ pattern-primary = underscore
 
 rec-pat-fields  = rec-pat-field *(comma rec-pat-field)
 
-rec-pat-field   = [kw-mut] ident [colon pattern]
+rec-pat-field   = ident [colon pattern]
 
 pat-list        = pattern *(comma pattern)
 ; --- Attributes ---
@@ -648,7 +659,7 @@ params     = lparen [param-list] rparen
 
 param-list = param *(comma param)
 
-param      = [kw-mut] ident [type-annot] [colon-eq expr]
+param      = ident [type-annot] [colon-eq expr]
 
 ident-list = comma-pad ident *(comma ident) comma-pad
 

@@ -6,7 +6,7 @@ This document is the compact, implementer-facing formalization intended to be ea
 
 - a hand-written lexer
 - recursive descent for statements/constructs
-- Pratt parsing for expressions
+- a flat infix-chain parse for expressions, with precedence/associativity resolved semantically via fixity declarations
 
 It also defines CST shaping rules (“no unnecessary nodes”).
 
@@ -14,7 +14,7 @@ It also defines CST shaping rules (“no unnecessary nodes”).
 
 Keywords:
 
-`and as case class data effect export foreign handle if import in instance law let mut rec not of opaque or perform quote resume shl shr where with xor`
+`and as case class data effect export foreign forall handle if import in infix infixl infixr instance law let mut rec not of opaque or perform quote resume shl shr where with xor`
 
 Fixed punctuation / operators (maximal munch):
 
@@ -22,23 +22,28 @@ Fixed punctuation / operators (maximal munch):
 
 Singles:
 
-`@ # ( ) [ ] { } , ; . : | + - * / % = < > _`
+`@ # \ ( ) [ ] { } , ; . : | + - * / % = < > _`
 
 Literals:
 
 - `INT_LIT`, `FLOAT_LIT`
-- `STRING_LIT`, `TEMPLATE_LIT`, `RUNE_LIT`
+- `STRING_LIT`, `RUNE_LIT`
+- template literals (backticks) tokenized as `TEMPLATE_BEGIN`/`TEMPLATE_TEXT`/`TEMPLATE_INTERP_BEGIN`/`RBRACE`/`TEMPLATE_END`
 - `IDENT`
 
-## Expression precedence (term expressions)
+## Operator precedence (semantic)
 
 Higher number = tighter binding.
+
+This is **not** a parser contract anymore. Parsing produces a flat infix chain (see EBNF below), and a later phase folds it into a tree using:
+
+- built-in fixities for built-in operators/keywords
+- explicit fixity declarations (`infixl`/`infixr`/`infix`) for user-defined symbolic operators
 
 | BP | Operators / forms                     | Assoc |
 | -- | -------------------------------------- | ----- |
 | 26 | calls `()`, bracket apply `[]`, postfix field/index/update | left  |
 | 24 | prefix `- not mut`                     | right |
-| 22 | user `SYMBOLIC_OP`                     | left  |
 | 20 | `* / %`                                | left  |
 | 18 | `+ -`                                  | left  |
 | 16 | `shl shr`                              | left  |
@@ -50,6 +55,20 @@ Higher number = tighter binding.
 | 6  | `|>`                                   | left  |
 | 2  | `<-`                                   | right |
 
+### Fixity declarations
+
+User-defined symbolic operators (and optionally operator spellings like `(+)`) may have their precedence/associativity declared at the root level:
+
+```musi
+infixl 6 (++);
+infixr 5 (**);
+infix 4 (<=>);
+```
+
+- `infixl n op` left-associative
+- `infixr n op` right-associative
+- `infix n op` non-associative
+
 ## EBNF
 
 Notation:
@@ -60,25 +79,32 @@ Notation:
 ### Root
 
 ```
-root      = stmt* EOF ;
+root      = root_stmt* EOF ;
+root_stmt = fixity_decl | stmt ;
 stmt      = expr ";" ;
+
+fixity_decl = ("infixl" | "infixr" | "infix") INT_LIT op_ident ";" ;
 ```
 
-### Expressions (Pratt)
+### Expressions (flat infix chain)
 
-This is the *contract* for a Pratt parser; the exact EBNF expansion can be derived from the table above.
+This is the parser contract:
+
+- Parse `expr` as a flat chain of `prefix_expr` separated by `infix_op`.
+- Then fold the chain into an AST using the fixity environment.
 
 Atoms (unique FIRST tokens):
 
 ```
 atom =
     literal
+  | template_lit
   | splice
   | ident
   | op_ident
   | pi_expr
+  | lambda_expr
   | paren_form
-  | array_type_expr
   | array_lit
   | record_lit
   | dot_prefix
@@ -98,6 +124,14 @@ atom =
   ;
 ```
 
+Template literals (lexer-driven tokens):
+
+```
+template_lit =
+    TEMPLATE_BEGIN (TEMPLATE_TEXT | TEMPLATE_INTERP_BEGIN expr RBRACE)* TEMPLATE_END
+  ;
+```
+
 Postfix ops:
 
 ```
@@ -114,12 +148,21 @@ postfix =
   ;
 ```
 
-### Bindings
-
-Single modifier slot: exactly one of `mut` or `rec`.
+Infix chains:
 
 ```
-let_modifier = "mut" | "rec" ;
+expr       = infix_expr ;
+infix_expr = prefix_expr (infix_op prefix_expr)* ;
+```
+
+`infix_op` includes built-in operators/keywords plus user-defined `SYMBOLIC_OP`.
+
+### Bindings
+
+Single modifier slot: `rec`.
+
+```
+let_modifier = "rec" ;
 
 let_expr =
   "let" let_modifier? pattern
@@ -163,8 +206,8 @@ pattern_primary =
 The first-class cleanup preserves the existing spellings as ordinary expressions:
 
 ```
-pi_expr         = "(" ident ":" expr ")" ("->" | "~>") expr ;
-array_type_expr = "[" dim_list? "]" prefix_expr ;
+pi_expr = "forall" "(" ident ":" expr ")" ("->" | "~>") expr ;
+lambda_expr = "\\" params (":" expr)? "=>" expr ;
 ```
 
 Bracket application remains general:

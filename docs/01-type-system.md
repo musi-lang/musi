@@ -80,25 +80,26 @@ Int + String
 ### Arrays
 
 ```musi
-[]Int
-[3]Int
-[n]T
+Array[Int]
+Array[Int, 3]
+Array[T, n]
 ```
 
-Arrays are ordinary type and expression forms.
+Arrays are ordinary constructor applications in the unified expression space.
 
 ### Mutability
 
 ```musi
-mut []Int
+mut Array[Int]
 mut Point
 ```
 
 `mut T` means writable `T`. Mutability belongs to the type/value model, not only to bindings.
 
-Binding mutability is separate:
+Mutation is location-based:
 
-- `let mut x := expr` controls whether `x <- value` is permitted
+- `mut expr` produces a writable location/value
+- `<-` writes into a writable location expression
 - `mut T` controls whether writes through `base.field <- value` and `base.[i] <- value` are permitted
 
 ## Type Definitions
@@ -147,7 +148,7 @@ let id[T] (x : T) : T := x;
 Constraints stay in `where`.
 
 ```musi
-let sort[T] (xs : []T) : []T where T : Ord := /* ... */;
+let sort[T] (xs : Array[T]) : Array[T] where T : Ord := /* ... */;
 let lift[T] (x : T) : Box[T] where T <: Value := /* ... */;
 ```
 

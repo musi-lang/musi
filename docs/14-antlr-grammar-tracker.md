@@ -15,24 +15,20 @@ This tracker is for the remaining semantic clarifications needed to make the gra
 
 ## Lexical contracts
 
-- [ ] Define whether block comments can nest; if not, state it normatively
-- [ ] Define whether rune/string literals may contain raw newlines normatively (current lexer allows it)
-- [ ] Define whether template literals may contain raw newlines normatively
+- [x] Block comments do not nest (`/* ... */`, `/** ... */`)
+- [x] String/rune literals do not contain raw newlines (no raw `\n` or `\r`)
+- [x] Template literals may contain raw newlines
 
 ## Template Literals
 
-- [ ] Decide whether template literals support `${ expr }` interpolation in the core syntax
-- [ ] If yes: define brace escaping (`{{` / `}}`?) and nesting rules
-- [ ] Specify how template interpolation is tokenized and parsed (current ANTLR grammar treats it as one literal token)
+- [x] Decide whether template literals support `${ expr }` interpolation in the core syntax
+- [x] Define nesting rule (interpolation ends at `}` when brace depth returns to 0)
+- [x] Specify how template interpolation is tokenized and parsed (lexer modes + `TEMPLATE_BEGIN`/`TEMPLATE_TEXT`/`TEMPLATE_INTERP_BEGIN`/`TEMPLATE_END`)
 
 ## Symbolic operators
 
-- [ ] Specify “precedence by family” rule:
-  - [ ] How a family is derived from an operator string (first char? full string? partitioning?)
-  - [ ] Whether mixed-symbol operators are allowed (`==<<==>>==`)
-  - [ ] Associativity per family (or global default)
-  - [ ] How collisions with reserved compound tokens are rejected (normative rule)
-- [ ] Update `grammar/Musi.g4` to reflect the finalized rule (or explicitly document as semantic rule outside the grammar)
+- [x] Define fixity declarations (`infixl`/`infixr`/`infix`) for symbolic operators
+- [x] Parse infix operators as a flat chain; resolve precedence/associativity semantically
 
 ## Syntactic inconsistencies to resolve
 
