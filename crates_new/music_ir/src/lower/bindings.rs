@@ -21,21 +21,11 @@ fn collect_module_level_bindings_from_expr(
                 collect_module_level_bindings_from_expr(sema, expr, out);
             }
         }
-        HirExprKind::Export { expr, .. } | HirExprKind::Attributed { expr, .. } => {
-            collect_module_level_bindings_from_expr(sema, *expr, out);
-        }
         HirExprKind::Let { pat, .. } => {
             if let HirPatKind::Bind { name } = sema.module().store.pats.get(*pat).kind {
                 if let Some(binding) = super::decl_binding_id(sema, name) {
-                    let _ = out.insert(binding);
-                }
-            }
-        }
-        HirExprKind::Foreign { decls, .. } => {
-            for decl in sema.module().store.foreign_decls.get(decls.clone()) {
-                if let Some(binding) = super::decl_binding_id(sema, decl.name) {
                     if sema.is_gated_binding(binding) {
-                        continue;
+                        return;
                     }
                     let _ = out.insert(binding);
                 }
@@ -44,4 +34,3 @@ fn collect_module_level_bindings_from_expr(
         _ => {}
     }
 }
-

@@ -25,12 +25,12 @@ impl<T> SliceRange<T> {
     }
 
     #[must_use]
-    pub const fn len(self) -> u32 {
+    pub const fn len(&self) -> u32 {
         self.end.saturating_sub(self.start)
     }
 
     #[must_use]
-    pub const fn is_empty(self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.start == self.end
     }
 

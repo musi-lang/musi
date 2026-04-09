@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::kinds::SyntaxNodeKind;
 use super::syntax::SyntaxNode;
 
@@ -65,25 +63,6 @@ pub enum Expr<'tree, 'src> {
     Other(SyntaxNode<'tree, 'src>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PatternKind {
-    Wildcard,
-    Bind,
-    Literal,
-    Variant,
-    Record,
-    Tuple,
-    Array,
-    Or,
-    As,
-    Other,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Pattern<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct LetExpr<'tree, 'src> {
     syntax: SyntaxNode<'tree, 'src>,
@@ -126,11 +105,6 @@ pub struct InstanceExpr<'tree, 'src> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct QuoteExpr<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Attr<'tree, 'src> {
     syntax: SyntaxNode<'tree, 'src>,
 }
 
@@ -246,38 +220,6 @@ impl<'tree, 'src> Expr<'tree, 'src> {
     }
 }
 
-impl<'tree, 'src> Pattern<'tree, 'src> {
-    #[must_use]
-    pub fn cast(node: SyntaxNode<'tree, 'src>) -> Option<Self> {
-        node.kind().is_pat().then_some(Self { syntax: node })
-    }
-
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-
-    #[must_use]
-    pub fn kind(self) -> PatternKind {
-        let kind = self.syntax.kind();
-        if !kind.is_pat() {
-            return PatternKind::Other;
-        }
-        match kind {
-            SyntaxNodeKind::WildcardPat => PatternKind::Wildcard,
-            SyntaxNodeKind::BindPat => PatternKind::Bind,
-            SyntaxNodeKind::LiteralPat => PatternKind::Literal,
-            SyntaxNodeKind::VariantPat => PatternKind::Variant,
-            SyntaxNodeKind::RecordPat => PatternKind::Record,
-            SyntaxNodeKind::TuplePat => PatternKind::Tuple,
-            SyntaxNodeKind::ArrayPat => PatternKind::Array,
-            SyntaxNodeKind::OrPat => PatternKind::Or,
-            SyntaxNodeKind::AsPat => PatternKind::As,
-            _ => PatternKind::Other,
-        }
-    }
-}
-
 impl<'tree, 'src> LetExpr<'tree, 'src> {
     #[must_use]
     pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
@@ -335,18 +277,6 @@ impl<'tree, 'src> InstanceExpr<'tree, 'src> {
 }
 
 impl<'tree, 'src> QuoteExpr<'tree, 'src> {
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-}
-
-impl<'tree, 'src> Attr<'tree, 'src> {
-    #[must_use]
-    pub fn cast(node: SyntaxNode<'tree, 'src>) -> Option<Self> {
-        (node.kind() == SyntaxNodeKind::Attr).then_some(Self { syntax: node })
-    }
-
     #[must_use]
     pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
         self.syntax

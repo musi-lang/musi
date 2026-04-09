@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, HashSet};
 use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
-    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirForeignDecl,
-    HirHandleClause, HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp,
-    HirRecordItem, HirRecordPatField, HirTyField, HirTyId, HirTyKind,
+    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirHandleClause,
+    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirRecordItem,
+    HirRecordPatField, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -37,6 +37,7 @@ struct TopLevelItems {
 }
 
 struct LetItemInput {
+    expr_id: HirExprId,
     pat: HirPatId,
     params: SliceRange<HirParam>,
     value: HirExprId,
@@ -226,9 +227,6 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Resume { expr } => IrExprKind::Resume {
             expr: expr.map(|expr| Box::new(lower_expr(ctx, expr))),
         },
-        HirExprKind::Export { expr, .. } | HirExprKind::Attributed { expr, .. } => {
-            return lower_expr(ctx, *expr);
-        }
         HirExprKind::Import { .. }
             if matches!(sema.ty(sema.expr_ty(expr_id)).kind, HirTyKind::Module) =>
         {
@@ -1521,16 +1519,20 @@ fn use_binding_id(sema: &SemaModule, ident: Ident) -> Option<NameBindingId> {
         .copied()
 }
 
-fn lower_foreign_decl(
+fn lower_foreign_let(
     sema: &SemaModule,
     interner: &Interner,
-    abi: Option<&str>,
-    decl: &HirForeignDecl,
+    expr_id: HirExprId,
+    name: Ident,
+    params: SliceRange<HirParam>,
     exported: bool,
 ) -> IrForeignDef {
-    let name: Box<str> = interner.resolve(decl.name.name).into();
-    let binding = decl_binding_id(sema, decl.name);
-    let mut symbol = name.clone();
+    let expr = sema.module().store.exprs.get(expr_id);
+    debug_assert!(expr.mods.foreign.is_some());
+
+    let name_text: Box<str> = interner.resolve(name.name).into();
+    let binding = decl_binding_id(sema, name);
+    let mut symbol = name_text.clone();
     let mut link = None::<Box<str>>;
     if let Some(binding) = binding {
         if let Some(attrs) = sema.foreign_link(binding) {
@@ -1540,12 +1542,18 @@ fn lower_foreign_decl(
             }
         }
     }
+    let abi = expr
+        .mods
+        .foreign
+        .as_ref()
+        .and_then(|foreign| foreign.abi)
+        .map_or("c", |sym| interner.resolve(sym));
     IrForeignDef {
         binding,
         symbol,
-        name,
-        abi: abi.unwrap_or("c").into(),
-        param_count: u32::try_from(sema.module().store.params.get(decl.params.clone()).len())
+        name: name_text,
+        abi: abi.into(),
+        param_count: u32::try_from(sema.module().store.params.get(params).len())
             .expect("param count overflow"),
         link,
         exported,

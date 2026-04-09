@@ -12,17 +12,13 @@ pub(super) fn collect_top_level_items(
     items: &mut TopLevelItems,
 ) {
     let sema = ctx.sema;
-    match &sema.module().store.exprs.get(expr_id).kind {
+    let expr = sema.module().store.exprs.get(expr_id);
+    let exported = exported || expr.mods.export.is_some();
+    match &expr.kind {
         HirExprKind::Sequence { exprs } => {
             for expr in sema.module().store.expr_ids.get(*exprs).iter().copied() {
-                collect_top_level_items(ctx, expr, false, items);
+                collect_top_level_items(ctx, expr, exported, items);
             }
-        }
-        HirExprKind::Export { expr, .. } => {
-            collect_top_level_items(ctx, *expr, true, items);
-        }
-        HirExprKind::Attributed { expr, .. } => {
-            collect_top_level_items(ctx, *expr, exported, items);
         }
         HirExprKind::Let {
             pat,
@@ -36,6 +32,7 @@ pub(super) fn collect_top_level_items(
             collect_let_item(
                 ctx,
                 LetItemInput {
+                    expr_id,
                     pat: *pat,
                     params: params.clone(),
                     value: *value,
@@ -45,22 +42,6 @@ pub(super) fn collect_top_level_items(
                 items,
             );
         }
-        HirExprKind::Foreign { abi, decls } => {
-            for decl in sema.module().store.foreign_decls.get(decls.clone()) {
-                if let Some(binding) = super::decl_binding_id(sema, decl.name)
-                    && sema.is_gated_binding(binding)
-                {
-                    continue;
-                }
-                items.foreigns.push(super::lower_foreign_decl(
-                    sema,
-                    ctx.interner,
-                    abi.as_deref(),
-                    decl,
-                    exported,
-                ));
-            }
-        }
         _ => {}
     }
 }
@@ -69,6 +50,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
     let sema = ctx.sema;
     let interner = ctx.interner;
     let LetItemInput {
+        expr_id,
         pat,
         params,
         value,
@@ -79,6 +61,24 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         return;
     };
     let binding = super::decl_binding_id(sema, name);
+    if let Some(binding) = binding {
+        if sema.is_gated_binding(binding) {
+            return;
+        }
+    }
+
+    if sema.module().store.exprs.get(expr_id).mods.foreign.is_some() {
+        items.foreigns.push(super::lower_foreign_let(
+            sema,
+            interner,
+            expr_id,
+            name,
+            params,
+            exported,
+        ));
+        return;
+    }
+
     let module_target = sema.expr_module_target(value).cloned();
     let effects = sema.expr_effects(value).clone();
     if matches!(sema.ty(sema.expr_ty(value)).kind, HirTyKind::Module)
