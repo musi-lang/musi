@@ -218,3 +218,35 @@ fn lowers_sum_constructors_as_synthetic_variants() {
     };
     assert_eq!(data_key.name.as_ref(), synth.key.name.as_ref());
 }
+
+#[test]
+fn lowers_type_test_and_cast() {
+    let ir = lower(
+        r"
+        export let check (x : Any) : Bool := x :? Int;
+        export let cast (x : Any) : Int := x :?> Int;
+    ",
+    );
+
+    let check = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "check")
+        .expect("check callable");
+    let check_kind = match &check.body.kind {
+        IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
+        kind => kind,
+    };
+    assert!(matches!(check_kind, IrExprKind::TyTest { .. }));
+
+    let cast = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "cast")
+        .expect("cast callable");
+    let cast_kind = match &cast.body.kind {
+        IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
+        kind => kind,
+    };
+    assert!(matches!(cast_kind, IrExprKind::TyCast { .. }));
+}

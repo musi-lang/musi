@@ -31,21 +31,7 @@ pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
         HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Module => "Module".into(),
         HirTyKind::NatLit(value) => value.to_string(),
-        HirTyKind::Named { name, args } => {
-            let mut out = String::from(ctx.resolve_symbol(name));
-            let args = ctx.ty_ids(args);
-            if !args.is_empty() {
-                out.push('[');
-                for (idx, arg) in args.into_iter().enumerate() {
-                    if idx != 0 {
-                        out.push_str(", ");
-                    }
-                    out.push_str(&render_ty(ctx, arg));
-                }
-                out.push(']');
-            }
-            out
-        }
+        HirTyKind::Named { name, args } => render_named_ty(ctx, name, args),
         HirTyKind::Pi {
             binder,
             binder_ty,
@@ -64,59 +50,94 @@ pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
             params,
             ret,
             is_effectful,
-        } => {
-            let params = ctx.ty_ids(params);
-            let left = if params.len() == 1 {
-                render_ty(ctx, params[0])
-            } else {
-                format!(
-                    "({})",
-                    params
-                        .into_iter()
-                        .map(|param| render_ty(ctx, param))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
-            let arrow = if is_effectful { " ~> " } else { " -> " };
-            format!("{left}{arrow}{}", render_ty(ctx, ret))
-        }
+        } => render_arrow_ty(ctx, params, ret, is_effectful),
         HirTyKind::Sum { left, right } => {
             format!("{} + {}", render_ty(ctx, left), render_ty(ctx, right))
         }
-        HirTyKind::Tuple { items } => format!(
+        HirTyKind::Tuple { items } => render_tuple_ty(ctx, items),
+        HirTyKind::Array { dims, item } => render_array_ty(ctx, dims, item),
+        HirTyKind::Mut { inner } => format!("mut {}", render_ty(ctx, inner)),
+        HirTyKind::Record { fields } => render_record_ty(ctx, fields),
+    }
+}
+
+fn render_named_ty(ctx: &PassBase<'_, '_, '_>, name: Symbol, args: SliceRange<HirTyId>) -> String {
+    let mut out = String::from(ctx.resolve_symbol(name));
+    let args = ctx.ty_ids(args);
+    if args.is_empty() {
+        return out;
+    }
+    out.push('[');
+    for (idx, arg) in args.into_iter().enumerate() {
+        if idx != 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&render_ty(ctx, arg));
+    }
+    out.push(']');
+    out
+}
+
+fn render_arrow_ty(
+    ctx: &PassBase<'_, '_, '_>,
+    params: SliceRange<HirTyId>,
+    ret: HirTyId,
+    is_effectful: bool,
+) -> String {
+    let params = ctx.ty_ids(params);
+    let left = if params.len() == 1 {
+        render_ty(ctx, params[0])
+    } else {
+        format!(
             "({})",
-            ctx.ty_ids(items)
+            params
                 .into_iter()
-                .map(|item| render_ty(ctx, item))
+                .map(|param| render_ty(ctx, param))
                 .collect::<Vec<_>>()
                 .join(", ")
-        ),
-        HirTyKind::Array { dims, item } => {
-            let dims = ctx.dims(dims);
-            let mut parts = vec![render_ty(ctx, item)];
-            for dim in dims {
-                parts.push(match dim {
-                    HirDim::Unknown => "_".into(),
-                    HirDim::Name(name) => ctx.resolve_symbol(name.name).into(),
-                    HirDim::Int(value) => value.to_string(),
-                });
-            }
-            format!("Array[{}]", parts.join(", "))
-        }
-        HirTyKind::Mut { inner } => format!("mut {}", render_ty(ctx, inner)),
-        HirTyKind::Record { fields } => {
-            let mut parts = Vec::new();
-            for field in ctx.ty_fields(fields) {
-                parts.push(format!(
-                    "{} = {}",
-                    ctx.resolve_symbol(field.name),
-                    render_ty(ctx, field.ty)
-                ));
-            }
-            format!("{{{}}}", parts.join(", "))
-        }
+        )
+    };
+    let arrow = if is_effectful { " ~> " } else { " -> " };
+    format!("{left}{arrow}{}", render_ty(ctx, ret))
+}
+
+fn render_tuple_ty(ctx: &PassBase<'_, '_, '_>, items: SliceRange<HirTyId>) -> String {
+    format!(
+        "({})",
+        ctx.ty_ids(items)
+            .into_iter()
+            .map(|item| render_ty(ctx, item))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn render_array_ty(ctx: &PassBase<'_, '_, '_>, dims: SliceRange<HirDim>, item: HirTyId) -> String {
+    let dims = ctx.dims(dims);
+    let mut parts = vec![render_ty(ctx, item)];
+    for dim in dims {
+        parts.push(match dim {
+            HirDim::Unknown => "_".into(),
+            HirDim::Name(name) => ctx.resolve_symbol(name.name).into(),
+            HirDim::Int(value) => value.to_string(),
+        });
     }
+    format!("Array[{}]", parts.join(", "))
+}
+
+fn render_record_ty(
+    ctx: &PassBase<'_, '_, '_>,
+    fields: SliceRange<HirTyField>,
+) -> String {
+    let mut parts = Vec::new();
+    for field in ctx.ty_fields(fields) {
+        parts.push(format!(
+            "{} = {}",
+            ctx.resolve_symbol(field.name),
+            render_ty(ctx, field.ty)
+        ));
+    }
+    format!("{{{}}}", parts.join(", "))
 }
 
 pub fn type_mismatch(
@@ -464,15 +485,20 @@ fn lower_apply_type_expr(
                 HirExprKind::Lit { lit } => match ctx.lit(lit).kind {
                     HirLitKind::Int { raw } => {
                         let raw = raw.replace('_', "");
-                        let value = if let Some(hex) = raw.strip_prefix("0x") {
-                            u32::from_str_radix(hex, 16).ok()
-                        } else if let Some(oct) = raw.strip_prefix("0o") {
-                            u32::from_str_radix(oct, 8).ok()
-                        } else if let Some(bin) = raw.strip_prefix("0b") {
-                            u32::from_str_radix(bin, 2).ok()
-                        } else {
-                            raw.parse::<u32>().ok()
-                        };
+                        let value = raw.strip_prefix("0x").map_or_else(
+                            || {
+                                raw.strip_prefix("0o").map_or_else(
+                                    || {
+                                        raw.strip_prefix("0b").map_or_else(
+                                            || raw.parse::<u32>().ok(),
+                                            |bin| u32::from_str_radix(bin, 2).ok(),
+                                        )
+                                    },
+                                    |oct| u32::from_str_radix(oct, 8).ok(),
+                                )
+                            },
+                            |hex| u32::from_str_radix(hex, 16).ok(),
+                        );
                         value.map(HirDim::Int)
                     }
                     _ => None,

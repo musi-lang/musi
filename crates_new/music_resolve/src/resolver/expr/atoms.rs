@@ -65,7 +65,7 @@ where
                 SyntaxElement::Node(expr) => {
                     pieces.push(self.lower_expr(expr));
                 }
-                _ => {}
+                SyntaxElement::Token(_) => {}
             }
         }
 

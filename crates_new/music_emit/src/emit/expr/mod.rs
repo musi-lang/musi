@@ -24,27 +24,84 @@ pub(super) fn compile_expr(
     keep_result: bool,
     diags: &mut EmitDiagList,
 ) {
+    let matched = compile_expr_literal(emitter, expr, diags)
+        || compile_expr_sequence_and_data(emitter, expr, diags)
+        || compile_expr_storage_ops(emitter, expr, diags)
+        || compile_expr_control_ops(emitter, expr, diags)
+        || compile_expr_effect_ops(emitter, expr, diags)
+        || compile_expr_type_ops(emitter, expr, diags)
+        || compile_expr_unsupported(emitter, expr, diags);
+    debug_assert!(matched);
+    if !keep_result {
+        let slot = support::scratch_slot(emitter);
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+    }
+}
+
+fn compile_expr_literal(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
     match &expr.kind {
-        IrExprKind::Unit => emit_zero(emitter),
+        IrExprKind::Unit => {
+            emit_zero(emitter);
+            true
+        }
         IrExprKind::Name {
             binding,
             name,
             module_target,
             ..
-        } => compile_name(emitter, *binding, name, module_target.as_ref(), expr, diags),
-        IrExprKind::Temp { temp } => compile_temp(emitter, *temp),
-        IrExprKind::Lit(lit) => literals::compile_lit(emitter, lit, &expr.origin, diags),
-        IrExprKind::Sequence { exprs } => compile_sequence(emitter, exprs, diags),
+        } => {
+            compile_name(emitter, *binding, name, module_target.as_ref(), expr, diags);
+            true
+        }
+        IrExprKind::Temp { temp } => {
+            compile_temp(emitter, *temp);
+            true
+        }
+        IrExprKind::Lit(lit) => {
+            literals::compile_lit(emitter, lit, &expr.origin, diags);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn compile_expr_sequence_and_data(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
+        IrExprKind::Sequence { exprs } => {
+            compile_sequence(emitter, exprs, diags);
+            true
+        }
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             compile_sequence_literal(emitter, ty_name, items, diags);
+            true
         }
-        IrExprKind::ArrayCat { ty_name, parts } => compile_array_cat(emitter, ty_name, parts, diags),
+        IrExprKind::ArrayCat { ty_name, parts } => {
+            compile_array_cat(emitter, ty_name, parts, diags);
+            true
+        }
         IrExprKind::Record {
             ty_name,
             field_count,
             fields,
-        } => compile_record_literal(emitter, ty_name, *field_count, fields, diags),
-        IrExprKind::RecordGet { base, index } => compile_record_get(emitter, base, *index, diags),
+        } => {
+            compile_record_literal(emitter, ty_name, *field_count, fields, diags);
+            true
+        }
+        IrExprKind::RecordGet { base, index } => {
+            compile_record_get(emitter, base, *index, diags);
+            true
+        }
         IrExprKind::RecordUpdate {
             ty_name,
             field_count,
@@ -52,38 +109,78 @@ pub(super) fn compile_expr(
             base_fields,
             result_fields,
             updates,
-        } => compile_record_update(
-            emitter,
-            RecordUpdateInput {
-                ty_name,
-                field_count: *field_count,
-                base,
-                base_fields,
-                result_fields,
-                updates,
-            },
-            diags,
-        ),
+        } => {
+            compile_record_update(
+                emitter,
+                RecordUpdateInput {
+                    ty_name,
+                    field_count: *field_count,
+                    base,
+                    base_fields,
+                    result_fields,
+                    updates,
+                },
+                diags,
+            );
+            true
+        }
         IrExprKind::VariantNew {
             data_key,
             tag_index,
             field_count,
             args,
-        } => compile_variant_new(emitter, data_key, *tag_index, *field_count, args, diags),
+        } => {
+            compile_variant_new(emitter, data_key, *tag_index, *field_count, args, diags);
+            true
+        }
+        IrExprKind::Index { base, index } => {
+            compile_index(emitter, base, index, diags);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn compile_expr_storage_ops(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
         IrExprKind::Let {
             binding,
             name,
             value,
             ..
-        } => compile_let(emitter, *binding, name, value, diags),
-        IrExprKind::TempLet { temp, value } => compile_temp_let(emitter, *temp, value, diags),
-        IrExprKind::Assign { target, value } => compile_assign(emitter, target, value, diags),
-        IrExprKind::Index { base, index } => compile_index(emitter, base, index, diags),
+        } => {
+            compile_let(emitter, *binding, name, value, diags);
+            true
+        }
+        IrExprKind::TempLet { temp, value } => {
+            compile_temp_let(emitter, *temp, value, diags);
+            true
+        }
+        IrExprKind::Assign { target, value } => {
+            compile_assign(emitter, target, value, diags);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn compile_expr_control_ops(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
         IrExprKind::ClosureNew { callee, captures } => {
             compile_closure_new(emitter, callee, captures, diags);
+            true
         }
         IrExprKind::Binary { op, left, right } => {
             compile_binary(emitter, op, left, right, diags);
+            true
         }
         IrExprKind::Not { expr: inner } => {
             compile_expr(emitter, inner, true, diags);
@@ -92,76 +189,121 @@ pub(super) fn compile_expr(
                 Opcode::CmpEq,
                 Operand::None,
             )));
+            true
         }
-        IrExprKind::TyTest { base, ty_name } => {
-            compile_expr(emitter, base, true, diags);
-            let Some(ty) = emitter.layout.types.get(ty_name.as_ref()).copied() else {
-                support::push_expr_diag(
-                    diags,
-                    emitter.module_key,
-                    &expr.origin,
-                    format!("unknown type name `{ty_name}` for `:?`"),
-                );
-                emit_zero(emitter);
-                return;
-            };
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::TyChk,
-                Operand::Type(ty),
-            )));
+        IrExprKind::Case { scrutinee, arms } => {
+            compile_case(emitter, scrutinee, arms, diags);
+            true
         }
-        IrExprKind::TyCast { base, ty_name } => {
-            compile_expr(emitter, base, true, diags);
-            let Some(ty) = emitter.layout.types.get(ty_name.as_ref()).copied() else {
-                support::push_expr_diag(
-                    diags,
-                    emitter.module_key,
-                    &expr.origin,
-                    format!("unknown type name `{ty_name}` for `:?>`"),
-                );
-                emit_zero(emitter);
-                return;
-            };
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::TyCast,
-                Operand::Type(ty),
-            )));
+        IrExprKind::Call { callee, args } => {
+            compile_call(emitter, callee, args, diags);
+            true
         }
-        IrExprKind::Case { scrutinee, arms } => compile_case(emitter, scrutinee, arms, diags),
-        IrExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
-        IrExprKind::CallSeq { callee, args } => compile_call_seq(emitter, callee, args, diags),
+        IrExprKind::CallSeq { callee, args } => {
+            compile_call_seq(emitter, callee, args, diags);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn compile_expr_effect_ops(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
         IrExprKind::Perform {
             effect_key,
             op_index,
             args,
-        } => compile_perform(emitter, effect_key, *op_index, args, diags),
+        } => {
+            compile_perform(emitter, effect_key, *op_index, args, diags);
+            true
+        }
         IrExprKind::PerformSeq {
             effect_key,
             op_index,
             args,
-        } => compile_perform_seq(emitter, effect_key, *op_index, args, diags),
+        } => {
+            compile_perform_seq(emitter, effect_key, *op_index, args, diags);
+            true
+        }
         IrExprKind::Handle {
             effect_key,
             value,
             ops,
             body,
-        } => compile_handle(emitter, effect_key, value, ops, body, diags),
-        IrExprKind::Resume { expr } => compile_resume(emitter, expr.as_deref(), diags),
-        IrExprKind::Unsupported { description } => {
-            support::push_expr_diag(
-                diags,
-                emitter.module_key,
-                &expr.origin,
-                format!("unsupported emitted expression `{description}`"),
-            );
-            emit_zero(emitter);
+        } => {
+            compile_handle(emitter, effect_key, value, ops, body, diags);
+            true
         }
+        IrExprKind::Resume { expr } => {
+            compile_resume(emitter, expr.as_deref(), diags);
+            true
+        }
+        _ => false,
     }
-    if !keep_result {
-        let slot = support::scratch_slot(emitter);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::StLoc,
-            Operand::Local(slot),
-        )));
+}
+
+fn compile_expr_type_ops(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
+        IrExprKind::TyTest { base, ty_name } => {
+            compile_type_op_by_name(emitter, &expr.origin, base, ty_name, Opcode::TyChk, ":?", diags);
+            true
+        }
+        IrExprKind::TyCast { base, ty_name } => {
+            compile_type_op_by_name(emitter, &expr.origin, base, ty_name, Opcode::TyCast, ":?>", diags);
+            true
+        }
+        _ => false,
     }
+}
+
+fn compile_expr_unsupported(
+    emitter: &mut MethodEmitter<'_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    let IrExprKind::Unsupported { description } = &expr.kind else {
+        return false;
+    };
+    support::push_expr_diag(
+        diags,
+        emitter.module_key,
+        &expr.origin,
+        format!("unsupported emitted expression `{description}`"),
+    );
+    emit_zero(emitter);
+    true
+}
+
+fn compile_type_op_by_name(
+    emitter: &mut MethodEmitter<'_, '_>,
+    origin: &IrOrigin,
+    base: &IrExpr,
+    ty_name: &str,
+    opcode: Opcode,
+    op_text: &str,
+    diags: &mut EmitDiagList,
+) {
+    compile_expr(emitter, base, true, diags);
+    let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
+        support::push_expr_diag(
+            diags,
+            emitter.module_key,
+            origin,
+            format!("unknown type name `{ty_name}` for `{op_text}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        opcode,
+        Operand::Type(ty),
+    )));
 }

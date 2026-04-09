@@ -476,6 +476,38 @@ fn duplicate_handler_clause_reports_diag() {
 }
 
 #[test]
+fn type_test_target_rejects_mut() {
+    let sema = check(
+        r"
+        export let check (x : Any) : Bool := x :? mut Int;
+    ",
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "`mut` not allowed in type test target"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn type_cast_target_rejects_mut() {
+    let sema = check(
+        r"
+        export let cast (x : Any) : Int := x :?> mut Int;
+    ",
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "`mut` not allowed in type cast target"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn duplicate_class_member_reports_diag() {
     let sema = check(
         r"

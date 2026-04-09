@@ -265,3 +265,30 @@ fn emits_closures_and_higher_order_calls() {
     assert!(has_indirect_call);
     assert!(has_capturing_closure);
 }
+
+#[test]
+fn emits_type_test_and_cast() {
+    let ir = lower_ir(
+        r"
+        export let check (x : Any) : Bool := x :? Int;
+        export let cast (x : Any) : Int := x :?> Int;
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(opcodes.contains(&music_bc::Opcode::TyChk));
+    assert!(opcodes.contains(&music_bc::Opcode::TyCast));
+}

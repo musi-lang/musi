@@ -1,21 +1,5 @@
 [workspace]
-members = [
-  "crates_new/music_arena",
-  "crates_new/music_base",
-  "crates_new/music_bc",
-  "crates_new/music_emit",
-  "crates_new/music_hir",
-  "crates_new/music_ir",
-  "crates_new/music_assembly",
-  "crates_new/music_module",
-  "crates_new/musi_project",
-  "crates_new/music_names",
-  "crates_new/music_resolve",
-  "crates_new/music_sema",
-  "crates_new/music_session",
-  "crates_new/music_syntax",
-]
-exclude = ["crates/*"]
+members = ["crates_new/*"]
 resolver = "2"
 
 # https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -44,6 +28,7 @@ criterion = "0.8.2"
 smallvec = "1.15.1"
 
 [workspace.lints.rust]
+dead_code = "deny"
 keyword_idents_2024 = "forbid"
 missing_unsafe_on_extern = "forbid"
 unsafe_code = "deny"

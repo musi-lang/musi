@@ -12,8 +12,7 @@ where
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ExportMod);
         let (export_opaque, export_foreign_abi) = export_mod
-            .map(|n| parse_export_mod(n))
-            .unwrap_or((false, None));
+            .map_or((false, None), parse_export_mod);
 
         let target = node.child_nodes().find(|n| {
             !matches!(n.kind(), SyntaxNodeKind::Attr | SyntaxNodeKind::ExportMod)

@@ -210,6 +210,19 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             handler,
             clauses,
         } => lower_handle_expr(ctx, expr_id, *expr, *handler, clauses.clone()),
+        HirExprKind::TypeTest { base, .. } => {
+            let ty_name = sema
+                .type_test_target(expr_id)
+                .map_or_else(|| "Unknown".into(), |target| render_ty_name(sema, target, interner));
+            IrExprKind::TyTest {
+                base: Box::new(lower_expr(ctx, *base)),
+                ty_name,
+            }
+        }
+        HirExprKind::TypeCast { base, .. } => IrExprKind::TyCast {
+            base: Box::new(lower_expr(ctx, *base)),
+            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+        },
         HirExprKind::Resume { expr } => IrExprKind::Resume {
             expr: expr.map(|expr| Box::new(lower_expr(ctx, expr))),
         },
@@ -861,10 +874,7 @@ fn lower_irrefutable_value_record(
         } else {
             lower_irrefutable_bind(
                 ctx,
-                IrrefutablePatInput {
-                    origin: input.origin,
-                    module_target: input.module_target,
-                },
+                input,
                 field.name,
                 proj,
                 out,

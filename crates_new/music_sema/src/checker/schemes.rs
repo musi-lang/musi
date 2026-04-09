@@ -195,17 +195,12 @@ pub fn substitute_ty(
         | HirTyKind::Module
         | HirTyKind::NatLit(_) => ty,
         HirTyKind::Named { name, args } => {
-            let args_vec = ctx.ty_ids(args);
-            if args_vec.is_empty()
+            if ctx.ty_ids(args).is_empty()
                 && let Some(found) = subst.get(&name).copied()
             {
                 return found;
             }
-            let args = args_vec
-                .into_iter()
-                .map(|arg| substitute_ty(ctx, arg, subst))
-                .collect::<Vec<_>>();
-            let args = ctx.alloc_ty_list(args);
+            let args = substitute_ty_list(ctx, args, subst);
             ctx.alloc_ty(HirTyKind::Named { name, args })
         }
         HirTyKind::Pi {
@@ -230,12 +225,7 @@ pub fn substitute_ty(
             ret,
             is_effectful,
         } => {
-            let params = ctx
-                .ty_ids(params)
-                .into_iter()
-                .map(|param| substitute_ty(ctx, param, subst))
-                .collect::<Vec<_>>();
-            let params = ctx.alloc_ty_list(params);
+            let params = substitute_ty_list(ctx, params, subst);
             let ret = substitute_ty(ctx, ret, subst);
             ctx.alloc_ty(HirTyKind::Arrow {
                 params,
@@ -249,12 +239,7 @@ pub fn substitute_ty(
             ctx.alloc_ty(HirTyKind::Sum { left, right })
         }
         HirTyKind::Tuple { items } => {
-            let items = ctx
-                .ty_ids(items)
-                .into_iter()
-                .map(|item| substitute_ty(ctx, item, subst))
-                .collect::<Vec<_>>();
-            let items = ctx.alloc_ty_list(items);
+            let items = substitute_ty_list(ctx, items, subst);
             ctx.alloc_ty(HirTyKind::Tuple { items })
         }
         HirTyKind::Array { dims, item } => {
@@ -278,6 +263,19 @@ pub fn substitute_ty(
             ctx.alloc_ty(HirTyKind::Record { fields })
         }
     }
+}
+
+fn substitute_ty_list(
+    ctx: &mut PassBase<'_, '_, '_>,
+    tys: SliceRange<HirTyId>,
+    subst: &HashMap<Symbol, HirTyId>,
+) -> SliceRange<HirTyId> {
+    let tys = ctx
+        .ty_ids(tys)
+        .into_iter()
+        .map(|ty| substitute_ty(ctx, ty, subst))
+        .collect::<Vec<_>>();
+    ctx.alloc_ty_list(tys)
 }
 
 pub fn substitute_effect_row(

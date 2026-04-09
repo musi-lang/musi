@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{HirDim, HirStore, HirTyField, HirTyId, HirTyKind};
 use music_module::ModuleKey;
@@ -61,21 +62,7 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         SurfaceTyKind::CPtr => "CPtr".into(),
         SurfaceTyKind::Module => "Module".into(),
         SurfaceTyKind::NatLit(value) => value.to_string(),
-        SurfaceTyKind::Named { name, args } => {
-            if args.is_empty() {
-                name.to_string()
-            } else {
-                format!(
-                    "{}[{}]",
-                    name,
-                    args.iter()
-                        .copied()
-                        .map(|arg| canonical_surface_ty(surface, arg))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-        }
+        SurfaceTyKind::Named { name, args } => canonical_surface_named(surface, name, args),
         SurfaceTyKind::Pi {
             binder,
             binder_ty,
@@ -93,20 +80,7 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
             params,
             ret,
             is_effectful,
-        } => {
-            let params = params
-                .iter()
-                .copied()
-                .map(|param| canonical_surface_ty(surface, param))
-                .collect::<Vec<_>>();
-            let left = if params.len() == 1 {
-                params[0].clone()
-            } else {
-                format!("({})", params.join(", "))
-            };
-            let arrow = if *is_effectful { " ~> " } else { " -> " };
-            format!("{left}{arrow}{}", canonical_surface_ty(surface, *ret))
-        }
+        } => canonical_surface_arrow(surface, params, *ret, *is_effectful),
         SurfaceTyKind::Sum { left, right } => {
             format!(
                 "{} + {}",
@@ -114,43 +88,96 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
                 canonical_surface_ty(surface, *right)
             )
         }
-        SurfaceTyKind::Tuple { items } => format!(
-            "({})",
-            items
-                .iter()
-                .copied()
-                .map(|item| canonical_surface_ty(surface, item))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        SurfaceTyKind::Array { dims, item } => {
-            let dims = dims
-                .iter()
-                .map(|dim| match dim {
-                    SurfaceDim::Unknown => "_".into(),
-                    SurfaceDim::Name(name) => name.to_string(),
-                    SurfaceDim::Int(value) => value.to_string(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("[{dims}]{}", canonical_surface_ty(surface, *item))
-        }
+        SurfaceTyKind::Tuple { items } => canonical_surface_tuple(surface, items),
+        SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
         SurfaceTyKind::Mut { inner } => {
             format!("mut {}", canonical_surface_ty(surface, *inner))
         }
-        SurfaceTyKind::Record { fields } => format!(
-            "{{{}}}",
-            fields
-                .iter()
-                .map(|field| format!(
-                    "{} = {}",
-                    field.name,
-                    canonical_surface_ty(surface, field.ty)
-                ))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
+        SurfaceTyKind::Record { fields } => canonical_surface_record(surface, fields),
     }
+}
+
+fn canonical_surface_named(
+    surface: &ModuleSurface,
+    name: &str,
+    args: &[SurfaceTyId],
+) -> String {
+    if args.is_empty() {
+        return name.to_owned();
+    }
+    format!(
+        "{}[{}]",
+        name,
+        args.iter()
+            .copied()
+            .map(|arg| canonical_surface_ty(surface, arg))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn canonical_surface_arrow(
+    surface: &ModuleSurface,
+    params: &[SurfaceTyId],
+    ret: SurfaceTyId,
+    is_effectful: bool,
+) -> String {
+    let params = params
+        .iter()
+        .copied()
+        .map(|param| canonical_surface_ty(surface, param))
+        .collect::<Vec<_>>();
+    let left = if params.len() == 1 {
+        params[0].clone()
+    } else {
+        format!("({})", params.join(", "))
+    };
+    let arrow = if is_effectful { " ~> " } else { " -> " };
+    format!("{left}{arrow}{}", canonical_surface_ty(surface, ret))
+}
+
+fn canonical_surface_tuple(surface: &ModuleSurface, items: &[SurfaceTyId]) -> String {
+    format!(
+        "({})",
+        items
+            .iter()
+            .copied()
+            .map(|item| canonical_surface_ty(surface, item))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn canonical_surface_array(
+    surface: &ModuleSurface,
+    dims: &[SurfaceDim],
+    item: SurfaceTyId,
+) -> String {
+    let dims = dims
+        .iter()
+        .map(|dim| match dim {
+            SurfaceDim::Unknown => "_".into(),
+            SurfaceDim::Name(name) => name.to_string(),
+            SurfaceDim::Int(value) => value.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{dims}]{}", canonical_surface_ty(surface, item))
+}
+
+fn canonical_surface_record(surface: &ModuleSurface, fields: &[SurfaceTyField]) -> String {
+    format!(
+        "{{{}}}",
+        fields
+            .iter()
+            .map(|field| format!(
+                "{} = {}",
+                field.name,
+                canonical_surface_ty(surface, field.ty)
+            ))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 pub(super) struct SurfaceTyBuilder<'a> {
@@ -174,34 +201,22 @@ impl<'a> SurfaceTyBuilder<'a> {
         if let Some(id) = self.cache.get(&id).copied() {
             return id;
         }
-        let kind = match &self.hir.tys.get(id).kind {
-            HirTyKind::Error => SurfaceTyKind::Error,
-            HirTyKind::Unknown => SurfaceTyKind::Unknown,
-            HirTyKind::Type => SurfaceTyKind::Type,
-            HirTyKind::Syntax => SurfaceTyKind::Syntax,
-            HirTyKind::Any => SurfaceTyKind::Any,
-            HirTyKind::Empty => SurfaceTyKind::Empty,
-            HirTyKind::Unit => SurfaceTyKind::Unit,
-            HirTyKind::Bool => SurfaceTyKind::Bool,
-            HirTyKind::Nat => SurfaceTyKind::Nat,
-            HirTyKind::Int => SurfaceTyKind::Int,
-            HirTyKind::Float => SurfaceTyKind::Float,
-            HirTyKind::String => SurfaceTyKind::String,
-            HirTyKind::CString => SurfaceTyKind::CString,
-            HirTyKind::CPtr => SurfaceTyKind::CPtr,
-            HirTyKind::Module => SurfaceTyKind::Module,
-            HirTyKind::NatLit(value) => SurfaceTyKind::NatLit(*value),
+        let kind = self.lower_kind(id);
+        let next = SurfaceTyId::new(u32::try_from(self.tys.len()).unwrap_or(u32::MAX));
+        self.tys.push(SurfaceTy { kind });
+        let _ = self.cache.insert(id, next);
+        next
+    }
+
+    fn lower_kind(&mut self, id: HirTyId) -> SurfaceTyKind {
+        let kind = &self.hir.tys.get(id).kind;
+        if let Some(simple) = simple_surface_ty_kind(kind) {
+            return simple;
+        }
+        match kind {
             HirTyKind::Named { name, args } => SurfaceTyKind::Named {
                 name: self.interner.resolve(*name).into(),
-                args: self
-                    .hir
-                    .ty_ids
-                    .get(*args)
-                    .iter()
-                    .copied()
-                    .map(|ty| self.lower(ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                args: self.lower_ty_ids(*args),
             },
             HirTyKind::Pi {
                 binder,
@@ -219,15 +234,7 @@ impl<'a> SurfaceTyBuilder<'a> {
                 ret,
                 is_effectful,
             } => SurfaceTyKind::Arrow {
-                params: self
-                    .hir
-                    .ty_ids
-                    .get(*params)
-                    .iter()
-                    .copied()
-                    .map(|ty| self.lower(ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                params: self.lower_ty_ids(*params),
                 ret: self.lower(*ret),
                 is_effectful: *is_effectful,
             },
@@ -236,58 +243,92 @@ impl<'a> SurfaceTyBuilder<'a> {
                 right: self.lower(*right),
             },
             HirTyKind::Tuple { items } => SurfaceTyKind::Tuple {
-                items: self
-                    .hir
-                    .ty_ids
-                    .get(*items)
-                    .iter()
-                    .copied()
-                    .map(|ty| self.lower(ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                items: self.lower_ty_ids(*items),
             },
             HirTyKind::Array { dims, item } => SurfaceTyKind::Array {
-                dims: self
-                    .hir
-                    .dims
-                    .get(dims.clone())
-                    .iter()
-                    .map(|dim| match dim {
-                        HirDim::Unknown => SurfaceDim::Unknown,
-                        HirDim::Name(name) => {
-                            SurfaceDim::Name(self.interner.resolve(name.name).into())
-                        }
-                        HirDim::Int(value) => SurfaceDim::Int(*value),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
             },
             HirTyKind::Mut { inner } => SurfaceTyKind::Mut {
                 inner: self.lower(*inner),
             },
             HirTyKind::Record { fields } => SurfaceTyKind::Record {
-                fields: self
-                    .hir
-                    .ty_fields
-                    .get(fields.clone())
-                    .iter()
-                    .map(|field| SurfaceTyField {
-                        name: self.interner.resolve(field.name).into(),
-                        ty: self.lower(field.ty),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                fields: self.lower_fields(fields.clone()),
             },
-        };
-        let next = SurfaceTyId::new(u32::try_from(self.tys.len()).unwrap_or(u32::MAX));
-        self.tys.push(SurfaceTy { kind });
-        let _ = self.cache.insert(id, next);
-        next
+            other => simple_surface_ty_kind(other)
+                .expect("expected primitive type kind after composite matches"),
+        }
+    }
+
+    fn lower_ty_ids(&mut self, tys: SliceRange<HirTyId>) -> Box<[SurfaceTyId]> {
+        self.hir
+            .ty_ids
+            .get(tys)
+            .iter()
+            .copied()
+            .map(|ty| self.lower(ty))
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    fn lower_dims(&self, dims: SliceRange<HirDim>) -> Box<[SurfaceDim]> {
+        self.hir
+            .dims
+            .get(dims)
+            .iter()
+            .map(|dim| match dim {
+                HirDim::Unknown => SurfaceDim::Unknown,
+                HirDim::Name(name) => SurfaceDim::Name(self.interner.resolve(name.name).into()),
+                HirDim::Int(value) => SurfaceDim::Int(*value),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    fn lower_fields(&mut self, fields: SliceRange<HirTyField>) -> Box<[SurfaceTyField]> {
+        self.hir
+            .ty_fields
+            .get(fields)
+            .iter()
+            .map(|field| SurfaceTyField {
+                name: self.interner.resolve(field.name).into(),
+                ty: self.lower(field.ty),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     pub(super) fn finish(self) -> Box<[SurfaceTy]> {
         self.tys.into_boxed_slice()
+    }
+}
+
+const fn simple_surface_ty_kind(kind: &HirTyKind) -> Option<SurfaceTyKind> {
+    match kind {
+        HirTyKind::Error => Some(SurfaceTyKind::Error),
+        HirTyKind::Unknown => Some(SurfaceTyKind::Unknown),
+        HirTyKind::Type => Some(SurfaceTyKind::Type),
+        HirTyKind::Syntax => Some(SurfaceTyKind::Syntax),
+        HirTyKind::Any => Some(SurfaceTyKind::Any),
+        HirTyKind::Empty => Some(SurfaceTyKind::Empty),
+        HirTyKind::Unit => Some(SurfaceTyKind::Unit),
+        HirTyKind::Bool => Some(SurfaceTyKind::Bool),
+        HirTyKind::Nat => Some(SurfaceTyKind::Nat),
+        HirTyKind::Int => Some(SurfaceTyKind::Int),
+        HirTyKind::Float => Some(SurfaceTyKind::Float),
+        HirTyKind::String => Some(SurfaceTyKind::String),
+        HirTyKind::CString => Some(SurfaceTyKind::CString),
+        HirTyKind::CPtr => Some(SurfaceTyKind::CPtr),
+        HirTyKind::Module => Some(SurfaceTyKind::Module),
+        HirTyKind::NatLit(value) => Some(SurfaceTyKind::NatLit(*value)),
+        HirTyKind::Named { .. }
+        | HirTyKind::Pi { .. }
+        | HirTyKind::Arrow { .. }
+        | HirTyKind::Sum { .. }
+        | HirTyKind::Tuple { .. }
+        | HirTyKind::Array { .. }
+        | HirTyKind::Mut { .. }
+        | HirTyKind::Record { .. } => None,
     }
 }
 
@@ -313,35 +354,22 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
         if let Some(id) = self.cache.get(&id).copied() {
             return id;
         }
-        let kind = match &self.surface.ty(id).kind {
-            SurfaceTyKind::Error => HirTyKind::Error,
-            SurfaceTyKind::Unknown => HirTyKind::Unknown,
-            SurfaceTyKind::Type => HirTyKind::Type,
-            SurfaceTyKind::Syntax => HirTyKind::Syntax,
-            SurfaceTyKind::Any => HirTyKind::Any,
-            SurfaceTyKind::Empty => HirTyKind::Empty,
-            SurfaceTyKind::Unit => HirTyKind::Unit,
-            SurfaceTyKind::Bool => HirTyKind::Bool,
-            SurfaceTyKind::Nat => HirTyKind::Nat,
-            SurfaceTyKind::Int => HirTyKind::Int,
-            SurfaceTyKind::Float => HirTyKind::Float,
-            SurfaceTyKind::String => HirTyKind::String,
-            SurfaceTyKind::CString => HirTyKind::CString,
-            SurfaceTyKind::CPtr => HirTyKind::CPtr,
-            SurfaceTyKind::Module => HirTyKind::Module,
-            SurfaceTyKind::NatLit(value) => HirTyKind::NatLit(*value),
-            SurfaceTyKind::Named { name, args } => {
-                let args = args
-                    .iter()
-                    .copied()
-                    .map(|ty| self.import(ty))
-                    .collect::<Vec<_>>();
-                let args = self.ctx.alloc_ty_list(args);
-                HirTyKind::Named {
-                    name: self.ctx.intern(name),
-                    args,
-                }
-            }
+        let kind = self.import_kind(id);
+        let local = self.ctx.alloc_ty(kind);
+        let _ = self.cache.insert(id, local);
+        local
+    }
+
+    fn import_kind(&mut self, id: SurfaceTyId) -> HirTyKind {
+        let kind = &self.surface.ty(id).kind;
+        if let Some(simple) = simple_hir_ty_kind(kind) {
+            return simple;
+        }
+        match kind {
+            SurfaceTyKind::Named { name, args } => HirTyKind::Named {
+                name: self.ctx.intern(name),
+                args: self.import_ty_list(args),
+            },
             SurfaceTyKind::Pi {
                 binder,
                 binder_ty,
@@ -357,66 +385,91 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                 params,
                 ret,
                 is_effectful,
-            } => {
-                let params = params
-                    .iter()
-                    .copied()
-                    .map(|ty| self.import(ty))
-                    .collect::<Vec<_>>();
-                let params = self.ctx.alloc_ty_list(params);
-                HirTyKind::Arrow {
-                    params,
-                    ret: self.import(*ret),
-                    is_effectful: *is_effectful,
-                }
-            }
+            } => HirTyKind::Arrow {
+                params: self.import_ty_list(params),
+                ret: self.import(*ret),
+                is_effectful: *is_effectful,
+            },
             SurfaceTyKind::Sum { left, right } => HirTyKind::Sum {
                 left: self.import(*left),
                 right: self.import(*right),
             },
-            SurfaceTyKind::Tuple { items } => {
-                let items = items
-                    .iter()
-                    .copied()
-                    .map(|ty| self.import(ty))
-                    .collect::<Vec<_>>();
-                let items = self.ctx.alloc_ty_list(items);
-                HirTyKind::Tuple { items }
-            }
-            SurfaceTyKind::Array { dims, item } => {
-                let dims = dims
-                    .iter()
-                    .map(|dim| match dim {
-                        SurfaceDim::Unknown => HirDim::Unknown,
-                        SurfaceDim::Name(name) => {
-                            HirDim::Name(Ident::new(self.ctx.intern(name), Span::DUMMY))
-                        }
-                        SurfaceDim::Int(value) => HirDim::Int(*value),
-                    })
-                    .collect::<Vec<_>>();
-                let dims = self.ctx.alloc_dims(dims);
-                HirTyKind::Array {
-                    dims,
-                    item: self.import(*item),
-                }
-            }
+            SurfaceTyKind::Tuple { items } => HirTyKind::Tuple {
+                items: self.import_ty_list(items),
+            },
+            SurfaceTyKind::Array { dims, item } => HirTyKind::Array {
+                dims: self.import_dims(dims),
+                item: self.import(*item),
+            },
             SurfaceTyKind::Mut { inner } => HirTyKind::Mut {
                 inner: self.import(*inner),
             },
-            SurfaceTyKind::Record { fields } => {
-                let fields = fields
-                    .iter()
-                    .map(|field| HirTyField {
-                        name: self.ctx.intern(&field.name),
-                        ty: self.import(field.ty),
-                    })
-                    .collect::<Vec<_>>();
-                let fields = self.ctx.alloc_ty_fields(fields);
-                HirTyKind::Record { fields }
-            }
-        };
-        let local = self.ctx.alloc_ty(kind);
-        let _ = self.cache.insert(id, local);
-        local
+            SurfaceTyKind::Record { fields } => HirTyKind::Record {
+                fields: self.import_fields(fields),
+            },
+            other => simple_hir_ty_kind(other)
+                .expect("expected primitive surface type kind after composite matches"),
+        }
+    }
+
+    fn import_ty_list(&mut self, tys: &[SurfaceTyId]) -> SliceRange<HirTyId> {
+        let tys = tys
+            .iter()
+            .copied()
+            .map(|ty| self.import(ty))
+            .collect::<Vec<_>>();
+        self.ctx.alloc_ty_list(tys)
+    }
+
+    fn import_dims(&mut self, dims: &[SurfaceDim]) -> SliceRange<HirDim> {
+        let dims = dims
+            .iter()
+            .map(|dim| match dim {
+                SurfaceDim::Unknown => HirDim::Unknown,
+                SurfaceDim::Name(name) => HirDim::Name(Ident::new(self.ctx.intern(name), Span::DUMMY)),
+                SurfaceDim::Int(value) => HirDim::Int(*value),
+            })
+            .collect::<Vec<_>>();
+        self.ctx.alloc_dims(dims)
+    }
+
+    fn import_fields(&mut self, fields: &[SurfaceTyField]) -> SliceRange<HirTyField> {
+        let fields = fields
+            .iter()
+            .map(|field| HirTyField {
+                name: self.ctx.intern(&field.name),
+                ty: self.import(field.ty),
+            })
+            .collect::<Vec<_>>();
+        self.ctx.alloc_ty_fields(fields)
+    }
+}
+
+const fn simple_hir_ty_kind(kind: &SurfaceTyKind) -> Option<HirTyKind> {
+    match kind {
+        SurfaceTyKind::Error => Some(HirTyKind::Error),
+        SurfaceTyKind::Unknown => Some(HirTyKind::Unknown),
+        SurfaceTyKind::Type => Some(HirTyKind::Type),
+        SurfaceTyKind::Syntax => Some(HirTyKind::Syntax),
+        SurfaceTyKind::Any => Some(HirTyKind::Any),
+        SurfaceTyKind::Empty => Some(HirTyKind::Empty),
+        SurfaceTyKind::Unit => Some(HirTyKind::Unit),
+        SurfaceTyKind::Bool => Some(HirTyKind::Bool),
+        SurfaceTyKind::Nat => Some(HirTyKind::Nat),
+        SurfaceTyKind::Int => Some(HirTyKind::Int),
+        SurfaceTyKind::Float => Some(HirTyKind::Float),
+        SurfaceTyKind::String => Some(HirTyKind::String),
+        SurfaceTyKind::CString => Some(HirTyKind::CString),
+        SurfaceTyKind::CPtr => Some(HirTyKind::CPtr),
+        SurfaceTyKind::Module => Some(HirTyKind::Module),
+        SurfaceTyKind::NatLit(value) => Some(HirTyKind::NatLit(*value)),
+        SurfaceTyKind::Named { .. }
+        | SurfaceTyKind::Pi { .. }
+        | SurfaceTyKind::Arrow { .. }
+        | SurfaceTyKind::Sum { .. }
+        | SurfaceTyKind::Tuple { .. }
+        | SurfaceTyKind::Array { .. }
+        | SurfaceTyKind::Mut { .. }
+        | SurfaceTyKind::Record { .. } => None,
     }
 }
