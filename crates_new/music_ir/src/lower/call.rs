@@ -63,9 +63,7 @@ pub(super) fn lower_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return IrExprKind::Unsupported {
-                    description: "call spread lowering invariant".into(),
-                };
+                return unsupported_expr("call spread lowering invariant");
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -84,11 +82,7 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
     let interner = ctx.interner;
     let (effect_key, op_index, args) = match resolve_perform_target(sema, interner, expr) {
         Ok(value) => value,
-        Err(description) => {
-            return IrExprKind::Unsupported {
-                description: description.into(),
-            };
-        }
+        Err(description) => return unsupported_expr(description),
     };
     let args_nodes = sema.module().store.args.get(args);
     if !args_nodes.iter().any(|arg| arg.spread) {
@@ -129,9 +123,7 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return IrExprKind::Unsupported {
-                    description: "perform spread lowering invariant".into(),
-                };
+                return unsupported_expr("perform spread lowering invariant");
             };
             IrExprKind::Perform {
                 effect_key,
@@ -272,9 +264,7 @@ fn lower_spread_arg(
         HirTyKind::Array { dims, item } => {
             lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode)
         }
-        _ => Err(IrExprKind::Unsupported {
-            description: mode.source_message().into(),
-        }),
+        _ => Err(unsupported_expr(mode.source_message())),
     }
 }
 
@@ -293,14 +283,10 @@ fn lower_spread_array_arg(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             return Ok(true);
         }
-        return Err(IrExprKind::Unsupported {
-            description: mode.runtime_any_message().into(),
-        });
+        return Err(unsupported_expr(mode.runtime_any_message()));
     }
     if dims_vec.len() != 1 {
-        return Err(IrExprKind::Unsupported {
-            description: mode.dims_message().into(),
-        });
+        return Err(unsupported_expr(mode.dims_message()));
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -317,9 +303,7 @@ fn lower_spread_array_arg(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             Ok(true)
         }
-        HirDim::Unknown | HirDim::Name(_) => Err(IrExprKind::Unsupported {
-            description: mode.runtime_any_message().into(),
-        }),
+        HirDim::Unknown | HirDim::Name(_) => Err(unsupported_expr(mode.runtime_any_message())),
     }
 }
 

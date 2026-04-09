@@ -10,12 +10,29 @@ use crate::api::PatFacts;
 
 use super::exprs::check_expr;
 use super::normalize::type_mismatch;
-use super::{CheckPass, PassBase};
+use super::{CheckPass, DiagKind, PassBase};
 
 pub fn bound_name_from_pat(ctx: &PassBase<'_, '_, '_>, pat: HirPatId) -> Option<Ident> {
     match ctx.pat(pat).kind {
         HirPatKind::Bind { name } => Some(name),
         _ => None,
+    }
+}
+
+pub fn pat_is_irrefutable(ctx: &PassBase<'_, '_, '_>, pat: HirPatId) -> bool {
+    match ctx.pat(pat).kind {
+        HirPatKind::Error | HirPatKind::Wildcard | HirPatKind::Bind { .. } => true,
+        HirPatKind::Tuple { items } | HirPatKind::Array { items } => ctx
+            .pat_ids(items)
+            .into_iter()
+            .all(|item| pat_is_irrefutable(ctx, item)),
+        HirPatKind::Record { fields } => ctx.record_pat_fields(fields).into_iter().all(|field| {
+            field
+                .value
+                .is_none_or(|value| pat_is_irrefutable(ctx, value))
+        }),
+        HirPatKind::As { pat, .. } => pat_is_irrefutable(ctx, pat),
+        HirPatKind::Lit { .. } | HirPatKind::Variant { .. } | HirPatKind::Or { .. } => false,
     }
 }
 
@@ -155,7 +172,7 @@ fn bind_variant_pat(
         });
     let args_vec = ctx.pat_ids(args);
     if expected_args.len() != args_vec.len() {
-        ctx.diag(span, "variant pattern arity mismatch", "");
+        ctx.diag(span, DiagKind::VariantPatternArityMismatch, "");
     }
     for (index, arg) in args_vec.into_iter().enumerate() {
         let expected = expected_args
@@ -176,7 +193,7 @@ fn bind_or_pat(
     let left_binders = binders_in_pat(ctx, left);
     let right_binders = binders_in_pat(ctx, right);
     if left_binders != right_binders {
-        ctx.diag(span, "or-pattern binders must match", "");
+        ctx.diag(span, DiagKind::OrPatternBindersMismatch, "");
     }
     bind_pat(ctx, left, ty);
     bind_pat(ctx, right, ty);

@@ -10,7 +10,6 @@ use music_names::Ident;
 
 use crate::api::ExprFacts;
 
-use super::CheckPass;
 use super::attrs::validate_expr_attrs;
 use super::decls::{
     LetExprInput, check_handle_expr, check_import_expr, check_instance_expr, check_let_expr,
@@ -23,6 +22,7 @@ use super::expr_calls::{check_apply_expr, check_call_expr};
 use super::normalize::{lower_params, lower_type_expr, symbol_value_type, type_mismatch};
 use super::patterns::bind_pat;
 use super::schemes::{instantiate_monomorphic_scheme, scheme_from_export, solve_obligations};
+use super::{CheckPass, DiagKind};
 use crate::effects::EffectRow;
 
 pub fn check_module_root(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
@@ -198,7 +198,7 @@ fn check_decl_expr(
         | HirExprKind::Effect { .. }
         | HirExprKind::Class { .. }
         | HirExprKind::Instance { .. } => {
-            ctx.diag(origin.span, "declaration form used as value", "");
+            ctx.diag(origin.span, DiagKind::DeclarationUsedAsValue, "");
             ExprFacts {
                 ty: builtins.unknown,
                 effects: EffectRow::empty(),
@@ -279,7 +279,7 @@ fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Id
     if let Some(binding) = ctx.binding_id_for_use(name)
         && ctx.is_gated_binding(binding)
     {
-        ctx.diag(name.span, "unavailable on this target", "");
+        ctx.diag(name.span, DiagKind::TargetGateRejected, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects: EffectRow::empty(),
@@ -450,15 +450,15 @@ fn check_index_expr(
     let builtins = ctx.builtins();
     let base_facts = check_expr(ctx, base);
     let mut effects = base_facts.effects.clone();
-    let arg_count = check_index_args(ctx, args, &mut effects);
+    let arg_count = check_index_args(ctx, origin, args, &mut effects);
     let ty = if let HirTyKind::Array { dims, item } = ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
         let dims = ctx.dims(dims);
         if !dims.is_empty() && dims.len() != arg_count {
-            ctx.diag(origin.span, "invalid index arity", "");
+            ctx.diag(origin.span, DiagKind::InvalidIndexArity, "");
         }
         item
     } else {
-        ctx.diag(origin.span, "invalid index target", "");
+        ctx.diag(origin.span, DiagKind::InvalidIndexTarget, "");
         builtins.unknown
     };
     ExprFacts { ty, effects }
@@ -466,11 +466,15 @@ fn check_index_expr(
 
 fn check_index_args(
     ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
     args: SliceRange<HirExprId>,
     effects: &mut EffectRow,
 ) -> usize {
     let builtins = ctx.builtins();
     let index_exprs = ctx.expr_ids(args);
+    if index_exprs.is_empty() {
+        ctx.diag(origin.span, DiagKind::IndexRequiresArgument, "");
+    }
     for index_expr in &index_exprs {
         let facts = check_expr(ctx, *index_expr);
         effects.union_with(&facts.effects);
@@ -515,7 +519,7 @@ fn check_field_expr(
             .find(|field| field.name == name.name)
             .map_or_else(
                 || {
-                    ctx.diag(origin.span, "unknown field", "");
+                    ctx.diag(origin.span, DiagKind::UnknownField, "");
                     builtins.unknown
                 },
                 |field| field.ty,
@@ -529,13 +533,15 @@ fn check_field_expr(
                 ctx.set_expr_callable_effects(expr_id, scheme.effects.clone());
                 scheme.ty
             } else {
-                ctx.diag(origin.span, "unknown export", "");
+                ctx.diag(origin.span, DiagKind::UnknownExport, "");
                 builtins.unknown
             }
         }
         _ => {
-            if !matches!(access, HirAccessKind::Direct) {
-                ctx.diag(origin.span, "invalid optional field access", "");
+            if matches!(access, HirAccessKind::Direct) {
+                ctx.diag(origin.span, DiagKind::InvalidFieldAccess, "");
+            } else {
+                ctx.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
             }
             builtins.unknown
         }
@@ -558,7 +564,7 @@ fn check_record_update_expr(
                 .map(|field| (field.name, field.ty))
                 .collect::<BTreeMap<_, _>>()
         } else {
-            ctx.diag(origin.span, "invalid record update target", "");
+            ctx.diag(origin.span, DiagKind::InvalidRecordUpdateTarget, "");
             BTreeMap::new()
         };
     for record_item in ctx.record_items(items) {
@@ -571,7 +577,7 @@ fn check_record_update_expr(
                 fields: spread_fields,
             } = ctx.ty(spread_ty).kind
             else {
-                ctx.diag(spread_origin.span, "invalid record spread source", "");
+                ctx.diag(spread_origin.span, DiagKind::InvalidRecordSpreadSource, "");
                 continue;
             };
             for spread_field in ctx.ty_fields(spread_fields) {
@@ -609,7 +615,7 @@ fn check_type_test_expr(
     let origin = ctx.expr(ty_expr).origin;
     let target = lower_type_expr(ctx, ty_expr, origin);
     if contains_mut_ty(ctx, target) {
-        ctx.diag(origin.span, "`mut` not allowed in type test target", "");
+        ctx.diag(origin.span, DiagKind::MutForbiddenInTypeTestTarget, "");
     }
     ctx.set_type_test_target(expr_id, target);
     if let Some(binding) = as_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
@@ -630,7 +636,7 @@ fn check_type_cast_expr(
     let origin = ctx.expr(ty_expr).origin;
     let ty = lower_type_expr(ctx, ty_expr, origin);
     if contains_mut_ty(ctx, ty) {
-        ctx.diag(origin.span, "`mut` not allowed in type cast target", "");
+        ctx.diag(origin.span, DiagKind::MutForbiddenInTypeCastTarget, "");
     }
     ExprFacts {
         ty,
@@ -677,6 +683,27 @@ fn check_binary_expr(
     let right_facts = check_expr(ctx, right);
     let mut effects = left_facts.effects.clone();
     effects.union_with(&right_facts.effects);
+    if matches!(
+        op,
+        HirBinaryOp::Pipe
+            | HirBinaryOp::Or
+            | HirBinaryOp::Xor
+            | HirBinaryOp::And
+            | HirBinaryOp::In
+            | HirBinaryOp::Shl
+            | HirBinaryOp::Shr
+            | HirBinaryOp::UserOp(_)
+    ) {
+        ctx.diag(
+            origin.span,
+            DiagKind::BinaryOperatorHasNoExecutableLowering,
+            "",
+        );
+        return ExprFacts {
+            ty: builtins.unknown,
+            effects,
+        };
+    }
     let ty = match op {
         HirBinaryOp::Assign => builtins.unit,
         HirBinaryOp::Arrow | HirBinaryOp::EffectArrow => {
@@ -716,22 +743,21 @@ fn check_binary_expr(
         | HirBinaryOp::Sub
         | HirBinaryOp::Mul
         | HirBinaryOp::Div
-        | HirBinaryOp::Rem
-        | HirBinaryOp::Shl
-        | HirBinaryOp::Shr => numeric_binary_type(ctx, origin, left_facts.ty, right_facts.ty),
+        | HirBinaryOp::Rem => numeric_binary_type(ctx, origin, left_facts.ty, right_facts.ty),
         HirBinaryOp::Eq
         | HirBinaryOp::Ne
         | HirBinaryOp::Lt
         | HirBinaryOp::Gt
         | HirBinaryOp::Le
-        | HirBinaryOp::Ge
-        | HirBinaryOp::In => builtins.bool_,
-        HirBinaryOp::And | HirBinaryOp::Or | HirBinaryOp::Xor => {
-            type_mismatch(ctx, origin, builtins.bool_, left_facts.ty);
-            type_mismatch(ctx, origin, builtins.bool_, right_facts.ty);
-            builtins.bool_
-        }
-        HirBinaryOp::Pipe | HirBinaryOp::UserOp(_) => builtins.unknown,
+        | HirBinaryOp::Ge => builtins.bool_,
+        HirBinaryOp::Pipe
+        | HirBinaryOp::Or
+        | HirBinaryOp::Xor
+        | HirBinaryOp::And
+        | HirBinaryOp::In
+        | HirBinaryOp::Shl
+        | HirBinaryOp::Shr
+        | HirBinaryOp::UserOp(_) => builtins.unknown,
     };
     ExprFacts { ty, effects }
 }
@@ -753,29 +779,29 @@ fn check_assign_expr(
             if is_mut_ty(ctx, ty) {
                 (peel_mut_ty(ctx, ty), EffectRow::empty())
             } else {
-                ctx.diag(origin.span, "write requires `mut T`", "");
+                ctx.diag(origin.span, DiagKind::WriteRequiresMutValue, "");
                 (builtins.unknown, EffectRow::empty())
             }
         }
         HirExprKind::Index { base, args } => {
             let base_facts = check_expr(ctx, base);
             let mut effects = base_facts.effects;
-            let arg_count = check_index_args(ctx, args, &mut effects);
+            let arg_count = check_index_args(ctx, origin, args, &mut effects);
 
             let expected = match ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
                 HirTyKind::Array { dims, item } if is_mut_ty(ctx, base_facts.ty) => {
                     let dims = ctx.dims(dims);
                     if !dims.is_empty() && dims.len() != arg_count {
-                        ctx.diag(origin.span, "invalid index arity", "");
+                        ctx.diag(origin.span, DiagKind::InvalidIndexArity, "");
                     }
                     item
                 }
                 HirTyKind::Array { .. } => {
-                    ctx.diag(origin.span, "write requires `mut []T`", "");
+                    ctx.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
                     builtins.unknown
                 }
                 _ => {
-                    ctx.diag(origin.span, "invalid index target", "");
+                    ctx.diag(origin.span, DiagKind::InvalidIndexTarget, "");
                     builtins.unknown
                 }
             };
@@ -792,24 +818,24 @@ fn check_assign_expr(
                     .find(|field| field.name == name.name)
                     .map_or_else(
                         || {
-                            ctx.diag(origin.span, "unknown field", "");
+                            ctx.diag(origin.span, DiagKind::UnknownField, "");
                             builtins.unknown
                         },
                         |field| field.ty,
                     ),
                 HirTyKind::Record { .. } => {
-                    ctx.diag(origin.span, "write requires `mut { ... }`", "");
+                    ctx.diag(origin.span, DiagKind::WriteRequiresMutRecord, "");
                     builtins.unknown
                 }
                 _ => {
-                    ctx.diag(origin.span, "invalid field update target", "");
+                    ctx.diag(origin.span, DiagKind::InvalidFieldUpdateTarget, "");
                     builtins.unknown
                 }
             };
             (expected, effects)
         }
         _ => {
-            ctx.diag(origin.span, "unsupported assignment target", "");
+            ctx.diag(origin.span, DiagKind::UnsupportedAssignmentTarget, "");
             (builtins.unknown, EffectRow::empty())
         }
     };
@@ -935,7 +961,7 @@ fn numeric_unary_type(ctx: &mut CheckPass<'_, '_, '_>, origin: HirOrigin, ty: Hi
     if ty == builtins.int_ || ty == builtins.float_ {
         ty
     } else {
-        ctx.diag(origin.span, "numeric operand required", "");
+        ctx.diag(origin.span, DiagKind::NumericOperandRequired, "");
         builtins.unknown
     }
 }

@@ -54,7 +54,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | -------------------------------------------------- | --------- | ----------- | ---- | -- | --------- | ----- |
 | Sequences (`;`)                                    | ✅        | ✅          | ✅   | ✅ | ✅        | Top-level statements lower as sequence expressions |
 | `let` bindings                                     | ✅        | ✅          | ✅   | ✅ | ✅        | Destructuring patterns (`(x, y)`, `[x, y]`, `{x, y}`) compile end-to-end; generic `let` uses explicit type params, not implicit HM-style generalization |
-| `let rec`                                          | ✅        | ✅          | ✅   | 🟡 | 🟡        | Capture-free local recursive callable bindings now typecheck, lower, and emit end-to-end; recursive local callables with captures still stop at unsupported lowering |
+| `let rec`                                          | ✅        | ✅          | ✅   | ✅ | ✅        | Local recursive callable bindings, including captured local recursion, now typecheck, lower, and emit end-to-end |
 | Writable locations (`mut expr`)                    | ✅        | ✅          | ✅   | ✅ | ✅        | Names bind immutably; mutation is performed by writing into `mut` locations via `:=` |
 | Assignment (`:=`)                                  | ✅        | ✅          | ✅   | ✅ | ✅        | Local names, globals, indexed sequence elements, and record fields compile end-to-end |
 | Calls                                              | ✅        | ✅          | ✅   | ✅ | ✅        | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
@@ -109,8 +109,8 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | SEAM contract (`music_bc`)                       | ✅     | Artifact tables, descriptors, opcode families, and structural validation exist; `data.new` uses `type_len`, `data.get/data.set` exist, and `hdl.push` takes an effect id (handler object is a stack value) |
 | SEAM text transport (`music_assembly`)           | ✅     | Text format, parser, formatter, and validation exist |
 | SEAM binary transport (`music_assembly`)         | ✅     | Binary encode/decode and validation exist |
-| Sema-to-IR lowering (`music_ir`)                 | 🟡     | Codegen-facing IR now preserves multi-index access, dynamic imports, syntax values, and capture-free local `let rec`; some sema-accepted forms still lower through `IrExprKind::Unsupported` invariants (for example recursive local callables with captures and unsupported spread/layout edge cases) |
-| IR-to-SEAM emission (`music_emit`)               | 🟡     | Emits supported IR into SEAM artifacts and opcode streams (`data.*`, `br.tbl`, `hdl.*`, `eff.*`, `seq.*`, `mod.load`); unsupported IR still produces diagnostics instead of artifact output |
+| Sema-to-IR lowering (`music_ir`)                 | ✅     | Codegen-facing IR now covers multi-index access, dynamic imports, syntax values, first-class type values, record case patterns, and local recursive callables without routing sema-valid programs through unsupported placeholder IR |
+| IR-to-SEAM emission (`music_emit`)               | ✅     | Emits the current valid IR surface into SEAM artifacts and opcode streams (`data.*`, `br.tbl`, `hdl.*`, `eff.*`, `seq.*`, `mod.load`, `ty.id`) without a generic unsupported-expression fallback |
 | Module compilation through `music_session`       | ✅     | Artifact, bytes, and text outputs exist |
 | Reachable entry-graph compilation                | ✅     | `music_session` compiles the static-import closure |
 | Parse/resolve/sema/IR/emit session caching       | ✅     | Cached phase products and edit invalidation exist |
@@ -130,4 +130,4 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | Feature                       | Status | Notes |
 | ----------------------------- | ------ | ----- |
 | Native/JIT backend            | ❌     | `music_jit` is planned but not implemented |
-| Full-language backend parity  | 🟡     | Frontend-backed constructs now compile further through IR and SEAM, including multi-index access, dynamic imports, syntax values, and capture-free local `let rec`; remaining gaps are the residual `Unsupported` lowering edge cases and the missing runtime/VM |
+| Full-language backend parity  | 🟡     | Frontend-backed constructs now lower and emit through IR and SEAM, including multi-index access, dynamic imports, syntax values, first-class type values, and captured local `let rec`; remaining gap is runtime/VM execution plus planned native/JIT backend work |

@@ -12,7 +12,7 @@ use crate::effects::{EffectKey, EffectRow};
 
 use super::normalize::{named_type_for_symbol, render_ty, ty_matches};
 use super::surface::{import_surface_ty, surface_key};
-use super::{CheckPass, PassBase};
+use super::{CheckPass, DiagKind, PassBase};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingScheme {
@@ -105,7 +105,7 @@ pub fn instantiate_binding_scheme(
     args: &[HirTyId],
 ) -> Option<InstantiatedBinding> {
     if scheme.type_params.len() != args.len() {
-        ctx.diag(origin.span, "type application arity mismatch", "");
+        ctx.diag(origin.span, DiagKind::TypeApplicationArityMismatch, "");
         return None;
     }
     let subst = scheme
@@ -342,7 +342,7 @@ fn solve_obligation(
             if ty_matches(ctx, obligation.value, obligation.subject) {
                 return true;
             }
-            ctx.diag(origin.span, "unsatisfied constraint", "");
+            ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             false
         }
         ConstraintKind::Implements => solve_implements(ctx, origin, obligation, stack),
@@ -356,7 +356,7 @@ fn solve_implements(
     stack: &mut Vec<String>,
 ) -> bool {
     let Some((class_key, class_args)) = obligation_class_target(ctx, obligation) else {
-        ctx.diag(origin.span, "unsatisfied constraint", "");
+        ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
         return false;
     };
     let frame = format!(
@@ -388,11 +388,11 @@ fn solve_implements(
     let Some(env) = ctx.sema_env() else {
         let _ = stack.pop();
         if matches == 0 {
-            ctx.diag(origin.span, "unsatisfied constraint", "");
+            ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return false;
         }
         if matches > 1 {
-            ctx.diag(origin.span, "ambiguous instance match", "");
+            ctx.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
             return false;
         }
         return true;
@@ -421,11 +421,11 @@ fn solve_implements(
 
     let _ = stack.pop();
     if matches == 0 {
-        ctx.diag(origin.span, "unsatisfied constraint", "");
+        ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
         return false;
     }
     if matches > 1 {
-        ctx.diag(origin.span, "ambiguous instance match", "");
+        ctx.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
         return false;
     }
     true

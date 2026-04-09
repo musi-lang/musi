@@ -99,9 +99,7 @@ fn append_array_spread_parts(
         HirTyKind::Array { dims, .. } => {
             append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
         }
-        _ => Err(IrExprKind::Unsupported {
-            description: "array spread source is not tuple/array".into(),
-        }),
+        _ => Err(unsupported_expr("array spread source is not tuple/array")),
     }
 }
 
@@ -118,9 +116,7 @@ fn append_array_dim_spread_parts(
         return Ok(true);
     }
     if dims_vec.len() != 1 {
-        return Err(IrExprKind::Unsupported {
-            description: "array spread requires 1D array".into(),
-        });
+        return Err(unsupported_expr("array spread requires 1D array"));
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -178,9 +174,7 @@ fn array_tail_kind(
         .collect::<Option<Vec<_>>>()
         .map(Vec::into_boxed_slice);
     let Some(items) = items else {
-        return IrExprKind::Unsupported {
-            description: "array spread lowering invariant".into(),
-        };
+        return unsupported_expr("array spread lowering invariant");
     };
     IrExprKind::Array {
         ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),

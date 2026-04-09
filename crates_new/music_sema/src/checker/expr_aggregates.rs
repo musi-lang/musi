@@ -10,10 +10,10 @@ use music_names::Ident;
 use crate::api::ExprFacts;
 use crate::effects::EffectRow;
 
-use super::CheckPass;
 use super::exprs::peel_mut_ty;
 use super::normalize::{lower_type_expr, type_mismatch};
 use super::state::DataDef;
+use super::{CheckPass, DiagKind};
 
 pub(super) fn check_array_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
@@ -63,7 +63,11 @@ pub(super) fn check_array_expr(
                     continue;
                 }
                 if dims_vec.len() != 1 {
-                    ctx.diag(spread_origin.span, "array spread requires 1D array", "");
+                    ctx.diag(
+                        spread_origin.span,
+                        DiagKind::ArraySpreadRequiresOneDimensionalArray,
+                        "",
+                    );
                     continue;
                 }
                 match dims_vec[0] {
@@ -77,7 +81,7 @@ pub(super) fn check_array_expr(
                     }
                 }
             }
-            _ => ctx.diag(spread_origin.span, "invalid array spread source", ""),
+            _ => ctx.diag(spread_origin.span, DiagKind::InvalidArraySpreadSource, ""),
         }
     }
 
@@ -144,7 +148,7 @@ pub(super) fn check_record_expr(
                 fields: spread_fields,
             } = ctx.ty(spread_ty).kind
             else {
-                ctx.diag(origin.span, "invalid record spread source", "");
+                ctx.diag(origin.span, DiagKind::InvalidRecordSpreadSource, "");
                 continue;
             };
             for spread_field in ctx.ty_fields(spread_fields) {
@@ -171,7 +175,7 @@ pub(super) fn check_record_expr(
         let key: Box<str> = ctx.resolve_symbol(name.name).into();
         if !seen_explicit.insert(key.clone()) {
             let span = ctx.expr(record_item.value).origin.span;
-            ctx.diag(span, "duplicate record field", "");
+            ctx.diag(span, DiagKind::DuplicateRecordField, "");
         }
         let _prev = fields.insert(
             key,
@@ -210,11 +214,7 @@ pub(super) fn check_variant_expr(
     let data_def = expected_data_def(ctx, expected_ty);
     let Some(data_def) = data_def else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
-        ctx.diag(
-            tag.span,
-            "variant constructor missing data type context",
-            "",
-        );
+        ctx.diag(tag.span, DiagKind::VariantMissingDataContext, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects,
@@ -224,7 +224,7 @@ pub(super) fn check_variant_expr(
     let tag_name = ctx.resolve_symbol(tag.name);
     let Some(variant) = data_def.variants.get(tag_name) else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
-        ctx.diag(tag.span, "unknown data variant", "");
+        ctx.diag(tag.span, DiagKind::UnknownDataVariant, "");
         return ExprFacts {
             ty: expected_ty,
             effects,
@@ -245,7 +245,7 @@ pub(super) fn check_variant_expr(
         &expected_args,
         arg_exprs,
         &mut effects,
-        "variant constructor arity mismatch",
+        DiagKind::VariantConstructorArityMismatch,
     );
 
     ExprFacts {
@@ -307,11 +307,11 @@ fn check_array_literal_expected_len(
     if has_runtime_spread {
         ctx.diag(
             span,
-            "array literal length unknown due to runtime spread",
+            DiagKind::ArrayLiteralLengthUnknownFromRuntimeSpread,
             "",
         );
     } else if expected_len != known_len {
-        ctx.diag(span, "array literal length mismatch", "");
+        ctx.diag(span, DiagKind::ArrayLiteralLengthMismatch, "");
     }
 }
 
@@ -351,7 +351,7 @@ fn check_sum_constructor_variant(
         &expected_args,
         arg_exprs,
         &mut effects,
-        "sum constructor arity mismatch",
+        DiagKind::SumConstructorArityMismatch,
     );
     Some(ExprFacts {
         ty: expected_sum_ty,
@@ -365,7 +365,7 @@ fn typecheck_positional_args(
     expected_args: &[HirTyId],
     arg_exprs: Vec<HirExprId>,
     effects: &mut EffectRow,
-    arity_diag: &str,
+    arity_diag: DiagKind,
 ) {
     let builtins = ctx.builtins();
     if expected_args.len() != arg_exprs.len() {
@@ -417,7 +417,7 @@ fn infer_variant_context_ty(ctx: &mut CheckPass<'_, '_, '_>, tag: Ident) -> Opti
 
     match matches.len() {
         0 => {
-            ctx.diag(tag.span, "unknown data variant", "");
+            ctx.diag(tag.span, DiagKind::UnknownDataVariant, "");
             None
         }
         1 => {
@@ -427,11 +427,7 @@ fn infer_variant_context_ty(ctx: &mut CheckPass<'_, '_, '_>, tag: Ident) -> Opti
             Some(ctx.alloc_ty(HirTyKind::Named { name, args }))
         }
         _ => {
-            ctx.diag(
-                tag.span,
-                "ambiguous variant tag; add type annotation to disambiguate",
-                "",
-            );
+            ctx.diag(tag.span, DiagKind::AmbiguousVariantTag, "");
             None
         }
     }

@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::compile_expr;
 use super::literals::{compile_i64, compile_lit};
@@ -36,7 +37,7 @@ pub(super) fn compile_binary(
                 diags,
                 emitter.module_key,
                 &left.origin,
-                format!("unsupported emitted binary operator `{name}`"),
+                &EmitDiagKind::UnsupportedBinaryOperator(name.clone()),
             );
             Opcode::CmpEq
         }
@@ -173,7 +174,7 @@ fn compile_case_variant_dispatch(
             diags,
             emitter.module_key,
             &origin,
-            "case variant dispatch requires a single data type".into(),
+            &EmitDiagKind::CaseVariantDispatchRequiresSingleDataType,
         );
         emit_zero(emitter);
         return;
@@ -389,6 +390,9 @@ fn compile_case_pattern(
                 diags,
             )
         }
+        IrCasePattern::Record { fields } => {
+            compile_record_patterns(emitter, scrutinee_slot, fields, next_label, diags)
+        }
         IrCasePattern::Variant {
             data_key,
             tag_index,
@@ -508,6 +512,44 @@ fn compile_projected_patterns(
     true
 }
 
+fn compile_record_patterns(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    fields: &[IrCaseRecordField],
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    for field in fields {
+        let item_slot = compile_record_item(emitter, scrutinee_slot, field.index);
+        if !compile_case_pattern(emitter, &field.pat, item_slot, next_label, diags) {
+            return false;
+        }
+    }
+    true
+}
+
+fn compile_record_item(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    index: u16,
+) -> u16 {
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    compile_i64(emitter, i64::from(index));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::DataGet,
+        Operand::None,
+    )));
+    let item_slot = reserve_temp_slot(emitter);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(item_slot),
+    )));
+    item_slot
+}
+
 fn compile_variant_payload_patterns(
     emitter: &mut MethodEmitter<'_, '_>,
     scrutinee_slot: u16,
@@ -570,7 +612,7 @@ fn resolve_variant_data_ty(
             diags,
             emitter.module_key,
             origin,
-            format!("unknown emitted data type `{data_ty_name}`"),
+            &EmitDiagKind::UnknownDataType(data_ty_name),
         );
         return None;
     };

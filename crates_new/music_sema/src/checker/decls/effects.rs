@@ -6,7 +6,7 @@ use music_names::Ident;
 
 use super::super::exprs::check_expr;
 use super::super::normalize::type_mismatch;
-use super::super::{CheckPass, ResumeCtx};
+use super::super::{CheckPass, DiagKind, ResumeCtx};
 use crate::api::ExprFacts;
 use crate::effects::{EffectKey, EffectRow};
 
@@ -19,7 +19,7 @@ pub(in super::super) fn check_perform_expr(
     let inner = check_expr(ctx, expr);
     let mut effects = inner.effects;
     let Some((effect_name, op_def)) = effect_op_call(ctx, expr) else {
-        ctx.diag(origin.span, "invalid perform target", "");
+        ctx.diag(origin.span, DiagKind::InvalidPerformTarget, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects,
@@ -45,7 +45,7 @@ pub(in super::super) fn check_handle_expr(
     let handled_facts = check_expr(ctx, expr);
     let handler_name: Box<str> = ctx.resolve_symbol(handler.name).into();
     let Some(effect) = ctx.effect_def(&handler_name).cloned() else {
-        ctx.diag(origin.span, "unknown effect", "");
+        ctx.diag(origin.span, DiagKind::UnknownEffect, "");
         return handled_facts;
     };
 
@@ -78,16 +78,16 @@ pub(in super::super) fn check_handle_expr(
 
         let did_insert = seen_ops.insert(clause_name.clone());
         if !did_insert {
-            ctx.diag(origin.span, "duplicate handler clause", "");
+            ctx.diag(origin.span, DiagKind::DuplicateHandlerClause, "");
         }
         let Some(op_def) = effect.ops.get(clause_name.as_ref()).cloned() else {
-            ctx.diag(origin.span, "unknown effect op", "");
+            ctx.diag(origin.span, DiagKind::UnknownEffectOp, "");
             continue;
         };
 
         let params = ctx.idents(clause.params);
         if params.len() != op_def.params.len().saturating_add(1) {
-            ctx.diag(origin.span, "handler clause arity mismatch", "");
+            ctx.diag(origin.span, DiagKind::HandlerClauseArityMismatch, "");
         }
         let (args, cont) = if params.is_empty() {
             (Vec::<Ident>::new(), None)
@@ -123,11 +123,11 @@ pub(in super::super) fn check_handle_expr(
     }
 
     if seen_value != 1 {
-        ctx.diag(origin.span, "handle requires exactly one value clause", "");
+        ctx.diag(origin.span, DiagKind::HandleRequiresSingleValueClause, "");
     }
     for op in effect.ops.keys() {
         if !seen_ops.contains(op) {
-            ctx.diag(origin.span, "handler missing operation clause", "");
+            ctx.diag(origin.span, DiagKind::HandlerMissingOperationClause, "");
         }
     }
 
@@ -147,7 +147,7 @@ pub(in super::super) fn check_resume_expr(
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     let Some(resume) = ctx.resume_top() else {
-        ctx.diag(origin.span, "resume outside handler clause", "");
+        ctx.diag(origin.span, DiagKind::ResumeOutsideHandlerClause, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects: EffectRow::empty(),
@@ -194,10 +194,10 @@ pub(super) fn require_declared_effects(
             final_row.add(item.clone());
             continue;
         }
-        ctx.diag(origin.span, "effect not declared", "");
+        ctx.diag(origin.span, DiagKind::EffectNotDeclared, "");
     }
     if actual.open.is_some() && declared.open.is_none() {
-        ctx.diag(origin.span, "effect not declared", "");
+        ctx.diag(origin.span, DiagKind::EffectNotDeclared, "");
     }
     final_row
 }

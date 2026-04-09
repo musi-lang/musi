@@ -64,7 +64,7 @@ fn lower_irrefutable_pat_bindings(
         HirPatKind::Record { fields } => {
             lower_irrefutable_record(ctx, input, fields.clone(), pat, base, out);
         }
-        other => push_unsupported_pat(origin, other, out),
+        other => invalid_lowering_path(format!("invalid local let pattern in lowering: {other:?}")),
     }
 }
 
@@ -143,12 +143,7 @@ fn lower_irrefutable_record(
         HirTyKind::Record { .. } => {
             lower_irrefutable_value_record(ctx, input, fields, pat_ty, base, out);
         }
-        _ => out.push(IrExpr {
-            origin: input.origin,
-            kind: IrExprKind::Unsupported {
-                description: "record destructuring without record base".into(),
-            },
-        }),
+        _ => invalid_lowering_path("record destructuring without record base"),
     }
 }
 
@@ -162,13 +157,7 @@ fn lower_irrefutable_module_record(
     let sema = ctx.sema;
     let interner = ctx.interner;
     let Some(module_target) = module_target else {
-        out.push(IrExpr {
-            origin,
-            kind: IrExprKind::Unsupported {
-                description: "module destructuring without module target".into(),
-            },
-        });
-        return;
+        invalid_lowering_path("module destructuring without module target");
     };
     for field in sema.module().store.record_pat_fields.get(fields) {
         let name_text: Box<str> = interner.resolve(field.name.name).into();
@@ -207,23 +196,11 @@ fn lower_irrefutable_value_record(
     let stored = store_in_temp(ctx, input.origin, base, out);
     let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, pat_ty, interner)
     else {
-        out.push(IrExpr {
-            origin: input.origin,
-            kind: IrExprKind::Unsupported {
-                description: "record destructuring without record layout".into(),
-            },
-        });
-        return;
+        invalid_lowering_path("record destructuring without record layout");
     };
     for field in sema.module().store.record_pat_fields.get(fields) {
         let Some(index) = indices.get(&field.name.name).copied() else {
-            out.push(IrExpr {
-                origin: input.origin,
-                kind: IrExprKind::Unsupported {
-                    description: "record destructuring missing field".into(),
-                },
-            });
-            continue;
+            invalid_lowering_path("record destructuring missing field");
         };
         let proj = IrExpr {
             origin: input.origin,
@@ -303,13 +280,4 @@ fn store_in_temp(
         origin,
         kind: IrExprKind::Temp { temp },
     }
-}
-
-fn push_unsupported_pat(origin: IrOrigin, other: &HirPatKind, out: &mut Vec<IrExpr>) {
-    out.push(IrExpr {
-        origin,
-        kind: IrExprKind::Unsupported {
-            description: format!("local let pattern {other:?}").into(),
-        },
-    });
 }

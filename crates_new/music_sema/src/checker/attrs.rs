@@ -7,7 +7,7 @@ use music_hir::{
 };
 
 use super::normalize::lower_type_expr;
-use super::{CheckPass, PassBase};
+use super::{CheckPass, DiagKind, PassBase};
 
 pub(super) fn extract_data_layout_hints(
     ctx: &mut PassBase<'_, '_, '_>,
@@ -23,43 +23,43 @@ pub(super) fn extract_data_layout_hints(
             match path.as_slice() {
                 ["repr"] => {
                     if repr_kind.is_some() {
-                        ctx.diag(origin.span, "duplicate @repr", "");
+                        ctx.diag(origin.span, DiagKind::AttrDuplicateRepr, "");
                         continue;
                     }
                     repr_kind = parse_named_string_arg(ctx, &attr, "kind");
                     if repr_kind.is_none() {
-                        ctx.diag(origin.span, "attr invalid value", "");
+                        ctx.diag(origin.span, DiagKind::AttrReprRequiresKindString, "");
                     }
                 }
                 ["layout"] => {
                     for arg in ctx.attr_args(attr.args.clone()) {
                         let Some(name) = arg.name else {
-                            ctx.diag(origin.span, "attr invalid value", "");
+                            ctx.diag(origin.span, DiagKind::AttrLayoutArgRequiresName, "");
                             continue;
                         };
                         let key = ctx.resolve_symbol(name.name);
                         match key {
                             "align" => {
                                 if align.is_some() {
-                                    ctx.diag(origin.span, "duplicate @layout align", "");
+                                    ctx.diag(origin.span, DiagKind::AttrDuplicateLayoutAlign, "");
                                     continue;
                                 }
                                 align = parse_u32_value(ctx, arg.value);
                                 if align.is_none() {
-                                    ctx.diag(origin.span, "attr invalid value", "");
+                                    ctx.diag(origin.span, DiagKind::AttrLayoutAlignRequiresU32, "");
                                 }
                             }
                             "pack" => {
                                 if pack.is_some() {
-                                    ctx.diag(origin.span, "duplicate @layout pack", "");
+                                    ctx.diag(origin.span, DiagKind::AttrDuplicateLayoutPack, "");
                                     continue;
                                 }
                                 pack = parse_u32_value(ctx, arg.value);
                                 if pack.is_none() {
-                                    ctx.diag(origin.span, "attr invalid value", "");
+                                    ctx.diag(origin.span, DiagKind::AttrLayoutPackRequiresU32, "");
                                 }
                             }
-                            _ => ctx.diag(origin.span, "attr unknown arg", ""),
+                            _ => ctx.diag(origin.span, DiagKind::AttrUnknownArg, ""),
                         }
                     }
                 }
@@ -77,7 +77,7 @@ fn validate_musi_lang_attr(
     inner: HirExprId,
 ) {
     if !ctx.in_module_stmt() {
-        ctx.diag(origin.span, "attr invalid target", "");
+        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
         return;
     }
     if let HirExprKind::Let {
@@ -87,20 +87,20 @@ fn validate_musi_lang_attr(
     } = ctx.expr(inner).kind
     {
         if has_param_clause {
-            ctx.diag(origin.span, "attr invalid target", "");
+            ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
             return;
         }
         if !matches!(ctx.pat(pat).kind, HirPatKind::Bind { .. }) {
-            ctx.diag(origin.span, "attr invalid target", "");
+            ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
             return;
         }
     } else {
-        ctx.diag(origin.span, "attr invalid target", "");
+        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
         return;
     }
     let name = parse_named_string_arg(ctx, attr, "name");
     if name.is_none() {
-        ctx.diag(origin.span, "attr invalid value", "");
+        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, "");
     }
 }
 
@@ -111,7 +111,11 @@ fn validate_musi_intrinsic_attr(
 ) {
     let opcode = parse_named_string_arg(ctx, attr, "opcode");
     if opcode.is_none() {
-        ctx.diag(origin.span, "attr invalid value", "");
+        ctx.diag(
+            origin.span,
+            DiagKind::AttrMusiIntrinsicRequiresOpcodeString,
+            "",
+        );
     }
 }
 
@@ -129,7 +133,7 @@ pub fn validate_expr_attrs(
         match path.as_slice() {
             ["link" | "when"] => {
                 if !inner_is_foreign {
-                    ctx.diag(origin.span, "attr invalid target", "");
+                    ctx.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
                 }
             }
             ["repr" | "layout"] => {
@@ -141,7 +145,7 @@ pub fn validate_expr_attrs(
                     _ => false,
                 };
                 if !ok {
-                    ctx.diag(origin.span, "attr invalid target", "");
+                    ctx.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
                 }
             }
             ["musi", "lang"] => validate_musi_lang_attr(ctx, &attr, origin, inner),
@@ -154,7 +158,7 @@ pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ab
     let _ = abi;
     let origin = ctx.expr(expr).origin;
     let HirExprKind::Let { params, sig, .. } = ctx.expr(expr).kind else {
-        ctx.diag(origin.span, "attr invalid target", "");
+        ctx.diag(origin.span, DiagKind::AttrForeignRequiresForeignLet, "");
         return;
     };
     for param in ctx.params(params) {
@@ -170,7 +174,7 @@ pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ab
         validate_ffi_type(ctx, sig, ty);
     } else {
         let span = ctx.expr(expr).origin.span;
-        ctx.diag(span, "foreign signature required", "");
+        ctx.diag(span, DiagKind::ForeignSignatureRequired, "");
     }
     for attr in ctx.attrs(ctx.expr(expr).mods.attrs) {
         let path = attr_path(ctx, &attr);
@@ -197,7 +201,7 @@ fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTy
         | HirTyKind::Error => {}
         _ => {
             let span = ctx.expr(expr).origin.span;
-            ctx.diag(span, "invalid ffi type", "");
+            ctx.diag(span, DiagKind::InvalidFfiType, "");
         }
     }
 }
@@ -211,11 +215,11 @@ pub(super) fn validate_link_attr(
     for arg in ctx.attr_args(attr.args.clone()) {
         if let Some(name) = arg.name.map(|ident| ident.name) {
             if name != known.name_key && name != ctx.intern("symbol") {
-                ctx.diag(origin.span, "attr unknown arg", "");
+                ctx.diag(origin.span, DiagKind::AttrUnknownArg, "");
             }
         }
         if !attr_value_is_string(ctx, &arg) {
-            ctx.diag(origin.span, "attr invalid value", "");
+            ctx.diag(origin.span, DiagKind::AttrLinkRequiresStringValue, "");
         }
     }
 }
@@ -232,11 +236,16 @@ pub(super) fn validate_when_attr(
     for arg in ctx.attr_args(attr.args.clone()) {
         if let Some(name) = arg.name.map(|ident| ident.name) {
             if !allowed.contains(&name) {
-                ctx.diag(origin.span, "attr unknown arg", "");
+                ctx.diag(origin.span, DiagKind::AttrUnknownArg, "");
             }
         }
         if !attr_value_is_string(ctx, &arg) && !attr_value_is_string_array(ctx, &arg) {
-            ctx.diag(origin.span, "attr invalid value", "");
+            let kind = if arg.name.map(|ident| ctx.resolve_symbol(ident.name)) == Some("feature") {
+                DiagKind::AttrWhenRequiresStringList
+            } else {
+                DiagKind::AttrWhenRequiresStringValue
+            };
+            ctx.diag(origin.span, kind, "");
         }
     }
     let _ = ctx.target();

@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 pub(super) fn compile_lit(
     emitter: &mut MethodEmitter<'_, '_>,
@@ -41,7 +42,7 @@ fn compile_int_literal(
             diags,
             emitter.module_key,
             origin,
-            format!("invalid integer literal `{raw}`"),
+            &EmitDiagKind::InvalidIntegerLiteral(raw.into()),
         );
         emit_zero(emitter);
     }
@@ -63,7 +64,7 @@ fn compile_float_literal(
             diags,
             emitter.module_key,
             origin,
-            format!("invalid float literal `{raw}`"),
+            &EmitDiagKind::InvalidFloatLiteral(raw.into()),
         );
         emit_zero(emitter);
         return;

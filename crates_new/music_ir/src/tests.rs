@@ -6,7 +6,7 @@ use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::lower_module;
-use crate::{IrCasePattern, IrExprKind};
+use crate::{IrBinaryOp, IrCasePattern, IrExprKind};
 
 fn lower(src: &str) -> crate::IrModule {
     let lexed = Lexer::new(src).lex();
@@ -249,4 +249,142 @@ fn lowers_type_test_and_cast() {
         kind => kind,
     };
     assert!(matches!(cast_kind, IrExprKind::TyCast { .. }));
+}
+
+#[test]
+fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
+    let ir = lower(
+        r"
+        export let msg (name : String) : String := `hello ${name}`;
+        export let neg (x : Int) : Int := -x;
+        export let inv (x : Bool) : Bool := not x;
+        export let answer (n : Int) : Int := (
+          let base := 1;
+          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+          let point := { x := 1, y := 2 };
+          let picked : Int := case point of (| { x } => x | _ => 0);
+          picked + loop(n)
+        );
+    ",
+    );
+
+    let msg = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "msg")
+        .expect("msg callable");
+    assert!(contains_strcat(&msg.body));
+
+    let neg = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "neg")
+        .expect("neg callable");
+    let neg_kind = match &neg.body.kind {
+        IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
+        kind => kind,
+    };
+    assert!(matches!(
+        neg_kind,
+        IrExprKind::Binary {
+            op: IrBinaryOp::ISub,
+            ..
+        }
+    ));
+
+    let inv = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "inv")
+        .expect("inv callable");
+    let inv_kind = match &inv.body.kind {
+        IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
+        kind => kind,
+    };
+    assert!(matches!(inv_kind, IrExprKind::Not { .. }));
+
+    let answer = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "answer")
+        .expect("answer callable");
+    assert!(contains_record_pattern(&answer.body));
+
+    let loop_fn = ir
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == "loop")
+        .expect("loop callable");
+    assert!(contains_closure_callee(&loop_fn.body));
+}
+
+fn contains_strcat(expr: &crate::IrExpr) -> bool {
+    match &expr.kind {
+        IrExprKind::Binary {
+            op: crate::IrBinaryOp::StrCat,
+            ..
+        } => true,
+        IrExprKind::Sequence { exprs } => exprs.iter().any(contains_strcat),
+        IrExprKind::Let { value, .. }
+        | IrExprKind::TempLet { value, .. }
+        | IrExprKind::Not { expr: value }
+        | IrExprKind::DynamicImport { spec: value }
+        | IrExprKind::RecordGet { base: value, .. }
+        | IrExprKind::TyTest { base: value, .. }
+        | IrExprKind::TyCast { base: value, .. } => contains_strcat(value),
+        IrExprKind::Binary { left, right, .. } => contains_strcat(left) || contains_strcat(right),
+        IrExprKind::Call { callee, args } => {
+            contains_strcat(callee) || args.iter().any(|arg| contains_strcat(&arg.expr))
+        }
+        IrExprKind::Case { scrutinee, arms } => {
+            contains_strcat(scrutinee)
+                || arms.iter().any(|arm| {
+                    arm.guard.as_ref().is_some_and(contains_strcat) || contains_strcat(&arm.expr)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn contains_record_pattern(expr: &crate::IrExpr) -> bool {
+    match &expr.kind {
+        IrExprKind::Case { scrutinee, arms } => {
+            contains_record_pattern(scrutinee)
+                || arms.iter().any(|arm| {
+                    matches!(arm.pattern, IrCasePattern::Record { .. })
+                        || arm.guard.as_ref().is_some_and(contains_record_pattern)
+                        || contains_record_pattern(&arm.expr)
+                })
+        }
+        IrExprKind::Sequence { exprs } => exprs.iter().any(contains_record_pattern),
+        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
+            contains_record_pattern(value)
+        }
+        _ => false,
+    }
+}
+
+fn contains_closure_callee(expr: &crate::IrExpr) -> bool {
+    match &expr.kind {
+        IrExprKind::Call { callee, args } => {
+            matches!(callee.kind, IrExprKind::ClosureNew { .. })
+                || contains_closure_callee(callee)
+                || args.iter().any(|arg| contains_closure_callee(&arg.expr))
+        }
+        IrExprKind::Sequence { exprs } => exprs.iter().any(contains_closure_callee),
+        IrExprKind::Case { scrutinee, arms } => {
+            contains_closure_callee(scrutinee)
+                || arms.iter().any(|arm| {
+                    arm.guard.as_ref().is_some_and(contains_closure_callee)
+                        || contains_closure_callee(&arm.expr)
+                })
+        }
+        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
+            contains_closure_callee(value)
+        }
+        IrExprKind::Binary { left, right, .. } => {
+            contains_closure_callee(left) || contains_closure_callee(right)
+        }
+        _ => false,
+    }
 }

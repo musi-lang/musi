@@ -10,9 +10,7 @@ pub(super) fn lower_assign_expr(
     right: HirExprId,
 ) -> IrExprKind {
     let Some(target) = lower_assign_target(ctx, left) else {
-        return IrExprKind::Unsupported {
-            description: "unsupported assignment target".into(),
-        };
+        return super::unsupported_expr("unsupported assignment target");
     };
     IrExprKind::Assign {
         target: Box::new(target),

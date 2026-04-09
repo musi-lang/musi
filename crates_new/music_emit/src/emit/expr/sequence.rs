@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::support::push_expr_diag;
 
@@ -34,7 +35,7 @@ pub(super) fn compile_sequence_literal(
             diags,
             emitter.module_key,
             &missing_origin,
-            format!("unknown emitted sequence type `{ty_name}`"),
+            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
         );
         emit_zero(emitter);
         return;
@@ -62,7 +63,7 @@ pub(super) fn compile_array_cat(
                 source_id: SourceId::from_raw(0),
                 span: Span::new(0, 0),
             },
-            format!("unknown emitted sequence type `{ty_name}`"),
+            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
         );
         emit_zero(emitter);
         return;
@@ -106,7 +107,7 @@ pub(super) fn compile_seq_parts_any(
                 source_id: SourceId::from_raw(0),
                 span: Span::new(0, 0),
             },
-            format!("unknown emitted sequence type `{ty_name}`"),
+            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
         );
         emit_zero(emitter);
         return;

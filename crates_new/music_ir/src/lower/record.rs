@@ -17,9 +17,7 @@ pub(super) fn lower_record_expr(
     let interner = ctx.interner;
     let ty = sema.expr_ty(expr_id);
     let Some((indices, _layout, field_count)) = record_layout_for_ty(sema, ty, interner) else {
-        return IrExprKind::Unsupported {
-            description: "record without record type".into(),
-        };
+        return unsupported_expr("record without record type");
     };
     let origin = to_ir_origin(sema, expr_id);
     let (prelude, sources) = match collect_record_sources(ctx, origin, items, &indices) {
@@ -58,17 +56,13 @@ pub(super) fn lower_record_update_expr(
     let Some((_base_indices, base_fields, _base_count)) =
         record_layout_for_ty(sema, base_ty, interner)
     else {
-        return IrExprKind::Unsupported {
-            description: "record update without record base".into(),
-        };
+        return unsupported_expr("record update without record base");
     };
     let result_ty = sema.expr_ty(expr_id);
     let Some((result_indices, result_fields, result_count)) =
         record_layout_for_ty(sema, result_ty, interner)
     else {
-        return IrExprKind::Unsupported {
-            description: "record update without record result".into(),
-        };
+        return unsupported_expr("record update without record result");
     };
     let update_items = sema.module().store.record_items.get(items);
     let layout = RecordUpdateLayout {
@@ -109,9 +103,7 @@ fn collect_record_sources(
             let Some((spread_indices, _spread_layout, _spread_count)) =
                 record_layout_for_ty(sema, spread_ty, interner)
             else {
-                return Err(IrExprKind::Unsupported {
-                    description: "record spread without record type".into(),
-                });
+                return Err(unsupported_expr("record spread without record type"));
             };
             for (symbol, index) in spread_indices {
                 if !indices.contains_key(&symbol) {
@@ -131,14 +123,12 @@ fn collect_record_sources(
             continue;
         }
         let Some(name) = record_item.name else {
-            return Err(IrExprKind::Unsupported {
-                description: "record item without name".into(),
-            });
+            return Err(unsupported_expr("record item without name"));
         };
         if !indices.contains_key(&name.name) {
-            return Err(IrExprKind::Unsupported {
-                description: "record item name missing from record type".into(),
-            });
+            return Err(unsupported_expr(
+                "record item name missing from record type",
+            ));
         }
         let _ = sources.insert(name.name, temp_expr);
     }
@@ -182,14 +172,10 @@ fn lower_ordered_record_fields(
     let mut lowered_fields = Vec::<IrRecordField>::new();
     for (idx, symbol) in symbol_by_index.into_iter().enumerate() {
         let Some(symbol) = symbol else {
-            return Err(IrExprKind::Unsupported {
-                description: "record layout missing symbol".into(),
-            });
+            return Err(unsupported_expr("record layout missing symbol"));
         };
         let Some(expr) = sources.get(&symbol).cloned() else {
-            return Err(IrExprKind::Unsupported {
-                description: "record missing field value".into(),
-            });
+            return Err(unsupported_expr("record missing field value"));
         };
         lowered_fields.push(IrRecordField {
             name: interner.resolve(symbol).into(),
@@ -218,14 +204,10 @@ fn lower_record_update_without_spread(
     let mut updates = Vec::new();
     for record_item in update_items {
         let Some(name) = record_item.name else {
-            return IrExprKind::Unsupported {
-                description: "record update item without name".into(),
-            };
+            return unsupported_expr("record update item without name");
         };
         let Some(index) = result_indices.get(&name.name).copied() else {
-            return IrExprKind::Unsupported {
-                description: "record update field missing from record type".into(),
-            };
+            return unsupported_expr("record update field missing from record type");
         };
         updates.push(IrRecordField {
             name: interner.resolve(name.name).into(),
@@ -270,9 +252,7 @@ fn lower_record_update_with_spread(
             let Some((spread_indices, _spread_fields, _spread_count)) =
                 record_layout_for_ty(sema, spread_ty, interner)
             else {
-                return IrExprKind::Unsupported {
-                    description: "record update spread without record type".into(),
-                };
+                return unsupported_expr("record update spread without record type");
             };
             for (symbol, spread_index) in spread_indices {
                 let Some(result_index) = result_indices.get(&symbol).copied() else {
@@ -293,14 +273,10 @@ fn lower_record_update_with_spread(
             continue;
         }
         let Some(name) = record_item.name else {
-            return IrExprKind::Unsupported {
-                description: "record update item without name".into(),
-            };
+            return unsupported_expr("record update item without name");
         };
         let Some(index) = result_indices.get(&name.name).copied() else {
-            return IrExprKind::Unsupported {
-                description: "record update field missing from record type".into(),
-            };
+            return unsupported_expr("record update field missing from record type");
         };
         updates.push(IrRecordField {
             name: interner.resolve(name.name).into(),

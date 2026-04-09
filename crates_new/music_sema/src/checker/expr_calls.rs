@@ -4,7 +4,6 @@ use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirT
 use crate::api::ExprFacts;
 use crate::effects::EffectRow;
 
-use super::CheckPass;
 use super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
 use super::exprs::{check_expr, peel_mut_ty};
 use super::normalize::{lower_type_expr, type_mismatch};
@@ -12,6 +11,7 @@ use super::schemes::{
     BindingScheme, instantiate_binding_scheme, instantiate_monomorphic_scheme, scheme_from_export,
     solve_obligations,
 };
+use super::{CheckPass, DiagKind};
 
 pub(super) fn check_call_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
@@ -24,7 +24,7 @@ pub(super) fn check_call_expr(
     let (params, ret) = if let HirTyKind::Arrow { params, ret, .. } = ctx.ty(callee_facts.ty).kind {
         (ctx.ty_ids(params), ret)
     } else {
-        ctx.diag(origin.span, "invalid call target", "");
+        ctx.diag(origin.span, DiagKind::InvalidCallTarget, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects: callee_facts.effects,
@@ -49,10 +49,10 @@ pub(super) fn check_call_expr(
 
     if !has_runtime_spread {
         if param_index != params.len() {
-            ctx.diag(origin.span, "call arity mismatch", "");
+            ctx.diag(origin.span, DiagKind::CallArityMismatch, "");
         }
     } else if param_index > params.len() {
-        ctx.diag(origin.span, "call arity mismatch", "");
+        ctx.diag(origin.span, DiagKind::CallArityMismatch, "");
     }
 
     merge_call_effects(ctx, origin, callee, &mut effects);
@@ -78,7 +78,7 @@ pub(super) fn check_apply_expr(
         })
         .collect::<Vec<_>>();
     let Some(scheme) = callable_scheme_for_expr(ctx, callee) else {
-        ctx.diag(origin.span, "invalid type application", "");
+        ctx.diag(origin.span, DiagKind::InvalidTypeApplication, "");
         return ExprFacts {
             ty: builtins.unknown,
             effects: effectful_eval,
@@ -169,7 +169,7 @@ fn check_call_spread_arg(
             param_index,
             has_runtime_spread,
         ),
-        _ => ctx.diag(origin.span, "invalid call spread source", ""),
+        _ => ctx.diag(origin.span, DiagKind::InvalidCallSpreadSource, ""),
     }
 }
 
@@ -188,12 +188,12 @@ fn check_call_array_spread(
         if ctx.ty(item).kind == HirTyKind::Any {
             *has_runtime_spread = true;
         } else {
-            ctx.diag(origin.span, "call runtime spread requires `[]Any`", "");
+            ctx.diag(origin.span, DiagKind::CallRuntimeSpreadRequiresArrayAny, "");
         }
         return;
     }
     if dims_vec.len() != 1 {
-        ctx.diag(origin.span, "call spread requires 1D array or tuple", "");
+        ctx.diag(origin.span, DiagKind::CallSpreadRequiresTupleOrArray, "");
         return;
     }
     match dims_vec[0] {
@@ -210,7 +210,7 @@ fn check_call_array_spread(
         HirDim::Unknown | HirDim::Name(_) if ctx.ty(item).kind == HirTyKind::Any => {
             *has_runtime_spread = true;
         }
-        _ => ctx.diag(origin.span, "call runtime spread requires `[]Any`", ""),
+        _ => ctx.diag(origin.span, DiagKind::CallRuntimeSpreadRequiresArrayAny, ""),
     }
 }
 

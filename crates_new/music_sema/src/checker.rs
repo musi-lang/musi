@@ -23,6 +23,8 @@ use state::{
     prepare_module,
 };
 
+use crate::diag::SemaDiagKind as DiagKind;
+
 struct Checker<'interner, 'env> {
     module: ModuleState,
     runtime: RuntimeEnv<'interner, 'env>,

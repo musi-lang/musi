@@ -11,8 +11,8 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
         IrExprKind::Unit
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
-        | IrExprKind::Unsupported { .. }
         | IrExprKind::Name { binding: None, .. }
+        | IrExprKind::TypeValue { .. }
         | IrExprKind::SyntaxValue { .. } => {}
         IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
             collect_used_bindings(value, out);
@@ -102,7 +102,7 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
         | IrExprKind::Name { .. }
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
-        | IrExprKind::Unsupported { .. }
+        | IrExprKind::TypeValue { .. }
         | IrExprKind::SyntaxValue { .. } => {}
         IrExprKind::Let { value, .. }
         | IrExprKind::TempLet { value, .. }

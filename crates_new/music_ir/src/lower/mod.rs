@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, HashSet};
+use std::process::abort;
 
 use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirHandleClause,
     HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirQuoteKind,
-    HirRecordItem, HirRecordPatField, HirSpliceKind, HirTyField, HirTyId, HirTyKind,
+    HirRecordItem, HirRecordPatField, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId,
+    HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -13,9 +15,9 @@ use music_sema::{DefinitionKey, SemaModule};
 
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
-    IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
-    IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
-    IrRecordLayoutField, IrSeqPart, IrTempId,
+    IrCaseRecordField, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind,
+    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin,
+    IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 
 mod array;
@@ -62,7 +64,7 @@ struct ClosureCallableInput<'a> {
     binding: Option<NameBindingId>,
     name: Option<Box<str>>,
     callable_module_target: Option<ModuleKey>,
-    allow_captures: bool,
+    rewrite_recursive_self: bool,
 }
 
 struct LowerCtx<'a> {
@@ -73,6 +75,23 @@ struct LowerCtx<'a> {
     next_lambda_id: u32,
     next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
+}
+
+struct RecursiveBindingInput<'a, 'b> {
+    ctx: &'a LowerCtx<'b>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &'a str,
+    captures: &'a [NameBindingId],
+}
+
+struct RecordUpdateRewriteInput {
+    ty_name: Box<str>,
+    field_count: u16,
+    base: IrExpr,
+    base_fields: Box<[IrRecordLayoutField]>,
+    result_fields: Box<[IrRecordLayoutField]>,
+    updates: Box<[IrRecordField]>,
 }
 
 /// Lowers sema-owned module facts into the codegen-facing IR surface.
@@ -183,12 +202,21 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         source_id: expr.origin.source_id,
         span: expr.origin.span,
     };
+    if is_type_value_expr(sema, expr_id) {
+        return IrExpr {
+            origin,
+            kind: IrExprKind::TypeValue {
+                ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            },
+        };
+    }
     let kind = match &expr.kind {
         HirExprKind::Name { name } => lower_name_expr(sema, expr_id, *name, interner),
         HirExprKind::Lit { lit } => lower_lit_expr(sema, *lit),
         HirExprKind::Sequence { exprs } => lower_sequence_expr(ctx, *exprs),
         HirExprKind::Tuple { items } => lower_tuple_expr(ctx, expr_id, *items),
         HirExprKind::Array { items } => lower_array_expr(ctx, expr_id, items.clone()),
+        HirExprKind::Template { parts } => lower_template_expr(ctx, origin, parts.clone()),
         HirExprKind::Record { items } => lower_record_expr(ctx, expr_id, items.clone()),
         HirExprKind::Let {
             mods,
@@ -201,10 +229,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Binary { op, left, right } => lower_binary_expr(ctx, op, *left, *right),
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args),
         HirExprKind::Apply { callee, .. } => return lower_expr_with_origin(ctx, *callee, origin),
-        HirExprKind::Prefix {
-            op: HirPrefixOp::Mut,
-            expr,
-        } => return lower_expr_with_origin(ctx, *expr, origin),
+        HirExprKind::Prefix { op, expr } => lower_prefix_expr(ctx, expr_id, op, *expr, origin),
         HirExprKind::Index { base, args } => lower_index_expr(ctx, *base, *args),
         HirExprKind::Field { base, name, .. } => {
             lower_field_expr(ctx, expr_id, *base, name.name, &expr.kind)
@@ -249,9 +274,111 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         }
         HirExprKind::Quote { kind } => lower_quote_expr(kind),
         HirExprKind::Splice { kind } => lower_splice_expr(kind),
-        other => unsupported_expr_kind(other),
+        other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
     };
     IrExpr { origin, kind }
+}
+
+fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
+    match &sema.module().store.exprs.get(expr_id).kind {
+        HirExprKind::Error => true,
+        HirExprKind::Name { name } => {
+            use_binding_id(sema, *name).is_none() && sema.expr_module_target(expr_id).is_none()
+        }
+        HirExprKind::Tuple { items } => sema
+            .module()
+            .store
+            .expr_ids
+            .get(*items)
+            .iter()
+            .copied()
+            .all(|item| is_type_value_expr(sema, item)),
+        HirExprKind::ArrayTy { item, .. } => is_type_value_expr(sema, *item),
+        HirExprKind::Pi { binder_ty, ret, .. } => {
+            is_type_value_expr(sema, *binder_ty) && is_type_value_expr(sema, *ret)
+        }
+        HirExprKind::Apply { callee, args } => {
+            is_type_value_expr(sema, *callee)
+                && sema
+                    .module()
+                    .store
+                    .expr_ids
+                    .get(*args)
+                    .iter()
+                    .copied()
+                    .all(|arg| type_apply_arg_expr(sema, arg))
+        }
+        HirExprKind::Binary { op, left, right } => {
+            matches!(
+                op,
+                HirBinaryOp::Add | HirBinaryOp::Arrow | HirBinaryOp::EffectArrow
+            ) && is_type_value_expr(sema, *left)
+                && is_type_value_expr(sema, *right)
+        }
+        HirExprKind::Prefix {
+            op: HirPrefixOp::Mut,
+            expr,
+        } => is_type_value_expr(sema, *expr),
+        HirExprKind::Record { items } => sema
+            .module()
+            .store
+            .record_items
+            .get(items.clone())
+            .iter()
+            .all(|item| is_type_value_expr(sema, item.value)),
+        _ => false,
+    }
+}
+
+fn type_apply_arg_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
+    match &sema.module().store.exprs.get(expr_id).kind {
+        HirExprKind::Lit { lit } => matches!(
+            sema.module().store.lits.get(*lit).kind,
+            HirLitKind::Int { .. }
+        ),
+        _ => is_type_value_expr(sema, expr_id),
+    }
+}
+
+fn lower_prefix_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    op: &HirPrefixOp,
+    expr: HirExprId,
+    origin: IrOrigin,
+) -> IrExprKind {
+    match op {
+        HirPrefixOp::Mut => lower_expr_with_origin(ctx, expr, origin).kind,
+        HirPrefixOp::Not => IrExprKind::Not {
+            expr: lower_boxed_expr(ctx, expr),
+        },
+        HirPrefixOp::Neg => {
+            let ty = ctx.sema.expr_ty(expr_id);
+            let (zero, op) = match &ctx.sema.ty(ty).kind {
+                HirTyKind::Float => (
+                    IrExpr {
+                        origin,
+                        kind: IrExprKind::Lit(IrLit::Float { raw: "0.0".into() }),
+                    },
+                    IrBinaryOp::FSub,
+                ),
+                HirTyKind::Int | HirTyKind::Nat | HirTyKind::NatLit(_) => (
+                    IrExpr {
+                        origin,
+                        kind: IrExprKind::Lit(IrLit::Int { raw: "0".into() }),
+                    },
+                    IrBinaryOp::ISub,
+                ),
+                other => invalid_lowering_path(format!("invalid neg operand type {other:?}")),
+            };
+            let expr = lower_expr(ctx, expr);
+            IrExprKind::Binary {
+                op,
+                left: Box::new(zero),
+                right: Box::new(expr),
+            }
+        }
+    }
 }
 
 fn lower_expr_with_origin(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, origin: IrOrigin) -> IrExpr {
@@ -280,14 +407,47 @@ fn lower_splice_expr(kind: &HirSpliceKind) -> IrExprKind {
     IrExprKind::SyntaxValue { raw }
 }
 
-fn unsupported_expr(description: impl Into<Box<str>>) -> IrExprKind {
-    IrExprKind::Unsupported {
-        description: description.into(),
-    }
+fn invalid_lowering_path(description: impl AsRef<str>) -> ! {
+    debug_assert!(false, "invalid IR lowering path: {}", description.as_ref());
+    abort();
 }
 
-fn unsupported_expr_kind(kind: &HirExprKind) -> IrExprKind {
-    unsupported_expr(format!("{kind:?}"))
+fn unsupported_expr(description: impl AsRef<str>) -> IrExprKind {
+    invalid_lowering_path(description)
+}
+
+fn lower_template_expr(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    parts: SliceRange<HirTemplatePart>,
+) -> IrExprKind {
+    let mut rendered = Vec::<IrExpr>::new();
+    for part in ctx.sema.module().store.template_parts.get(parts) {
+        match part {
+            HirTemplatePart::Text { value } => rendered.push(IrExpr {
+                origin,
+                kind: IrExprKind::Lit(IrLit::String {
+                    value: value.clone(),
+                }),
+            }),
+            HirTemplatePart::Expr { expr } => rendered.push(lower_expr(ctx, *expr)),
+        }
+    }
+    let mut iter = rendered.into_iter();
+    let Some(mut acc) = iter.next() else {
+        return IrExprKind::Lit(IrLit::String { value: "".into() });
+    };
+    for expr in iter {
+        acc = IrExpr {
+            origin,
+            kind: IrExprKind::Binary {
+                op: IrBinaryOp::StrCat,
+                left: Box::new(acc),
+                right: Box::new(expr),
+            },
+        };
+    }
+    acc.kind
 }
 
 fn lower_name_expr(
@@ -536,7 +696,7 @@ fn lower_handler_clause_closure(
             binding: None,
             name: None,
             callable_module_target: ctx.sema.expr_module_target(body).cloned(),
-            allow_captures: true,
+            rewrite_recursive_self: false,
         },
     )
 }
@@ -617,7 +777,7 @@ fn lower_local_callable_let(
             binding,
             name: (binding.is_some() && name.as_ref() != "_").then_some(name.clone()),
             callable_module_target: sema.expr_module_target(value).cloned(),
-            allow_captures: !mods.is_rec,
+            rewrite_recursive_self: mods.is_rec,
         },
     );
 
@@ -646,7 +806,7 @@ fn lower_lambda_expr(
             binding: None,
             name: None,
             callable_module_target: Some(ctx.module_key.clone()),
-            allow_captures: true,
+            rewrite_recursive_self: false,
         },
     )
     .kind
@@ -695,12 +855,22 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
     let sema = ctx.sema;
     let captures =
         compute_capture_bindings(ctx, &input.body, &input.params.bindings, input.binding);
-    if !input.allow_captures && !captures.is_empty() {
-        return IrExpr {
-            origin: input.origin,
-            kind: unsupported_expr("capturing local callable let rec"),
-        };
-    }
+    let body = if input.rewrite_recursive_self {
+        if let Some(binding) = input.binding {
+            rewrite_recursive_binding_refs(
+                ctx,
+                input.origin,
+                input.body,
+                binding,
+                input.name.as_deref().unwrap_or("_"),
+                &captures,
+            )
+        } else {
+            input.body
+        }
+    } else {
+        input.body
+    };
     let capture_params = lower_capture_params(ctx, &captures);
     let capture_exprs = lower_capture_exprs(ctx, input.origin, &captures);
 
@@ -716,7 +886,7 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
         binding: input.binding,
         name: callable_name.clone(),
         params: callable_params.into_boxed_slice(),
-        body: input.body,
+        body,
         exported: false,
         effects: sema.expr_effects(input.body_id).clone(),
         module_target: input.callable_module_target,
@@ -731,6 +901,991 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
                 module_target: Some(ctx.module_key.clone()),
             },
             captures: capture_exprs,
+        },
+    }
+}
+
+fn rewrite_recursive_binding_refs(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    expr: IrExpr,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExpr {
+    let input = RecursiveBindingInput {
+        ctx,
+        origin,
+        binding,
+        callable_name,
+        captures,
+    };
+    let origin_expr = expr.origin;
+    let kind = rewrite_recursive_binding_kind(&input, expr.kind);
+    IrExpr {
+        origin: origin_expr,
+        kind,
+    }
+}
+
+fn rewrite_recursive_binding_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    kind: IrExprKind,
+) -> IrExprKind {
+    match kind {
+        IrExprKind::Name {
+            binding: Some(found),
+            module_target,
+            ..
+        } if found == input.binding && module_target.is_none() => IrExprKind::ClosureNew {
+            callee: IrNameRef {
+                binding: Some(input.binding),
+                name: input.callable_name.into(),
+                module_target: Some(input.ctx.module_key.clone()),
+            },
+            captures: lower_capture_exprs(input.ctx, input.origin, input.captures),
+        },
+        IrExprKind::Sequence { exprs } => rewrite_sequence_kind(
+            input.ctx,
+            input.origin,
+            exprs,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Tuple { ty_name, items } => rewrite_tuple_kind(
+            input.ctx,
+            input.origin,
+            ty_name,
+            items,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Array { ty_name, items } => rewrite_array_kind(
+            input.ctx,
+            input.origin,
+            ty_name,
+            items,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::ArrayCat { ty_name, parts } => rewrite_array_cat_kind(
+            input.ctx,
+            input.origin,
+            ty_name,
+            parts,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Record {
+            ty_name,
+            field_count,
+            fields,
+        } => rewrite_record_kind(input, ty_name, field_count, fields),
+        IrExprKind::RecordGet { base, index } => rewrite_record_get_kind(
+            input.ctx,
+            input.origin,
+            *base,
+            index,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::RecordUpdate {
+            ty_name,
+            field_count,
+            base,
+            base_fields,
+            result_fields,
+            updates,
+        } => rewrite_record_update_kind(
+            input,
+            RecordUpdateRewriteInput {
+                ty_name,
+                field_count,
+                base: *base,
+                base_fields,
+                result_fields,
+                updates,
+            },
+        ),
+        other => rewrite_recursive_binding_storage_kind(input, other),
+    }
+}
+
+fn rewrite_recursive_binding_storage_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    kind: IrExprKind,
+) -> IrExprKind {
+    match kind {
+        IrExprKind::Let {
+            binding: local_binding,
+            name,
+            value,
+        } => rewrite_let_kind(input, local_binding, name, *value),
+        IrExprKind::TempLet { temp, value } => rewrite_temp_let_kind(
+            input.ctx,
+            input.origin,
+            temp,
+            *value,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Assign { target, value } => rewrite_assign_kind(
+            input.ctx,
+            input.origin,
+            *target,
+            *value,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Index { base, indices } => rewrite_index_kind(
+            input.ctx,
+            input.origin,
+            *base,
+            indices,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::DynamicImport { spec } => rewrite_dynamic_import_kind(
+            input.ctx,
+            input.origin,
+            *spec,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        other => rewrite_recursive_binding_compute_kind(input, other),
+    }
+}
+
+fn rewrite_recursive_binding_compute_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    kind: IrExprKind,
+) -> IrExprKind {
+    match kind {
+        IrExprKind::Binary { op, left, right } => rewrite_binary_kind(input, op, *left, *right),
+        IrExprKind::Not { expr } => rewrite_not_kind(
+            input.ctx,
+            input.origin,
+            *expr,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::TyTest { base, ty_name } => rewrite_ty_test_kind(
+            input.ctx,
+            input.origin,
+            *base,
+            ty_name,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::TyCast { base, ty_name } => rewrite_ty_cast_kind(
+            input.ctx,
+            input.origin,
+            *base,
+            ty_name,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::Case { scrutinee, arms } => rewrite_case_kind(
+            input.ctx,
+            input.origin,
+            *scrutinee,
+            arms,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::VariantNew {
+            data_key,
+            tag_index,
+            field_count,
+            args,
+        } => rewrite_variant_kind(input, data_key, tag_index, field_count, args),
+        IrExprKind::Call { callee, args } => rewrite_call_kind(
+            input.ctx,
+            input.origin,
+            *callee,
+            args,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        IrExprKind::CallSeq { callee, args } => rewrite_call_seq_kind(
+            input.ctx,
+            input.origin,
+            *callee,
+            args,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        other => rewrite_recursive_binding_effect_kind(input, other),
+    }
+}
+
+fn rewrite_recursive_binding_effect_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    kind: IrExprKind,
+) -> IrExprKind {
+    match kind {
+        IrExprKind::Perform {
+            effect_key,
+            op_index,
+            args,
+        } => rewrite_perform_kind(input, effect_key, op_index, args),
+        IrExprKind::PerformSeq {
+            effect_key,
+            op_index,
+            args,
+        } => rewrite_perform_seq_kind(input, effect_key, op_index, args),
+        IrExprKind::Handle {
+            effect_key,
+            value,
+            ops,
+            body,
+        } => rewrite_handle_kind(input, effect_key, *value, ops, *body),
+        IrExprKind::Resume { expr } => rewrite_resume_kind(
+            input.ctx,
+            input.origin,
+            expr.map(|expr| *expr),
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        other => other,
+    }
+}
+
+fn rewrite_seq_parts(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    parts: Box<[IrSeqPart]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrSeqPart]> {
+    parts
+        .into_vec()
+        .into_iter()
+        .map(|part| match part {
+            IrSeqPart::Expr(expr) => IrSeqPart::Expr(rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                expr,
+                binding,
+                callable_name,
+                captures,
+            )),
+            IrSeqPart::Spread(expr) => IrSeqPart::Spread(rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                expr,
+                binding,
+                callable_name,
+                captures,
+            )),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_sequence_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    exprs: Box<[IrExpr]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Sequence {
+        exprs: exprs
+            .into_vec()
+            .into_iter()
+            .map(|item| {
+                rewrite_recursive_binding_refs(ctx, origin, item, binding, callable_name, captures)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    }
+}
+
+fn rewrite_tuple_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    ty_name: Box<str>,
+    items: Box<[IrExpr]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Tuple {
+        ty_name,
+        items: rewrite_expr_slice(ctx, origin, items, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_array_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    ty_name: Box<str>,
+    items: Box<[IrExpr]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Array {
+        ty_name,
+        items: rewrite_expr_slice(ctx, origin, items, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_array_cat_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    ty_name: Box<str>,
+    parts: Box<[IrSeqPart]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::ArrayCat {
+        ty_name,
+        parts: rewrite_seq_parts(ctx, origin, parts, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_record_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    ty_name: Box<str>,
+    field_count: u16,
+    fields: Box<[IrRecordField]>,
+) -> IrExprKind {
+    IrExprKind::Record {
+        ty_name,
+        field_count,
+        fields: rewrite_record_fields(
+            input.ctx,
+            input.origin,
+            fields,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+    }
+}
+
+fn rewrite_record_get_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    base: IrExpr,
+    index: u16,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::RecordGet {
+        base: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            base,
+            binding,
+            callable_name,
+            captures,
+        )),
+        index,
+    }
+}
+
+fn rewrite_record_update_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    update: RecordUpdateRewriteInput,
+) -> IrExprKind {
+    IrExprKind::RecordUpdate {
+        ty_name: update.ty_name,
+        field_count: update.field_count,
+        base: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            update.base,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+        base_fields: update.base_fields,
+        result_fields: update.result_fields,
+        updates: rewrite_record_fields(
+            input.ctx,
+            input.origin,
+            update.updates,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+    }
+}
+
+fn rewrite_let_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    local_binding: Option<NameBindingId>,
+    name: Box<str>,
+    value: IrExpr,
+) -> IrExprKind {
+    IrExprKind::Let {
+        binding: local_binding,
+        name,
+        value: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            value,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+    }
+}
+
+fn rewrite_temp_let_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    temp: IrTempId,
+    value: IrExpr,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::TempLet {
+        temp,
+        value: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            value,
+            binding,
+            callable_name,
+            captures,
+        )),
+    }
+}
+
+fn rewrite_assign_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    target: IrAssignTarget,
+    value: IrExpr,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Assign {
+        target: Box::new(rewrite_assign_target(
+            ctx,
+            origin,
+            target,
+            binding,
+            callable_name,
+            captures,
+        )),
+        value: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            value,
+            binding,
+            callable_name,
+            captures,
+        )),
+    }
+}
+
+fn rewrite_index_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    base: IrExpr,
+    indices: Box<[IrExpr]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Index {
+        base: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            base,
+            binding,
+            callable_name,
+            captures,
+        )),
+        indices: rewrite_expr_slice(ctx, origin, indices, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_dynamic_import_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    spec: IrExpr,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::DynamicImport {
+        spec: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            spec,
+            binding,
+            callable_name,
+            captures,
+        )),
+    }
+}
+
+fn rewrite_binary_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    op: IrBinaryOp,
+    left: IrExpr,
+    right: IrExpr,
+) -> IrExprKind {
+    IrExprKind::Binary {
+        op,
+        left: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            left,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+        right: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            right,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+    }
+}
+
+fn rewrite_not_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    expr: IrExpr,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Not {
+        expr: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            expr,
+            binding,
+            callable_name,
+            captures,
+        )),
+    }
+}
+
+fn rewrite_ty_test_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    base: IrExpr,
+    ty_name: Box<str>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::TyTest {
+        base: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            base,
+            binding,
+            callable_name,
+            captures,
+        )),
+        ty_name,
+    }
+}
+
+fn rewrite_ty_cast_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    base: IrExpr,
+    ty_name: Box<str>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::TyCast {
+        base: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            base,
+            binding,
+            callable_name,
+            captures,
+        )),
+        ty_name,
+    }
+}
+
+fn rewrite_case_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    scrutinee: IrExpr,
+    arms: Box<[IrLoweredCaseArm]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Case {
+        scrutinee: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            scrutinee,
+            binding,
+            callable_name,
+            captures,
+        )),
+        arms: rewrite_case_arms(ctx, origin, arms, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_variant_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    data_key: DefinitionKey,
+    tag_index: u16,
+    field_count: u16,
+    args: Box<[IrExpr]>,
+) -> IrExprKind {
+    IrExprKind::VariantNew {
+        data_key,
+        tag_index,
+        field_count,
+        args: rewrite_expr_slice(
+            input.ctx,
+            input.origin,
+            args,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+    }
+}
+
+fn rewrite_call_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    callee: IrExpr,
+    args: Box<[IrArg]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Call {
+        callee: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            callee,
+            binding,
+            callable_name,
+            captures,
+        )),
+        args: rewrite_call_args(ctx, origin, args, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_call_seq_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    callee: IrExpr,
+    args: Box<[IrSeqPart]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::CallSeq {
+        callee: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            callee,
+            binding,
+            callable_name,
+            captures,
+        )),
+        args: rewrite_seq_parts(ctx, origin, args, binding, callable_name, captures),
+    }
+}
+
+fn rewrite_perform_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    effect_key: DefinitionKey,
+    op_index: u16,
+    args: Box<[IrExpr]>,
+) -> IrExprKind {
+    IrExprKind::Perform {
+        effect_key,
+        op_index,
+        args: rewrite_expr_slice(
+            input.ctx,
+            input.origin,
+            args,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+    }
+}
+
+fn rewrite_perform_seq_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    effect_key: DefinitionKey,
+    op_index: u16,
+    args: Box<[IrSeqPart]>,
+) -> IrExprKind {
+    IrExprKind::PerformSeq {
+        effect_key,
+        op_index,
+        args: rewrite_seq_parts(
+            input.ctx,
+            input.origin,
+            args,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+    }
+}
+
+fn rewrite_handle_kind(
+    input: &RecursiveBindingInput<'_, '_>,
+    effect_key: DefinitionKey,
+    value: IrExpr,
+    ops: Box<[IrHandleOp]>,
+    body: IrExpr,
+) -> IrExprKind {
+    IrExprKind::Handle {
+        effect_key,
+        value: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            value,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+        ops: rewrite_handle_ops(
+            input.ctx,
+            input.origin,
+            ops,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
+        body: Box::new(rewrite_recursive_binding_refs(
+            input.ctx,
+            input.origin,
+            body,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        )),
+    }
+}
+
+fn rewrite_resume_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    expr: Option<IrExpr>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::Resume {
+        expr: expr.map(|expr| {
+            Box::new(rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                expr,
+                binding,
+                callable_name,
+                captures,
+            ))
+        }),
+    }
+}
+
+fn rewrite_record_fields(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    fields: Box<[IrRecordField]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrRecordField]> {
+    fields
+        .into_vec()
+        .into_iter()
+        .map(|field| IrRecordField {
+            expr: rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                field.expr,
+                binding,
+                callable_name,
+                captures,
+            ),
+            ..field
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_call_args(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    args: Box<[IrArg]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrArg]> {
+    args.into_vec()
+        .into_iter()
+        .map(|arg| IrArg {
+            expr: rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                arg.expr,
+                binding,
+                callable_name,
+                captures,
+            ),
+            ..arg
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_case_arms(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    arms: Box<[IrLoweredCaseArm]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrLoweredCaseArm]> {
+    arms.into_vec()
+        .into_iter()
+        .map(|arm| IrLoweredCaseArm {
+            guard: arm.guard.map(|guard| {
+                rewrite_recursive_binding_refs(ctx, origin, guard, binding, callable_name, captures)
+            }),
+            expr: rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                arm.expr,
+                binding,
+                callable_name,
+                captures,
+            ),
+            ..arm
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_handle_ops(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    ops: Box<[IrHandleOp]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrHandleOp]> {
+    ops.into_vec()
+        .into_iter()
+        .map(|op| IrHandleOp {
+            closure: rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                op.closure,
+                binding,
+                callable_name,
+                captures,
+            ),
+            ..op
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_expr_slice(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    exprs: Box<[IrExpr]>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> Box<[IrExpr]> {
+    exprs
+        .into_vec()
+        .into_iter()
+        .map(|expr| {
+            rewrite_recursive_binding_refs(ctx, origin, expr, binding, callable_name, captures)
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn rewrite_assign_target(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    target: IrAssignTarget,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrAssignTarget {
+    match target {
+        IrAssignTarget::Binding {
+            binding,
+            name,
+            module_target,
+        } => IrAssignTarget::Binding {
+            binding,
+            name,
+            module_target,
+        },
+        IrAssignTarget::Index { base, indices } => IrAssignTarget::Index {
+            base: Box::new(rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                *base,
+                binding,
+                callable_name,
+                captures,
+            )),
+            indices: rewrite_expr_slice(ctx, origin, indices, binding, callable_name, captures),
+        },
+        IrAssignTarget::RecordField { base, index } => IrAssignTarget::RecordField {
+            base: Box::new(rewrite_recursive_binding_refs(
+                ctx,
+                origin,
+                *base,
+                binding,
+                callable_name,
+                captures,
+            )),
+            index,
         },
     }
 }
@@ -776,6 +1931,11 @@ fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut HashSet<NameBindi
         IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
             for item in items {
                 collect_pattern_bindings(item, out);
+            }
+        }
+        IrCasePattern::Record { fields } => {
+            for field in fields {
+                collect_pattern_bindings(&field.pat, out);
             }
         }
         IrCasePattern::Variant { args, .. } => {
@@ -984,6 +2144,7 @@ fn lower_case_patterns(
             interner,
             |items| IrCasePattern::Array { items },
         ),
+        HirPatKind::Record { fields } => lower_record_case_patterns(sema, pat, fields, interner),
         HirPatKind::Variant { tag, args } => {
             lower_variant_patterns(sema, pat, *tag, *args, interner)
         }
@@ -1004,8 +2165,60 @@ fn lower_case_patterns(
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default(),
-        _ => Vec::new(),
+        HirPatKind::Error => Vec::new(),
     }
+}
+
+fn lower_record_case_patterns(
+    sema: &SemaModule,
+    pat: HirPatId,
+    fields: &SliceRange<HirRecordPatField>,
+    interner: &Interner,
+) -> Vec<IrCasePattern> {
+    let Some((indices, _layout, _field_count)) =
+        record_layout_for_ty(sema, sema.pat_ty(pat), interner)
+    else {
+        return Vec::new();
+    };
+    let mut acc = vec![Vec::<IrCaseRecordField>::new()];
+    for field in sema.module().store.record_pat_fields.get(fields.clone()) {
+        let Some(index) = indices.get(&field.name.name).copied() else {
+            return Vec::new();
+        };
+        let nested = field.value.map_or_else(
+            || {
+                decl_binding_id(sema, field.name)
+                    .map(|binding| {
+                        vec![IrCasePattern::Bind {
+                            binding,
+                            name: interner.resolve(field.name.name).into(),
+                        }]
+                    })
+                    .unwrap_or_default()
+            },
+            |value| lower_case_patterns(sema, value, interner),
+        );
+        if nested.is_empty() {
+            return Vec::new();
+        }
+        let mut next = Vec::<Vec<IrCaseRecordField>>::new();
+        for prefix in &acc {
+            for pat in &nested {
+                let mut updated = prefix.clone();
+                updated.push(IrCaseRecordField {
+                    index,
+                    pat: Box::new(pat.clone()),
+                });
+                next.push(updated);
+            }
+        }
+        acc = next;
+    }
+    acc.into_iter()
+        .map(|fields| IrCasePattern::Record {
+            fields: fields.into_boxed_slice(),
+        })
+        .collect()
 }
 
 fn lower_product_patterns<F>(

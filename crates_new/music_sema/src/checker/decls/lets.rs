@@ -1,17 +1,18 @@
 use music_arena::SliceRange;
 use music_hir::{
     HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirMods, HirOrigin,
-    HirParam, HirPatId, HirTyId, HirTyKind,
+    HirParam, HirPatId, HirPatKind, HirTyId, HirTyKind,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::CheckPass;
+use super::super::DiagKind;
 use super::super::decls::check_foreign_let;
 use super::super::exprs::check_expr;
 use super::super::normalize::{
     lower_constraints, lower_effect_row, lower_params, lower_type_expr, type_mismatch,
 };
-use super::super::patterns::{bind_pat, bound_name_from_pat};
+use super::super::patterns::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::declarations::{check_bound_class, check_bound_data, check_bound_effect};
 use super::effects::require_declared_effects;
@@ -45,6 +46,32 @@ struct RecCallableSeed<'a> {
     constraints: &'a [ConstraintFacts],
 }
 
+struct CallableLetCheckInput<'a> {
+    origin: HirOrigin,
+    mods: HirLetMods,
+    pat: HirPatId,
+    params: SliceRange<HirParam>,
+    effects: Option<&'a HirEffectSet>,
+    declared_ty: Option<HirTyId>,
+    value: HirExprId,
+    binding: Option<NameBindingId>,
+    type_params: Box<[Symbol]>,
+    constraints: Box<[ConstraintFacts]>,
+}
+
+struct NonCallableLetCheckInput {
+    origin: HirOrigin,
+    mods: HirLetMods,
+    pat: HirPatId,
+    value: HirExprId,
+    binding: Option<NameBindingId>,
+    declared_ty: Option<HirTyId>,
+    is_module_stmt: bool,
+    bound_name: Option<Ident>,
+    type_params: Box<[Symbol]>,
+    constraints: Box<[ConstraintFacts]>,
+}
+
 fn lower_let_type_params(
     ctx: &CheckPass<'_, '_, '_>,
     type_params: SliceRange<HirBinder>,
@@ -54,6 +81,44 @@ fn lower_let_type_params(
         .map(|binder| binder.name.name)
         .collect::<Vec<_>>()
         .into_boxed_slice()
+}
+
+fn validate_non_callable_let_pattern(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
+    pat: HirPatId,
+    value: HirExprId,
+    value_ty: HirTyId,
+) {
+    if !pat_is_irrefutable(ctx, pat) {
+        ctx.diag(
+            origin.span,
+            DiagKind::PlainLetRequiresIrrefutablePattern,
+            "",
+        );
+    }
+    if matches!(ctx.ty(value_ty).kind, HirTyKind::Module)
+        && matches!(ctx.pat(pat).kind, HirPatKind::Record { .. })
+        && module_target_for_expr(ctx, value).is_none()
+    {
+        ctx.diag(
+            origin.span,
+            DiagKind::ModuleDestructuringRequiresStaticModule,
+            "",
+        );
+    }
+    if matches!(ctx.pat(pat).kind, HirPatKind::Record { .. })
+        && !matches!(
+            ctx.ty(value_ty).kind,
+            HirTyKind::Record { .. } | HirTyKind::Module
+        )
+    {
+        ctx.diag(
+            origin.span,
+            DiagKind::RecordDestructuringRequiresRecordOrModule,
+            "",
+        );
+    }
 }
 
 fn insert_let_binding_scheme(
@@ -118,8 +183,9 @@ fn seed_recursive_callable_scheme(ctx: &mut CheckPass<'_, '_, '_>, seed: &RecCal
         return;
     };
     let builtins = ctx.builtins();
-    let provisional_effects =
-        seed.effects.map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
+    let provisional_effects = seed
+        .effects
+        .map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
     let provisional_ret = seed.declared_ty.unwrap_or(builtins.unknown);
     let params = ctx.alloc_ty_list(seed.param_types.iter().copied());
     let provisional_ty = ctx.alloc_ty(HirTyKind::Arrow {
@@ -198,6 +264,93 @@ fn check_non_callable_let_value(
     }
 }
 
+fn check_callable_let_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    input: CallableLetCheckInput<'_>,
+) -> HirTyId {
+    let CallableLetCheckInput {
+        origin,
+        mods,
+        pat,
+        params,
+        effects,
+        declared_ty,
+        value,
+        binding,
+        type_params,
+        constraints,
+    } = input;
+    if !matches!(
+        ctx.pat(pat).kind,
+        HirPatKind::Bind { .. } | HirPatKind::Wildcard
+    ) {
+        ctx.diag(
+            origin.span,
+            DiagKind::CallableLetRequiresSimpleBindingPattern,
+            "",
+        );
+    }
+    let param_types = lower_params(ctx, params);
+    seed_recursive_callable_scheme(
+        ctx,
+        &RecCallableSeed {
+            binding,
+            mods,
+            param_types: &param_types,
+            effects,
+            declared_ty,
+            type_params: &type_params,
+            constraints: &constraints,
+        },
+    );
+    let (ty, callable_effects) =
+        check_callable_let_binding(ctx, origin, &param_types, effects, declared_ty, value);
+    if let Some(binding) = binding {
+        insert_let_binding_scheme(ctx, binding, ty, callable_effects, type_params, constraints);
+    }
+    ty
+}
+
+fn check_non_callable_let_expr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    input: NonCallableLetCheckInput,
+) -> HirTyId {
+    let NonCallableLetCheckInput {
+        origin,
+        mods,
+        pat,
+        value,
+        binding,
+        declared_ty,
+        is_module_stmt,
+        bound_name,
+        type_params,
+        constraints,
+    } = input;
+    let builtins = ctx.builtins();
+    if mods.is_rec
+        && let Some(binding) = binding
+    {
+        ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
+    }
+    let value_facts =
+        check_non_callable_let_value(ctx, origin, is_module_stmt, bound_name, declared_ty, value);
+    validate_non_callable_let_pattern(ctx, origin, pat, value, value_facts.ty);
+    let ty = declared_ty.unwrap_or(value_facts.ty);
+    type_mismatch(ctx, origin, ty, value_facts.ty);
+    if let Some(binding) = binding {
+        insert_let_binding_scheme(
+            ctx,
+            binding,
+            ty,
+            EffectRow::empty(),
+            type_params,
+            constraints,
+        );
+    }
+    ty
+}
+
 pub(in super::super) fn check_let_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     input: LetExprInput,
@@ -230,58 +383,37 @@ pub(in super::super) fn check_let_expr(
     let final_ty = if is_module_stmt && expr_mods.foreign.is_some() {
         check_foreign_let(ctx, expr_id).unwrap_or(builtins.unknown)
     } else if has_param_clause {
-        let param_types = lower_params(ctx, params);
-        seed_recursive_callable_scheme(
+        check_callable_let_expr(
             ctx,
-            &RecCallableSeed {
-                binding,
+            CallableLetCheckInput {
+                origin,
                 mods,
-                param_types: &param_types,
+                pat,
+                params,
                 effects: effects.as_ref(),
                 declared_ty,
-                type_params: &type_params,
-                constraints: &constraints,
-            },
-        );
-        let (ty, callable_effects) = check_callable_let_binding(
-            ctx,
-            origin,
-            &param_types,
-            effects.as_ref(),
-            declared_ty,
-            value,
-        );
-        if let Some(binding) = binding {
-            insert_let_binding_scheme(ctx, binding, ty, callable_effects, type_params, constraints);
-        }
-        ty
-    } else {
-        if mods.is_rec
-            && let Some(binding) = binding
-        {
-            ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
-        }
-        let value_facts = check_non_callable_let_value(
-            ctx,
-            origin,
-            is_module_stmt,
-            bound_name,
-            declared_ty,
-            value,
-        );
-        let ty = declared_ty.unwrap_or(value_facts.ty);
-        type_mismatch(ctx, origin, ty, value_facts.ty);
-        if let Some(binding) = binding {
-            insert_let_binding_scheme(
-                ctx,
+                value,
                 binding,
-                ty,
-                EffectRow::empty(),
                 type_params,
                 constraints,
-            );
-        }
-        ty
+            },
+        )
+    } else {
+        check_non_callable_let_expr(
+            ctx,
+            NonCallableLetCheckInput {
+                origin,
+                mods,
+                pat,
+                value,
+                binding,
+                declared_ty,
+                is_module_stmt,
+                bound_name,
+                type_params,
+                constraints,
+            },
+        )
     };
 
     if !bind_module_pattern(ctx, pat, value) {

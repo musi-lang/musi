@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::literals::compile_i64;
 use super::names::resolve_global;
@@ -86,7 +87,7 @@ pub(super) fn compile_assign(
                 diags,
                 emitter.module_key,
                 &value.origin,
-                format!("unsupported emitted assignment target `{name}`"),
+                &EmitDiagKind::UnsupportedAssignTarget(name.clone()),
             );
             emit_zero(emitter);
         }

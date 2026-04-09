@@ -9,7 +9,7 @@ use music_names::Symbol;
 
 use super::exprs::check_expr;
 use super::surface::surface_key;
-use super::{CheckPass, PassBase};
+use super::{CheckPass, DiagKind, PassBase};
 use crate::api::{ConstraintFacts, ConstraintKind, DefinitionKey};
 use crate::effects::{EffectKey, EffectRow};
 
@@ -151,7 +151,7 @@ pub fn type_mismatch(
         render_ty(ctx, expected),
         render_ty(ctx, found)
     );
-    ctx.diag(origin.span, "type mismatch", &label);
+    ctx.diag(origin.span, DiagKind::TypeMismatch, &label);
 }
 
 pub fn ty_matches(ctx: &PassBase<'_, '_, '_>, expected: HirTyId, found: HirTyId) -> bool {
@@ -437,7 +437,7 @@ pub fn lower_type_expr(
         HirExprKind::Import { .. } => builtins.module,
         HirExprKind::Record { items } => lower_record_type_expr(ctx, items),
         _ => {
-            ctx.diag(origin.span, "invalid type expression", "");
+            ctx.diag(origin.span, DiagKind::InvalidTypeExpression, "");
             builtins.error
         }
     }
@@ -463,14 +463,14 @@ fn lower_apply_type_expr(
     args: SliceRange<HirExprId>,
 ) -> HirTyId {
     let HirExprKind::Name { name } = ctx.expr(callee).kind else {
-        ctx.diag(origin.span, "invalid type application", "");
+        ctx.diag(origin.span, DiagKind::InvalidTypeApplication, "");
         return ctx.builtins().error;
     };
 
     if ctx.resolve_symbol(name.name) == "Array" {
         let args = ctx.expr_ids(args);
         let Some((item_expr, dims_exprs)) = args.split_first() else {
-            ctx.diag(origin.span, "Array expects at least one argument", "");
+            ctx.diag(origin.span, DiagKind::ArrayTypeRequiresItem, "");
             return ctx.builtins().error;
         };
         let item_origin = ctx.expr(*item_expr).origin;
@@ -550,7 +550,7 @@ fn lower_binary_type_expr(
             ctx.alloc_ty(HirTyKind::Sum { left, right })
         }
         _ => {
-            ctx.diag(origin.span, "invalid type expression", "");
+            ctx.diag(origin.span, DiagKind::InvalidTypeExpression, "");
             ctx.builtins().error
         }
     }

@@ -330,11 +330,13 @@ fn emits_local_recursive_callable_lets() {
 
     let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
-    assert!(emitted
-        .artifact
-        .methods
-        .iter()
-        .any(|(_, method)| emitted.artifact.string_text(method.name).contains("loop")));
+    assert!(
+        emitted
+            .artifact
+            .methods
+            .iter()
+            .any(|(_, method)| emitted.artifact.string_text(method.name).contains("loop"))
+    );
 }
 
 #[test]
@@ -362,4 +364,51 @@ fn emits_type_test_and_cast() {
         .collect::<Vec<_>>();
     assert!(opcodes.contains(&music_bc::Opcode::TyChk));
     assert!(opcodes.contains(&music_bc::Opcode::TyCast));
+}
+
+#[test]
+fn emits_type_values_record_patterns_and_capturing_recursion() {
+    let ir = lower_ir(
+        r"
+        export let answer (n : Int) : Int := (
+          let base := 1;
+          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+          let point := { x := 1, y := 2 };
+          let picked : Int := case point of (| { x } => x | _ => 0);
+          picked + loop(n)
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(opcodes.contains(&music_bc::Opcode::DataGet));
+    assert!(opcodes.contains(&music_bc::Opcode::CallCls));
+
+    assert!(
+        emitted.artifact.methods.iter().any(|(_, method)| {
+            method.code.iter().any(|entry| {
+                matches!(
+                    entry,
+                    music_bc::CodeEntry::Instruction(music_bc::Instruction {
+                        opcode: music_bc::Opcode::ClsNew,
+                        operand: music_bc::Operand::WideMethodCaptures { captures, .. },
+                    }) if *captures > 0
+                )
+            })
+        }),
+        "expected capturing recursive closure"
+    );
 }

@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 pub(super) fn compile_name(
     emitter: &mut MethodEmitter<'_, '_>,
@@ -38,7 +39,7 @@ pub(super) fn compile_name(
         diags,
         emitter.module_key,
         &expr.origin,
-        format!("unsupported emitted name reference `{name}`"),
+        &EmitDiagKind::UnsupportedNameRef(name.into()),
     );
     emit_zero(emitter);
 }

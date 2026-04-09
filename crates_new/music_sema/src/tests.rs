@@ -9,7 +9,10 @@ use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
 use music_syntax::{Lexer, parse};
 
-use super::{EffectKey, EffectRow, ModuleSurface, SemaEnv, SemaModule, SemaOptions, check_module};
+use super::{
+    EffectKey, EffectRow, ModuleSurface, SemaDiagKind, SemaEnv, SemaModule, SemaOptions,
+    check_module, sema_diag_kind,
+};
 
 #[derive(Default)]
 struct TestImportEnv {
@@ -84,6 +87,13 @@ fn check_module_src(
             env: sema_env,
         },
     )
+}
+
+fn has_diag(module: &SemaModule, kind: SemaDiagKind) -> bool {
+    module
+        .diags()
+        .iter()
+        .any(|diag| sema_diag_kind(diag) == Some(kind))
 }
 
 #[test]
@@ -170,10 +180,7 @@ fn imported_module_record_pattern_binds_exported_values() {
         HirTyKind::Arrow { .. }
     ));
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unknown export"),
+        !has_diag(&sema, SemaDiagKind::UnknownExport),
         "{:?}",
         sema.diags()
     );
@@ -274,10 +281,7 @@ fn destructured_effect_alias_handles_perform_and_handle() {
     ));
     assert!(sema.expr_effects(root).is_pure(), "{:?}", sema.diags());
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unknown effect"),
+        !has_diag(&sema, SemaDiagKind::UnknownEffect),
         "{:?}",
         sema.diags()
     );
@@ -338,10 +342,7 @@ fn imported_class_alias_supports_instance_checking() {
         .expect("expected instance expr");
     assert!(sema.instance_facts(instance_id).is_some());
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unknown class"),
+        !has_diag(&sema, SemaDiagKind::UnknownClass),
         "{:?}",
         sema.diags()
     );
@@ -379,10 +380,7 @@ fn destructured_class_alias_supports_instance_checking() {
         .expect("expected instance expr");
     assert!(sema.instance_facts(instance_id).is_some());
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unknown class"),
+        !has_diag(&sema, SemaDiagKind::UnknownClass),
         "{:?}",
         sema.diags()
     );
@@ -422,10 +420,7 @@ fn imported_class_alias_ignores_symbol_allocation_order() {
         .expect("expected instance expr");
     assert!(sema.instance_facts(instance_id).is_some());
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unknown class"),
+        !has_diag(&sema, SemaDiagKind::UnknownClass),
         "{:?}",
         sema.diags()
     );
@@ -467,9 +462,7 @@ fn duplicate_handler_clause_reports_diag() {
     "#,
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "duplicate handler clause"),
+        has_diag(&sema, SemaDiagKind::DuplicateHandlerClause),
         "{:?}",
         sema.diags()
     );
@@ -483,9 +476,7 @@ fn type_test_target_rejects_mut() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "`mut` not allowed in type test target"),
+        has_diag(&sema, SemaDiagKind::MutForbiddenInTypeTestTarget),
         "{:?}",
         sema.diags()
     );
@@ -499,9 +490,7 @@ fn type_cast_target_rejects_mut() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "`mut` not allowed in type cast target"),
+        has_diag(&sema, SemaDiagKind::MutForbiddenInTypeCastTarget),
         "{:?}",
         sema.diags()
     );
@@ -518,9 +507,7 @@ fn duplicate_class_member_reports_diag() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "duplicate class member"),
+        has_diag(&sema, SemaDiagKind::CollectDuplicateClassMember),
         "{:?}",
         sema.diags()
     );
@@ -540,9 +527,7 @@ fn missing_instance_member_reports_diag() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "missing instance member"),
+        has_diag(&sema, SemaDiagKind::MissingInstanceMember),
         "{:?}",
         sema.diags()
     );
@@ -597,9 +582,7 @@ fn reachable_exported_instances_participate_in_coherence() {
         Some(&env_for_main),
     );
     assert!(
-        main.diags()
-            .iter()
-            .any(|diag| diag.message() == "duplicate instance"),
+        has_diag(&main, SemaDiagKind::DuplicateInstance),
         "{:?}",
         main.diags()
     );
@@ -654,10 +637,7 @@ fn non_exported_instances_do_not_participate_in_coherence() {
         Some(&env_for_main),
     );
     assert!(
-        !main
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "duplicate instance"),
+        !has_diag(&main, SemaDiagKind::DuplicateInstance),
         "{:?}",
         main.diags()
     );
@@ -695,9 +675,7 @@ fn imported_tuple_instances_match_local_coherence_keys() {
         Some(&env_for_main),
     );
     assert!(
-        main.diags()
-            .iter()
-            .any(|diag| diag.message() == "duplicate instance"),
+        has_diag(&main, SemaDiagKind::DuplicateInstance),
         "{:?}",
         main.diags()
     );
@@ -777,10 +755,7 @@ fn generic_constraints_succeed_when_matching_instance_exists() {
     ",
     );
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "unsatisfied constraint"),
+        !has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
         "{:?}",
         sema.diags()
     );
@@ -801,9 +776,7 @@ fn generic_constraints_report_unsatisfied_instances() {
     "#,
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "unsatisfied constraint"),
+        has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
         "{:?}",
         sema.diags()
     );
@@ -827,9 +800,7 @@ fn generic_constraints_report_ambiguous_instances() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "ambiguous instance match"),
+        has_diag(&sema, SemaDiagKind::AmbiguousInstanceMatch),
         "{:?}",
         sema.diags()
     );
@@ -839,19 +810,14 @@ fn generic_constraints_report_ambiguous_instances() {
 fn assignment_requires_mut_location() {
     let sema = check("let x : Int := 1; x := 2;");
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut T`"),
+        has_diag(&sema, SemaDiagKind::WriteRequiresMutValue),
         "{:?}",
         sema.diags()
     );
 
     let sema = check("let x := mut 1; x := 2;");
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut T`"),
+        !has_diag(&sema, SemaDiagKind::WriteRequiresMutValue),
         "{:?}",
         sema.diags()
     );
@@ -866,9 +832,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut []T`"),
+        has_diag(&sema, SemaDiagKind::WriteRequiresMutArray),
         "{:?}",
         sema.diags()
     );
@@ -880,10 +844,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut []T`"),
+        !has_diag(&sema, SemaDiagKind::WriteRequiresMutArray),
         "{:?}",
         sema.diags()
     );
@@ -895,9 +856,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut { ... }`"),
+        has_diag(&sema, SemaDiagKind::WriteRequiresMutRecord),
         "{:?}",
         sema.diags()
     );
@@ -909,10 +868,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "write requires `mut { ... }`"),
+        !has_diag(&sema, SemaDiagKind::WriteRequiresMutRecord),
         "{:?}",
         sema.diags()
     );
@@ -922,19 +878,14 @@ fn write_through_requires_mut_type() {
 fn fixed_array_dims_validate_literal_length() {
     let sema = check("let xs : Array[Int, 2] := [1, 2];");
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "array literal length mismatch"),
+        !has_diag(&sema, SemaDiagKind::ArrayLiteralLengthMismatch),
         "{:?}",
         sema.diags()
     );
 
     let sema = check("let xs : Array[Int, 2] := [1, 2, 3];");
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "array literal length mismatch"),
+        has_diag(&sema, SemaDiagKind::ArrayLiteralLengthMismatch),
         "{:?}",
         sema.diags()
     );
@@ -951,10 +902,7 @@ fn multi_index_arrays_check_expected_arity() {
     ",
     );
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "invalid index arity"),
+        !has_diag(&sema, SemaDiagKind::InvalidIndexArity),
         "{:?}",
         sema.diags()
     );
@@ -965,9 +913,7 @@ fn multi_index_arrays_check_expected_arity() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "invalid index arity"),
+        has_diag(&sema, SemaDiagKind::InvalidIndexArity),
         "{:?}",
         sema.diags()
     );
@@ -984,10 +930,36 @@ fn local_recursive_callable_let_typechecks() {
     ",
     );
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "invalid call target"),
+        !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
+    let sema = check("let answer := 1.x;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        "{:?}",
+        sema.diags()
+    );
+
+    let sema = check(
+        r"
+        let grid : Array[Int, 2, 2] := [[1, 2], [3, 4]];
+        let answer := grid.[];
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::IndexRequiresArgument),
+        "{:?}",
+        sema.diags()
+    );
+
+    let sema = check("let (f) (x : Int) : Int := x;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::CallableLetRequiresSimpleBindingPattern),
         "{:?}",
         sema.diags()
     );
@@ -1018,10 +990,7 @@ fn open_effect_rows_absorb_extra_effects() {
     );
     assert!(effects.open.is_some(), "{effects:?}");
     assert!(
-        !sema
-            .diags()
-            .iter()
-            .any(|diag| diag.message() == "effect not declared"),
+        !has_diag(&sema, SemaDiagKind::EffectNotDeclared),
         "{:?}",
         sema.diags()
     );
@@ -1042,9 +1011,7 @@ fn closed_effect_rows_reject_extra_effects() {
     ",
     );
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "effect not declared"),
+        has_diag(&sema, SemaDiagKind::EffectNotDeclared),
         "{:?}",
         sema.diags()
     );
@@ -1054,9 +1021,7 @@ fn closed_effect_rows_reject_extra_effects() {
 fn invalid_link_attr_target_reports_diag() {
     let sema = check("@link(name := \"c\") let x := 1;");
     assert!(
-        sema.diags()
-            .iter()
-            .any(|diag| diag.message() == "attr invalid target"),
+        has_diag(&sema, SemaDiagKind::AttrLinkRequiresForeignLet),
         "{:?}",
         sema.diags()
     );

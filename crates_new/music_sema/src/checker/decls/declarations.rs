@@ -12,7 +12,7 @@ use super::super::attrs::{validate_link_attr, validate_when_attr};
 use super::super::exprs::check_expr;
 use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
 use super::super::surface::surface_key;
-use super::super::{CheckPass, EffectDef, EffectOpDef, PassBase};
+use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, TargetInfo};
 use crate::effects::EffectRow;
 
@@ -151,7 +151,7 @@ pub(in super::super) fn check_foreign_let(
     }
     let origin = ctx.expr(expr_id).origin;
     let HirExprKind::Let { params, sig, .. } = ctx.expr(expr_id).kind else {
-        ctx.diag(origin.span, "foreign signature required", "");
+        ctx.diag(origin.span, DiagKind::ForeignSignatureRequired, "");
         return None;
     };
     let params = lower_params(ctx, params);
@@ -327,7 +327,11 @@ pub(super) fn check_bound_data(
             });
             let prev = variant_map.insert(tag, super::super::DataVariantDef { payload });
             if prev.is_some() {
-                ctx.diag(variant.origin.span, "duplicate data variant", "");
+                ctx.diag(
+                    variant.origin.span,
+                    DiagKind::CollectDuplicateDataVariant,
+                    "",
+                );
             }
         }
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);

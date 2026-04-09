@@ -1,5 +1,6 @@
 mod api;
 mod checker;
+mod diag;
 mod effects;
 
 pub use api::{
@@ -8,9 +9,10 @@ pub use api::{
     EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef,
     SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim,
     SurfaceEffectItem, SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
-    TargetInfo,
+    TargetInfo, sema_diag_kind,
 };
 pub use checker::check_module;
+pub use diag::SemaDiagKind;
 pub use effects::{EffectKey, EffectRow};
 
 #[cfg(test)]

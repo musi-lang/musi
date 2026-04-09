@@ -6,7 +6,14 @@ use music_sema::{
     SemaEffectDef, SurfaceTy,
 };
 
+use crate::IrDiagKind;
+
 pub type IrDiagList = Vec<Diag>;
+
+#[must_use]
+pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
+    IrDiagKind::from_diag(diag)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IrOrigin {
@@ -134,6 +141,9 @@ pub enum IrCasePattern {
     Array {
         items: Box<[Self]>,
     },
+    Record {
+        fields: Box<[IrCaseRecordField]>,
+    },
     Variant {
         data_key: DefinitionKey,
         variant_count: u16,
@@ -152,6 +162,12 @@ pub struct IrCaseArm {
     pub pattern: IrCasePattern,
     pub guard: Option<IrExpr>,
     pub expr: IrExpr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrCaseRecordField {
+    pub index: u16,
+    pub pat: Box<IrCasePattern>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,6 +234,9 @@ pub enum IrExprKind {
     DynamicImport {
         spec: Box<IrExpr>,
     },
+    TypeValue {
+        ty_name: Box<str>,
+    },
     SyntaxValue {
         raw: Box<str>,
     },
@@ -277,9 +296,6 @@ pub enum IrExprKind {
     },
     Resume {
         expr: Option<Box<IrExpr>>,
-    },
-    Unsupported {
-        description: Box<str>,
     },
 }
 

@@ -4,7 +4,7 @@ use music_bc::Artifact;
 use music_module::{ImportMap, ModuleKey};
 use music_sema::TargetInfo;
 
-use crate::{Session, SessionOptions};
+use crate::{Session, SessionError, SessionOptions};
 
 fn meta_records(artifact: &Artifact) -> Vec<(String, String, Vec<String>)> {
     artifact
@@ -72,6 +72,30 @@ fn compiles_module_to_artifact_bytes_and_text() {
     assert!(output.artifact.validate().is_ok());
     assert!(!output.bytes.is_empty());
     assert!(output.text.contains(".global $main::answer export"));
+}
+
+#[test]
+fn parse_failures_expose_typed_syntax_errors_and_diags() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "let x := 1")
+        .unwrap();
+
+    let err = session.parse_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Parse {
+        lex_errors,
+        parse_errors,
+        diags,
+        ..
+    } = err
+    else {
+        panic!("parse error expected");
+    };
+
+    assert!(lex_errors.is_empty());
+    assert_eq!(parse_errors.len(), 1);
+    assert_eq!(diags.len(), 1);
+    assert!(!diags[0].labels().is_empty());
 }
 
 #[test]
@@ -372,6 +396,31 @@ fn compiles_tuple_and_array_destructuring_let_patterns() {
 
     assert!(output.artifact.validate().is_ok());
     assert!(output.text.contains("seq.get"));
+}
+
+#[test]
+fn compiles_capturing_recursion_record_patterns_and_type_values() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer (n : Int) : Int := (
+              let base := 1;
+              let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+              let point := { x := 1, y := 2 };
+              let picked : Int := case point of (| { x } => x | _ => 0);
+              picked + loop(n)
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("data.get"));
+    assert!(output.text.contains("call.cls"));
 }
 
 #[test]

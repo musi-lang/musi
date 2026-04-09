@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::literals::compile_i64;
 use super::support::push_expr_diag;
@@ -25,7 +26,7 @@ pub(super) fn compile_perform(
             diags,
             emitter.module_key,
             &origin,
-            "unknown emitted effect".into(),
+            &EmitDiagKind::UnknownEffect,
         );
         emit_zero(emitter);
         return;
@@ -58,7 +59,7 @@ pub(super) fn compile_handle(
             diags,
             emitter.module_key,
             &body.origin,
-            format!("unknown emitted handler type `{handler_ty_name}`"),
+            &EmitDiagKind::UnknownHandlerType(handler_ty_name),
         );
         emit_zero(emitter);
         return;
@@ -78,7 +79,7 @@ pub(super) fn compile_handle(
             diags,
             emitter.module_key,
             &body.origin,
-            "unknown emitted effect".into(),
+            &EmitDiagKind::UnknownEffect,
         );
         emit_zero(emitter);
         return;
@@ -128,7 +129,7 @@ pub(super) fn compile_perform_seq(
                 source_id: SourceId::from_raw(0),
                 span: Span::new(0, 0),
             },
-            "unknown emitted effect".into(),
+            &EmitDiagKind::UnknownEffect,
         );
         emit_zero(emitter);
         return;

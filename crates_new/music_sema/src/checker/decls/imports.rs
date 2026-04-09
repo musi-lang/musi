@@ -7,7 +7,7 @@ use music_names::Ident;
 use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::schemes::{instantiate_monomorphic_scheme, scheme_from_export};
 use super::super::surface::import_surface_ty;
-use super::super::{CheckPass, DataDef, DataVariantDef, EffectDef, EffectOpDef};
+use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ConstraintFacts, ExportedValue, ModuleSurface, PatFacts,
 };
@@ -86,7 +86,7 @@ pub(super) fn bind_module_pattern(
             .exported_value(ctx.resolve_symbol(field.name.name))
             .cloned()
         else {
-            ctx.diag(field.name.span, "unknown export", "");
+            ctx.diag(field.name.span, DiagKind::UnknownExport, "");
             continue;
         };
         let field_ty = import_surface_ty(ctx, &surface, export.ty);

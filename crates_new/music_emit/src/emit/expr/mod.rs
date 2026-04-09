@@ -1,4 +1,5 @@
 use super::*;
+use crate::EmitDiagKind;
 
 mod callable;
 mod control;
@@ -30,8 +31,7 @@ pub(super) fn compile_expr(
         || compile_expr_storage_ops(emitter, expr, diags)
         || compile_expr_control_ops(emitter, expr, diags)
         || compile_expr_effect_ops(emitter, expr, diags)
-        || compile_expr_type_ops(emitter, expr, diags)
-        || compile_expr_unsupported(emitter, expr, diags);
+        || compile_expr_type_ops(emitter, expr, diags);
     debug_assert!(matched);
     if !keep_result {
         let slot = support::scratch_slot(emitter);
@@ -143,6 +143,23 @@ fn compile_expr_sequence_and_data(
             emitter.code.push(CodeEntry::Instruction(Instruction::new(
                 Opcode::ModLoad,
                 Operand::None,
+            )));
+            true
+        }
+        IrExprKind::TypeValue { ty_name } => {
+            let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
+                support::push_expr_diag(
+                    diags,
+                    emitter.module_key,
+                    &expr.origin,
+                    &EmitDiagKind::UnknownTypeValue(ty_name.clone()),
+                );
+                emit_zero(emitter);
+                return true;
+            };
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::TyId,
+                Operand::Type(ty),
             )));
             true
         }
@@ -293,24 +310,6 @@ fn compile_expr_type_ops(
     }
 }
 
-fn compile_expr_unsupported(
-    emitter: &mut MethodEmitter<'_, '_>,
-    expr: &IrExpr,
-    diags: &mut EmitDiagList,
-) -> bool {
-    let IrExprKind::Unsupported { description } = &expr.kind else {
-        return false;
-    };
-    support::push_expr_diag(
-        diags,
-        emitter.module_key,
-        &expr.origin,
-        format!("unsupported emitted expression `{description}`"),
-    );
-    emit_zero(emitter);
-    true
-}
-
 fn compile_type_op_by_name(
     emitter: &mut MethodEmitter<'_, '_>,
     origin: &IrOrigin,
@@ -326,7 +325,10 @@ fn compile_type_op_by_name(
             diags,
             emitter.module_key,
             origin,
-            format!("unknown type name `{ty_name}` for `{op_text}`"),
+            &EmitDiagKind::UnknownTypeNameForOp {
+                ty_name: ty_name.into(),
+                op_text: op_text.into(),
+            },
         );
         emit_zero(emitter);
         return;

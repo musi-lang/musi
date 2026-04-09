@@ -7,9 +7,15 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
+use crate::diag::SemaDiagKind;
 use crate::effects::EffectRow;
 
 pub type SemaDiagList = Vec<Diag>;
+
+#[must_use]
+pub fn sema_diag_kind(diag: &Diag) -> Option<SemaDiagKind> {
+    SemaDiagKind::from_diag(diag)
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ForeignLinkInfo {

@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::literals::compile_i64;
 use super::names::{resolve_foreign, resolve_method};
@@ -31,7 +32,7 @@ pub(super) fn compile_variant_new(
             diags,
             emitter.module_key,
             &origin,
-            format!("unknown emitted data type `{ty_name}`"),
+            &EmitDiagKind::UnknownDataType(ty_name),
         );
         emit_zero(emitter);
         return;
@@ -58,7 +59,7 @@ pub(super) fn compile_call(
                 diags,
                 emitter.module_key,
                 &arg.expr.origin,
-                "spread call arguments are not yet emitted".into(),
+                &EmitDiagKind::SpreadCallArgsNotEmitted,
             );
         }
         super::compile_expr(emitter, &arg.expr, true, diags);
@@ -182,7 +183,7 @@ pub(super) fn compile_closure_new(
             diags,
             emitter.module_key,
             &origin,
-            format!("unknown emitted closure target `{}`", callee.name),
+            &EmitDiagKind::UnknownClosureTarget(callee.name.clone()),
         );
         emit_zero(emitter);
         return;

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::super::*;
+use crate::EmitDiagKind;
 
 use super::literals::compile_i64;
 use super::support::{push_expr_diag, reserve_temp_slot};
@@ -39,7 +40,7 @@ pub(super) fn compile_record_literal(
             diags,
             emitter.module_key,
             &missing_origin,
-            format!("unknown emitted record type `{ty_name}`"),
+            &EmitDiagKind::UnknownRecordType(ty_name.into()),
         );
         emit_zero(emitter);
         return;
@@ -51,7 +52,7 @@ pub(super) fn compile_record_literal(
                 diags,
                 emitter.module_key,
                 &missing_origin,
-                "record literal missing field value".into(),
+                &EmitDiagKind::RecordLiteralMissingFieldValue,
             );
             emit_zero(emitter);
             continue;
@@ -96,7 +97,7 @@ pub(super) fn compile_record_update(
             diags,
             emitter.module_key,
             &input.base.origin,
-            format!("unknown emitted record type `{}`", input.ty_name),
+            &EmitDiagKind::UnknownRecordType(input.ty_name.into()),
         );
         emit_zero(emitter);
         return;
@@ -144,7 +145,7 @@ pub(super) fn compile_record_update(
                 diags,
                 emitter.module_key,
                 &input.base.origin,
-                "record update missing field value".into(),
+                &EmitDiagKind::RecordUpdateMissingFieldValue,
             );
             emit_zero(emitter);
             continue;

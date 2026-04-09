@@ -14,7 +14,7 @@ use super::decls::member_signature;
 use super::normalize::{lower_constraints, lower_type_expr};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
-use super::{CollectPass, DataDef, DataVariantDef, EffectDef, EffectOpDef};
+use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     visit_expr(ctx, ctx.root_expr_id());
@@ -205,7 +205,11 @@ fn collect_data_decl(
         });
         let prev = variant_map.insert(tag, DataVariantDef { payload });
         if prev.is_some() {
-            ctx.diag(variant.origin.span, "duplicate data variant", "");
+            ctx.diag(
+                variant.origin.span,
+                DiagKind::CollectDuplicateDataVariant,
+                "",
+            );
         }
     }
 
@@ -239,12 +243,12 @@ fn collect_effect_decl(
             HirMemberKind::Let => {
                 let op_name: Box<str> = ctx.resolve_symbol(member.name.name).into();
                 if seen_ops.insert(op_name, member.origin).is_some() {
-                    ctx.diag(member.origin.span, "duplicate effect op", "");
+                    ctx.diag(member.origin.span, DiagKind::CollectDuplicateEffectOp, "");
                 }
             }
             HirMemberKind::Law => {
                 if seen_laws.insert(member.name.name, member.origin).is_some() {
-                    ctx.diag(member.origin.span, "duplicate effect law", "");
+                    ctx.diag(member.origin.span, DiagKind::CollectDuplicateEffectLaw, "");
                 }
             }
         }
@@ -293,10 +297,14 @@ fn collect_class_decl(
                     .insert(member.name.name, member.origin)
                     .is_some() =>
             {
-                ctx.diag(member.origin.span, "duplicate class member", "");
+                ctx.diag(
+                    member.origin.span,
+                    DiagKind::CollectDuplicateClassMember,
+                    "",
+                );
             }
             HirMemberKind::Law if seen_laws.insert(member.name.name, member.origin).is_some() => {
-                ctx.diag(member.origin.span, "duplicate class law", "");
+                ctx.diag(member.origin.span, DiagKind::CollectDuplicateClassLaw, "");
             }
             _ => {}
         }
