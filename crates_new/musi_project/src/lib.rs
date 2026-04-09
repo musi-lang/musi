@@ -3,6 +3,7 @@ mod lock;
 pub mod manifest;
 mod project;
 mod registry;
+mod types;
 
 pub use errors::ProjectError;
 pub use lock::{LockedPackage, LockedPackageSource, Lockfile};
@@ -11,6 +12,7 @@ pub use project::{
     PackageId, PackageSource, Project, ProjectEntry, ProjectOptions, ResolvedPackage, TaskSpec,
     WorkspaceGraph, load_project,
 };
+pub use types::ProjectResult;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]

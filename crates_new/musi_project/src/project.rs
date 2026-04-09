@@ -12,6 +12,7 @@ use music_session::{CompiledOutput, Session, SessionOptions};
 use music_syntax::{Lexer, parse};
 
 use crate::errors::ProjectError;
+use crate::ProjectResult;
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::registry::{RegistryPackage, resolve_registry_package};
@@ -122,7 +123,7 @@ struct LocalPackage {
 pub fn load_project(
     path: impl AsRef<Path>,
     options: ProjectOptions,
-) -> Result<Project, ProjectError> {
+) -> ProjectResult<Project> {
     Project::load(path, options)
 }
 
@@ -131,7 +132,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the manifest, workspace, dependency graph, or registry/cache
     /// state cannot be loaded into a project model.
-    pub fn load(path: impl AsRef<Path>, options: ProjectOptions) -> Result<Self, ProjectError> {
+    pub fn load(path: impl AsRef<Path>, options: ProjectOptions) -> ProjectResult<Self> {
         let root_manifest_path = manifest_path_for(path.as_ref())?;
         let root_dir = root_manifest_path
             .parent()
@@ -266,7 +267,7 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError::NoRootPackage`] when the loaded manifest is workspace-only.
-    pub fn root_package(&self) -> Result<&ResolvedPackage, ProjectError> {
+    pub fn root_package(&self) -> ProjectResult<&ResolvedPackage> {
         let Some(id) = &self.workspace.root_package else {
             return Err(ProjectError::NoRootPackage);
         };
@@ -279,14 +280,14 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the project has no root package entry.
-    pub fn root_entry(&self) -> Result<&ProjectEntry, ProjectError> {
+    pub fn root_entry(&self) -> ProjectResult<&ProjectEntry> {
         Ok(&self.root_package()?.entry)
     }
 
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the named package is not part of the loaded project graph.
-    pub fn package_entry(&self, name: &str) -> Result<&ProjectEntry, ProjectError> {
+    pub fn package_entry(&self, name: &str) -> ProjectResult<&ProjectEntry> {
         let package = self
             .package(name)
             .ok_or_else(|| ProjectError::UnresolvedDependency { name: name.into() })?;
@@ -311,7 +312,7 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the resolved lockfile cannot be serialized or written.
-    pub fn write_lockfile(&self) -> Result<(), ProjectError> {
+    pub fn write_lockfile(&self) -> ProjectResult {
         let text = serde_json::to_string_pretty(&self.resolved_lockfile).map_err(|source| {
             ProjectError::ManifestJson {
                 path: self.lockfile_path.clone(),
@@ -342,7 +343,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the named task does not exist or the task graph contains a
     /// dependency cycle.
-    pub fn task_plan(&self, name: &str) -> Result<Vec<TaskSpec>, ProjectError> {
+    pub fn task_plan(&self, name: &str) -> ProjectResult<Vec<TaskSpec>> {
         let mut order = Vec::new();
         let mut seen = BTreeSet::new();
         let mut active = BTreeSet::new();
@@ -356,7 +357,7 @@ impl Project {
         seen: &mut BTreeSet<String>,
         active: &mut BTreeSet<String>,
         out: &mut Vec<TaskSpec>,
-    ) -> Result<(), ProjectError> {
+    ) -> ProjectResult {
         if !seen.insert(name.into()) {
             return Ok(());
         }
@@ -378,7 +379,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the project modules cannot be registered into a configured
     /// [`Session`].
-    pub fn build_session(&self) -> Result<Session, ProjectError> {
+    pub fn build_session(&self) -> ProjectResult<Session> {
         let mut session = Session::new(SessionOptions {
             emit: self.options.emit,
             import_map: self.import_map.clone(),
@@ -394,7 +395,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled through
     /// [`Session`].
-    pub fn compile_root_entry(&self) -> Result<CompiledOutput, ProjectError> {
+    pub fn compile_root_entry(&self) -> ProjectResult<CompiledOutput> {
         let mut session = self.build_session()?;
         Ok(session.compile_entry(&self.root_entry()?.module_key)?)
     }
@@ -402,7 +403,7 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be emitted to an artifact.
-    pub fn compile_root_entry_artifact(&self) -> Result<Artifact, ProjectError> {
+    pub fn compile_root_entry_artifact(&self) -> ProjectResult<Artifact> {
         let mut session = self.build_session()?;
         Ok(session.compile_entry_artifact(&self.root_entry()?.module_key)?)
     }
@@ -410,7 +411,7 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled to bytes.
-    pub fn compile_root_entry_bytes(&self) -> Result<Vec<u8>, ProjectError> {
+    pub fn compile_root_entry_bytes(&self) -> ProjectResult<Vec<u8>> {
         let mut session = self.build_session()?;
         Ok(session.compile_entry_bytes(&self.root_entry()?.module_key)?)
     }
@@ -418,7 +419,7 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled to text.
-    pub fn compile_root_entry_text(&self) -> Result<String, ProjectError> {
+    pub fn compile_root_entry_text(&self) -> ProjectResult<String> {
         let mut session = self.build_session()?;
         Ok(session.compile_entry_text(&self.root_entry()?.module_key)?)
     }
@@ -426,13 +427,13 @@ impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the named package entry cannot be compiled.
-    pub fn compile_package_entry(&self, name: &str) -> Result<CompiledOutput, ProjectError> {
+    pub fn compile_package_entry(&self, name: &str) -> ProjectResult<CompiledOutput> {
         let mut session = self.build_session()?;
         Ok(session.compile_entry(&self.package_entry(name)?.module_key)?)
     }
 }
 
-fn manifest_path_for(path: &Path) -> Result<PathBuf, ProjectError> {
+fn manifest_path_for(path: &Path) -> ProjectResult<PathBuf> {
     let manifest_path = if path.file_name() == Some(OsStr::new("musi.json")) {
         path.to_path_buf()
     } else {
@@ -447,7 +448,7 @@ fn manifest_path_for(path: &Path) -> Result<PathBuf, ProjectError> {
     }
 }
 
-fn read_manifest(path: &Path) -> Result<PackageManifest, ProjectError> {
+fn read_manifest(path: &Path) -> ProjectResult<PackageManifest> {
     let text = fs::read_to_string(path).map_err(|source| ProjectError::Io {
         path: path.to_path_buf(),
         source,
@@ -458,7 +459,7 @@ fn read_manifest(path: &Path) -> Result<PackageManifest, ProjectError> {
     })
 }
 
-fn validate_manifest(manifest: &PackageManifest, path: &Path) -> Result<(), ProjectError> {
+fn validate_manifest(manifest: &PackageManifest, path: &Path) -> ProjectResult {
     if let Some(name) = &manifest.name {
         if name.trim().is_empty() {
             return Err(ProjectError::Validation {
@@ -488,7 +489,7 @@ fn validate_manifest(manifest: &PackageManifest, path: &Path) -> Result<(), Proj
     Ok(())
 }
 
-fn validate_task_graph(manifest: &PackageManifest) -> Result<(), ProjectError> {
+fn validate_task_graph(manifest: &PackageManifest) -> ProjectResult {
     let mut seen = BTreeSet::new();
     let mut active = BTreeSet::new();
     for name in manifest.tasks.keys() {
@@ -502,7 +503,7 @@ fn validate_task_node(
     manifest: &PackageManifest,
     seen: &mut BTreeSet<String>,
     active: &mut BTreeSet<String>,
-) -> Result<(), ProjectError> {
+) -> ProjectResult {
     if !seen.insert(name.into()) {
         return Ok(());
     }
@@ -523,7 +524,7 @@ fn validate_task_node(
     Ok(())
 }
 
-fn load_lockfile(path: &Path) -> Result<Lockfile, ProjectError> {
+fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
     if !path.exists() {
         return Ok(Lockfile {
             version: 1,
@@ -544,7 +545,7 @@ fn load_local_packages(
     root_dir: &Path,
     manifest: &PackageManifest,
     root_manifest_path: &Path,
-) -> Result<BTreeMap<String, LocalPackage>, ProjectError> {
+) -> ProjectResult<BTreeMap<String, LocalPackage>> {
     let mut out = BTreeMap::new();
     if let Some(name) = manifest.name.clone() {
         let version = manifest
@@ -599,7 +600,7 @@ fn load_local_packages(
     Ok(out)
 }
 
-fn member_manifest_name(root_dir: &Path, member: &str) -> Result<String, ProjectError> {
+fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> {
     let manifest_path = manifest_path_for(&root_dir.join(member))?;
     let manifest = read_manifest(&manifest_path)?;
     manifest.name.ok_or_else(|| ProjectError::Validation {
@@ -618,7 +619,7 @@ fn resolve_package_dependencies(
     package_records: &mut BTreeMap<PackageId, PackageRecord>,
     package_name_index: &mut BTreeMap<String, PackageId>,
     resolving: &mut BTreeSet<String>,
-) -> Result<(), ProjectError> {
+) -> ProjectResult {
     if !resolving.insert(package_id.name.clone()) {
         return Err(ProjectError::DependencyCycle {
             name: package_id.name.clone(),
@@ -634,17 +635,20 @@ fn resolve_package_dependencies(
 
     for (section, deps) in manifest.dependency_maps() {
         let mut dependency_ids = BTreeMap::new();
+        let mut dep_ctx = ResolveDepCtx {
+            local_packages,
+            options,
+            lockfile,
+            package_records,
+            package_name_index,
+            resolving,
+        };
         for (name, requirement) in deps {
             if let Some(id) = resolve_dependency(
+                &mut dep_ctx,
                 name,
                 requirement,
                 section == "optionalDependencies",
-                local_packages,
-                options,
-                lockfile,
-                package_records,
-                package_name_index,
-                resolving,
             )? {
                 let _ = dependency_ids.insert(name.clone(), id);
             }
@@ -667,18 +671,30 @@ fn resolve_package_dependencies(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+struct ResolveDepCtx<'a> {
+    local_packages: &'a BTreeMap<String, LocalPackage>,
+    options: &'a ProjectOptions,
+    lockfile: &'a Lockfile,
+    package_records: &'a mut BTreeMap<PackageId, PackageRecord>,
+    package_name_index: &'a mut BTreeMap<String, PackageId>,
+    resolving: &'a mut BTreeSet<String>,
+}
+
 fn resolve_dependency(
+    ctx: &mut ResolveDepCtx<'_>,
     name: &str,
     requirement: &str,
     optional: bool,
-    local_packages: &BTreeMap<String, LocalPackage>,
-    options: &ProjectOptions,
-    lockfile: &Lockfile,
-    package_records: &mut BTreeMap<PackageId, PackageRecord>,
-    package_name_index: &mut BTreeMap<String, PackageId>,
-    resolving: &mut BTreeSet<String>,
-) -> Result<Option<PackageId>, ProjectError> {
+) -> ProjectResult<Option<PackageId>> {
+    let ResolveDepCtx {
+        local_packages,
+        options,
+        lockfile,
+        package_records,
+        package_name_index,
+        resolving,
+    } = ctx;
+
     if let Some(package) = local_packages.get(name) {
         let package_id = PackageId {
             name: name.into(),
@@ -775,7 +791,7 @@ fn locked_or_latest_registry_package(
     lockfile: &Lockfile,
     name: &str,
     requirement: &str,
-) -> Result<RegistryPackage, ProjectError> {
+) -> ProjectResult<RegistryPackage> {
     if let Some(locked) = lockfile
         .packages
         .iter()
@@ -794,7 +810,7 @@ fn load_package_record(
     manifest_path: PathBuf,
     manifest: PackageManifest,
     source: PackageSource,
-) -> Result<PackageRecord, ProjectError> {
+) -> ProjectResult<PackageRecord> {
     let id = PackageId {
         name: manifest
             .name
@@ -877,7 +893,7 @@ fn load_package_record(
 fn discover_modules(
     package_id: &PackageId,
     root_dir: &Path,
-) -> Result<BTreeMap<ModuleKey, LoadedModule>, ProjectError> {
+) -> ProjectResult<BTreeMap<ModuleKey, LoadedModule>> {
     let mut out = BTreeMap::new();
     discover_modules_recursive(package_id, root_dir, root_dir, &mut out)?;
     Ok(out)
@@ -888,7 +904,7 @@ fn discover_modules_recursive(
     root_dir: &Path,
     dir: &Path,
     out: &mut BTreeMap<ModuleKey, LoadedModule>,
-) -> Result<(), ProjectError> {
+) -> ProjectResult {
     let entries = fs::read_dir(dir).map_err(|source| ProjectError::Io {
         path: dir.to_path_buf(),
         source,
@@ -940,7 +956,7 @@ fn discover_modules_recursive(
 fn build_import_map(
     package_records: &BTreeMap<PackageId, PackageRecord>,
     package_name_index: &BTreeMap<String, PackageId>,
-) -> Result<ImportMap, ProjectError> {
+) -> ProjectResult<ImportMap> {
     let mut import_map = ImportMap::default();
     for record in package_records.values() {
         let manifest_map = ImportMap {

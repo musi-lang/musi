@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::errors::ProjectError;
+use crate::ProjectResult;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistryPackage {
@@ -15,7 +16,7 @@ pub fn resolve_registry_package(
     cache_root: &Path,
     name: &str,
     requirement: &str,
-) -> Result<RegistryPackage, ProjectError> {
+) -> ProjectResult<RegistryPackage> {
     let package_root = registry_root.join(name);
     let mut best: Option<(VersionKey, PathBuf)> = None;
 
@@ -109,7 +110,7 @@ fn version_matches(requirement: &str, version: &VersionKey) -> bool {
     VersionKey::parse(requirement) == Some(version.clone())
 }
 
-fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), ProjectError> {
+fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
     fs::create_dir_all(to).map_err(|source| ProjectError::Io {
         path: to.to_path_buf(),
         source,
