@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
-use music_hir::{HirExpr, HirExprId, HirExprKind, HirModule, HirOrigin, HirStore};
+use music_arena::SliceRange;
+use music_hir::{HirAttr, HirExpr, HirExprId, HirExprKind, HirMods, HirModule, HirOrigin, HirStore};
 use music_module::{
     ImportEnv, ModuleExportSummary, ModuleKey, ModuleSpecifier, collect_export_summary,
 };
@@ -138,11 +139,47 @@ where
     }
 
     fn alloc_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> HirExprId {
-        self.store.alloc_expr(HirExpr { origin, kind })
+        self.store.alloc_expr(HirExpr {
+            origin,
+            mods: HirMods::EMPTY,
+            kind,
+        })
     }
 
     fn error_expr(&mut self, origin: HirOrigin) -> HirExprId {
         self.alloc_expr(origin, HirExprKind::Error)
+    }
+
+    fn merge_attrs(
+        &mut self,
+        first: SliceRange<HirAttr>,
+        second: SliceRange<HirAttr>,
+    ) -> SliceRange<HirAttr> {
+        if first.is_empty() {
+            return second;
+        }
+        if second.is_empty() {
+            return first;
+        }
+        let mut out = Vec::with_capacity(usize::try_from(first.len() + second.len()).unwrap_or(0));
+        out.extend(self.store.attrs.get(first).iter().cloned());
+        out.extend(self.store.attrs.get(second).iter().cloned());
+        self.store.attrs.alloc_from_iter(out)
+    }
+
+    fn apply_mods(&mut self, expr: HirExprId, mods: HirMods) {
+        if mods.is_empty() {
+            return;
+        }
+        let current = self.store.exprs.get(expr).mods.clone();
+        let attrs = self.merge_attrs(current.attrs, mods.attrs);
+        let export = current.export.or(mods.export);
+        let foreign = current.foreign.or(mods.foreign);
+        self.store.exprs.get_mut(expr).mods = HirMods {
+            attrs,
+            export,
+            foreign,
+        };
     }
 
     fn lower_opt_expr(

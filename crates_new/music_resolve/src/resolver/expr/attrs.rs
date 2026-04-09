@@ -8,47 +8,46 @@ where
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
 
-        let export_mod = node
+        let export_mod_node = node
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ExportMod);
-        let (export_opaque, export_foreign_abi) = export_mod
-            .map_or((false, None), parse_export_mod);
+        let (export_mod, export_foreign_abi) = export_mod_node
+            .map_or((None, None), |node| self.parse_export_mod(node));
+
+        let mut mods = HirMods::EMPTY.with_attrs(attrs);
+        if let Some(export_mod) = export_mod {
+            mods = mods.with_export(export_mod);
+        }
+        if export_mod_node.is_some() && (export_foreign_abi.is_some() || is_foreign_group_target(&node)) {
+            mods = mods.with_foreign(HirForeignMod {
+                abi: export_foreign_abi,
+            });
+        }
 
         let target = node.child_nodes().find(|n| {
             !matches!(n.kind(), SyntaxNodeKind::Attr | SyntaxNodeKind::ExportMod)
                 && (n.kind().is_expr() || n.kind() == SyntaxNodeKind::MemberList)
         });
 
-        let mut expr = match target {
+        match target {
             Some(target) if target.kind() == SyntaxNodeKind::MemberList => {
-                let decls = self.lower_foreign_group_decls(target);
-                self.alloc_expr(
-                    self.origin_node(target),
-                    HirExprKind::Foreign {
-                        abi: export_foreign_abi.clone(),
-                        decls,
-                    },
-                )
+                let mut exprs = Vec::<HirExprId>::new();
+                for member in target.child_nodes().filter(|n| n.kind() == SyntaxNodeKind::Member) {
+                    exprs.push(self.lower_foreign_member_let(member, mods.clone()));
+                }
+                let exprs = self.store.alloc_expr_list(exprs);
+                self.alloc_expr(origin, HirExprKind::Sequence { exprs })
             }
-            Some(target) => self.lower_expr(target),
+            Some(target) if target.kind() == SyntaxNodeKind::ForeignBlockExpr => {
+                self.lower_foreign_block_expr_with_mods(target, mods)
+            }
+            Some(target) => {
+                let expr_id = self.lower_expr(target);
+                self.apply_mods(expr_id, mods);
+                expr_id
+            }
             None => self.error_expr(origin),
-        };
-
-        if export_mod.is_some() {
-            expr = self.alloc_expr(
-                origin,
-                HirExprKind::Export {
-                    opaque: export_opaque,
-                    foreign_abi: export_foreign_abi,
-                    expr,
-                },
-            );
         }
-
-        if attrs.clone().is_empty() {
-            return expr;
-        }
-        self.alloc_expr(origin, HirExprKind::Attributed { attrs, expr })
     }
 
     pub(super) fn lower_attrs(&mut self, node: SyntaxNode<'tree, 'src>) -> SliceRange<HirAttr> {
@@ -96,19 +95,27 @@ where
         };
         HirAttrArg { name, value }
     }
+
+    fn parse_export_mod(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+    ) -> (Option<HirExportMod>, Option<music_names::Symbol>) {
+        debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
+        let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
+        let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwForeign) {
+            node.child_tokens()
+                .find(|t| t.kind() == TokenKind::String)
+                .and_then(SyntaxToken::text)
+                .and_then(|raw| decode_string_lit(raw).ok())
+                .map(|abi| self.interner.intern(abi.as_str()))
+        } else {
+            None
+        };
+        (Some(HirExportMod { opaque }), foreign_abi)
+    }
 }
 
-fn parse_export_mod(node: SyntaxNode<'_, '_>) -> (bool, Option<Box<str>>) {
-    debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
-    let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
-    let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwForeign) {
-        node.child_tokens()
-            .find(|t| t.kind() == TokenKind::String)
-            .and_then(SyntaxToken::text)
-            .and_then(|raw| decode_string_lit(raw).ok())
-            .map(String::into_boxed_str)
-    } else {
-        None
-    };
-    (opaque, foreign_abi)
+fn is_foreign_group_target(node: &SyntaxNode<'_, '_>) -> bool {
+    node.child_nodes()
+        .any(|n| n.kind() == SyntaxNodeKind::MemberList)
 }

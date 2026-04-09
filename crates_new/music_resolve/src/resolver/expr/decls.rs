@@ -11,13 +11,28 @@ where
     }
 
     pub(super) fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        self.lower_foreign_block_expr_with_mods(node, HirMods::EMPTY)
+    }
+
+    pub(super) fn lower_foreign_block_expr_with_mods(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+        outer_mods: HirMods,
+    ) -> HirExprId {
         let origin = self.origin_node(node);
+        let outer_attrs = self.lower_attrs(node);
+
         let abi = node
             .child_tokens()
             .find(|t| t.kind() == TokenKind::String)
             .and_then(SyntaxToken::text)
             .and_then(|raw| decode_string_lit(raw).ok())
-            .map(String::into_boxed_str);
+            .map(|abi| self.interner.intern(abi.as_str()));
+        let foreign_mod = HirForeignMod { abi };
+
+        let inherited_attrs = outer_mods.attrs.clone();
+        let merged_attrs = self.merge_attrs(inherited_attrs, outer_attrs);
+        let base_mods = outer_mods.with_foreign(foreign_mod).with_attrs(merged_attrs);
 
         let decls_node = node.child_nodes().find(|n| {
             matches!(
@@ -25,67 +40,76 @@ where
                 SyntaxNodeKind::MemberList | SyntaxNodeKind::LetExpr
             )
         });
-        let decls = if let Some(n) = decls_node {
+
+        let mut exprs = Vec::<HirExprId>::new();
+        if let Some(n) = decls_node {
             match n.kind() {
-                SyntaxNodeKind::MemberList => self.lower_foreign_group_decls(n),
+                SyntaxNodeKind::MemberList => {
+                    for member in n.child_nodes().filter(|m| m.kind() == SyntaxNodeKind::Member) {
+                        exprs.push(self.lower_foreign_member_let(member, base_mods.clone()));
+                    }
+                }
                 SyntaxNodeKind::LetExpr => {
                     let member = n.child_nodes().find(|m| m.kind() == SyntaxNodeKind::Member);
                     if let Some(member) = member {
-                        let decl = self.lower_foreign_decl(member);
-                        self.store.foreign_decls.alloc_from_iter([decl])
-                    } else {
-                        SliceRange::EMPTY
+                        exprs.push(self.lower_foreign_member_let(member, base_mods));
                     }
                 }
-                _ => SliceRange::EMPTY,
+                _ => {}
             }
-        } else {
-            SliceRange::EMPTY
-        };
+        }
 
-        self.alloc_expr(origin, HirExprKind::Foreign { abi, decls })
+        let exprs = self.store.alloc_expr_list(exprs);
+        self.alloc_expr(origin, HirExprKind::Sequence { exprs })
     }
 
-    pub(super) fn lower_foreign_group_decls(
+    pub(super) fn lower_foreign_member_let(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> SliceRange<HirForeignDecl> {
-        let decls: Vec<_> = node
-            .child_nodes()
-            .filter(|n| n.kind() == SyntaxNodeKind::Member)
-            .map(|n| self.lower_foreign_decl(n))
-            .collect();
-        self.store.foreign_decls.alloc_from_iter(decls)
-    }
-
-    pub(super) fn lower_foreign_decl(&mut self, node: SyntaxNode<'tree, 'src>) -> HirForeignDecl {
+        mods: HirMods,
+    ) -> HirExprId {
+        debug_assert_eq!(node.kind(), SyntaxNodeKind::Member);
         let origin = self.origin_node(node);
-        let attrs = self.lower_attrs(node);
+
+        let member_attrs = self.lower_attrs(node);
+        let merged_attrs = self.merge_attrs(mods.attrs.clone(), member_attrs);
+        let mods = mods.with_attrs(merged_attrs);
 
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
-
         let _ = self.insert_binding(name, NameBindingKind::Let);
+
+        let pat = self.store.alloc_pat(HirPat {
+            origin,
+            kind: HirPatKind::Bind { name },
+        });
 
         self.push_scope();
         let type_params = self.lower_type_params_clause(node);
+        let has_param_clause = child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let mut exprs = node
-            .child_nodes()
-            .filter(|child| child.kind().is_expr() && child.kind() != SyntaxNodeKind::ParamList);
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         self.pop_scope();
 
-        HirForeignDecl {
+        let value = self.error_expr(origin);
+        let expr_id = self.alloc_expr(
             origin,
-            attrs,
-            name,
-            type_params,
-            params,
-            constraints,
-            sig,
-        }
+            HirExprKind::Let {
+                mods: HirLetMods { is_rec: false },
+                pat,
+                type_params,
+                has_param_clause,
+                params,
+                constraints,
+                effects: None,
+                sig,
+                value,
+            },
+        );
+        self.apply_mods(expr_id, mods);
+        expr_id
     }
 
     pub(super) fn lower_data_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
