@@ -6,7 +6,7 @@ use music_base::diag::Diag;
 use music_base::{SourceId, Span};
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirDim,
-    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirForeignDecl, HirHandleClause,
+    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause,
     HirLit, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId,
     HirRecordItem, HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind,
     HirVariantDef,
@@ -418,16 +418,6 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .module
             .store
             .members
-            .get(range)
-            .to_vec()
-    }
-
-    pub fn foreign_decls(&self, range: SliceRange<HirForeignDecl>) -> Vec<HirForeignDecl> {
-        self.module
-            .resolved
-            .module
-            .store
-            .foreign_decls
             .get(range)
             .to_vec()
     }

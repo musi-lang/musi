@@ -1,9 +1,9 @@
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl,
-    HirHandleClause, HirLitKind, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
-    HirRecordPatField, HirTemplatePart, HirVariantDef,
+    HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef, HirHandleClause, HirLitKind,
+    HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem, HirRecordPatField,
+    HirTemplatePart, HirVariantDef,
 };
 use music_names::{Ident, Interner, NameBindingId, NameSite};
 
@@ -444,7 +444,16 @@ fn collect_exports_from_expr(
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    match module.resolved.module.store.exprs.get(expr_id).kind.clone() {
+    let expr = module.resolved.module.store.exprs.get(expr_id);
+    let start = attr_stack.len();
+    if !expr.mods.attrs.is_empty() {
+        attr_stack.extend_from_slice(module.resolved.module.store.attrs.get(expr.mods.attrs.clone()));
+    }
+    if let Some(export_mod) = &expr.mods.export {
+        collect_direct_exports(module, interner, expr_id, export_mod.opaque, exports, attr_stack);
+    }
+
+    match expr.kind.clone() {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
             collect_expr_id_range(module, interner, exprs, exports, attr_stack);
         }
@@ -471,14 +480,10 @@ fn collect_exports_from_expr(
             collect_exports_from_expr(module, interner, binder_ty, exports, attr_stack);
             collect_exports_from_expr(module, interner, ret, exports, attr_stack);
         }
-        HirExprKind::Lambda { body, .. } | HirExprKind::Import { arg: body } | HirExprKind::Perform { expr: body } => {
+        HirExprKind::Lambda { body, .. }
+        | HirExprKind::Import { arg: body }
+        | HirExprKind::Perform { expr: body } => {
             collect_exports_from_expr(module, interner, body, exports, attr_stack);
-        }
-        HirExprKind::Attributed { attrs, expr: body } => {
-            let start = attr_stack.len();
-            attr_stack.extend_from_slice(module.resolved.module.store.attrs.get(attrs));
-            collect_exports_from_expr(module, interner, body, exports, attr_stack);
-            attr_stack.truncate(start);
         }
         HirExprKind::Call { callee, args } => {
             collect_exports_from_expr(module, interner, callee, exports, attr_stack);
@@ -503,10 +508,6 @@ fn collect_exports_from_expr(
         HirExprKind::Let { value, .. } => {
             collect_exports_from_expr(module, interner, value, exports, attr_stack);
         }
-        HirExprKind::Export { opaque, expr, .. } => {
-            collect_direct_exports(module, interner, expr, opaque, exports, attr_stack);
-            collect_exports_from_expr(module, interner, expr, exports, attr_stack);
-        }
         HirExprKind::Case { scrutinee, arms } => {
             collect_case_exports(module, interner, scrutinee, arms, exports, attr_stack);
         }
@@ -519,9 +520,6 @@ fn collect_exports_from_expr(
         HirExprKind::Instance { class, members, .. } => {
             collect_exports_from_expr(module, interner, class, exports, attr_stack);
             collect_member_exports(module, interner, members, exports, attr_stack);
-        }
-        HirExprKind::Foreign { decls, .. } => {
-            collect_foreign_exports(module, interner, decls, exports, attr_stack);
         }
         HirExprKind::Handle { expr, clauses, .. } => {
             collect_handle_exports(module, interner, expr, clauses, exports, attr_stack);
@@ -539,6 +537,8 @@ fn collect_exports_from_expr(
         | HirExprKind::ArrayTy { .. }
         | HirExprKind::Variant { .. } => {}
     }
+
+    attr_stack.truncate(start);
 }
 
 fn collect_expr_id_range(
@@ -649,21 +649,6 @@ fn collect_member_exports(
     }
 }
 
-fn collect_foreign_exports(
-    module: &ModuleState,
-    interner: &Interner,
-    decls: SliceRange<HirForeignDecl>,
-    exports: &mut ModuleExports,
-    attr_stack: &mut Vec<HirAttr>,
-) {
-    for decl in module.resolved.module.store.foreign_decls.get(decls) {
-        collect_param_exports(module, interner, decl.params.clone(), exports, attr_stack);
-        if let Some(sig) = decl.sig {
-            collect_exports_from_expr(module, interner, sig, exports, attr_stack);
-        }
-    }
-}
-
 fn collect_handle_exports(
     module: &ModuleState,
     interner: &Interner,
@@ -689,11 +674,6 @@ fn collect_direct_exports(
     match module.resolved.module.store.exprs.get(expr_id).kind.clone() {
         HirExprKind::Let { pat, .. } => {
             collect_export_bindings_from_pat(module, interner, pat, opaque, exports, attr_stack);
-        }
-        HirExprKind::Foreign { decls, .. } => {
-            for decl in module.resolved.module.store.foreign_decls.get(decls) {
-                push_export_binding(module, interner, decl.name, opaque, exports, attr_stack);
-            }
         }
         HirExprKind::Instance { .. } => {
             let span = module.resolved.module.store.exprs.get(expr_id).origin.span;

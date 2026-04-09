@@ -13,10 +13,11 @@ use crate::api::ExprFacts;
 
 use super::CheckPass;
 use super::decls::{
-    LetExprInput, call_effects_for_expr, check_attributed_expr, check_foreign_expr,
-    check_handle_expr, check_import_expr, check_instance_expr, check_let_expr, check_perform_expr,
-    check_resume_expr, module_export_for_expr, module_target_for_expr,
+    LetExprInput, call_effects_for_expr, check_handle_expr, check_import_expr, check_instance_expr,
+    check_let_expr, check_perform_expr, check_resume_expr, module_export_for_expr,
+    module_target_for_expr,
 };
+use super::attrs::validate_expr_attrs;
 use super::normalize::{lower_params, lower_type_expr, symbol_value_type, type_mismatch};
 use super::patterns::bind_pat;
 use super::schemes::{
@@ -31,6 +32,12 @@ pub fn check_module_root(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> Expr
 }
 
 pub fn check_expr(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
+    let expr = ctx.expr(id);
+    let origin = expr.origin;
+    let attrs = expr.mods.attrs;
+    if !attrs.is_empty() {
+        validate_expr_attrs(ctx, origin, attrs, id);
+    }
     let facts = check_expr_kind(ctx, id);
     ctx.set_expr_facts(id, facts.clone());
     facts
@@ -95,7 +102,9 @@ fn check_expr_kind(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts 
         } => check_let_kind(
             ctx,
             LetExprInput {
+                expr_id: id,
                 origin: expr.origin,
+                expr_mods: expr.mods,
                 mods,
                 pat,
                 type_params,
@@ -171,7 +180,9 @@ fn check_decl_expr(
         } => check_let_kind(
             ctx,
             LetExprInput {
+                expr_id: id,
                 origin,
+                expr_mods: ctx.expr(id).mods,
                 mods,
                 pat,
                 type_params,
@@ -184,13 +195,11 @@ fn check_decl_expr(
             },
         ),
         HirExprKind::Import { arg } => check_import_expr(ctx, id, arg),
-        HirExprKind::Export { expr: inner, .. } => check_export_expr(ctx, id, inner),
         HirExprKind::Case { scrutinee, arms } => check_case_expr(ctx, scrutinee, arms),
         HirExprKind::Data { .. }
         | HirExprKind::Effect { .. }
         | HirExprKind::Class { .. }
-        | HirExprKind::Instance { .. }
-        | HirExprKind::Foreign { .. } => {
+        | HirExprKind::Instance { .. } => {
             ctx.diag(origin.span, "declaration form used as value", "");
             ExprFacts {
                 ty: builtins.unknown,
@@ -206,9 +215,6 @@ fn check_decl_expr(
         HirExprKind::Resume { expr: inner } => check_resume_expr(ctx, origin, inner),
         HirExprKind::Quote { kind } => check_quote_expr(ctx, kind),
         HirExprKind::Splice { kind } => check_splice_expr(ctx, kind),
-        HirExprKind::Attributed { attrs, expr: inner } => {
-            check_attributed_expr(ctx, origin, attrs, inner)
-        }
     }
 }
 
@@ -227,18 +233,6 @@ fn check_module_stmt(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFact
             }
             ExprFacts { ty, effects }
         }
-        HirExprKind::Export { expr: inner, .. } => {
-            let inner_facts = check_module_stmt(ctx, inner);
-            ctx.set_expr_facts(inner, inner_facts.clone());
-            let key = ctx.module_key().clone();
-            ctx.set_expr_module_target(id, key);
-            inner_facts
-        }
-        HirExprKind::Attributed { attrs, expr: inner } => {
-            let facts = check_attributed_expr(ctx, origin, attrs, inner);
-            ctx.set_expr_facts(inner, facts.clone());
-            facts
-        }
         HirExprKind::Instance {
             type_params,
             constraints,
@@ -251,7 +245,6 @@ fn check_module_stmt(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFact
                 effects: EffectRow::empty(),
             }
         }
-        HirExprKind::Foreign { abi, decls } => check_foreign_expr(ctx, origin, abi, decls, None),
         _ => check_expr(ctx, id),
     };
     ctx.set_expr_facts(id, facts.clone());
@@ -318,18 +311,6 @@ fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Id
         ty,
         effects: EffectRow::empty(),
     }
-}
-
-fn check_export_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    inner: HirExprId,
-) -> ExprFacts {
-    let facts = check_expr(ctx, inner);
-    if let Some(target) = module_target_for_expr(ctx, inner) {
-        ctx.set_expr_module_target(expr_id, target);
-    }
-    facts
 }
 
 fn check_lit_expr(ctx: &CheckPass<'_, '_, '_>, lit: HirLitId) -> ExprFacts {

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use music_arena::SliceRange;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirForeignDecl, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
+    HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
 };
 use music_names::Ident;
 
@@ -41,8 +41,7 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
         }
         HirExprKind::Lambda { body, .. }
         | HirExprKind::Import { arg: body }
-        | HirExprKind::Perform { expr: body }
-        | HirExprKind::Export { expr: body, .. } => visit_expr(ctx, body),
+        | HirExprKind::Perform { expr: body } => visit_expr(ctx, body),
         HirExprKind::Call { callee, args } => visit_call(ctx, callee, args),
         HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
             visit_expr(ctx, callee);
@@ -54,22 +53,15 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
             visit_expr(ctx, ty);
         }
         HirExprKind::Prefix { expr, .. } => visit_expr(ctx, expr),
-        HirExprKind::Attributed { attrs, expr } => {
-            // `@repr/@layout` attach to the `let` declaration (see docs/05-ffi.md).
-            if let HirExprKind::Let { pat, value, .. } = ctx.expr(expr).kind
-                && let Some(name) = bound_name_from_pat(ctx, pat)
-            {
-                collect_bound_decl(ctx, value, name, Some((ctx.expr(id).origin, attrs)));
-            }
-            visit_expr(ctx, expr);
-        }
         HirExprKind::Binary { left, right, .. } => {
             visit_expr(ctx, left);
             visit_expr(ctx, right);
         }
         HirExprKind::Let { pat, value, .. } => {
             if let Some(name) = bound_name_from_pat(ctx, pat) {
-                collect_bound_decl(ctx, value, name, None);
+                let attrs = ctx.expr(id).mods.attrs;
+                let outer_attrs = (!attrs.is_empty()).then_some((ctx.expr(id).origin, attrs));
+                collect_bound_decl(ctx, value, name, outer_attrs.as_ref());
             }
             visit_expr(ctx, value);
         }
@@ -86,7 +78,6 @@ fn visit_expr(ctx: &mut CollectPass<'_, '_, '_>, id: HirExprId) {
                 visit_member(ctx, &member);
             }
         }
-        HirExprKind::Foreign { decls, .. } => visit_foreign(ctx, decls),
         HirExprKind::Handle { expr, clauses, .. } => {
             visit_expr(ctx, expr);
             for clause in ctx.handle_clauses(clauses) {
@@ -170,64 +161,23 @@ fn visit_data(
     }
 }
 
-fn visit_foreign(ctx: &mut CollectPass<'_, '_, '_>, decls: SliceRange<HirForeignDecl>) {
-    for decl in ctx.foreign_decls(decls) {
-        for param in ctx.params(decl.params.clone()) {
-            if let Some(ty) = param.ty {
-                visit_expr(ctx, ty);
-            }
-            if let Some(default) = param.default {
-                visit_expr(ctx, default);
-            }
-        }
-        if let Some(sig) = decl.sig {
-            visit_expr(ctx, sig);
-        }
-    }
-}
-
 fn collect_bound_decl(
     ctx: &mut CollectPass<'_, '_, '_>,
     value: HirExprId,
     name: Ident,
-    outer_attrs: Option<(HirOrigin, SliceRange<HirAttr>)>,
+    outer_attrs: Option<&(HirOrigin, SliceRange<HirAttr>)>,
 ) {
-    let (origin, attrs, inner) = peel_decl_wrappers(ctx, value, outer_attrs);
-    match ctx.expr(inner).kind {
+    let origin = outer_attrs.map_or_else(|| ctx.expr(value).origin, |(o, _)| *o);
+    let attrs = outer_attrs.map_or_else(Vec::new, |(_, range)| vec![range.clone()]);
+    match ctx.expr(value).kind {
         HirExprKind::Data { variants, fields: _ } => collect_data_decl(ctx, origin, &attrs, name, variants),
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
             constraints,
             members,
-        } => collect_class_decl(ctx, inner, name, constraints, members),
+        } => collect_class_decl(ctx, value, name, constraints, members),
         _ => {}
     }
-}
-
-fn peel_decl_wrappers(
-    ctx: &CollectPass<'_, '_, '_>,
-    mut expr: HirExprId,
-    outer_attrs: Option<(HirOrigin, SliceRange<HirAttr>)>,
-) -> (HirOrigin, Vec<SliceRange<HirAttr>>, HirExprId) {
-    let mut origin = ctx.expr(expr).origin;
-    let mut attrs = Vec::new();
-    if let Some((outer_origin, range)) = outer_attrs {
-        origin = outer_origin;
-        attrs.push(range);
-    }
-    loop {
-        match ctx.expr(expr).kind {
-            HirExprKind::Attributed { attrs: range, expr: inner } => {
-                attrs.push(range);
-                expr = inner;
-            }
-            HirExprKind::Export { expr: inner, .. } => {
-                expr = inner;
-            }
-            _ => break,
-        }
-    }
-    (origin, attrs, expr)
 }
 
 fn collect_data_decl(

@@ -42,7 +42,6 @@ pub(in super::super) fn module_target_for_expr(
         HirExprKind::Name { name } => ctx
             .binding_id_for_use(name)
             .and_then(|binding| ctx.binding_module_target(binding).cloned()),
-        HirExprKind::Export { expr: inner, .. } => module_target_for_expr(ctx, inner),
         _ => None,
     }
 }

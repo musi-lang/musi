@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirForeignDecl, HirLitKind, HirOrigin, HirPatKind,
-    HirTyId, HirTyKind,
+    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirLitKind, HirOrigin, HirPatKind, HirTyId,
+    HirTyKind,
 };
 
 use super::{CheckPass, PassBase};
@@ -117,20 +117,22 @@ pub fn validate_expr_attrs(
     attrs: SliceRange<HirAttr>,
     inner: HirExprId,
 ) {
-    let inner_kind = ctx.expr(inner).kind;
+    let inner_expr = ctx.expr(inner);
+    let inner_kind = inner_expr.kind;
+    let inner_is_foreign = inner_expr.mods.foreign.is_some();
     for attr in ctx.attrs(attrs) {
         let path = attr_path(ctx, &attr);
         match path.as_slice() {
             ["link" | "when"] => {
-                if !matches!(inner_kind, HirExprKind::Foreign { .. }) {
+                if !inner_is_foreign {
                     ctx.diag(origin.span, "attr invalid target", "");
                 }
             }
             ["repr" | "layout"] => {
-                let ok = match inner_kind {
+                let ok = match &inner_kind {
                     HirExprKind::Data { .. } => true,
                     HirExprKind::Let { value, .. } => {
-                        matches!(ctx.expr(peel_value_wrappers(ctx, value)).kind, HirExprKind::Data { .. })
+                        matches!(ctx.expr(*value).kind, HirExprKind::Data { .. })
                     }
                     _ => false,
                 };
@@ -144,28 +146,34 @@ pub fn validate_expr_attrs(
     }
 }
 
-pub fn validate_foreign_decl(ctx: &mut CheckPass<'_, '_, '_>, decl: &HirForeignDecl, abi: &str) {
+pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, abi: &str) {
     let _ = abi;
-    for param in ctx.params(decl.params.clone()) {
+    let origin = ctx.expr(expr).origin;
+    let HirExprKind::Let { params, sig, .. } = ctx.expr(expr).kind else {
+        ctx.diag(origin.span, "attr invalid target", "");
+        return;
+    };
+    for param in ctx.params(params) {
         if let Some(expr) = param.ty {
             let origin = ctx.expr(expr).origin;
             let ty = lower_type_expr(ctx, expr, origin);
             validate_ffi_type(ctx, expr, ty);
         }
     }
-    if let Some(sig) = decl.sig {
+    if let Some(sig) = sig {
         let origin = ctx.expr(sig).origin;
         let ty = lower_type_expr(ctx, sig, origin);
         validate_ffi_type(ctx, sig, ty);
     } else {
-        ctx.diag(decl.origin.span, "foreign signature required", "");
+        let span = ctx.expr(expr).origin.span;
+        ctx.diag(span, "foreign signature required", "");
     }
-    for attr in ctx.attrs(decl.attrs.clone()) {
+    for attr in ctx.attrs(ctx.expr(expr).mods.attrs) {
         let path = attr_path(ctx, &attr);
         match path.as_slice() {
-            ["link"] => validate_link_attr(ctx, &attr, decl.origin),
-            ["when"] => validate_when_attr(ctx, &attr, decl.origin),
-            ["musi", "intrinsic"] => validate_musi_intrinsic_attr(ctx, &attr, decl.origin),
+            ["link"] => validate_link_attr(ctx, &attr, ctx.expr(expr).origin),
+            ["when"] => validate_when_attr(ctx, &attr, ctx.expr(expr).origin),
+            ["musi", "intrinsic"] => validate_musi_intrinsic_attr(ctx, &attr, ctx.expr(expr).origin),
             _ => {}
         }
     }
@@ -290,13 +298,4 @@ fn parse_int_lit(raw: &str) -> Option<u32> {
     u32::from_str_radix(digits, radix).ok()
 }
 
-fn peel_value_wrappers(ctx: &CheckPass<'_, '_, '_>, mut expr: HirExprId) -> HirExprId {
-    loop {
-        match ctx.expr(expr).kind {
-            HirExprKind::Attributed { expr: inner, .. } | HirExprKind::Export { expr: inner, .. } => {
-                expr = inner;
-            }
-            _ => return expr,
-        }
-    }
-}
+// Note: wrapper forms (export/attrs/foreign) are modeled via `HirExpr.mods`, not `HirExprKind`.

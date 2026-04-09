@@ -1,13 +1,12 @@
 use music_arena::SliceRange;
 use music_hir::{
-    HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirOrigin, HirParam,
-    HirPatId, HirTyId, HirTyKind,
+    HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirMods, HirOrigin,
+    HirParam, HirPatId, HirTyId, HirTyKind,
 };
-use music_names::{NameBindingId, Symbol};
+use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::CheckPass;
-use super::super::attrs::validate_expr_attrs;
-use super::super::decls::check_foreign_expr;
+use super::super::decls::check_foreign_let;
 use super::super::exprs::check_expr;
 use super::super::normalize::{
     lower_constraints, lower_effect_row, lower_params, lower_type_expr, type_mismatch,
@@ -16,13 +15,15 @@ use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::schemes::BindingScheme;
 use super::declarations::{check_bound_class, check_bound_data, check_bound_effect};
 use super::effects::require_declared_effects;
-use super::instances::check_instance_expr;
 use super::imports::{bind_imported_alias, bind_module_pattern, module_target_for_expr};
+use super::instances::check_instance_expr;
 use crate::api::{ConstraintFacts, ExprFacts};
 use crate::effects::EffectRow;
 
 pub(in super::super) struct LetExprInput {
+    pub(in super::super) expr_id: HirExprId,
     pub(in super::super) origin: HirOrigin,
+    pub(in super::super) expr_mods: HirMods,
     pub(in super::super) mods: HirLetMods,
     pub(in super::super) pat: HirPatId,
     pub(in super::super) type_params: SliceRange<HirBinder>,
@@ -100,7 +101,67 @@ fn check_callable_let_binding(
     (ty, callable_effects)
 }
 
-#[allow(clippy::too_many_lines)]
+fn check_value_with_expected_ty(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    declared_ty: Option<HirTyId>,
+    value: HirExprId,
+) -> ExprFacts {
+    if let Some(expected) = declared_ty {
+        ctx.push_expected_ty(expected);
+    }
+    let facts = check_expr(ctx, value);
+    if declared_ty.is_some() {
+        let _ = ctx.pop_expected_ty();
+    }
+    facts
+}
+
+fn check_non_callable_let_value(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    origin: HirOrigin,
+    is_module_stmt: bool,
+    bound_name: Option<Ident>,
+    declared_ty: Option<HirTyId>,
+    value: HirExprId,
+) -> ExprFacts {
+    let builtins = ctx.builtins();
+    let Some(name) = bound_name.filter(|_| is_module_stmt) else {
+        return check_value_with_expected_ty(ctx, declared_ty, value);
+    };
+
+    match &ctx.expr(value).kind {
+        HirExprKind::Data { variants, fields } => {
+            check_bound_data(ctx, name, variants.clone(), fields.clone())
+        }
+        HirExprKind::Effect { members } => check_bound_effect(ctx, value, name, members.clone()),
+        HirExprKind::Class {
+            constraints,
+            members,
+        } => check_bound_class(ctx, value, name, constraints.clone(), members.clone()),
+        HirExprKind::Instance {
+            type_params,
+            constraints,
+            class,
+            members,
+        } => {
+            let _ = check_instance_expr(
+                ctx,
+                value,
+                origin,
+                *type_params,
+                constraints.clone(),
+                *class,
+                members,
+            );
+            ExprFacts {
+                ty: builtins.unit,
+                effects: EffectRow::empty(),
+            }
+        }
+        _ => check_value_with_expected_ty(ctx, declared_ty, value),
+    }
+}
+
 pub(in super::super) fn check_let_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     input: LetExprInput,
@@ -108,7 +169,9 @@ pub(in super::super) fn check_let_expr(
     let builtins = ctx.builtins();
     let is_module_stmt = ctx.in_module_stmt();
     let LetExprInput {
+        expr_id,
         origin,
+        expr_mods,
         mods,
         pat,
         type_params,
@@ -134,7 +197,9 @@ pub(in super::super) fn check_let_expr(
         ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
     }
 
-    let final_ty = if has_param_clause {
+    let final_ty = if is_module_stmt && expr_mods.foreign.is_some() {
+        check_foreign_let(ctx, expr_id).unwrap_or(builtins.unknown)
+    } else if has_param_clause {
         let (ty, callable_effects) =
             check_callable_let_binding(ctx, origin, params, effects.as_ref(), declared_ty, value);
         if let Some(binding) = binding {
@@ -142,62 +207,8 @@ pub(in super::super) fn check_let_expr(
         }
         ty
     } else {
-        let value_facts = if let Some(name) = bound_name && is_module_stmt {
-            let (value_id, kind) = peel_let_value_wrappers(ctx, value);
-            match kind {
-                HirExprKind::Data { variants, fields } => check_bound_data(ctx, name, variants, fields),
-                HirExprKind::Effect { members } => check_bound_effect(ctx, value_id, name, members),
-                HirExprKind::Class { constraints, members } => {
-                    check_bound_class(ctx, value_id, name, constraints, members)
-                }
-                HirExprKind::Instance {
-                    type_params,
-                    constraints,
-                    class,
-                    members,
-                } => {
-                    let _ = check_instance_expr(
-                        ctx,
-                        value_id,
-                        origin,
-                        type_params,
-                        constraints,
-                        class,
-                        &members,
-                    );
-                    ExprFacts {
-                        ty: builtins.unit,
-                        effects: EffectRow::empty(),
-                    }
-                }
-                HirExprKind::Foreign { abi, decls } => {
-                    let _ = check_foreign_expr(ctx, origin, abi, decls, None);
-                    ExprFacts {
-                        ty: builtins.unit,
-                        effects: EffectRow::empty(),
-                    }
-                }
-                _ => {
-                    if let Some(expected) = declared_ty {
-                        ctx.push_expected_ty(expected);
-                    }
-                    let facts = check_expr(ctx, value);
-                    if declared_ty.is_some() {
-                        let _ = ctx.pop_expected_ty();
-                    }
-                    facts
-                }
-            }
-        } else {
-            if let Some(expected) = declared_ty {
-                ctx.push_expected_ty(expected);
-            }
-            let facts = check_expr(ctx, value);
-            if declared_ty.is_some() {
-                let _ = ctx.pop_expected_ty();
-            }
-            facts
-        };
+        let value_facts =
+            check_non_callable_let_value(ctx, origin, is_module_stmt, bound_name, declared_ty, value);
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);
         if let Some(binding) = binding {
@@ -227,22 +238,5 @@ pub(in super::super) fn check_let_expr(
     ExprFacts {
         ty: builtins.unit,
         effects: EffectRow::empty(),
-    }
-}
-
-fn peel_let_value_wrappers(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    mut value: HirExprId,
-) -> (HirExprId, HirExprKind) {
-    loop {
-        match ctx.expr(value).kind {
-            HirExprKind::Attributed { attrs, expr } => {
-                let origin = ctx.expr(value).origin;
-                validate_expr_attrs(ctx, origin, attrs, expr);
-                value = expr;
-            }
-            HirExprKind::Export { expr, .. } => value = expr,
-            other => return (value, other),
-        }
     }
 }

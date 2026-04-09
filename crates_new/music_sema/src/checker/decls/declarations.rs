@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirForeignDecl, HirMemberDef,
-    HirMemberKind, HirOrigin, HirTyKind, HirVariantDef,
+    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirPatKind,
+    HirMemberKind, HirTyId, HirTyKind, HirVariantDef,
 };
-use music_names::Ident;
+use music_names::{Ident, NameBindingId};
 
-use super::super::attrs::{validate_expr_attrs, validate_foreign_decl};
+use super::super::attrs::validate_foreign_let;
 use super::super::attrs::{validate_link_attr, validate_when_attr};
 use super::super::exprs::check_expr;
 use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
@@ -116,65 +116,71 @@ pub(in super::super) fn check_class_expr(
     }
 }
 
-pub(in super::super) fn check_foreign_expr(
+pub(in super::super) fn check_foreign_let(
     ctx: &mut CheckPass<'_, '_, '_>,
-    origin: HirOrigin,
-    abi: Option<Box<str>>,
-    decls: SliceRange<HirForeignDecl>,
-    group_attrs: Option<SliceRange<HirAttr>>,
-) -> ExprFacts {
+    expr_id: HirExprId,
+) -> Option<HirTyId> {
     let builtins = ctx.builtins();
-    let abi = abi.unwrap_or_else(|| Box::<str>::from("c"));
-    let group_attrs = group_attrs
-        .map(|range| ctx.attrs(range))
-        .unwrap_or_default();
-    for attr in &group_attrs {
+    let abi: Box<str> = ctx
+        .expr(expr_id)
+        .mods
+        .foreign
+        .as_ref()
+        .and_then(|m| m.abi)
+        .map_or_else(|| "c".into(), |sym| ctx.resolve_symbol(sym).into());
+    let attrs = ctx.attrs(ctx.expr(expr_id).mods.attrs);
+    for attr in &attrs {
         let path = super::super::attrs::attr_path(ctx, attr);
         match path.as_slice() {
-            ["link"] => validate_link_attr(ctx, attr, origin),
-            ["when"] => validate_when_attr(ctx, attr, origin),
+            ["link"] => validate_link_attr(ctx, attr, ctx.expr(expr_id).origin),
+            ["when"] => validate_when_attr(ctx, attr, ctx.expr(expr_id).origin),
             _ => {}
         }
     }
-    let group_link = link_info_from_attrs(ctx, &group_attrs);
-    for decl in ctx.foreign_decls(decls) {
-        let decl_attrs = ctx.attrs(decl.attrs.clone());
-        let mut all_attrs = Vec::<HirAttr>::with_capacity(group_attrs.len() + decl_attrs.len());
-        all_attrs.extend_from_slice(&group_attrs);
-        all_attrs.extend_from_slice(&decl_attrs);
+    if !when_attrs_match(ctx, &attrs) {
+        if let Some((binding, _)) = foreign_binding_from_let(ctx, expr_id) {
+            ctx.mark_gated_binding(binding);
+        }
+        return None;
+    }
+    if let Some((binding, _name)) = foreign_binding_from_let(ctx, expr_id) {
+        let link = link_info_from_attrs(ctx, &attrs);
+        if link.name.is_some() || link.symbol.is_some() {
+            ctx.set_foreign_link(binding, link);
+        }
+    }
+    let origin = ctx.expr(expr_id).origin;
+    let HirExprKind::Let { params, sig, .. } = ctx.expr(expr_id).kind else {
+        ctx.diag(origin.span, "foreign signature required", "");
+        return None;
+    };
+    let params = lower_params(ctx, params);
+    let result = sig.map_or(builtins.unknown, |sig| {
+        let origin = ctx.expr(sig).origin;
+        lower_type_expr(ctx, sig, origin)
+    });
+    let params = ctx.alloc_ty_list(params.iter().copied());
+    let ty = ctx.alloc_ty(HirTyKind::Arrow {
+        params,
+        ret: result,
+        is_effectful: false,
+    });
+    if let Some((binding, _)) = foreign_binding_from_let(ctx, expr_id) {
+        ctx.insert_binding_type(binding, ty);
+    }
+    validate_foreign_let(ctx, expr_id, abi.as_ref());
+    Some(ty)
+}
 
-        if !when_attrs_match(ctx, &all_attrs) {
-            if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
-                ctx.mark_gated_binding(binding);
-            }
-            continue;
-        }
-        if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
-            let merged = merge_link_info(&group_link, &link_info_from_attrs(ctx, &decl_attrs));
-            if merged.name.is_some() || merged.symbol.is_some() {
-                ctx.set_foreign_link(binding, merged);
-            }
-        }
-        let params = lower_params(ctx, decl.params.clone());
-        let result = decl.sig.map_or(builtins.unknown, |sig| {
-            let origin = ctx.expr(sig).origin;
-            lower_type_expr(ctx, sig, origin)
-        });
-        let params = ctx.alloc_ty_list(params.iter().copied());
-        let ty = ctx.alloc_ty(HirTyKind::Arrow {
-            params,
-            ret: result,
-            is_effectful: false,
-        });
-        if let Some(binding) = ctx.binding_id_for_decl(decl.name) {
-            ctx.insert_binding_type(binding, ty);
-        }
-        validate_foreign_decl(ctx, &decl, &abi);
-    }
-    ExprFacts {
-        ty: builtins.unit,
-        effects: EffectRow::empty(),
-    }
+fn foreign_binding_from_let(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<(NameBindingId, Ident)> {
+    let HirExprKind::Let { pat, .. } = ctx.expr(expr).kind else {
+        return None;
+    };
+    let HirPatKind::Bind { name } = ctx.pat(pat).kind else {
+        return None;
+    };
+    let binding = ctx.binding_id_for_decl(name)?;
+    Some((binding, name))
 }
 
 fn when_attrs_match(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> bool {
@@ -288,16 +294,6 @@ fn string_lit_value(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<Stri
     match ctx.expr(expr).kind {
         HirExprKind::Lit { lit } => ctx.lit_string_value(lit),
         _ => None,
-    }
-}
-
-fn merge_link_info(group: &ForeignLinkInfo, decl: &ForeignLinkInfo) -> ForeignLinkInfo {
-    ForeignLinkInfo {
-        name: decl.name.clone().or_else(|| group.name.clone()),
-        symbol: decl
-            .symbol
-            .clone()
-            .or_else(|| group.symbol.clone()),
     }
 }
 
@@ -429,28 +425,4 @@ pub(super) fn check_bound_class(
     check_class_expr(ctx, expr_id, constraints, members, Some(name))
 }
 
-pub(in super::super) fn check_attributed_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    origin: HirOrigin,
-    attrs: SliceRange<HirAttr>,
-    inner: HirExprId,
-) -> ExprFacts {
-    validate_expr_attrs(ctx, origin, attrs.clone(), inner);
-    match ctx.expr(inner).kind {
-        HirExprKind::Foreign { abi, decls } => {
-            let facts = check_foreign_expr(ctx, origin, abi, decls, Some(attrs));
-            ctx.set_expr_facts(inner, facts.clone());
-            facts
-        }
-        HirExprKind::Export { expr, .. } => match ctx.expr(expr).kind {
-            HirExprKind::Foreign { abi, decls } => {
-                let facts = check_foreign_expr(ctx, origin, abi, decls, Some(attrs));
-                ctx.set_expr_facts(expr, facts.clone());
-                ctx.set_expr_facts(inner, facts.clone());
-                facts
-            }
-            _ => check_expr(ctx, inner),
-        },
-        _ => check_expr(ctx, inner),
-    }
-}
+// Note: attribute and export wrappers are modeled via `HirExpr.mods`, not `HirExprKind`.
