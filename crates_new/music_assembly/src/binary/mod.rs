@@ -9,14 +9,14 @@ use music_bc::{
     SectionTag,
 };
 
-use crate::AssemblyError;
+use crate::{AssemblyError, AssemblyResult};
 
 /// Encodes a validated SEAM artifact into the sectioned `.seam` binary format.
 ///
 /// # Errors
 ///
 /// Returns [`AssemblyError`] if the artifact fails structural validation before encoding.
-pub fn encode_binary(artifact: &Artifact) -> Result<Vec<u8>, AssemblyError> {
+pub fn encode_binary(artifact: &Artifact) -> AssemblyResult<Vec<u8>> {
     artifact.validate()?;
     let mut out = Vec::new();
     out.extend_from_slice(&SEAM_MAGIC);
@@ -41,7 +41,7 @@ pub fn encode_binary(artifact: &Artifact) -> Result<Vec<u8>, AssemblyError> {
 ///
 /// Returns [`AssemblyError`] if the header, sections, payload lengths, opcodes, or references are
 /// invalid.
-pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
+pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     let mut cursor = Cursor::new(bytes);
     let magic = cursor.read_exact(4)?;
     if magic != SEAM_MAGIC {
@@ -80,7 +80,7 @@ pub fn decode_binary(bytes: &[u8]) -> Result<Artifact, AssemblyError> {
 /// # Errors
 ///
 /// Returns [`AssemblyError`] if decoding or artifact validation fails.
-pub fn validate_binary(bytes: &[u8]) -> Result<(), AssemblyError> {
+pub fn validate_binary(bytes: &[u8]) -> AssemblyResult {
     let _ = decode_binary(bytes)?;
     Ok(())
 }
@@ -400,7 +400,7 @@ fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
     }
 }
 
-fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Strings)?;
     for _ in 0..cursor.read_u32()? {
         let bytes = cursor.read_bytes()?;
@@ -410,7 +410,7 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Types)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -419,7 +419,7 @@ fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), 
     Ok(())
 }
 
-fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Constants)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -436,7 +436,7 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<
     Ok(())
 }
 
-fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Globals)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -455,7 +455,7 @@ fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Methods)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -499,7 +499,7 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Effects)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -519,7 +519,7 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Classes)?;
     for _ in 0..cursor.read_u32()? {
         let _ = artifact.classes.alloc(ClassDescriptor {
@@ -529,7 +529,7 @@ fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Foreigns)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
@@ -553,7 +553,7 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(
     Ok(())
 }
 
-fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Exports)?;
     let count = cursor.read_u32()?;
     for _ in 0..count {
@@ -579,7 +579,7 @@ fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<()
     Ok(())
 }
 
-fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Data)?;
     let count = cursor.read_u32()?;
     for _ in 0..count {
@@ -613,7 +613,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), A
     Ok(())
 }
 
-fn decode_meta(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), AssemblyError> {
+fn decode_meta(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Meta)?;
     for _ in 0..cursor.read_u32()? {
         let target = cursor.read_idx()?;
@@ -632,7 +632,7 @@ fn decode_meta(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Result<(), A
     Ok(())
 }
 
-fn decode_operand(cursor: &mut Cursor<'_>) -> Result<Operand, AssemblyError> {
+fn decode_operand(cursor: &mut Cursor<'_>) -> AssemblyResult<Operand> {
     Ok(match cursor.read_u8()? {
         0 => Operand::None,
         1 => Operand::I16(cursor.read_i16()?),
@@ -673,7 +673,7 @@ fn push_section_tag(out: &mut Vec<u8>, tag: SectionTag) {
     out.push(section_tag_byte(tag));
 }
 
-fn require_section(cursor: &mut Cursor<'_>, tag: SectionTag) -> Result<(), AssemblyError> {
+fn require_section(cursor: &mut Cursor<'_>, tag: SectionTag) -> AssemblyResult {
     let found = cursor.read_u8()?;
     if found == section_tag_byte(tag) {
         Ok(())
@@ -741,7 +741,7 @@ impl<'bytes> Cursor<'bytes> {
         self.bytes.get(self.offset).copied()
     }
 
-    fn read_exact(&mut self, len: usize) -> Result<[u8; 4], AssemblyError> {
+    fn read_exact(&mut self, len: usize) -> AssemblyResult<[u8; 4]> {
         if len != 4 {
             return Err(AssemblyError::TruncatedBinary);
         }
@@ -756,7 +756,7 @@ impl<'bytes> Cursor<'bytes> {
         Ok(out)
     }
 
-    fn read_u8(&mut self) -> Result<u8, AssemblyError> {
+    fn read_u8(&mut self) -> AssemblyResult<u8> {
         let value = *self
             .bytes
             .get(self.offset)
@@ -765,36 +765,36 @@ impl<'bytes> Cursor<'bytes> {
         Ok(value)
     }
 
-    fn read_u16(&mut self) -> Result<u16, AssemblyError> {
+    fn read_u16(&mut self) -> AssemblyResult<u16> {
         let bytes = self.read_array::<2>()?;
         Ok(u16::from_le_bytes(bytes))
     }
 
-    fn read_i16(&mut self) -> Result<i16, AssemblyError> {
+    fn read_i16(&mut self) -> AssemblyResult<i16> {
         let bytes = self.read_array::<2>()?;
         Ok(i16::from_le_bytes(bytes))
     }
 
-    fn read_u32(&mut self) -> Result<u32, AssemblyError> {
+    fn read_u32(&mut self) -> AssemblyResult<u32> {
         let bytes = self.read_array::<4>()?;
         Ok(u32::from_le_bytes(bytes))
     }
 
-    fn read_i64(&mut self) -> Result<i64, AssemblyError> {
+    fn read_i64(&mut self) -> AssemblyResult<i64> {
         let bytes = self.read_array::<8>()?;
         Ok(i64::from_le_bytes(bytes))
     }
 
-    fn read_u64(&mut self) -> Result<u64, AssemblyError> {
+    fn read_u64(&mut self) -> AssemblyResult<u64> {
         let bytes = self.read_array::<8>()?;
         Ok(u64::from_le_bytes(bytes))
     }
 
-    fn read_idx<T>(&mut self) -> Result<Idx<T>, AssemblyError> {
+    fn read_idx<T>(&mut self) -> AssemblyResult<Idx<T>> {
         Ok(Idx::from_raw(self.read_u32()?))
     }
 
-    fn read_bytes(&mut self) -> Result<Vec<u8>, AssemblyError> {
+    fn read_bytes(&mut self) -> AssemblyResult<Vec<u8>> {
         let len = read_len(self, "byte payload length")?;
         let end = self.offset.saturating_add(len);
         let slice = self
@@ -805,7 +805,7 @@ impl<'bytes> Cursor<'bytes> {
         Ok(slice.to_vec())
     }
 
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], AssemblyError> {
+    fn read_array<const N: usize>(&mut self) -> AssemblyResult<[u8; N]> {
         let end = self.offset.saturating_add(N);
         let slice = self
             .bytes
@@ -818,7 +818,7 @@ impl<'bytes> Cursor<'bytes> {
     }
 }
 
-fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> Result<usize, AssemblyError> {
+fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> AssemblyResult<usize> {
     usize::try_from(cursor.read_u32()?)
         .map_err(|_| AssemblyError::Text(format!("{what} does not fit in usize")))
 }

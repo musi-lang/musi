@@ -10,7 +10,7 @@ use music_bc::{
     Instruction, Label, MethodId, Opcode, Operand, OperandShape, StringId, TypeId,
 };
 
-use crate::AssemblyError;
+use crate::{AssemblyError, AssemblyResult};
 
 fn symbol_needs_quote(text: &str) -> bool {
     text.chars().any(char::is_whitespace) || text.contains('"') || text.contains('\\')
@@ -232,7 +232,7 @@ fn format_exports(out: &mut String, artifact: &Artifact) {
 ///
 /// Returns [`AssemblyError`] if directives, operands, labels, references, or the final artifact
 /// structure are invalid.
-pub fn parse_text(text: &str) -> Result<Artifact, AssemblyError> {
+pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
     let mut builder = TextBuilder::new();
     let lines = text.lines().map(str::trim).collect::<Vec<_>>();
     let mut index = 0usize;
@@ -263,7 +263,7 @@ pub fn parse_text(text: &str) -> Result<Artifact, AssemblyError> {
 /// # Errors
 ///
 /// Returns [`AssemblyError`] if parsing or artifact validation fails.
-pub fn validate_text(text: &str) -> Result<(), AssemblyError> {
+pub fn validate_text(text: &str) -> AssemblyResult {
     let _ = parse_text(text)?;
     Ok(())
 }
@@ -271,7 +271,7 @@ pub fn validate_text(text: &str) -> Result<(), AssemblyError> {
 fn collect_method_lines<'text>(
     lines: &'text [&'text str],
     index: &mut usize,
-) -> Result<Vec<&'text str>, AssemblyError> {
+) -> AssemblyResult<Vec<&'text str>> {
     let start = *index;
     while let Some(line) = lines.get(*index).copied() {
         *index = index.saturating_add(1);
@@ -392,7 +392,7 @@ impl TextBuilder {
         self.artifact
     }
 
-    fn parse_directive(&mut self, line: &str) -> Result<(), AssemblyError> {
+    fn parse_directive(&mut self, line: &str) -> AssemblyResult {
         let parts = tokenize(line)?;
         let Some(head) = parts.first() else {
             return Ok(());
@@ -411,7 +411,7 @@ impl TextBuilder {
         }
     }
 
-    fn parse_type(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_type(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 2 {
             return Err(AssemblyError::Text("expected `.type $Name`".into()));
         }
@@ -422,7 +422,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_data(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_data(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
             return Err(AssemblyError::Text(
                 "expected `.data $Name variants <count> fields <count> ...`".into(),
@@ -491,7 +491,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_const(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_const(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 4 {
             return Err(AssemblyError::Text(
                 "expected `.const $Name <kind> <value>`".into(),
@@ -528,7 +528,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_global(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_global(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 2 {
             return Err(AssemblyError::Text("expected `.global $Name ...`".into()));
         }
@@ -550,7 +550,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_effect(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_effect(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 2 {
             return Err(AssemblyError::Text("expected `.effect $Name ...`".into()));
         }
@@ -581,7 +581,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_class(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_class(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 2 {
             return Err(AssemblyError::Text("expected `.class $Name`".into()));
         }
@@ -595,7 +595,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_meta_value(token: &str) -> Result<String, AssemblyError> {
+    fn parse_meta_value(token: &str) -> AssemblyResult<String> {
         if token.starts_with('$') {
             parse_symbol(token)
         } else {
@@ -603,7 +603,7 @@ impl TextBuilder {
         }
     }
 
-    fn parse_meta(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_meta(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
             return Err(AssemblyError::Text("expected `.meta $Target $Key ...`".into()));
         }
@@ -624,7 +624,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_foreign(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_foreign(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
             return Err(AssemblyError::Text(
                 "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
@@ -682,7 +682,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_export(&mut self, parts: &[String]) -> Result<(), AssemblyError> {
+    fn parse_export(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
             return Err(AssemblyError::Text(
                 "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`".into(),
@@ -742,7 +742,7 @@ impl TextBuilder {
         Ok(())
     }
 
-    fn parse_method(&mut self, header: &str, lines: &[&str]) -> Result<(), AssemblyError> {
+    fn parse_method(&mut self, header: &str, lines: &[&str]) -> AssemblyResult {
         let parts = tokenize(header)?;
         if parts.len() < 4 {
             return Err(AssemblyError::Text(
@@ -807,7 +807,7 @@ impl TextBuilder {
         line: &str,
         labels: &mut Vec<StringId>,
         label_ids: &mut HashMap<String, u16>,
-    ) -> Result<Instruction, AssemblyError> {
+    ) -> AssemblyResult<Instruction> {
         let parts = tokenize(line)?;
         let Some(opcode_text) = parts.first() else {
             return Err(AssemblyError::Text("empty instruction".into()));
@@ -825,7 +825,7 @@ impl TextBuilder {
         parts: &[String],
         labels: &mut Vec<StringId>,
         label_ids: &mut HashMap<String, u16>,
-    ) -> Result<Operand, AssemblyError> {
+    ) -> AssemblyResult<Operand> {
         match shape {
             OperandShape::None => Ok(Operand::None),
             OperandShape::I16 => Self::parse_i16_operand(parts),
@@ -845,7 +845,7 @@ impl TextBuilder {
         }
     }
 
-    fn parse_i16_operand(parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_i16_operand(parts: &[String]) -> AssemblyResult<Operand> {
         Ok(Operand::I16(
             must_get(parts.get(1), "i16 operand")?
                 .parse()
@@ -853,13 +853,13 @@ impl TextBuilder {
         ))
     }
 
-    fn parse_string_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_string_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
         Ok(Operand::String(self.intern_string(&parse_quoted(
             must_get(parts.get(1), "string")?,
         )?)))
     }
 
-    fn parse_type_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_type_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "type")?)?;
         let ty = *self
             .types
@@ -868,7 +868,7 @@ impl TextBuilder {
         Ok(Operand::Type(ty))
     }
 
-    fn parse_constant_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_constant_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "constant")?)?;
         let constant = *self
             .constants
@@ -877,7 +877,7 @@ impl TextBuilder {
         Ok(Operand::Constant(constant))
     }
 
-    fn parse_global_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_global_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "global")?)?;
         Ok(Operand::Global(self.ensure_global_symbol(&name)))
     }
@@ -913,7 +913,7 @@ impl TextBuilder {
         id
     }
 
-    fn parse_method_operand(&mut self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_method_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "method")?)?;
         Ok(Operand::Method(self.ensure_method_symbol(&name)))
     }
@@ -921,7 +921,7 @@ impl TextBuilder {
     fn parse_wide_method_captures_operand(
         &mut self,
         parts: &[String],
-    ) -> Result<Operand, AssemblyError> {
+    ) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "method")?)?;
         let method = self.ensure_method_symbol(&name);
         let captures = must_get(parts.get(2), "capture count")?
@@ -930,7 +930,7 @@ impl TextBuilder {
         Ok(Operand::WideMethodCaptures { method, captures })
     }
 
-    fn parse_foreign_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_foreign_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "foreign")?)?;
         let foreign = *self
             .foreigns
@@ -939,7 +939,7 @@ impl TextBuilder {
         Ok(Operand::Foreign(foreign))
     }
 
-    fn parse_effect_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_effect_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
         let op_name = parse_symbol(must_get(parts.get(2), "effect op")?)?;
         let effect_id = *self
@@ -959,7 +959,7 @@ impl TextBuilder {
         })
     }
 
-    fn parse_effect_id_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_effect_id_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
         let effect_id = *self
             .effects
@@ -973,7 +973,7 @@ impl TextBuilder {
         parts: &[String],
         labels: &mut Vec<StringId>,
         label_ids: &mut HashMap<String, u16>,
-    ) -> Result<Operand, AssemblyError> {
+    ) -> AssemblyResult<Operand> {
         let label_name = must_get(parts.get(1), "label")?.to_owned();
         Ok(Operand::Label(ensure_label(
             &mut self.artifact,
@@ -983,7 +983,7 @@ impl TextBuilder {
         )?))
     }
 
-    fn parse_type_len_operand(&self, parts: &[String]) -> Result<Operand, AssemblyError> {
+    fn parse_type_len_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let type_name = parse_symbol(must_get(parts.get(1), "type")?)?;
         let ty = *self
             .types
@@ -1000,7 +1000,7 @@ impl TextBuilder {
         parts: &[String],
         labels: &mut Vec<StringId>,
         label_ids: &mut HashMap<String, u16>,
-    ) -> Result<Operand, AssemblyError> {
+    ) -> AssemblyResult<Operand> {
         let joined = parts.iter().skip(1).cloned().collect::<Vec<_>>().join(" ");
         let labels = joined
             .split(',')
@@ -1026,7 +1026,7 @@ fn ensure_label(
     labels: &mut Vec<StringId>,
     label_ids: &mut HashMap<String, u16>,
     name: String,
-) -> Result<u16, AssemblyError> {
+) -> AssemblyResult<u16> {
     if let Some(id) = label_ids.get(&name).copied() {
         return Ok(id);
     }
@@ -1038,7 +1038,7 @@ fn ensure_label(
     Ok(id)
 }
 
-fn parse_symbol(token: &str) -> Result<String, AssemblyError> {
+fn parse_symbol(token: &str) -> AssemblyResult<String> {
     let body = token
         .strip_prefix('$')
         .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))?;
@@ -1049,7 +1049,7 @@ fn parse_symbol(token: &str) -> Result<String, AssemblyError> {
     }
 }
 
-fn parse_local(token: Option<&String>) -> Result<u16, AssemblyError> {
+fn parse_local(token: Option<&String>) -> AssemblyResult<u16> {
     let token = must_get(token, "local")?;
     token
         .strip_prefix('%')
@@ -1058,7 +1058,7 @@ fn parse_local(token: Option<&String>) -> Result<u16, AssemblyError> {
         .map_err(|_| AssemblyError::Text("invalid local slot".into()))
 }
 
-fn parse_quoted(token: &str) -> Result<String, AssemblyError> {
+fn parse_quoted(token: &str) -> AssemblyResult<String> {
     let Some(body) = token
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
@@ -1070,13 +1070,13 @@ fn parse_quoted(token: &str) -> Result<String, AssemblyError> {
     Ok(body.replace("\\\"", "\"").replace("\\\\", "\\"))
 }
 
-fn must_get<'a>(token: Option<&'a String>, name: &str) -> Result<&'a str, AssemblyError> {
+fn must_get<'a>(token: Option<&'a String>, name: &str) -> AssemblyResult<&'a str> {
     token
         .map(String::as_str)
         .ok_or_else(|| AssemblyError::Text(format!("missing {name} operand")))
 }
 
-fn tokenize(line: &str) -> Result<Vec<String>, AssemblyError> {
+fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut chars = line.chars().peekable();
