@@ -1,5 +1,7 @@
 use super::*;
 
+use music_names::Symbol;
+
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,
@@ -99,7 +101,7 @@ where
     fn parse_export_mod(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> (Option<HirExportMod>, Option<music_names::Symbol>) {
+    ) -> (Option<HirExportMod>, Option<Symbol>) {
         debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
         let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
         let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwForeign) {
