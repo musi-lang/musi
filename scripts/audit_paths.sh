@@ -26,6 +26,7 @@ if [[ ${#files[@]} -eq 0 ]]; then
 fi
 
 perl -ne '
+  close ARGV if eof;
   next if /^\s*(?:use|pub use)\b/;
   next if /^\s*(?:(?:\/\/\/?)|\/\*|\*|\*\/)/;
 
