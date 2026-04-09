@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirAccessKind, HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirConstraint, HirDim, HirExprId,
-    HirExprKind, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPrefixOp,
+    HirAccessKind, HirArg, HirArrayItem, HirBinder, HirBinaryOp, HirCaseArm, HirConstraint, HirDim,
+    HirExprId, HirExprKind, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPrefixOp,
     HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::Ident;
@@ -263,7 +263,7 @@ fn check_instance_kind(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
     origin: HirOrigin,
-    type_params: SliceRange<Ident>,
+    type_params: SliceRange<HirBinder>,
     constraints: SliceRange<HirConstraint>,
     class: HirExprId,
     members: &SliceRange<HirMemberDef>,

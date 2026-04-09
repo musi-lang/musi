@@ -111,15 +111,23 @@ pub enum SurfaceTyKind {
     Empty,
     Unit,
     Bool,
+    Nat,
     Int,
     Float,
     String,
     CString,
     CPtr,
     Module,
+    NatLit(u64),
     Named {
         name: Box<str>,
         args: Box<[SurfaceTyId]>,
+    },
+    Pi {
+        binder: Box<str>,
+        binder_ty: SurfaceTyId,
+        body: SurfaceTyId,
+        is_effectful: bool,
     },
     Arrow {
         params: Box<[SurfaceTyId]>,

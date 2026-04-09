@@ -1,9 +1,9 @@
 use music_arena::SliceRange;
 use music_hir::{
-    HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirOrigin, HirParam, HirPatId,
-    HirTyId, HirTyKind,
+    HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirOrigin, HirParam,
+    HirPatId, HirTyId, HirTyKind,
 };
-use music_names::{Ident, NameBindingId, Symbol};
+use music_names::{NameBindingId, Symbol};
 
 use super::super::CheckPass;
 use super::super::attrs::validate_expr_attrs;
@@ -25,7 +25,7 @@ pub(in super::super) struct LetExprInput {
     pub(in super::super) origin: HirOrigin,
     pub(in super::super) mods: HirLetMods,
     pub(in super::super) pat: HirPatId,
-    pub(in super::super) type_params: SliceRange<Ident>,
+    pub(in super::super) type_params: SliceRange<HirBinder>,
     pub(in super::super) has_param_clause: bool,
     pub(in super::super) params: SliceRange<HirParam>,
     pub(in super::super) constraints: SliceRange<HirConstraint>,
@@ -36,11 +36,11 @@ pub(in super::super) struct LetExprInput {
 
 fn lower_let_type_params(
     ctx: &CheckPass<'_, '_, '_>,
-    type_params: SliceRange<Ident>,
+    type_params: SliceRange<HirBinder>,
 ) -> Box<[Symbol]> {
-    ctx.idents(type_params)
+    ctx.binders(type_params)
         .into_iter()
-        .map(|ident| ident.name)
+        .map(|binder| binder.name.name)
         .collect::<Vec<_>>()
         .into_boxed_slice()
 }

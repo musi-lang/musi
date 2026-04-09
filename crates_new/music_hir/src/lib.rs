@@ -5,7 +5,7 @@ mod pat;
 mod ty;
 
 pub use expr::{
-    HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
+    HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirBinaryOp, HirCaseArm,
     HirConstraint, HirConstraintKind, HirEffectItem, HirEffectSet, HirExpr, HirExprKind,
     HirFieldDef, HirForeignDecl, HirHandleClause, HirLetMods, HirLit, HirLitKind, HirMemberDef,
     HirMemberKind, HirParam, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind,

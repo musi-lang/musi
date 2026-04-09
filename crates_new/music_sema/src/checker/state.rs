@@ -5,10 +5,11 @@ use music_arena::{Idx, SliceRange};
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirCaseArm, HirConstraint, HirDim, HirEffectItem,
-    HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirForeignDecl, HirHandleClause, HirLit,
-    HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
-    HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
+    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirDim,
+    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirForeignDecl, HirHandleClause,
+    HirLit, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId,
+    HirRecordItem, HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind,
+    HirVariantDef,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
@@ -36,6 +37,7 @@ pub struct Builtins {
     pub empty: HirTyId,
     pub unit: HirTyId,
     pub bool_: HirTyId,
+    pub nat: HirTyId,
     pub int_: HirTyId,
     pub float_: HirTyId,
     pub string_: HirTyId,
@@ -146,6 +148,7 @@ pub fn prepare_module<'interner, 'env>(
         empty: alloc_builtin(&mut resolved, HirTyKind::Empty),
         unit: alloc_builtin(&mut resolved, HirTyKind::Unit),
         bool_: alloc_builtin(&mut resolved, HirTyKind::Bool),
+        nat: alloc_builtin(&mut resolved, HirTyKind::Nat),
         int_: alloc_builtin(&mut resolved, HirTyKind::Int),
         float_: alloc_builtin(&mut resolved, HirTyKind::Float),
         string_: alloc_builtin(&mut resolved, HirTyKind::String),
@@ -506,6 +509,10 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn idents(&self, range: SliceRange<Ident>) -> Vec<Ident> {
         self.module.resolved.module.store.idents.get(range).to_vec()
+    }
+
+    pub fn binders(&self, range: SliceRange<HirBinder>) -> Vec<HirBinder> {
+        self.module.resolved.module.store.binders.get(range).to_vec()
     }
 
     pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> Vec<HirTemplatePart> {

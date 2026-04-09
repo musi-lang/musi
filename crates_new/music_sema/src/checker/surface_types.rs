@@ -53,12 +53,14 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         SurfaceTyKind::Empty => "Empty".into(),
         SurfaceTyKind::Unit => "Unit".into(),
         SurfaceTyKind::Bool => "Bool".into(),
+        SurfaceTyKind::Nat => "Nat".into(),
         SurfaceTyKind::Int => "Int".into(),
         SurfaceTyKind::Float => "Float".into(),
         SurfaceTyKind::String => "String".into(),
         SurfaceTyKind::CString => "CString".into(),
         SurfaceTyKind::CPtr => "CPtr".into(),
         SurfaceTyKind::Module => "Module".into(),
+        SurfaceTyKind::NatLit(value) => value.to_string(),
         SurfaceTyKind::Named { name, args } => {
             if args.is_empty() {
                 name.to_string()
@@ -73,6 +75,19 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
                         .join(", ")
                 )
             }
+        }
+        SurfaceTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => {
+            let arrow = if *is_effectful { " ~> " } else { " -> " };
+            format!(
+                "forall ({binder} : {}){arrow}{}",
+                canonical_surface_ty(surface, *binder_ty),
+                canonical_surface_ty(surface, *body)
+            )
         }
         SurfaceTyKind::Arrow {
             params,
@@ -168,12 +183,14 @@ impl<'a> SurfaceTyBuilder<'a> {
             HirTyKind::Empty => SurfaceTyKind::Empty,
             HirTyKind::Unit => SurfaceTyKind::Unit,
             HirTyKind::Bool => SurfaceTyKind::Bool,
+            HirTyKind::Nat => SurfaceTyKind::Nat,
             HirTyKind::Int => SurfaceTyKind::Int,
             HirTyKind::Float => SurfaceTyKind::Float,
             HirTyKind::String => SurfaceTyKind::String,
             HirTyKind::CString => SurfaceTyKind::CString,
             HirTyKind::CPtr => SurfaceTyKind::CPtr,
             HirTyKind::Module => SurfaceTyKind::Module,
+            HirTyKind::NatLit(value) => SurfaceTyKind::NatLit(*value),
             HirTyKind::Named { name, args } => SurfaceTyKind::Named {
                 name: self.interner.resolve(*name).into(),
                 args: self
@@ -185,6 +202,17 @@ impl<'a> SurfaceTyBuilder<'a> {
                     .map(|ty| self.lower(ty))
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
+            },
+            HirTyKind::Pi {
+                binder,
+                binder_ty,
+                body,
+                is_effectful,
+            } => SurfaceTyKind::Pi {
+                binder: self.interner.resolve(*binder).into(),
+                binder_ty: self.lower(*binder_ty),
+                body: self.lower(*body),
+                is_effectful: *is_effectful,
             },
             HirTyKind::Arrow {
                 params,
@@ -294,12 +322,14 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             SurfaceTyKind::Empty => HirTyKind::Empty,
             SurfaceTyKind::Unit => HirTyKind::Unit,
             SurfaceTyKind::Bool => HirTyKind::Bool,
+            SurfaceTyKind::Nat => HirTyKind::Nat,
             SurfaceTyKind::Int => HirTyKind::Int,
             SurfaceTyKind::Float => HirTyKind::Float,
             SurfaceTyKind::String => HirTyKind::String,
             SurfaceTyKind::CString => HirTyKind::CString,
             SurfaceTyKind::CPtr => HirTyKind::CPtr,
             SurfaceTyKind::Module => HirTyKind::Module,
+            SurfaceTyKind::NatLit(value) => HirTyKind::NatLit(*value),
             SurfaceTyKind::Named { name, args } => {
                 let args = args
                     .iter()
@@ -312,6 +342,17 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                     args,
                 }
             }
+            SurfaceTyKind::Pi {
+                binder,
+                binder_ty,
+                body,
+                is_effectful,
+            } => HirTyKind::Pi {
+                binder: self.ctx.intern(binder),
+                binder_ty: self.import(*binder_ty),
+                body: self.import(*body),
+                is_effectful: *is_effectful,
+            },
             SurfaceTyKind::Arrow {
                 params,
                 ret,

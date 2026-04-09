@@ -9,6 +9,7 @@ pub struct KnownSymbols {
     pub empty: Symbol,
     pub unit: Symbol,
     pub bool_: Symbol,
+    pub nat: Symbol,
     pub int_: Symbol,
     pub float_: Symbol,
     pub string_: Symbol,
@@ -35,6 +36,7 @@ impl KnownSymbols {
             empty: interner.intern("Empty"),
             unit: interner.intern("Unit"),
             bool_: interner.intern("Bool"),
+            nat: interner.intern("Nat"),
             int_: interner.intern("Int"),
             float_: interner.intern("Float"),
             string_: interner.intern("String"),
@@ -52,7 +54,7 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 13] {
+    pub const fn compiler_prelude(self) -> [Symbol; 14] {
         [
             self.type_,
             self.any,
@@ -61,6 +63,7 @@ impl KnownSymbols {
             self.empty,
             self.unit,
             self.bool_,
+            self.nat,
             self.int_,
             self.float_,
             self.string_,

@@ -2,10 +2,10 @@ use std::collections::{BTreeSet, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirConstraint, HirExprId, HirMemberDef, HirMemberKind, HirOrigin, HirTyId, HirTyKind,
+    HirBinder, HirConstraint, HirExprId, HirMemberDef, HirMemberKind, HirOrigin, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
-use music_names::{Ident, Symbol};
+use music_names::Symbol;
 
 use super::super::CheckPass;
 use super::super::exprs::check_expr;
@@ -100,7 +100,7 @@ pub(in super::super) fn check_instance_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
     origin: HirOrigin,
-    type_params: SliceRange<Ident>,
+    type_params: SliceRange<HirBinder>,
     constraints: SliceRange<HirConstraint>,
     class: HirExprId,
     members: &SliceRange<HirMemberDef>,
@@ -134,9 +134,9 @@ pub(in super::super) fn check_instance_expr(
     let member_names = check_instance_member_set(ctx, origin, &members_vec, &expected_members);
 
     let type_params = ctx
-        .idents(type_params)
+        .binders(type_params)
         .into_iter()
-        .map(|ident| ident.name)
+        .map(|binder| binder.name.name)
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let constraints = lower_constraints(ctx, constraints);

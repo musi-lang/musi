@@ -71,6 +71,12 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
             }
             validate_surface_ty_id(types, *ret, diags);
         }
+        SurfaceTyKind::Pi {
+            binder_ty, body, ..
+        } => {
+            validate_surface_ty_id(types, *binder_ty, diags);
+            validate_surface_ty_id(types, *body, diags);
+        }
         SurfaceTyKind::Sum { left, right } => {
             validate_surface_ty_id(types, *left, diags);
             validate_surface_ty_id(types, *right, diags);
@@ -95,11 +101,13 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
         | SurfaceTyKind::Empty
         | SurfaceTyKind::Unit
         | SurfaceTyKind::Bool
+        | SurfaceTyKind::Nat
         | SurfaceTyKind::Int
         | SurfaceTyKind::Float
         | SurfaceTyKind::String
         | SurfaceTyKind::CString
         | SurfaceTyKind::CPtr
-        | SurfaceTyKind::Module => {}
+        | SurfaceTyKind::Module
+        | SurfaceTyKind::NatLit(_) => {}
     }
 }

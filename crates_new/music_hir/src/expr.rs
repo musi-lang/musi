@@ -5,6 +5,12 @@ use crate::module::{HirExprId, HirLitId, HirPatId};
 use crate::origin::HirOrigin;
 use crate::ty::HirDim;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirBinder {
+    pub name: Ident,
+    pub ty: Option<HirExprId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirExpr {
     pub origin: HirOrigin,
@@ -101,7 +107,7 @@ pub enum HirExprKind {
     Let {
         mods: HirLetMods,
         pat: HirPatId,
-        type_params: SliceRange<Ident>,
+        type_params: SliceRange<HirBinder>,
         has_param_clause: bool,
         params: SliceRange<HirParam>,
         constraints: SliceRange<HirConstraint>,
@@ -134,7 +140,7 @@ pub enum HirExprKind {
         members: SliceRange<HirMemberDef>,
     },
     Instance {
-        type_params: SliceRange<Ident>,
+        type_params: SliceRange<HirBinder>,
         constraints: SliceRange<HirConstraint>,
         class: HirExprId,
         members: SliceRange<HirMemberDef>,
@@ -332,7 +338,7 @@ pub struct HirForeignDecl {
     pub origin: HirOrigin,
     pub attrs: SliceRange<HirAttr>,
     pub name: Ident,
-    pub type_params: SliceRange<Ident>,
+    pub type_params: SliceRange<HirBinder>,
     pub params: SliceRange<HirParam>,
     pub constraints: SliceRange<HirConstraint>,
     pub sig: Option<HirExprId>,

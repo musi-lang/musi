@@ -92,12 +92,14 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
         SurfaceTyKind::Empty => "Empty".into(),
         SurfaceTyKind::Unit => "Unit".into(),
         SurfaceTyKind::Bool => "Bool".into(),
+        SurfaceTyKind::Nat => "Nat".into(),
         SurfaceTyKind::Int => "Int".into(),
         SurfaceTyKind::Float => "Float".into(),
         SurfaceTyKind::String => "String".into(),
         SurfaceTyKind::CString => "CString".into(),
         SurfaceTyKind::CPtr => "CPtr".into(),
         SurfaceTyKind::Module => "Module".into(),
+        SurfaceTyKind::NatLit(value) => value.to_string(),
         SurfaceTyKind::Named { name, args } => {
             if args.is_empty() {
                 name.to_string()
@@ -110,6 +112,17 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
                     .join(", ");
                 format!("{name}[{args}]")
             }
+        }
+        SurfaceTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => {
+            let binder_ty = format_surface_ty(surface, *binder_ty);
+            let body = format_surface_ty(surface, *body);
+            let arrow = if *is_effectful { "~>" } else { "->" };
+            format!("forall ({binder}: {binder_ty}) {arrow} {body}")
         }
         SurfaceTyKind::Arrow {
             params,

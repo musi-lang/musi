@@ -1,7 +1,7 @@
 use super::*;
 
 use music_arena::SliceRange;
-use music_hir::{HirConstraint, HirLit, HirLitId, HirLitKind, HirParam};
+use music_hir::{HirBinder, HirConstraint, HirLit, HirLitId, HirLitKind, HirParam};
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
 use crate::string_lit::{
@@ -63,7 +63,7 @@ where
     pub(super) fn lower_type_params_clause(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> SliceRange<Ident> {
+    ) -> SliceRange<HirBinder> {
         child_of_kind(node, SyntaxNodeKind::TypeParamList)
             .map_or(SliceRange::EMPTY, |child| self.lower_type_param_list(child))
     }

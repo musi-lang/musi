@@ -1521,13 +1521,27 @@ fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<st
         HirTyKind::Empty => "Empty".into(),
         HirTyKind::Unit => "Unit".into(),
         HirTyKind::Bool => "Bool".into(),
+        HirTyKind::Nat => "Nat".into(),
         HirTyKind::Int => "Int".into(),
         HirTyKind::Float => "Float".into(),
         HirTyKind::String => "String".into(),
         HirTyKind::CString => "CString".into(),
         HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Module => "Module".into(),
+        HirTyKind::NatLit(value) => value.to_string().into(),
         HirTyKind::Named { name, args } => render_named_ty_name(sema, *name, *args, interner),
+        HirTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => {
+            let binder = interner.resolve(*binder);
+            let binder_ty = render_ty_name(sema, *binder_ty, interner);
+            let body = render_ty_name(sema, *body, interner);
+            let arrow = if *is_effectful { "~>" } else { "->" };
+            format!("forall ({binder} : {binder_ty}) {arrow} {body}").into()
+        }
         HirTyKind::Arrow {
             params,
             ret,

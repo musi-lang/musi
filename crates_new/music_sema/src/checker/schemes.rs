@@ -186,12 +186,14 @@ pub fn substitute_ty(
         | HirTyKind::Empty
         | HirTyKind::Unit
         | HirTyKind::Bool
+        | HirTyKind::Nat
         | HirTyKind::Int
         | HirTyKind::Float
         | HirTyKind::String
         | HirTyKind::CString
         | HirTyKind::CPtr
-        | HirTyKind::Module => ty,
+        | HirTyKind::Module
+        | HirTyKind::NatLit(_) => ty,
         HirTyKind::Named { name, args } => {
             let args_vec = ctx.ty_ids(args);
             if args_vec.is_empty()
@@ -205,6 +207,23 @@ pub fn substitute_ty(
                 .collect::<Vec<_>>();
             let args = ctx.alloc_ty_list(args);
             ctx.alloc_ty(HirTyKind::Named { name, args })
+        }
+        HirTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => {
+            let binder_ty = substitute_ty(ctx, binder_ty, subst);
+            let mut next = subst.clone();
+            let _ = next.remove(&binder);
+            let body = substitute_ty(ctx, body, &next);
+            ctx.alloc_ty(HirTyKind::Pi {
+                binder,
+                binder_ty,
+                body,
+                is_effectful,
+            })
         }
         HirTyKind::Arrow {
             params,

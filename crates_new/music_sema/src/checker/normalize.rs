@@ -23,12 +23,14 @@ pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
         HirTyKind::Empty => "Empty".into(),
         HirTyKind::Unit => "Unit".into(),
         HirTyKind::Bool => "Bool".into(),
+        HirTyKind::Nat => "Nat".into(),
         HirTyKind::Int => "Int".into(),
         HirTyKind::Float => "Float".into(),
         HirTyKind::String => "String".into(),
         HirTyKind::CString => "CString".into(),
         HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Module => "Module".into(),
+        HirTyKind::NatLit(value) => value.to_string(),
         HirTyKind::Named { name, args } => {
             let mut out = String::from(ctx.resolve_symbol(name));
             let args = ctx.ty_ids(args);
@@ -43,6 +45,20 @@ pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
                 out.push(']');
             }
             out
+        }
+        HirTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => {
+            let binder = ctx.resolve_symbol(binder);
+            let arrow = if is_effectful { " ~> " } else { " -> " };
+            format!(
+                "forall ({binder} : {}){arrow}{}",
+                render_ty(ctx, binder_ty),
+                render_ty(ctx, body)
+            )
         }
         HirTyKind::Arrow {
             params,
@@ -282,6 +298,8 @@ pub fn named_type_for_symbol(ctx: &mut PassBase<'_, '_, '_>, symbol: Symbol) -> 
         builtins.unit
     } else if symbol == known.bool_ {
         builtins.bool_
+    } else if symbol == known.nat {
+        builtins.nat
     } else if symbol == known.int_ {
         builtins.int_
     } else if symbol == known.float_ {
@@ -309,6 +327,7 @@ pub fn symbol_value_type(ctx: &PassBase<'_, '_, '_>, symbol: Symbol) -> HirTyId 
         known.empty,
         known.unit,
         known.bool_,
+        known.nat,
         known.int_,
         known.float_,
         known.string_,

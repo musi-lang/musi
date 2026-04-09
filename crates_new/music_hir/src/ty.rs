@@ -20,15 +20,23 @@ pub enum HirTyKind {
     Empty,
     Unit,
     Bool,
+    Nat,
     Int,
     Float,
     String,
     CString,
     CPtr,
     Module,
+    NatLit(u64),
     Named {
         name: Symbol,
         args: SliceRange<HirTyId>,
+    },
+    Pi {
+        binder: Symbol,
+        binder_ty: HirTyId,
+        body: HirTyId,
+        is_effectful: bool,
     },
     Arrow {
         params: SliceRange<HirTyId>,

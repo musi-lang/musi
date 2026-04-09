@@ -1,4 +1,5 @@
 use super::*;
+use music_hir::HirBinder;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -7,17 +8,26 @@ where
     pub(in crate::resolver) fn lower_type_param_list(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
-    ) -> SliceRange<Ident> {
+    ) -> SliceRange<HirBinder> {
         let params: Vec<_> = node
             .child_nodes()
             .filter(|n| n.kind() == SyntaxNodeKind::TypeParam)
-            .filter_map(|n| n.child_tokens().find(|t| t.kind() == TokenKind::Ident))
-            .filter_map(|t| self.intern_ident_token(t))
+            .filter_map(|n| {
+                let name = n
+                    .child_tokens()
+                    .find(|t| t.kind() == TokenKind::Ident)
+                    .and_then(|t| self.intern_ident_token(t))?;
+                let ty = n
+                    .child_nodes()
+                    .find(|child| child.kind().is_expr())
+                    .map(|expr| self.lower_expr(expr));
+                Some(HirBinder { name, ty })
+            })
             .collect();
         for p in &params {
-            let _ = self.insert_binding(*p, NameBindingKind::TypeParam);
+            let _ = self.insert_binding(p.name, NameBindingKind::TypeParam);
         }
-        self.store.idents.alloc_from_iter(params)
+        self.store.binders.alloc_from_iter(params)
     }
 
     pub(in crate::resolver) fn lower_param_list(
@@ -118,4 +128,3 @@ where
         HirEffectItem { name, arg }
     }
 }
-
