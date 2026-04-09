@@ -14,6 +14,20 @@ pub(super) fn compile_lit(
     }
 }
 
+pub(super) fn compile_string_constant(emitter: &mut MethodEmitter<'_, '_>, value: &str) {
+    let string_id = emitter.artifact.intern_string(value);
+    let const_name = format!("const:string:{}", emitter.artifact.constants.len());
+    let name_id = emitter.artifact.intern_string(&const_name);
+    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
+        name: name_id,
+        value: ConstantValue::String(string_id),
+    });
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdConst,
+        Operand::Constant(constant_id),
+    )));
+}
+
 fn compile_int_literal(
     emitter: &mut MethodEmitter<'_, '_>,
     raw: &str,
@@ -34,17 +48,7 @@ fn compile_int_literal(
 }
 
 fn compile_string_literal(emitter: &mut MethodEmitter<'_, '_>, value: &str) {
-    let string_id = emitter.artifact.intern_string(value);
-    let const_name = format!("const:string:{}", emitter.artifact.constants.len());
-    let name_id = emitter.artifact.intern_string(&const_name);
-    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
-        name: name_id,
-        value: ConstantValue::String(string_id),
-    });
-    emitter.code.push(CodeEntry::Instruction(Instruction::new(
-        Opcode::LdConst,
-        Operand::Constant(constant_id),
-    )));
+    compile_string_constant(emitter, value);
 }
 
 fn compile_float_literal(

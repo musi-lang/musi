@@ -54,17 +54,17 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | -------------------------------------------------- | --------- | ----------- | ---- | -- | --------- | ----- |
 | Sequences (`;`)                                    | ✅        | ✅          | ✅   | ✅ | ✅        | Top-level statements lower as sequence expressions |
 | `let` bindings                                     | ✅        | ✅          | ✅   | ✅ | ✅        | Destructuring patterns (`(x, y)`, `[x, y]`, `{x, y}`) compile end-to-end; generic `let` uses explicit type params, not implicit HM-style generalization |
-| `let rec`                                          | ✅        | ✅          | ✅   | 🟡 | 🟡        | Recursive binding surface exists, but local callable `let rec` still lowers through unsupported IR paths |
+| `let rec`                                          | ✅        | ✅          | ✅   | 🟡 | 🟡        | Capture-free local recursive callable bindings now typecheck, lower, and emit end-to-end; recursive local callables with captures still stop at unsupported lowering |
 | Writable locations (`mut expr`)                    | ✅        | ✅          | ✅   | ✅ | ✅        | Names bind immutably; mutation is performed by writing into `mut` locations via `:=` |
 | Assignment (`:=`)                                  | ✅        | ✅          | ✅   | ✅ | ✅        | Local names, globals, indexed sequence elements, and record fields compile end-to-end |
 | Calls                                              | ✅        | ✅          | ✅   | ✅ | ✅        | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
-| Field/index/update access (`.`, `.[`, `.{`)        | ✅        | ✅          | ✅   | 🟡 | 🟡        | Imported module members, single-index sequence get/set, record field projection, and record update compile end-to-end; multi-index access is not lowered |
+| Field/index/update access (`.`, `.[`, `.{`)        | ✅        | ✅          | ✅   | ✅ | ✅        | Imported module members, single-index and multi-index sequence get/set, record field projection, and record update compile end-to-end (`seq.get`, `seq.getn`, `seq.set`, `seq.setn`) |
 | Variant constructors (`.Tag(...)`)                 | ✅        | ✅          | ✅   | ✅ | ✅        | Constructor type is inferred from unique matching `data` variant tag in scope; ambiguous tags require disambiguation via annotation |
 | `case ... of` with guards                          | ✅        | ✅          | ✅   | ✅ | ✅        | Literal, wildcard, bind, tuple, array, and structural variant patterns with guards compile end-to-end through SEAM (`data.tag`, `br.tbl`, `data.get`) |
 | `data`, `effect`, `class`, `instance` declarations | ✅        | ✅          | ✅   | ✅ | ✅        | Declaration forms are supported at module scope; using them as value expressions is a semantic error (not a runtime feature) |
 | `perform`, `handle`, `resume`                      | ✅        | ✅          | ✅   | ✅ | ✅        | Handler clauses bind params as written (`op(args, k) => ...`), `value => ...` has an implicit `value` binder, and `k` is typed as `op_result ~> handled_result`; lowering emits `hdl.push/hdl.pop`, `eff.invk`, and `eff.resume` |
 | Static imports (`import "..."`)                    | ✅        | ✅          | ✅   | ✅ | ✅        | Static import discovery, module keys, and session/project integration exist |
-| Dynamic imports (`import expr`)                    | ✅        | ✅          | ✅   | 🟡 | 🟡        | Typechecks as `Module` (argument checked against `String`), but dynamic import sites do not add static graph edges and module-typed `import expr` is erased to `()` in IR; there is no runtime module loading |
+| Dynamic imports (`import expr`)                    | ✅        | ✅          | ✅   | ✅ | ✅        | Static `import "..."` stays compile-time-only; non-static `import expr` preserves an explicit IR node and emits `mod.load`. Dynamic import sites still do not add static graph edges and there is no runtime module loading yet |
 | Export and opaque module surface                   | ✅        | ✅          | ✅   | ✅ | ✅        | Export collection, opaque marking, and SEAM metadata emission exist; runtime hiding implications remain out of scope |
 | Imported module member typing                      | ➖        | ✅          | ✅   | ✅ | ✅        | Imported globals and generic callables compile through semantic module surfaces |
 | Destructured module imports and aliases            | ✅        | ✅          | ✅   | ✅ | ✅        | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation |
@@ -99,8 +99,8 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | `@repr` and `@layout` surface       | ✅        | ✅          | ✅   | ✅ | ✅        | Layout-sensitive metadata is carried into SEAM artifacts (`.data` descriptors); runtime ABI execution remains out of scope |
 | Compiler-only `@musi.*` attrs       | ✅        | ✅          | ✅   | ✅ | ✅        | Reserved surface exists and is emitted as metadata; consumers are toolchain-defined |
 | Inert metadata attrs                | ✅        | ✅          | ✅   | ✅ | ✅        | Preserved and emitted as metadata; downstream consumers are optional |
-| Quote as first-class syntax         | ✅        | ✅          | ✅   | 🟡 | ❌        | Parser enforces splice placement and sema types quote as `Syntax`; current IR lowering leaves quote unsupported and SEAM emission fails with diagnostics |
-| Splice forms `#name/#()/#[]`        | ✅        | ✅          | ✅   | 🟡 | ❌        | Valid only inside quote at parse level; sema types splice as `Syntax`; current IR lowering leaves splice unsupported and SEAM emission fails with diagnostics |
+| Quote as first-class syntax         | ✅        | ✅          | ✅   | ✅ | ✅        | Parser enforces splice placement and sema types quote as `Syntax`; current lowering preserves quote as emitted syntax data, not executable staged code |
+| Splice forms `#name/#()/#[]`        | ✅        | ✅          | ✅   | ✅ | ✅        | Valid only inside quote at parse level; splice now survives lowering and emission as syntax data inside the quoted surface |
 
 ## SEAM, Session, And Project Integration
 
@@ -109,8 +109,8 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | SEAM contract (`music_bc`)                       | ✅     | Artifact tables, descriptors, opcode families, and structural validation exist; `data.new` uses `type_len`, `data.get/data.set` exist, and `hdl.push` takes an effect id (handler object is a stack value) |
 | SEAM text transport (`music_assembly`)           | ✅     | Text format, parser, formatter, and validation exist |
 | SEAM binary transport (`music_assembly`)         | ✅     | Binary encode/decode and validation exist |
-| Sema-to-IR lowering (`music_ir`)                 | 🟡     | Codegen-facing IR exists for the supported executable subset, but some accepted frontend forms still lower to `IrExprKind::Unsupported` or are erased (`import expr` -> `()`) |
-| IR-to-SEAM emission (`music_emit`)               | 🟡     | Emits supported IR into SEAM artifacts and opcode streams (`data.*`, `br.tbl`, `hdl.*`, `eff.*`, `seq.*`); unsupported IR produces diagnostics instead of artifact output |
+| Sema-to-IR lowering (`music_ir`)                 | 🟡     | Codegen-facing IR now preserves multi-index access, dynamic imports, syntax values, and capture-free local `let rec`; some sema-accepted forms still lower through `IrExprKind::Unsupported` invariants (for example recursive local callables with captures and unsupported spread/layout edge cases) |
+| IR-to-SEAM emission (`music_emit`)               | 🟡     | Emits supported IR into SEAM artifacts and opcode streams (`data.*`, `br.tbl`, `hdl.*`, `eff.*`, `seq.*`, `mod.load`); unsupported IR still produces diagnostics instead of artifact output |
 | Module compilation through `music_session`       | ✅     | Artifact, bytes, and text outputs exist |
 | Reachable entry-graph compilation                | ✅     | `music_session` compiles the static-import closure |
 | Parse/resolve/sema/IR/emit session caching       | ✅     | Cached phase products and edit invalidation exist |
@@ -122,12 +122,12 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | Feature                                  | Status | Notes |
 | ---------------------------------------- | ------ | ----- |
 | SEAM runtime execution / VM              | ❌     | Interpreter/runtime for executing emitted opcodes does not exist |
-| Runtime dynamic imports (module loading) | ❌     | `import expr` is typechecked but there is no runtime module loading |
-| Runtime execution for quote/splice       | ❌     | Quote/splice execution is not implemented (toolchain-defined) |
+| Runtime dynamic imports (module loading) | ❌     | `import expr` now lowers and emits `mod.load`, but there is still no runtime loader/VM support for executing it |
+| Runtime execution for quote/splice       | ❌     | Quote/splice now emit as syntax data, but there is no runtime syntax evaluation/execution model yet |
 
 ## Backends (Planned Or Missing)
 
 | Feature                       | Status | Notes |
 | ----------------------------- | ------ | ----- |
 | Native/JIT backend            | ❌     | `music_jit` is planned but not implemented |
-| Full-language backend parity  | 🟡     | Supported executable forms compile through IR and SEAM, but full surface parity is not complete: quote/splice do not emit, dynamic imports are runtime-erased, local callable `let rec` is not lowered, and there is no VM/runtime yet |
+| Full-language backend parity  | 🟡     | Frontend-backed constructs now compile further through IR and SEAM, including multi-index access, dynamic imports, syntax values, and capture-free local `let rec`; remaining gaps are the residual `Unsupported` lowering edge cases and the missing runtime/VM |

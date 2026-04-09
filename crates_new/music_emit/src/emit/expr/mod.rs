@@ -13,6 +13,7 @@ mod support;
 use callable::{compile_call, compile_call_seq, compile_closure_new, compile_variant_new};
 use control::{compile_binary, compile_case};
 use effects::{compile_handle, compile_perform, compile_perform_seq, compile_resume};
+use literals::compile_string_constant;
 use names::compile_name;
 use records::{compile_record_get, compile_record_literal, compile_record_update};
 use sequence::{compile_array_cat, compile_index, compile_sequence, compile_sequence_literal};
@@ -133,8 +134,20 @@ fn compile_expr_sequence_and_data(
             compile_variant_new(emitter, data_key, *tag_index, *field_count, args, diags);
             true
         }
-        IrExprKind::Index { base, index } => {
-            compile_index(emitter, base, index, diags);
+        IrExprKind::Index { base, indices } => {
+            compile_index(emitter, base, indices, diags);
+            true
+        }
+        IrExprKind::DynamicImport { spec } => {
+            compile_expr(emitter, spec, true, diags);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::ModLoad,
+                Operand::None,
+            )));
+            true
+        }
+        IrExprKind::SyntaxValue { raw } => {
+            compile_string_constant(emitter, raw);
             true
         }
         _ => false,

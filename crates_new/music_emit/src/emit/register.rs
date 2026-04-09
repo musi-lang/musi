@@ -252,6 +252,7 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         | IrExprKind::Name { .. }
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
+        | IrExprKind::SyntaxValue { .. }
         | IrExprKind::Unsupported { .. } => {}
         IrExprKind::Sequence { exprs } => collect_expr_types_iter(state, layout, exprs),
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
@@ -275,10 +276,11 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             collect_assign_target_types(state, layout, target);
             collect_expr_types(state, layout, value);
         }
-        IrExprKind::Index { base, index } => {
+        IrExprKind::Index { base, indices } => {
             collect_expr_types(state, layout, base);
-            collect_expr_types(state, layout, index);
+            collect_expr_types_iter(state, layout, indices.iter());
         }
+        IrExprKind::DynamicImport { spec } => collect_expr_types(state, layout, spec),
         IrExprKind::RecordGet { base, .. } => collect_expr_types(state, layout, base),
         IrExprKind::RecordUpdate {
             ty_name,
@@ -300,23 +302,10 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types(state, layout, base);
         }
-        IrExprKind::Case { scrutinee, arms } => {
-            collect_expr_types(state, layout, scrutinee);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_expr_types(state, layout, guard);
-                }
-                collect_expr_types(state, layout, &arm.expr);
-            }
-        }
-        IrExprKind::Call { callee, args } => {
-            collect_expr_types(state, layout, callee);
-            collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
-        }
+        IrExprKind::Case { scrutinee, arms } => collect_case_expr_types(state, layout, scrutinee, arms),
+        IrExprKind::Call { callee, args } => collect_call_expr_types(state, layout, callee, args),
         IrExprKind::CallSeq { callee, args } => {
-            let _ = ensure_type(state, layout, "[]Any");
-            collect_expr_types(state, layout, callee);
-            collect_expr_types_seq_parts(state, layout, args);
+            collect_call_seq_expr_types(state, layout, callee, args);
         }
         IrExprKind::VariantNew { data_key, args, .. } => {
             let name = qualified_name(&data_key.module, &data_key.name);
@@ -334,13 +323,7 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             ops,
             body,
             ..
-        } => {
-            let handler_ty = handler_type_name(effect_key);
-            let _ = ensure_type(state, layout, handler_ty.as_ref());
-            collect_expr_types(state, layout, value);
-            collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
-            collect_expr_types(state, layout, body);
-        }
+        } => collect_handle_expr_types(state, layout, effect_key, value, ops, body),
         IrExprKind::Resume { expr } => {
             if let Some(expr) = expr.as_deref() {
                 collect_expr_types(state, layout, expr);
@@ -363,6 +346,57 @@ fn collect_expr_types_seq_parts(
     );
 }
 
+fn collect_case_expr_types(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    scrutinee: &IrExpr,
+    arms: &[IrCaseArm],
+) {
+    collect_expr_types(state, layout, scrutinee);
+    for arm in arms {
+        if let Some(guard) = &arm.guard {
+            collect_expr_types(state, layout, guard);
+        }
+        collect_expr_types(state, layout, &arm.expr);
+    }
+}
+
+fn collect_call_expr_types(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    callee: &IrExpr,
+    args: &[IrArg],
+) {
+    collect_expr_types(state, layout, callee);
+    collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
+}
+
+fn collect_call_seq_expr_types(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    callee: &IrExpr,
+    args: &[IrSeqPart],
+) {
+    let _ = ensure_type(state, layout, "[]Any");
+    collect_expr_types(state, layout, callee);
+    collect_expr_types_seq_parts(state, layout, args);
+}
+
+fn collect_handle_expr_types(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    effect_key: &DefinitionKey,
+    value: &IrExpr,
+    ops: &[IrHandleOp],
+    body: &IrExpr,
+) {
+    let handler_ty = handler_type_name(effect_key);
+    let _ = ensure_type(state, layout, handler_ty.as_ref());
+    collect_expr_types(state, layout, value);
+    collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
+    collect_expr_types(state, layout, body);
+}
+
 fn collect_expr_types_iter<'a, I>(state: &mut ProgramState, layout: &mut ModuleLayout, exprs: I)
 where
     I: IntoIterator<Item = &'a IrExpr>,
@@ -378,9 +412,9 @@ fn collect_assign_target_types(
     target: &IrAssignTarget,
 ) {
     match target {
-        IrAssignTarget::Index { base, index } => {
+        IrAssignTarget::Index { base, indices } => {
             collect_expr_types(state, layout, base);
-            collect_expr_types(state, layout, index);
+            collect_expr_types_iter(state, layout, indices.iter());
         }
         IrAssignTarget::RecordField { base, .. } => collect_expr_types(state, layout, base),
         IrAssignTarget::Binding { .. } => {}

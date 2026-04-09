@@ -450,17 +450,34 @@ fn check_index_expr(
     let builtins = ctx.builtins();
     let base_facts = check_expr(ctx, base);
     let mut effects = base_facts.effects.clone();
-    for arg in ctx.expr_ids(args) {
-        let facts = check_expr(ctx, arg);
-        effects.union_with(&facts.effects);
-    }
-    let ty = if let HirTyKind::Array { item, .. } = ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
+    let arg_count = check_index_args(ctx, args, &mut effects);
+    let ty = if let HirTyKind::Array { dims, item } = ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
+        let dims = ctx.dims(dims);
+        if !dims.is_empty() && dims.len() != arg_count {
+            ctx.diag(origin.span, "invalid index arity", "");
+        }
         item
     } else {
         ctx.diag(origin.span, "invalid index target", "");
         builtins.unknown
     };
     ExprFacts { ty, effects }
+}
+
+fn check_index_args(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    args: SliceRange<HirExprId>,
+    effects: &mut EffectRow,
+) -> usize {
+    let builtins = ctx.builtins();
+    let index_exprs = ctx.expr_ids(args);
+    for index_expr in &index_exprs {
+        let facts = check_expr(ctx, *index_expr);
+        effects.union_with(&facts.effects);
+        let index_origin = ctx.expr(*index_expr).origin;
+        type_mismatch(ctx, index_origin, builtins.int_, facts.ty);
+    }
+    index_exprs.len()
 }
 
 fn check_field_expr(
@@ -743,20 +760,16 @@ fn check_assign_expr(
         HirExprKind::Index { base, args } => {
             let base_facts = check_expr(ctx, base);
             let mut effects = base_facts.effects;
-
-            let index_exprs = ctx.expr_ids(args);
-            if index_exprs.len() != 1 {
-                ctx.diag(origin.span, "invalid index arity", "");
-            }
-            if let Some(index_expr) = index_exprs.first().copied() {
-                let index_facts = check_expr(ctx, index_expr);
-                effects.union_with(&index_facts.effects);
-                let index_origin = ctx.expr(index_expr).origin;
-                type_mismatch(ctx, index_origin, builtins.int_, index_facts.ty);
-            }
+            let arg_count = check_index_args(ctx, args, &mut effects);
 
             let expected = match ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
-                HirTyKind::Array { item, .. } if is_mut_ty(ctx, base_facts.ty) => item,
+                HirTyKind::Array { dims, item } if is_mut_ty(ctx, base_facts.ty) => {
+                    let dims = ctx.dims(dims);
+                    if !dims.is_empty() && dims.len() != arg_count {
+                        ctx.diag(origin.span, "invalid index arity", "");
+                    }
+                    item
+                }
                 HirTyKind::Array { .. } => {
                     ctx.diag(origin.span, "write requires `mut []T`", "");
                     builtins.unknown

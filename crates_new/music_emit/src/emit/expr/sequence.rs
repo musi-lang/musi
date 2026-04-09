@@ -152,13 +152,19 @@ fn compile_seq_parts_any_append(
 pub(super) fn compile_index(
     emitter: &mut MethodEmitter<'_, '_>,
     base: &IrExpr,
-    index: &IrExpr,
+    indices: &[IrExpr],
     diags: &mut EmitDiagList,
 ) {
     super::compile_expr(emitter, base, true, diags);
-    super::compile_expr(emitter, index, true, diags);
-    emitter.code.push(CodeEntry::Instruction(Instruction::new(
-        Opcode::SeqGet,
-        Operand::None,
-    )));
+    for index in indices {
+        super::compile_expr(emitter, index, true, diags);
+    }
+    let instruction = match indices {
+        [_] => Instruction::new(Opcode::SeqGet, Operand::None),
+        _ => Instruction::new(
+            Opcode::SeqGetN,
+            Operand::I16(i16::try_from(indices.len()).unwrap_or(i16::MAX)),
+        ),
+    };
+    emitter.code.push(CodeEntry::Instruction(instruction));
 }

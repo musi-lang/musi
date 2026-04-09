@@ -186,6 +186,32 @@ fn compiles_imported_globals_and_local_assignment() {
 }
 
 #[test]
+fn compiles_dynamic_import_multi_index_and_quote() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
+              let loaded := import name;
+              grid.[0, 1] := 7;
+              grid.[0, 1]
+            );
+            export let quoted : Syntax := quote (#(1 + 2));
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("mod.load"));
+    assert!(output.text.contains("seq.getn"));
+    assert!(output.text.contains("seq.setn"));
+    assert!(output.text.contains("quote (#(1 + 2))"));
+}
+
+#[test]
 fn compiles_closures_and_higher_order_calls() {
     let mut session = session();
     session
@@ -207,6 +233,27 @@ fn compiles_closures_and_higher_order_calls() {
     assert!(output.artifact.validate().is_ok());
     assert!(output.text.contains("call.cls"));
     assert!(output.text.contains("cls.new"));
+}
+
+#[test]
+fn compiles_local_recursive_callable_let() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let answer (n : Int) : Int := (
+              let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+              loop(n)
+            );
+        ",
+        )
+        .unwrap();
+
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+
+    assert!(output.artifact.validate().is_ok());
+    assert!(output.text.contains("loop"));
 }
 
 #[test]

@@ -35,6 +35,16 @@ pub(in super::super) struct LetExprInput {
     pub(in super::super) value: HirExprId,
 }
 
+struct RecCallableSeed<'a> {
+    binding: Option<NameBindingId>,
+    mods: HirLetMods,
+    param_types: &'a [HirTyId],
+    effects: Option<&'a HirEffectSet>,
+    declared_ty: Option<HirTyId>,
+    type_params: &'a [Symbol],
+    constraints: &'a [ConstraintFacts],
+}
+
 fn lower_let_type_params(
     ctx: &CheckPass<'_, '_, '_>,
     type_params: SliceRange<HirBinder>,
@@ -70,12 +80,11 @@ fn insert_let_binding_scheme(
 fn check_callable_let_binding(
     ctx: &mut CheckPass<'_, '_, '_>,
     origin: HirOrigin,
-    params: SliceRange<HirParam>,
+    param_types: &[HirTyId],
     effects: Option<&HirEffectSet>,
     declared_ty: Option<HirTyId>,
     value: HirExprId,
 ) -> (HirTyId, EffectRow) {
-    let param_types = lower_params(ctx, params);
     let mut callable_effects = effects.map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
     if let Some(expected) = declared_ty {
         ctx.push_expected_ty(expected);
@@ -99,6 +108,33 @@ fn check_callable_let_binding(
         is_effectful: !callable_effects.is_pure(),
     });
     (ty, callable_effects)
+}
+
+fn seed_recursive_callable_scheme(ctx: &mut CheckPass<'_, '_, '_>, seed: &RecCallableSeed<'_>) {
+    if !seed.mods.is_rec {
+        return;
+    }
+    let Some(binding) = seed.binding else {
+        return;
+    };
+    let builtins = ctx.builtins();
+    let provisional_effects =
+        seed.effects.map_or(EffectRow::empty(), |set| lower_effect_row(ctx, set));
+    let provisional_ret = seed.declared_ty.unwrap_or(builtins.unknown);
+    let params = ctx.alloc_ty_list(seed.param_types.iter().copied());
+    let provisional_ty = ctx.alloc_ty(HirTyKind::Arrow {
+        params,
+        ret: provisional_ret,
+        is_effectful: !provisional_effects.is_pure(),
+    });
+    insert_let_binding_scheme(
+        ctx,
+        binding,
+        provisional_ty,
+        provisional_effects,
+        seed.type_params.to_vec().into_boxed_slice(),
+        seed.constraints.to_vec().into_boxed_slice(),
+    );
 }
 
 fn check_value_with_expected_ty(
@@ -191,22 +227,40 @@ pub(in super::super) fn check_let_expr(
         lower_type_expr(ctx, expr, origin)
     });
 
-    if mods.is_rec
-        && let Some(binding) = binding
-    {
-        ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
-    }
-
     let final_ty = if is_module_stmt && expr_mods.foreign.is_some() {
         check_foreign_let(ctx, expr_id).unwrap_or(builtins.unknown)
     } else if has_param_clause {
-        let (ty, callable_effects) =
-            check_callable_let_binding(ctx, origin, params, effects.as_ref(), declared_ty, value);
+        let param_types = lower_params(ctx, params);
+        seed_recursive_callable_scheme(
+            ctx,
+            &RecCallableSeed {
+                binding,
+                mods,
+                param_types: &param_types,
+                effects: effects.as_ref(),
+                declared_ty,
+                type_params: &type_params,
+                constraints: &constraints,
+            },
+        );
+        let (ty, callable_effects) = check_callable_let_binding(
+            ctx,
+            origin,
+            &param_types,
+            effects.as_ref(),
+            declared_ty,
+            value,
+        );
         if let Some(binding) = binding {
             insert_let_binding_scheme(ctx, binding, ty, callable_effects, type_params, constraints);
         }
         ty
     } else {
+        if mods.is_rec
+            && let Some(binding) = binding
+        {
+            ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
+        }
         let value_facts = check_non_callable_let_value(
             ctx,
             origin,

@@ -100,14 +100,20 @@ pub(super) fn compile_assign(
             )));
             emit_zero(emitter);
         }
-        IrAssignTarget::Index { base, index } => {
+        IrAssignTarget::Index { base, indices } => {
             super::compile_expr(emitter, base, true, diags);
-            super::compile_expr(emitter, index, true, diags);
+            for index in indices {
+                super::compile_expr(emitter, index, true, diags);
+            }
             super::compile_expr(emitter, value, true, diags);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::SeqSet,
-                Operand::None,
-            )));
+            let instruction = match indices.as_ref() {
+                [_] => Instruction::new(Opcode::SeqSet, Operand::None),
+                _ => Instruction::new(
+                    Opcode::SeqSetN,
+                    Operand::I16(i16::try_from(indices.len()).unwrap_or(i16::MAX)),
+                ),
+            };
+            emitter.code.push(CodeEntry::Instruction(instruction));
             emit_zero(emitter);
         }
     }

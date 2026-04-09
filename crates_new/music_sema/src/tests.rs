@@ -941,6 +941,59 @@ fn fixed_array_dims_validate_literal_length() {
 }
 
 #[test]
+fn multi_index_arrays_check_expected_arity() {
+    let sema = check(
+        r"
+        export let touch (grid : mut Array[Int, 2, 2]) : Int := (
+          grid.[0, 1] := 7;
+          grid.[0, 1]
+        );
+    ",
+    );
+    assert!(
+        !sema
+            .diags()
+            .iter()
+            .any(|diag| diag.message() == "invalid index arity"),
+        "{:?}",
+        sema.diags()
+    );
+
+    let sema = check(
+        r"
+        export let touch (grid : mut Array[Int, 2, 2]) : Int := grid.[0];
+    ",
+    );
+    assert!(
+        sema.diags()
+            .iter()
+            .any(|diag| diag.message() == "invalid index arity"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn local_recursive_callable_let_typechecks() {
+    let sema = check(
+        r"
+        export let answer (n : Int) : Int := (
+          let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+          loop(n)
+        );
+    ",
+    );
+    assert!(
+        !sema
+            .diags()
+            .iter()
+            .any(|diag| diag.message() == "invalid call target"),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn open_effect_rows_absorb_extra_effects() {
     let sema = check(
         r"

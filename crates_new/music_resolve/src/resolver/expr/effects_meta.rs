@@ -78,12 +78,18 @@ where
 
     pub(super) fn lower_quote_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
+        let raw = self
+            .tree
+            .lexed()
+            .slice_span(node.span())
+            .unwrap_or_default()
+            .into();
         if node.child_tokens().any(|t| t.kind() == TokenKind::LParen) {
             let expr = self.lower_opt_expr(origin, node.child_nodes().find(|n| n.kind().is_expr()));
             return self.alloc_expr(
                 origin,
                 HirExprKind::Quote {
-                    kind: HirQuoteKind::Expr { expr },
+                    kind: HirQuoteKind::Expr { expr, raw },
                 },
             );
         }
@@ -101,20 +107,26 @@ where
         self.alloc_expr(
             origin,
             HirExprKind::Quote {
-                kind: HirQuoteKind::Block { exprs },
+                kind: HirQuoteKind::Block { exprs, raw },
             },
         )
     }
 
     pub(super) fn lower_splice_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
+        let raw = self
+            .tree
+            .lexed()
+            .slice_span(node.span())
+            .unwrap_or_default()
+            .into();
         if let Some(tok) = node.child_tokens().find(|t| t.kind() == TokenKind::Ident) {
             let name = self.intern_ident_token_or_placeholder(Some(tok), tok.span());
             self.record_use(name);
             return self.alloc_expr(
                 origin,
                 HirExprKind::Splice {
-                    kind: HirSpliceKind::Name { name },
+                    kind: HirSpliceKind::Name { name, raw },
                 },
             );
         }
@@ -123,7 +135,7 @@ where
             return self.alloc_expr(
                 origin,
                 HirExprKind::Splice {
-                    kind: HirSpliceKind::Expr { expr },
+                    kind: HirSpliceKind::Expr { expr, raw },
                 },
             );
         }
@@ -132,7 +144,7 @@ where
         self.alloc_expr(
             origin,
             HirExprKind::Splice {
-                kind: HirSpliceKind::Exprs { exprs },
+                kind: HirSpliceKind::Exprs { exprs, raw },
             },
         )
     }

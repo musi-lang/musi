@@ -30,10 +30,10 @@ fn lower_assign_target(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> Option<IrAssi
             module_target: sema.expr_module_target(expr).cloned(),
         }),
         HirExprKind::Index { base, args } => {
-            let IrExprKind::Index { base, index } = lower_index_expr(ctx, *base, *args) else {
+            let IrExprKind::Index { base, indices } = lower_index_expr(ctx, *base, *args) else {
                 return None;
             };
-            Some(IrAssignTarget::Index { base, index })
+            Some(IrAssignTarget::Index { base, indices })
         }
         HirExprKind::Field { base, name, .. } => {
             let base_ty = sema.expr_ty(*base);

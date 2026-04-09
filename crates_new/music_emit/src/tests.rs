@@ -134,6 +134,37 @@ fn emits_globals_locals_assignment_index_and_case() {
 }
 
 #[test]
+fn emits_multi_index_get_set_and_dynamic_import() {
+    let ir = lower_ir(
+        r"
+        export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
+          let loaded := import name;
+          grid.[0, 1] := 7;
+          grid.[0, 1]
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(opcodes.contains(&music_bc::Opcode::ModLoad));
+    assert!(opcodes.contains(&music_bc::Opcode::SeqGetN));
+    assert!(opcodes.contains(&music_bc::Opcode::SeqSetN));
+}
+
+#[test]
 fn emits_case_tuple_and_array_patterns() {
     let ir = lower_ir(
         r"
@@ -162,6 +193,26 @@ fn emits_case_tuple_and_array_patterns() {
         .collect::<Vec<_>>();
     assert!(opcodes.contains(&music_bc::Opcode::SeqGet));
     assert!(opcodes.contains(&music_bc::Opcode::BrFalse));
+}
+
+#[test]
+fn emits_quote_as_syntax_constant() {
+    let ir = lower_ir(
+        r"
+        export let quoted : Syntax := quote (#(1 + 2));
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(emitted.artifact.constants.iter().any(|(_, constant)| {
+        matches!(
+            constant.value,
+            ConstantValue::String(value)
+                if emitted.artifact.string_text(value).contains("quote (#(1 + 2))")
+        )
+    }));
 }
 
 #[test]
@@ -263,6 +314,27 @@ fn emits_closures_and_higher_order_calls() {
 
     assert!(has_indirect_call);
     assert!(has_capturing_closure);
+}
+
+#[test]
+fn emits_local_recursive_callable_lets() {
+    let ir = lower_ir(
+        r"
+        export let answer (n : Int) : Int := (
+          let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+          loop(n)
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(emitted
+        .artifact
+        .methods
+        .iter()
+        .any(|(_, method)| emitted.artifact.string_text(method.name).contains("loop")));
 }
 
 #[test]

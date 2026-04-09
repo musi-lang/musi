@@ -12,6 +12,7 @@ pub enum OpcodeFamily {
     Ty,
     Eff,
     Ffi,
+    Module,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -52,7 +53,9 @@ pub enum Opcode {
     ClsNew,
     SeqNew,
     SeqGet,
+    SeqGetN,
     SeqSet,
+    SeqSetN,
     SeqCat,
     DataNew,
     DataTag,
@@ -68,6 +71,7 @@ pub enum Opcode {
     EffResume,
     FfiCall,
     FfiCallSeq,
+    ModLoad,
 }
 
 impl Opcode {
@@ -103,13 +107,19 @@ impl Opcode {
             | Self::CallTail
             | Self::Ret
             | Self::ClsNew => OpcodeFamily::CallClosure,
-            Self::SeqNew | Self::SeqGet | Self::SeqSet | Self::SeqCat => OpcodeFamily::Sequence,
+            Self::SeqNew
+            | Self::SeqGet
+            | Self::SeqGetN
+            | Self::SeqSet
+            | Self::SeqSetN
+            | Self::SeqCat => OpcodeFamily::Sequence,
             Self::DataNew | Self::DataTag | Self::DataGet | Self::DataSet => OpcodeFamily::Data,
             Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
             Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffInvkSeq | Self::EffResume => {
                 OpcodeFamily::Eff
             }
             Self::FfiCall | Self::FfiCallSeq => OpcodeFamily::Ffi,
+            Self::ModLoad => OpcodeFamily::Module,
         }
     }
 
@@ -152,7 +162,9 @@ impl Opcode {
             Self::ClsNew => "cls.new",
             Self::SeqNew => "seq.new",
             Self::SeqGet => "seq.get",
+            Self::SeqGetN => "seq.getn",
             Self::SeqSet => "seq.set",
+            Self::SeqSetN => "seq.setn",
             Self::SeqCat => "seq.cat",
             Self::DataNew => "data.new",
             Self::DataTag => "data.tag",
@@ -168,6 +180,7 @@ impl Opcode {
             Self::EffResume => "eff.resume",
             Self::FfiCall => "ffi.call",
             Self::FfiCallSeq => "ffi.call.seq",
+            Self::ModLoad => "mod.load",
         }
     }
 
@@ -177,7 +190,7 @@ impl Opcode {
             Self::LdLoc | Self::StLoc => OperandShape::Local,
             Self::LdGlob | Self::StGlob => OperandShape::Global,
             Self::LdConst => OperandShape::Constant,
-            Self::LdSmi => OperandShape::I16,
+            Self::LdSmi | Self::SeqGetN | Self::SeqSetN => OperandShape::I16,
             Self::LdStr => OperandShape::String,
             Self::IAdd
             | Self::ISub
@@ -205,7 +218,8 @@ impl Opcode {
             | Self::CallCls
             | Self::CallClsSeq
             | Self::DataGet
-            | Self::DataSet => OperandShape::None,
+            | Self::DataSet
+            | Self::ModLoad => OperandShape::None,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
             Self::Call | Self::CallSeq | Self::CallTail => OperandShape::Method,
@@ -257,8 +271,10 @@ impl Opcode {
             Self::CallClsSeq => 0x0407,
             Self::SeqNew => 0x0501,
             Self::SeqGet => 0x0502,
-            Self::SeqSet => 0x0503,
-            Self::SeqCat => 0x0504,
+            Self::SeqGetN => 0x0503,
+            Self::SeqSet => 0x0504,
+            Self::SeqSetN => 0x0505,
+            Self::SeqCat => 0x0506,
             Self::DataNew => 0x0601,
             Self::DataTag => 0x0602,
             Self::DataGet => 0x0603,
@@ -273,6 +289,7 @@ impl Opcode {
             Self::EffInvkSeq => 0x0805,
             Self::FfiCall => 0x0901,
             Self::FfiCallSeq => 0x0902,
+            Self::ModLoad => 0x0A01,
         }
     }
 
@@ -315,7 +332,9 @@ impl Opcode {
             "cls.new" => Self::ClsNew,
             "seq.new" => Self::SeqNew,
             "seq.get" => Self::SeqGet,
+            "seq.getn" => Self::SeqGetN,
             "seq.set" => Self::SeqSet,
+            "seq.setn" => Self::SeqSetN,
             "seq.cat" => Self::SeqCat,
             "data.new" => Self::DataNew,
             "data.tag" => Self::DataTag,
@@ -331,6 +350,7 @@ impl Opcode {
             "eff.resume" => Self::EffResume,
             "ffi.call" => Self::FfiCall,
             "ffi.call.seq" => Self::FfiCallSeq,
+            "mod.load" => Self::ModLoad,
             _ => return None,
         })
     }
@@ -374,8 +394,10 @@ impl Opcode {
             0x0407 => Self::CallClsSeq,
             0x0501 => Self::SeqNew,
             0x0502 => Self::SeqGet,
-            0x0503 => Self::SeqSet,
-            0x0504 => Self::SeqCat,
+            0x0503 => Self::SeqGetN,
+            0x0504 => Self::SeqSet,
+            0x0505 => Self::SeqSetN,
+            0x0506 => Self::SeqCat,
             0x0601 => Self::DataNew,
             0x0602 => Self::DataTag,
             0x0603 => Self::DataGet,
@@ -390,6 +412,7 @@ impl Opcode {
             0x0805 => Self::EffInvkSeq,
             0x0901 => Self::FfiCall,
             0x0902 => Self::FfiCallSeq,
+            0x0A01 => Self::ModLoad,
             _ => return None,
         })
     }

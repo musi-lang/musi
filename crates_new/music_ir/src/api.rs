@@ -112,7 +112,7 @@ pub enum IrAssignTarget {
     },
     Index {
         base: Box<IrExpr>,
-        index: Box<IrExpr>,
+        indices: Box<[IrExpr]>,
     },
     RecordField {
         base: Box<IrExpr>,
@@ -213,7 +213,13 @@ pub enum IrExprKind {
     },
     Index {
         base: Box<IrExpr>,
-        index: Box<IrExpr>,
+        indices: Box<[IrExpr]>,
+    },
+    DynamicImport {
+        spec: Box<IrExpr>,
+    },
+    SyntaxValue {
+        raw: Box<str>,
     },
     ClosureNew {
         callee: IrNameRef,

@@ -376,15 +376,30 @@ pub struct HirHandleClause {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirQuoteKind {
-    Expr { expr: HirExprId },
-    Block { exprs: SliceRange<HirExprId> },
+    Expr {
+        expr: HirExprId,
+        raw: Box<str>,
+    },
+    Block {
+        exprs: SliceRange<HirExprId>,
+        raw: Box<str>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirSpliceKind {
-    Name { name: Ident },
-    Expr { expr: HirExprId },
-    Exprs { exprs: SliceRange<HirExprId> },
+    Name {
+        name: Ident,
+        raw: Box<str>,
+    },
+    Expr {
+        expr: HirExprId,
+        raw: Box<str>,
+    },
+    Exprs {
+        exprs: SliceRange<HirExprId>,
+        raw: Box<str>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

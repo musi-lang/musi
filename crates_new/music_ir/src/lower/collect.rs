@@ -12,19 +12,23 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. }
-        | IrExprKind::Name { binding: None, .. } => {}
+        | IrExprKind::Name { binding: None, .. }
+        | IrExprKind::SyntaxValue { .. } => {}
         IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
             collect_used_bindings(value, out);
         }
         IrExprKind::Assign { target, value } => collect_used_in_assign_target(value, target, out),
-        IrExprKind::Index { base, index }
-        | IrExprKind::Binary {
+        IrExprKind::Binary {
             left: base,
             right: index,
             ..
         } => {
             collect_used_bindings(base, out);
             collect_used_bindings(index, out);
+        }
+        IrExprKind::Index { base, indices } => {
+            collect_used_bindings(base, out);
+            collect_expr_slice(indices, out, collect_used_bindings);
         }
         IrExprKind::RecordGet { base, .. } => collect_used_bindings(base, out),
         IrExprKind::Sequence { exprs } => collect_expr_slice(exprs, out, collect_used_bindings),
@@ -80,6 +84,7 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
                 collect_used_bindings(expr, out);
             }
         }
+        IrExprKind::DynamicImport { spec } => collect_used_bindings(spec, out),
     }
 }
 
@@ -97,20 +102,24 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
         | IrExprKind::Name { .. }
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
-        | IrExprKind::Unsupported { .. } => {}
+        | IrExprKind::Unsupported { .. }
+        | IrExprKind::SyntaxValue { .. } => {}
         IrExprKind::Let { value, .. }
         | IrExprKind::TempLet { value, .. }
         | IrExprKind::Assign { value, .. } => {
             collect_local_decl_bindings(value, out);
         }
-        IrExprKind::Index { base, index }
-        | IrExprKind::Binary {
+        IrExprKind::Binary {
             left: base,
             right: index,
             ..
         } => {
             collect_local_decl_bindings(base, out);
             collect_local_decl_bindings(index, out);
+        }
+        IrExprKind::Index { base, indices } => {
+            collect_local_decl_bindings(base, out);
+            collect_expr_slice(indices, out, collect_local_decl_bindings);
         }
         IrExprKind::RecordGet { base, .. } => collect_local_decl_bindings(base, out),
         IrExprKind::Sequence { exprs } => {
@@ -174,6 +183,7 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
                 collect_local_decl_bindings(expr, out);
             }
         }
+        IrExprKind::DynamicImport { spec } => collect_local_decl_bindings(spec, out),
     }
 }
 
@@ -185,9 +195,9 @@ fn collect_used_in_assign_target(
     collect_used_bindings(value, out);
     match target {
         IrAssignTarget::Binding { .. } => {}
-        IrAssignTarget::Index { base, index } => {
+        IrAssignTarget::Index { base, indices } => {
             collect_used_bindings(base, out);
-            collect_used_bindings(index, out);
+            collect_expr_slice(indices, out, collect_used_bindings);
         }
         IrAssignTarget::RecordField { base, .. } => collect_used_bindings(base, out),
     }

@@ -4,8 +4,8 @@ use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirHandleClause,
-    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirRecordItem,
-    HirRecordPatField, HirTyField, HirTyId, HirTyKind,
+    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirQuoteKind,
+    HirRecordItem, HirRecordPatField, HirSpliceKind, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -62,6 +62,7 @@ struct ClosureCallableInput<'a> {
     binding: Option<NameBindingId>,
     name: Option<Box<str>>,
     callable_module_target: Option<ModuleKey>,
+    allow_captures: bool,
 }
 
 struct LowerCtx<'a> {
@@ -237,11 +238,17 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Resume { expr } => IrExprKind::Resume {
             expr: expr.map(|expr| lower_boxed_expr(ctx, expr)),
         },
-        HirExprKind::Import { .. }
-            if matches!(sema.ty(sema.expr_ty(expr_id)).kind, HirTyKind::Module) =>
-        {
-            IrExprKind::Unit
+        HirExprKind::Import { arg } => {
+            if sema.expr_module_target(expr_id).is_some() {
+                IrExprKind::Unit
+            } else {
+                IrExprKind::DynamicImport {
+                    spec: lower_boxed_expr(ctx, *arg),
+                }
+            }
         }
+        HirExprKind::Quote { kind } => lower_quote_expr(kind),
+        HirExprKind::Splice { kind } => lower_splice_expr(kind),
         other => unsupported_expr_kind(other),
     };
     IrExpr { origin, kind }
@@ -255,6 +262,22 @@ fn lower_expr_with_origin(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, origin: Ir
 
 fn lower_boxed_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> Box<IrExpr> {
     Box::new(lower_expr(ctx, expr_id))
+}
+
+fn lower_quote_expr(kind: &HirQuoteKind) -> IrExprKind {
+    let raw = match kind {
+        HirQuoteKind::Expr { raw, .. } | HirQuoteKind::Block { raw, .. } => raw.clone(),
+    };
+    IrExprKind::SyntaxValue { raw }
+}
+
+fn lower_splice_expr(kind: &HirSpliceKind) -> IrExprKind {
+    let raw = match kind {
+        HirSpliceKind::Name { raw, .. }
+        | HirSpliceKind::Expr { raw, .. }
+        | HirSpliceKind::Exprs { raw, .. } => raw.clone(),
+    };
+    IrExprKind::SyntaxValue { raw }
 }
 
 fn unsupported_expr(description: impl Into<Box<str>>) -> IrExprKind {
@@ -513,6 +536,7 @@ fn lower_handler_clause_closure(
             binding: None,
             name: None,
             callable_module_target: ctx.sema.expr_module_target(body).cloned(),
+            allow_captures: true,
         },
     )
 }
@@ -531,20 +555,8 @@ fn lower_let_expr(
     let is_callable =
         has_param_clause || !sema.module().store.params.get(params.clone()).is_empty();
 
-    if matches!(sema.ty(sema.expr_ty(value)).kind, HirTyKind::Module)
-        || matches!(
-            sema.module().store.exprs.get(value).kind,
-            HirExprKind::Import { .. }
-        )
-    {
-        return IrExprKind::Unit;
-    }
-
     if is_callable {
-        if mods.is_rec {
-            return unsupported_expr("rec local callable let");
-        }
-        return lower_local_callable_let(ctx, pat, params, value);
+        return lower_local_callable_let(ctx, mods, pat, params, value);
     }
 
     match &sema.module().store.pats.get(pat).kind {
@@ -570,6 +582,7 @@ const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
 
 fn lower_local_callable_let(
     ctx: &mut LowerCtx<'_>,
+    mods: HirLetMods,
     pat: HirPatId,
     params: &SliceRange<HirParam>,
     value: HirExprId,
@@ -604,6 +617,7 @@ fn lower_local_callable_let(
             binding,
             name: (binding.is_some() && name.as_ref() != "_").then_some(name.clone()),
             callable_module_target: sema.expr_module_target(value).cloned(),
+            allow_captures: !mods.is_rec,
         },
     );
 
@@ -632,6 +646,7 @@ fn lower_lambda_expr(
             binding: None,
             name: None,
             callable_module_target: Some(ctx.module_key.clone()),
+            allow_captures: true,
         },
     )
     .kind
@@ -680,6 +695,12 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
     let sema = ctx.sema;
     let captures =
         compute_capture_bindings(ctx, &input.body, &input.params.bindings, input.binding);
+    if !input.allow_captures && !captures.is_empty() {
+        return IrExpr {
+            origin: input.origin,
+            kind: unsupported_expr("capturing local callable let rec"),
+        };
+    }
     let capture_params = lower_capture_params(ctx, &captures);
     let capture_exprs = lower_capture_exprs(ctx, input.origin, &captures);
 
@@ -835,15 +856,18 @@ fn lower_index_expr(
     args: SliceRange<HirExprId>,
 ) -> IrExprKind {
     let sema = ctx.sema;
-    let Some(index) = sema.module().store.expr_ids.get(args).first().copied() else {
+    let indices = sema.module().store.expr_ids.get(args);
+    if indices.is_empty() {
         return unsupported_expr("index without argument");
-    };
-    if sema.module().store.expr_ids.get(args).len() != 1 {
-        return unsupported_expr("multi-index access");
     }
     IrExprKind::Index {
         base: lower_boxed_expr(ctx, base),
-        index: lower_boxed_expr(ctx, index),
+        indices: indices
+            .iter()
+            .copied()
+            .map(|index| lower_expr(ctx, index))
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
     }
 }
 

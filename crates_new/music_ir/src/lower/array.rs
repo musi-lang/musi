@@ -145,12 +145,13 @@ fn project_index(origin: IrOrigin, base: IrExpr, index_u32: u32) -> IrExpr {
         origin,
         kind: IrExprKind::Index {
             base: Box::new(base),
-            index: Box::new(IrExpr {
+            indices: vec![IrExpr {
                 origin,
                 kind: IrExprKind::Lit(IrLit::Int {
                     raw: index_u32.to_string().into(),
                 }),
-            }),
+            }]
+            .into_boxed_slice(),
         },
     }
 }
