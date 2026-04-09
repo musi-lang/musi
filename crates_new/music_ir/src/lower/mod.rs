@@ -549,30 +549,27 @@ fn lower_let_expr(
                 description: "rec local callable let".into(),
             };
         }
-        return lower_local_callable_let(ctx, mods, pat, params, value);
+        return lower_local_callable_let(ctx, pat, params, value);
     }
 
     match &sema.module().store.pats.get(pat).kind {
         HirPatKind::Bind { name } => IrExprKind::Let {
             binding: decl_binding_id(sema, *name),
             name: interner.resolve(name.name).into(),
-            is_mut: mods.is_mut,
             value: Box::new(lower_expr(ctx, value)),
         },
         HirPatKind::Wildcard => IrExprKind::Let {
             binding: None,
             name: "_".into(),
-            is_mut: false,
             value: Box::new(lower_expr(ctx, value)),
         },
-        _ => lower_destructure_let(ctx, origin, mods.is_mut, pat, value),
+        _ => lower_destructure_let(ctx, origin, pat, value),
     }
 }
 
 fn lower_destructure_let(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
-    is_mut: bool,
     pat: HirPatId,
     value: HirExprId,
 ) -> IrExprKind {
@@ -596,7 +593,6 @@ fn lower_destructure_let(
     lower_irrefutable_pat_bindings(
         ctx,
         origin,
-        is_mut,
         module_target,
         pat,
         base,
@@ -620,14 +616,12 @@ const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
 #[derive(Clone, Copy)]
 struct IrrefutablePatInput<'a> {
     origin: IrOrigin,
-    is_mut: bool,
     module_target: Option<&'a ModuleKey>,
 }
 
 fn lower_irrefutable_pat_bindings(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
-    is_mut: bool,
     module_target: Option<&ModuleKey>,
     pat: HirPatId,
     base: IrExpr,
@@ -636,7 +630,6 @@ fn lower_irrefutable_pat_bindings(
     let sema = ctx.sema;
     let input = IrrefutablePatInput {
         origin,
-        is_mut,
         module_target,
     };
     match &sema.module().store.pats.get(pat).kind {
@@ -669,7 +662,6 @@ fn lower_irrefutable_bind(
         kind: IrExprKind::Let {
             binding: decl_binding_id(sema, name),
             name: interner.resolve(name.name).into(),
-            is_mut: input.is_mut,
             value: Box::new(base),
         },
     });
@@ -691,14 +683,12 @@ fn lower_irrefutable_as(
         kind: IrExprKind::Let {
             binding: decl_binding_id(sema, name),
             name: interner.resolve(name.name).into(),
-            is_mut: input.is_mut,
             value: Box::new(stored.clone()),
         },
     });
     lower_irrefutable_pat_bindings(
         ctx,
         input.origin,
-        input.is_mut,
         input.module_target,
         inner,
         stored,
@@ -734,7 +724,6 @@ fn lower_irrefutable_sequence(
         lower_irrefutable_pat_bindings(
             ctx,
             input.origin,
-            input.is_mut,
             input.module_target,
             *item,
             proj,
@@ -757,7 +746,6 @@ fn lower_irrefutable_record(
         HirTyKind::Module => lower_irrefutable_module_record(
             ctx,
             input.origin,
-            input.is_mut,
             input.module_target,
             fields,
             out,
@@ -777,7 +765,6 @@ fn lower_irrefutable_record(
 fn lower_irrefutable_module_record(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
-    is_mut: bool,
     module_target: Option<&ModuleKey>,
     fields: SliceRange<HirRecordPatField>,
     out: &mut Vec<IrExpr>,
@@ -807,7 +794,6 @@ fn lower_irrefutable_module_record(
             lower_irrefutable_pat_bindings(
                 ctx,
                 origin,
-                is_mut || field.is_mut,
                 Some(module_target),
                 value_pat,
                 proj,
@@ -819,7 +805,6 @@ fn lower_irrefutable_module_record(
                 kind: IrExprKind::Let {
                     binding: decl_binding_id(sema, field.name),
                     name: name_text,
-                    is_mut: is_mut || field.is_mut,
                     value: Box::new(proj),
                 },
             });
@@ -868,7 +853,6 @@ fn lower_irrefutable_value_record(
             lower_irrefutable_pat_bindings(
                 ctx,
                 input.origin,
-                input.is_mut || field.is_mut,
                 input.module_target,
                 value_pat,
                 proj,
@@ -879,7 +863,6 @@ fn lower_irrefutable_value_record(
                 ctx,
                 IrrefutablePatInput {
                     origin: input.origin,
-                    is_mut: input.is_mut || field.is_mut,
                     module_target: input.module_target,
                 },
                 field.name,
@@ -916,7 +899,6 @@ fn push_unsupported_pat(origin: IrOrigin, other: &HirPatKind, out: &mut Vec<IrEx
 
 fn lower_local_callable_let(
     ctx: &mut LowerCtx<'_>,
-    mods: HirLetMods,
     pat: HirPatId,
     params: &SliceRange<HirParam>,
     value: HirExprId,
@@ -1001,7 +983,6 @@ fn lower_local_callable_let(
     IrExprKind::Let {
         binding,
         name,
-        is_mut: mods.is_mut,
         value: Box::new(closure_value),
     }
 }

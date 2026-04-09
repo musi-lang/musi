@@ -201,7 +201,6 @@ pub enum IrExprKind {
     Let {
         binding: Option<NameBindingId>,
         name: Box<str>,
-        is_mut: bool,
         value: Box<IrExpr>,
     },
     TempLet {

@@ -221,7 +221,6 @@ pub struct HirArg {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirParam {
-    pub is_mut: bool,
     pub name: Ident,
     pub ty: Option<HirExprId>,
     pub default: Option<HirExprId>,
@@ -229,7 +228,6 @@ pub struct HirParam {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirLetMods {
-    pub is_mut: bool,
     pub is_rec: bool,
 }
 

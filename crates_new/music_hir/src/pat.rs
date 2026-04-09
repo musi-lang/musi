@@ -45,7 +45,6 @@ pub enum HirPatKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirRecordPatField {
-    pub is_mut: bool,
     pub name: Ident,
     pub value: Option<HirPatId>,
 }

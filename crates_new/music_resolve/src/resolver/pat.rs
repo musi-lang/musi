@@ -189,15 +189,6 @@ where
         let mut fields = Vec::<HirRecordPatField>::new();
         let mut i: usize = 0;
         while i < children.len() {
-            let is_mut = children
-                .get(i)
-                .copied()
-                .and_then(SyntaxElement::into_token)
-                .is_some_and(|t| t.kind() == TokenKind::KwMut);
-            if is_mut {
-                i += 1;
-            }
-
             let Some(name_tok) = children
                 .get(i)
                 .copied()
@@ -232,7 +223,6 @@ where
             };
 
             fields.push(HirRecordPatField {
-                is_mut,
                 name,
                 value,
             });

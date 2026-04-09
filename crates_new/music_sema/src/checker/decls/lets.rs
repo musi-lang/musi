@@ -12,7 +12,7 @@ use super::super::exprs::check_expr;
 use super::super::normalize::{
     lower_constraints, lower_effect_row, lower_params, lower_type_expr, type_mismatch,
 };
-use super::super::patterns::{bind_pat, binders_in_pat, bound_name_from_pat};
+use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::schemes::BindingScheme;
 use super::declarations::{check_bound_class, check_bound_data, check_bound_effect};
 use super::effects::require_declared_effects;
@@ -132,12 +132,6 @@ pub(in super::super) fn check_let_expr(
         && let Some(binding) = binding
     {
         ctx.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
-    }
-
-    if mods.is_mut {
-        for binder in binders_in_pat(ctx, pat) {
-            ctx.mark_binding_mutable(binder);
-        }
     }
 
     let final_ty = if has_param_clause {

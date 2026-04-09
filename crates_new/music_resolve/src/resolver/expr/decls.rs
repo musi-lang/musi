@@ -250,9 +250,8 @@ where
     pub(super) fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
 
-        let is_mut = node.child_tokens().any(|t| t.kind() == TokenKind::KwMut);
         let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
-        let mods = HirLetMods { is_mut, is_rec };
+        let mods = HirLetMods { is_rec };
 
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
         let pat_node = pat_node.unwrap_or(node);

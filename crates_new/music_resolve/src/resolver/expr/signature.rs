@@ -43,7 +43,6 @@ where
     }
 
     fn lower_param(&mut self, node: SyntaxNode<'tree, 'src>) -> HirParam {
-        let is_mut = node.child_tokens().any(|t| t.kind() == TokenKind::KwMut);
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Param);
@@ -53,7 +52,6 @@ where
         let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
 
         HirParam {
-            is_mut,
             name,
             ty,
             default,
