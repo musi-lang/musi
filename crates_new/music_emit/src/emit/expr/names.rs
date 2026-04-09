@@ -39,7 +39,8 @@ pub(super) fn compile_name(
         diags,
         emitter.module_key,
         &expr.origin,
-        &EmitDiagKind::UnsupportedNameRef(name.into()),
+        &EmitDiagKind::UnsupportedNameRef,
+        format!("name ref `{name}` has no emitted form"),
     );
     emit_zero(emitter);
 }

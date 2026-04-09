@@ -207,16 +207,15 @@ fn import_effect_alias(
         .map(|op| {
             (
                 op.name.clone(),
-                EffectOpDef {
-                    params: op
-                        .params
+                EffectOpDef::new(
+                    op.params
                         .iter()
                         .copied()
                         .map(|ty| import_surface_ty(ctx, module_surface, ty))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                    result: import_surface_ty(ctx, module_surface, op.result),
-                },
+                    import_surface_ty(ctx, module_surface, op.result),
+                ),
             )
         })
         .collect::<BTreeMap<_, _>>();
@@ -227,14 +226,7 @@ fn import_effect_alias(
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
-    ctx.insert_effect_def(
-        alias_name,
-        EffectDef {
-            key: surface.key.clone(),
-            ops,
-            laws,
-        },
-    );
+    ctx.insert_effect_def(alias_name, EffectDef::new(surface.key.clone(), ops, laws));
 }
 
 fn import_data_alias(
@@ -249,24 +241,24 @@ fn import_data_alias(
         .map(|variant| {
             (
                 variant.name.clone(),
-                DataVariantDef {
-                    payload: variant
+                DataVariantDef::new(
+                    variant
                         .payload
                         .map(|ty| import_surface_ty(ctx, module_surface, ty)),
-                },
+                ),
             )
         })
         .collect::<BTreeMap<_, _>>();
     let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
     ctx.insert_data_def(
         alias_name,
-        DataDef {
-            key: surface.key.clone(),
+        DataDef::new(
+            surface.key.clone(),
             variants,
-            repr_kind: surface.repr_kind.clone(),
-            layout_align: surface.layout_align,
-            layout_pack: surface.layout_pack,
-        },
+            surface.repr_kind.clone(),
+            surface.layout_align,
+            surface.layout_pack,
+        ),
     );
 }
 

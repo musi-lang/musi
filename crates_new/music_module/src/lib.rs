@@ -11,3 +11,7 @@ pub use syntax::{
     ExportedInstanceSite, ImportSite, ImportSiteKind, ModuleExportSummary, collect_export_summary,
     collect_import_sites,
 };
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests;

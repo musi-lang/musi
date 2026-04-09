@@ -44,8 +44,16 @@ pub(super) fn push_expr_diag(
     module_key: &ModuleKey,
     origin: &IrOrigin,
     kind: &EmitDiagKind,
+    label: impl Into<String>,
 ) {
-    push_span_diag(diags, module_key, origin.source_id, origin.span, kind);
+    push_span_diag(
+        diags,
+        module_key,
+        origin.source_id,
+        origin.span,
+        kind,
+        label,
+    );
 }
 
 pub(super) fn push_span_diag(
@@ -54,10 +62,11 @@ pub(super) fn push_span_diag(
     source_id: SourceId,
     span: Span,
     kind: &EmitDiagKind,
+    label: impl Into<String>,
 ) {
     diags.push(
         Diag::error(kind.message())
             .with_code(kind.code())
-            .with_label(span, source_id, kind.label()),
+            .with_label(span, source_id, label),
     );
 }

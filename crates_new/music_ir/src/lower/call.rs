@@ -63,7 +63,7 @@ pub(super) fn lower_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return unsupported_expr("call spread lowering invariant");
+                invalid_lowering_path("call spread lowering invariant");
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -82,7 +82,7 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
     let interner = ctx.interner;
     let (effect_key, op_index, args) = match resolve_perform_target(sema, interner, expr) {
         Ok(value) => value,
-        Err(description) => return unsupported_expr(description),
+        Err(description) => invalid_lowering_path(description),
     };
     let args_nodes = sema.module().store.args.get(args);
     if !args_nodes.iter().any(|arg| arg.spread) {
@@ -123,7 +123,7 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return unsupported_expr("perform spread lowering invariant");
+                invalid_lowering_path("perform spread lowering invariant");
             };
             IrExprKind::Perform {
                 effect_key,
@@ -193,16 +193,11 @@ fn resolve_perform_target(
     let Some(effect) = sema.effect_def(effect_name) else {
         return Err("perform with unknown effect");
     };
-    let op_index = effect
-        .ops
-        .keys()
-        .position(|entry| entry.as_ref() == op_name)
-        .and_then(|index| u16::try_from(index).ok())
-        .unwrap_or(u16::MAX);
+    let op_index = effect.op_index(op_name).unwrap_or(u16::MAX);
     if op_index == u16::MAX {
         return Err("perform with unknown effect op");
     }
-    Ok((effect.key.clone(), op_index, args.clone()))
+    Ok((effect.key().clone(), op_index, args.clone()))
 }
 
 fn lower_spread_args(
@@ -246,7 +241,9 @@ fn lower_spread_arg(
     parts: &mut Vec<IrSeqPart>,
     mode: SpreadMode,
 ) -> Result<bool, IrExprKind> {
-    let spread_ty = sema.expr_ty(spread_expr);
+    let spread_ty = sema
+        .try_expr_ty(spread_expr)
+        .expect("expr type missing for spread arg");
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -264,7 +261,7 @@ fn lower_spread_arg(
         HirTyKind::Array { dims, item } => {
             lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode)
         }
-        _ => Err(unsupported_expr(mode.source_message())),
+        _ => invalid_lowering_path(mode.source_message()),
     }
 }
 
@@ -283,10 +280,10 @@ fn lower_spread_array_arg(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             return Ok(true);
         }
-        return Err(unsupported_expr(mode.runtime_any_message()));
+        invalid_lowering_path(mode.runtime_any_message());
     }
     if dims_vec.len() != 1 {
-        return Err(unsupported_expr(mode.dims_message()));
+        invalid_lowering_path(mode.dims_message());
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -303,7 +300,7 @@ fn lower_spread_array_arg(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             Ok(true)
         }
-        HirDim::Unknown | HirDim::Name(_) => Err(unsupported_expr(mode.runtime_any_message())),
+        HirDim::Unknown | HirDim::Name(_) => invalid_lowering_path(mode.runtime_any_message()),
     }
 }
 

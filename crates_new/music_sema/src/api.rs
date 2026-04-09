@@ -271,25 +271,87 @@ pub struct InstanceSurface {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleSurface {
-    pub module_key: ModuleKey,
-    pub static_imports: Box<[ModuleKey]>,
-    pub tys: Box<[SurfaceTy]>,
-    pub exported_values: Box<[ExportedValue]>,
-    pub exported_data: Box<[DataSurface]>,
-    pub exported_classes: Box<[ClassSurface]>,
-    pub exported_effects: Box<[EffectSurface]>,
-    pub exported_instances: Box<[InstanceSurface]>,
+    module_key: ModuleKey,
+    static_imports: Box<[ModuleKey]>,
+    tys: Box<[SurfaceTy]>,
+    exported_values: Box<[ExportedValue]>,
+    exported_data: Box<[DataSurface]>,
+    exported_classes: Box<[ClassSurface]>,
+    exported_effects: Box<[EffectSurface]>,
+    exported_instances: Box<[InstanceSurface]>,
 }
 
+type ModuleSurfaceExports = (
+    Box<[ExportedValue]>,
+    Box<[DataSurface]>,
+    Box<[ClassSurface]>,
+    Box<[EffectSurface]>,
+    Box<[InstanceSurface]>,
+);
+
 impl ModuleSurface {
-    /// # Panics
-    ///
-    /// Panics if `id` does not refer to a type in this surface.
+    pub(super) fn from_collected(
+        module_key: ModuleKey,
+        static_imports: Box<[ModuleKey]>,
+        tys: Box<[SurfaceTy]>,
+        exports: ModuleSurfaceExports,
+    ) -> Self {
+        Self {
+            module_key,
+            static_imports,
+            tys,
+            exported_values: exports.0,
+            exported_data: exports.1,
+            exported_classes: exports.2,
+            exported_effects: exports.3,
+            exported_instances: exports.4,
+        }
+    }
+
     #[must_use]
-    pub fn ty(&self, id: SurfaceTyId) -> &SurfaceTy {
+    pub const fn module_key(&self) -> &ModuleKey {
+        &self.module_key
+    }
+
+    #[must_use]
+    pub fn static_imports(&self) -> &[ModuleKey] {
+        &self.static_imports
+    }
+
+    #[must_use]
+    pub fn types(&self) -> &[SurfaceTy] {
+        &self.tys
+    }
+
+    #[must_use]
+    pub fn exported_values(&self) -> &[ExportedValue] {
+        &self.exported_values
+    }
+
+    #[must_use]
+    pub fn exported_data_defs(&self) -> &[DataSurface] {
+        &self.exported_data
+    }
+
+    #[must_use]
+    pub fn exported_classes(&self) -> &[ClassSurface] {
+        &self.exported_classes
+    }
+
+    #[must_use]
+    pub fn exported_effects(&self) -> &[EffectSurface] {
+        &self.exported_effects
+    }
+
+    #[must_use]
+    pub fn exported_instances(&self) -> &[InstanceSurface] {
+        &self.exported_instances
+    }
+
+    #[must_use]
+    pub fn try_ty(&self, id: SurfaceTyId) -> Option<&SurfaceTy> {
         self.tys
             .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
-            .expect("surface type id out of bounds")
     }
 
     #[must_use]
@@ -325,29 +387,169 @@ pub struct ExprFacts {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
-    pub params: Box<[HirTyId]>,
-    pub result: HirTyId,
+    params: Box<[HirTyId]>,
+    result: HirTyId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectDef {
-    pub key: DefinitionKey,
-    pub ops: BTreeMap<Box<str>, SemaEffectOpDef>,
-    pub laws: Box<[Symbol]>,
+    key: DefinitionKey,
+    ops: BTreeMap<Box<str>, SemaEffectOpDef>,
+    laws: Box<[Symbol]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
-    pub payload: Option<HirTyId>,
+    payload: Option<HirTyId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataDef {
-    pub key: DefinitionKey,
-    pub variants: BTreeMap<Box<str>, SemaDataVariantDef>,
-    pub repr_kind: Option<Box<str>>,
-    pub layout_align: Option<u32>,
-    pub layout_pack: Option<u32>,
+    key: DefinitionKey,
+    variants: BTreeMap<Box<str>, SemaDataVariantDef>,
+    repr_kind: Option<Box<str>>,
+    layout_align: Option<u32>,
+    layout_pack: Option<u32>,
+}
+
+impl SemaEffectOpDef {
+    #[must_use]
+    pub(crate) fn new(params: impl Into<Box<[HirTyId]>>, result: HirTyId) -> Self {
+        Self {
+            params: params.into(),
+            result,
+        }
+    }
+
+    #[must_use]
+    pub fn params(&self) -> &[HirTyId] {
+        &self.params
+    }
+
+    #[must_use]
+    pub const fn result(&self) -> HirTyId {
+        self.result
+    }
+}
+
+impl SemaEffectDef {
+    #[must_use]
+    pub(crate) fn new(
+        key: DefinitionKey,
+        ops: impl Into<BTreeMap<Box<str>, SemaEffectOpDef>>,
+        laws: impl Into<Box<[Symbol]>>,
+    ) -> Self {
+        Self {
+            key,
+            ops: ops.into(),
+            laws: laws.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn key(&self) -> &DefinitionKey {
+        &self.key
+    }
+
+    #[must_use]
+    pub fn op(&self, name: &str) -> Option<&SemaEffectOpDef> {
+        self.ops.get(name)
+    }
+
+    #[must_use]
+    pub fn op_index(&self, name: &str) -> Option<u16> {
+        self.ops
+            .keys()
+            .position(|entry| entry.as_ref() == name)
+            .and_then(|index| u16::try_from(index).ok())
+    }
+
+    #[must_use]
+    pub fn op_count(&self) -> usize {
+        self.ops.len()
+    }
+
+    pub fn ops(&self) -> impl Iterator<Item = (&str, &SemaEffectOpDef)> {
+        self.ops.iter().map(|(name, def)| (name.as_ref(), def))
+    }
+
+    #[must_use]
+    pub fn laws(&self) -> &[Symbol] {
+        &self.laws
+    }
+}
+
+impl SemaDataVariantDef {
+    #[must_use]
+    pub(crate) const fn new(payload: Option<HirTyId>) -> Self {
+        Self { payload }
+    }
+
+    #[must_use]
+    pub const fn payload(&self) -> Option<HirTyId> {
+        self.payload
+    }
+}
+
+impl SemaDataDef {
+    #[must_use]
+    pub(crate) fn new(
+        key: DefinitionKey,
+        variants: impl Into<BTreeMap<Box<str>, SemaDataVariantDef>>,
+        repr_kind: Option<Box<str>>,
+        layout_align: Option<u32>,
+        layout_pack: Option<u32>,
+    ) -> Self {
+        Self {
+            key,
+            variants: variants.into(),
+            repr_kind,
+            layout_align,
+            layout_pack,
+        }
+    }
+
+    #[must_use]
+    pub const fn key(&self) -> &DefinitionKey {
+        &self.key
+    }
+
+    #[must_use]
+    pub fn variant(&self, name: &str) -> Option<&SemaDataVariantDef> {
+        self.variants.get(name)
+    }
+
+    #[must_use]
+    pub fn variant_index(&self, name: &str) -> Option<u16> {
+        self.variants
+            .keys()
+            .position(|entry| entry.as_ref() == name)
+            .and_then(|index| u16::try_from(index).ok())
+    }
+
+    #[must_use]
+    pub fn variant_count(&self) -> usize {
+        self.variants.len()
+    }
+
+    pub fn variants(&self) -> impl Iterator<Item = (&str, &SemaDataVariantDef)> {
+        self.variants.iter().map(|(name, def)| (name.as_ref(), def))
+    }
+
+    #[must_use]
+    pub fn repr_kind(&self) -> Option<&str> {
+        self.repr_kind.as_deref()
+    }
+
+    #[must_use]
+    pub const fn layout_align(&self) -> Option<u32> {
+        self.layout_align
+    }
+
+    #[must_use]
+    pub const fn layout_pack(&self) -> Option<u32> {
+        self.layout_pack
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -414,21 +616,54 @@ pub struct SemaModule {
     diags: SemaDiagList,
 }
 
-pub struct SemaModuleParts {
-    pub resolved: ResolvedModule,
-    pub target: Option<TargetInfo>,
-    pub gated_bindings: HashSet<NameBindingId>,
-    pub foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
-    pub expr_facts: Vec<ExprFacts>,
-    pub pat_facts: Vec<PatFacts>,
-    pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
-    pub type_test_targets: HashMap<HirExprId, HirTyId>,
-    pub effect_defs: HashMap<Box<str>, SemaEffectDef>,
-    pub data_defs: HashMap<Box<str>, SemaDataDef>,
-    pub class_facts: HashMap<HirExprId, ClassFacts>,
-    pub instance_facts: HashMap<HirExprId, InstanceFacts>,
-    pub surface: ModuleSurface,
-    pub diags: SemaDiagList,
+struct SemaContextTables {
+    target: Option<TargetInfo>,
+    gated_bindings: HashSet<NameBindingId>,
+    foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+}
+
+struct SemaFactTables {
+    expr_facts: Vec<ExprFacts>,
+    pat_facts: Vec<PatFacts>,
+    expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    type_test_targets: HashMap<HirExprId, HirTyId>,
+}
+
+struct SemaDeclTables {
+    effect_defs: HashMap<Box<str>, SemaEffectDef>,
+    data_defs: HashMap<Box<str>, SemaDataDef>,
+    class_facts: HashMap<HirExprId, ClassFacts>,
+    instance_facts: HashMap<HirExprId, InstanceFacts>,
+}
+
+impl From<crate::SemaModuleBuild> for SemaModule {
+    fn from(build: crate::SemaModuleBuild) -> Self {
+        let context = SemaContextTables {
+            target: build.context.target,
+            gated_bindings: build.context.gated_bindings,
+            foreign_links: build.context.foreign_links,
+        };
+        let facts = SemaFactTables {
+            expr_facts: build.facts.expr_facts,
+            pat_facts: build.facts.pat_facts,
+            expr_module_targets: build.facts.expr_module_targets,
+            type_test_targets: build.facts.type_test_targets,
+        };
+        let decls = SemaDeclTables {
+            effect_defs: build.decls.effect_defs,
+            data_defs: build.decls.data_defs,
+            class_facts: build.decls.class_facts,
+            instance_facts: build.decls.instance_facts,
+        };
+        Self::from_parts(
+            build.resolved,
+            context,
+            facts,
+            decls,
+            build.surface,
+            build.diags,
+        )
+    }
 }
 
 impl SemaModule {
@@ -452,25 +687,16 @@ impl SemaModule {
         self.module().store.tys.get(id)
     }
 
-    /// # Panics
-    /// Panics if `id` does not refer to an expression in this module.
     #[must_use]
-    pub fn expr_ty(&self, id: HirExprId) -> HirTyId {
-        self.expr_facts
-            .get(idx_to_usize(id))
-            .expect("expr facts missing for HIR expr id")
-            .ty
+    pub fn try_expr_ty(&self, id: HirExprId) -> Option<HirTyId> {
+        self.expr_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
     }
 
-    /// # Panics
-    /// Panics if `id` does not refer to an expression in this module.
     #[must_use]
-    pub fn expr_effects(&self, id: HirExprId) -> &EffectRow {
-        &self
-            .expr_facts
+    pub fn try_expr_effects(&self, id: HirExprId) -> Option<&EffectRow> {
+        self.expr_facts
             .get(idx_to_usize(id))
-            .expect("expr facts missing for HIR expr id")
-            .effects
+            .map(|facts| &facts.effects)
     }
 
     #[must_use]
@@ -493,14 +719,9 @@ impl SemaModule {
         self.foreign_links.get(&binding)
     }
 
-    /// # Panics
-    /// Panics if `id` does not refer to a pattern in this module.
     #[must_use]
-    pub fn pat_ty(&self, id: HirPatId) -> HirTyId {
-        self.pat_facts
-            .get(idx_to_usize(id))
-            .expect("pat facts missing for HIR pat id")
-            .ty
+    pub fn try_pat_ty(&self, id: HirPatId) -> Option<HirTyId> {
+        self.pat_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
     }
 
     #[must_use]
@@ -513,9 +734,8 @@ impl SemaModule {
         self.effect_defs.get(name)
     }
 
-    #[must_use]
-    pub const fn effect_defs(&self) -> &HashMap<Box<str>, SemaEffectDef> {
-        &self.effect_defs
+    pub fn effect_defs(&self) -> impl Iterator<Item = &SemaEffectDef> {
+        self.effect_defs.values()
     }
 
     #[must_use]
@@ -523,9 +743,8 @@ impl SemaModule {
         self.data_defs.get(name)
     }
 
-    #[must_use]
-    pub const fn data_defs(&self) -> &HashMap<Box<str>, SemaDataDef> {
-        &self.data_defs
+    pub fn data_defs(&self) -> impl Iterator<Item = &SemaDataDef> {
+        self.data_defs.values()
     }
 
     #[must_use]
@@ -538,23 +757,29 @@ impl SemaModule {
         &self.surface
     }
 
-    #[must_use]
-    pub(crate) fn from_parts(parts: SemaModuleParts) -> Self {
+    fn from_parts(
+        resolved: ResolvedModule,
+        context: SemaContextTables,
+        facts: SemaFactTables,
+        decls: SemaDeclTables,
+        surface: ModuleSurface,
+        diags: SemaDiagList,
+    ) -> Self {
         Self {
-            resolved: parts.resolved,
-            target: parts.target,
-            gated_bindings: parts.gated_bindings,
-            foreign_links: parts.foreign_links,
-            expr_facts: parts.expr_facts.into_boxed_slice(),
-            pat_facts: parts.pat_facts.into_boxed_slice(),
-            expr_module_targets: parts.expr_module_targets,
-            type_test_targets: parts.type_test_targets,
-            effect_defs: parts.effect_defs,
-            data_defs: parts.data_defs,
-            class_facts: parts.class_facts,
-            instance_facts: parts.instance_facts,
-            surface: parts.surface,
-            diags: parts.diags,
+            resolved,
+            target: context.target,
+            gated_bindings: context.gated_bindings,
+            foreign_links: context.foreign_links,
+            expr_facts: facts.expr_facts.into_boxed_slice(),
+            pat_facts: facts.pat_facts.into_boxed_slice(),
+            expr_module_targets: facts.expr_module_targets,
+            type_test_targets: facts.type_test_targets,
+            effect_defs: decls.effect_defs,
+            data_defs: decls.data_defs,
+            class_facts: decls.class_facts,
+            instance_facts: decls.instance_facts,
+            surface,
+            diags,
         }
     }
 

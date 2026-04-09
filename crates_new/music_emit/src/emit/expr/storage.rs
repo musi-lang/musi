@@ -87,7 +87,8 @@ pub(super) fn compile_assign(
                 diags,
                 emitter.module_key,
                 &value.origin,
-                &EmitDiagKind::UnsupportedAssignTarget(name.clone()),
+                &EmitDiagKind::UnsupportedAssignTarget,
+                format!("assignment target `{name}` has no emitted form"),
             );
             emit_zero(emitter);
         }

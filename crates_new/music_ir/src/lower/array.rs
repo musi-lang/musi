@@ -10,7 +10,12 @@ pub(super) fn lower_array_expr(
     let array_items = sema.module().store.array_items.get(items);
     if !array_items.iter().any(|array_item| array_item.spread) {
         return IrExprKind::Array {
-            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            ty_name: render_ty_name(
+                sema,
+                sema.try_expr_ty(expr_id)
+                    .expect("expr type missing for array literal"),
+                interner,
+            ),
             items: array_items
                 .iter()
                 .map(|array_item| lower_expr(ctx, array_item.expr))
@@ -29,12 +34,8 @@ pub(super) fn lower_array_expr(
             parts.push(IrSeqPart::Expr(temp_expr));
             continue;
         }
-        match append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts) {
-            Ok(runtime_spread) => {
-                has_runtime_spread |= runtime_spread;
-            }
-            Err(kind) => return kind,
-        }
+        has_runtime_spread |=
+            append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts);
     }
 
     prelude.push(IrExpr {
@@ -80,8 +81,10 @@ fn append_array_spread_parts(
     spread_expr: HirExprId,
     temp_expr: &IrExpr,
     parts: &mut Vec<IrSeqPart>,
-) -> Result<bool, IrExprKind> {
-    let spread_ty = sema.expr_ty(spread_expr);
+) -> bool {
+    let spread_ty = sema
+        .try_expr_ty(spread_expr)
+        .expect("expr type missing for array spread");
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -94,12 +97,12 @@ fn append_array_spread_parts(
                     index_u32,
                 )));
             }
-            Ok(false)
+            false
         }
         HirTyKind::Array { dims, .. } => {
             append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
         }
-        _ => Err(unsupported_expr("array spread source is not tuple/array")),
+        _ => invalid_lowering_path("array spread source is not tuple/array"),
     }
 }
 
@@ -109,14 +112,14 @@ fn append_array_dim_spread_parts(
     dims: &SliceRange<HirDim>,
     temp_expr: &IrExpr,
     parts: &mut Vec<IrSeqPart>,
-) -> Result<bool, IrExprKind> {
+) -> bool {
     let dims_vec = sema.module().store.dims.get(dims.clone());
     if dims_vec.is_empty() {
         parts.push(IrSeqPart::Spread(temp_expr.clone()));
-        return Ok(true);
+        return true;
     }
     if dims_vec.len() != 1 {
-        return Err(unsupported_expr("array spread requires 1D array"));
+        invalid_lowering_path("array spread requires 1D array");
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -127,11 +130,11 @@ fn append_array_dim_spread_parts(
                     index_u32,
                 )));
             }
-            Ok(false)
+            false
         }
         HirDim::Unknown | HirDim::Name(_) => {
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
-            Ok(true)
+            true
         }
     }
 }
@@ -161,7 +164,12 @@ fn array_tail_kind(
 ) -> IrExprKind {
     if has_runtime_spread {
         return IrExprKind::ArrayCat {
-            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            ty_name: render_ty_name(
+                sema,
+                sema.try_expr_ty(expr_id)
+                    .expect("expr type missing for array cat"),
+                interner,
+            ),
             parts: parts.into_boxed_slice(),
         };
     }
@@ -174,10 +182,15 @@ fn array_tail_kind(
         .collect::<Option<Vec<_>>>()
         .map(Vec::into_boxed_slice);
     let Some(items) = items else {
-        return unsupported_expr("array spread lowering invariant");
+        invalid_lowering_path("array spread lowering invariant");
     };
     IrExprKind::Array {
-        ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+        ty_name: render_ty_name(
+            sema,
+            sema.try_expr_ty(expr_id)
+                .expect("expr type missing for array literal"),
+            interner,
+        ),
         items,
     }
 }

@@ -325,7 +325,7 @@ pub(super) fn check_bound_data(
                 let origin = ctx.expr(expr).origin;
                 lower_type_expr(ctx, expr, origin)
             });
-            let prev = variant_map.insert(tag, super::super::DataVariantDef { payload });
+            let prev = variant_map.insert(tag, super::super::DataVariantDef::new(payload));
             if prev.is_some() {
                 ctx.diag(
                     variant.origin.span,
@@ -337,13 +337,7 @@ pub(super) fn check_bound_data(
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
         ctx.insert_data_def(
             data_name,
-            super::super::DataDef {
-                key,
-                variants: variant_map,
-                repr_kind: None,
-                layout_align: None,
-                layout_pack: None,
-            },
+            super::super::DataDef::new(key, variant_map, None, None, None),
         );
     }
     check_data_expr(ctx, variants, fields)
@@ -366,10 +360,7 @@ pub(super) fn check_bound_effect(
                 let facts = member_signature(ctx, member, false);
                 (
                     Box::<str>::from(ctx.resolve_symbol(member.name.name)),
-                    EffectOpDef {
-                        params: facts.params.clone(),
-                        result: facts.result,
-                    },
+                    EffectOpDef::new(facts.params.clone(), facts.result),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -380,7 +371,7 @@ pub(super) fn check_bound_effect(
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-        ctx.insert_effect_def(effect_name, EffectDef { key, ops, laws });
+        ctx.insert_effect_def(effect_name, EffectDef::new(key, ops, laws));
     }
     let _ = expr_id;
     for member in ctx.members(members) {

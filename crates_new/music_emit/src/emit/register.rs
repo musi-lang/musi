@@ -1,6 +1,4 @@
 use super::*;
-use crate::EmitDiagKind;
-
 pub(super) fn register_module(
     state: &mut ProgramState,
     module: &IrModule,
@@ -22,8 +20,8 @@ pub(super) fn register_module(
 
 fn register_types(state: &mut ProgramState, module: &IrModule) {
     let mut seen = BTreeSet::<Box<str>>::new();
-    for index in 0..module.types.len() {
-        let name: Box<str> = format!("{}::type::{index}", module.module_key.as_str()).into();
+    for index in 0..module.types().len() {
+        let name: Box<str> = format!("{}::type::{index}", module.module_key().as_str()).into();
         if seen.insert(name.clone()) {
             let name_id = state.artifact.intern_string(name.as_ref());
             let _ = state.artifact.types.alloc(TypeDescriptor { name: name_id });
@@ -32,7 +30,7 @@ fn register_types(state: &mut ProgramState, module: &IrModule) {
 }
 
 fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for data in &module.data_defs {
+    for data in module.data_defs() {
         let name = qualified_name(&data.key.module, &data.key.name);
         let _ty = ensure_type(state, layout, name.as_ref());
         let repr_kind = data
@@ -52,14 +50,14 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
 }
 
 fn register_effects(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for effect in &module.effects {
+    for effect in module.effects() {
         let effect_id = ensure_effect(state, effect);
         let _ = layout.effects.insert(effect.key.clone(), effect_id);
     }
 }
 
 fn register_classes(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for class in &module.classes {
+    for class in module.classes() {
         let name = qualified_name(&class.key.module, &class.key.name);
         let name_id = state.artifact.intern_string(name.as_ref());
         let id = state
@@ -71,8 +69,8 @@ fn register_classes(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
 }
 
 fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for export in &module.exports {
-        let name = qualified_name(&module.module_key, export.name.as_ref());
+    for export in module.exports() {
+        let name = qualified_name(module.module_key(), export.name.as_ref());
         let name_id = state.artifact.intern_string(name.as_ref());
         let target = export_target(
             state,
@@ -85,11 +83,7 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
         );
 
         let Some(target) = target else {
-            state.diags.push(
-                Diag::error(EmitDiagKind::ExportTargetMissing.message())
-                    .with_code(EmitDiagKind::ExportTargetMissing.code()),
-            );
-            continue;
+            super::invalid_emit_path(format!("export target missing for `{}`", export.name));
         };
 
         let _ = state.artifact.exports.alloc(ExportDescriptor {
@@ -141,20 +135,20 @@ fn export_target(
 
 pub(super) fn export_binding(module: &IrModule, export_name: &str) -> Option<NameBindingId> {
     module
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == export_name)
         .and_then(|callable| callable.binding)
         .or_else(|| {
             module
-                .globals
+                .globals()
                 .iter()
                 .find(|global| global.name.as_ref() == export_name)
                 .and_then(|global| global.binding)
         })
         .or_else(|| {
             module
-                .foreigns
+                .foreigns()
                 .iter()
                 .find(|foreign| foreign.name.as_ref() == export_name)
                 .and_then(|foreign| foreign.binding)
@@ -162,7 +156,7 @@ pub(super) fn export_binding(module: &IrModule, export_name: &str) -> Option<Nam
 }
 
 fn register_meta(state: &mut ProgramState, module: &IrModule) {
-    for record in &module.meta {
+    for record in module.meta() {
         let target = state.artifact.intern_string(record.target.as_ref());
         let key = state.artifact.intern_string(record.key.as_ref());
         let values = record
@@ -180,8 +174,8 @@ fn register_meta(state: &mut ProgramState, module: &IrModule) {
 }
 
 fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for foreign in &module.foreigns {
-        let qualified = qualified_name(&module.module_key, &foreign.name);
+    for foreign in module.foreigns() {
+        let qualified = qualified_name(module.module_key(), &foreign.name);
         let name_id = state.artifact.intern_string(qualified.as_ref());
         let abi_id = state.artifact.intern_string(&foreign.abi);
         let symbol_id = state.artifact.intern_string(&foreign.symbol);
@@ -205,8 +199,8 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
 }
 
 fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for callable in &module.callables {
-        let name = qualified_name(&module.module_key, &callable.name);
+    for callable in module.callables() {
+        let name = qualified_name(module.module_key(), &callable.name);
         let params = u16::try_from(callable.params.len()).unwrap_or(u16::MAX);
         let method_id = alloc_method(
             &mut state.artifact,
@@ -224,8 +218,8 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
 }
 
 fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for global in &module.globals {
-        let name = qualified_name(&module.module_key, &global.name);
+    for global in module.globals() {
+        let name = qualified_name(module.module_key(), &global.name);
         let init_name = format!("{name}::init");
         let init_method = alloc_method(&mut state.artifact, &init_name, false, 0);
         let name_id = state.artifact.intern_string(name.as_ref());
@@ -242,10 +236,10 @@ fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
 }
 
 fn register_expr_types(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for callable in &module.callables {
+    for callable in module.callables() {
         collect_expr_types(state, layout, &callable.body);
     }
-    for global in &module.globals {
+    for global in module.globals() {
         collect_expr_types(state, layout, &global.body);
     }
 }

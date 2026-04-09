@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
@@ -20,6 +21,7 @@ use music_module::ModuleKey;
 use music_names::NameBindingId;
 
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
+use crate::diag::EmitDiagKind;
 
 mod expr;
 mod register;
@@ -104,6 +106,11 @@ struct EmitterTables<'a> {
     qualified: &'a QualifiedTables,
 }
 
+#[derive(Debug)]
+struct EmitInvariant {
+    description: Box<str>,
+}
+
 /// Lowers one IR module into a standalone SEAM artifact.
 ///
 /// # Errors
@@ -111,6 +118,25 @@ struct EmitterTables<'a> {
 /// Returns emit diagnostics when the module contains unsupported lowered expressions or invalid
 /// runtime-contract values.
 pub fn lower_ir_module(
+    module: &IrModule,
+    options: EmitOptions,
+) -> Result<EmittedModule, EmitDiagList> {
+    match catch_unwind(AssertUnwindSafe(|| lower_ir_module_impl(module, options))) {
+        Ok(result) => result,
+        Err(payload) => {
+            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
+                resume_unwind(payload);
+            };
+            Err(vec![
+                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
+                    .with_note(format!("detail `{}`", invariant.description)),
+            ])
+        }
+    }
+}
+
+fn lower_ir_module_impl(
     module: &IrModule,
     options: EmitOptions,
 ) -> Result<EmittedModule, EmitDiagList> {
@@ -123,13 +149,13 @@ pub fn lower_ir_module(
         return Err(state.diags);
     }
 
-    let entry_method = build_module_entry(&mut state.artifact, &module.module_key, &layout);
+    let entry_method = build_module_entry(&mut state.artifact, module.module_key(), &layout);
     Ok(EmittedModule {
-        module_key: module.module_key.clone(),
+        module_key: module.module_key().clone(),
         artifact: state.artifact,
         entry_method,
         exports: collect_exports(module, &layout).into_boxed_slice(),
-        static_imports: module.static_imports.clone(),
+        static_imports: module.static_imports().to_vec().into_boxed_slice(),
     })
 }
 
@@ -140,6 +166,28 @@ pub fn lower_ir_module(
 /// Returns emit diagnostics when any module contains unsupported lowered expressions or invalid
 /// runtime-contract values.
 pub fn lower_ir_program(
+    modules: &[IrModule],
+    entry_module: &ModuleKey,
+    options: EmitOptions,
+) -> Result<EmittedProgram, EmitDiagList> {
+    match catch_unwind(AssertUnwindSafe(|| {
+        lower_ir_program_impl(modules, entry_module, options)
+    })) {
+        Ok(result) => result,
+        Err(payload) => {
+            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
+                resume_unwind(payload);
+            };
+            Err(vec![
+                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
+                    .with_note(format!("detail `{}`", invariant.description)),
+            ])
+        }
+    }
+}
+
+fn lower_ir_program_impl(
     modules: &[IrModule],
     entry_module: &ModuleKey,
     options: EmitOptions,
@@ -164,10 +212,16 @@ pub fn lower_ir_program(
         entry_method,
         modules: modules
             .iter()
-            .map(|module| module.module_key.clone())
+            .map(|module| module.module_key().clone())
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     })
+}
+
+fn invalid_emit_path(description: impl AsRef<str>) -> ! {
+    let description = description.as_ref().to_owned().into_boxed_str();
+    debug_assert!(false, "invalid emit path: {description}");
+    resume_unwind(Box::new(EmitInvariant { description }));
 }
 
 fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &[ModuleLayout]) {
@@ -175,42 +229,42 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
     let mut foreign_candidates = HashMap::<Box<str>, Vec<ForeignId>>::new();
     let mut global_candidates = HashMap::<Box<str>, Vec<GlobalId>>::new();
     for (module, layout) in modules.iter().zip(layouts) {
-        for callable in &module.callables {
+        for callable in module.callables() {
             if let Some(binding) = callable.binding
                 && let Some(method) = layout.callables.get(&binding).copied()
             {
                 let _ = state
                     .qualified
                     .methods
-                    .insert((module.module_key.clone(), callable.name.clone()), method);
+                    .insert((module.module_key().clone(), callable.name.clone()), method);
                 method_candidates
                     .entry(callable.name.clone())
                     .or_default()
                     .push(method);
             }
         }
-        for foreign in &module.foreigns {
+        for foreign in module.foreigns() {
             if let Some(binding) = foreign.binding
                 && let Some(id) = layout.foreigns.get(&binding).copied()
             {
                 let _ = state
                     .qualified
                     .foreigns
-                    .insert((module.module_key.clone(), foreign.name.clone()), id);
+                    .insert((module.module_key().clone(), foreign.name.clone()), id);
                 foreign_candidates
                     .entry(foreign.name.clone())
                     .or_default()
                     .push(id);
             }
         }
-        for global in &module.globals {
+        for global in module.globals() {
             if let Some(binding) = global.binding
                 && let Some(id) = layout.globals.get(&binding).copied()
             {
                 let _ = state
                     .qualified
                     .globals
-                    .insert((module.module_key.clone(), global.name.clone()), id);
+                    .insert((module.module_key().clone(), global.name.clone()), id);
                 global_candidates
                     .entry(global.name.clone())
                     .or_default()
@@ -253,7 +307,7 @@ fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &Modul
         ..
     } = state;
     let tables = EmitterTables { unique, qualified };
-    for callable in &module.callables {
+    for callable in module.callables() {
         let Some(method_id) = layout
             .callables_by_name
             .get(callable.name.as_ref())
@@ -262,7 +316,7 @@ fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &Modul
             continue;
         };
         let locals = build_param_locals(&callable.params);
-        let mut emitter = method_emitter(artifact, &module.module_key, layout, tables, locals);
+        let mut emitter = method_emitter(artifact, module.module_key(), layout, tables, locals);
         expr::compile_expr(&mut emitter, &callable.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
@@ -281,7 +335,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
         ..
     } = state;
     let tables = EmitterTables { unique, qualified };
-    for global in &module.globals {
+    for global in module.globals() {
         let Some(binding) = global.binding else {
             continue;
         };
@@ -291,8 +345,13 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
         let Some(init_method) = artifact.globals.get(global_id).initializer else {
             continue;
         };
-        let mut emitter =
-            method_emitter(artifact, &module.module_key, layout, tables, HashMap::new());
+        let mut emitter = method_emitter(
+            artifact,
+            module.module_key(),
+            layout,
+            tables,
+            HashMap::new(),
+        );
         expr::compile_expr(&mut emitter, &global.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::StGlob,
@@ -358,7 +417,7 @@ fn entry_code(init_methods: &[MethodId]) -> CodeBuffer {
 
 fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBinding> {
     module
-        .exports
+        .exports()
         .iter()
         .map(|export| EmittedBinding {
             name: export.name.clone(),

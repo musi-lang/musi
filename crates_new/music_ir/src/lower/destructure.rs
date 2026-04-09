@@ -135,7 +135,9 @@ fn lower_irrefutable_record(
     out: &mut Vec<IrExpr>,
 ) {
     let sema = ctx.sema;
-    let pat_ty = sema.pat_ty(pat);
+    let pat_ty = sema
+        .try_pat_ty(pat)
+        .expect("pattern type missing for destructuring");
     match &sema.ty(pat_ty).kind {
         HirTyKind::Module => {
             lower_irrefutable_module_record(ctx, input.origin, input.module_target, fields, out);

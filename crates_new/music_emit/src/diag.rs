@@ -3,26 +3,24 @@ use music_base::diag::{Diag, DiagCode};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EmitDiagKind {
     ExportTargetMissing,
-    UnknownTypeValue(Box<str>),
-    UnknownTypeNameForOp {
-        ty_name: Box<str>,
-        op_text: Box<str>,
-    },
-    UnsupportedBinaryOperator(Box<str>),
+    UnknownTypeValue,
+    UnknownTypeNameForOp,
+    UnsupportedBinaryOperator,
     CaseVariantDispatchRequiresSingleDataType,
-    UnknownDataType(Box<str>),
+    UnknownDataType,
     SpreadCallArgsNotEmitted,
-    UnknownClosureTarget(Box<str>),
+    UnknownClosureTarget,
     UnknownEffect,
-    UnknownHandlerType(Box<str>),
-    UnknownRecordType(Box<str>),
+    UnknownHandlerType,
+    UnknownRecordType,
     RecordLiteralMissingFieldValue,
     RecordUpdateMissingFieldValue,
-    UnknownSequenceType(Box<str>),
-    InvalidIntegerLiteral(Box<str>),
-    InvalidFloatLiteral(Box<str>),
-    UnsupportedNameRef(Box<str>),
-    UnsupportedAssignTarget(Box<str>),
+    UnknownSequenceType,
+    InvalidIntegerLiteral,
+    InvalidFloatLiteral,
+    UnsupportedNameRef,
+    UnsupportedAssignTarget,
+    EmitInvariantViolated,
 }
 
 impl EmitDiagKind {
@@ -30,72 +28,87 @@ impl EmitDiagKind {
     pub const fn code(&self) -> DiagCode {
         DiagCode::new(match self {
             Self::ExportTargetMissing => 3500,
-            Self::UnknownTypeValue(_) => 3501,
-            Self::UnknownTypeNameForOp { .. } => 3502,
-            Self::UnsupportedBinaryOperator(_) => 3503,
+            Self::UnknownTypeValue => 3501,
+            Self::UnknownTypeNameForOp => 3502,
+            Self::UnsupportedBinaryOperator => 3503,
             Self::CaseVariantDispatchRequiresSingleDataType => 3504,
-            Self::UnknownDataType(_) => 3505,
+            Self::UnknownDataType => 3505,
             Self::SpreadCallArgsNotEmitted => 3506,
-            Self::UnknownClosureTarget(_) => 3507,
+            Self::UnknownClosureTarget => 3507,
             Self::UnknownEffect => 3508,
-            Self::UnknownHandlerType(_) => 3509,
-            Self::UnknownRecordType(_) => 3510,
+            Self::UnknownHandlerType => 3509,
+            Self::UnknownRecordType => 3510,
             Self::RecordLiteralMissingFieldValue => 3511,
             Self::RecordUpdateMissingFieldValue => 3512,
-            Self::UnknownSequenceType(_) => 3513,
-            Self::InvalidIntegerLiteral(_) => 3514,
-            Self::InvalidFloatLiteral(_) => 3515,
-            Self::UnsupportedNameRef(_) => 3516,
-            Self::UnsupportedAssignTarget(_) => 3517,
+            Self::UnknownSequenceType => 3513,
+            Self::InvalidIntegerLiteral => 3514,
+            Self::InvalidFloatLiteral => 3515,
+            Self::UnsupportedNameRef => 3516,
+            Self::UnsupportedAssignTarget => 3517,
+            Self::EmitInvariantViolated => 3518,
         })
     }
 
     #[must_use]
-    pub fn message(&self) -> String {
+    pub const fn message(&self) -> &'static str {
         match self {
-            Self::ExportTargetMissing => "export target missing".into(),
-            Self::UnknownTypeValue(name) => format!("unknown emitted type value `{name}`"),
-            Self::UnknownTypeNameForOp { ty_name, op_text } => {
-                format!("unknown type name `{ty_name}` for `{op_text}`")
-            }
-            Self::UnsupportedBinaryOperator(name) => {
-                format!("binary operator `{name}` has no emitted form")
-            }
+            Self::ExportTargetMissing => "export target missing",
+            Self::UnknownTypeValue => "unknown emitted type value",
+            Self::UnknownTypeNameForOp => "unknown type name for op",
+            Self::UnsupportedBinaryOperator => "binary operator has no emitted form",
             Self::CaseVariantDispatchRequiresSingleDataType => {
-                "case variant dispatch requires single data type".into()
+                "case variant dispatch requires single data type"
             }
-            Self::UnknownDataType(name) => format!("unknown emitted data type `{name}`"),
-            Self::SpreadCallArgsNotEmitted => "spread call args have no emitted form".into(),
-            Self::UnknownClosureTarget(name) => format!("unknown emitted closure target `{name}`"),
-            Self::UnknownEffect => "unknown emitted effect".into(),
-            Self::UnknownHandlerType(name) => format!("unknown emitted handler type `{name}`"),
-            Self::UnknownRecordType(name) => format!("unknown emitted record type `{name}`"),
-            Self::RecordLiteralMissingFieldValue => "record literal missing field value".into(),
-            Self::RecordUpdateMissingFieldValue => "record update missing field value".into(),
-            Self::UnknownSequenceType(name) => format!("unknown emitted sequence type `{name}`"),
-            Self::InvalidIntegerLiteral(raw) => format!("invalid integer literal `{raw}`"),
-            Self::InvalidFloatLiteral(raw) => format!("invalid float literal `{raw}`"),
-            Self::UnsupportedNameRef(name) => format!("name ref `{name}` has no emitted form"),
-            Self::UnsupportedAssignTarget(name) => {
-                format!("assignment target `{name}` has no emitted form")
-            }
+            Self::UnknownDataType => "unknown emitted data type",
+            Self::SpreadCallArgsNotEmitted => "spread call args have no emitted form",
+            Self::UnknownClosureTarget => "unknown emitted closure target",
+            Self::UnknownEffect => "unknown emitted effect",
+            Self::UnknownHandlerType => "unknown emitted handler type",
+            Self::UnknownRecordType => "unknown emitted record type",
+            Self::RecordLiteralMissingFieldValue => "record literal missing field value",
+            Self::RecordUpdateMissingFieldValue => "record update missing field value",
+            Self::UnknownSequenceType => "unknown emitted sequence type",
+            Self::InvalidIntegerLiteral => "invalid integer literal",
+            Self::InvalidFloatLiteral => "invalid float literal",
+            Self::UnsupportedNameRef => "name ref has no emitted form",
+            Self::UnsupportedAssignTarget => "assignment target has no emitted form",
+            Self::EmitInvariantViolated => "emit invariant violated",
         }
     }
 
     #[must_use]
-    pub fn label(&self) -> String {
+    pub const fn label(&self) -> &'static str {
         self.message()
     }
 
     #[must_use]
-    pub fn from_diag(diag: &Diag) -> Option<Self> {
-        match diag.code()?.raw() {
+    pub const fn from_code(code: DiagCode) -> Option<Self> {
+        match code.raw() {
             3500 => Some(Self::ExportTargetMissing),
+            3501 => Some(Self::UnknownTypeValue),
+            3502 => Some(Self::UnknownTypeNameForOp),
+            3503 => Some(Self::UnsupportedBinaryOperator),
             3504 => Some(Self::CaseVariantDispatchRequiresSingleDataType),
+            3505 => Some(Self::UnknownDataType),
+            3506 => Some(Self::SpreadCallArgsNotEmitted),
+            3507 => Some(Self::UnknownClosureTarget),
             3508 => Some(Self::UnknownEffect),
+            3509 => Some(Self::UnknownHandlerType),
+            3510 => Some(Self::UnknownRecordType),
             3511 => Some(Self::RecordLiteralMissingFieldValue),
             3512 => Some(Self::RecordUpdateMissingFieldValue),
+            3513 => Some(Self::UnknownSequenceType),
+            3514 => Some(Self::InvalidIntegerLiteral),
+            3515 => Some(Self::InvalidFloatLiteral),
+            3516 => Some(Self::UnsupportedNameRef),
+            3517 => Some(Self::UnsupportedAssignTarget),
+            3518 => Some(Self::EmitInvariantViolated),
             _ => None,
         }
+    }
+
+    #[must_use]
+    pub fn from_diag(diag: &Diag) -> Option<Self> {
+        Self::from_code(diag.code()?)
     }
 }

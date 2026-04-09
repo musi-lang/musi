@@ -407,8 +407,8 @@ fn solve_implements(
         let Some(surface) = env.module_surface(&module_key) else {
             continue;
         };
-        pending.extend(surface.static_imports.iter().cloned());
-        for instance in &surface.exported_instances {
+        pending.extend(surface.static_imports().iter().cloned());
+        for instance in surface.exported_instances() {
             if instance.class_key != class_key {
                 continue;
             }
@@ -675,7 +675,7 @@ fn class_name_from_surface(
     class_args: &[SurfaceTyId],
     class_key: &DefinitionKey,
 ) -> Symbol {
-    for class in &surface.exported_classes {
+    for class in surface.exported_classes() {
         if &class.key == class_key {
             return ctx.intern(&class.key.name);
         }

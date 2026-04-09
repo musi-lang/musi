@@ -197,8 +197,8 @@ pub(in super::super) fn check_instance_coherence(ctx: &mut CheckPass<'_, '_, '_>
         let Some(surface) = env.module_surface(&module) else {
             continue;
         };
-        stack.extend(surface.static_imports.iter().cloned());
-        for instance in &surface.exported_instances {
+        stack.extend(surface.static_imports().iter().cloned());
+        for instance in surface.exported_instances() {
             let args = instance
                 .class_args
                 .iter()

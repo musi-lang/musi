@@ -7,7 +7,7 @@ use music_resolve::{ResolveOptions, ResolvedModule, resolve_module};
 use music_sema::{SemaEnv, SemaModule, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
-use crate::api::{ParsedModule, SessionError};
+use crate::api::{ParsedModule, SessionError, SessionSyntaxErrors};
 
 use super::Session;
 use super::graph::{SessionImportEnv, SurfaceMap};
@@ -40,14 +40,12 @@ impl Session {
             .parsed
             .as_ref()
             .expect("parsed cache missing after construction");
-        if parsed.lex_errors.is_empty() && parsed.parse_errors.is_empty() {
+        if parsed.syntax.is_empty() {
             Ok(parsed)
         } else {
             Err(SessionError::Parse {
                 module: key.clone(),
-                lex_errors: parsed.lex_errors.clone(),
-                parse_errors: parsed.parse_errors.clone(),
-                diags: parsed.syntax_diags.clone(),
+                syntax: parsed.syntax.clone(),
             })
         }
     }
@@ -148,6 +146,13 @@ impl Session {
             .and_then(|record| record.ir.as_ref())
             .is_none()
         {
+            #[cfg(test)]
+            if let Some(diags) = self.test_hooks.ir_failure.take() {
+                return Err(SessionError::Ir {
+                    module: key.clone(),
+                    diags,
+                });
+            }
             let _ = self.check_module(key)?;
             let ir = {
                 let sema = self
@@ -189,6 +194,13 @@ impl Session {
             .and_then(|record| record.emitted.as_ref())
             .is_none()
         {
+            #[cfg(test)]
+            if let Some(diags) = self.test_hooks.emit_failure.take() {
+                return Err(SessionError::Emit {
+                    module: key.clone(),
+                    diags,
+                });
+            }
             let _ = self.lower_module(key)?;
             let emit_options = self.options.emit;
             let emitted = {
@@ -239,9 +251,7 @@ impl Session {
             source_id,
             import_sites,
             export_summary,
-            lex_errors,
-            parse_errors,
-            syntax_diags,
+            syntax: SessionSyntaxErrors::new(lex_errors, parse_errors, syntax_diags),
         })
     }
 

@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
-use std::process::abort;
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 use music_arena::SliceRange;
 use music_base::diag::Diag;
@@ -13,6 +13,7 @@ use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 use music_sema::{DefinitionKey, SemaModule};
 
+use crate::IrDiagKind;
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrCaseRecordField, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind,
@@ -94,6 +95,11 @@ struct RecordUpdateRewriteInput {
     updates: Box<[IrRecordField]>,
 }
 
+#[derive(Debug)]
+struct LoweringInvariant {
+    description: Box<str>,
+}
+
 /// Lowers sema-owned module facts into the codegen-facing IR surface.
 ///
 /// # Errors
@@ -101,7 +107,31 @@ struct RecordUpdateRewriteInput {
 /// Returns semantic diagnostics when exported surface types or effect rows reference invalid
 /// sema-owned ids.
 pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, IrDiagList> {
+    match catch_unwind(AssertUnwindSafe(|| lower_module_impl(sema, interner))) {
+        Ok(result) => result,
+        Err(payload) => {
+            let Some(invariant) = payload.downcast_ref::<LoweringInvariant>() else {
+                resume_unwind(payload);
+            };
+            Err(vec![
+                Diag::error(IrDiagKind::LoweringInvariantViolated.message())
+                    .with_code(IrDiagKind::LoweringInvariantViolated.code())
+                    .with_note(format!("detail `{}`", invariant.description)),
+            ])
+        }
+    }
+}
+
+fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule, IrDiagList> {
     let mut diags = Vec::<Diag>::new();
+    if !sema.diags().is_empty() {
+        diags.push(
+            Diag::error(IrDiagKind::LoweringRequiresSemaCleanModule.message())
+                .with_code(IrDiagKind::LoweringRequiresSemaCleanModule.code())
+                .with_note(format!("sema diagnostic count `{}`", sema.diags().len())),
+        );
+        return Err(diags);
+    }
     validate::validate_surface(sema, &mut diags);
     if !diags.is_empty() {
         return Err(diags);
@@ -126,18 +156,18 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
     for data_def in &items.data_defs {
         let _ = seen_data_keys.insert(data_def.key.clone());
     }
-    for data in sema.data_defs().values() {
-        if !data.key.name.starts_with("__sum__") {
+    for data in sema.data_defs() {
+        if !data.key().name.starts_with("__sum__") {
             continue;
         }
-        if seen_data_keys.contains(&data.key) {
+        if seen_data_keys.contains(data.key()) {
             continue;
         }
         let mut max_field_count = 0u32;
-        for variant in data.variants.values() {
+        for (_, variant) in data.variants() {
             let arity =
                 variant
-                    .payload
+                    .payload()
                     .map_or(0u32, |payload_ty| match &sema.ty(payload_ty).kind {
                         HirTyKind::Tuple { items } => {
                             u32::try_from(sema.module().store.ty_ids.get(*items).len())
@@ -148,50 +178,51 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
             max_field_count = max_field_count.max(arity);
         }
         items.data_defs.push(IrDataDef {
-            key: data.key.clone(),
-            variant_count: u32::try_from(data.variants.len()).unwrap_or(u32::MAX),
+            key: data.key().clone(),
+            variant_count: u32::try_from(data.variant_count()).unwrap_or(u32::MAX),
             field_count: max_field_count,
-            repr_kind: data.repr_kind.clone(),
-            layout_align: data.layout_align,
-            layout_pack: data.layout_pack,
+            repr_kind: data.repr_kind().map(Into::into),
+            layout_align: data.layout_align(),
+            layout_pack: data.layout_pack(),
         });
     }
     let meta = meta::collect_meta(sema);
+    let surface = sema.surface();
 
-    Ok(IrModule {
-        module_key: sema.resolved().module_key.clone(),
-        static_imports: sema.surface().static_imports.to_vec().into_boxed_slice(),
-        types: sema.surface().tys.clone(),
-        exports: sema.surface().exported_values.clone(),
-        callables: items.callables.into_boxed_slice(),
-        globals: items.globals.into_boxed_slice(),
-        data_defs: items.data_defs.into_boxed_slice(),
-        foreigns: items.foreigns.into_boxed_slice(),
-        effects: {
-            let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
-            for effect in sema.effect_defs().values() {
-                let _ = seen
-                    .entry(effect.key.clone())
-                    .or_insert_with(|| IrEffectDef::from(effect));
-            }
-            seen.into_values().collect::<Vec<_>>().into_boxed_slice()
-        },
-        classes: sema
-            .surface()
-            .exported_classes
-            .iter()
-            .map(IrClassDef::from)
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        instances: sema
-            .surface()
-            .exported_instances
-            .iter()
-            .map(IrInstanceDef::from)
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        meta,
-    })
+    Ok(IrModule::new(
+        sema.resolved().module_key.clone(),
+        surface.static_imports().to_vec().into_boxed_slice(),
+        surface.types().to_vec().into_boxed_slice(),
+        (
+            surface.exported_values().to_vec().into_boxed_slice(),
+            items.callables.into_boxed_slice(),
+            items.globals.into_boxed_slice(),
+            items.data_defs.into_boxed_slice(),
+            items.foreigns.into_boxed_slice(),
+            {
+                let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
+                for effect in sema.effect_defs() {
+                    let _ = seen
+                        .entry(effect.key().clone())
+                        .or_insert_with(|| IrEffectDef::from(effect));
+                }
+                seen.into_values().collect::<Vec<_>>().into_boxed_slice()
+            },
+            surface
+                .exported_classes()
+                .iter()
+                .map(IrClassDef::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            surface
+                .exported_instances()
+                .iter()
+                .map(IrInstanceDef::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            meta,
+        ),
+    ))
 }
 
 fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
@@ -206,7 +237,12 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         return IrExpr {
             origin,
             kind: IrExprKind::TypeValue {
-                ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+                ty_name: render_ty_name(
+                    sema,
+                    sema.try_expr_ty(expr_id)
+                        .expect("expr type missing for type value"),
+                    interner,
+                ),
             },
         };
     }
@@ -258,7 +294,12 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         }
         HirExprKind::TypeCast { base, .. } => IrExprKind::TyCast {
             base: lower_boxed_expr(ctx, *base),
-            ty_name: render_ty_name(sema, sema.expr_ty(expr_id), interner),
+            ty_name: render_ty_name(
+                sema,
+                sema.try_expr_ty(expr_id)
+                    .expect("expr type missing for syntax type value"),
+                interner,
+            ),
         },
         HirExprKind::Resume { expr } => IrExprKind::Resume {
             expr: expr.map(|expr| lower_boxed_expr(ctx, expr)),
@@ -353,7 +394,10 @@ fn lower_prefix_expr(
             expr: lower_boxed_expr(ctx, expr),
         },
         HirPrefixOp::Neg => {
-            let ty = ctx.sema.expr_ty(expr_id);
+            let ty = ctx
+                .sema
+                .try_expr_ty(expr_id)
+                .expect("expr type missing for prefix op");
             let (zero, op) = match &ctx.sema.ty(ty).kind {
                 HirTyKind::Float => (
                     IrExpr {
@@ -408,12 +452,9 @@ fn lower_splice_expr(kind: &HirSpliceKind) -> IrExprKind {
 }
 
 fn invalid_lowering_path(description: impl AsRef<str>) -> ! {
-    debug_assert!(false, "invalid IR lowering path: {}", description.as_ref());
-    abort();
-}
-
-fn unsupported_expr(description: impl AsRef<str>) -> IrExprKind {
-    invalid_lowering_path(description)
+    let description = description.as_ref().to_owned().into_boxed_str();
+    debug_assert!(false, "invalid IR lowering path: {description}");
+    resume_unwind(Box::new(LoweringInvariant { description }));
 }
 
 fn lower_template_expr(
@@ -488,7 +529,12 @@ fn lower_tuple_expr(
 ) -> IrExprKind {
     let sema = ctx.sema;
     IrExprKind::Tuple {
-        ty_name: render_ty_name(sema, sema.expr_ty(expr_id), ctx.interner),
+        ty_name: render_ty_name(
+            sema,
+            sema.try_expr_ty(expr_id)
+                .expect("expr type missing for tuple literal"),
+            ctx.interner,
+        ),
         items: lower_expr_list(ctx, items),
     }
 }
@@ -551,7 +597,9 @@ fn lower_variant_expr(
 ) -> IrExprKind {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let ty = sema.expr_ty(expr_id);
+    let ty = sema
+        .try_expr_ty(expr_id)
+        .expect("expr type missing for variant");
     let data = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
@@ -564,18 +612,13 @@ fn lower_variant_expr(
         _ => None,
     };
     let Some(data) = data else {
-        return unsupported_expr("variant without data type definition");
+        invalid_lowering_path("variant without data type definition");
     };
     let tag_name = interner.resolve(tag.name);
-    let tag_index = data
-        .variants
-        .keys()
-        .position(|name| name.as_ref() == tag_name)
-        .and_then(|index| u16::try_from(index).ok())
-        .unwrap_or(u16::MAX);
-    let variant_count = u16::try_from(data.variants.len()).unwrap_or(u16::MAX);
+    let tag_index = data.variant_index(tag_name).unwrap_or(u16::MAX);
+    let variant_count = u16::try_from(data.variant_count()).unwrap_or(u16::MAX);
     if tag_index == u16::MAX {
-        return unsupported_expr("unknown variant tag");
+        invalid_lowering_path("unknown variant tag");
     }
 
     let arg_exprs = sema.module().store.expr_ids.get(args);
@@ -588,7 +631,7 @@ fn lower_variant_expr(
     let field_count = u16::try_from(lowered_args.len()).unwrap_or(u16::MAX);
     let _ = variant_count;
     IrExprKind::VariantNew {
-        data_key: data.key.clone(),
+        data_key: data.key().clone(),
         tag_index,
         field_count,
         args: lowered_args,
@@ -610,7 +653,7 @@ fn lower_handle_expr(
     let interner = ctx.interner;
     let handler_name = interner.resolve(handler.name);
     let Some(effect) = sema.effect_def(handler_name) else {
-        return unsupported_expr("handle with unknown effect");
+        invalid_lowering_path("handle with unknown effect");
     };
     let origin = sema.module().store.exprs.get(expr_id).origin;
     let origin = IrOrigin {
@@ -630,7 +673,7 @@ fn lower_handle_expr(
         }
     }
     let Some(value_clause) = value_clause else {
-        return unsupported_expr("handle without value clause");
+        invalid_lowering_path("handle without value clause");
     };
 
     let value_closure = lower_handler_clause_closure(
@@ -641,11 +684,11 @@ fn lower_handle_expr(
         value_clause.body,
     );
 
-    let mut ops_by_index = vec![None::<IrHandleOp>; effect.ops.len()];
+    let mut ops_by_index = vec![None::<IrHandleOp>; effect.op_count()];
     for clause in op_clauses {
         let op_name = interner.resolve(clause.op.name);
-        let Some(op_index) = effect.ops.keys().position(|name| name.as_ref() == op_name) else {
-            return unsupported_expr("handle clause with unknown effect op");
+        let Some(op_index) = effect.op_index(op_name).map(usize::from) else {
+            invalid_lowering_path("handle clause with unknown effect op");
         };
         let closure = lower_handler_clause_closure(
             ctx,
@@ -662,11 +705,11 @@ fn lower_handle_expr(
     }
 
     if ops_by_index.iter().any(Option::is_none) {
-        return unsupported_expr("handle missing op clause");
+        invalid_lowering_path("handle missing op clause");
     }
 
     IrExprKind::Handle {
-        effect_key: effect.key.clone(),
+        effect_key: effect.key().clone(),
         value: Box::new(value_closure),
         ops: ops_by_index
             .into_iter()
@@ -757,7 +800,7 @@ fn lower_local_callable_let(
         ),
         HirPatKind::Wildcard => (None, Box::<str>::from("_")),
         other => {
-            return unsupported_expr(format!("local callable let pattern {other:?}"));
+            invalid_lowering_path(format!("local callable let pattern {other:?}"));
         }
     };
 
@@ -888,7 +931,10 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
         params: callable_params.into_boxed_slice(),
         body,
         exported: false,
-        effects: sema.expr_effects(input.body_id).clone(),
+        effects: sema
+            .try_expr_effects(input.body_id)
+            .expect("expr effects missing for closure body")
+            .clone(),
         module_target: input.callable_module_target,
     });
 
@@ -2018,7 +2064,7 @@ fn lower_index_expr(
     let sema = ctx.sema;
     let indices = sema.module().store.expr_ids.get(args);
     if indices.is_empty() {
-        return unsupported_expr("index without argument");
+        invalid_lowering_path("index without argument");
     }
     IrExprKind::Index {
         base: lower_boxed_expr(ctx, base),
@@ -2041,7 +2087,9 @@ fn lower_field_expr(
     let sema = ctx.sema;
     let interner = ctx.interner;
 
-    let base_ty = sema.expr_ty(base);
+    let base_ty = sema
+        .try_expr_ty(base)
+        .expect("expr type missing for field base");
     let record_ty = match sema.ty(base_ty).kind {
         HirTyKind::Mut { inner } => inner,
         _ => base_ty,
@@ -2050,10 +2098,10 @@ fn lower_field_expr(
         let Some((indices, _layout, _field_count)) =
             record_layout_for_ty(sema, record_ty, interner)
         else {
-            return unsupported_expr("record field access without record layout");
+            invalid_lowering_path("record field access without record layout");
         };
         let Some(index) = indices.get(&symbol).copied() else {
-            return unsupported_expr("record field access missing field");
+            invalid_lowering_path("record field access missing field");
         };
         return IrExprKind::RecordGet {
             base: Box::new(lower_expr(ctx, base)),
@@ -2065,7 +2113,7 @@ fn lower_field_expr(
         .cloned()
         .or_else(|| sema.expr_module_target(base).cloned())
         .map_or_else(
-            || unsupported_expr(format!("{kind:?}")),
+            || invalid_lowering_path(format!("{kind:?}")),
             |module_target| IrExprKind::Name {
                 binding: None,
                 name: interner.resolve(symbol).into(),
@@ -2094,7 +2142,7 @@ fn lower_case_expr(
         lowered.extend(lower_case_arm(ctx, arm));
     }
     if lowered.is_empty() {
-        return unsupported_expr("case without emit-compatible arms");
+        invalid_lowering_path("case without emit-compatible arms");
     }
     IrExprKind::Case {
         scrutinee: Box::new(lower_expr(ctx, scrutinee)),
@@ -2175,9 +2223,12 @@ fn lower_record_case_patterns(
     fields: &SliceRange<HirRecordPatField>,
     interner: &Interner,
 ) -> Vec<IrCasePattern> {
-    let Some((indices, _layout, _field_count)) =
-        record_layout_for_ty(sema, sema.pat_ty(pat), interner)
-    else {
+    let Some((indices, _layout, _field_count)) = record_layout_for_ty(
+        sema,
+        sema.try_pat_ty(pat)
+            .expect("pattern type missing for record case"),
+        interner,
+    ) else {
         return Vec::new();
     };
     let mut acc = vec![Vec::<IrCaseRecordField>::new()];
@@ -2258,7 +2309,9 @@ fn lower_variant_patterns(
     args: SliceRange<HirPatId>,
     interner: &Interner,
 ) -> Vec<IrCasePattern> {
-    let ty = sema.pat_ty(pat);
+    let ty = sema
+        .try_pat_ty(pat)
+        .expect("pattern type missing for variant case");
     let data = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
@@ -2274,15 +2327,10 @@ fn lower_variant_patterns(
         return Vec::new();
     };
     let tag_name = interner.resolve(tag.name);
-    let Some(tag_index) = data
-        .variants
-        .keys()
-        .position(|name| name.as_ref() == tag_name)
-        .and_then(|index| u16::try_from(index).ok())
-    else {
+    let Some(tag_index) = data.variant_index(tag_name) else {
         return Vec::new();
     };
-    let Some(variant_count) = u16::try_from(data.variants.len()).ok() else {
+    let Some(variant_count) = u16::try_from(data.variant_count()).ok() else {
         return Vec::new();
     };
 
@@ -2291,7 +2339,7 @@ fn lower_variant_patterns(
         sema.module().store.pat_ids.get(args),
         interner,
         |items| IrCasePattern::Variant {
-            data_key: data.key.clone(),
+            data_key: data.key().clone(),
             variant_count,
             tag_index,
             args: items,
@@ -2356,8 +2404,12 @@ fn lower_binary_op(
     interner: &Interner,
 ) -> IrBinaryOp {
     let sema = ctx.sema;
-    let left_ty = sema.ty(sema.expr_ty(left));
-    let right_ty = sema.ty(sema.expr_ty(right));
+    let left_ty = sema.ty(sema
+        .try_expr_ty(left)
+        .expect("expr type missing for binary left"));
+    let right_ty = sema.ty(sema
+        .try_expr_ty(right)
+        .expect("expr type missing for binary right"));
     let wants_float =
         matches!(left_ty.kind, HirTyKind::Float) || matches!(right_ty.kind, HirTyKind::Float);
     let wants_string =

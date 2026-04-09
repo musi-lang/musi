@@ -152,7 +152,8 @@ fn compile_expr_sequence_and_data(
                     diags,
                     emitter.module_key,
                     &expr.origin,
-                    &EmitDiagKind::UnknownTypeValue(ty_name.clone()),
+                    &EmitDiagKind::UnknownTypeValue,
+                    format!("unknown emitted type value `{ty_name}`"),
                 );
                 emit_zero(emitter);
                 return true;
@@ -325,10 +326,8 @@ fn compile_type_op_by_name(
             diags,
             emitter.module_key,
             origin,
-            &EmitDiagKind::UnknownTypeNameForOp {
-                ty_name: ty_name.into(),
-                op_text: op_text.into(),
-            },
+            &EmitDiagKind::UnknownTypeNameForOp,
+            format!("unknown type name `{ty_name}` for `{op_text}`"),
         );
         emit_zero(emitter);
         return;

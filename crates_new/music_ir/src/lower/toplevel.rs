@@ -1,6 +1,6 @@
 use music_arena::SliceRange;
 use music_hir::{HirExprId, HirExprKind, HirParam, HirPatKind, HirTyKind};
-use music_sema::DefinitionKey;
+use music_sema::{DefinitionKey, SemaDataDef};
 
 use super::{LetItemInput, LowerCtx, TopLevelItems};
 use crate::api::{IrCallable, IrDataDef, IrGlobal, IrParam};
@@ -83,13 +83,20 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
     }
 
     let module_target = sema.expr_module_target(value).cloned();
-    let effects = sema.expr_effects(value).clone();
-    if matches!(sema.ty(sema.expr_ty(value)).kind, HirTyKind::Module)
-        || matches!(
-            sema.module().store.exprs.get(value).kind,
-            HirExprKind::Import { .. }
-        )
-    {
+    let effects = sema
+        .try_expr_effects(value)
+        .expect("expr effects missing for top-level value")
+        .clone();
+    if matches!(
+        sema.ty(sema
+            .try_expr_ty(value)
+            .expect("expr type missing for top-level value"))
+            .kind,
+        HirTyKind::Module
+    ) || matches!(
+        sema.module().store.exprs.get(value).kind,
+        HirExprKind::Import { .. }
+    ) {
         return;
     }
 
@@ -102,11 +109,11 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
                     module: ctx.module_key.clone(),
                     name: name_text.clone(),
                 },
-                |data| data.key.clone(),
+                |data| data.key().clone(),
             );
-            let repr_kind = def.and_then(|data| data.repr_kind.clone());
-            let layout_align = def.and_then(|data| data.layout_align);
-            let layout_pack = def.and_then(|data| data.layout_pack);
+            let repr_kind = def.and_then(|data| data.repr_kind().map(Into::into));
+            let layout_align = def.and_then(SemaDataDef::layout_align);
+            let layout_pack = def.and_then(SemaDataDef::layout_pack);
             items.data_defs.push(IrDataDef {
                 key,
                 variant_count: u32::try_from(

@@ -30,7 +30,7 @@ pub(in super::super) fn check_perform_expr(
         arg: None,
     });
     ExprFacts {
-        ty: op_def.result,
+        ty: op_def.result(),
         effects,
     }
 }
@@ -80,13 +80,13 @@ pub(in super::super) fn check_handle_expr(
         if !did_insert {
             ctx.diag(origin.span, DiagKind::DuplicateHandlerClause, "");
         }
-        let Some(op_def) = effect.ops.get(clause_name.as_ref()).cloned() else {
+        let Some(op_def) = effect.op(clause_name.as_ref()).cloned() else {
             ctx.diag(origin.span, DiagKind::UnknownEffectOp, "");
             continue;
         };
 
         let params = ctx.idents(clause.params);
-        if params.len() != op_def.params.len().saturating_add(1) {
+        if params.len() != op_def.params().len().saturating_add(1) {
             ctx.diag(origin.span, DiagKind::HandlerClauseArityMismatch, "");
         }
         let (args, cont) = if params.is_empty() {
@@ -95,7 +95,7 @@ pub(in super::super) fn check_handle_expr(
             let split = params.len().saturating_sub(1);
             (params[0..split].to_vec(), params.last().copied())
         };
-        for (ident, ty) in args.into_iter().zip(op_def.params.iter().copied()) {
+        for (ident, ty) in args.into_iter().zip(op_def.params().iter().copied()) {
             if let Some(binding) = ctx.binding_id_for_decl(ident) {
                 ctx.insert_binding_type(binding, ty);
             }
@@ -103,7 +103,7 @@ pub(in super::super) fn check_handle_expr(
         if let Some(cont) = cont
             && let Some(binding) = ctx.binding_id_for_decl(cont)
         {
-            let params = ctx.alloc_ty_list([op_def.result]);
+            let params = ctx.alloc_ty_list([op_def.result()]);
             let cont_ty = ctx.alloc_ty(HirTyKind::Arrow {
                 params,
                 ret: result_ty,
@@ -112,7 +112,7 @@ pub(in super::super) fn check_handle_expr(
             ctx.insert_binding_type(binding, cont_ty);
         }
         ctx.push_resume(ResumeCtx {
-            arg: op_def.result,
+            arg: op_def.result(),
             result: result_ty,
         });
         let body = check_expr(ctx, clause.body);
@@ -125,7 +125,7 @@ pub(in super::super) fn check_handle_expr(
     if seen_value != 1 {
         ctx.diag(origin.span, DiagKind::HandleRequiresSingleValueClause, "");
     }
-    for op in effect.ops.keys() {
+    for (op, _) in effect.ops() {
         if !seen_ops.contains(op) {
             ctx.diag(origin.span, DiagKind::HandlerMissingOperationClause, "");
         }
@@ -219,7 +219,6 @@ fn effect_op_call(
     let op_name = ctx.resolve_symbol(name.name);
     let op = ctx
         .effect_def(&effect_name_text)
-        .and_then(|effect| effect.ops.get(op_name))
-        .cloned()?;
+        .and_then(|effect| effect.op(op_name).cloned())?;
     Some((effect_name_text, op))
 }

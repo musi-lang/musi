@@ -35,7 +35,8 @@ pub(super) fn compile_sequence_literal(
             diags,
             emitter.module_key,
             &missing_origin,
-            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
+            &EmitDiagKind::UnknownSequenceType,
+            format!("unknown emitted sequence type `{ty_name}`"),
         );
         emit_zero(emitter);
         return;
@@ -63,7 +64,8 @@ pub(super) fn compile_array_cat(
                 source_id: SourceId::from_raw(0),
                 span: Span::new(0, 0),
             },
-            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
+            &EmitDiagKind::UnknownSequenceType,
+            format!("unknown emitted sequence type `{ty_name}`"),
         );
         emit_zero(emitter);
         return;
@@ -107,7 +109,8 @@ pub(super) fn compile_seq_parts_any(
                 source_id: SourceId::from_raw(0),
                 span: Span::new(0, 0),
             },
-            &EmitDiagKind::UnknownSequenceType(ty_name.into()),
+            &EmitDiagKind::UnknownSequenceType,
+            format!("unknown emitted sequence type `{ty_name}`"),
         );
         emit_zero(emitter);
         return;

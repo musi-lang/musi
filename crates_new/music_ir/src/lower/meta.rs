@@ -83,7 +83,11 @@ fn format_attr(attr: &Attr) -> String {
 }
 
 fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
-    match &surface.ty(ty).kind {
+    match &surface
+        .try_ty(ty)
+        .expect("surface type missing while formatting meta")
+        .kind
+    {
         SurfaceTyKind::Error => "<error>".into(),
         SurfaceTyKind::Unknown => "Unknown".into(),
         SurfaceTyKind::Type => "Type".into(),
@@ -294,7 +298,7 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
     let mut out = Vec::<IrMetaRecord>::new();
     let surface = sema.surface();
 
-    for class in &surface.exported_classes {
+    for class in surface.exported_classes() {
         let target = qualified_name(&class.key.module, class.key.name.as_ref());
         if !class.laws.is_empty() {
             push_meta(
@@ -312,7 +316,7 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         );
     }
 
-    for effect in &surface.exported_effects {
+    for effect in surface.exported_effects() {
         let target = qualified_name(&effect.key.module, effect.key.name.as_ref());
         if !effect.laws.is_empty() {
             push_meta(
@@ -330,7 +334,7 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         );
     }
 
-    for data in &surface.exported_data {
+    for data in surface.exported_data_defs() {
         let target = qualified_name(&data.key.module, data.key.name.as_ref());
         push_inert_and_musi_attrs(
             &mut out,
@@ -340,8 +344,8 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         );
     }
 
-    for export in &surface.exported_values {
-        let target = qualified_name(&surface.module_key, export.name.as_ref());
+    for export in surface.exported_values() {
+        let target = qualified_name(surface.module_key(), export.name.as_ref());
         push_inert_and_musi_attrs(
             &mut out,
             target.as_ref(),
@@ -351,8 +355,8 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         push_export_sig_meta(&mut out, surface, target.as_ref(), export);
     }
 
-    for (idx, inst) in surface.exported_instances.iter().enumerate() {
-        let target: Box<str> = format!("{}::instance::{idx}", surface.module_key.as_str()).into();
+    for (idx, inst) in surface.exported_instances().iter().enumerate() {
+        let target: Box<str> = format!("{}::instance::{idx}", surface.module_key().as_str()).into();
         push_inert_and_musi_attrs(
             &mut out,
             target.as_ref(),

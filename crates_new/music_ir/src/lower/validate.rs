@@ -4,15 +4,16 @@ use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTy
 use crate::{IrDiagKind as DiagKind, api::IrDiagList};
 
 pub(super) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
-    let types = &sema.surface().tys;
-    for export in &sema.surface().exported_values {
+    let surface = sema.surface();
+    let types = surface.types();
+    for export in surface.exported_values() {
         validate_surface_ty_id(types, export.ty, diags);
         validate_effect_row(types, &export.effects, diags);
         for constraint in &export.constraints {
             validate_surface_ty_id(types, constraint.value, diags);
         }
     }
-    for effect in &sema.surface().exported_effects {
+    for effect in surface.exported_effects() {
         for op in &effect.ops {
             for param in &op.params {
                 validate_surface_ty_id(types, *param, diags);
@@ -20,7 +21,7 @@ pub(super) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
             validate_surface_ty_id(types, op.result, diags);
         }
     }
-    for class in &sema.surface().exported_classes {
+    for class in surface.exported_classes() {
         for constraint in &class.constraints {
             validate_surface_ty_id(types, constraint.value, diags);
         }
@@ -31,7 +32,7 @@ pub(super) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
             validate_surface_ty_id(types, member.result, diags);
         }
     }
-    for instance in &sema.surface().exported_instances {
+    for instance in surface.exported_instances() {
         for arg in &instance.class_args {
             validate_surface_ty_id(types, *arg, diags);
         }

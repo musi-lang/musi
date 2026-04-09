@@ -251,10 +251,10 @@ pub(super) fn collect_exported_values(
                     .map(|facts| facts.key.clone()),
                 effect_key: decls
                     .effect_def(export.name.as_ref())
-                    .map(|effect| effect.key.clone()),
+                    .map(|effect| effect.key().clone()),
                 data_key: decls
                     .data_def(export.name.as_ref())
-                    .map(|data| data.key.clone()),
+                    .map(|data| data.key().clone()),
                 inert_attrs,
                 musi_attrs,
             })
@@ -275,23 +275,22 @@ pub(super) fn collect_exported_data(
         |export, inert_attrs, musi_attrs, tys| {
             let data = decls.data_def(export.name.as_ref())?;
             Some(DataSurface {
-                key: data.key.clone(),
+                key: data.key().clone(),
                 variants: export
                     .opaque
                     .then(Box::<[DataVariantSurface]>::default)
                     .unwrap_or_else(|| {
-                        data.variants
-                            .iter()
+                        data.variants()
                             .map(|(name, variant)| DataVariantSurface {
-                                name: name.clone(),
-                                payload: variant.payload.map(|ty| tys.lower(ty)),
+                                name: name.into(),
+                                payload: variant.payload().map(|ty| tys.lower(ty)),
                             })
                             .collect::<Vec<_>>()
                             .into_boxed_slice()
                     }),
-                repr_kind: data.repr_kind.clone(),
-                layout_align: data.layout_align,
-                layout_pack: data.layout_pack,
+                repr_kind: data.repr_kind().map(Into::into),
+                layout_align: data.layout_align(),
+                layout_pack: data.layout_pack(),
                 inert_attrs,
                 musi_attrs,
             })
@@ -357,24 +356,23 @@ pub(super) fn collect_exported_effects(
         |export, inert_attrs, musi_attrs, tys| {
             let effect = decls.effect_def(export.name.as_ref())?;
             Some(EffectSurface {
-                key: effect.key.clone(),
+                key: effect.key().clone(),
                 ops: export
                     .opaque
                     .then(Box::<[EffectOpSurface]>::default)
                     .unwrap_or_else(|| {
                         effect
-                            .ops
-                            .iter()
+                            .ops()
                             .map(|(name, op)| EffectOpSurface {
-                                name: name.clone(),
+                                name: name.into(),
                                 params: op
-                                    .params
+                                    .params()
                                     .iter()
                                     .copied()
                                     .map(|ty| tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
-                                result: tys.lower(op.result),
+                                result: tys.lower(op.result()),
                             })
                             .collect::<Vec<_>>()
                             .into_boxed_slice()
@@ -384,7 +382,7 @@ pub(super) fn collect_exported_effects(
                     .then(Box::<[Box<str>]>::default)
                     .unwrap_or_else(|| {
                         effect
-                            .laws
+                            .laws()
                             .iter()
                             .map(|symbol| tys.interner.resolve(*symbol).into())
                             .collect::<Vec<_>>()

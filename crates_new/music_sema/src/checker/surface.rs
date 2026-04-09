@@ -33,14 +33,16 @@ pub fn build_module_surface(
     let exported_effects = collect_exported_effects(module, decls, &exports, &mut tys);
     let exported_instances = collect_exported_instances(module, decls, &exports, &mut tys);
 
-    ModuleSurface {
-        module_key: module.resolved.module_key.clone(),
+    ModuleSurface::from_collected(
+        module.resolved.module_key.clone(),
         static_imports,
-        tys: tys.finish(),
-        exported_values,
-        exported_data,
-        exported_classes,
-        exported_effects,
-        exported_instances,
-    }
+        tys.finish(),
+        (
+            exported_values,
+            exported_data,
+            exported_classes,
+            exported_effects,
+            exported_instances,
+        ),
+    )
 }

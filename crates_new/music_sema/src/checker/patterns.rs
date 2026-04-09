@@ -6,7 +6,7 @@ use music_hir::{HirPatId, HirPatKind, HirRecordPatField, HirTyId, HirTyKind};
 use music_names::Ident;
 use music_names::NameBindingId;
 
-use crate::api::PatFacts;
+use crate::api::{PatFacts, SemaDataVariantDef};
 
 use super::exprs::check_expr;
 use super::normalize::type_mismatch;
@@ -160,8 +160,8 @@ fn bind_variant_pat(
             let data_name = ctx.resolve_symbol(name);
             let tag_name = ctx.resolve_symbol(tag.name);
             ctx.data_def(data_name)
-                .and_then(|data| data.variants.get(tag_name))
-                .and_then(|variant| variant.payload)
+                .and_then(|data| data.variant(tag_name))
+                .and_then(SemaDataVariantDef::payload)
         }
         _ => None,
     };

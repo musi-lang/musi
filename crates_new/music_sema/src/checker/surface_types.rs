@@ -45,7 +45,11 @@ pub fn surface_key(module_key: &ModuleKey, interner: &Interner, name: Symbol) ->
 }
 
 pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
-    match &surface.ty(ty).kind {
+    match &surface
+        .try_ty(ty)
+        .expect("surface type missing while formatting")
+        .kind
+    {
         SurfaceTyKind::Error => "<error>".into(),
         SurfaceTyKind::Unknown => "Unknown".into(),
         SurfaceTyKind::Type => "Type".into(),
@@ -357,7 +361,11 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
     }
 
     fn import_kind(&mut self, id: SurfaceTyId) -> HirTyKind {
-        let kind = &self.surface.ty(id).kind;
+        let kind = &self
+            .surface
+            .try_ty(id)
+            .expect("surface type missing while reading")
+            .kind;
         if let Some(simple) = simple_hir_ty_kind(kind) {
             return simple;
         }

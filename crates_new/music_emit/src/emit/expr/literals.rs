@@ -42,7 +42,8 @@ fn compile_int_literal(
             diags,
             emitter.module_key,
             origin,
-            &EmitDiagKind::InvalidIntegerLiteral(raw.into()),
+            &EmitDiagKind::InvalidIntegerLiteral,
+            format!("invalid integer literal `{raw}`"),
         );
         emit_zero(emitter);
     }
@@ -64,7 +65,8 @@ fn compile_float_literal(
             diags,
             emitter.module_key,
             origin,
-            &EmitDiagKind::InvalidFloatLiteral(raw.into()),
+            &EmitDiagKind::InvalidFloatLiteral,
+            format!("invalid float literal `{raw}`"),
         );
         emit_zero(emitter);
         return;

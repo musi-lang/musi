@@ -20,7 +20,7 @@ use super::surface::build_module_surface;
 use crate::api::{
     ClassFacts, DefinitionKey, ExprFacts, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef,
     SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule,
-    SemaModuleParts, SemaOptions, TargetInfo,
+    SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -232,19 +232,25 @@ pub fn finish_module(
     facts: FactState,
 ) -> SemaModule {
     let surface = build_module_surface(&module, runtime, typing, &decls);
-    SemaModule::from_parts(SemaModuleParts {
+    crate::build_sema_module(crate::SemaModuleBuild {
         resolved: module.resolved,
-        target: runtime.target.clone(),
-        gated_bindings: typing.gated_bindings.clone(),
-        foreign_links: typing.foreign_links.clone(),
-        expr_facts: facts.expr_facts,
-        pat_facts: facts.pat_facts,
-        expr_module_targets: facts.expr_module_targets,
-        type_test_targets: facts.type_test_targets,
-        effect_defs: decls.effect_defs,
-        data_defs: decls.data_defs,
-        class_facts: decls.class_facts,
-        instance_facts: decls.instance_facts,
+        context: crate::SemaContextBuild {
+            target: runtime.target.clone(),
+            gated_bindings: typing.gated_bindings.clone(),
+            foreign_links: typing.foreign_links.clone(),
+        },
+        facts: crate::SemaFactsBuild {
+            expr_facts: facts.expr_facts,
+            pat_facts: facts.pat_facts,
+            expr_module_targets: facts.expr_module_targets,
+            type_test_targets: facts.type_test_targets,
+        },
+        decls: crate::SemaDeclsBuild {
+            effect_defs: decls.effect_defs,
+            data_defs: decls.data_defs,
+            class_facts: decls.class_facts,
+            instance_facts: decls.instance_facts,
+        },
         surface,
         diags: facts.diags,
     })
@@ -711,28 +717,12 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
         let key = DefinitionKey::new(self.module_key().clone(), name.clone());
         let variants = BTreeMap::from([
-            (
-                "Left".into(),
-                SemaDataVariantDef {
-                    payload: Some(left),
-                },
-            ),
-            (
-                "Right".into(),
-                SemaDataVariantDef {
-                    payload: Some(right),
-                },
-            ),
+            ("Left".into(), SemaDataVariantDef::new(Some(left))),
+            ("Right".into(), SemaDataVariantDef::new(Some(right))),
         ]);
         let _prev = self.decls.data_defs.insert(
             name.clone(),
-            SemaDataDef {
-                key,
-                variants,
-                repr_kind: None,
-                layout_align: None,
-                layout_pack: None,
-            },
+            SemaDataDef::new(key, variants, None, None, None),
         );
         name
     }

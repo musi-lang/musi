@@ -1,4 +1,5 @@
 use music_base::SourceId;
+use music_base::diag::{Diag, DiagCode};
 use music_bc::descriptor::ConstantValue;
 use music_module::ModuleKey;
 use music_names::Interner;
@@ -6,7 +7,7 @@ use music_resolve::{ResolveOptions, resolve_module};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
-use crate::{EmitOptions, lower_ir_module, lower_ir_program};
+use crate::{EmitDiagKind, EmitOptions, emit_diag_kind, lower_ir_module, lower_ir_program};
 
 fn lower_ir(src: &str, key: &str) -> music_ir::IrModule {
     let lexed = Lexer::new(src).lex();
@@ -250,9 +251,9 @@ fn emits_foreign_calls() {
     let ir = lower_ir(
         r#"
         foreign "c" (
-          let puts (value : CString) : Int;
+          let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts("hello");
+        export let answer () : Int := puts(1);
     "#,
         "main",
     );
@@ -411,4 +412,20 @@ fn emits_type_values_record_patterns_and_capturing_recursion() {
         }),
         "expected capturing recursive closure"
     );
+}
+
+#[test]
+fn emit_diag_kind_extracts_every_known_emit_code() {
+    for code in 3500u16..=3517u16 {
+        let diag = Diag::error("emit failure").with_code(DiagCode::new(code));
+        let kind = emit_diag_kind(&diag).expect("all emit diagnostic codes must map to a kind");
+        assert_eq!(kind.code().raw(), code);
+    }
+}
+
+#[test]
+fn emit_diag_kind_is_code_based_not_message_based() {
+    let diag = Diag::error("plain text").with_code(EmitDiagKind::UnknownEffect.code());
+    let kind = emit_diag_kind(&diag).expect("emit diagnostic code should map");
+    assert_eq!(kind, EmitDiagKind::UnknownEffect);
 }

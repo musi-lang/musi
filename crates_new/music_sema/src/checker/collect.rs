@@ -203,7 +203,7 @@ fn collect_data_decl(
             let origin = ctx.expr(expr).origin;
             lower_type_expr(ctx, expr, origin)
         });
-        let prev = variant_map.insert(tag, DataVariantDef { payload });
+        let prev = variant_map.insert(tag, DataVariantDef::new(payload));
         if prev.is_some() {
             ctx.diag(
                 variant.origin.span,
@@ -216,13 +216,7 @@ fn collect_data_decl(
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
     ctx.insert_data_def(
         data_name,
-        DataDef {
-            key,
-            variants: variant_map,
-            repr_kind,
-            layout_align,
-            layout_pack,
-        },
+        DataDef::new(key, variant_map, repr_kind, layout_align, layout_pack),
     );
 }
 
@@ -260,10 +254,7 @@ fn collect_effect_decl(
             let facts = member_signature(ctx, member, false);
             (
                 Box::<str>::from(ctx.resolve_symbol(member.name.name)),
-                EffectOpDef {
-                    params: facts.params.clone(),
-                    result: facts.result,
-                },
+                EffectOpDef::new(facts.params.clone(), facts.result),
             )
         })
         .collect::<BTreeMap<_, _>>();
@@ -274,7 +265,7 @@ fn collect_effect_decl(
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-    ctx.insert_effect_def(effect_name, EffectDef { key, ops, laws });
+    ctx.insert_effect_def(effect_name, EffectDef::new(key, ops, laws));
 }
 
 fn collect_class_decl(

@@ -37,7 +37,8 @@ pub(super) fn compile_binary(
                 diags,
                 emitter.module_key,
                 &left.origin,
-                &EmitDiagKind::UnsupportedBinaryOperator(name.clone()),
+                &EmitDiagKind::UnsupportedBinaryOperator,
+                format!("binary operator `{name}` has no emitted form"),
             );
             Opcode::CmpEq
         }
@@ -175,6 +176,7 @@ fn compile_case_variant_dispatch(
             emitter.module_key,
             &origin,
             &EmitDiagKind::CaseVariantDispatchRequiresSingleDataType,
+            "case variant dispatch requires single data type",
         );
         emit_zero(emitter);
         return;
@@ -612,7 +614,8 @@ fn resolve_variant_data_ty(
             diags,
             emitter.module_key,
             origin,
-            &EmitDiagKind::UnknownDataType(data_ty_name),
+            &EmitDiagKind::UnknownDataType,
+            format!("unknown emitted data type `{data_ty_name}`"),
         );
         return None;
     };

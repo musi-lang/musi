@@ -500,11 +500,11 @@ fn check_field_expr(
         let effect_name = ctx.resolve_symbol(effect_name.name);
         let op_name = ctx.resolve_symbol(name.name);
         if let Some(effect) = ctx.effect_def(effect_name) {
-            if let Some(op) = effect.ops.get(op_name).cloned() {
-                let params = ctx.alloc_ty_list(op.params.iter().copied());
+            if let Some(op) = effect.op(op_name).cloned() {
+                let params = ctx.alloc_ty_list(op.params().iter().copied());
                 let ty = ctx.alloc_ty(HirTyKind::Arrow {
                     params,
-                    ret: op.result,
+                    ret: op.result(),
                     is_effectful: true,
                 });
                 return ExprFacts { ty, effects };

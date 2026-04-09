@@ -106,7 +106,8 @@ fn import_exprs_type_as_opaque_module() {
     let sema = check_module_src(11, "main", src, Some(&env), None);
     let root = sema.module().root;
     assert!(matches!(
-        sema.ty(sema.expr_ty(root)).kind,
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
         HirTyKind::Module
     ));
     assert_eq!(
@@ -144,7 +145,8 @@ fn imported_module_field_access_uses_export_surface() {
     );
     let root = sema.module().root;
     assert!(matches!(
-        sema.ty(sema.expr_ty(root)).kind,
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
         HirTyKind::Arrow { .. }
     ));
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
@@ -176,7 +178,8 @@ fn imported_module_record_pattern_binds_exported_values() {
     );
     let root = sema.module().root;
     assert!(matches!(
-        sema.ty(sema.expr_ty(root)).kind,
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
         HirTyKind::Arrow { .. }
     ));
     assert!(
@@ -217,10 +220,17 @@ fn imported_effect_alias_handles_perform_and_handle() {
     );
     let root = sema.module().root;
     assert!(matches!(
-        sema.ty(sema.expr_ty(root)).kind,
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
         HirTyKind::String
     ));
-    assert!(sema.expr_effects(root).is_pure(), "{:?}", sema.diags());
+    assert!(
+        sema.try_expr_effects(root)
+            .expect("root expr effects missing")
+            .is_pure(),
+        "{:?}",
+        sema.diags()
+    );
 }
 
 #[test]
@@ -234,7 +244,9 @@ fn perform_effects_expose_textual_names() {
     ",
     );
     let root = sema.module().root;
-    let effects = sema.expr_effects(root);
+    let effects = sema
+        .try_expr_effects(root)
+        .expect("root expr effects missing");
     assert!(
         effects
             .items
@@ -276,10 +288,17 @@ fn destructured_effect_alias_handles_perform_and_handle() {
     );
     let root = sema.module().root;
     assert!(matches!(
-        sema.ty(sema.expr_ty(root)).kind,
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
         HirTyKind::String
     ));
-    assert!(sema.expr_effects(root).is_pure(), "{:?}", sema.diags());
+    assert!(
+        sema.try_expr_effects(root)
+            .expect("root expr effects missing")
+            .is_pure(),
+        "{:?}",
+        sema.diags()
+    );
     assert!(
         !has_diag(&sema, SemaDiagKind::UnknownEffect),
         "{:?}",
@@ -690,10 +709,14 @@ fn explicit_type_apply_instantiates_local_generic_lets() {
     "#,
     );
     let root = sema.module().root;
-    let HirTyKind::Tuple { items } = sema.ty(sema.expr_ty(root)).kind else {
+    let HirTyKind::Tuple { items } = sema
+        .ty(sema.try_expr_ty(root).expect("root expr type missing"))
+        .kind
+    else {
         panic!(
             "expected tuple type, got {:?}",
-            sema.ty(sema.expr_ty(root)).kind
+            sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+                .kind
         );
     };
     let items = sema.module().store.ty_ids.get(items);
@@ -727,10 +750,14 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
         Some(&sema_env),
     );
     let root = sema.module().root;
-    let HirTyKind::Tuple { items } = sema.ty(sema.expr_ty(root)).kind else {
+    let HirTyKind::Tuple { items } = sema
+        .ty(sema.try_expr_ty(root).expect("root expr type missing"))
+        .kind
+    else {
         panic!(
             "expected tuple type, got {:?}",
-            sema.ty(sema.expr_ty(root)).kind
+            sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+                .kind
         );
     };
     let items = sema.module().store.ty_ids.get(items);
@@ -980,7 +1007,9 @@ fn open_effect_rows_absorb_extra_effects() {
     ",
     );
     let root = sema.module().root;
-    let effects = sema.expr_effects(root);
+    let effects = sema
+        .try_expr_effects(root)
+        .expect("root expr effects missing");
     assert!(
         effects
             .items

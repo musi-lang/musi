@@ -9,6 +9,48 @@ use thiserror::Error;
 
 pub type SessionDiagList = Box<[Diag]>;
 
+#[derive(Debug, Clone, Default)]
+pub struct SessionSyntaxErrors {
+    lex: Box<[LexError]>,
+    parse: Box<[ParseError]>,
+    diags: SessionDiagList,
+}
+
+impl SessionSyntaxErrors {
+    #[must_use]
+    pub fn new(
+        lex: impl Into<Box<[LexError]>>,
+        parse: impl Into<Box<[ParseError]>>,
+        diags: impl Into<SessionDiagList>,
+    ) -> Self {
+        Self {
+            lex: lex.into(),
+            parse: parse.into(),
+            diags: diags.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn lex_errors(&self) -> &[LexError] {
+        &self.lex
+    }
+
+    #[must_use]
+    pub fn parse_errors(&self) -> &[ParseError] {
+        &self.parse
+    }
+
+    #[must_use]
+    pub fn diags(&self) -> &[Diag] {
+        &self.diags
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.lex.is_empty() && self.parse.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionOptions {
     pub emit: EmitOptions,
@@ -31,9 +73,7 @@ pub struct ParsedModule {
     pub source_id: SourceId,
     pub import_sites: Box<[ImportSite]>,
     pub export_summary: ModuleExportSummary,
-    pub lex_errors: Box<[LexError]>,
-    pub parse_errors: Box<[ParseError]>,
-    pub syntax_diags: SessionDiagList,
+    pub syntax: SessionSyntaxErrors,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,9 +92,7 @@ pub enum SessionError {
     #[error("parse failed for module `{module}`")]
     Parse {
         module: ModuleKey,
-        lex_errors: Box<[LexError]>,
-        parse_errors: Box<[ParseError]>,
-        diags: SessionDiagList,
+        syntax: SessionSyntaxErrors,
     },
     #[error("resolve failed for module `{module}`")]
     Resolve {

@@ -1,8 +1,13 @@
 use std::collections::BTreeSet;
 
+use music_base::diag::Diag;
 use music_bc::Artifact;
+use music_emit::{EmitDiagKind, emit_diag_kind};
+use music_ir::{IrDiagKind, ir_diag_kind};
 use music_module::{ImportMap, ModuleKey};
-use music_sema::TargetInfo;
+use music_resolve::{ResolveDiagKind, resolve_diag_kind};
+use music_sema::{SemaDiagKind, TargetInfo, sema_diag_kind};
+use music_syntax::{ParseErrorKind, TokenKind};
 
 use crate::{Session, SessionError, SessionOptions};
 
@@ -82,20 +87,55 @@ fn parse_failures_expose_typed_syntax_errors_and_diags() {
         .unwrap();
 
     let err = session.parse_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Parse {
-        lex_errors,
-        parse_errors,
-        diags,
-        ..
-    } = err
-    else {
+    let SessionError::Parse { syntax, .. } = err else {
         panic!("parse error expected");
     };
 
-    assert!(lex_errors.is_empty());
-    assert_eq!(parse_errors.len(), 1);
-    assert_eq!(diags.len(), 1);
-    assert!(!diags[0].labels().is_empty());
+    assert!(syntax.lex_errors().is_empty());
+    assert_eq!(syntax.parse_errors().len(), 1);
+    assert!(matches!(
+        syntax.parse_errors()[0].kind,
+        ParseErrorKind::ExpectedToken {
+            expected: TokenKind::Semicolon,
+            ..
+        }
+    ));
+    assert_eq!(syntax.diags().len(), 1);
+    assert!(!syntax.diags()[0].labels().is_empty());
+}
+
+#[test]
+fn compile_module_propagates_parse_failures() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "let x := 1")
+        .unwrap();
+
+    let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Parse { syntax, .. } = err else {
+        panic!("parse error expected");
+    };
+
+    assert!(syntax.lex_errors().is_empty());
+    assert_eq!(syntax.parse_errors().len(), 1);
+    assert_eq!(syntax.diags().len(), 1);
+}
+
+#[test]
+fn compile_entry_propagates_parse_failures() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "let x := 1")
+        .unwrap();
+
+    let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Parse { syntax, .. } = err else {
+        panic!("parse error expected");
+    };
+
+    assert!(syntax.lex_errors().is_empty());
+    assert_eq!(syntax.parse_errors().len(), 1);
+    assert_eq!(syntax.diags().len(), 1);
 }
 
 #[test]
@@ -257,6 +297,131 @@ fn compiles_closures_and_higher_order_calls() {
     assert!(output.artifact.validate().is_ok());
     assert!(output.text.contains("call.cls"));
     assert!(output.text.contains("cls.new"));
+}
+
+#[test]
+fn resolve_failures_surface_session_resolve_error() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            "import \"missing\"; export let answer : Int := 42;",
+        )
+        .unwrap();
+
+    let err = session.resolve_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Resolve { diags, .. } = err else {
+        panic!("resolve error expected");
+    };
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(
+        resolve_diag_kind(&diags[0]),
+        Some(ResolveDiagKind::ImportResolveFailed)
+    );
+    assert!(!diags[0].labels().is_empty());
+}
+
+#[test]
+fn sema_failures_surface_session_sema_error() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            "export let answer : Int := \"no\";",
+        )
+        .unwrap();
+
+    let err = session.check_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Sema { diags, .. } = err else {
+        panic!("sema error expected");
+    };
+
+    assert!(!diags.is_empty());
+    assert!(
+        diags
+            .iter()
+            .any(|diag| sema_diag_kind(diag) == Some(SemaDiagKind::TypeMismatch))
+    );
+    assert!(diags.iter().any(|diag| !diag.labels().is_empty()));
+}
+
+#[test]
+fn lower_module_propagates_ir_failure_with_typed_kind() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
+        .unwrap();
+    session.inject_ir_failure_for_tests(
+        vec![
+            Diag::error(IrDiagKind::LoweringRequiresSemaCleanModule.message())
+                .with_code(IrDiagKind::LoweringRequiresSemaCleanModule.code()),
+        ]
+        .into_boxed_slice(),
+    );
+
+    let err = session.lower_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Ir { diags, .. } = err else {
+        panic!("ir error expected");
+    };
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(
+        ir_diag_kind(&diags[0]),
+        Some(IrDiagKind::LoweringRequiresSemaCleanModule)
+    );
+}
+
+#[test]
+fn compile_module_propagates_emit_failure_with_typed_kind() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
+        .unwrap();
+    session.inject_emit_failure_for_tests(
+        vec![
+            Diag::error(EmitDiagKind::UnknownTypeValue.message())
+                .with_code(EmitDiagKind::UnknownTypeValue.code()),
+        ]
+        .into_boxed_slice(),
+    );
+
+    let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Emit { diags, .. } = err else {
+        panic!("emit error expected");
+    };
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(
+        emit_diag_kind(&diags[0]),
+        Some(EmitDiagKind::UnknownTypeValue)
+    );
+}
+
+#[test]
+fn compile_entry_propagates_emit_failure_with_typed_kind() {
+    let mut session = session();
+    session
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
+        .unwrap();
+    session.inject_emit_failure_for_tests(
+        vec![
+            Diag::error(EmitDiagKind::UnknownTypeValue.message())
+                .with_code(EmitDiagKind::UnknownTypeValue.code()),
+        ]
+        .into_boxed_slice(),
+    );
+
+    let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
+    let SessionError::Emit { diags, .. } = err else {
+        panic!("emit error expected");
+    };
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(
+        emit_diag_kind(&diags[0]),
+        Some(EmitDiagKind::UnknownTypeValue)
+    );
 }
 
 #[test]

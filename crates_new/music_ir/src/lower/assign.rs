@@ -10,7 +10,7 @@ pub(super) fn lower_assign_expr(
     right: HirExprId,
 ) -> IrExprKind {
     let Some(target) = lower_assign_target(ctx, left) else {
-        return super::unsupported_expr("unsupported assignment target");
+        super::invalid_lowering_path("unsupported assignment target");
     };
     IrExprKind::Assign {
         target: Box::new(target),
@@ -34,7 +34,9 @@ fn lower_assign_target(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> Option<IrAssi
             Some(IrAssignTarget::Index { base, indices })
         }
         HirExprKind::Field { base, name, .. } => {
-            let base_ty = sema.expr_ty(*base);
+            let Some(base_ty) = sema.try_expr_ty(*base) else {
+                super::invalid_lowering_path("assignment field base type missing");
+            };
             let record_ty = match sema.ty(base_ty).kind {
                 HirTyKind::Mut { inner } => inner,
                 _ => base_ty,

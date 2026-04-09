@@ -67,6 +67,13 @@ impl Session {
     pub fn compile_entry_artifact(&mut self, key: &ModuleKey) -> Result<Artifact, SessionError> {
         if !self.graph.entry_programs.contains_key(key) {
             let modules = self.collect_reachable_ir_modules(key)?;
+            #[cfg(test)]
+            if let Some(diags) = self.test_hooks.emit_failure.take() {
+                return Err(SessionError::Emit {
+                    module: key.clone(),
+                    diags,
+                });
+            }
             let program = lower_ir_program(&modules, key, self.options.emit).map_err(|diags| {
                 SessionError::Emit {
                     module: key.clone(),

@@ -222,7 +222,7 @@ pub(super) fn check_variant_expr(
     };
 
     let tag_name = ctx.resolve_symbol(tag.name);
-    let Some(variant) = data_def.variants.get(tag_name) else {
+    let Some(variant) = data_def.variant(tag_name) else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         ctx.diag(tag.span, DiagKind::UnknownDataVariant, "");
         return ExprFacts {
@@ -231,7 +231,7 @@ pub(super) fn check_variant_expr(
         };
     };
 
-    let expected_payload = variant.payload;
+    let expected_payload = variant.payload();
     let arg_exprs = ctx.expr_ids(args);
     let expected_args: Vec<HirTyId> =
         expected_payload.map_or_else(Vec::new, |payload_ty| match &ctx.ty(payload_ty).kind {
@@ -412,7 +412,7 @@ fn infer_variant_context_ty(ctx: &mut CheckPass<'_, '_, '_>, tag: Ident) -> Opti
     let mut matches = ctx
         .data_defs()
         .iter()
-        .filter_map(|(name, data)| data.variants.contains_key(tag_name).then_some(name.clone()))
+        .filter_map(|(name, data)| data.variant(tag_name).is_some().then_some(name.clone()))
         .collect::<Vec<Box<str>>>();
 
     match matches.len() {

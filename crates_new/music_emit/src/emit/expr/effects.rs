@@ -27,6 +27,7 @@ pub(super) fn compile_perform(
             emitter.module_key,
             &origin,
             &EmitDiagKind::UnknownEffect,
+            "unknown emitted effect",
         );
         emit_zero(emitter);
         return;
@@ -59,7 +60,8 @@ pub(super) fn compile_handle(
             diags,
             emitter.module_key,
             &body.origin,
-            &EmitDiagKind::UnknownHandlerType(handler_ty_name),
+            &EmitDiagKind::UnknownHandlerType,
+            format!("unknown emitted handler type `{handler_ty_name}`"),
         );
         emit_zero(emitter);
         return;
@@ -80,6 +82,7 @@ pub(super) fn compile_handle(
             emitter.module_key,
             &body.origin,
             &EmitDiagKind::UnknownEffect,
+            "unknown emitted effect",
         );
         emit_zero(emitter);
         return;
@@ -130,6 +133,7 @@ pub(super) fn compile_perform_seq(
                 span: Span::new(0, 0),
             },
             &EmitDiagKind::UnknownEffect,
+            "unknown emitted effect",
         );
         emit_zero(emitter);
         return;

@@ -6,6 +6,10 @@ use crate::EmitDiagKind;
 
 pub type EmitDiagList = Vec<Diag>;
 
+/// Extract stable emit diagnostic kind from a generic diagnostic.
+///
+/// This extraction is code-based (`DiagCode`) and does not depend on diagnostic
+/// message or label text.
 #[must_use]
 pub fn emit_diag_kind(diag: &Diag) -> Option<EmitDiagKind> {
     EmitDiagKind::from_diag(diag)

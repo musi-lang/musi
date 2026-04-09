@@ -50,11 +50,11 @@ fn lowers_exports_and_semantic_metadata() {
     );
 
     assert!(ir.exported_value("id").is_some());
-    assert_eq!(ir.callables.len(), 1);
-    assert_eq!(ir.effects.len(), 1);
-    assert_eq!(ir.classes.len(), 1);
-    assert_eq!(ir.instances.len(), 1);
-    assert!(ir.static_imports.is_empty());
+    assert_eq!(ir.callables().len(), 1);
+    assert_eq!(ir.effects().len(), 1);
+    assert_eq!(ir.classes().len(), 1);
+    assert_eq!(ir.instances().len(), 1);
+    assert!(ir.static_imports().is_empty());
 }
 
 #[test]
@@ -69,14 +69,14 @@ fn lowers_data_and_foreign_facts() {
     "#,
     );
 
-    assert_eq!(ir.data_defs.len(), 1);
-    assert_eq!(ir.data_defs[0].variant_count, 2);
-    assert_eq!(ir.foreigns.len(), 1);
-    assert_eq!(ir.foreigns[0].abi.as_ref(), "c");
-    assert_eq!(ir.foreigns[0].param_count, 1);
-    assert!(ir.foreigns[0].link.is_none());
-    assert_eq!(ir.callables.len(), 1);
-    assert_eq!(ir.exports.len(), 1);
+    assert_eq!(ir.data_defs().len(), 1);
+    assert_eq!(ir.data_defs()[0].variant_count, 2);
+    assert_eq!(ir.foreigns().len(), 1);
+    assert_eq!(ir.foreigns()[0].abi.as_ref(), "c");
+    assert_eq!(ir.foreigns()[0].param_count, 1);
+    assert!(ir.foreigns()[0].link.is_none());
+    assert_eq!(ir.callables().len(), 1);
+    assert_eq!(ir.exports().len(), 1);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn lowers_array_cat_for_runtime_spread() {
     ",
     );
     let ys = ir
-        .globals
+        .globals()
         .iter()
         .find(|global| global.name.as_ref() == "ys")
         .expect("ys global");
@@ -111,7 +111,7 @@ fn lowers_call_seq_for_runtime_any_spread() {
     "#,
     );
     let y = ir
-        .globals
+        .globals()
         .iter()
         .find(|global| global.name.as_ref() == "y")
         .expect("y global");
@@ -134,7 +134,7 @@ fn lowers_call_with_compile_time_tuple_spread() {
     "#,
     );
     let y = ir
-        .globals
+        .globals()
         .iter()
         .find(|global| global.name.as_ref() == "y")
         .expect("y global");
@@ -159,7 +159,7 @@ fn lowers_perform_seq_for_runtime_any_spread() {
     "#,
     );
     let y = ir
-        .globals
+        .globals()
         .iter()
         .find(|global| global.name.as_ref() == "y")
         .expect("y global");
@@ -186,14 +186,14 @@ fn lowers_sum_constructors_as_synthetic_variants() {
     );
 
     let synth = ir
-        .data_defs
+        .data_defs()
         .iter()
         .find(|data| data.key.name.starts_with("__sum__"))
         .expect("synthetic sum data def");
     assert_eq!(synth.variant_count, 2);
 
     let x = ir
-        .globals
+        .globals()
         .iter()
         .find(|global| global.name.as_ref() == "x")
         .expect("x global");
@@ -203,7 +203,7 @@ fn lowers_sum_constructors_as_synthetic_variants() {
     assert_eq!(data_key.name.as_ref(), synth.key.name.as_ref());
 
     let z = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "z")
         .expect("z callable");
@@ -229,7 +229,7 @@ fn lowers_type_test_and_cast() {
     );
 
     let check = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "check")
         .expect("check callable");
@@ -240,7 +240,7 @@ fn lowers_type_test_and_cast() {
     assert!(matches!(check_kind, IrExprKind::TyTest { .. }));
 
     let cast = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "cast")
         .expect("cast callable");
@@ -269,14 +269,14 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     );
 
     let msg = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "msg")
         .expect("msg callable");
     assert!(contains_strcat(&msg.body));
 
     let neg = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "neg")
         .expect("neg callable");
@@ -293,7 +293,7 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     ));
 
     let inv = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "inv")
         .expect("inv callable");
@@ -304,14 +304,14 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     assert!(matches!(inv_kind, IrExprKind::Not { .. }));
 
     let answer = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "answer")
         .expect("answer callable");
     assert!(contains_record_pattern(&answer.body));
 
     let loop_fn = ir
-        .callables
+        .callables()
         .iter()
         .find(|callable| callable.name.as_ref() == "loop")
         .expect("loop callable");

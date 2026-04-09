@@ -381,21 +381,116 @@ pub struct IrMetaRecord {
 
 #[derive(Debug, Clone)]
 pub struct IrModule {
-    pub module_key: ModuleKey,
-    pub static_imports: Box<[ModuleKey]>,
-    pub types: Box<[SurfaceTy]>,
-    pub exports: Box<[ExportedValue]>,
-    pub callables: Box<[IrCallable]>,
-    pub globals: Box<[IrGlobal]>,
-    pub data_defs: Box<[IrDataDef]>,
-    pub foreigns: Box<[IrForeignDef]>,
-    pub effects: Box<[IrEffectDef]>,
-    pub classes: Box<[IrClassDef]>,
-    pub instances: Box<[IrInstanceDef]>,
-    pub meta: Box<[IrMetaRecord]>,
+    module_key: ModuleKey,
+    static_imports: Box<[ModuleKey]>,
+    types: Box<[SurfaceTy]>,
+    exports: Box<[ExportedValue]>,
+    callables: Box<[IrCallable]>,
+    globals: Box<[IrGlobal]>,
+    data_defs: Box<[IrDataDef]>,
+    foreigns: Box<[IrForeignDef]>,
+    effects: Box<[IrEffectDef]>,
+    classes: Box<[IrClassDef]>,
+    instances: Box<[IrInstanceDef]>,
+    meta: Box<[IrMetaRecord]>,
 }
 
+type IrModuleCollections = (
+    Box<[ExportedValue]>,
+    Box<[IrCallable]>,
+    Box<[IrGlobal]>,
+    Box<[IrDataDef]>,
+    Box<[IrForeignDef]>,
+    Box<[IrEffectDef]>,
+    Box<[IrClassDef]>,
+    Box<[IrInstanceDef]>,
+    Box<[IrMetaRecord]>,
+);
+
 impl IrModule {
+    #[must_use]
+    pub(crate) fn new(
+        module_key: ModuleKey,
+        static_imports: Box<[ModuleKey]>,
+        types: Box<[SurfaceTy]>,
+        collections: IrModuleCollections,
+    ) -> Self {
+        Self {
+            module_key,
+            static_imports,
+            types,
+            exports: collections.0,
+            callables: collections.1,
+            globals: collections.2,
+            data_defs: collections.3,
+            foreigns: collections.4,
+            effects: collections.5,
+            classes: collections.6,
+            instances: collections.7,
+            meta: collections.8,
+        }
+    }
+
+    #[must_use]
+    pub const fn module_key(&self) -> &ModuleKey {
+        &self.module_key
+    }
+
+    #[must_use]
+    pub fn static_imports(&self) -> &[ModuleKey] {
+        &self.static_imports
+    }
+
+    #[must_use]
+    pub fn types(&self) -> &[SurfaceTy] {
+        &self.types
+    }
+
+    #[must_use]
+    pub fn exports(&self) -> &[ExportedValue] {
+        &self.exports
+    }
+
+    #[must_use]
+    pub fn callables(&self) -> &[IrCallable] {
+        &self.callables
+    }
+
+    #[must_use]
+    pub fn globals(&self) -> &[IrGlobal] {
+        &self.globals
+    }
+
+    #[must_use]
+    pub fn data_defs(&self) -> &[IrDataDef] {
+        &self.data_defs
+    }
+
+    #[must_use]
+    pub fn foreigns(&self) -> &[IrForeignDef] {
+        &self.foreigns
+    }
+
+    #[must_use]
+    pub fn effects(&self) -> &[IrEffectDef] {
+        &self.effects
+    }
+
+    #[must_use]
+    pub fn classes(&self) -> &[IrClassDef] {
+        &self.classes
+    }
+
+    #[must_use]
+    pub fn instances(&self) -> &[IrInstanceDef] {
+        &self.instances
+    }
+
+    #[must_use]
+    pub fn meta(&self) -> &[IrMetaRecord] {
+        &self.meta
+    }
+
     #[must_use]
     pub fn exported_value(&self, name: &str) -> Option<&ExportedValue> {
         self.exports
@@ -435,13 +530,12 @@ impl From<&EffectSurface> for IrEffectDef {
 impl From<&SemaEffectDef> for IrEffectDef {
     fn from(value: &SemaEffectDef) -> Self {
         Self {
-            key: value.key.clone(),
+            key: value.key().clone(),
             ops: value
-                .ops
-                .iter()
+                .ops()
                 .map(|(name, def)| IrEffectOpDef {
-                    name: name.clone(),
-                    params: u16::try_from(def.params.len()).unwrap_or(u16::MAX),
+                    name: name.into(),
+                    params: u16::try_from(def.params().len()).unwrap_or(u16::MAX),
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),

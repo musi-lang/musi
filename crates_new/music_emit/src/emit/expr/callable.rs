@@ -32,7 +32,8 @@ pub(super) fn compile_variant_new(
             diags,
             emitter.module_key,
             &origin,
-            &EmitDiagKind::UnknownDataType(ty_name),
+            &EmitDiagKind::UnknownDataType,
+            format!("unknown emitted data type `{ty_name}`"),
         );
         emit_zero(emitter);
         return;
@@ -60,6 +61,7 @@ pub(super) fn compile_call(
                 emitter.module_key,
                 &arg.expr.origin,
                 &EmitDiagKind::SpreadCallArgsNotEmitted,
+                "spread call args have no emitted form",
             );
         }
         super::compile_expr(emitter, &arg.expr, true, diags);
@@ -183,7 +185,8 @@ pub(super) fn compile_closure_new(
             diags,
             emitter.module_key,
             &origin,
-            &EmitDiagKind::UnknownClosureTarget(callee.name.clone()),
+            &EmitDiagKind::UnknownClosureTarget,
+            format!("unknown emitted closure target `{}`", callee.name),
         );
         emit_zero(emitter);
         return;

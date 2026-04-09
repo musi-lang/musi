@@ -40,7 +40,8 @@ pub(super) fn compile_record_literal(
             diags,
             emitter.module_key,
             &missing_origin,
-            &EmitDiagKind::UnknownRecordType(ty_name.into()),
+            &EmitDiagKind::UnknownRecordType,
+            format!("unknown emitted record type `{ty_name}`"),
         );
         emit_zero(emitter);
         return;
@@ -53,6 +54,7 @@ pub(super) fn compile_record_literal(
                 emitter.module_key,
                 &missing_origin,
                 &EmitDiagKind::RecordLiteralMissingFieldValue,
+                "record literal missing field value",
             );
             emit_zero(emitter);
             continue;
@@ -97,7 +99,8 @@ pub(super) fn compile_record_update(
             diags,
             emitter.module_key,
             &input.base.origin,
-            &EmitDiagKind::UnknownRecordType(input.ty_name.into()),
+            &EmitDiagKind::UnknownRecordType,
+            format!("unknown emitted record type `{}`", input.ty_name),
         );
         emit_zero(emitter);
         return;
@@ -146,6 +149,7 @@ pub(super) fn compile_record_update(
                 emitter.module_key,
                 &input.base.origin,
                 &EmitDiagKind::RecordUpdateMissingFieldValue,
+                "record update missing field value",
             );
             emit_zero(emitter);
             continue;
