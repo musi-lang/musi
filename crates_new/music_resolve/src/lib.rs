@@ -1,9 +1,11 @@
+mod diag;
 mod resolver;
 mod string_lit;
 
+pub use diag::ResolveDiagKind;
 pub use resolver::{
     ResolveDiagList, ResolveOptions, ResolvedImport, ResolvedImportList, ResolvedModule,
-    resolve_module,
+    resolve_diag_kind, resolve_module,
 };
 
 #[cfg(test)]

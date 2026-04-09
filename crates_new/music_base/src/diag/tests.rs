@@ -141,7 +141,7 @@ fn note_sub_diagnostic_appears() {
 }
 
 #[test]
-fn hint_is_appended_to_headline() {
+fn hint_renders_as_help_line() {
     let (sources, source_id) = make_source_map();
     let diag = Diag::error("undefined binding 'writein'")
         .with_code(DiagCode::new(3001))
@@ -149,7 +149,8 @@ fn hint_is_appended_to_headline() {
         .with_label(Span::new(0, 7), source_id, "");
 
     let output = emit_to_string(&diag, &sources, false);
-    assert!(output.contains("error[ms3001]: undefined binding 'writein'; did you mean 'writeln'?"));
+    assert!(output.contains("error[ms3001]: undefined binding 'writein'"));
+    assert!(output.contains("help: did you mean 'writeln'?"));
 }
 
 #[test]

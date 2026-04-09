@@ -1,4 +1,5 @@
 use super::*;
+use crate::EmitDiagKind;
 
 pub(super) fn register_module(
     state: &mut ProgramState,
@@ -84,7 +85,10 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
         );
 
         let Some(target) = target else {
-            state.diags.push(Diag::error("export target missing"));
+            state.diags.push(
+                Diag::error(EmitDiagKind::ExportTargetMissing.message())
+                    .with_code(EmitDiagKind::ExportTargetMissing.code()),
+            );
             continue;
         };
 
@@ -252,8 +256,10 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         | IrExprKind::Name { .. }
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
-        | IrExprKind::SyntaxValue { .. }
-        | IrExprKind::Unsupported { .. } => {}
+        | IrExprKind::SyntaxValue { .. } => {}
+        IrExprKind::TypeValue { ty_name } => {
+            let _ = ensure_type(state, layout, ty_name);
+        }
         IrExprKind::Sequence { exprs } => collect_expr_types_iter(state, layout, exprs),
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             let _ = ensure_type(state, layout, ty_name);
@@ -302,7 +308,9 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types(state, layout, base);
         }
-        IrExprKind::Case { scrutinee, arms } => collect_case_expr_types(state, layout, scrutinee, arms),
+        IrExprKind::Case { scrutinee, arms } => {
+            collect_case_expr_types(state, layout, scrutinee, arms);
+        }
         IrExprKind::Call { callee, args } => collect_call_expr_types(state, layout, callee, args),
         IrExprKind::CallSeq { callee, args } => {
             collect_call_seq_expr_types(state, layout, callee, args);

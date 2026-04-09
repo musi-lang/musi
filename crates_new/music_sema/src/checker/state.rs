@@ -14,6 +14,7 @@ use music_module::ModuleKey;
 use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
 use music_resolve::ResolvedModule;
 
+use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
@@ -783,10 +784,17 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         }
     }
 
-    pub fn diag(&mut self, span: Span, message: &str, label: &str) {
-        self.facts
-            .diags
-            .push(Diag::error(message).with_label(span, self.source_id(), label));
+    pub fn diag(&mut self, span: Span, kind: DiagKind, label: &str) {
+        let label = if label.is_empty() {
+            kind.label()
+        } else {
+            label
+        };
+        self.facts.diags.push(
+            Diag::error(kind.message())
+                .with_code(kind.code())
+                .with_label(span, self.source_id(), label),
+        );
     }
 
     pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {

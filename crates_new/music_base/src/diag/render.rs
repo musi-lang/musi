@@ -77,16 +77,12 @@ pub fn emit<W: Write>(
                 || String::from(diag.level().label()),
                 |code| format!("{}[{code}]", diag.level().label()),
             );
-            let message = diag.hint().map_or_else(
-                || String::from(diag.message()),
-                |hint| format!("{}; {hint}", diag.message()),
-            );
             writeln!(
                 writer,
                 "{} {}: {}",
                 paint(DiagColor::Bold, loc.as_str()),
                 paint(diag.level().color(), level.as_str()),
-                paint(DiagColor::Bold, message.as_str()),
+                paint(DiagColor::Bold, diag.message()),
             )?;
 
             if let Some(line_text) = source.line_text(line) {
@@ -128,15 +124,20 @@ pub fn emit<W: Write>(
             || String::from(diag.level().label()),
             |code| format!("{}[{code}]", diag.level().label()),
         );
-        let message = diag.hint().map_or_else(
-            || String::from(diag.message()),
-            |hint| format!("{}; {hint}", diag.message()),
-        );
         writeln!(
             writer,
             "{}: {}",
             paint(diag.level().color(), level.as_str()),
-            paint(DiagColor::Bold, message.as_str()),
+            paint(DiagColor::Bold, diag.message()),
+        )?;
+    }
+
+    if let Some(hint) = diag.hint() {
+        writeln!(
+            writer,
+            "{}: {}",
+            paint(DiagColor::Cyan, "help"),
+            paint(DiagColor::Bold, hint),
         )?;
     }
 

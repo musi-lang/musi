@@ -25,7 +25,7 @@ pub struct SessionStats {
     pub emit_runs: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ParsedModule {
     pub module_key: ModuleKey,
     pub source_id: SourceId,
@@ -33,6 +33,7 @@ pub struct ParsedModule {
     pub export_summary: ModuleExportSummary,
     pub lex_errors: Box<[LexError]>,
     pub parse_errors: Box<[ParseError]>,
+    pub syntax_diags: SessionDiagList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +54,7 @@ pub enum SessionError {
         module: ModuleKey,
         lex_errors: Box<[LexError]>,
         parse_errors: Box<[ParseError]>,
+        diags: SessionDiagList,
     },
     #[error("resolve failed for module `{module}`")]
     Resolve {

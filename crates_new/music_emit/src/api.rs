@@ -2,7 +2,14 @@ use music_base::diag::Diag;
 use music_bc::{Artifact, GlobalId, MethodId};
 use music_module::ModuleKey;
 
+use crate::EmitDiagKind;
+
 pub type EmitDiagList = Vec<Diag>;
+
+#[must_use]
+pub fn emit_diag_kind(diag: &Diag) -> Option<EmitDiagKind> {
+    EmitDiagKind::from_diag(diag)
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EmitOptions;

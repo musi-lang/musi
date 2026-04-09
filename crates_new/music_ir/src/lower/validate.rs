@@ -1,7 +1,7 @@
 use music_base::diag::Diag;
 use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
-use crate::api::IrDiagList;
+use crate::{IrDiagKind as DiagKind, api::IrDiagList};
 
 pub(super) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
     let types = &sema.surface().tys;
@@ -52,7 +52,11 @@ fn validate_effect_row(types: &[SurfaceTy], row: &SurfaceEffectRow, diags: &mut 
 fn validate_surface_ty_id(types: &[SurfaceTy], id: SurfaceTyId, diags: &mut IrDiagList) {
     let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
     let Some(ty) = types.get(index) else {
-        diags.push(Diag::error("invalid surface type id"));
+        diags.push(
+            Diag::error(DiagKind::InvalidSurfaceTypeId.message())
+                .with_code(DiagKind::InvalidSurfaceTypeId.code())
+                .with_note(format!("surface type id `{}`", id.raw())),
+        );
         return;
     };
     validate_surface_ty(types, ty, diags);

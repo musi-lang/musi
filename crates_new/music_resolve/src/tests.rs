@@ -7,7 +7,7 @@ use music_module::{
 use music_names::{Interner, NameBindingKind, NameSite};
 use music_syntax::{Lexer, SyntaxNodeKind, canonical_name_text, parse};
 
-use crate::{ResolveOptions, resolve_module};
+use crate::{ResolveDiagKind, ResolveOptions, resolve_diag_kind, resolve_module};
 
 #[derive(Default)]
 struct TestImportEnv {
@@ -223,7 +223,7 @@ fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
     let unbound_count = resolved
         .diags
         .iter()
-        .filter(|diag| diag.message() == "unbound name")
+        .filter(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::UnboundName))
         .count();
     assert_eq!(unbound_count, 0, "{:?}", resolved.diags);
 }
@@ -272,7 +272,7 @@ fn static_imports_resolve_but_do_not_open_export_names() {
         resolved
             .diags
             .iter()
-            .any(|diag| diag.message() == "unbound name")
+            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::UnboundName))
     );
 }
 
@@ -366,7 +366,7 @@ fn unresolved_static_imports_emit_diag() {
         resolved
             .diags
             .iter()
-            .any(|diag| diag.message() == "import resolve failed")
+            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::ImportResolveFailed))
     );
 }
 
@@ -400,7 +400,7 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
         resolved
             .diags
             .iter()
-            .any(|diag| diag.message() == "invalid import spec")
+            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
     );
 }
 
@@ -433,7 +433,7 @@ fn dynamic_imports_do_not_populate_resolved_imports() {
         !resolved
             .diags
             .iter()
-            .any(|diag| diag.message() == "import resolve failed")
+            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::ImportResolveFailed))
     );
 }
 
@@ -454,7 +454,7 @@ fn handle_clause_params_resolve_in_body() {
         ResolveOptions::default(),
     );
 
-    let site = find_nth_name_site(source_id, parsed.tree(), "a", 0).expect("a use site");
+    let site = find_nth_name_site(source_id, parsed.tree(), "a", 0).expect("use site");
     let binding = resolved.names.refs.get(&site).copied().expect("binding");
     assert_eq!(
         resolved.names.bindings.get(binding).kind,

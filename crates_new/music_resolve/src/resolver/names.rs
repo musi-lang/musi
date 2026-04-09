@@ -1,4 +1,5 @@
 use super::*;
+use crate::diag::ResolveDiagKind;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -39,11 +40,12 @@ where
     pub(super) fn record_use(&mut self, ident: Ident) {
         let site = NameSite::new(self.source_id, ident.span);
         let Some(binding) = self.lookup(ident.name) else {
-            self.diags.push(Diag::error("unbound name").with_label(
-                ident.span,
-                self.source_id,
-                "name not found",
-            ));
+            let name = self.interner.resolve(ident.name);
+            self.diags.push(
+                Diag::error(ResolveDiagKind::UnboundName.message())
+                    .with_code(ResolveDiagKind::UnboundName.code())
+                    .with_label(ident.span, self.source_id, format!("unknown name `{name}`")),
+            );
             return;
         };
         self.names.record_ref(site, binding);

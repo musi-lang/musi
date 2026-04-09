@@ -1,4 +1,5 @@
 use super::*;
+use crate::diag::ResolveDiagKind;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -17,11 +18,11 @@ where
             .child_tokens()
             .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent))
         else {
-            self.diags.push(Diag::error("expected name").with_label(
-                node.span(),
-                self.source_id,
-                "identifier missing",
-            ));
+            self.diags.push(
+                Diag::error(ResolveDiagKind::ExpectedName.message())
+                    .with_code(ResolveDiagKind::ExpectedName.code())
+                    .with_label(node.span(), self.source_id, "name starts here"),
+            );
             return self.error_expr(origin);
         };
         let Some(ident) = self.intern_ident_token(tok) else {

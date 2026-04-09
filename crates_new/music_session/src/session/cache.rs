@@ -47,6 +47,7 @@ impl Session {
                 module: key.clone(),
                 lex_errors: parsed.lex_errors.clone(),
                 parse_errors: parsed.parse_errors.clone(),
+                diags: parsed.syntax_diags.clone(),
             })
         }
     }
@@ -221,6 +222,18 @@ impl Session {
         let import_sites = collect_import_sites(source_id, parsed.tree()).into_boxed_slice();
         let export_summary = collect_export_summary(source_id, parsed.tree());
         let parse_errors = parsed.errors().to_vec().into_boxed_slice();
+        let syntax_diags = lex_errors
+            .iter()
+            .copied()
+            .map(|error| error.to_diag(source_id, &text))
+            .chain(
+                parse_errors
+                    .iter()
+                    .copied()
+                    .map(|error| error.to_diag(source_id, &text)),
+            )
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         Ok(ParsedModule {
             module_key: key.clone(),
             source_id,
@@ -228,6 +241,7 @@ impl Session {
             export_summary,
             lex_errors,
             parse_errors,
+            syntax_diags,
         })
     }
 

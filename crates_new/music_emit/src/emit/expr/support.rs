@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::EmitDiagKind;
 
 pub(super) fn ensure_local_slot(
     emitter: &mut MethodEmitter<'_, '_>,
@@ -42,17 +43,21 @@ pub(super) fn push_expr_diag(
     diags: &mut EmitDiagList,
     module_key: &ModuleKey,
     origin: &IrOrigin,
-    message: String,
+    kind: &EmitDiagKind,
 ) {
-    push_span_diag(diags, module_key, origin.source_id, origin.span, message);
+    push_span_diag(diags, module_key, origin.source_id, origin.span, kind);
 }
 
 pub(super) fn push_span_diag(
     diags: &mut EmitDiagList,
-    module_key: &ModuleKey,
+    _module_key: &ModuleKey,
     source_id: SourceId,
     span: Span,
-    message: String,
+    kind: &EmitDiagKind,
 ) {
-    diags.push(Diag::error(message).with_label(span, source_id, module_key.as_str()));
+    diags.push(
+        Diag::error(kind.message())
+            .with_code(kind.code())
+            .with_label(span, source_id, kind.label()),
+    );
 }

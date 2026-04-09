@@ -16,6 +16,8 @@ use music_names::{
 };
 use music_syntax::{SyntaxNode, SyntaxToken, SyntaxTree, TokenKind, canonical_name_text};
 
+use crate::ResolveDiagKind;
+
 mod expr;
 mod imports;
 mod names;
@@ -25,6 +27,11 @@ mod util;
 
 pub type ResolvedImportList = Vec<ResolvedImport>;
 pub type ResolveDiagList = Vec<Diag>;
+
+#[must_use]
+pub fn resolve_diag_kind(diag: &Diag) -> Option<ResolveDiagKind> {
+    ResolveDiagKind::from_diag(diag)
+}
 
 #[derive(Default)]
 pub struct ResolveOptions<'env> {

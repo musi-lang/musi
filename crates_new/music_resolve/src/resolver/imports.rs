@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::diag::ResolveDiagKind;
 use music_module::{ImportErrorKind, ImportSiteKind, collect_import_sites};
 
 impl Resolver<'_, '_, '_, '_> {
@@ -23,21 +24,23 @@ impl Resolver<'_, '_, '_, '_> {
                             ImportErrorKind::NotFound => "module not found",
                             ImportErrorKind::InvalidSpecifier => "invalid module specifier",
                         };
-                        self.diags
-                            .push(Diag::error("import resolve failed").with_label(
-                                site.span,
-                                self.source_id,
-                                label,
-                            ));
+                        self.diags.push(
+                            Diag::error(ResolveDiagKind::ImportResolveFailed.message())
+                                .with_code(ResolveDiagKind::ImportResolveFailed.code())
+                                .with_label(site.span, self.source_id, format!("{label} `{spec}`")),
+                        );
                     }
                 },
                 ImportSiteKind::InvalidStringLit => {
-                    self.diags
-                        .push(Diag::error("invalid import spec").with_label(
-                            site.span,
-                            self.source_id,
-                            "string literal invalid",
-                        ));
+                    self.diags.push(
+                        Diag::error(ResolveDiagKind::InvalidImportSpec.message())
+                            .with_code(ResolveDiagKind::InvalidImportSpec.code())
+                            .with_label(
+                                site.span,
+                                self.source_id,
+                                "import spec is not string literal",
+                            ),
+                    );
                 }
                 ImportSiteKind::Dynamic => {}
             }
