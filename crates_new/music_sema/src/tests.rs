@@ -805,7 +805,7 @@ fn generic_constraints_report_ambiguous_instances() {
 
 #[test]
 fn assignment_requires_mut_binding() {
-    let sema = check("let x : Int = 1; x <- 2;");
+    let sema = check("let x : Int = 1; x := 2;");
     assert!(
         sema.diags()
             .iter()
@@ -814,7 +814,7 @@ fn assignment_requires_mut_binding() {
         sema.diags()
     );
 
-    let sema = check("let mut x : Int = 1; x <- 2;");
+    let sema = check("let mut x : Int = 1; x := 2;");
     assert!(
         !sema
             .diags()
@@ -830,7 +830,7 @@ fn write_through_requires_mut_type() {
     let sema = check(
         r"
         let xs = [1, 2];
-        xs.[0] <- 3;
+        xs.[0] := 3;
     ",
     );
     assert!(
@@ -844,7 +844,7 @@ fn write_through_requires_mut_type() {
     let sema = check(
         r"
         let xs = mut [1, 2];
-        xs.[0] <- 3;
+        xs.[0] := 3;
     ",
     );
     assert!(
@@ -859,7 +859,7 @@ fn write_through_requires_mut_type() {
     let sema = check(
         r"
         let r = { x = 1 };
-        r.x <- 2;
+        r.x := 2;
     ",
     );
     assert!(
@@ -873,7 +873,7 @@ fn write_through_requires_mut_type() {
     let sema = check(
         r"
         let r = mut { x = 1 };
-        r.x <- 2;
+        r.x := 2;
     ",
     );
     assert!(

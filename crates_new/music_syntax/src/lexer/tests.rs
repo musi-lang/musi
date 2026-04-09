@@ -56,18 +56,18 @@ fn lex_compound_tokens_and_symbolic_ops() {
 
 #[test]
 fn lex_compound_tokens_longest_first() {
-    let lexed = Lexer::new(":?> = :? ... .{ .[ <- -> ~> => /= <= >= <: |>").lex();
+    let lexed = Lexer::new(":?> := = :? ... .{ .[ -> ~> => /= <= >= <: |>").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
         [
             TokenKind::ColonQuestionGt,
+            TokenKind::ColonEq,
             TokenKind::Eq,
             TokenKind::ColonQuestion,
             TokenKind::DotDotDot,
             TokenKind::DotLBrace,
             TokenKind::DotLBracket,
-            TokenKind::LtMinus,
             TokenKind::MinusGt,
             TokenKind::TildeGt,
             TokenKind::EqGt,
@@ -167,7 +167,7 @@ fn dot_start_float_is_float() {
 
 #[test]
 fn reserved_compounds_do_not_lex_as_op_ident() {
-    let lexed = Lexer::new("(->) (<-) (=>) (|>)").lex();
+    let lexed = Lexer::new("(->) (:=) (=>) (|>)").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -176,7 +176,7 @@ fn reserved_compounds_do_not_lex_as_op_ident() {
             TokenKind::MinusGt,
             TokenKind::RParen,
             TokenKind::LParen,
-            TokenKind::LtMinus,
+            TokenKind::ColonEq,
             TokenKind::RParen,
             TokenKind::LParen,
             TokenKind::EqGt,
@@ -187,6 +187,13 @@ fn reserved_compounds_do_not_lex_as_op_ident() {
             TokenKind::Eof,
         ]
     );
+}
+
+#[test]
+fn lt_minus_is_a_user_symbolic_op() {
+    let lexed = Lexer::new("<-").lex();
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, [TokenKind::SymbolicOp, TokenKind::Eof]);
 }
 
 #[test]

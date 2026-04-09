@@ -31,21 +31,21 @@ The language keeps these keyword families:
 
 ## Bindings And Functions
 
-Bindings use `:=`.
+Bindings use `=`.
 
 ```musi
-let x := 41;
-let inc := \(n : Int) : Int => n + 1;
+let x = 41;
+let inc = \(n : Int) : Int => n + 1;
 ```
 
-Mutable update uses `<-`.
+Mutable update uses `:=`.
 
 ```musi
-let counter := mut 0;
-counter <- 1;
+let counter = mut 0;
+counter := 1;
 ```
 
-`<-` writes value into target location. Borrow checking is not implemented.
+`:=` writes value into target location. Borrow checking is not implemented.
 
 `mut` has two separate roles:
 
@@ -53,11 +53,11 @@ counter <- 1;
 - `let` bindings are immutable; mutation is performed by writing into locations
 
 ```musi
-let x := mut 0;
-x <- 1;
+let x = mut 0;
+x := 1;
 
-let array := mut [1, 2, 3];
-array.[0] <- 4;
+let array = mut [1, 2, 3];
+array.[0] := 4;
 ```
 
 ## Records
@@ -65,9 +65,9 @@ array.[0] <- 4;
 Record literals use `{ ... }`. Record update uses `expr.{ ... }`. Record patterns also use `{ ... }`.
 
 ```musi
-let p := { x := 1, y := 2 };
-let q := p.{ x := 3 };
-let {x, y} := p;
+let p = { x = 1, y = 2 };
+let q = p.{ x = 3 };
+let {x, y} = p;
 ```
 
 ## Imports
@@ -75,9 +75,9 @@ let {x, y} := p;
 `import expr` is an expression. Aliasing and selective binding use `let` patterns. Path validation is semantic, not parser-only.
 
 ```musi
-let IO := import "std/io";
-let {read, write} := IO;
-let dynamic := import module_path;
+let IO = import "std/io";
+let {read, write} = IO;
+let dynamic = import module_path;
 ```
 
 ## Types
@@ -106,19 +106,19 @@ Functions use `->` and `~>` by kind, while declaration signatures carry effect r
 Named type and effect definitions are expressed through `let`.
 
 ```musi
-let Option[T] := data { Some : T | None };
+let Option[T] = data { Some : T | None };
 
-let Console := effect {
+let Console = effect {
   let write (text : String) : Unit;
 };
 
-let Eq[T] := class {
+let Eq[T] = class {
   let (=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := x = x;
+  law reflexive (x : T) = x = x;
 };
 
-let eqInt := instance Eq[Int] {
-  let (=) (a : Int, b : Int) : Bool := int_eq(a, b);
+let eqInt = instance Eq[Int] {
+  let (=) (a : Int, b : Int) : Bool = int_eq(a, b);
 };
 ```
 
@@ -146,11 +146,9 @@ case x of (
 
 Structural operators include:
 
+- `=`
 - `:=`
-- `<-`
 - `.`
-- `?.`
-- `!.`
 - `:?`
 - `:?>`
 - `|>`
@@ -183,7 +181,7 @@ Parsing treats infix operators as a flat chain; fixity determines how the chain 
 Recursion uses `let rec`.
 
 ```musi
-let rec fact (n : Int) : Int := /* ... */;
+let rec fact (n : Int) : Int = /* ... */;
 ```
 
 ## Literals
@@ -201,8 +199,8 @@ String literals use `"` and must not contain raw newlines. Multiline text uses t
 Template literals use backticks, may contain raw newlines, and may contain `${ expr }` interpolations:
 
 ```musi
-let name := "world";
-let msg := `hello ${name}`;
+let name = "world";
+let msg = `hello ${name}`;
 ```
 
 Rune literals use `'` and contain exactly one character (including via an escape).
@@ -218,7 +216,7 @@ Supported escapes in strings and runes:
 Foreign declarations use `foreign` with an optional ABI string:
 
 ```musi
-@link(name := "c", symbol := "puts")
+@link(name = "c", symbol = "puts")
 foreign "c" let puts (msg : CString) : Int;
 ```
 

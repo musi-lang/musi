@@ -30,7 +30,7 @@ expr: infix_expr;
 infix_expr: prefix_expr (infix_op prefix_expr)*;
 
 infix_op:
-	LT_MINUS
+	COLON_EQ
 	| PIPE_GT
 	| MINUS_GT
 	| TILDE_GT
@@ -382,6 +382,7 @@ KW_WITH: 'with';
 KW_XOR: 'xor';
 
 // Fixed tokens (maximal munch).
+COLON_EQ: ':=';
 COLON_QUESTION_GT: ':?>';
 DOT_DOT_DOT: '...';
 DOT_LBRACE: '.{';
@@ -391,7 +392,6 @@ MINUS_GT: '->';
 SLASH_EQ: '/=';
 LT_EQ: '<=';
 LT_COLON: '<:';
-LT_MINUS: '<-';
 GT_EQ: '>=';
 PIPE_GT: '|>';
 TILDE_GT: '~>';
@@ -526,6 +526,7 @@ I_KW_WITH: 'with' -> type(KW_WITH);
 I_KW_XOR: 'xor' -> type(KW_XOR);
 
 // Fixed tokens (maximal munch).
+I_COLON_EQ: ':=' -> type(COLON_EQ);
 I_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 I_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 I_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
@@ -534,7 +535,6 @@ I_MINUS_GT: '->' -> type(MINUS_GT);
 I_SLASH_EQ: '/=' -> type(SLASH_EQ);
 I_LT_EQ: '<=' -> type(LT_EQ);
 I_LT_COLON: '<:' -> type(LT_COLON);
-I_LT_MINUS: '<-' -> type(LT_MINUS);
 I_GT_EQ: '>=' -> type(GT_EQ);
 I_PIPE_GT: '|>' -> type(PIPE_GT);
 I_TILDE_GT: '~>' -> type(TILDE_GT);
@@ -664,6 +664,7 @@ N_KW_WITH: 'with' -> type(KW_WITH);
 N_KW_XOR: 'xor' -> type(KW_XOR);
 
 // Fixed tokens (maximal munch).
+N_COLON_EQ: ':=' -> type(COLON_EQ);
 N_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 N_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 N_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
@@ -672,7 +673,6 @@ N_MINUS_GT: '->' -> type(MINUS_GT);
 N_SLASH_EQ: '/=' -> type(SLASH_EQ);
 N_LT_EQ: '<=' -> type(LT_EQ);
 N_LT_COLON: '<:' -> type(LT_COLON);
-N_LT_MINUS: '<-' -> type(LT_MINUS);
 N_GT_EQ: '>=' -> type(GT_EQ);
 N_PIPE_GT: '|>' -> type(PIPE_GT);
 N_TILDE_GT: '~>' -> type(TILDE_GT);

@@ -236,7 +236,7 @@ impl Parser<'_> {
 
 const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
     match kind {
-        TokenKind::LtMinus => Some((1, ASSIGN_BP, InfixClass::Other)),
+        TokenKind::ColonEq => Some((1, ASSIGN_BP, InfixClass::Other)),
         TokenKind::PipeGt => Some((PIPE_BP, PIPE_BP + 1, InfixClass::Other)),
         TokenKind::MinusGt | TokenKind::TildeGt => Some((ARROW_BP, ARROW_BP, InfixClass::Other)),
         TokenKind::KwOr => Some((OR_BP, OR_BP + 1, InfixClass::Other)),

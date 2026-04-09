@@ -99,8 +99,8 @@ mut Point
 Mutation is location-based:
 
 - `mut expr` produces a writable location/value
-- `<-` writes into a writable location expression
-- `mut T` controls whether writes through `base.field <- value` and `base.[i] <- value` are permitted
+- `:=` writes into a writable location expression
+- `mut T` controls whether writes through `base.field := value` and `base.[i] := value` are permitted
 
 ## Type Definitions
 
@@ -109,20 +109,20 @@ All named type definitions are expressed through `let`.
 ### Product Types
 
 ```musi
-let Point := data { x : Float; y : Float };
+let Point = data { x : Float; y : Float };
 ```
 
 ### Sum Types
 
 ```musi
-let Option[T] := data { Some : T | None };
-let Result[T, E] := data { Ok : T | Err : E };
+let Option[T] = data { Some : T | None };
+let Result[T, E] = data { Ok : T | Err : E };
 ```
 
 ### Effects
 
 ```musi
-let State[S] := effect {
+let State[S] = effect {
   let get () : S;
   let put (s : S) : Unit;
 };
@@ -131,9 +131,9 @@ let State[S] := effect {
 ### Classes
 
 ```musi
-let Eq[T] := class {
+let Eq[T] = class {
   let (=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := x = x;
+  law reflexive (x : T) = x = x;
 };
 ```
 
@@ -142,14 +142,14 @@ let Eq[T] := class {
 Type parameters are introduced with brackets.
 
 ```musi
-let id[T] (x : T) : T := x;
+let id[T] (x : T) : T = x;
 ```
 
 Constraints stay in `where`.
 
 ```musi
-let sort[T] (xs : Array[T]) : Array[T] where T : Ord := /* ... */;
-let lift[T] (x : T) : Box[T] where T <: Value := /* ... */;
+let sort[T] (xs : Array[T]) : Array[T] where T : Ord = /* ... */;
+let lift[T] (x : T) : Box[T] where T <: Value = /* ... */;
 ```
 
 - `T : ClassName[...]` means class implementation
@@ -160,9 +160,9 @@ let lift[T] (x : T) : Box[T] where T <: Value := /* ... */;
 The current surface keeps effect rows on signatures.
 
 ```musi
-let f (x : Int) : Int := x + 1;
-let g (x : Int) with { Console } : Int := /* ... */;
-let h[T] (x : T) with { State[T], ...r } : T := /* ... */;
+let f (x : Int) : Int = x + 1;
+let g (x : Int) with { Console } : Int = /* ... */;
+let h[T] (x : T) with { State[T], ...r } : T = /* ... */;
 ```
 
 That means:
@@ -195,16 +195,16 @@ This is not the same idea as “open classes” or “sealed classes” in OOP l
 Classes and instances are part of the language core.
 
 ```musi
-let Ord[T] := class {
+let Ord[T] = class {
   let (<) (a : T, b : T) : Bool;
   let (<=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := x <= x;
+  law reflexive (x : T) = x <= x;
 };
 ```
 
 ```musi
-let eqInt := instance Eq[Int] {
-  let (=) (a : Int, b : Int) : Bool := int_eq(a, b);
+let eqInt = instance Eq[Int] {
+  let (=) (a : Int, b : Int) : Bool = int_eq(a, b);
 };
 ```
 

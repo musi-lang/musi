@@ -21,12 +21,12 @@ Public language attrs share one argument model:
   - string/int/rune literals
   - variant literals (`.None`, `.Some(...)`) where args are data-only
   - arrays (`[...]`) of data-only values
-  - records (`{ key := value, ... }`) of data-only values
+  - records (`{ key = value, ... }`) of data-only values
 
 Examples:
 
 ```musi
-@link(name := "c", symbol := "puts")
+@link(name = "c", symbol = "puts")
 @link("c", "puts")
 ```
 
@@ -37,7 +37,7 @@ Examples:
 Attaches native library and symbol metadata to a `foreign let` declaration.
 
 ```musi
-@link(name := "c", symbol := "puts")
+@link(name = "c", symbol = "puts")
 foreign "c" let puts (msg : CString) : Int;
 ```
 
@@ -58,14 +58,14 @@ If `symbol` is omitted, the Musi binding name is used.
 Marks a declaration or module item as conditionally present for a target.
 
 ```musi
-@when(os := "linux", arch := "x86_64")
+@when(os = "linux", arch = "x86_64")
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
 To express multiple alternatives, use arrays:
 
 ```musi
-@when(os := ["linux", "mac"], arch := ["x86_64", "aarch64"])
+@when(os = ["linux", "mac"], arch = ["x86_64", "aarch64"])
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
@@ -87,8 +87,8 @@ Named predicates are canonical.
 Selects the representation family for a data declaration that must cross a foreign or layout-sensitive boundary.
 
 ```musi
-@repr(kind := "c")
-let Point := data { x : Int; y : Int };
+@repr(kind = "c")
+let Point = data { x : Int; y : Int };
 ```
 
 Parameter order:
@@ -102,8 +102,8 @@ Parameter order:
 Applies explicit layout controls to a layout-sensitive declaration.
 
 ```musi
-@layout(align := 8, pack := 1)
-let Header := data { tag : Int; len : Int };
+@layout(align = 8, pack = 1)
+let Header = data { tag : Int; len : Int };
 ```
 
 Parameter order:
@@ -124,9 +124,9 @@ Parameter order:
 Controls diagnostics by `ms####` code.
 
 ```musi
-@diag.allow("ms4023") let x := 1;
-@diag.warn("ms2502") @musi.lang(name := "Fake") let Fake := data { Fake };
-@diag.expect("ms2502") @musi.lang(name := "Fake") let Fake := data { Fake };
+@diag.allow("ms4023") let x = 1;
+@diag.warn("ms2502") @musi.lang(name = "Fake") let Fake = data { Fake };
+@diag.expect("ms2502") @musi.lang(name = "Fake") let Fake = data { Fake };
 ```
 
 - `allow` suppresses matching diagnostics
@@ -145,8 +145,8 @@ Compiler-owned attrs are reserved to compiler modules and internal language/runt
 Marks a compiler-owned language definition.
 
 ```musi
-@musi.lang(name := "Bool")
-let Bool := data { True | False };
+@musi.lang(name = "Bool")
+let Bool = data { True | False };
 ```
 
 ### `@musi.intrinsic(...)`
@@ -154,7 +154,7 @@ let Bool := data { True | False };
 Marks a compiler-known intrinsic bridge between the language and the runtime or host.
 
 ```musi
-@musi.intrinsic(opcode := "seq.len")
+@musi.intrinsic(opcode = "seq.len")
 foreign let musi_seq_len (xs : CPtr) : Int;
 ```
 
@@ -179,7 +179,7 @@ Any non-reserved attr outside the public and compiler-only sets is preserved as 
 ```musi
 @serde.rename("user_id")
 @sql.table("users")
-let User := data { id : Int };
+let User = data { id : Int };
 ```
 
 Inert metadata does not affect:

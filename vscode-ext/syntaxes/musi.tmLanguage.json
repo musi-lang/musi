@@ -533,7 +533,7 @@
 			"patterns": [
 				{
 					"name": "keyword.operator.assignment.musi",
-					"match": ":=|<-"
+					"match": ":="
 				},
 				{
 					"name": "keyword.operator.arrow.musi",
@@ -553,7 +553,7 @@
 				},
 				{
 					"name": "keyword.operator.other.musi",
-					"match": "\\|>|\\.\\.\\.|\\.\\{|\\.\\[|\\?\\.|!\\.|\\+|-|\\*|/|%|\\."
+					"match": "\\|>|\\.\\.\\.|\\.\\{|\\.\\[|\\+|-|\\*|/|%|\\."
 				}
 			]
 		},

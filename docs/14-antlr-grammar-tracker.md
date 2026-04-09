@@ -23,7 +23,7 @@ This tracker is for the remaining semantic clarifications needed to make the gra
 
 - [x] Decide whether template literals support `${ expr }` interpolation in the core syntax
 - [x] Define nesting rule (interpolation ends at `}` when brace depth returns to 0)
-- [x] Specify how template interpolation is tokenized and parsed (lexer modes + `TEMPLATE_BEGIN`/`TEMPLATE_TEXT`/`TEMPLATE_INTERP_BEGIN`/`TEMPLATE_END`)
+- [x] Specify how template interpolation is tokenized and parsed (lexer modes + `TEMPLATE_NO_SUBST` / `TEMPLATE_HEAD` / `TEMPLATE_MIDDLE` / `TEMPLATE_TAIL`)
 
 ## Symbolic operators
 

@@ -23,16 +23,16 @@ Effects are a computation feature. The grammar no longer reserves a separate typ
 Effects are declared as expressions bound through `let`.
 
 ```musi
-let Console := effect {
+let Console = effect {
   let writeln (msg : String) : Unit;
   let readln () : String;
 };
 
-let Abort := effect {
+let Abort = effect {
   let abort (msg : String) : Empty;
 };
 
-let State[S] := effect {
+let State[S] = effect {
   let get () : S;
   let put (s : S) : Unit;
 };
@@ -46,7 +46,7 @@ Effect members describe operations. Laws may also be attached as named propositi
 
 ```musi
 perform Console.writeln("hello");
-let line := perform Console.readln();
+let line = perform Console.readln();
 perform Abort.abort("bad state");
 perform op(msg);
 ```
@@ -96,8 +96,8 @@ Effect rows are open immediately, not deferred to a later design phase.
 Rows live on signatures through `with { ... }`.
 
 ```musi
-let f (x : Int) with { Console } : Int := ...;
-let g[T] (x : T) with { State[T], ...r } : T := ...;
+let f (x : Int) with { Console } : Int = ...;
+let g[T] (x : T) with { State[T], ...r } : T = ...;
 ```
 
 ### Reading Rows

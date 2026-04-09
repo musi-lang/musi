@@ -24,7 +24,7 @@ where
 
         let op_tok = node.child_tokens().find(|t| t.kind() != TokenKind::Eof);
         let op = match op_tok.map(SyntaxToken::kind) {
-            Some(TokenKind::LtMinus) => HirBinaryOp::Assign,
+            Some(TokenKind::ColonEq) => HirBinaryOp::Assign,
             Some(TokenKind::PipeGt) => HirBinaryOp::Pipe,
             Some(TokenKind::MinusGt) => HirBinaryOp::Arrow,
             Some(TokenKind::TildeGt) => HirBinaryOp::EffectArrow,
@@ -56,4 +56,3 @@ where
         self.alloc_expr(origin, HirExprKind::Binary { op, left, right })
     }
 }
-

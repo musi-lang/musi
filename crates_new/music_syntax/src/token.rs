@@ -89,7 +89,7 @@ pub enum TokenKind {
     Gt,
 
     // Compound tokens (grammar/Musi.abnf)
-    LtMinus,     // <-
+    ColonEq,     // :=
     MinusGt,     // ->
     TildeGt,     // ~>
     EqGt,            // =>
@@ -111,6 +111,7 @@ pub enum TokenKind {
 // Ordered by longest-to-shortest (maximal munch).
 pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b":?>", TokenKind::ColonQuestionGt),
+    (b":=", TokenKind::ColonEq),
     (b"...", TokenKind::DotDotDot),
     (b".{", TokenKind::DotLBrace),
     (b".[", TokenKind::DotLBracket),
@@ -119,7 +120,6 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"/=", TokenKind::SlashEq),
     (b"<=", TokenKind::LtEq),
     (b"<:", TokenKind::LtColon),
-    (b"<-", TokenKind::LtMinus),
     (b">=", TokenKind::GtEq),
     (b"|>", TokenKind::PipeGt),
     (b"~>", TokenKind::TildeGt),
@@ -321,7 +321,7 @@ pub const fn display_token_kind(kind: TokenKind) -> &'static str {
         TokenKind::Eq => "`=`",
         TokenKind::Lt => "`<`",
         TokenKind::Gt => "`>`",
-        TokenKind::LtMinus => "`<-`",
+        TokenKind::ColonEq => "`:=`",
         TokenKind::MinusGt => "`->`",
         TokenKind::TildeGt => "`~>`",
         TokenKind::EqGt => "`=>`",

@@ -30,14 +30,14 @@ Plain Musi `String` is not part of the direct FFI contract. Convert at the bound
 Single declaration:
 
 ```musi
-@link(name := "c", symbol := "puts")
+@link(name = "c", symbol = "puts")
 foreign "c" let puts (msg : CString) : Int;
 ```
 
 Grouped declarations:
 
 ```musi
-@link(name := "m")
+@link(name = "m")
 foreign "c" (
   let sin (x : Float) : Float;
   let cos (x : Float) : Float;
@@ -67,14 +67,14 @@ If `name` is omitted, lookup falls back to compiler-owned builtin host symbols.
 `@when(os, arch, env, abi, vendor, feature...)` conditionally includes a foreign declaration for a target.
 
 ```musi
-@when(os := "linux", arch := "x86_64")
+@when(os = "linux", arch = "x86_64")
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
 To express multiple alternatives, use arrays:
 
 ```musi
-@when(os := ["linux", "mac"], arch := ["x86_64", "aarch64"])
+@when(os = ["linux", "mac"], arch = ["x86_64", "aarch64"])
 foreign let clock_gettime (id : Int, out : CPtr) : Int;
 ```
 
@@ -84,7 +84,7 @@ Use named predicates as the canonical form.
 
 ## Builtin Host Symbols
 
-Compiler-owned builtin host symbols do not require `@link(name := ...)`:
+Compiler-owned builtin host symbols do not require `@link(name = ...)`:
 
 ```musi
 foreign let musi_io_read_text (path : CString) : CString;
@@ -108,9 +108,9 @@ Aggregate interop is explicit.
 Only declarations marked with `@repr(...)` and, when needed, `@layout(...)` are part of the direct aggregate FFI surface:
 
 ```musi
-@repr(kind := "c")
-@layout(align := 8, pack := 1)
-let Header := data { tag : Int; len : Int };
+@repr(kind = "c")
+@layout(align = 8, pack = 1)
+let Header = data { tag : Int; len : Int };
 ```
 
 Ordinary `data` declarations do not become FFI-safe by accident.

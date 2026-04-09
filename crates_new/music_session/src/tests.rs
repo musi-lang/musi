@@ -166,7 +166,7 @@ fn compiles_imported_globals_and_local_assignment() {
             let dep = import "dep";
             export let answer () : Int = (
               let mut local = dep.base;
-              local <- local + 1;
+              local := local + 1;
               local
             );
         "#,
@@ -263,7 +263,7 @@ fn compiles_record_field_assignment() {
             r"
             export let answer () : Int = (
               let r = mut { x = 1, y = 2 };
-              r.x <- 3;
+              r.x := 3;
               r.x
             );
         ",

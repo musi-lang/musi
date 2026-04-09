@@ -106,7 +106,7 @@ fn emits_globals_locals_assignment_index_and_case() {
         export let base : Int = 41;
         export let answer (x : Int) : Int = (
           let items = mut [1, 2, 3];
-          items.[0] <- base;
+          items.[0] := base;
           case x of (| 0 => items.[0] | value => value + base);
         );
     ",

@@ -54,8 +54,8 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | ------------------------------------------------- | --------- | ----------- | ---- | ----------------- | -------------------------------------------------------------------- |
 | Sequences (`;`)                                   | ✅        | ✅          | ✅   | ✅                | Top-level statements lower as sequence expressions                   |
 | `let` bindings                                    | ✅        | ✅          | ✅   | ✅                | Destructuring patterns (`(x, y)`, `[x, y]`, `{x, y}`) compile end-to-end; generic `let` uses explicit type params, not implicit HM-style generalization |
-| Writable locations (`mut expr`)                   | ✅        | ✅          | ✅   | ✅                | Names bind immutably; mutation is performed by writing into `mut` locations via `<-` |
-| Assignment (`<-`)                                 | ✅        | ✅          | ✅   | ✅                | Local names, globals, and indexed sequence elements compile end-to-end |
+| Writable locations (`mut expr`)                   | ✅        | ✅          | ✅   | ✅                | Names bind immutably; mutation is performed by writing into `mut` locations via `:=` |
+| Assignment (`:=`)                                 | ✅        | ✅          | ✅   | ✅                | Local names, globals, and indexed sequence elements compile end-to-end |
 | Calls                                             | ✅        | ✅          | ✅   | ✅                | Direct named, imported, generic, foreign, and higher-order closure calls compile end-to-end in the non-runtime backend |
 | Field/index/update access (`.`, `.[`, `.{`)       | ✅        | ✅          | ✅   | ✅                | Imported module members, indexed sequence get/set, record field projection, and record update now compile end-to-end; SEAM text transport supports quoted symbolic names for structural record types |
 | Variant constructors (`.Tag(...)`)                | ✅        | ✅          | ✅   | ✅                | Constructor type is inferred from unique matching `data` variant tag in scope; ambiguous tags require disambiguation via annotation |
@@ -79,7 +79,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 | Anonymous sums (`+`)                 | ✅        | ✅          | ✅   | ✅                | Sum types are represented semantically and emitted in exported signature metadata |
 | Arrays (`Array[T, n]`)               | ✅        | ✅          | ✅   | ✅                | Array literals and dimension-argument forms typecheck |
 | Array spread (`...expr` in `[...]`)  | ✅        | ✅          | ✅   | ✅                | Tuple and fixed-dimension array spreads expand into indexed reads; 1D spreads with unknown dims lower via `seq.cat` |
-| `mut T`                              | ✅        | ✅          | ✅   | ✅                | Writable types are enforced for write-through assignment (`base.[i] <-`, `base.field <-`) |
+| `mut T`                              | ✅        | ✅          | ✅   | ✅                | Writable types are enforced for write-through assignment (`base.[i] :=`, `base.field :=`) |
 | `where` constraints (`T :`, `T <:`)  | ✅        | ✅          | ✅   | ✅                | Constraint lowering and solving exist; constraints are emitted in exported signature metadata |
 | Open effect rows (`with { ... }`)    | ✅        | ✅          | ✅   | ✅                | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata |
 | Imported generic exports             | ➖        | ✅          | ✅   | ✅                | Imported generic callable uses now compile through `music_session` end-to-end |

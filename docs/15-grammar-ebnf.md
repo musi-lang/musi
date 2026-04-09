@@ -18,7 +18,7 @@ Keywords:
 
 Fixed punctuation / operators (maximal munch):
 
-`:= <- -> ~> => /= <= >= <: ?. !. ... .{ .[ :? :?> |>`
+`:= -> ~> => /= <= >= <: ... .{ .[ :? :?> |>`
 
 Singles:
 
@@ -28,7 +28,7 @@ Literals:
 
 - `INT_LIT`, `FLOAT_LIT`
 - `STRING_LIT`, `RUNE_LIT`
-- template literals (backticks) tokenized as `TEMPLATE_BEGIN`/`TEMPLATE_TEXT`/`TEMPLATE_INTERP_BEGIN`/`RBRACE`/`TEMPLATE_END`
+- template literals (backticks) tokenized as `TEMPLATE_NO_SUBST` or `TEMPLATE_HEAD`/`TEMPLATE_MIDDLE`/`TEMPLATE_TAIL`
 - `IDENT`
 
 ## Operator precedence (semantic)
@@ -53,7 +53,7 @@ This is **not** a parser contract anymore. Parsing produces a flat infix chain (
 | 8  | `or`                                   | left  |
 | 7  | `-> ~>`                                | right |
 | 6  | `|>`                                   | left  |
-| 2  | `<-`                                   | right |
+| 2  | `:=`                                   | right |
 
 ### Fixity declarations
 
@@ -128,7 +128,8 @@ Template literals (lexer-driven tokens):
 
 ```
 template_lit =
-    TEMPLATE_BEGIN (TEMPLATE_TEXT | TEMPLATE_INTERP_BEGIN expr RBRACE)* TEMPLATE_END
+    TEMPLATE_NO_SUBST
+  | TEMPLATE_HEAD expr (TEMPLATE_MIDDLE expr)* TEMPLATE_TAIL
   ;
 ```
 
@@ -141,8 +142,6 @@ postfix =
   | ".[" expr_list? "]"
   | ".{" record_fields? "}"
   | "." field_target
-  | "?." field_target
-  | "!." field_target
   | ":?" expr ("as" ident)?
   | ":?>" expr
   ;

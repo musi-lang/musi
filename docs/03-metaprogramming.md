@@ -18,7 +18,7 @@ The current metaprogramming surface is limited to the constructs above.
 
 ```musi
 quote (x + 1)
-quote { let f := 42; }
+quote { let f = 42; }
 ```
 
 Grammar:
@@ -34,10 +34,10 @@ ast-quote = "quote" ("(" ast-expr ")" / "{" *(ast-stmt) "}")
 Splice inserts quoted syntax back into a `quote`.
 
 ```musi
-let name := quote x;
-let expr := quote (#name + 1);
-let stmts := [quote (let a := 1), quote (let b := 2)];
-let block := quote { #[stmts]; };
+let name = quote x;
+let expr = quote (#name + 1);
+let stmts = [quote (let a = 1), quote (let b = 2)];
+let block = quote { #[stmts]; };
 ```
 
 Grammar:
@@ -55,11 +55,11 @@ Splice forms are only valid inside quoted syntax.
 Attributes remain part of metaprogramming, but they are not all the same kind of thing.
 
 ```musi
-@link(name := "c", symbol := "puts")
+@link(name = "c", symbol = "puts")
 foreign let puts (s : CString) : Int;
 
 @diag.allow("ms4023")
-let x := 1;
+let x = 1;
 ```
 
 The language splits attrs into three tiers:

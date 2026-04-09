@@ -152,6 +152,8 @@ kw-with     = %x77.69.74.68
 
 kw-xor      = %x78.6F.72
 ; --- Fixed multi-octet tokens ---
+colon-eq           = ":="
+
 colon-question-gt = ":?>"
 
 dot-dot-dot       = "..."
@@ -170,8 +172,6 @@ slash-eq          = "/="
 lt-eq             = "<="
 
 lt-colon          = "<:"
-
-lt-minus          = "<-"
 
 gt-eq             = ">="
 
@@ -360,12 +360,12 @@ fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
 ; --- Expressions (semantic precedence; parse as flat infix chain) ---
 expr              = infix-expr
 
-infix-op          = lt-minus
-	                    / pipe-gt
-                    / minus-gt
-                    / tilde-gt
-                    / kw-or
-                    / kw-xor
+infix-op          = colon-eq
+                        / pipe-gt
+                        / minus-gt
+                        / tilde-gt
+                        / kw-or
+                        / kw-xor
                     / kw-and
                     / eq
                     / slash-eq
