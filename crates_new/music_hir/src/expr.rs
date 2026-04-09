@@ -1,9 +1,57 @@
 use music_arena::SliceRange;
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 
 use crate::module::{HirExprId, HirLitId, HirPatId};
 use crate::origin::HirOrigin;
 use crate::ty::HirDim;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirExportMod {
+    pub opaque: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirForeignMod {
+    pub abi: Option<Symbol>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirMods {
+    pub attrs: SliceRange<HirAttr>,
+    pub export: Option<HirExportMod>,
+    pub foreign: Option<HirForeignMod>,
+}
+
+impl HirMods {
+    pub const EMPTY: Self = Self {
+        attrs: SliceRange::EMPTY,
+        export: None,
+        foreign: None,
+    };
+
+    #[must_use]
+    pub const fn with_attrs(mut self, attrs: SliceRange<HirAttr>) -> Self {
+        self.attrs = attrs;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_export(mut self, export: HirExportMod) -> Self {
+        self.export = Some(export);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_foreign(mut self, foreign: HirForeignMod) -> Self {
+        self.foreign = Some(foreign);
+        self
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.attrs.is_empty() && self.export.is_none() && self.foreign.is_none()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirBinder {
@@ -14,6 +62,7 @@ pub struct HirBinder {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirExpr {
     pub origin: HirOrigin,
+    pub mods: HirMods,
     pub kind: HirExprKind,
 }
 
@@ -118,11 +167,6 @@ pub enum HirExprKind {
     Import {
         arg: HirExprId,
     },
-    Export {
-        opaque: bool,
-        foreign_abi: Option<Box<str>>,
-        expr: HirExprId,
-    },
 
     Case {
         scrutinee: HirExprId,
@@ -145,10 +189,6 @@ pub enum HirExprKind {
         class: HirExprId,
         members: SliceRange<HirMemberDef>,
     },
-    Foreign {
-        abi: Option<Box<str>>,
-        decls: SliceRange<HirForeignDecl>,
-    },
     Perform {
         expr: HirExprId,
     },
@@ -166,10 +206,6 @@ pub enum HirExprKind {
     },
     Splice {
         kind: HirSpliceKind,
-    },
-    Attributed {
-        attrs: SliceRange<HirAttr>,
-        expr: HirExprId,
     },
 }
 
@@ -329,17 +365,6 @@ pub struct HirFieldDef {
     pub name: Ident,
     pub ty: HirExprId,
     pub value: Option<HirExprId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirForeignDecl {
-    pub origin: HirOrigin,
-    pub attrs: SliceRange<HirAttr>,
-    pub name: Ident,
-    pub type_params: SliceRange<HirBinder>,
-    pub params: SliceRange<HirParam>,
-    pub constraints: SliceRange<HirConstraint>,
-    pub sig: Option<HirExprId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

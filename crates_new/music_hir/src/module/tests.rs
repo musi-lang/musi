@@ -1,6 +1,6 @@
 use music_base::{SourceId, Span};
 
-use crate::{HirExpr, HirExprKind, HirLit, HirLitKind, HirModule, HirOrigin, HirStore};
+use crate::{HirExpr, HirExprKind, HirLit, HirLitKind, HirMods, HirModule, HirOrigin, HirStore};
 
 #[test]
 fn store_allocates_and_round_trips_ids() {
@@ -12,6 +12,7 @@ fn store_allocates_and_round_trips_ids() {
     });
     let expr = store.alloc_expr(HirExpr {
         origin,
+        mods: HirMods::EMPTY,
         kind: HirExprKind::Lit { lit },
     });
 
@@ -24,6 +25,7 @@ fn module_wraps_store_and_root() {
     let origin = HirOrigin::dummy();
     let root = store.alloc_expr(HirExpr {
         origin,
+        mods: HirMods::EMPTY,
         kind: HirExprKind::Error,
     });
     let module = HirModule::new(SourceId::from_raw(9), store, root);
