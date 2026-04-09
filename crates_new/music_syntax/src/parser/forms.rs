@@ -257,8 +257,7 @@ impl Parser<'_> {
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),
             TokenKind::KwQuote => self.parse_quote_expr(),
-            TokenKind::KwExport => self.parse_export_expr(Vec::new()),
-            TokenKind::At => self.parse_with_attrs_expr(),
+            TokenKind::At | TokenKind::KwExport => self.parse_with_mods_expr(),
             _ => Err(self.expected_expression()),
         }
     }
@@ -832,13 +831,24 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_with_attrs_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let mut children = self.parse_attrs()?;
+    fn parse_with_mods_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = Vec::new();
+        let mut has_export_mod = false;
+        while self.at(TokenKind::At) || self.at(TokenKind::KwExport) {
+            if self.at(TokenKind::At) {
+                children.push(SyntaxElementId::Node(self.parse_attr()?));
+            } else {
+                children.push(SyntaxElementId::Node(self.parse_export_mod()?));
+                has_export_mod = true;
+            }
+        }
         let expr = match self.peek_kind() {
             TokenKind::KwLet => self.parse_let_expr(Vec::new())?,
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new())?,
             TokenKind::KwInstance => self.parse_instance_expr(Vec::new())?,
-            TokenKind::KwExport => self.parse_export_expr(Vec::new())?,
+            TokenKind::LParen if has_export_mod && self.nth_kind(1) == TokenKind::KwLet => {
+                self.parse_foreign_group()?
+            }
             _ => self.parse_expr(PREFIX_BP)?,
         };
         children.push(SyntaxElementId::Node(expr));
@@ -847,28 +857,20 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::AttributedExpr, children))
     }
 
-    fn parse_export_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
-        attrs.push(self.expect_token(TokenKind::KwExport)?);
+    fn parse_export_mod(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = vec![self.expect_token(TokenKind::KwExport)?];
         if let Some(opaque) = self.eat(TokenKind::KwOpaque) {
-            attrs.push(opaque);
+            children.push(opaque);
         }
         if self.at(TokenKind::KwForeign) {
-            attrs.push(self.advance_element());
+            children.push(self.advance_element());
             if self.at(TokenKind::String) {
-                attrs.push(self.advance_element());
+                children.push(self.advance_element());
             }
-        }
-        match self.peek_kind() {
-            TokenKind::KwLet => attrs.push(SyntaxElementId::Node(self.parse_let_expr(Vec::new())?)),
-            TokenKind::KwInstance => {
-                attrs.push(SyntaxElementId::Node(self.parse_instance_expr(Vec::new())?));
-            }
-            TokenKind::LParen => attrs.push(SyntaxElementId::Node(self.parse_foreign_group()?)),
-            _ => attrs.push(SyntaxElementId::Node(self.parse_expr(0)?)),
         }
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::ExportExpr, attrs))
+            .push_node_from_children(SyntaxNodeKind::ExportMod, children))
     }
 
     fn parse_member_body_expr(

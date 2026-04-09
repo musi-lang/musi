@@ -453,8 +453,7 @@ atom                  = literal
                         / handle-expr
                         / foreign-expr
                         / quote-expr
-                        / export-expr
-                        / with-attrs-expr
+                        / with-mods-expr
 
 pi-expr               = kw-forall lparen ident colon expr rparen (minus-gt /
                         tilde-gt) expr
@@ -566,10 +565,15 @@ splice                = hash ident
                         / hash lparen expr rparen
                         / hash lbracket [expr-list] rbracket
 
-with-attrs-expr       = attrs expr
+with-attrs-expr       = with-mods-expr
+; `export` is a modifier that applies to an expression (like attributes), not an
+; expression form itself.
+export-mod            = kw-export [kw-opaque] [kw-foreign [string-lit]]
 
-export-expr           = kw-export [kw-opaque] [kw-foreign [string-lit]] (let-expr
-                        / instance-expr / foreign-let-group / expr)
+modifier              = attr
+                        / export-mod
+
+with-mods-expr        = 1*(modifier) (expr / foreign-let-group)
 
 let-rest              = [let-modifier] pattern [bracket-params] [params]
                         [where-clause] [with-clause] [type-annot] [colon-eq

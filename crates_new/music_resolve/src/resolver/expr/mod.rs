@@ -44,7 +44,6 @@ where
 
             SyntaxNodeKind::LetExpr => self.lower_let_expr(node),
             SyntaxNodeKind::ImportExpr => self.lower_import_expr(node),
-            SyntaxNodeKind::ExportExpr => self.lower_export_expr(node),
             SyntaxNodeKind::ForeignBlockExpr => self.lower_foreign_block_expr(node),
             SyntaxNodeKind::DataExpr => self.lower_data_expr(node),
             SyntaxNodeKind::EffectExpr => self.lower_effect_expr(node),

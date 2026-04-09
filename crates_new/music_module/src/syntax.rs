@@ -93,15 +93,18 @@ pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree) -> Vec<Impor
 pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleExportSummary {
     let mut summary = ModuleExportSummary::default();
     walk_nodes(tree.root(), &mut |node| {
-        if node.kind() != SyntaxNodeKind::ExportExpr {
+        if node.kind() != SyntaxNodeKind::AttributedExpr {
             return;
         }
-        let is_opaque = node
+        let Some(export_mod) = node
+            .child_nodes()
+            .find(|child| child.kind() == SyntaxNodeKind::ExportMod)
+        else {
+            return;
+        };
+        let is_opaque = export_mod
             .child_tokens()
             .any(|tok| tok.kind() == TokenKind::KwOpaque);
-        let has_foreign = node
-            .child_tokens()
-            .any(|tok| tok.kind() == TokenKind::KwForeign);
 
         if let Some(let_expr) = node
             .child_nodes()
@@ -118,14 +121,12 @@ pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleE
             return;
         }
 
-        if has_foreign {
-            if let Some(group) = node
-                .child_nodes()
-                .find(|child| child.kind() == SyntaxNodeKind::MemberList)
-            {
-                collect_foreign_group_exports(group, &mut summary, is_opaque);
-                return;
-            }
+        if let Some(group) = node
+            .child_nodes()
+            .find(|child| child.kind() == SyntaxNodeKind::MemberList)
+        {
+            collect_foreign_group_exports(group, &mut summary, is_opaque);
+            return;
         }
 
         if node

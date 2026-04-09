@@ -10,43 +10,6 @@ where
         self.alloc_expr(origin, HirExprKind::Import { arg })
     }
 
-    pub(super) fn lower_export_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
-        let foreign_abi = if node
-            .child_tokens()
-            .any(|t| t.kind() == TokenKind::KwForeign)
-        {
-            node.child_tokens()
-                .find(|t| t.kind() == TokenKind::String)
-                .and_then(SyntaxToken::text)
-                .and_then(|raw| decode_string_lit(raw).ok())
-                .map(String::into_boxed_str)
-        } else {
-            None
-        };
-
-        let expr_node = node
-            .child_nodes()
-            .find(|n| n.kind() != SyntaxNodeKind::Attr);
-        let expr = match expr_node.map(SyntaxNode::kind) {
-            Some(SyntaxNodeKind::MemberList) => {
-                self.lower_foreign_group(expr_node.unwrap(), foreign_abi.clone())
-            }
-            Some(_) => self.lower_expr(expr_node.unwrap()),
-            None => self.error_expr(origin),
-        };
-
-        self.alloc_expr(
-            origin,
-            HirExprKind::Export {
-                opaque,
-                foreign_abi,
-                expr,
-            },
-        )
-    }
-
     pub(super) fn lower_foreign_block_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let abi = node
@@ -83,17 +46,7 @@ where
         self.alloc_expr(origin, HirExprKind::Foreign { abi, decls })
     }
 
-    fn lower_foreign_group(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        abi: Option<Box<str>>,
-    ) -> HirExprId {
-        let origin = self.origin_node(node);
-        let decls = self.lower_foreign_group_decls(node);
-        self.alloc_expr(origin, HirExprKind::Foreign { abi, decls })
-    }
-
-    fn lower_foreign_group_decls(
+    pub(super) fn lower_foreign_group_decls(
         &mut self,
         node: SyntaxNode<'tree, 'src>,
     ) -> SliceRange<HirForeignDecl> {
@@ -105,7 +58,7 @@ where
         self.store.foreign_decls.alloc_from_iter(decls)
     }
 
-    fn lower_foreign_decl(&mut self, node: SyntaxNode<'tree, 'src>) -> HirForeignDecl {
+    pub(super) fn lower_foreign_decl(&mut self, node: SyntaxNode<'tree, 'src>) -> HirForeignDecl {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
 
@@ -374,4 +327,3 @@ where
         )
     }
 }
-

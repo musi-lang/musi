@@ -39,7 +39,7 @@ pub enum SyntaxNodeKind {
     QuoteExpr,
     SpliceExpr,
     AttributedExpr,
-    ExportExpr,
+    ExportMod,
 
     WildcardPat,
     BindPat,
@@ -120,7 +120,6 @@ impl SyntaxNodeKind {
                 | Self::QuoteExpr
                 | Self::SpliceExpr
                 | Self::AttributedExpr
-                | Self::ExportExpr
         )
     }
 

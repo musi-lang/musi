@@ -112,8 +112,7 @@ atom:
 	| handle_expr
 	| foreign_expr
 	| quote_expr
-	| export_expr
-	| with_attrs_expr;
+	| with_mods_expr;
 
 literal: INT_LIT | FLOAT_LIT | STRING_LIT | RUNE_LIT;
 
@@ -237,15 +236,11 @@ splice:
 	| HASH LPAREN expr RPAREN
 	| HASH LBRACKET expr_list? RBRACKET;
 
-with_attrs_expr: attrs expr;
+with_mods_expr: modifier+ (expr | foreign_let_group);
 
-export_expr:
-	KW_EXPORT KW_OPAQUE? (KW_FOREIGN STRING_LIT?)? (
-		let_expr
-		| instance_expr
-		| foreign_let_group
-		| expr
-	);
+modifier: attr | export_mod;
+
+export_mod: KW_EXPORT KW_OPAQUE? (KW_FOREIGN STRING_LIT?)?;
 
 let_rest:
 	let_modifier? pattern bracket_params? params? where_clause? with_clause? type_annot? (
