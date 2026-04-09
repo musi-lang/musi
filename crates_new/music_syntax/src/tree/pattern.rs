@@ -57,14 +57,6 @@ fn collect_record_pattern_binder_tokens<'tree, 'src>(
     let children: Vec<_> = node.children().collect();
     let mut index = 0usize;
     while index < children.len() {
-        if children[index]
-            .into_token()
-            .is_some_and(|token| token.kind() == TokenKind::KwMut)
-        {
-            index += 1;
-            continue;
-        }
-
         let Some(name_token) = children
             .get(index)
             .copied()

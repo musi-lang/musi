@@ -85,9 +85,6 @@ impl Parser<'_> {
         let mut children = vec![open];
         if !self.at(TokenKind::RBrace) {
             loop {
-                if let Some(mut_kw) = self.eat(TokenKind::KwMut) {
-                    children.push(mut_kw);
-                }
                 children.push(self.expect_ident_element()?);
                 if let Some(colon) = self.eat(TokenKind::Colon) {
                     children.push(colon);
