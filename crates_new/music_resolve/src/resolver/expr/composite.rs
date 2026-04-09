@@ -98,7 +98,7 @@ where
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let has_bind = node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq);
+        let has_bind = node.child_tokens().any(|t| t.kind() == TokenKind::Eq);
         let value = if has_bind {
             self.lower_opt_expr(origin, node.child_nodes().next())
         } else {
@@ -133,4 +133,3 @@ where
             .collect()
     }
 }
-

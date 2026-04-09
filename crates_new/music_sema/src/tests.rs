@@ -89,7 +89,7 @@ fn check_module_src(
 #[test]
 fn import_exprs_type_as_opaque_module() {
     let src = r#"
-        let IO := import "std/io";
+        let IO = import "std/io";
         IO;
     "#;
     let env = TestImportEnv::default().with_module("std/io", "std/io");
@@ -116,7 +116,7 @@ fn imported_module_field_access_uses_export_surface() {
         12,
         "std/io",
         r"
-        export let read (path : String) : String := path;
+        export let read (path : String) : String = path;
     ",
         Some(&import_env),
         None,
@@ -126,7 +126,7 @@ fn imported_module_field_access_uses_export_surface() {
         13,
         "main",
         r#"
-        let IO := import "std/io";
+        let IO = import "std/io";
         IO.read;
     "#,
         Some(&import_env),
@@ -147,7 +147,7 @@ fn imported_module_record_pattern_binds_exported_values() {
         14,
         "std/io",
         r"
-        export let read (path : String) : String := path;
+        export let read (path : String) : String = path;
     ",
         Some(&import_env),
         None,
@@ -157,8 +157,8 @@ fn imported_module_record_pattern_binds_exported_values() {
         15,
         "main",
         r#"
-        let IO := import "std/io";
-        let {read} := IO;
+        let IO = import "std/io";
+        let {read} = IO;
         read;
     "#,
         Some(&import_env),
@@ -186,7 +186,7 @@ fn imported_effect_alias_handles_perform_and_handle() {
         16,
         "std/io",
         r"
-        export let Console := effect {
+        export let Console = effect {
           let readln () : String;
         };
     ",
@@ -198,8 +198,8 @@ fn imported_effect_alias_handles_perform_and_handle() {
         17,
         "main",
         r#"
-        let IO := import "std/io";
-        let Console := IO.Console;
+        let IO = import "std/io";
+        let Console = IO.Console;
         handle perform Console.readln() with Console of (
         | value => value
         | readln(k) => resume "ok"
@@ -220,7 +220,7 @@ fn imported_effect_alias_handles_perform_and_handle() {
 fn perform_effects_expose_textual_names() {
     let sema = check(
         r"
-        let Console := effect {
+        let Console = effect {
           let readln () : String;
         };
         perform Console.readln();
@@ -245,7 +245,7 @@ fn destructured_effect_alias_handles_perform_and_handle() {
         25,
         "std/io",
         r"
-        export let Console := effect {
+        export let Console = effect {
           let readln () : String;
         };
     ",
@@ -257,8 +257,8 @@ fn destructured_effect_alias_handles_perform_and_handle() {
         26,
         "main",
         r#"
-        let IO := import "std/io";
-        let {Console} := IO;
+        let IO = import "std/io";
+        let {Console} = IO;
         handle perform Console.readln() with Console of (
         | value => value
         | readln(k) => resume "ok"
@@ -313,7 +313,7 @@ fn imported_class_alias_supports_instance_checking() {
         18,
         "std/types",
         r"
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
     ",
@@ -325,10 +325,10 @@ fn imported_class_alias_supports_instance_checking() {
         19,
         "main",
         r#"
-        let Types := import "std/types";
-        let Eq := Types.Eq;
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let Types = import "std/types";
+        let Eq = Types.Eq;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -354,7 +354,7 @@ fn destructured_class_alias_supports_instance_checking() {
         27,
         "std/types",
         r"
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
     ",
@@ -366,10 +366,10 @@ fn destructured_class_alias_supports_instance_checking() {
         28,
         "main",
         r#"
-        let Types := import "std/types";
-        let {Eq} := Types;
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let Types = import "std/types";
+        let {Eq} = Types;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -395,8 +395,8 @@ fn imported_class_alias_ignores_symbol_allocation_order() {
         23,
         "std/types",
         r#"
-        let warmup := "noise";
-        export let Eq[T] := class {
+        let warmup = "noise";
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
     "#,
@@ -408,11 +408,11 @@ fn imported_class_alias_ignores_symbol_allocation_order() {
         24,
         "main",
         r#"
-        let scratch := 42;
-        let Types := import "std/types";
-        let Eq := Types.Eq;
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let scratch = 42;
+        let Types = import "std/types";
+        let Eq = Types.Eq;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -435,12 +435,12 @@ fn imported_class_alias_ignores_symbol_allocation_order() {
 fn class_and_instance_queries_return_facts() {
     let sema = check(
         r"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
-          law reflexive (x : T) := true;
+          law reflexive (x : T) = true;
         };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     ",
     );
@@ -456,7 +456,7 @@ fn class_and_instance_queries_return_facts() {
 fn duplicate_handler_clause_reports_diag() {
     let sema = check(
         r#"
-        let Console := effect {
+        let Console = effect {
           let readln () : String;
         };
         handle perform Console.readln() with Console of (
@@ -479,7 +479,7 @@ fn duplicate_handler_clause_reports_diag() {
 fn duplicate_class_member_reports_diag() {
     let sema = check(
         r"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
           let (=) (a : T, b : T) : Bool;
         };
@@ -498,12 +498,12 @@ fn duplicate_class_member_reports_diag() {
 fn missing_instance_member_reports_diag() {
     let sema = check(
         r"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
           let compare (a : T, b : T) : Int;
         };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     ",
     );
@@ -526,11 +526,11 @@ fn reachable_exported_instances_participate_in_coherence() {
         20,
         "a",
         r"
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     ",
         Some(&import_env),
@@ -541,10 +541,10 @@ fn reachable_exported_instances_participate_in_coherence() {
         21,
         "b",
         r#"
-        let A := import "a";
-        export let Eq := A.Eq;
+        let A = import "a";
+        export let Eq = A.Eq;
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -557,8 +557,8 @@ fn reachable_exported_instances_participate_in_coherence() {
         22,
         "main",
         r#"
-        let A := import "a";
-        let B := import "b";
+        let A = import "a";
+        let B = import "b";
         0;
     "#,
         Some(&import_env),
@@ -583,11 +583,11 @@ fn non_exported_instances_do_not_participate_in_coherence() {
         29,
         "a",
         r"
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
         instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     ",
         Some(&import_env),
@@ -598,10 +598,10 @@ fn non_exported_instances_do_not_participate_in_coherence() {
         30,
         "b",
         r#"
-        let A := import "a";
-        export let Eq := A.Eq;
+        let A = import "a";
+        export let Eq = A.Eq;
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -614,8 +614,8 @@ fn non_exported_instances_do_not_participate_in_coherence() {
         31,
         "main",
         r#"
-        let A := import "a";
-        let B := import "b";
+        let A = import "a";
+        let B = import "b";
         0;
     "#,
         Some(&import_env),
@@ -638,11 +638,11 @@ fn imported_tuple_instances_match_local_coherence_keys() {
         32,
         "a",
         r"
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
         export instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := true;
+          let (=) (a : (Int, Int), b : (Int, Int)) : Bool = true;
         };
     ",
         Some(&import_env),
@@ -653,10 +653,10 @@ fn imported_tuple_instances_match_local_coherence_keys() {
         33,
         "main",
         r#"
-        let A := import "a";
-        let Eq := A.Eq;
-        let eqPair := instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := true;
+        let A = import "a";
+        let Eq = A.Eq;
+        let eqPair = instance Eq[(Int, Int)] {
+          let (=) (a : (Int, Int), b : (Int, Int)) : Bool = true;
         };
     "#,
         Some(&import_env),
@@ -675,7 +675,7 @@ fn imported_tuple_instances_match_local_coherence_keys() {
 fn explicit_type_apply_instantiates_local_generic_lets() {
     let sema = check(
         r#"
-        let id[T] (x : T) : T := x;
+        let id[T] (x : T) : T = x;
         (id[Int](1), id[String]("ok"));
     "#,
     );
@@ -700,7 +700,7 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
         34,
         "std/base",
         r"
-        export let id[T] (x : T) : T := x;
+        export let id[T] (x : T) : T = x;
     ",
         Some(&import_env),
         None,
@@ -710,7 +710,7 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
         35,
         "main",
         r#"
-        let Base := import "std/base";
+        let Base = import "std/base";
         (Base.id[Int](1), Base.id[String]("ok"));
     "#,
         Some(&import_env),
@@ -734,13 +734,13 @@ fn explicit_type_apply_instantiates_imported_generic_exports() {
 fn generic_constraints_succeed_when_matching_instance_exists() {
     let sema = check(
         r"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) where T : Eq : T = x;
         requireEq[Int](1);
     ",
     );
@@ -758,13 +758,13 @@ fn generic_constraints_succeed_when_matching_instance_exists() {
 fn generic_constraints_report_unsatisfied_instances() {
     let sema = check(
         r#"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) where T : Eq : T = x;
         requireEq[String]("ok");
     "#,
     );
@@ -781,16 +781,16 @@ fn generic_constraints_report_unsatisfied_instances() {
 fn generic_constraints_report_ambiguous_instances() {
     let sema = check(
         r"
-        let Eq[T] := class {
+        let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
         instance[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := true;
+          let (=) (a : T, b : T) : Bool = true;
         };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+        let eqInt = instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool = true;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) where T : Eq : T = x;
         requireEq[Int](1);
     ",
     );
@@ -805,7 +805,7 @@ fn generic_constraints_report_ambiguous_instances() {
 
 #[test]
 fn assignment_requires_mut_binding() {
-    let sema = check("let x : Int := 1; x <- 2;");
+    let sema = check("let x : Int = 1; x <- 2;");
     assert!(
         sema.diags()
             .iter()
@@ -814,7 +814,7 @@ fn assignment_requires_mut_binding() {
         sema.diags()
     );
 
-    let sema = check("let mut x : Int := 1; x <- 2;");
+    let sema = check("let mut x : Int = 1; x <- 2;");
     assert!(
         !sema
             .diags()
@@ -829,7 +829,7 @@ fn assignment_requires_mut_binding() {
 fn write_through_requires_mut_type() {
     let sema = check(
         r"
-        let xs := [1, 2];
+        let xs = [1, 2];
         xs.[0] <- 3;
     ",
     );
@@ -843,7 +843,7 @@ fn write_through_requires_mut_type() {
 
     let sema = check(
         r"
-        let xs := mut [1, 2];
+        let xs = mut [1, 2];
         xs.[0] <- 3;
     ",
     );
@@ -858,7 +858,7 @@ fn write_through_requires_mut_type() {
 
     let sema = check(
         r"
-        let r := { x := 1 };
+        let r = { x = 1 };
         r.x <- 2;
     ",
     );
@@ -872,7 +872,7 @@ fn write_through_requires_mut_type() {
 
     let sema = check(
         r"
-        let r := mut { x := 1 };
+        let r = mut { x = 1 };
         r.x <- 2;
     ",
     );
@@ -888,7 +888,7 @@ fn write_through_requires_mut_type() {
 
 #[test]
 fn fixed_array_dims_validate_literal_length() {
-    let sema = check("let xs : [2]Int := [1, 2];");
+    let sema = check("let xs : Array[Int, 2] = [1, 2];");
     assert!(
         !sema
             .diags()
@@ -898,7 +898,7 @@ fn fixed_array_dims_validate_literal_length() {
         sema.diags()
     );
 
-    let sema = check("let xs : [2]Int := [1, 2, 3];");
+    let sema = check("let xs : Array[Int, 2] = [1, 2, 3];");
     assert!(
         sema.diags()
             .iter()
@@ -912,13 +912,13 @@ fn fixed_array_dims_validate_literal_length() {
 fn open_effect_rows_absorb_extra_effects() {
     let sema = check(
         r"
-        let Console := effect {
+        let Console = effect {
           let readln () : String;
         };
-        let State := effect {
+        let State = effect {
           let readln () : String;
         };
-        let readOpen (x : Int) with { Console, ...r } : String := perform State.readln();
+        let readOpen (x : Int) with { Console, ...r } : String = perform State.readln();
         readOpen(0);
     ",
     );
@@ -946,13 +946,13 @@ fn open_effect_rows_absorb_extra_effects() {
 fn closed_effect_rows_reject_extra_effects() {
     let sema = check(
         r"
-        let Console := effect {
+        let Console = effect {
           let readln () : String;
         };
-        let State := effect {
+        let State = effect {
           let readln () : String;
         };
-        let readClosed (x : Int) with { Console } : String := perform State.readln();
+        let readClosed (x : Int) with { Console } : String = perform State.readln();
         readClosed(0);
     ",
     );
@@ -967,7 +967,7 @@ fn closed_effect_rows_reject_extra_effects() {
 
 #[test]
 fn invalid_link_attr_target_reports_diag() {
-    let sema = check("@link(name := \"c\") let x := 1;");
+    let sema = check("@link(name = \"c\") let x = 1;");
     assert!(
         sema.diags()
             .iter()
@@ -981,7 +981,7 @@ fn invalid_link_attr_target_reports_diag() {
 fn any_expected_matches_concrete_types() {
     let sema = check(
         r"
-        let idAny (x : Any) : Any := x;
+        let idAny (x : Any) : Any = x;
         idAny(1);
     ",
     );
@@ -992,12 +992,12 @@ fn any_expected_matches_concrete_types() {
 fn array_and_record_spreads_typecheck() {
     let sema = check(
         r"
-        let xs := [1, 2];
-        let ys := [0, ...xs, 3];
+        let xs = [1, 2];
+        let ys = [0, ...xs, 3];
 
-        let p := { x := 1, y := 2 };
-        let q := { ...p, x := 3 };
-        let r := p.{ ...q, y := 9 };
+        let p = { x = 1, y = 2 };
+        let q = { ...p, x = 3 };
+        let r = p.{ ...q, y = 9 };
 
         ys;
         q;
@@ -1011,12 +1011,12 @@ fn array_and_record_spreads_typecheck() {
 fn call_spreads_typecheck_for_tuples_and_any_seq() {
     let sema = check(
         r#"
-        let f (a : Int, b : String) : Int := a;
-        let t := (1, "x");
+        let f (a : Int, b : String) : Int = a;
+        let t = (1, "x");
         f(...t);
 
-        let g (a : Any, b : Any) : Any := a;
-        let xs : []Any := [1, "x"];
+        let g (a : Any, b : Any) : Any = a;
+        let xs : Array[Any] = [1, "x"];
         g(...xs);
     "#,
     );
@@ -1027,7 +1027,7 @@ fn call_spreads_typecheck_for_tuples_and_any_seq() {
 fn sum_constructors_and_patterns_typecheck() {
     let sema = check(
         r"
-        let x : Int + String := .Left(1);
+        let x : Int + String = .Left(1);
         case x of (
           | .Left(n) => n
           | .Right(_) => 0

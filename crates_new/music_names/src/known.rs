@@ -3,6 +3,7 @@ use crate::{Interner, Symbol};
 #[derive(Debug, Clone, Copy)]
 pub struct KnownSymbols {
     pub type_: Symbol,
+    pub array: Symbol,
     pub any: Symbol,
     pub unknown: Symbol,
     pub syntax: Symbol,
@@ -30,6 +31,7 @@ impl KnownSymbols {
     pub fn new(interner: &mut Interner) -> Self {
         Self {
             type_: interner.intern("Type"),
+            array: interner.intern("Array"),
             any: interner.intern("Any"),
             unknown: interner.intern("Unknown"),
             syntax: interner.intern("Syntax"),
@@ -54,9 +56,10 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 14] {
+    pub const fn compiler_prelude(self) -> [Symbol; 15] {
         [
             self.type_,
+            self.array,
             self.any,
             self.unknown,
             self.syntax,

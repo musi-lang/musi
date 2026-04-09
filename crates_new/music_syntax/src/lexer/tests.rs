@@ -2,14 +2,14 @@ use crate::{LexErrorKind, Lexer, TokenKind, TriviaKind};
 
 #[test]
 fn lex_keywords_idents_and_literals() {
-    let lexed = Lexer::new("let x := 1\n").lex();
+    let lexed = Lexer::new("let x = 1\n").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
         [
             TokenKind::KwLet,
             TokenKind::Ident,
-            TokenKind::ColonEq,
+            TokenKind::Eq,
             TokenKind::Int,
             TokenKind::Eof,
         ]
@@ -56,13 +56,13 @@ fn lex_compound_tokens_and_symbolic_ops() {
 
 #[test]
 fn lex_compound_tokens_longest_first() {
-    let lexed = Lexer::new(":?> := :? ... .{ .[ ?. !. <- -> ~> => /= <= >= <: |>").lex();
+    let lexed = Lexer::new(":?> = :? ... .{ .[ ?. !. <- -> ~> => /= <= >= <: |>").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
         [
             TokenKind::ColonQuestionGt,
-            TokenKind::ColonEq,
+            TokenKind::Eq,
             TokenKind::ColonQuestion,
             TokenKind::DotDotDot,
             TokenKind::DotLBrace,
@@ -134,7 +134,7 @@ fn lex_template_literal_with_substitution() {
 
 #[test]
 fn lex_template_literal_does_not_end_interpolation_on_inner_rbrace() {
-    let lexed = Lexer::new("`a ${{x := 1}} b`").lex();
+    let lexed = Lexer::new("`a ${{x = 1}} b`").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -142,7 +142,7 @@ fn lex_template_literal_does_not_end_interpolation_on_inner_rbrace() {
             TokenKind::TemplateHead,
             TokenKind::LBrace,
             TokenKind::Ident,
-            TokenKind::ColonEq,
+            TokenKind::Eq,
             TokenKind::Int,
             TokenKind::RBrace,
             TokenKind::TemplateTail,

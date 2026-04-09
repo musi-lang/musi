@@ -150,7 +150,6 @@ struct Parser<'a> {
     errors: &'a mut ParseErrorList,
     comparison_exprs: Vec<SyntaxNodeId>,
     lparen_match: Vec<Option<usize>>,
-    lbracket_match: Vec<Option<usize>>,
     quote_depth: u32,
 }
 
@@ -168,7 +167,6 @@ impl<'a> Parser<'a> {
             errors,
             comparison_exprs: Vec::new(),
             lparen_match: compute_matching(tokens, TokenKind::LParen, TokenKind::RParen),
-            lbracket_match: compute_matching(tokens, TokenKind::LBracket, TokenKind::RBracket),
             quote_depth: 0,
         }
     }
@@ -304,15 +302,6 @@ impl<'a> Parser<'a> {
         self.tokens
             .get(close + 1)
             .is_some_and(|token| matches!(token.kind, TokenKind::MinusGt | TokenKind::TildeGt))
-    }
-
-    fn is_array_type_expr(&self) -> bool {
-        let Some(close) = self.lbracket_match.get(self.pos).copied().flatten() else {
-            return false;
-        };
-        self.tokens
-            .get(close + 1)
-            .is_some_and(|token| is_prefix_expr_start(token.kind))
     }
 
     fn is_comparison_expr(&self, node: SyntaxNodeId) -> bool {
@@ -482,15 +471,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expected_array_dimension(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedArrayDimension {
-                found: self.found_token(),
-            },
-            span: self.span(),
-        }
-    }
-
     fn expected_field_target(&self) -> ParseError {
         ParseError {
             kind: ParseErrorKind::ExpectedFieldTarget {
@@ -521,42 +501,6 @@ impl<'a> Parser<'a> {
 
 fn same_kind(left: TokenKind, right: TokenKind) -> bool {
     mem::discriminant(&left) == mem::discriminant(&right)
-}
-
-const fn is_prefix_expr_start(kind: TokenKind) -> bool {
-    matches!(
-        kind,
-        TokenKind::Minus
-            | TokenKind::KwNot
-            | TokenKind::KwMut
-            | TokenKind::Int
-            | TokenKind::Float
-            | TokenKind::String
-            | TokenKind::Rune
-            | TokenKind::TemplateNoSubst
-            | TokenKind::TemplateHead
-            | TokenKind::Ident
-            | TokenKind::OpIdent
-            | TokenKind::Hash
-            | TokenKind::LParen
-            | TokenKind::LBracket
-            | TokenKind::LBrace
-            | TokenKind::Dot
-            | TokenKind::KwCase
-            | TokenKind::KwLet
-            | TokenKind::KwResume
-            | TokenKind::KwImport
-            | TokenKind::KwData
-            | TokenKind::KwEffect
-            | TokenKind::KwClass
-            | TokenKind::KwInstance
-            | TokenKind::KwPerform
-            | TokenKind::KwHandle
-            | TokenKind::KwForeign
-            | TokenKind::KwQuote
-            | TokenKind::KwExport
-            | TokenKind::At
-    )
 }
 
 fn compute_matching(tokens: &[Token], open: TokenKind, close: TokenKind) -> Vec<Option<usize>> {

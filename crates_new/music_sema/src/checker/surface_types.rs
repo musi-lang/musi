@@ -143,7 +143,7 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
             fields
                 .iter()
                 .map(|field| format!(
-                    "{} := {}",
+                    "{} = {}",
                     field.name,
                     canonical_surface_ty(surface, field.ty)
                 ))

@@ -126,7 +126,7 @@ fn meta_roundtrips_in_text_and_binary() {
     let mut artifact = sample_artifact();
     let target = artifact.intern_string("main::answer");
     let key = artifact.intern_string("inert.attr");
-    let value = artifact.intern_string("@foo.bar(baz := \"qux\")");
+    let value = artifact.intern_string("@foo.bar(baz = \"qux\")");
     let _ = artifact.meta.alloc(MetaDescriptor {
         target,
         key,

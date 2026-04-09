@@ -1,10 +1,14 @@
-// Musi Language - ANTLR4 Grammar (v2)
-// 
+// Musi Language - ANTLR4 Grammar
+//
 // Canonical, tool-supported grammar for the Musi surface syntax.
-// 
-// Design goals: - expression-first - maximal munch tokenization (see fixed tokens) - compact and
-// mechanically checkable. Infix operator precedence/associativity is resolved semantically via
-// explicit fixity declarations.
+//
+// Design goals:
+// - Expression-first (types/imports/effects are ordinary expressions)
+// - Maximal-munch tokenization (see fixed tokens)
+// - Mechanically checkable and generator-friendly (ANTLR/LR)
+//
+// Operator precedence/associativity for symbolic operators is resolved semantically via explicit
+// fixity declarations; the parser only recognizes a flat infix chain.
 
 grammar Musi;
 
@@ -25,11 +29,11 @@ expr: infix_expr;
 
 infix_expr: prefix_expr (infix_op prefix_expr)*;
 
-infix_op:
-	LT_MINUS
-	| PIPE_GT
-	| MINUS_GT
-	| TILDE_GT
+	infix_op:
+		LT_MINUS
+		| PIPE_GT
+		| MINUS_GT
+		| TILDE_GT
 	| KW_OR
 	| KW_XOR
 	| KW_AND
@@ -94,11 +98,10 @@ atom:
 	| ident
 	| op_ident
 	| pi_expr
-	| lambda_expr
-	| paren_expr
-	| array_type_expr
-	| array_lit_expr
-	| record_literal_expr
+		| lambda_expr
+		| paren_expr
+		| array_lit_expr
+		| record_literal_expr
 	| dot_prefix_expr
 	| case_expr
 	| let_expr
@@ -110,7 +113,6 @@ atom:
 	| instance_expr
 	| perform_expr
 	| handle_expr
-	| foreign_expr
 	| quote_expr
 	| with_mods_expr;
 
@@ -148,15 +150,9 @@ sequence_body: expr (SEMICOLON expr)* SEMICOLON?;
 case_expr:
 	KW_CASE expr KW_OF LPAREN PIPE? case_arm (PIPE case_arm)* PIPE? RPAREN;
 
-case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
+	case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
 
-array_type_expr: LBRACKET array_dims? RBRACKET prefix_expr;
-
-array_dims: array_dim (COMMA array_dim)* COMMA?;
-
-array_dim: INT_LIT | ident | UNDERSCORE;
-
-array_lit_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
+	array_lit_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
 
 array_items: array_item (COMMA array_item)*;
 
@@ -167,7 +163,7 @@ record_literal_expr: LBRACE record_fields? RBRACE;
 record_fields:
 	comma_pad (record_field (COMMA record_field)*)? comma_pad;
 
-record_field: ident (COLON_EQ expr)? | spread;
+record_field: ident (EQ expr)? | spread;
 
 spread: DOT_DOT_DOT expr;
 
@@ -181,7 +177,7 @@ let_modifier: KW_REC;
 
 let_expr:
 	KW_LET let_modifier? pattern bracket_params? params? where_clause? with_clause? type_annot?
-		COLON_EQ expr;
+		EQ expr;
 
 bracket_params: LBRACKET ident (COMMA ident)* COMMA? RBRACKET;
 
@@ -193,12 +189,12 @@ data_body: variant_list | rec_def_fields | PIPE | SEMICOLON;
 
 variant_list: PIPE? variant (PIPE variant)* PIPE?;
 
-variant: attrs? ident (COLON expr)? (COLON_EQ expr)?;
+variant: attrs? ident (COLON expr)? (EQ expr)?;
 
 rec_def_fields:
 	SEMICOLON? rec_def_field (SEMICOLON rec_def_field)* SEMICOLON?;
 
-rec_def_field: ident COLON expr (COLON_EQ expr)?;
+rec_def_field: ident COLON expr (EQ expr)?;
 
 effect_expr:
 	KW_EFFECT LBRACE (effect_member (SEMICOLON effect_member)*)? SEMICOLON? RBRACE;
@@ -223,9 +219,6 @@ handle_clause:
 	ident EQ_GT expr
 	| ident LPAREN ident_list? RPAREN EQ_GT expr;
 
-foreign_expr:
-	KW_FOREIGN STRING_LIT? (KW_LET let_rest | foreign_let_group);
-
 foreign_let_group:
 	LPAREN (KW_LET foreign_binding SEMICOLON)+ RPAREN;
 
@@ -236,15 +229,20 @@ splice:
 	| HASH LPAREN expr RPAREN
 	| HASH LBRACKET expr_list? RBRACKET;
 
-with_mods_expr: modifier+ (expr | foreign_let_group);
+with_mods_expr:
+	attrs export_mod? foreign_mod? (expr | foreign_let_group | let_expr)
+	| export_mod foreign_mod? (expr | foreign_let_group | let_expr)
+	| foreign_mod (foreign_let_group | let_expr);
 
-modifier: attr | export_mod;
+modifier: attr | export_mod | foreign_mod;
 
-export_mod: KW_EXPORT KW_OPAQUE? (KW_FOREIGN STRING_LIT?)?;
+export_mod: KW_EXPORT KW_OPAQUE?;
+
+foreign_mod: KW_FOREIGN STRING_LIT?;
 
 let_rest:
 	let_modifier? pattern bracket_params? params? where_clause? with_clause? type_annot? (
-		COLON_EQ expr
+		EQ expr
 	)?;
 
 instance_body: LBRACE class_member* RBRACE;
@@ -255,9 +253,9 @@ foreign_binding:
 	)?;
 
 fn_decl:
-	KW_LET op_or_ident params? type_annot? (COLON_EQ expr)?;
+	KW_LET op_or_ident params? type_annot? (EQ expr)?;
 
-law_decl: KW_LAW ident params? COLON_EQ expr;
+law_decl: KW_LAW ident params? EQ expr;
 
 op_or_ident: ident | op_ident;
 
@@ -310,7 +308,7 @@ attr_path: ident (DOT ident)*;
 
 attr_args: attr_arg (COMMA attr_arg)*;
 
-attr_arg: ident COLON_EQ attr_value | attr_value;
+attr_arg: ident EQ attr_value | attr_value;
 
 attr_value:
 	STRING_LIT
@@ -329,7 +327,7 @@ attr_record: LBRACE attr_record_fields? RBRACE;
 attr_record_fields:
 	attr_record_field (COMMA attr_record_field)* comma_pad;
 
-attr_record_field: ident COLON_EQ attr_value;
+attr_record_field: ident EQ attr_value;
 
 attr_value_list: attr_value (COMMA attr_value)* comma_pad;
 
@@ -345,7 +343,7 @@ params: LPAREN param_list? RPAREN;
 
 param_list: param (COMMA param)*;
 
-param: ident type_annot? (COLON_EQ expr)?;
+param: ident type_annot? (EQ expr)?;
 
 ident_list: comma_pad ident (COMMA ident)* comma_pad;
 
@@ -403,10 +401,9 @@ LT_COLON: '<:';
 LT_MINUS: '<-';
 GT_EQ: '>=';
 Q_DOT: '?.';
-PIPE_GT: '|>';
-TILDE_GT: '~>';
-COLON_EQ: ':=';
-COLON_QUESTION: ':?';
+	PIPE_GT: '|>';
+	TILDE_GT: '~>';
+	COLON_QUESTION: ':?';
 
 // Prefixes.
 AT: '@';
@@ -551,8 +548,7 @@ I_GT_EQ: '>=' -> type(GT_EQ);
 I_Q_DOT: '?.' -> type(Q_DOT);
 I_PIPE_GT: '|>' -> type(PIPE_GT);
 I_TILDE_GT: '~>' -> type(TILDE_GT);
-I_COLON_EQ: ':=' -> type(COLON_EQ);
-I_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
+	I_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
 
 // Prefixes.
 I_AT: '@' -> type(AT);
@@ -692,8 +688,7 @@ N_GT_EQ: '>=' -> type(GT_EQ);
 N_Q_DOT: '?.' -> type(Q_DOT);
 N_PIPE_GT: '|>' -> type(PIPE_GT);
 N_TILDE_GT: '~>' -> type(TILDE_GT);
-N_COLON_EQ: ':=' -> type(COLON_EQ);
-N_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
+	N_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
 
 // Prefixes.
 N_AT: '@' -> type(AT);

@@ -5,7 +5,7 @@ use super::*;
 fn make_source_map() -> (SourceMap, SourceId) {
     let mut map = SourceMap::default();
     let id = map
-        .add("src/main.ms", "let x := 42 + y\nlet z := 10")
+        .add("src/main.ms", "let x = 42 + y\nlet z = 10")
         .expect("add succeeds");
     (map, id)
 }
@@ -34,22 +34,22 @@ fn builder_chain() {
 }
 
 #[test]
-fn emit_colorless_matches_expected_format() {
-    let (sources, source_id) = make_source_map();
-    let diag = Diag::error("expected ';' after expression")
-        .with_code(DiagCode::new(2001))
-        .with_label(Span::new(15, 16), source_id, "");
+    fn emit_colorless_matches_expected_format() {
+        let (sources, source_id) = make_source_map();
+        let diag = Diag::error("expected ';' after expression")
+            .with_code(DiagCode::new(2001))
+            .with_label(Span::new(13, 14), source_id, "");
 
     let output = emit_to_string(&diag, &sources, false);
 
-    let expected = concat!(
-        "src/main.ms:1:16: error[ms2001]: expected ';' after expression\n",
-        "  |\n",
-        "1 | let x := 42 + y\n",
-        "  |                ^\n",
-    );
-    assert_eq!(output, expected);
-}
+        let expected = concat!(
+            "src/main.ms:1:14: error[ms2001]: expected ';' after expression\n",
+            "  |\n",
+            "1 | let x = 42 + y\n",
+            "  |              ^\n",
+        );
+        assert_eq!(output, expected);
+    }
 
 #[test]
 fn emit_colored_includes_ansi_codes() {

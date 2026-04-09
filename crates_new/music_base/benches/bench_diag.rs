@@ -7,7 +7,7 @@ use music_base::{Diag, SourceMap, Span};
 
 fn bench_emit(c: &mut Criterion) {
     let mut sources = SourceMap::new();
-    let text = "let x := 1 + y\nlet z := 2\n".repeat(256);
+    let text = "let x = 1 + y\nlet z = 2\n".repeat(256);
     let source_id = sources.add("bench.ms", text).expect("add succeeds");
 
     let diag = Diag::error("expected ';' after expression")

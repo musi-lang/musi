@@ -109,9 +109,6 @@ pub enum ParseErrorKind {
     #[error("expected operator member name, found {found}")]
     ExpectedOperatorMemberName { found: TokenKind },
 
-    #[error("expected array dimension, found {found}")]
-    ExpectedArrayDimension { found: TokenKind },
-
     #[error("expected field name or tuple index, found {found}")]
     ExpectedFieldTarget { found: TokenKind },
 

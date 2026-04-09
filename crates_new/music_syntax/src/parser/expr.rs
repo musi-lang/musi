@@ -43,10 +43,60 @@ impl Parser<'_> {
         Ok(left)
     }
 
+    pub(super) fn parse_expr_without_eq(&mut self, min_bp: u8) -> ParseResult<SyntaxNodeId> {
+        let mut left = self.parse_prefix_expr_without_eq()?;
+        loop {
+            if let Some(next_left) = self.try_postfix(left)? {
+                left = next_left;
+                continue;
+            }
+            let Some((left_bp, right_bp, class)) =
+                infix_binding_power_without_eq(self.peek_kind())
+            else {
+                break;
+            };
+            if left_bp < min_bp {
+                break;
+            }
+            let op = self.advance_element();
+            let right = self.parse_expr_without_eq(right_bp)?;
+            if class == InfixClass::Comparison && self.is_comparison_expr(left) {
+                self.error(ParseError {
+                    kind: ParseErrorKind::NonAssociativeChain,
+                    span: self.span(),
+                });
+            }
+            left = self.builder.push_node_from_children(
+                SyntaxNodeKind::BinaryExpr,
+                vec![
+                    SyntaxElementId::Node(left),
+                    op,
+                    SyntaxElementId::Node(right),
+                ],
+            );
+            if class == InfixClass::Comparison {
+                self.comparison_exprs.push(left);
+            }
+        }
+        Ok(left)
+    }
+
     fn parse_prefix_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         if self.at_any(&[TokenKind::Minus, TokenKind::KwNot, TokenKind::KwMut]) {
             let op = self.advance_element();
             let operand = self.parse_expr(PREFIX_BP)?;
+            return Ok(self.builder.push_node_from_children(
+                SyntaxNodeKind::PrefixExpr,
+                vec![op, SyntaxElementId::Node(operand)],
+            ));
+        }
+        self.parse_atom_expr()
+    }
+
+    fn parse_prefix_expr_without_eq(&mut self) -> ParseResult<SyntaxNodeId> {
+        if self.at_any(&[TokenKind::Minus, TokenKind::KwNot, TokenKind::KwMut]) {
+            let op = self.advance_element();
+            let operand = self.parse_expr_without_eq(PREFIX_BP)?;
             return Ok(self.builder.push_node_from_children(
                 SyntaxNodeKind::PrefixExpr,
                 vec![op, SyntaxElementId::Node(operand)],
@@ -207,4 +257,11 @@ const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
         TokenKind::SymbolicOp => Some((SYMBOLIC_BP, SYMBOLIC_BP + 1, InfixClass::Other)),
         _ => None,
     }
+}
+
+const fn infix_binding_power_without_eq(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
+    if matches!(kind, TokenKind::Eq) {
+        return None;
+    }
+    infix_binding_power(kind)
 }

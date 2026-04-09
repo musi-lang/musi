@@ -25,7 +25,7 @@ fn assert_has_parse_error(text: &str, predicate: impl Fn(ParseErrorKind) -> bool
 
 #[test]
 fn parses_simple_let_statement() {
-    let parsed = parse(Lexer::new("let x := 1;").lex());
+    let parsed = parse(Lexer::new("let x = 1;").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",
@@ -61,36 +61,35 @@ fn parses_instance_expr() {
 fn parses_all_atom_forms_smoke() {
     let kinds = parse_kinds(
         r#"
-let x := 1;
-import "std/io";
-resume x;
-perform x;
-handle x with h of (| x => x);
-case x of (| _ => 0);
-foreign "c" let puts (msg : CString) : Int;
-export let y := 2;
-let Option[T] := data { | Some : T | None };
-let Console := effect { let write (text : String) : Unit; };
-let Eq[T] := class { let (=) (a : T, b : T) : Bool; };
-instance Eq[Int] { };
-quote (x + 1);
-quote { x; };
-@link(name := "c") foreign "c" let puts (msg : CString) : Int;
-`hello ${x}`;
-{ x := 1 };
-.Some(1);
-[1, 2, 3];
-[1]x;
-(x);
-(x; y;);
-"#,
+	let x = 1;
+	import "std/io";
+	resume x;
+	perform x;
+	handle x with h of (| x => x);
+	case x of (| _ => 0);
+	foreign "c" let puts (msg : CString) : Int;
+	export let y = 2;
+	let Option[T] = data { | Some : T | None };
+	let Console = effect { let write (text : String) : Unit; };
+	let Eq[T] = class { let (=) (a : T, b : T) : Bool; };
+	instance Eq[Int] { };
+	quote (x + 1);
+	quote { x; };
+	@link(name = "c") foreign "c" let puts (msg : CString) : Int;
+	`hello ${x}`;
+	{ x = 1 };
+	.Some(1);
+	[1, 2, 3];
+	(x);
+	(x; y;);
+	"#,
     );
     assert!(!kinds.is_empty());
 }
 
 #[test]
 fn error_expected_token_semicolon() {
-    assert_has_parse_error("let x := 1", |k| {
+    assert_has_parse_error("let x = 1", |k| {
         matches!(
             k,
             ParseErrorKind::ExpectedToken {
@@ -110,7 +109,7 @@ fn error_expected_expression() {
 
 #[test]
 fn error_expected_pattern() {
-    assert_has_parse_error("let := 1;", |k| {
+    assert_has_parse_error("let = 1;", |k| {
         matches!(k, ParseErrorKind::ExpectedPattern { .. })
     });
 }
@@ -144,13 +143,6 @@ fn error_expected_operator_member_name() {
 }
 
 #[test]
-fn error_expected_array_dimension() {
-    assert_has_parse_error("[;]x;", |k| {
-        matches!(k, ParseErrorKind::ExpectedArrayDimension { .. })
-    });
-}
-
-#[test]
 fn error_expected_field_target() {
     assert_has_parse_error("x.;", |k| {
         matches!(k, ParseErrorKind::ExpectedFieldTarget { .. })
@@ -159,7 +151,7 @@ fn error_expected_field_target() {
 
 #[test]
 fn error_expected_constraint_operator() {
-    assert_has_parse_error("let x where Eq = Int := 1;", |k| {
+    assert_has_parse_error("let x where Eq = Int = 1;", |k| {
         matches!(k, ParseErrorKind::ExpectedConstraintOperator { .. })
     });
 }
@@ -214,7 +206,7 @@ fn parses_case_and_handle_with_trailing_pipe() {
 #[test]
 fn parses_attr_values_and_patterns_with_trailing_commas() {
     let parsed =
-        parse(Lexer::new("@a(.Tag(1,), [1,], {x := 1,}) let (.Some(x,), [y,]) := z;").lex());
+        parse(Lexer::new("@a(.Tag(1,), [1,], {x = 1,}) let (.Some(x,), [y,]) = z;").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",
@@ -224,7 +216,7 @@ fn parses_attr_values_and_patterns_with_trailing_commas() {
 
 #[test]
 fn parses_attr_record_with_repeated_trailing_commas() {
-    let parsed = parse(Lexer::new("@a({x := 1,,}) let y := z;").lex());
+    let parsed = parse(Lexer::new("@a({x = 1,,}) let y = z;").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",

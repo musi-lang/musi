@@ -182,8 +182,6 @@ pipe-gt           = "|>"
 
 tilde-gt          = "~>"
 
-colon-eq          = ":="
-
 colon-question    = ":?"
 ; --- Prefixes ---
 at     = "@"
@@ -365,7 +363,7 @@ fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
 expr              = infix-expr
 
 infix-op          = lt-minus
-                    / pipe-gt
+	                    / pipe-gt
                     / minus-gt
                     / tilde-gt
                     / kw-or
@@ -429,17 +427,16 @@ type-cast-op      = colon-question-gt expr
 field-target      = ident
                     / int-lit
 ; --- Atoms ---
-atom                  = literal
-                        / template-lit
-                        / splice
-                        / ident
-                        / op-ident
-                        / pi-expr
-                        / lambda-expr
-                        / paren-expr
-                        / array-type-expr
-                        / array-expr
-                        / record-literal-expr
+	atom                  = literal
+	                        / template-lit
+	                        / splice
+	                        / ident
+	                        / op-ident
+	                        / pi-expr
+	                        / lambda-expr
+	                        / paren-expr
+	                        / array-expr
+	                        / record-literal-expr
                         / dot-prefix-expr
                         / case-expr
                         / let-expr
@@ -451,7 +448,6 @@ atom                  = literal
                         / instance-expr
                         / perform-expr
                         / handle-expr
-                        / foreign-expr
                         / quote-expr
                         / with-mods-expr
 
@@ -470,23 +466,12 @@ grouped-or-tuple-body = expr [comma [expr-list] [comma]]
 
 sequence-body         = expr *(semicolon expr) [semicolon]
 
-case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
-                        case-arm) [pipe] rparen
+	case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
+	                        case-arm) [pipe] rparen
 
-case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
+	case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
 
-; NOTE: `array-type-expr` and `array-expr` share the same leading token (`[`).
-; Disambiguation rule: if a `]` is immediately followed by the start of a
-; `prefix-expr`, the construct is parsed as `array-type-expr` (i.e. `[dims]T`).
-array-type-expr       = lbracket [array-dims] rbracket prefix-expr
-
-array-dims            = array-dim *(comma array-dim) [comma]
-
-array-dim             = int-lit
-                        / ident
-                        / underscore
-
-array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
+	array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
 
 array-items           = array-item *(comma array-item)
 
@@ -497,7 +482,7 @@ record-literal-expr   = lbrace [record-fields] rbrace
 
 record-fields         = comma-pad [record-field *(comma record-field)] comma-pad
 
-record-field          = ident [colon-eq expr]
+record-field          = ident [eq expr]
                         / spread
 
 spread                = dot-dot-dot expr
@@ -511,7 +496,7 @@ import-expr           = kw-import expr
 let-modifier          = kw-rec
 
 let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
-                        [where-clause] [with-clause] [type-annot] colon-eq expr
+                        [where-clause] [with-clause] [type-annot] eq expr
 
 bracket-params        = lbracket ident *(comma ident) [comma] rbracket
 
@@ -526,12 +511,12 @@ data-body             = variant-list
 
 variant-list          = [pipe] variant *(pipe variant) [pipe]
 
-variant               = [attrs] ident [colon expr] [colon-eq expr]
+variant               = [attrs] ident [colon expr] [eq expr]
 
 rec-def-fields        = [semicolon] rec-def-field *(semicolon rec-def-field)
                         [semicolon]
 
-rec-def-field         = ident colon expr [colon-eq expr]
+rec-def-field         = ident colon expr [eq expr]
 
 effect-expr           = kw-effect lbrace [effect-member *(semicolon
                         effect-member)] [semicolon] rbrace
@@ -554,9 +539,6 @@ handle-expr           = kw-handle expr kw-with ident kw-of lparen [pipe]
 handle-clause         = ident eq-gt expr
                         / ident lparen [ident-list] rparen eq-gt expr
 
-foreign-expr          = kw-foreign [string-lit] (kw-let let-rest /
-                        foreign-let-group)
-
 foreign-let-group     = lparen 1*(kw-let foreign-binding semicolon) rparen
 
 quote-expr            = kw-quote (lparen expr rparen / lbrace *(stmt) rbrace)
@@ -568,15 +550,20 @@ splice                = hash ident
 with-attrs-expr       = with-mods-expr
 ; `export` is a modifier that applies to an expression (like attributes), not an
 ; expression form itself.
-export-mod            = kw-export [kw-opaque] [kw-foreign [string-lit]]
+export-mod            = kw-export [kw-opaque]
+
+foreign-mod           = kw-foreign [string-lit]
 
 modifier              = attr
                         / export-mod
+                        / foreign-mod
 
-with-mods-expr        = 1*(modifier) (expr / foreign-let-group)
+with-mods-expr        = attrs [export-mod] [foreign-mod] (expr / foreign-let-group / let-expr)
+                        / export-mod [foreign-mod] (expr / foreign-let-group / let-expr)
+                        / foreign-mod (foreign-let-group / let-expr)
 
 let-rest              = [let-modifier] pattern [bracket-params] [params]
-                        [where-clause] [with-clause] [type-annot] [colon-eq
+                        [where-clause] [with-clause] [type-annot] [eq
                         expr]
 
 instance-body         = lbrace *(class-member) rbrace
@@ -584,9 +571,9 @@ instance-body         = lbrace *(class-member) rbrace
 foreign-binding       = [attrs] ident [bracket-params] [params] [where-clause]
                         [colon expr]
 
-fn-decl               = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
+fn-decl               = kw-let op-or-ident [params] [type-annot] [eq expr]
 
-law-decl              = kw-law ident [params] colon-eq expr
+law-decl              = kw-law ident [params] eq expr
 
 op-or-ident           = ident
                         / op-ident
@@ -635,7 +622,7 @@ attr-path          = ident *(dot ident)
 
 attr-args          = attr-arg *(comma attr-arg)
 
-attr-arg           = ident colon-eq attr-value
+attr-arg           = ident eq attr-value
                      / attr-value
 
 attr-value         = string-lit
@@ -653,7 +640,7 @@ attr-record        = lbrace [attr-record-fields] rbrace
 
 attr-record-fields = attr-record-field *(comma attr-record-field) comma-pad
 
-attr-record-field  = ident colon-eq attr-value
+attr-record-field  = ident eq attr-value
 
 attr-value-list    = attr-value *(comma attr-value) comma-pad
 ; --- Shared helpers ---
@@ -668,7 +655,7 @@ params     = lparen [param-list] rparen
 
 param-list = param *(comma param)
 
-param      = ident [type-annot] [colon-eq expr]
+param      = ident [type-annot] [eq expr]
 
 ident-list = comma-pad ident *(comma ident) comma-pad
 

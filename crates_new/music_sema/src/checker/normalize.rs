@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use music_arena::SliceRange;
 use music_hir::{
     HirBinaryOp, HirConstraint, HirConstraintKind, HirDim, HirEffectSet, HirExprId, HirExprKind,
-    HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::Symbol;
 
@@ -94,23 +94,22 @@ pub fn render_ty(ctx: &PassBase<'_, '_, '_>, ty: HirTyId) -> String {
         ),
         HirTyKind::Array { dims, item } => {
             let dims = ctx.dims(dims);
-            let dim_text = dims
-                .into_iter()
-                .map(|dim| match dim {
+            let mut parts = vec![render_ty(ctx, item)];
+            for dim in dims {
+                parts.push(match dim {
                     HirDim::Unknown => "_".into(),
                     HirDim::Name(name) => ctx.resolve_symbol(name.name).into(),
                     HirDim::Int(value) => value.to_string(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("[{dim_text}]{}", render_ty(ctx, item))
+                });
+            }
+            format!("Array[{}]", parts.join(", "))
         }
         HirTyKind::Mut { inner } => format!("mut {}", render_ty(ctx, inner)),
         HirTyKind::Record { fields } => {
             let mut parts = Vec::new();
             for field in ctx.ty_fields(fields) {
                 parts.push(format!(
-                    "{} := {}",
+                    "{} = {}",
                     ctx.resolve_symbol(field.name),
                     render_ty(ctx, field.ty)
                 ));
@@ -447,6 +446,42 @@ fn lower_apply_type_expr(
         ctx.diag(origin.span, "invalid type application", "");
         return ctx.builtins().error;
     };
+
+    if ctx.resolve_symbol(name.name) == "Array" {
+        let args = ctx.expr_ids(args);
+        let Some((item_expr, dims_exprs)) = args.split_first() else {
+            ctx.diag(origin.span, "Array expects at least one argument", "");
+            return ctx.builtins().error;
+        };
+        let item_origin = ctx.expr(*item_expr).origin;
+        let item = lower_type_expr(ctx, *item_expr, item_origin);
+        let dims = dims_exprs
+            .iter()
+            .filter_map(|expr| match ctx.expr(*expr).kind {
+                HirExprKind::Name { name } => Some(HirDim::Name(name)),
+                HirExprKind::Lit { lit } => match ctx.lit(lit).kind {
+                    HirLitKind::Int { raw } => {
+                        let raw = raw.replace('_', "");
+                        let value = if let Some(hex) = raw.strip_prefix("0x") {
+                            u32::from_str_radix(hex, 16).ok()
+                        } else if let Some(oct) = raw.strip_prefix("0o") {
+                            u32::from_str_radix(oct, 8).ok()
+                        } else if let Some(bin) = raw.strip_prefix("0b") {
+                            u32::from_str_radix(bin, 2).ok()
+                        } else {
+                            raw.parse::<u32>().ok()
+                        };
+                        value.map(HirDim::Int)
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let dims = ctx.alloc_dims(dims);
+        return ctx.alloc_ty(HirTyKind::Array { dims, item });
+    }
+
     let args = ctx
         .expr_ids(args)
         .into_iter()

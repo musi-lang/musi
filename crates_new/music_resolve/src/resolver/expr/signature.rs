@@ -50,7 +50,7 @@ where
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
+        let default = self.lower_optional_expr_clause(node, TokenKind::Eq, &mut exprs);
 
         HirParam {
             is_mut,

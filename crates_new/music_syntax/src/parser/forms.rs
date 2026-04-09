@@ -200,19 +200,19 @@ impl Parser<'_> {
     fn parse_optional_typed_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
         if let Some(colon) = self.eat(TokenKind::Colon) {
             children.push(colon);
-            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+            children.push(SyntaxElementId::Node(self.parse_expr_without_eq(0)?));
         }
         Ok(())
     }
 
     fn parse_required_typed_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
         children.push(self.expect_token(TokenKind::Colon)?);
-        children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        children.push(SyntaxElementId::Node(self.parse_expr_without_eq(0)?));
         Ok(())
     }
 
     fn parse_optional_bound_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
-        if let Some(bind) = self.eat(TokenKind::ColonEq) {
+        if let Some(bind) = self.eat(TokenKind::Eq) {
             children.push(bind);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         }
@@ -237,11 +237,7 @@ impl Parser<'_> {
                 }
             }
             TokenKind::LBracket => {
-                if self.is_array_type_expr() {
-                    self.parse_array_type_expr()
-                } else {
-                    self.parse_array_expr()
-                }
+                self.parse_array_expr()
             }
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
@@ -387,31 +383,6 @@ impl Parser<'_> {
         Ok(self.rewrap_node(first, vec![open, SyntaxElementId::Node(first), close]))
     }
 
-    fn parse_array_type_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let open = self.expect_token(TokenKind::LBracket)?;
-        let mut children = vec![open];
-        if !self.at(TokenKind::RBracket) {
-            children.push(self.parse_dim()?);
-            while let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                if self.at(TokenKind::RBracket) {
-                    break;
-                }
-                children.push(self.parse_dim()?);
-            }
-        }
-        children.push(self.expect_token(TokenKind::RBracket)?);
-        children.push(SyntaxElementId::Node(self.parse_expr(PREFIX_BP)?));
-        Ok(self.node(SyntaxNodeKind::ArrayExpr, children))
-    }
-
-    fn parse_dim(&mut self) -> ParseResult<SyntaxElementId> {
-        match self.peek_kind() {
-            TokenKind::Int | TokenKind::Ident | TokenKind::Underscore => Ok(self.advance_element()),
-            _ => Err(self.expected_array_dimension()),
-        }
-    }
-
     fn parse_array_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let open = self.expect_token(TokenKind::LBracket)?;
         let mut children = vec![open];
@@ -453,7 +424,7 @@ impl Parser<'_> {
             return Ok(self.node(SyntaxNodeKind::RecordItem, children));
         }
         children.push(self.expect_ident_element()?);
-        if let Some(bind) = self.eat(TokenKind::ColonEq) {
+        if let Some(bind) = self.eat(TokenKind::Eq) {
             children.push(bind);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         }
@@ -537,7 +508,7 @@ impl Parser<'_> {
         self.parse_optional_constraints_clause(&mut attrs)?;
         self.parse_optional_effects_clause(&mut attrs)?;
         self.parse_optional_typed_expr(&mut attrs)?;
-        attrs.push(self.expect_token(TokenKind::ColonEq)?);
+        attrs.push(self.expect_token(TokenKind::Eq)?);
         attrs.push(SyntaxElementId::Node(self.parse_expr(0)?));
         Ok(self
             .builder
@@ -903,7 +874,7 @@ impl Parser<'_> {
                 children.push(self.advance_element());
                 children.push(self.expect_ident_element()?);
                 self.parse_optional_param_clause(&mut children)?;
-                children.push(self.expect_token(TokenKind::ColonEq)?);
+                children.push(self.expect_token(TokenKind::Eq)?);
                 children.push(SyntaxElementId::Node(self.parse_expr(0)?));
             }
             _ => return Err(self.expected_member()),
@@ -950,7 +921,7 @@ impl Parser<'_> {
 
     fn parse_attr_arg(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
-        if matches!(self.peek_kind(), TokenKind::Ident) && self.nth_kind(1) == TokenKind::ColonEq {
+        if matches!(self.peek_kind(), TokenKind::Ident) && self.nth_kind(1) == TokenKind::Eq {
             children.push(self.advance_element());
             children.push(self.advance_element());
         }
@@ -1021,7 +992,7 @@ impl Parser<'_> {
 
     fn parse_attr_record_field(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
-        let bind = self.expect_token(TokenKind::ColonEq)?;
+        let bind = self.expect_token(TokenKind::Eq)?;
         let value = self.parse_attr_value()?;
         Ok(self.builder.push_node_from_children(
             SyntaxNodeKind::RecordItem,

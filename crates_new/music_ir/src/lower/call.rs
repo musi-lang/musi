@@ -154,8 +154,8 @@ enum SpreadMode {
 impl SpreadMode {
     const fn runtime_any_message(self) -> &'static str {
         match self {
-            Self::Call => "call runtime spread requires []Any",
-            Self::Perform => "perform runtime spread requires []Any",
+            Self::Call => "call runtime spread requires Array[Any]",
+            Self::Perform => "perform runtime spread requires Array[Any]",
         }
     }
 

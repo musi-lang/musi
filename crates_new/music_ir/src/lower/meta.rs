@@ -50,7 +50,7 @@ fn format_attr_value(value: &AttrValue) -> String {
         AttrValue::Record { fields } => {
             let inner = fields
                 .iter()
-                .map(|field| format!("{} := {}", field.name, format_attr_value(&field.value)))
+                .map(|field| format!("{} = {}", field.name, format_attr_value(&field.value)))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{{ {inner} }}")
@@ -74,7 +74,7 @@ fn format_attr(attr: &Attr) -> String {
         .map(|arg| {
             arg.name.as_deref().map_or_else(
                 || format_attr_value(&arg.value),
-                |name| format!("{name} := {}", format_attr_value(&arg.value)),
+                |name| format!("{name} = {}", format_attr_value(&arg.value)),
             )
         })
         .collect::<Vec<_>>()
@@ -154,21 +154,16 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
             format!("({items})")
         }
         SurfaceTyKind::Array { dims, item } => {
-            let dims = dims
-                .iter()
-                .map(|dim| match dim {
+            let item = format_surface_ty(surface, *item);
+            let mut parts = vec![item];
+            for dim in dims {
+                parts.push(match dim {
                     SurfaceDim::Unknown => "_".into(),
                     SurfaceDim::Name(name) => name.to_string(),
                     SurfaceDim::Int(value) => value.to_string(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            let item = format_surface_ty(surface, *item);
-            if dims.is_empty() {
-                format!("[]{item}")
-            } else {
-                format!("[{dims}]{item}")
+                });
             }
+            format!("Array[{}]", parts.join(", "))
         }
         SurfaceTyKind::Mut { inner } => format!("mut {}", format_surface_ty(surface, *inner)),
         SurfaceTyKind::Record { fields } => {

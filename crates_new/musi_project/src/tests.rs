@@ -62,7 +62,7 @@ fn compiles_root_package_with_workspace_member_dependency() {
     write_file(
         temp.path(),
         "index.ms",
-        r#"import "util"; export let answer : Int := 42;"#,
+        r#"import "util"; export let answer : Int = 42;"#,
     );
     write_file(
         temp.path(),
@@ -76,7 +76,7 @@ fn compiles_root_package_with_workspace_member_dependency() {
     write_file(
         temp.path(),
         "packages/util/index.ms",
-        r"export let base : Int := 41;",
+        r"export let base : Int = 41;",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
@@ -107,7 +107,7 @@ fn resolves_registry_dependency_and_caches_it_locally() {
     write_file(
         temp.path(),
         "index.ms",
-        r#"import "ext"; export let answer : Int := 42;"#,
+        r#"import "ext"; export let answer : Int = 42;"#,
     );
     write_file(
         &registry_root,
@@ -121,7 +121,7 @@ fn resolves_registry_dependency_and_caches_it_locally() {
     write_file(
         &registry_root,
         "ext/1.2.0/index.ms",
-        r"export let ext_answer : Int := 7;",
+        r"export let ext_answer : Int = 7;",
     );
 
     let project = Project::load(
@@ -156,7 +156,7 @@ fn frozen_lock_requires_existing_lockfile() {
   "lock": { "frozen": true }
 }"#,
     );
-    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+    write_file(temp.path(), "index.ms", r"export let answer : Int = 42;");
 
     let error =
         Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
@@ -179,7 +179,7 @@ fn task_plan_is_returned_in_dependency_order() {
   }
 }"#,
     );
-    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+    write_file(temp.path(), "index.ms", r"export let answer : Int = 42;");
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
     let plan = project.task_plan("test").expect("task plan should resolve");
@@ -207,7 +207,7 @@ fn manifest_imports_remap_specifiers_before_project_resolution() {
     write_file(
         temp.path(),
         "index.ms",
-        r#"import "alias"; export let answer : Int := 42;"#,
+        r#"import "alias"; export let answer : Int = 42;"#,
     );
     write_file(
         temp.path(),
@@ -221,7 +221,7 @@ fn manifest_imports_remap_specifiers_before_project_resolution() {
     write_file(
         temp.path(),
         "packages/util/index.ms",
-        r"export let base : Int := 41;",
+        r"export let base : Int = 41;",
     );
 
     let artifact: Artifact = Project::load(temp.path(), ProjectOptions::default())

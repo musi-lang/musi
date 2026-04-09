@@ -36,15 +36,15 @@ fn lower(src: &str) -> crate::IrModule {
 fn lowers_exports_and_semantic_metadata() {
     let ir = lower(
         r"
-        export let id[T] (x : T) : T := x;
-        export let Console := effect {
+        export let id[T] (x : T) : T = x;
+        export let Console = effect {
           let readln () : String;
         };
-        export let Eq[T] := class {
+        export let Eq[T] = class {
           let (=) (a : T, b : T) : Bool;
         };
         export instance[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := true;
+          let (=) (a : T, b : T) : Bool = true;
         };
     ",
     );
@@ -61,11 +61,11 @@ fn lowers_exports_and_semantic_metadata() {
 fn lowers_data_and_foreign_facts() {
     let ir = lower(
         r#"
-        let Maybe := data { | Some : Int | None };
+        let Maybe = data { | Some : Int | None };
         foreign "c" (
           let puts (value : CString) : Int;
         );
-        export let answer () : Int := 42;
+        export let answer () : Int = 42;
     "#,
     );
 
@@ -83,8 +83,8 @@ fn lowers_data_and_foreign_facts() {
 fn lowers_array_cat_for_runtime_spread() {
     let ir = lower(
         r"
-        let xs := [1, 2];
-        export let ys := [0, ...xs, 3];
+        let xs = [1, 2];
+        export let ys = [0, ...xs, 3];
     ",
     );
     let ys = ir
@@ -105,9 +105,9 @@ fn lowers_array_cat_for_runtime_spread() {
 fn lowers_call_seq_for_runtime_any_spread() {
     let ir = lower(
         r#"
-        let g (a : Any, b : Any) : Any := a;
-        let xs : []Any := [1, "x"];
-        export let y := g(...xs);
+        let g (a : Any, b : Any) : Any = a;
+        let xs : Array[Any] = [1, "x"];
+        export let y = g(...xs);
     "#,
     );
     let y = ir
@@ -115,22 +115,22 @@ fn lowers_call_seq_for_runtime_any_spread() {
         .iter()
         .find(|global| global.name.as_ref() == "y")
         .expect("y global");
-    let IrExprKind::Sequence { exprs } = &y.body.kind else {
-        panic!("expected sequence");
+    let ok = match &y.body.kind {
+        IrExprKind::Sequence { exprs } => exprs
+            .last()
+            .is_some_and(|expr| matches!(expr.kind, IrExprKind::CallSeq { .. })),
+        kind => matches!(kind, IrExprKind::CallSeq { .. }),
     };
-    let Some(last) = exprs.last() else {
-        panic!("expected sequence tail");
-    };
-    assert!(matches!(last.kind, IrExprKind::CallSeq { .. }));
+    assert!(ok, "expected call seq");
 }
 
 #[test]
 fn lowers_call_with_compile_time_tuple_spread() {
     let ir = lower(
         r#"
-        let f (a : Int, b : String) : Int := a;
-        let t := (1, "x");
-        export let y := f(...t);
+        let f (a : Int, b : String) : Int = a;
+        let t = (1, "x");
+        export let y = f(...t);
     "#,
     );
     let y = ir
@@ -151,11 +151,11 @@ fn lowers_call_with_compile_time_tuple_spread() {
 fn lowers_perform_seq_for_runtime_any_spread() {
     let ir = lower(
         r#"
-        let E := effect {
+        let E = effect {
           let op (a : Any, b : Any) : Unit;
         };
-        let xs : []Any := [1, "x"];
-        export let y := perform E.op(...xs);
+        let xs : Array[Any] = [1, "x"];
+        export let y = perform E.op(...xs);
     "#,
     );
     let y = ir
@@ -163,22 +163,22 @@ fn lowers_perform_seq_for_runtime_any_spread() {
         .iter()
         .find(|global| global.name.as_ref() == "y")
         .expect("y global");
-    let IrExprKind::Sequence { exprs } = &y.body.kind else {
-        panic!("expected sequence");
+    let ok = match &y.body.kind {
+        IrExprKind::Sequence { exprs } => exprs
+            .last()
+            .is_some_and(|expr| matches!(expr.kind, IrExprKind::PerformSeq { .. })),
+        kind => matches!(kind, IrExprKind::PerformSeq { .. }),
     };
-    let Some(last) = exprs.last() else {
-        panic!("expected sequence tail");
-    };
-    assert!(matches!(last.kind, IrExprKind::PerformSeq { .. }));
+    assert!(ok, "expected perform seq");
 }
 
 #[test]
 fn lowers_sum_constructors_as_synthetic_variants() {
     let ir = lower(
         r#"
-        export let x : Int + String := .Left(1);
-        export let y : Int + String := .Right("x");
-        export let z (v : Int + String) : Int := case v of (
+        export let x : Int + String = .Left(1);
+        export let y : Int + String = .Right("x");
+        export let z (v : Int + String) : Int = case v of (
           | .Left(n) => n
           | .Right(_) => 0
         );
