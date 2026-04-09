@@ -128,7 +128,7 @@ where
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let arg = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = self.lower_optional_expr_clause(node, TokenKind::Eq, &mut exprs);
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirVariantDef {
             origin,
             attrs,
@@ -146,7 +146,7 @@ where
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let ty = self.lower_opt_expr(origin, exprs.next());
-        let value = self.lower_optional_expr_clause(node, TokenKind::Eq, &mut exprs);
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirFieldDef {
             origin,
             attrs,
@@ -233,7 +233,7 @@ where
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = self.lower_optional_expr_clause(node, TokenKind::Eq, &mut exprs);
+        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         self.pop_scope();
 
         HirMemberDef {

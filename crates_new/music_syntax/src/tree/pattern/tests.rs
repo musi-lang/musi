@@ -29,18 +29,18 @@ fn binders_in(text: &str) -> Vec<String> {
 
 #[test]
 fn record_pattern_without_colon_yields_field_names() {
-    assert_eq!(binders_in("let {x, y} = value;"), ["x", "y"]);
+    assert_eq!(binders_in("let {x, y} := value;"), ["x", "y"]);
 }
 
 #[test]
 fn record_pattern_with_colon_yields_inner_pattern_binders() {
-    assert_eq!(binders_in("let {x: y, z: .Some(a)} = value;"), ["y", "a"]);
+    assert_eq!(binders_in("let {x: y, z: .Some(a)} := value;"), ["y", "a"]);
 }
 
 #[test]
 fn as_and_or_patterns_preserve_source_order() {
     assert_eq!(
-        binders_in("let (.Some(x) as y) or {mut z} = value;"),
+        binders_in("let (.Some(x) as y) or {z} := value;"),
         ["x", "y", "z"]
     );
 }

@@ -59,7 +59,7 @@ fn session_with_target(target: TargetInfo) -> Session {
 fn compiles_module_to_artifact_bytes_and_text() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int = 42;")
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
         .unwrap();
 
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
@@ -73,12 +73,12 @@ fn compiles_module_to_artifact_bytes_and_text() {
 fn compiles_reachable_entry_graph() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int = 41;")
+        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
         .unwrap();
     session
         .set_module_text(
             &ModuleKey::new("main"),
-            "import \"dep\"; export let answer : Int = 42;",
+            "import \"dep\"; export let answer : Int := 42;",
         )
         .unwrap();
 
@@ -93,12 +93,12 @@ fn compiles_reachable_entry_graph() {
 fn reuses_caches_and_invalidates_dependents_on_edit() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int = 41;")
+        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
         .unwrap();
     session
         .set_module_text(
             &ModuleKey::new("main"),
-            "import \"dep\"; export let answer : Int = 42;",
+            "import \"dep\"; export let answer : Int := 42;",
         )
         .unwrap();
 
@@ -108,7 +108,7 @@ fn reuses_caches_and_invalidates_dependents_on_edit() {
     assert_eq!(session.stats(), &first_stats);
 
     session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int = 99;")
+        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 99;")
         .unwrap();
     let _ = session.compile_entry(&ModuleKey::new("main")).unwrap();
     assert!(session.stats().resolve_runs > first_stats.resolve_runs);
@@ -119,7 +119,7 @@ fn reuses_caches_and_invalidates_dependents_on_edit() {
 fn resolve_reuses_cached_parse_product() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int = 42;")
+        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
         .unwrap();
 
     let _ = session.parse_module(&ModuleKey::new("main")).unwrap();
@@ -134,14 +134,14 @@ fn resolve_reuses_cached_parse_product() {
 fn compiles_imported_generic_callable_calls() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("dep"), "export let id[T] (x : T) : T = x;")
+        .set_module_text(&ModuleKey::new("dep"), "export let id[T] (x : T) : T := x;")
         .unwrap();
     session
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            let dep = import "dep";
-            export let answer () : Int = dep.id[Int](42);
+            let dep := import "dep";
+            export let answer () : Int := dep.id[Int](42);
         "#,
         )
         .unwrap();
@@ -157,15 +157,15 @@ fn compiles_imported_generic_callable_calls() {
 fn compiles_imported_globals_and_local_assignment() {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int = 41;")
+        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
         .unwrap();
     session
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            let dep = import "dep";
-            export let answer () : Int = (
-              let mut local = dep.base;
+            let dep := import "dep";
+            export let answer () : Int := (
+              let local := mut dep.base;
               local := local + 1;
               local
             );
@@ -187,10 +187,10 @@ fn compiles_closures_and_higher_order_calls() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            let apply (f : Int -> Int, x : Int) : Int = f(x);
-            export let answer (x : Int) : Int = (
-              let base : Int = 41;
-              let add_base (y : Int) : Int = y + base;
+            let apply (f : Int -> Int, x : Int) : Int := f(x);
+            export let answer (x : Int) : Int := (
+              let base : Int := 41;
+              let add_base (y : Int) : Int := y + base;
               apply(add_base, x)
             );
         ",
@@ -211,11 +211,11 @@ fn compiles_case_tuple_and_array_patterns() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            export let answer () : Int = (
-              let pair = (1, 2);
-              let items = [3, 4];
-              let p : Int = case pair of (| (1, b) => b | _ => 0);
-              let q : Int = case items of (| [3, b] => b | _ => 0);
+            export let answer () : Int := (
+              let pair := (1, 2);
+              let items := [3, 4];
+              let p : Int := case pair of (| (1, b) => b | _ => 0);
+              let q : Int := case items of (| [3, b] => b | _ => 0);
               p + q
             );
         ",
@@ -236,10 +236,10 @@ fn compiles_records_with_projection_and_update() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            export let answer () : Int = (
-              let r = { y = 2, x = 1 };
-              let a : Int = r.x;
-              let s = r.{ x = 3 };
+            export let answer () : Int := (
+              let r := { y := 2, x := 1 };
+              let a : Int := r.x;
+              let s := r.{ x := 3 };
               a + s.x
             );
         ",
@@ -261,8 +261,8 @@ fn compiles_record_field_assignment() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            export let answer () : Int = (
-              let r = mut { x = 1, y = 2 };
+            export let answer () : Int := (
+              let r := mut { x := 1, y := 2 };
               r.x := 3;
               r.x
             );
@@ -283,9 +283,9 @@ fn compiles_record_destructuring_let_patterns() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            export let answer () : Int = (
-              let r = { y = 2, x = 1 };
-              let {x, y} = r;
+            export let answer () : Int := (
+              let r := { y := 2, x := 1 };
+              let {x, y} := r;
               x + y
             );
         ",
@@ -305,11 +305,11 @@ fn compiles_tuple_and_array_destructuring_let_patterns() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            export let answer () : Int = (
-              let pair = (1, 2);
-              let items = [3, 4];
-              let (a, b) = pair;
-              let [c, d] = items;
+            export let answer () : Int := (
+              let pair := (1, 2);
+              let items := [3, 4];
+              let (a, b) := pair;
+              let [c, d] := items;
               a + b + c + d
             );
         ",
@@ -329,9 +329,9 @@ fn compiles_variants_with_case_patterns() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            let Maybe = data { | Some : Int | None };
-            export let answer () : Int = (
-              let x : Maybe = .Some(1);
+            let Maybe := data { | Some : Int | None };
+            export let answer () : Int := (
+              let x : Maybe := .Some(1);
               case x of (
               | .Some(y) => y
               | .None => 0
@@ -358,9 +358,9 @@ fn compiles_variants_without_type_context_when_tag_unique() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            let Maybe = data { | Some : Int | None };
-            export let answer () : Int = (
-              let x = .Some(1);
+            let Maybe := data { | Some : Int | None };
+            export let answer () : Int := (
+              let x := .Some(1);
               case x of (
               | .Some(y) => y
               | .None => 0
@@ -386,8 +386,8 @@ fn compiles_effects_with_perform_handle_resume() {
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            let Console = effect { let readln () : String; };
-            export let answer () : String =
+            let Console := effect { let readln () : String; };
+            export let answer () : String :=
               handle perform Console.readln() with Console of (
               | value => value
               | readln(k) => resume "ok"
@@ -415,7 +415,7 @@ fn compiles_exported_foreign_declarations_into_artifact() {
             export foreign "c" (
               let puts (msg : CString) : Int;
             );
-            export let answer : Int = 1;
+            export let answer : Int := 1;
         "#,
         )
         .unwrap();
@@ -435,7 +435,7 @@ fn lowers_link_attrs_into_foreign_descriptors() {
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            @link(name = "m")
+            @link(name := "m")
             foreign "c" (
               let sin (x : Float) : Float;
             );
@@ -464,10 +464,10 @@ fn skips_gated_foreign_declarations_for_target() {
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            @when(os = "linux")
+            @when(os := "linux")
             foreign let clock_gettime (id : Int, out : CPtr) : Int;
 
-            @when(os = "windows")
+            @when(os := "windows")
             foreign let QueryPerformanceCounter (out : CPtr) : Int;
         "#,
         )
@@ -488,20 +488,20 @@ fn emits_meta_records_for_laws_and_attrs() {
             r#"
             foreign let musi_true () : Bool;
 
-            @foo.bar(baz = "qux")
-            export let answer : Int = 42;
+            @foo.bar(baz := "qux")
+            export let answer : Int := 42;
 
-            @musi.codegen(mode = "test")
-            export let meaning : Int = 1;
+            @musi.codegen(mode := "test")
+            export let meaning : Int := 1;
 
-            export let Eq[T] = class {
+            export let Eq[T] := class {
               let (=) (a : T, b : T) : Bool;
-              law reflexive (x : T) = musi_true();
+              law reflexive (x : T) := musi_true();
             };
 
-            export let Console = effect {
+            export let Console := effect {
               let readln () : String;
-              law total () = musi_true();
+              law total () := musi_true();
             };
         "#,
         )
@@ -528,7 +528,7 @@ fn emits_meta_records_for_laws_and_attrs() {
         meta.iter().any(|(target, key, values)| {
             target == "main::answer"
                 && key == "inert.attr"
-                && values == &vec!["@foo.bar(baz = \"qux\")".to_owned()]
+                && values == &vec!["@foo.bar(baz := \"qux\")".to_owned()]
         }),
         "{meta:?}"
     );
@@ -536,7 +536,7 @@ fn emits_meta_records_for_laws_and_attrs() {
         meta.iter().any(|(target, key, values)| {
             target == "main::meaning"
                 && key == "musi.attr"
-                && values == &vec!["@musi.codegen(mode = \"test\")".to_owned()]
+                && values == &vec!["@musi.codegen(mode := \"test\")".to_owned()]
         }),
         "{meta:?}"
     );
@@ -549,19 +549,19 @@ fn emits_meta_records_for_exported_signatures() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            let Option[T] = data { | Some : Int | None };
+            let Option[T] := data { | Some : Int | None };
 
-            let Eq[T] = class { };
-            let eqInt = instance Eq[Int] { };
+            let Eq[T] := class { };
+            let eqInt := instance Eq[Int] { };
 
-            let Console = effect { let readln () : String; };
+            let Console := effect { let readln () : String; };
 
-            export let f[T] (x : T) where T : Eq with { Console } : T = x;
-            export let sumId (x : Int + String) : Int + String = x;
-            export let tupId (x : (Int, String)) : (Int, String) = x;
-            export let arrId (x : Array[Int, 2]) : Array[Int, 2] = x;
-            export let mutArrId (x : mut Array[Int, 2]) : mut Array[Int, 2] = x;
-            export let noneInt () : Option[Int] = .None;
+            export let f[T] (x : T) where T : Eq with { Console } : T := x;
+            export let sumId (x : Int + String) : Int + String := x;
+            export let tupId (x : (Int, String)) : (Int, String) := x;
+            export let arrId (x : Array[Int, 2]) : Array[Int, 2] := x;
+            export let mutArrId (x : mut Array[Int, 2]) : mut Array[Int, 2] := x;
+            export let noneInt () : Option[Int] := .None;
         ",
         )
         .unwrap();

@@ -145,6 +145,11 @@ pub fn ty_matches(ctx: &PassBase<'_, '_, '_>, expected: HirTyId, found: HirTyId)
     if matches!(left, HirTyKind::Any) {
         return true;
     }
+    if let HirTyKind::Mut { inner } = right {
+        if ty_matches(ctx, expected, inner) {
+            return true;
+        }
+    }
     if matches!(left, HirTyKind::Error | HirTyKind::Unknown)
         || matches!(right, HirTyKind::Error | HirTyKind::Unknown)
     {

@@ -6,8 +6,8 @@ use super::{ImportSiteKind, collect_export_summary, collect_import_sites};
 #[test]
 fn collects_static_and_dynamic_import_sites() {
     let src = r#"
-        let IO = import "std/io";
-        let dyn = import module_path;
+        let IO := import "std/io";
+        let dyn := import module_path;
     "#;
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -20,7 +20,7 @@ fn collects_static_and_dynamic_import_sites() {
 #[test]
 fn collects_static_template_import_site() {
     let src = r"
-        let IO = import `std/io`;
+        let IO := import `std/io`;
     ";
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -32,8 +32,8 @@ fn collects_static_template_import_site() {
 #[test]
 fn import_sites_ignore_quote_expr() {
     let src = r#"
-        let A = import "a";
-        quote { let B = import "b"; };
+        let A := import "a";
+        quote { let B := import "b"; };
     "#;
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -46,8 +46,8 @@ fn import_sites_ignore_quote_expr() {
 #[test]
 fn collects_exports_and_marks_opaque() {
     let src = r"
-        export let x = 1;
-        export opaque let y = 2;
+        export let x := 1;
+        export opaque let y := 2;
     ";
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -64,7 +64,7 @@ fn collects_exports_and_marks_opaque() {
 #[test]
 fn record_pattern_without_colon_binds_field_name() {
     let src = r"
-        export let {x, y} = r;
+        export let {x, y} := r;
     ";
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -77,7 +77,7 @@ fn record_pattern_without_colon_binds_field_name() {
 #[test]
 fn record_pattern_with_colon_binds_inner_pattern() {
     let src = r"
-        export let {x: y} = r;
+        export let {x: y} := r;
     ";
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);
@@ -120,12 +120,12 @@ fn export_instance_is_tracked_separately() {
 #[test]
 fn opaque_export_marking_is_order_independent() {
     let src = r#"
-        export let x = 1;
+        export let x := 1;
         export foreign "c" (
           let x (msg : CString) : Int;
           let y (msg : CString) : Int;
         );
-        export opaque let x = 2;
+        export opaque let x := 2;
     "#;
     let lexed = Lexer::new(src).lex();
     let parsed = music_syntax::parse(lexed);

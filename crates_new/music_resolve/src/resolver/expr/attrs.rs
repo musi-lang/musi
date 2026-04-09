@@ -81,7 +81,10 @@ where
     }
 
     pub(super) fn lower_attr_arg(&mut self, node: SyntaxNode<'tree, 'src>) -> HirAttrArg {
-        let name = if node.child_tokens().any(|t| t.kind() == TokenKind::Eq) {
+        let name = if node
+            .child_tokens()
+            .any(|t| t.kind() == TokenKind::ColonEq)
+        {
             node.child_tokens()
                 .find(|t| t.kind() == TokenKind::Ident)
                 .and_then(|t| self.intern_ident_token(t))

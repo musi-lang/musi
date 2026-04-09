@@ -474,7 +474,7 @@ record-literal-expr   = lbrace [record-fields] rbrace
 
 record-fields         = comma-pad [record-field *(comma record-field)] comma-pad
 
-record-field          = ident [eq expr]
+record-field          = ident [colon-eq expr]
                         / spread
 
 spread                = dot-dot-dot expr
@@ -488,7 +488,7 @@ import-expr           = kw-import expr
 let-modifier          = kw-rec
 
 let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
-                        [where-clause] [with-clause] [type-annot] eq expr
+                        [where-clause] [with-clause] [type-annot] colon-eq expr
 
 bracket-params        = lbracket ident *(comma ident) [comma] rbracket
 
@@ -503,12 +503,12 @@ data-body             = variant-list
 
 variant-list          = [pipe] variant *(pipe variant) [pipe]
 
-variant               = [attrs] ident [colon expr] [eq expr]
+variant               = [attrs] ident [colon expr] [colon-eq expr]
 
 rec-def-fields        = [semicolon] rec-def-field *(semicolon rec-def-field)
                         [semicolon]
 
-rec-def-field         = ident colon expr [eq expr]
+rec-def-field         = ident colon expr [colon-eq expr]
 
 effect-expr           = kw-effect lbrace [effect-member *(semicolon
                         effect-member)] [semicolon] rbrace
@@ -554,18 +554,18 @@ with-mods-expr        = attrs [export-mod] [foreign-mod] (expr / foreign-let-gro
                         / export-mod [foreign-mod] (expr / foreign-let-group / let-expr)
                         / foreign-mod (foreign-let-group / let-expr)
 
-let-rest              = [let-modifier] pattern [bracket-params] [params]
-                        [where-clause] [with-clause] [type-annot] [eq
-                        expr]
+	let-rest              = [let-modifier] pattern [bracket-params] [params]
+	                        [where-clause] [with-clause] [type-annot]
+	                        [colon-eq expr]
 
 instance-body         = lbrace *(class-member) rbrace
 
 foreign-binding       = [attrs] ident [bracket-params] [params] [where-clause]
                         [colon expr]
 
-fn-decl               = kw-let op-or-ident [params] [type-annot] [eq expr]
+fn-decl               = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
 
-law-decl              = kw-law ident [params] eq expr
+law-decl              = kw-law ident [params] colon-eq expr
 
 op-or-ident           = ident
                         / op-ident
@@ -614,8 +614,8 @@ attr-path          = ident *(dot ident)
 
 attr-args          = attr-arg *(comma attr-arg)
 
-attr-arg           = ident eq attr-value
-                     / attr-value
+attr-arg           = ident colon-eq attr-value
+                        / attr-value
 
 attr-value         = string-lit
                      / int-lit
@@ -632,7 +632,7 @@ attr-record        = lbrace [attr-record-fields] rbrace
 
 attr-record-fields = attr-record-field *(comma attr-record-field) comma-pad
 
-attr-record-field  = ident eq attr-value
+attr-record-field  = ident colon-eq attr-value
 
 attr-value-list    = attr-value *(comma attr-value) comma-pad
 ; --- Shared helpers ---
@@ -647,7 +647,7 @@ params     = lparen [param-list] rparen
 
 param-list = param *(comma param)
 
-param      = ident [type-annot] [eq expr]
+param      = ident [type-annot] [colon-eq expr]
 
 ident-list = comma-pad ident *(comma ident) comma-pad
 

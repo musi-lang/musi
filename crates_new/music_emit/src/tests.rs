@@ -36,12 +36,12 @@ fn lower_ir(src: &str, key: &str) -> music_ir::IrModule {
 fn emits_artifact_for_literal_exports_and_metadata() {
     let ir = lower_ir(
         r#"
-        let Option = data { | Some : Int | None };
+        let Option := data { | Some : Int | None };
         foreign "c" (
           let puts (value : CString) : Int;
         );
-        export let answer : Int = 42;
-        export let forty_two () : Int = 42;
+        export let answer : Int := 42;
+        export let forty_two () : Int := 42;
     "#,
         "main",
     );
@@ -57,14 +57,14 @@ fn emits_artifact_for_literal_exports_and_metadata() {
 fn emits_merged_program_for_reachable_modules() {
     let dep = lower_ir(
         r"
-        export let base : Int = 41;
+        export let base : Int := 41;
     ",
         "dep",
     );
     let main = lower_ir(
         r#"
         import "dep";
-        export let answer : Int = 42;
+        export let answer : Int := 42;
     "#,
         "main",
     );
@@ -79,11 +79,11 @@ fn emits_merged_program_for_reachable_modules() {
 fn emits_float_tuple_array_and_type_apply() {
     let ir = lower_ir(
         r"
-        let id[T] (x : T) : T = x;
-        export let pair = (1, 2);
-        export let items = [1, 2, 3];
-        export let pi : Float = 3.5;
-        export let answer () : Int = id[Int](42);
+        let id[T] (x : T) : T := x;
+        export let pair := (1, 2);
+        export let items := [1, 2, 3];
+        export let pi : Float := 3.5;
+        export let answer () : Int := id[Int](42);
     ",
         "main",
     );
@@ -103,9 +103,9 @@ fn emits_float_tuple_array_and_type_apply() {
 fn emits_globals_locals_assignment_index_and_case() {
     let ir = lower_ir(
         r"
-        export let base : Int = 41;
-        export let answer (x : Int) : Int = (
-          let items = mut [1, 2, 3];
+        export let base : Int := 41;
+        export let answer (x : Int) : Int := (
+          let items := mut [1, 2, 3];
           items.[0] := base;
           case x of (| 0 => items.[0] | value => value + base);
         );
@@ -137,11 +137,11 @@ fn emits_globals_locals_assignment_index_and_case() {
 fn emits_case_tuple_and_array_patterns() {
     let ir = lower_ir(
         r"
-        export let answer () : Int = (
-          let pair = (1, 2);
-          let items = [3, 4];
-          let p : Int = case pair of (| (1, b) => b | _ => 0);
-          let q : Int = case items of (| [3, b] => b | _ => 0);
+        export let answer () : Int := (
+          let pair := (1, 2);
+          let items := [3, 4];
+          let p : Int := case pair of (| (1, b) => b | _ => 0);
+          let q : Int := case items of (| [3, b] => b | _ => 0);
           p + q
         );
     ",
@@ -168,10 +168,10 @@ fn emits_case_tuple_and_array_patterns() {
 fn emits_records_with_projection_and_update() {
     let ir = lower_ir(
         r"
-        export let answer () : Int = (
-          let r = { y = 2, x = 1 };
-          let a : Int = r.x;
-          let s = r.{ x = 3 };
+        export let answer () : Int := (
+          let r := { y := 2, x := 1 };
+          let a : Int := r.x;
+          let s := r.{ x := 3 };
           a + s.x
         );
     ",
@@ -201,7 +201,7 @@ fn emits_foreign_calls() {
         foreign "c" (
           let puts (value : CString) : Int;
         );
-        export let answer () : Int = puts("hello");
+        export let answer () : Int := puts("hello");
     "#,
         "main",
     );
@@ -226,11 +226,11 @@ fn emits_foreign_calls() {
 fn emits_closures_and_higher_order_calls() {
     let ir = lower_ir(
         r"
-        let apply (f : Int -> Int, x : Int) : Int = f(x);
+        let apply (f : Int -> Int, x : Int) : Int := f(x);
 
-        export let answer (x : Int) : Int = (
-          let base : Int = 41;
-          let add_base (y : Int) : Int = y + base;
+        export let answer (x : Int) : Int := (
+          let base : Int := 41;
+          let add_base (y : Int) : Int := y + base;
           apply(add_base, x);
         );
     ",

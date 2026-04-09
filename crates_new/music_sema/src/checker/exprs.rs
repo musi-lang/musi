@@ -1299,15 +1299,15 @@ fn check_assign_expr(
     let (expected_rhs, mut effects) = match ctx.expr(left).kind {
         HirExprKind::Name { name } => {
             let binding = ctx.binding_id_for_use(name);
-            if let Some(binding) = binding
-                && !ctx.is_binding_mutable(binding)
-            {
-                ctx.diag(origin.span, "binding not mutable", "");
-            }
             let ty = binding
                 .and_then(|binding| ctx.binding_type(binding))
                 .unwrap_or_else(|| symbol_value_type(ctx, name.name));
-            (ty, EffectRow::empty())
+            if is_mut_ty(ctx, ty) {
+                (peel_mut_ty(ctx, ty), EffectRow::empty())
+            } else {
+                ctx.diag(origin.span, "write requires `mut T`", "");
+                (builtins.unknown, EffectRow::empty())
+            }
         }
         HirExprKind::Index { base, args } => {
             let base_facts = check_expr(ctx, base);

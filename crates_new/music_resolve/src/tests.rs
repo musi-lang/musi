@@ -67,7 +67,7 @@ fn find_nth_name_site(
 
 #[test]
 fn resolves_let_name_use() {
-    let src = "let x = 1; x;";
+    let src = "let x := 1; x;";
     let source_id = SourceId::from_raw(1);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
@@ -90,7 +90,7 @@ fn resolves_let_name_use() {
 
 #[test]
 fn resolves_rec_name_use_in_rhs() {
-    let src = "let rec f = f;";
+    let src = "let rec f := f;";
     let source_id = SourceId::from_raw(2);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
@@ -113,7 +113,7 @@ fn resolves_rec_name_use_in_rhs() {
 
 #[test]
 fn resolves_case_pat_binder_in_arm() {
-    let src = "let x = 0; case x of (| .Some(y) => y | _ => x);";
+    let src = "let x := 0; case x of (| .Some(y) => y | _ => x);";
     let source_id = SourceId::from_raw(3);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
@@ -203,8 +203,8 @@ fn resolves_pi_binder_in_ret() {
 #[test]
 fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
     let src = r"
-        let Option[T] = data { | Some : T | None | };
-        let Pair[T] = data { left : T; right : T; };
+        let Option[T] := data { | Some : T | None | };
+        let Pair[T] := data { left : T; right : T; };
     ";
     let source_id = SourceId::from_raw(6);
     let module_key = ModuleKey::new("main");
@@ -231,7 +231,7 @@ fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
 #[test]
 fn static_imports_resolve_but_do_not_open_export_names() {
     let src = r#"
-        let IO = import "std/io";
+        let IO := import "std/io";
         IO;
         read;
     "#;
@@ -279,7 +279,7 @@ fn static_imports_resolve_but_do_not_open_export_names() {
 #[test]
 fn import_resolution_only_creates_explicit_let_binding() {
     let src = r#"
-        let IO = import "std/io";
+        let IO := import "std/io";
         IO;
     "#;
     let source_id = SourceId::from_raw(8);
@@ -312,7 +312,7 @@ fn import_resolution_only_creates_explicit_let_binding() {
 #[test]
 fn static_template_imports_resolve_from_import_env() {
     let src = r"
-        let IO = import `std/io`;
+        let IO := import `std/io`;
     ";
     let source_id = SourceId::from_raw(9);
     let module_key = ModuleKey::new("main");
@@ -407,7 +407,7 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
 #[test]
 fn dynamic_imports_do_not_populate_resolved_imports() {
     let src = r#"
-        let path = "std/io";
+        let path := "std/io";
         import path;
     "#;
     let source_id = SourceId::from_raw(12);
@@ -465,7 +465,7 @@ fn handle_clause_params_resolve_in_body() {
 #[test]
 fn resolved_module_keeps_module_key_and_export_summary() {
     let src = r"
-        export let x = 1;
+        export let x := 1;
         export instance Eq[Int] { };
     ";
     let source_id = SourceId::from_raw(14);

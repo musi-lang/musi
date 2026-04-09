@@ -200,19 +200,19 @@ impl Parser<'_> {
     fn parse_optional_typed_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
         if let Some(colon) = self.eat(TokenKind::Colon) {
             children.push(colon);
-            children.push(SyntaxElementId::Node(self.parse_expr_without_eq(0)?));
+            children.push(SyntaxElementId::Node(self.parse_expr_without_colon_eq(0)?));
         }
         Ok(())
     }
 
     fn parse_required_typed_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
         children.push(self.expect_token(TokenKind::Colon)?);
-        children.push(SyntaxElementId::Node(self.parse_expr_without_eq(0)?));
+        children.push(SyntaxElementId::Node(self.parse_expr_without_colon_eq(0)?));
         Ok(())
     }
 
     fn parse_optional_bound_expr(&mut self, children: &mut SyntaxElementList) -> ParseResult<()> {
-        if let Some(bind) = self.eat(TokenKind::Eq) {
+        if let Some(bind) = self.eat(TokenKind::ColonEq) {
             children.push(bind);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         }
@@ -424,7 +424,7 @@ impl Parser<'_> {
             return Ok(self.node(SyntaxNodeKind::RecordItem, children));
         }
         children.push(self.expect_ident_element()?);
-        if let Some(bind) = self.eat(TokenKind::Eq) {
+        if let Some(bind) = self.eat(TokenKind::ColonEq) {
             children.push(bind);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         }
@@ -499,7 +499,7 @@ impl Parser<'_> {
 
     fn parse_let_expr(&mut self, mut attrs: SyntaxElementList) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwLet)?);
-        if self.at_any(&[TokenKind::KwMut, TokenKind::KwRec]) {
+        if self.at(TokenKind::KwRec) {
             attrs.push(self.advance_element());
         }
         attrs.push(SyntaxElementId::Node(self.parse_pattern()?));
@@ -508,7 +508,7 @@ impl Parser<'_> {
         self.parse_optional_constraints_clause(&mut attrs)?;
         self.parse_optional_effects_clause(&mut attrs)?;
         self.parse_optional_typed_expr(&mut attrs)?;
-        attrs.push(self.expect_token(TokenKind::Eq)?);
+        attrs.push(self.expect_token(TokenKind::ColonEq)?);
         attrs.push(SyntaxElementId::Node(self.parse_expr(0)?));
         Ok(self
             .builder
@@ -874,7 +874,7 @@ impl Parser<'_> {
                 children.push(self.advance_element());
                 children.push(self.expect_ident_element()?);
                 self.parse_optional_param_clause(&mut children)?;
-                children.push(self.expect_token(TokenKind::Eq)?);
+                children.push(self.expect_token(TokenKind::ColonEq)?);
                 children.push(SyntaxElementId::Node(self.parse_expr(0)?));
             }
             _ => return Err(self.expected_member()),
@@ -921,7 +921,7 @@ impl Parser<'_> {
 
     fn parse_attr_arg(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
-        if matches!(self.peek_kind(), TokenKind::Ident) && self.nth_kind(1) == TokenKind::Eq {
+        if matches!(self.peek_kind(), TokenKind::Ident) && self.nth_kind(1) == TokenKind::ColonEq {
             children.push(self.advance_element());
             children.push(self.advance_element());
         }
@@ -992,7 +992,7 @@ impl Parser<'_> {
 
     fn parse_attr_record_field(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
-        let bind = self.expect_token(TokenKind::Eq)?;
+        let bind = self.expect_token(TokenKind::ColonEq)?;
         let value = self.parse_attr_value()?;
         Ok(self.builder.push_node_from_children(
             SyntaxNodeKind::RecordItem,
@@ -1006,9 +1006,6 @@ impl Parser<'_> {
 
     fn parse_param(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
-        if let Some(mut_kw) = self.eat(TokenKind::KwMut) {
-            children.push(mut_kw);
-        }
         children.push(self.expect_ident_element()?);
         self.parse_optional_typed_expr(&mut children)?;
         self.parse_optional_bound_expr(&mut children)?;

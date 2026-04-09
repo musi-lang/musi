@@ -50,7 +50,7 @@ fn format_attr_value(value: &AttrValue) -> String {
         AttrValue::Record { fields } => {
             let inner = fields
                 .iter()
-                .map(|field| format!("{} = {}", field.name, format_attr_value(&field.value)))
+                .map(|field| format!("{} := {}", field.name, format_attr_value(&field.value)))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{{ {inner} }}")
@@ -74,7 +74,7 @@ fn format_attr(attr: &Attr) -> String {
         .map(|arg| {
             arg.name.as_deref().map_or_else(
                 || format_attr_value(&arg.value),
-                |name| format!("{name} = {}", format_attr_value(&arg.value)),
+                |name| format!("{name} := {}", format_attr_value(&arg.value)),
             )
         })
         .collect::<Vec<_>>()

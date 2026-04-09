@@ -69,7 +69,7 @@ fn bench_lex_trivia_heavy(c: &mut Criterion) {
 }
 
 fn bench_lex_numeric_heavy(c: &mut Criterion) {
-    let chunk = "let a = 1_234_567; let b = 0xff_ff; let c = 0o7_7_7; let d = 0b1_0_1_0; let e = 3.1415; let f = 2e10; let g = .5e-2;\n";
+    let chunk = "let a := 1_234_567; let b := 0xff_ff; let c := 0o7_7_7; let d := 0b1_0_1_0; let e := 3.1415; let f := 2e10; let g := .5e-2;\n";
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_numeric_heavy", |b| {
@@ -78,7 +78,7 @@ fn bench_lex_numeric_heavy(c: &mut Criterion) {
 }
 
 fn bench_lex_string_heavy(c: &mut Criterion) {
-    let chunk = r#"let s = "hello \"world\" \\n"; let t = `hi ${x}`; let r = 'a'; let e = '\n';
+    let chunk = r#"let s := "hello \"world\" \\n"; let t := `hi ${x}`; let r := 'a'; let e := '\n';
 "#;
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
@@ -88,7 +88,7 @@ fn bench_lex_string_heavy(c: &mut Criterion) {
 }
 
 fn bench_lex_operator_heavy(c: &mut Criterion) {
-    let chunk = "let x = 0; x := x + 1; a:?>b a:?T a:?>T a -> b a := b a => b a ~> b a /= b a <= b a >= b a <: b a...b a.{x} a.[x] a |> b a ++ b (+) (-) (*);\n";
+    let chunk = "let x := 0; x := x + 1; a:?>b a:?T a:?>T a -> b a := b a => b a ~> b a /= b a <= b a >= b a <: b a...b a.{x} a.[x] a |> b a ++ b (+) (-) (*);\n";
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_operator_heavy", |b| {
