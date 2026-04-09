@@ -120,8 +120,15 @@ impl<'src> Lexer<'src> {
                 let doc = self.cursor.peek_byte_n(2) == Some(b'/');
                 self.cursor.bump_bytes(if doc { 3 } else { 2 });
                 let rest = self.cursor.slice();
-                self.cursor
-                    .bump_bytes(rest.find('\n').unwrap_or(rest.len()));
+                let nl = rest.find('\n');
+                let cr = rest.find('\r');
+                let end = match (nl, cr) {
+                    (Some(a), Some(b)) => a.min(b),
+                    (Some(a), None) => a,
+                    (None, Some(b)) => b,
+                    (None, None) => rest.len(),
+                };
+                self.cursor.bump_bytes(end);
                 push(TriviaKind::LineComment { doc }, self.cursor.pos());
                 return true;
             }
@@ -487,6 +494,81 @@ impl<'src> Lexer<'src> {
         self.lex_escape_tail(errors, escape_start, delimiter);
     }
 
+    fn lex_string(&mut self, errors: &mut LexErrorList) -> TokenKind {
+        let start = self.cursor.pos();
+        self.cursor.bump_bytes(1);
+        loop {
+            let rest = self.cursor.slice().as_bytes();
+            let Some(i) = rest
+                .iter()
+                .position(|&b| matches!(b, b'"' | b'\\' | b'\n' | b'\r'))
+            else {
+                self.cursor.bump_bytes(rest.len());
+                let err_kind = LexErrorKind::UnterminatedStringLiteral;
+                Self::push_error(errors, err_kind, start, self.cursor.pos());
+                return TokenKind::String;
+            };
+            self.cursor.bump_bytes(i);
+            let b = self.cursor.peek_byte().unwrap();
+            if matches!(b, b'\n' | b'\r') {
+                let err_kind = LexErrorKind::UnterminatedStringLiteral;
+                Self::push_error(errors, err_kind, start, self.cursor.pos());
+                return TokenKind::String;
+            }
+            if b == b'"' {
+                self.cursor.bump_bytes(1);
+                return TokenKind::String;
+            }
+            debug_assert_eq!(b, b'\\');
+            self.process_escape_sequence(errors, b'"');
+        }
+    }
+
+    fn lex_rune(&mut self, errors: &mut LexErrorList) -> TokenKind {
+        let start = self.cursor.pos();
+        self.cursor.bump_bytes(1);
+        if self.cursor.peek_char() == Some('\'') {
+            self.cursor.bump_bytes(1);
+            let kind = LexErrorKind::EmptyRuneLiteral;
+            Self::push_error(errors, kind, start, self.cursor.pos());
+            return TokenKind::Rune;
+        }
+        match self.cursor.peek_char() {
+            Some('\\') => {
+                self.process_escape_sequence(errors, b'\'');
+            }
+            Some('\'') | None => {}
+            Some(_) => {
+                self.cursor.bump();
+            }
+        }
+        match self.cursor.peek_char() {
+            Some('\'') => {
+                self.cursor.bump_bytes(1);
+                TokenKind::Rune
+            }
+            Some(_) => {
+                let extra_start = self.cursor.pos();
+                self.cursor.bump();
+                let kind = LexErrorKind::RuneLiteralTooLong;
+                Self::push_error(errors, kind, extra_start, self.cursor.pos());
+                self.cursor.consume_while(|c| c != '\'' && c != '\n' && c != '\r');
+                if self.cursor.peek_char() == Some('\'') {
+                    self.cursor.bump_bytes(1);
+                } else {
+                    let kind = LexErrorKind::UnterminatedRuneLiteral;
+                    Self::push_error(errors, kind, start, self.cursor.pos());
+                }
+                TokenKind::Rune
+            }
+            None => {
+                let kind = LexErrorKind::UnterminatedRuneLiteral;
+                Self::push_error(errors, kind, start, self.cursor.pos());
+                TokenKind::Rune
+            }
+        }
+    }
+
     fn consume_template_chunk(&mut self, errors: &mut LexErrorList) -> TemplateChunkEnd {
         loop {
             let rest = self.cursor.slice().as_bytes();
@@ -570,73 +652,6 @@ impl<'src> Lexer<'src> {
                 let kind = LexErrorKind::UnterminatedTemplateLiteral;
                 Self::push_error(errors, kind, start, self.cursor.pos());
                 TokenKind::TemplateTail
-            }
-        }
-    }
-
-    fn lex_string(&mut self, errors: &mut LexErrorList) -> TokenKind {
-        let start = self.cursor.pos();
-        self.cursor.bump_bytes(1);
-        loop {
-            let rest = self.cursor.slice().as_bytes();
-            let Some(i) = rest.iter().position(|&b| b == b'"' || b == b'\\') else {
-                self.cursor.bump_bytes(rest.len());
-                let err_kind = LexErrorKind::UnterminatedStringLiteral;
-                Self::push_error(errors, err_kind, start, self.cursor.pos());
-                return TokenKind::String;
-            };
-            self.cursor.bump_bytes(i);
-            let b = self.cursor.peek_byte().unwrap();
-            if b == b'"' {
-                self.cursor.bump_bytes(1);
-                return TokenKind::String;
-            }
-            debug_assert_eq!(b, b'\\');
-            self.process_escape_sequence(errors, b'"');
-        }
-    }
-
-    fn lex_rune(&mut self, errors: &mut LexErrorList) -> TokenKind {
-        let start = self.cursor.pos();
-        self.cursor.bump_bytes(1);
-        if self.cursor.peek_char() == Some('\'') {
-            self.cursor.bump_bytes(1);
-            let kind = LexErrorKind::EmptyRuneLiteral;
-            Self::push_error(errors, kind, start, self.cursor.pos());
-            return TokenKind::Rune;
-        }
-        match self.cursor.peek_char() {
-            Some('\\') => {
-                self.process_escape_sequence(errors, b'\'');
-            }
-            Some('\'') | None => {}
-            Some(_) => {
-                self.cursor.bump();
-            }
-        }
-        match self.cursor.peek_char() {
-            Some('\'') => {
-                self.cursor.bump_bytes(1);
-                TokenKind::Rune
-            }
-            Some(_) => {
-                let extra_start = self.cursor.pos();
-                self.cursor.bump();
-                let kind = LexErrorKind::RuneLiteralTooLong;
-                Self::push_error(errors, kind, extra_start, self.cursor.pos());
-                self.cursor.consume_while(|c| c != '\'' && c != '\n');
-                if self.cursor.peek_char() == Some('\'') {
-                    self.cursor.bump_bytes(1);
-                } else {
-                    let kind = LexErrorKind::UnterminatedRuneLiteral;
-                    Self::push_error(errors, kind, start, self.cursor.pos());
-                }
-                TokenKind::Rune
-            }
-            None => {
-                let kind = LexErrorKind::UnterminatedRuneLiteral;
-                Self::push_error(errors, kind, start, self.cursor.pos());
-                TokenKind::Rune
             }
         }
     }

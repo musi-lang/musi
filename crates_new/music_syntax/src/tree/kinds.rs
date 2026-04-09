@@ -2,6 +2,7 @@
 pub enum SyntaxNodeKind {
     Error,
     SourceFile,
+    FixityDirective,
     SequenceExpr,
 
     LetExpr,
@@ -28,6 +29,7 @@ pub enum SyntaxNodeKind {
     TypeTestExpr,
     TypeCastExpr,
     PrefixExpr,
+    InfixExpr,
     BinaryExpr,
     CaseExpr,
     CaseArm,
@@ -109,6 +111,7 @@ impl SyntaxNodeKind {
                 | Self::TypeTestExpr
                 | Self::TypeCastExpr
                 | Self::PrefixExpr
+                | Self::InfixExpr
                 | Self::BinaryExpr
                 | Self::CaseExpr
                 | Self::PerformExpr

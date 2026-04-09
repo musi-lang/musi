@@ -1172,7 +1172,12 @@ impl Parser<'_> {
 
     fn parse_type_param(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
-        Ok(self.node1(SyntaxNodeKind::TypeParam, ident))
+        let mut children = vec![ident];
+        if let Some(colon) = self.eat(TokenKind::Colon) {
+            children.push(colon);
+            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        }
+        Ok(self.node(SyntaxNodeKind::TypeParam, children))
     }
 
     pub(super) fn parse_expr_node(&mut self) -> ParseResult<SyntaxNodeId> {

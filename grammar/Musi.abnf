@@ -437,6 +437,7 @@ atom                  = literal
                         / pi-expr
                         / lambda-expr
                         / paren-expr
+                        / array-type-expr
                         / array-expr
                         / record-literal-expr
                         / dot-prefix-expr
@@ -452,6 +453,7 @@ atom                  = literal
                         / handle-expr
                         / foreign-expr
                         / quote-expr
+                        / export-expr
                         / with-attrs-expr
 
 pi-expr               = kw-forall lparen ident colon expr rparen (minus-gt /
@@ -473,6 +475,17 @@ case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
                         case-arm) [pipe] rparen
 
 case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
+
+; NOTE: `array-type-expr` and `array-expr` share the same leading token (`[`).
+; Disambiguation rule: if a `]` is immediately followed by the start of a
+; `prefix-expr`, the construct is parsed as `array-type-expr` (i.e. `[dims]T`).
+array-type-expr       = lbracket [array-dims] rbracket prefix-expr
+
+array-dims            = array-dim *(comma array-dim) [comma]
+
+array-dim             = int-lit
+                        / ident
+                        / underscore
 
 array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
 
@@ -545,7 +558,7 @@ handle-clause         = ident eq-gt expr
 foreign-expr          = kw-foreign [string-lit] (kw-let let-rest /
                         foreign-let-group)
 
-foreign-let-group     = lparen *(kw-let foreign-binding semicolon) rparen
+foreign-let-group     = lparen 1*(kw-let foreign-binding semicolon) rparen
 
 quote-expr            = kw-quote (lparen expr rparen / lbrace *(stmt) rbrace)
 
@@ -555,16 +568,8 @@ splice                = hash ident
 
 with-attrs-expr       = attrs expr
 
-decl                  = export-decl
-                        / let-expr
-                        / foreign-expr
-                        / instance-expr
-
-export-decl           = kw-export export-tail
-
-export-tail           = [kw-opaque] [kw-foreign [string-lit]] (kw-let let-rest /
-                        foreign-let-group)
-                        / instance-expr
+export-expr           = kw-export [kw-opaque] [kw-foreign [string-lit]] (let-expr
+                        / instance-expr / foreign-let-group / expr)
 
 let-rest              = [let-modifier] pattern [bracket-params] [params]
                         [where-clause] [with-clause] [type-annot] [colon-eq

@@ -14,6 +14,10 @@ pub enum TokenKind {
     String,
     Rune,
 
+    // Template literal tokens.
+    //
+    // Note: These are *chunk* tokens that include their boundary markers in the
+    // token text (e.g. head starts with '`' and ends with '${').
     TemplateNoSubst,
     TemplateHead,
     TemplateMiddle,
@@ -28,10 +32,14 @@ pub enum TokenKind {
     KwEffect,
     KwExport,
     KwForeign,
+    KwForall,
     KwHandle,
     KwIf,
     KwImport,
     KwIn,
+    KwInfix,
+    KwInfixl,
+    KwInfixr,
     KwInstance,
     KwLaw,
     KwLet,
@@ -53,6 +61,7 @@ pub enum TokenKind {
     // Prefixes (grammar/Musi.abnf)
     At,
     Hash,
+    Backslash,
 
     // Separators / punctuation.
     LParen,
@@ -122,6 +131,7 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b":=", TokenKind::ColonEq),
     (b":?", TokenKind::ColonQuestion),
     (b"#", TokenKind::Hash),
+    (b"\\", TokenKind::Backslash),
     (b"%", TokenKind::Percent),
     (b"*", TokenKind::Star),
     (b"+", TokenKind::Plus),
@@ -170,10 +180,14 @@ impl TokenKind {
             "effect" => Self::KwEffect,
             "export" => Self::KwExport,
             "foreign" => Self::KwForeign,
+            "forall" => Self::KwForall,
             "handle" => Self::KwHandle,
             "if" => Self::KwIf,
             "import" => Self::KwImport,
             "in" => Self::KwIn,
+            "infix" => Self::KwInfix,
+            "infixl" => Self::KwInfixl,
+            "infixr" => Self::KwInfixr,
             "instance" => Self::KwInstance,
             "law" => Self::KwLaw,
             "let" => Self::KwLet,
@@ -207,10 +221,14 @@ impl TokenKind {
                 | Self::KwEffect
                 | Self::KwExport
                 | Self::KwForeign
+                | Self::KwForall
                 | Self::KwHandle
                 | Self::KwIf
                 | Self::KwImport
                 | Self::KwIn
+                | Self::KwInfix
+                | Self::KwInfixl
+                | Self::KwInfixr
                 | Self::KwInstance
                 | Self::KwLaw
                 | Self::KwLet
@@ -261,10 +279,14 @@ pub const fn display_token_kind(kind: TokenKind) -> &'static str {
         TokenKind::KwEffect => "`effect`",
         TokenKind::KwExport => "`export`",
         TokenKind::KwForeign => "`foreign`",
+        TokenKind::KwForall => "`forall`",
         TokenKind::KwHandle => "`handle`",
         TokenKind::KwIf => "`if`",
         TokenKind::KwImport => "`import`",
         TokenKind::KwIn => "`in`",
+        TokenKind::KwInfix => "`infix`",
+        TokenKind::KwInfixl => "`infixl`",
+        TokenKind::KwInfixr => "`infixr`",
         TokenKind::KwInstance => "`instance`",
         TokenKind::KwLaw => "`law`",
         TokenKind::KwLet => "`let`",
@@ -284,6 +306,7 @@ pub const fn display_token_kind(kind: TokenKind) -> &'static str {
         TokenKind::KwXor => "`xor`",
         TokenKind::At => "`@`",
         TokenKind::Hash => "`#`",
+        TokenKind::Backslash => "`\\\\`",
         TokenKind::LParen => "`(`",
         TokenKind::RParen => "`)`",
         TokenKind::LBracket => "`[`",

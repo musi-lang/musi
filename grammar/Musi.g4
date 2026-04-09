@@ -96,7 +96,8 @@ atom:
 	| pi_expr
 	| lambda_expr
 	| paren_expr
-	| array_expr
+	| array_type_expr
+	| array_lit_expr
 	| record_literal_expr
 	| dot_prefix_expr
 	| case_expr
@@ -111,15 +112,14 @@ atom:
 	| handle_expr
 	| foreign_expr
 	| quote_expr
+	| export_expr
 	| with_attrs_expr;
 
 literal: INT_LIT | FLOAT_LIT | STRING_LIT | RUNE_LIT;
 
 template_expr:
-	TEMPLATE_BEGIN (
-		TEMPLATE_TEXT
-		| TEMPLATE_INTERP_BEGIN expr RBRACE
-	)* TEMPLATE_END;
+	TEMPLATE_NO_SUBST
+	| TEMPLATE_HEAD expr (TEMPLATE_MIDDLE expr)* TEMPLATE_TAIL;
 
 ident: IDENT;
 
@@ -151,7 +151,13 @@ case_expr:
 
 case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
 
-array_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
+array_type_expr: LBRACKET array_dims? RBRACKET prefix_expr;
+
+array_dims: array_dim (COMMA array_dim)* COMMA?;
+
+array_dim: INT_LIT | ident | UNDERSCORE;
+
+array_lit_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
 
 array_items: array_item (COMMA array_item)*;
 
@@ -222,7 +228,7 @@ foreign_expr:
 	KW_FOREIGN STRING_LIT? (KW_LET let_rest | foreign_let_group);
 
 foreign_let_group:
-	LPAREN (KW_LET foreign_binding SEMICOLON)* RPAREN;
+	LPAREN (KW_LET foreign_binding SEMICOLON)+ RPAREN;
 
 quote_expr: KW_QUOTE (LPAREN expr RPAREN | LBRACE stmt* RBRACE);
 
@@ -233,15 +239,13 @@ splice:
 
 with_attrs_expr: attrs expr;
 
-decl: export_decl | let_expr | foreign_expr | instance_expr;
-
-export_decl: KW_EXPORT export_tail;
-
-export_tail: (KW_OPAQUE)? (KW_FOREIGN STRING_LIT?)? (
-		KW_LET let_rest
+export_expr:
+	KW_EXPORT KW_OPAQUE? (KW_FOREIGN STRING_LIT?)? (
+		let_expr
+		| instance_expr
 		| foreign_let_group
-	)
-	| instance_expr;
+		| expr
+	);
 
 let_rest:
 	let_modifier? pattern bracket_params? params? where_clause? with_clause? type_annot? (
@@ -452,7 +456,11 @@ INT_LIT:
 
 STRING_LIT: '"' (ESC_SEQ | ~["\\\r\n])* '"';
 
-TEMPLATE_BEGIN: '`' -> pushMode(TEMPLATE);
+// Template literal tokens. These are chunk tokens that include their boundary
+// markers in the token text (matching the Rust frontend).
+TEMPLATE_NO_SUBST: '`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '`';
+
+TEMPLATE_HEAD: '`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${' -> pushMode(INTERP_TOP);
 
 RUNE_LIT: '\'' (ESC_SEQ | ~['\\\r\n])* '\'';
 
@@ -479,25 +487,24 @@ WS: [ \t\r]+ -> channel(HIDDEN);
 // modes (portable; no target-language code)
 // -----------------------------------------------------------------------------
 
-mode TEMPLATE;
-
-TEMPLATE_END: '`' -> popMode;
-
-TEMPLATE_INTERP_BEGIN: '${' -> pushMode(INTERP_TOP);
-
-TEMPLATE_TEXT: TEMPLATE_CHUNK_CHAR+;
-
 mode INTERP_TOP;
 
-INTERP_TEMPLATE_BEGIN:
-	'`' -> type(TEMPLATE_BEGIN), pushMode(TEMPLATE);
+TEMPLATE_TAIL:
+	'}' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '`' -> popMode;
+
+TEMPLATE_MIDDLE:
+	'}' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${';
+
+INTERP_TEMPLATE_NO_SUBST:
+	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '`' -> type(TEMPLATE_NO_SUBST);
+
+INTERP_TEMPLATE_HEAD:
+	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${' -> type(TEMPLATE_HEAD), pushMode(INTERP_TOP);
 
 INTERP_DOT_LBRACE:
 	'.{' -> type(DOT_LBRACE), pushMode(INTERP_NESTED);
 
 INTERP_LBRACE: '{' -> type(LBRACE), pushMode(INTERP_NESTED);
-
-TEMPLATE_INTERP_END: '}' -> type(RBRACE), popMode;
 
 // Keywords.
 I_KW_AND: 'and' -> type(KW_AND);
@@ -626,8 +633,11 @@ I_WS: [ \t\r]+ -> type(WS), channel(HIDDEN);
 
 mode INTERP_NESTED;
 
-N_INTERP_TEMPLATE_BEGIN:
-	'`' -> type(TEMPLATE_BEGIN), pushMode(TEMPLATE);
+N_INTERP_TEMPLATE_NO_SUBST:
+	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '`' -> type(TEMPLATE_NO_SUBST);
+
+N_INTERP_TEMPLATE_HEAD:
+	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${' -> type(TEMPLATE_HEAD), pushMode(INTERP_TOP);
 
 N_INTERP_DOT_LBRACE:
 	'.{' -> type(DOT_LBRACE), pushMode(INTERP_NESTED);

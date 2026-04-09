@@ -127,12 +127,7 @@ fn lex_template_literal_with_substitution() {
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
-        [
-            TokenKind::TemplateHead,
-            TokenKind::Ident,
-            TokenKind::TemplateTail,
-            TokenKind::Eof
-        ]
+        [TokenKind::TemplateHead, TokenKind::Ident, TokenKind::TemplateTail, TokenKind::Eof]
     );
     assert!(lexed.errors().is_empty());
 }
