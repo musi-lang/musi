@@ -118,7 +118,7 @@ impl Parser<'_> {
         if self.at(TokenKind::DotLBrace) {
             return self.parse_record_update_expr(left).map(Some);
         }
-        if self.at_any(&[TokenKind::Dot, TokenKind::QDot, TokenKind::BangDot]) {
+        if self.at(TokenKind::Dot) {
             return self.parse_field_expr(left).map(Some);
         }
         if self.at(TokenKind::ColonQuestion) {

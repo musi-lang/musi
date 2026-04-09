@@ -14,11 +14,17 @@ pub(super) fn compile_binary(
     compile_expr(emitter, left, true, diags);
     compile_expr(emitter, right, true, diags);
     let opcode = match op {
-        IrBinaryOp::Add => Opcode::IAdd,
-        IrBinaryOp::Sub => Opcode::ISub,
-        IrBinaryOp::Mul => Opcode::IMul,
-        IrBinaryOp::Div => Opcode::IDiv,
-        IrBinaryOp::Rem => Opcode::IRem,
+        IrBinaryOp::IAdd => Opcode::IAdd,
+        IrBinaryOp::ISub => Opcode::ISub,
+        IrBinaryOp::IMul => Opcode::IMul,
+        IrBinaryOp::IDiv => Opcode::IDiv,
+        IrBinaryOp::IRem => Opcode::IRem,
+        IrBinaryOp::FAdd => Opcode::FAdd,
+        IrBinaryOp::FSub => Opcode::FSub,
+        IrBinaryOp::FMul => Opcode::FMul,
+        IrBinaryOp::FDiv => Opcode::FDiv,
+        IrBinaryOp::FRem => Opcode::FRem,
+        IrBinaryOp::StrCat => Opcode::StrCat,
         IrBinaryOp::Eq => Opcode::CmpEq,
         IrBinaryOp::Ne => Opcode::CmpNe,
         IrBinaryOp::Lt => Opcode::CmpLt,
@@ -595,4 +601,3 @@ fn compile_case_as_pattern(
     )));
     true
 }
-

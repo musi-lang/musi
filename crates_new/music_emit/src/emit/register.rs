@@ -256,6 +256,11 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             collect_expr_types(state, layout, left);
             collect_expr_types(state, layout, right);
         }
+        IrExprKind::Not { expr } => collect_expr_types(state, layout, expr),
+        IrExprKind::TyTest { base, ty_name } | IrExprKind::TyCast { base, ty_name } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types(state, layout, base);
+        }
         IrExprKind::Case { scrutinee, arms } => collect_expr_types_case(state, layout, scrutinee, arms),
         IrExprKind::Call { callee, args } => collect_expr_types_call(state, layout, callee, args),
         IrExprKind::CallSeq { callee, args } => {

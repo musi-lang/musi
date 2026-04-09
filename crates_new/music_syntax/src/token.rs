@@ -86,22 +86,20 @@ pub enum TokenKind {
     Percent,
     Eq,
     Lt,
-	    Gt,
+    Gt,
 
-	    // Compound tokens (grammar/Musi.abnf)
-	    LtMinus,         // <-
-	    MinusGt,         // ->
-	    TildeGt,         // ~>
+    // Compound tokens (grammar/Musi.abnf)
+    LtMinus,     // <-
+    MinusGt,     // ->
+    TildeGt,     // ~>
     EqGt,            // =>
     SlashEq,         // /=
     LtEq,            // <=
     GtEq,            // >=
-    LtColon,         // <:
-    QDot,            // ?.
-    BangDot,         // !.
-    DotDotDot,       // ...
-    DotLBrace,       // .{
-    DotLBracket,     // .[
+    LtColon,     // <:
+    DotDotDot,   // ...
+    DotLBrace,   // .{
+    DotLBracket, // .[
     ColonQuestion,   // :?
     ColonQuestionGt, // :?>
     PipeGt,          // |>
@@ -111,25 +109,23 @@ pub enum TokenKind {
 }
 
 // Ordered by longest-to-shortest (maximal munch).
-	pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
-	    (b":?>", TokenKind::ColonQuestionGt),
-	    (b"...", TokenKind::DotDotDot),
-	    (b".{", TokenKind::DotLBrace),
-	    (b".[", TokenKind::DotLBracket),
-	    (b"=>", TokenKind::EqGt),
-	    (b"!.", TokenKind::BangDot),
-	    (b"->", TokenKind::MinusGt),
-	    (b"/=", TokenKind::SlashEq),
-	    (b"<=", TokenKind::LtEq),
-	    (b"<:", TokenKind::LtColon),
-	    (b"<-", TokenKind::LtMinus),
-	    (b">=", TokenKind::GtEq),
-	    (b"?.", TokenKind::QDot),
-	    (b"|>", TokenKind::PipeGt),
-	    (b"~>", TokenKind::TildeGt),
-	    (b":?", TokenKind::ColonQuestion),
-	    (b"#", TokenKind::Hash),
-	    (b"\\", TokenKind::Backslash),
+pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
+    (b":?>", TokenKind::ColonQuestionGt),
+    (b"...", TokenKind::DotDotDot),
+    (b".{", TokenKind::DotLBrace),
+    (b".[", TokenKind::DotLBracket),
+    (b"=>", TokenKind::EqGt),
+    (b"->", TokenKind::MinusGt),
+    (b"/=", TokenKind::SlashEq),
+    (b"<=", TokenKind::LtEq),
+    (b"<:", TokenKind::LtColon),
+    (b"<-", TokenKind::LtMinus),
+    (b">=", TokenKind::GtEq),
+    (b"|>", TokenKind::PipeGt),
+    (b"~>", TokenKind::TildeGt),
+    (b":?", TokenKind::ColonQuestion),
+    (b"#", TokenKind::Hash),
+    (b"\\", TokenKind::Backslash),
     (b"%", TokenKind::Percent),
     (b"*", TokenKind::Star),
     (b"+", TokenKind::Plus),
@@ -322,19 +318,17 @@ pub const fn display_token_kind(kind: TokenKind) -> &'static str {
         TokenKind::Star => "`*`",
         TokenKind::Slash => "`/`",
         TokenKind::Percent => "`%`",
-	        TokenKind::Eq => "`=`",
-	        TokenKind::Lt => "`<`",
-	        TokenKind::Gt => "`>`",
-	        TokenKind::LtMinus => "`<-`",
-	        TokenKind::MinusGt => "`->`",
+        TokenKind::Eq => "`=`",
+        TokenKind::Lt => "`<`",
+        TokenKind::Gt => "`>`",
+        TokenKind::LtMinus => "`<-`",
+        TokenKind::MinusGt => "`->`",
         TokenKind::TildeGt => "`~>`",
         TokenKind::EqGt => "`=>`",
         TokenKind::SlashEq => "`/=`",
         TokenKind::LtEq => "`<=`",
         TokenKind::GtEq => "`>=`",
         TokenKind::LtColon => "`<:`",
-        TokenKind::QDot => "`?.`",
-        TokenKind::BangDot => "`!.`",
         TokenKind::DotDotDot => "`...`",
         TokenKind::DotLBrace => "`.{`",
         TokenKind::DotLBracket => "`.[`",

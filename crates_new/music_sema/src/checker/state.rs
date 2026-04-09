@@ -99,6 +99,7 @@ pub struct FactState {
     pat_facts: Vec<PatFacts>,
     expr_callable_effects: HashMap<HirExprId, EffectRow>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    type_test_targets: HashMap<HirExprId, HirTyId>,
 }
 
 #[derive(Default)]
@@ -201,6 +202,7 @@ pub fn prepare_module<'interner, 'env>(
             pat_facts,
             expr_callable_effects: HashMap::new(),
             expr_module_targets: HashMap::new(),
+            type_test_targets: HashMap::new(),
         },
         ResumeState::default(),
     )
@@ -239,6 +241,7 @@ pub fn finish_module(
         expr_facts: facts.expr_facts,
         pat_facts: facts.pat_facts,
         expr_module_targets: facts.expr_module_targets,
+        type_test_targets: facts.type_test_targets,
         effect_defs: decls.effect_defs,
         data_defs: decls.data_defs,
         class_facts: decls.class_facts,
@@ -548,6 +551,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn set_expr_callable_effects(&mut self, id: HirExprId, effects: EffectRow) {
         let _prev = self.facts.expr_callable_effects.insert(id, effects);
+    }
+
+    pub fn type_test_target(&self, id: HirExprId) -> Option<HirTyId> {
+        self.facts.type_test_targets.get(&id).copied()
+    }
+
+    pub fn set_type_test_target(&mut self, id: HirExprId, target: HirTyId) {
+        let _prev = self.facts.type_test_targets.insert(id, target);
     }
 
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {

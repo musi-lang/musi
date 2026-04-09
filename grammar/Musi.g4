@@ -29,11 +29,11 @@ expr: infix_expr;
 
 infix_expr: prefix_expr (infix_op prefix_expr)*;
 
-	infix_op:
-		LT_MINUS
-		| PIPE_GT
-		| MINUS_GT
-		| TILDE_GT
+infix_op:
+	LT_MINUS
+	| PIPE_GT
+	| MINUS_GT
+	| TILDE_GT
 	| KW_OR
 	| KW_XOR
 	| KW_AND
@@ -64,8 +64,6 @@ postfix_op:
 	| index_op
 	| record_update_op
 	| field_access_op
-	| optional_chain_op
-	| force_access_op
 	| type_test_op
 	| type_cast_op;
 
@@ -78,10 +76,6 @@ index_op: DOT_LBRACKET expr_list? RBRACKET;
 record_update_op: DOT_LBRACE record_fields? RBRACE;
 
 field_access_op: DOT field_target;
-
-optional_chain_op: Q_DOT field_target;
-
-force_access_op: BANG_DOT field_target;
 
 type_test_op: COLON_QUESTION expr (KW_AS ident)?;
 
@@ -150,9 +144,9 @@ sequence_body: expr (SEMICOLON expr)* SEMICOLON?;
 case_expr:
 	KW_CASE expr KW_OF LPAREN PIPE? case_arm (PIPE case_arm)* PIPE? RPAREN;
 
-	case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
+case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
 
-	array_lit_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
+array_lit_expr: LBRACKET comma_pad array_items? comma_pad RBRACKET;
 
 array_items: array_item (COMMA array_item)*;
 
@@ -393,17 +387,15 @@ DOT_DOT_DOT: '...';
 DOT_LBRACE: '.{';
 DOT_LBRACKET: '.[';
 EQ_GT: '=>';
-BANG_DOT: '!.';
 MINUS_GT: '->';
 SLASH_EQ: '/=';
 LT_EQ: '<=';
 LT_COLON: '<:';
 LT_MINUS: '<-';
 GT_EQ: '>=';
-Q_DOT: '?.';
-	PIPE_GT: '|>';
-	TILDE_GT: '~>';
-	COLON_QUESTION: ':?';
+PIPE_GT: '|>';
+TILDE_GT: '~>';
+COLON_QUESTION: ':?';
 
 // Prefixes.
 AT: '@';
@@ -538,17 +530,15 @@ I_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 I_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 I_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
 I_EQ_GT: '=>' -> type(EQ_GT);
-I_BANG_DOT: '!.' -> type(BANG_DOT);
 I_MINUS_GT: '->' -> type(MINUS_GT);
 I_SLASH_EQ: '/=' -> type(SLASH_EQ);
 I_LT_EQ: '<=' -> type(LT_EQ);
 I_LT_COLON: '<:' -> type(LT_COLON);
 I_LT_MINUS: '<-' -> type(LT_MINUS);
 I_GT_EQ: '>=' -> type(GT_EQ);
-I_Q_DOT: '?.' -> type(Q_DOT);
 I_PIPE_GT: '|>' -> type(PIPE_GT);
 I_TILDE_GT: '~>' -> type(TILDE_GT);
-	I_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
+I_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
 
 // Prefixes.
 I_AT: '@' -> type(AT);
@@ -678,17 +668,15 @@ N_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 N_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 N_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
 N_EQ_GT: '=>' -> type(EQ_GT);
-N_BANG_DOT: '!.' -> type(BANG_DOT);
 N_MINUS_GT: '->' -> type(MINUS_GT);
 N_SLASH_EQ: '/=' -> type(SLASH_EQ);
 N_LT_EQ: '<=' -> type(LT_EQ);
 N_LT_COLON: '<:' -> type(LT_COLON);
 N_LT_MINUS: '<-' -> type(LT_MINUS);
 N_GT_EQ: '>=' -> type(GT_EQ);
-N_Q_DOT: '?.' -> type(Q_DOT);
 N_PIPE_GT: '|>' -> type(PIPE_GT);
 N_TILDE_GT: '~>' -> type(TILDE_GT);
-	N_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
+N_COLON_QUESTION: ':?' -> type(COLON_QUESTION);
 
 // Prefixes.
 N_AT: '@' -> type(AT);

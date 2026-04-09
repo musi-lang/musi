@@ -56,7 +56,7 @@ fn lex_compound_tokens_and_symbolic_ops() {
 
 #[test]
 fn lex_compound_tokens_longest_first() {
-    let lexed = Lexer::new(":?> = :? ... .{ .[ ?. !. <- -> ~> => /= <= >= <: |>").lex();
+    let lexed = Lexer::new(":?> = :? ... .{ .[ <- -> ~> => /= <= >= <: |>").lex();
     let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -67,8 +67,6 @@ fn lex_compound_tokens_longest_first() {
             TokenKind::DotDotDot,
             TokenKind::DotLBrace,
             TokenKind::DotLBracket,
-            TokenKind::QDot,
-            TokenKind::BangDot,
             TokenKind::LtMinus,
             TokenKind::MinusGt,
             TokenKind::TildeGt,
@@ -224,7 +222,7 @@ fn question_and_bang_are_only_valid_in_compounds() {
     );
 
     let compounds = Lexer::new("a?.b a!.b").lex();
-    assert!(compounds.errors().is_empty());
+    assert!(!compounds.errors().is_empty());
 }
 
 #[test]

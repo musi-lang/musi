@@ -28,6 +28,12 @@ pub enum Opcode {
     IMul,
     IDiv,
     IRem,
+    FAdd,
+    FSub,
+    FMul,
+    FDiv,
+    FRem,
+    StrCat,
     CmpEq,
     CmpNe,
     CmpLt,
@@ -75,7 +81,17 @@ impl Opcode {
             | Self::LdConst
             | Self::LdSmi
             | Self::LdStr => OpcodeFamily::LoadStore,
-            Self::IAdd | Self::ISub | Self::IMul | Self::IDiv | Self::IRem => OpcodeFamily::Scalar,
+            Self::IAdd
+            | Self::ISub
+            | Self::IMul
+            | Self::IDiv
+            | Self::IRem
+            | Self::FAdd
+            | Self::FSub
+            | Self::FMul
+            | Self::FDiv
+            | Self::FRem
+            | Self::StrCat => OpcodeFamily::Scalar,
             Self::CmpEq | Self::CmpNe | Self::CmpLt | Self::CmpGt | Self::CmpLe | Self::CmpGe => {
                 OpcodeFamily::LogicCompare
             }
@@ -114,6 +130,12 @@ impl Opcode {
             Self::IMul => "i.mul",
             Self::IDiv => "i.div",
             Self::IRem => "i.rem",
+            Self::FAdd => "f.add",
+            Self::FSub => "f.sub",
+            Self::FMul => "f.mul",
+            Self::FDiv => "f.div",
+            Self::FRem => "f.rem",
+            Self::StrCat => "str.cat",
             Self::CmpEq => "cmp.eq",
             Self::CmpNe => "cmp.ne",
             Self::CmpLt => "cmp.lt",
@@ -164,6 +186,12 @@ impl Opcode {
             | Self::IMul
             | Self::IDiv
             | Self::IRem
+            | Self::FAdd
+            | Self::FSub
+            | Self::FMul
+            | Self::FDiv
+            | Self::FRem
+            | Self::StrCat
             | Self::CmpEq
             | Self::CmpNe
             | Self::CmpLt
@@ -207,6 +235,12 @@ impl Opcode {
             Self::IMul => 0x0103,
             Self::IDiv => 0x0104,
             Self::IRem => 0x0105,
+            Self::FAdd => 0x0106,
+            Self::FSub => 0x0107,
+            Self::FMul => 0x0108,
+            Self::FDiv => 0x0109,
+            Self::FRem => 0x010A,
+            Self::StrCat => 0x010B,
             Self::CmpEq => 0x0201,
             Self::CmpNe => 0x0202,
             Self::CmpLt => 0x0203,
@@ -259,6 +293,12 @@ impl Opcode {
             "i.mul" => Self::IMul,
             "i.div" => Self::IDiv,
             "i.rem" => Self::IRem,
+            "f.add" => Self::FAdd,
+            "f.sub" => Self::FSub,
+            "f.mul" => Self::FMul,
+            "f.div" => Self::FDiv,
+            "f.rem" => Self::FRem,
+            "str.cat" => Self::StrCat,
             "cmp.eq" => Self::CmpEq,
             "cmp.ne" => Self::CmpNe,
             "cmp.lt" => Self::CmpLt,
@@ -312,6 +352,12 @@ impl Opcode {
             0x0103 => Self::IMul,
             0x0104 => Self::IDiv,
             0x0105 => Self::IRem,
+            0x0106 => Self::FAdd,
+            0x0107 => Self::FSub,
+            0x0108 => Self::FMul,
+            0x0109 => Self::FDiv,
+            0x010A => Self::FRem,
+            0x010B => Self::StrCat,
             0x0201 => Self::CmpEq,
             0x0202 => Self::CmpNe,
             0x0203 => Self::CmpLt,

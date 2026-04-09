@@ -74,7 +74,9 @@ fn check_expr_kind(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts 
         HirExprKind::RecordUpdate { base, items } => {
             check_record_update_expr(ctx, expr.origin, base, items)
         }
-        HirExprKind::TypeTest { base, ty, as_name } => check_type_test_expr(ctx, base, ty, as_name),
+        HirExprKind::TypeTest { base, ty, as_name } => {
+            check_type_test_expr(ctx, id, base, ty, as_name)
+        }
         HirExprKind::TypeCast { base, ty } => check_type_cast_expr(ctx, base, ty),
         HirExprKind::Prefix { op, expr: inner } => check_prefix_expr(ctx, expr.origin, &op, inner),
         HirExprKind::Binary { op, left, right } => {
@@ -150,7 +152,9 @@ fn check_decl_expr(
         HirExprKind::RecordUpdate { base, items } => {
             check_record_update_expr(ctx, origin, base, items)
         }
-        HirExprKind::TypeTest { base, ty, as_name } => check_type_test_expr(ctx, base, ty, as_name),
+        HirExprKind::TypeTest { base, ty, as_name } => {
+            check_type_test_expr(ctx, id, base, ty, as_name)
+        }
         HirExprKind::TypeCast { base, ty } => check_type_cast_expr(ctx, base, ty),
         HirExprKind::Prefix { op, expr: inner } => check_prefix_expr(ctx, origin, &op, inner),
         HirExprKind::Binary { op, left, right } => check_binary_expr(ctx, origin, &op, left, right),
@@ -1153,6 +1157,7 @@ fn check_record_update_expr(
 
 fn check_type_test_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
+    expr_id: HirExprId,
     base: HirExprId,
     ty_expr: HirExprId,
     as_name: Option<Ident>,
@@ -1160,7 +1165,8 @@ fn check_type_test_expr(
     let builtins = ctx.builtins();
     let base_facts = check_expr(ctx, base);
     let origin = ctx.expr(ty_expr).origin;
-    let _ = lower_type_expr(ctx, ty_expr, origin);
+    let target = lower_type_expr(ctx, ty_expr, origin);
+    ctx.set_type_test_target(expr_id, target);
     if let Some(binding) = as_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
         ctx.insert_binding_type(binding, base_facts.ty);
     }
@@ -1249,6 +1255,14 @@ fn check_binary_expr(
                 left: left_ty,
                 right: right_ty,
             })
+        }
+        HirBinaryOp::Add
+            if matches!(ctx.ty(left_facts.ty).kind, HirTyKind::String)
+                || matches!(ctx.ty(right_facts.ty).kind, HirTyKind::String) =>
+        {
+            type_mismatch(ctx, origin, builtins.string_, left_facts.ty);
+            type_mismatch(ctx, origin, builtins.string_, right_facts.ty);
+            builtins.string_
         }
         HirBinaryOp::Add
         | HirBinaryOp::Sub

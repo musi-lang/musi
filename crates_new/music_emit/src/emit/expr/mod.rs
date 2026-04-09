@@ -85,6 +85,48 @@ pub(super) fn compile_expr(
         IrExprKind::Binary { op, left, right } => {
             compile_binary(emitter, op, left, right, diags);
         }
+        IrExprKind::Not { expr: inner } => {
+            compile_expr(emitter, inner, true, diags);
+            emit_zero(emitter);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::CmpEq,
+                Operand::None,
+            )));
+        }
+        IrExprKind::TyTest { base, ty_name } => {
+            compile_expr(emitter, base, true, diags);
+            let Some(ty) = emitter.layout.types.get(ty_name.as_ref()).copied() else {
+                support::push_expr_diag(
+                    diags,
+                    emitter.module_key,
+                    &expr.origin,
+                    format!("unknown type name `{ty_name}` for `:?`"),
+                );
+                emit_zero(emitter);
+                return;
+            };
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::TyChk,
+                Operand::Type(ty),
+            )));
+        }
+        IrExprKind::TyCast { base, ty_name } => {
+            compile_expr(emitter, base, true, diags);
+            let Some(ty) = emitter.layout.types.get(ty_name.as_ref()).copied() else {
+                support::push_expr_diag(
+                    diags,
+                    emitter.module_key,
+                    &expr.origin,
+                    format!("unknown type name `{ty_name}` for `:?>`"),
+                );
+                emit_zero(emitter);
+                return;
+            };
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::TyCast,
+                Operand::Type(ty),
+            )));
+        }
         IrExprKind::Case { scrutinee, arms } => compile_case(emitter, scrutinee, arms, diags),
         IrExprKind::Call { callee, args } => compile_call(emitter, callee, args, diags),
         IrExprKind::CallSeq { callee, args } => compile_call_seq(emitter, callee, args, diags),

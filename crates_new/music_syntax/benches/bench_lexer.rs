@@ -88,7 +88,7 @@ fn bench_lex_string_heavy(c: &mut Criterion) {
 }
 
 fn bench_lex_operator_heavy(c: &mut Criterion) {
-    let chunk = "let x = 0; x <- x + 1; a:?>b a:?T a:?>T a -> b a <- b a => b a ~> b a /= b a <= b a >= b a <: b a?.b a!.b a...b a.{x} a.[x] a |> b a ++ b (+) (-) (*);\n";
+    let chunk = "let x = 0; x <- x + 1; a:?>b a:?T a:?>T a -> b a <- b a => b a ~> b a /= b a <= b a >= b a <: b a...b a.{x} a.[x] a |> b a ++ b (+) (-) (*);\n";
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_operator_heavy", |b| {

@@ -5,15 +5,11 @@ use music_hir::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
     HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExprId, HirFieldDef,
     HirForeignDecl, HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirParam, HirPat,
-    HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart,
-    HirVariantDef,
+    HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
-use crate::string_lit::{
-    decode_string_lit, decode_template_head, decode_template_middle, decode_template_no_subst,
-    decode_template_tail,
-};
+use crate::string_lit::decode_string_lit;
 
 use super::util::{child_of_kind, parse_u32_lit, stmt_inner_expr};
 

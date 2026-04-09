@@ -31,6 +31,10 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
             collect_used_in_record_fields(updates, out);
         }
         IrExprKind::ClosureNew { captures, .. } => collect_used_in_exprs(captures, out),
+        IrExprKind::Not { expr } => collect_used_bindings(expr, out),
+        IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
+            collect_used_bindings(base, out);
+        }
         IrExprKind::Case { scrutinee, arms } => {
             collect_used_bindings(scrutinee, out);
             collect_used_in_case_arms(arms, out);
@@ -94,6 +98,10 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
             collect_local_in_record_fields(updates, out);
         }
         IrExprKind::ClosureNew { captures, .. } => collect_local_in_exprs(captures, out),
+        IrExprKind::Not { expr } => collect_local_decl_bindings(expr, out),
+        IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
+            collect_local_decl_bindings(base, out);
+        }
         IrExprKind::Case { scrutinee, arms } => {
             collect_local_decl_bindings(scrutinee, out);
             for arm in arms {
@@ -133,9 +141,13 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
 
 fn collect_used_in_assign_target(value: &IrExpr, target: &IrAssignTarget, out: &mut HashSet<NameBindingId>) {
     collect_used_bindings(value, out);
-    if let IrAssignTarget::Index { base, index } = target {
-        collect_used_bindings(base, out);
-        collect_used_bindings(index, out);
+    match target {
+        IrAssignTarget::Binding { .. } => {}
+        IrAssignTarget::Index { base, index } => {
+            collect_used_bindings(base, out);
+            collect_used_bindings(index, out);
+        }
+        IrAssignTarget::RecordField { base, .. } => collect_used_bindings(base, out),
     }
 }
 

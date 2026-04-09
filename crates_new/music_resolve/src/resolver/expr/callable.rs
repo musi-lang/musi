@@ -108,13 +108,7 @@ where
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
 
-        let access = if node.child_tokens().any(|t| t.kind() == TokenKind::QDot) {
-            HirAccessKind::Optional
-        } else if node.child_tokens().any(|t| t.kind() == TokenKind::BangDot) {
-            HirAccessKind::Unwrap
-        } else {
-            HirAccessKind::Direct
-        };
+        let access = HirAccessKind::Direct;
 
         let name_tok = node
             .child_tokens()
@@ -150,4 +144,3 @@ where
         self.alloc_expr(origin, HirExprKind::TypeCast { base, ty })
     }
 }
-

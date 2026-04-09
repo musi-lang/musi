@@ -162,7 +162,6 @@ dot-lbracket      = ".["
 
 eq-gt             = "=>"
 
-bang-dot          = "!."
 
 minus-gt          = "->"
 
@@ -176,7 +175,6 @@ lt-minus          = "<-"
 
 gt-eq             = ">="
 
-q-dot             = "?."
 
 pipe-gt           = "|>"
 
@@ -396,15 +394,13 @@ prefix-expr       = prefix-op prefix-expr
 
 postfix-expr      = atom *(postfix-op)
 
-postfix-op        = call-op
-                    / bracket-apply-op
-                    / index-op
-                    / record-update-op
-                    / field-access-op
-                    / optional-chain-op
-                    / force-access-op
-                    / type-test-op
-                    / type-cast-op
+	postfix-op        = call-op
+	                    / bracket-apply-op
+	                    / index-op
+	                    / record-update-op
+	                    / field-access-op
+	                    / type-test-op
+	                    / type-cast-op
 
 call-op           = lparen [arg-list] rparen
 
@@ -416,11 +412,7 @@ record-update-op  = dot-lbrace [record-fields] rbrace
 
 field-access-op   = dot field-target
 
-optional-chain-op = q-dot field-target
-
-force-access-op   = bang-dot field-target
-
-type-test-op      = colon-question expr [kw-as ident]
+	type-test-op      = colon-question expr [kw-as ident]
 
 type-cast-op      = colon-question-gt expr
 

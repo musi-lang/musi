@@ -399,6 +399,7 @@ pub struct SemaModule {
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    type_test_targets: HashMap<HirExprId, HirTyId>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -415,6 +416,7 @@ pub struct SemaModuleParts {
     pub expr_facts: Vec<ExprFacts>,
     pub pat_facts: Vec<PatFacts>,
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    pub type_test_targets: HashMap<HirExprId, HirTyId>,
     pub effect_defs: HashMap<Box<str>, SemaEffectDef>,
     pub data_defs: HashMap<Box<str>, SemaDataDef>,
     pub class_facts: HashMap<HirExprId, ClassFacts>,
@@ -468,6 +470,11 @@ impl SemaModule {
     #[must_use]
     pub fn expr_module_target(&self, id: HirExprId) -> Option<&ModuleKey> {
         self.expr_module_targets.get(&id)
+    }
+
+    #[must_use]
+    pub fn type_test_target(&self, id: HirExprId) -> Option<HirTyId> {
+        self.type_test_targets.get(&id).copied()
     }
 
     #[must_use]
@@ -535,6 +542,7 @@ impl SemaModule {
             expr_facts: parts.expr_facts.into_boxed_slice(),
             pat_facts: parts.pat_facts.into_boxed_slice(),
             expr_module_targets: parts.expr_module_targets,
+            type_test_targets: parts.type_test_targets,
             effect_defs: parts.effect_defs,
             data_defs: parts.data_defs,
             class_facts: parts.class_facts,

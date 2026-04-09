@@ -1419,13 +1419,18 @@ fn lower_assign_expr(ctx: &mut LowerCtx<'_>, left: HirExprId, right: HirExprId) 
     assign::lower_assign_expr(ctx, left, right)
 }
 
-fn lower_binary_expr(ctx: &mut LowerCtx<'_>, op: &HirBinaryOp, left: HirExprId, right: HirExprId) -> IrExprKind {
+fn lower_binary_expr(
+    ctx: &mut LowerCtx<'_>,
+    op: &HirBinaryOp,
+    left: HirExprId,
+    right: HirExprId,
+) -> IrExprKind {
     let interner = ctx.interner;
     if matches!(op, HirBinaryOp::Assign) {
         return lower_assign_expr(ctx, left, right);
     }
     IrExprKind::Binary {
-        op: lower_binary_op(op, interner),
+        op: lower_binary_op(ctx, op, left, right, interner),
         left: Box::new(lower_expr(ctx, left)),
         right: Box::new(lower_expr(ctx, right)),
     }
@@ -1445,13 +1450,58 @@ fn lower_expr_list(ctx: &mut LowerCtx<'_>, exprs: SliceRange<HirExprId>) -> Box<
         .into_boxed_slice()
 }
 
-fn lower_binary_op(op: &HirBinaryOp, interner: &Interner) -> IrBinaryOp {
+fn lower_binary_op(
+    ctx: &LowerCtx<'_>,
+    op: &HirBinaryOp,
+    left: HirExprId,
+    right: HirExprId,
+    interner: &Interner,
+) -> IrBinaryOp {
+    let sema = ctx.sema;
+    let left_ty = sema.ty(sema.expr_ty(left));
+    let right_ty = sema.ty(sema.expr_ty(right));
+    let wants_float =
+        matches!(left_ty.kind, HirTyKind::Float) || matches!(right_ty.kind, HirTyKind::Float);
+    let wants_string =
+        matches!(left_ty.kind, HirTyKind::String) || matches!(right_ty.kind, HirTyKind::String);
     match op {
-        HirBinaryOp::Add => IrBinaryOp::Add,
-        HirBinaryOp::Sub => IrBinaryOp::Sub,
-        HirBinaryOp::Mul => IrBinaryOp::Mul,
-        HirBinaryOp::Div => IrBinaryOp::Div,
-        HirBinaryOp::Rem => IrBinaryOp::Rem,
+        HirBinaryOp::Add => {
+            if wants_string {
+                IrBinaryOp::StrCat
+            } else if wants_float {
+                IrBinaryOp::FAdd
+            } else {
+                IrBinaryOp::IAdd
+            }
+        }
+        HirBinaryOp::Sub => {
+            if wants_float {
+                IrBinaryOp::FSub
+            } else {
+                IrBinaryOp::ISub
+            }
+        }
+        HirBinaryOp::Mul => {
+            if wants_float {
+                IrBinaryOp::FMul
+            } else {
+                IrBinaryOp::IMul
+            }
+        }
+        HirBinaryOp::Div => {
+            if wants_float {
+                IrBinaryOp::FDiv
+            } else {
+                IrBinaryOp::IDiv
+            }
+        }
+        HirBinaryOp::Rem => {
+            if wants_float {
+                IrBinaryOp::FRem
+            } else {
+                IrBinaryOp::IRem
+            }
+        }
         HirBinaryOp::Eq => IrBinaryOp::Eq,
         HirBinaryOp::Ne => IrBinaryOp::Ne,
         HirBinaryOp::Lt => IrBinaryOp::Lt,

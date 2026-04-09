@@ -44,32 +44,44 @@ where
 
     pub(super) fn lower_template_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let mut parts = Vec::<HirTemplatePart>::new();
+        let mut pieces = Vec::<HirExprId>::new();
         for child in node.children() {
             match child {
-                SyntaxElement::Token(tok) => {
-                    let Some(raw) = tok.text() else {
+                SyntaxElement::Token(tok)
+                    if matches!(
+                        tok.kind(),
+                        TokenKind::TemplateNoSubst
+                            | TokenKind::TemplateHead
+                            | TokenKind::TemplateMiddle
+                            | TokenKind::TemplateTail
+                    ) =>
+                {
+                    let Some(lit) = self.alloc_lit_from_token(tok) else {
                         continue;
                     };
-                    let decoded = match tok.kind() {
-                        TokenKind::TemplateNoSubst => decode_template_no_subst(raw),
-                        TokenKind::TemplateHead => decode_template_head(raw),
-                        TokenKind::TemplateMiddle => decode_template_middle(raw),
-                        TokenKind::TemplateTail => decode_template_tail(raw),
-                        _ => continue,
-                    };
-                    if let Ok(text) = decoded {
-                        parts.push(HirTemplatePart::Text { value: text.into() });
-                    }
+                    let lit_origin = self.origin_token(tok);
+                    pieces.push(self.alloc_expr(lit_origin, HirExprKind::Lit { lit }));
                 }
                 SyntaxElement::Node(expr) => {
-                    let hir = self.lower_expr(expr);
-                    parts.push(HirTemplatePart::Expr { expr: hir });
+                    pieces.push(self.lower_expr(expr));
                 }
+                _ => {}
             }
         }
-        let parts = self.store.template_parts.alloc_from_iter(parts);
-        self.alloc_expr(origin, HirExprKind::Template { parts })
+
+        let mut iter = pieces.into_iter();
+        let Some(first) = iter.next() else {
+            return self.error_expr(origin);
+        };
+        iter.fold(first, |left, right| {
+            self.alloc_expr(
+                origin,
+                HirExprKind::Binary {
+                    op: HirBinaryOp::Add,
+                    left,
+                    right,
+                },
+            )
+        })
     }
 }
-

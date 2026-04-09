@@ -57,11 +57,17 @@ pub enum IrLit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrBinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
+    IAdd,
+    ISub,
+    IMul,
+    IDiv,
+    IRem,
+    FAdd,
+    FSub,
+    FMul,
+    FDiv,
+    FRem,
+    StrCat,
     Eq,
     Ne,
     Lt,
@@ -218,6 +224,17 @@ pub enum IrExprKind {
         op: IrBinaryOp,
         left: Box<IrExpr>,
         right: Box<IrExpr>,
+    },
+    Not {
+        expr: Box<IrExpr>,
+    },
+    TyTest {
+        base: Box<IrExpr>,
+        ty_name: Box<str>,
+    },
+    TyCast {
+        base: Box<IrExpr>,
+        ty_name: Box<str>,
     },
     Case {
         scrutinee: Box<IrExpr>,
