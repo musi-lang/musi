@@ -13,14 +13,16 @@ where
         let export_mod_node = node
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ExportMod);
-        let (export_mod, export_foreign_abi) = export_mod_node
-            .map_or((None, None), |node| self.parse_export_mod(node));
+        let (export_mod, export_foreign_abi) =
+            export_mod_node.map_or((None, None), |node| self.parse_export_mod(node));
 
         let mut mods = HirMods::EMPTY.with_attrs(attrs);
         if let Some(export_mod) = export_mod {
             mods = mods.with_export(export_mod);
         }
-        if export_mod_node.is_some() && (export_foreign_abi.is_some() || is_foreign_group_target(&node)) {
+        if export_mod_node.is_some()
+            && (export_foreign_abi.is_some() || is_foreign_group_target(&node))
+        {
             mods = mods.with_foreign(HirForeignMod {
                 abi: export_foreign_abi,
             });
@@ -34,7 +36,10 @@ where
         match target {
             Some(target) if target.kind() == SyntaxNodeKind::MemberList => {
                 let mut exprs = Vec::<HirExprId>::new();
-                for member in target.child_nodes().filter(|n| n.kind() == SyntaxNodeKind::Member) {
+                for member in target
+                    .child_nodes()
+                    .filter(|n| n.kind() == SyntaxNodeKind::Member)
+                {
                     exprs.push(self.lower_foreign_member_let(member, mods.clone()));
                 }
                 let exprs = self.store.alloc_expr_list(exprs);
@@ -81,10 +86,7 @@ where
     }
 
     pub(super) fn lower_attr_arg(&mut self, node: SyntaxNode<'tree, 'src>) -> HirAttrArg {
-        let name = if node
-            .child_tokens()
-            .any(|t| t.kind() == TokenKind::ColonEq)
-        {
+        let name = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
             node.child_tokens()
                 .find(|t| t.kind() == TokenKind::Ident)
                 .and_then(|t| self.intern_ident_token(t))
@@ -104,7 +106,10 @@ where
     ) -> (Option<HirExportMod>, Option<Symbol>) {
         debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
         let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
-        let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwForeign) {
+        let foreign_abi = if node
+            .child_tokens()
+            .any(|t| t.kind() == TokenKind::KwForeign)
+        {
             node.child_tokens()
                 .find(|t| t.kind() == TokenKind::String)
                 .and_then(SyntaxToken::text)

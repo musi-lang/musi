@@ -89,17 +89,17 @@ pub enum TokenKind {
     Gt,
 
     // Compound tokens (grammar/Musi.abnf)
-    ColonEq,     // :=
-    MinusGt,     // ->
-    TildeGt,     // ~>
+    ColonEq,         // :=
+    MinusGt,         // ->
+    TildeGt,         // ~>
     EqGt,            // =>
     SlashEq,         // /=
     LtEq,            // <=
     GtEq,            // >=
-    LtColon,     // <:
-    DotDotDot,   // ...
-    DotLBrace,   // .{
-    DotLBracket, // .[
+    LtColon,         // <:
+    DotDotDot,       // ...
+    DotLBrace,       // .{
+    DotLBracket,     // .[
     ColonQuestion,   // :?
     ColonQuestionGt, // :?>
     PipeGt,          // |>

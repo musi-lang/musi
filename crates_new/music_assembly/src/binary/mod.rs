@@ -1,7 +1,7 @@
 use music_arena::Idx;
 use music_bc::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
-    DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
     MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
@@ -281,7 +281,10 @@ fn encode_exports(out: &mut Vec<u8>, artifact: &Artifact) {
 
 fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
     push_section_tag(out, SectionTag::Data);
-    push_u32(out, u32::try_from(artifact.data.len()).expect("section overflow"));
+    push_u32(
+        out,
+        u32::try_from(artifact.data.len()).expect("section overflow"),
+    );
     for (_, entry) in artifact.data.iter() {
         push_u32(out, entry.name.raw());
         push_u32(out, entry.variant_count);
@@ -315,7 +318,10 @@ fn encode_meta(out: &mut Vec<u8>, artifact: &Artifact) {
         return;
     }
     push_section_tag(out, SectionTag::Meta);
-    push_u32(out, u32::try_from(artifact.meta.len()).expect("section overflow"));
+    push_u32(
+        out,
+        u32::try_from(artifact.meta.len()).expect("section overflow"),
+    );
     for (_, entry) in artifact.meta.iter() {
         push_u32(out, entry.target.raw());
         push_u32(out, entry.key.raw());

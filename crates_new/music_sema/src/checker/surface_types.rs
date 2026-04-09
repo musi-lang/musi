@@ -97,11 +97,7 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
     }
 }
 
-fn canonical_surface_named(
-    surface: &ModuleSurface,
-    name: &str,
-    args: &[SurfaceTyId],
-) -> String {
+fn canonical_surface_named(surface: &ModuleSurface, name: &str, args: &[SurfaceTyId]) -> String {
     if args.is_empty() {
         return name.to_owned();
     }
@@ -426,7 +422,9 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             .iter()
             .map(|dim| match dim {
                 SurfaceDim::Unknown => HirDim::Unknown,
-                SurfaceDim::Name(name) => HirDim::Name(Ident::new(self.ctx.intern(name), Span::DUMMY)),
+                SurfaceDim::Name(name) => {
+                    HirDim::Name(Ident::new(self.ctx.intern(name), Span::DUMMY))
+                }
                 SurfaceDim::Int(value) => HirDim::Int(*value),
             })
             .collect::<Vec<_>>();

@@ -25,7 +25,12 @@ fn meta_records(artifact: &Artifact) -> Vec<(String, String, Vec<String>)> {
         .collect::<Vec<_>>()
 }
 
-fn meta_has_exact(meta: &[(String, String, Vec<String>)], target: &str, key: &str, values: &[&str]) -> bool {
+fn meta_has_exact(
+    meta: &[(String, String, Vec<String>)],
+    target: &str,
+    key: &str,
+    values: &[&str],
+) -> bool {
     meta.iter().any(|(t, k, v)| {
         t == target
             && k == key
@@ -423,9 +428,11 @@ fn compiles_exported_foreign_declarations_into_artifact() {
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
 
     assert!(output.artifact.validate().is_ok());
-    assert!(output
-        .text
-        .contains(".foreign $main::puts params 1 abi \"c\" symbol \"puts\" export"));
+    assert!(
+        output
+            .text
+            .contains(".foreign $main::puts params 1 abi \"c\" symbol \"puts\" export")
+    );
 }
 
 #[test]
@@ -445,9 +452,13 @@ fn lowers_link_attrs_into_foreign_descriptors() {
 
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
     assert!(output.artifact.validate().is_ok());
-    assert!(output
-        .text
-        .contains(".foreign $main::sin params 1 abi \"c\" symbol \"sin\" link \"m\""), "{}", output.text);
+    assert!(
+        output
+            .text
+            .contains(".foreign $main::sin params 1 abi \"c\" symbol \"sin\" link \"m\""),
+        "{}",
+        output.text
+    );
 }
 
 #[test]
@@ -571,21 +582,35 @@ fn emits_meta_records_for_exported_signatures() {
 
     let meta = meta_records(&output.artifact);
 
-    assert!(meta_has_exact(&meta, "main::f", "value.type_params", &["T"]), "{meta:?}");
-    assert!(meta_has_exact(&meta, "main::f", "value.constraints", &["T : Eq"]), "{meta:?}");
+    assert!(
+        meta_has_exact(&meta, "main::f", "value.type_params", &["T"]),
+        "{meta:?}"
+    );
+    assert!(
+        meta_has_exact(&meta, "main::f", "value.constraints", &["T : Eq"]),
+        "{meta:?}"
+    );
     assert!(
         meta_has_exact(&meta, "main::f", "value.effects", &["with { Console }"]),
         "{meta:?}"
     );
     assert!(
         meta.iter().any(|(target, key, values)| {
-            target == "main::sumId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("Int + String"))
+            target == "main::sumId"
+                && key == "value.ty"
+                && values
+                    .first()
+                    .is_some_and(|value| value.contains("Int + String"))
         }),
         "{meta:?}"
     );
     assert!(
         meta.iter().any(|(target, key, values)| {
-            target == "main::tupId" && key == "value.ty" && values.first().is_some_and(|value| value.contains("(Int, String)"))
+            target == "main::tupId"
+                && key == "value.ty"
+                && values
+                    .first()
+                    .is_some_and(|value| value.contains("(Int, String)"))
         }),
         "{meta:?}"
     );
@@ -611,7 +636,11 @@ fn emits_meta_records_for_exported_signatures() {
     );
     assert!(
         meta.iter().any(|(target, key, values)| {
-            target == "main::noneInt" && key == "value.ty" && values.first().is_some_and(|value| value.contains("Option[Int]"))
+            target == "main::noneInt"
+                && key == "value.ty"
+                && values
+                    .first()
+                    .is_some_and(|value| value.contains("Option[Int]"))
         }),
         "{meta:?}"
     );

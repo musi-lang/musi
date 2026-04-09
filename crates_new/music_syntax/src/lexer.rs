@@ -552,7 +552,8 @@ impl<'src> Lexer<'src> {
                 self.cursor.bump();
                 let kind = LexErrorKind::RuneLiteralTooLong;
                 Self::push_error(errors, kind, extra_start, self.cursor.pos());
-                self.cursor.consume_while(|c| c != '\'' && c != '\n' && c != '\r');
+                self.cursor
+                    .consume_while(|c| c != '\'' && c != '\n' && c != '\r');
                 if self.cursor.peek_char() == Some('\'') {
                     self.cursor.bump_bytes(1);
                 } else {

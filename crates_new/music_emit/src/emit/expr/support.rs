@@ -1,6 +1,9 @@
 use super::super::*;
 
-pub(super) fn ensure_local_slot(emitter: &mut MethodEmitter<'_, '_>, binding: NameBindingId) -> u16 {
+pub(super) fn ensure_local_slot(
+    emitter: &mut MethodEmitter<'_, '_>,
+    binding: NameBindingId,
+) -> u16 {
     if let Some(slot) = emitter.locals.get(&binding).copied() {
         return slot;
     }

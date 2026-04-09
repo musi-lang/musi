@@ -106,11 +106,9 @@ impl Opcode {
             Self::SeqNew | Self::SeqGet | Self::SeqSet | Self::SeqCat => OpcodeFamily::Sequence,
             Self::DataNew | Self::DataTag | Self::DataGet | Self::DataSet => OpcodeFamily::Data,
             Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
-            Self::HdlPush
-            | Self::HdlPop
-            | Self::EffInvk
-            | Self::EffInvkSeq
-            | Self::EffResume => OpcodeFamily::Eff,
+            Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffInvkSeq | Self::EffResume => {
+                OpcodeFamily::Eff
+            }
             Self::FfiCall | Self::FfiCallSeq => OpcodeFamily::Ffi,
         }
     }

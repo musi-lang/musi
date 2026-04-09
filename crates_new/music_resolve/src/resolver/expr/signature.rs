@@ -51,11 +51,7 @@ where
         let ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
 
-        HirParam {
-            name,
-            ty,
-            default,
-        }
+        HirParam { name, ty, default }
     }
 
     pub(in crate::resolver) fn lower_constraint_list(

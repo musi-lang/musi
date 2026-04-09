@@ -12,8 +12,8 @@ use music_bc::{
     Opcode, Operand, StringId, TypeId,
 };
 use music_ir::{
-    IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef, IrExpr, IrExprKind,
-    DefinitionKey, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrEffectDef,
+    IrExpr, IrExprKind, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
     IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 use music_module::ModuleKey;
@@ -21,8 +21,8 @@ use music_names::NameBindingId;
 
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
 
-mod register;
 mod expr;
+mod register;
 
 type MethodTable = HashMap<NameBindingId, MethodId>;
 type MethodNameTable = HashMap<Box<str>, MethodId>;
@@ -38,6 +38,20 @@ type UniqueMethodTable = HashMap<Box<str>, MethodId>;
 type UniqueForeignTable = HashMap<Box<str>, ForeignId>;
 type UniqueGlobalTable = HashMap<Box<str>, GlobalId>;
 type EffectTable = HashMap<DefinitionKey, EffectId>;
+
+#[derive(Debug, Default)]
+struct UniqueTables {
+    methods: UniqueMethodTable,
+    foreigns: UniqueForeignTable,
+    globals: UniqueGlobalTable,
+}
+
+#[derive(Debug, Default)]
+struct QualifiedTables {
+    methods: QualifiedMethodTable,
+    foreigns: QualifiedForeignTable,
+    globals: QualifiedGlobalTable,
+}
 
 #[derive(Debug, Default)]
 struct ModuleLayout {
@@ -57,12 +71,8 @@ struct ProgramState {
     diags: EmitDiagList,
     types_by_name: HashMap<Box<str>, TypeId>,
     effects_by_key: HashMap<DefinitionKey, EffectId>,
-    unique_methods: UniqueMethodTable,
-    unique_foreigns: UniqueForeignTable,
-    unique_globals: UniqueGlobalTable,
-    qualified_methods: QualifiedMethodTable,
-    qualified_foreigns: QualifiedForeignTable,
-    qualified_globals: QualifiedGlobalTable,
+    unique: UniqueTables,
+    qualified: QualifiedTables,
 }
 
 #[derive(Debug)]
@@ -70,12 +80,7 @@ struct MethodEmitter<'artifact, 'module> {
     artifact: &'artifact mut Artifact,
     module_key: &'module ModuleKey,
     layout: &'module ModuleLayout,
-    unique_methods: &'module UniqueMethodTable,
-    unique_foreigns: &'module UniqueForeignTable,
-    unique_globals: &'module UniqueGlobalTable,
-    qualified_methods: &'module QualifiedMethodTable,
-    qualified_foreigns: &'module QualifiedForeignTable,
-    qualified_globals: &'module QualifiedGlobalTable,
+    tables: EmitterTables<'module>,
     locals: LocalSlots,
     temps: HashMap<IrTempId, u16>,
     next_local: u16,
@@ -91,6 +96,12 @@ struct RecordUpdateInput<'a> {
     base_fields: &'a [IrRecordLayoutField],
     result_fields: &'a [IrRecordLayoutField],
     updates: &'a [IrRecordField],
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EmitterTables<'a> {
+    unique: &'a UniqueTables,
+    qualified: &'a QualifiedTables,
 }
 
 /// Lowers one IR module into a standalone SEAM artifact.
@@ -169,7 +180,8 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
                 && let Some(method) = layout.callables.get(&binding).copied()
             {
                 let _ = state
-                    .qualified_methods
+                    .qualified
+                    .methods
                     .insert((module.module_key.clone(), callable.name.clone()), method);
                 method_candidates
                     .entry(callable.name.clone())
@@ -182,7 +194,8 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
                 && let Some(id) = layout.foreigns.get(&binding).copied()
             {
                 let _ = state
-                    .qualified_foreigns
+                    .qualified
+                    .foreigns
                     .insert((module.module_key.clone(), foreign.name.clone()), id);
                 foreign_candidates
                     .entry(foreign.name.clone())
@@ -195,7 +208,8 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
                 && let Some(id) = layout.globals.get(&binding).copied()
             {
                 let _ = state
-                    .qualified_globals
+                    .qualified
+                    .globals
                     .insert((module.module_key.clone(), global.name.clone()), id);
                 global_candidates
                     .entry(global.name.clone())
@@ -204,15 +218,15 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
             }
         }
     }
-    state.unique_methods = method_candidates
+    state.unique.methods = method_candidates
         .into_iter()
         .filter_map(unique_candidate)
         .collect();
-    state.unique_foreigns = foreign_candidates
+    state.unique.foreigns = foreign_candidates
         .into_iter()
         .filter_map(unique_candidate)
         .collect();
-    state.unique_globals = global_candidates
+    state.unique.globals = global_candidates
         .into_iter()
         .filter_map(unique_candidate)
         .collect();
@@ -231,45 +245,42 @@ fn compile_module(state: &mut ProgramState, module: &IrModule, layout: &ModuleLa
 }
 
 fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &ModuleLayout) {
+    let ProgramState {
+        artifact,
+        diags,
+        unique,
+        qualified,
+        ..
+    } = state;
+    let tables = EmitterTables { unique, qualified };
     for callable in &module.callables {
-        let Some(method_id) = layout.callables_by_name.get(callable.name.as_ref()).copied() else {
+        let Some(method_id) = layout
+            .callables_by_name
+            .get(callable.name.as_ref())
+            .copied()
+        else {
             continue;
         };
         let locals = build_param_locals(&callable.params);
-        let next_local = u16::try_from(locals.len()).unwrap_or(u16::MAX);
-        let labels = initial_labels(&mut state.artifact);
-        let mut emitter = MethodEmitter {
-            artifact: &mut state.artifact,
-            module_key: &module.module_key,
-            layout,
-            unique_methods: &state.unique_methods,
-            unique_foreigns: &state.unique_foreigns,
-            unique_globals: &state.unique_globals,
-            qualified_methods: &state.qualified_methods,
-            qualified_foreigns: &state.qualified_foreigns,
-            qualified_globals: &state.qualified_globals,
-            locals,
-            temps: HashMap::new(),
-            next_local,
-            labels,
-            code: method_prologue(),
-        };
-        expr::compile_expr(&mut emitter, &callable.body, true, &mut state.diags);
+        let mut emitter = method_emitter(artifact, &module.module_key, layout, tables, locals);
+        expr::compile_expr(&mut emitter, &callable.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
             Operand::None,
         )));
-        finalize_method(
-            emitter.artifact,
-            method_id,
-            emitter.next_local.saturating_add(1),
-            emitter.labels,
-            emitter.code,
-        );
+        finish_emitter_method(emitter, method_id);
     }
 }
 
 fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleLayout) {
+    let ProgramState {
+        artifact,
+        diags,
+        unique,
+        qualified,
+        ..
+    } = state;
+    let tables = EmitterTables { unique, qualified };
     for global in &module.globals {
         let Some(binding) = global.binding else {
             continue;
@@ -277,27 +288,12 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
         let Some(global_id) = layout.globals.get(&binding).copied() else {
             continue;
         };
-        let Some(init_method) = state.artifact.globals.get(global_id).initializer else {
+        let Some(init_method) = artifact.globals.get(global_id).initializer else {
             continue;
         };
-        let labels = initial_labels(&mut state.artifact);
-        let mut emitter = MethodEmitter {
-            artifact: &mut state.artifact,
-            module_key: &module.module_key,
-            layout,
-            unique_methods: &state.unique_methods,
-            unique_foreigns: &state.unique_foreigns,
-            unique_globals: &state.unique_globals,
-            qualified_methods: &state.qualified_methods,
-            qualified_foreigns: &state.qualified_foreigns,
-            qualified_globals: &state.qualified_globals,
-            locals: HashMap::new(),
-            temps: HashMap::new(),
-            next_local: 0,
-            labels,
-            code: method_prologue(),
-        };
-        expr::compile_expr(&mut emitter, &global.body, true, &mut state.diags);
+        let mut emitter =
+            method_emitter(artifact, &module.module_key, layout, tables, HashMap::new());
+        expr::compile_expr(&mut emitter, &global.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::StGlob,
             Operand::Global(global_id),
@@ -307,13 +303,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             Opcode::Ret,
             Operand::None,
         )));
-        finalize_method(
-            emitter.artifact,
-            init_method,
-            emitter.next_local.saturating_add(1),
-            emitter.labels,
-            emitter.code,
-        );
+        finish_emitter_method(emitter, init_method);
     }
 }
 
@@ -325,12 +315,11 @@ fn build_module_entry(
     if layout.init_methods.is_empty() {
         return None;
     }
-    let entry_name = format!("{}::__module_init", module_key.as_str());
-    let method_id = alloc_method(artifact, &entry_name, false, 0);
-    let labels = initial_labels(artifact);
-    let code = entry_code(&layout.init_methods);
-    finalize_method(artifact, method_id, 1, labels, code);
-    Some(method_id)
+    Some(build_entry_method(
+        artifact,
+        &format!("{}::__module_init", module_key.as_str()),
+        &layout.init_methods,
+    ))
 }
 
 fn build_program_entry(
@@ -338,16 +327,14 @@ fn build_program_entry(
     entry_module: &ModuleKey,
     layouts: &[ModuleLayout],
 ) -> MethodId {
-    let entry_name = format!("{}::__entry", entry_module.as_str());
-    let method_id = alloc_method(artifact, &entry_name, false, 0);
-    let init_methods = layouts
-        .iter()
-        .flat_map(|layout| layout.init_methods.iter().copied())
-        .collect::<Vec<_>>();
-    let labels = initial_labels(artifact);
-    let code = entry_code(&init_methods);
-    finalize_method(artifact, method_id, 1, labels, code);
-    method_id
+    build_entry_method(
+        artifact,
+        &format!("{}::__entry", entry_module.as_str()),
+        &layouts
+            .iter()
+            .flat_map(|layout| layout.init_methods.iter().copied())
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn entry_code(init_methods: &[MethodId]) -> CodeBuffer {
@@ -375,20 +362,60 @@ fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBindi
         .iter()
         .map(|export| EmittedBinding {
             name: export.name.clone(),
-            method: module
-                .callables
-                .iter()
-                .find(|callable| callable.name.as_ref() == export.name.as_ref())
-                .and_then(|callable| callable.binding)
-                .and_then(|binding| layout.callables.get(&binding).copied()),
-            global: module
-                .globals
-                .iter()
-                .find(|global| global.name.as_ref() == export.name.as_ref())
-                .and_then(|global| global.binding)
-                .and_then(|binding| layout.globals.get(&binding).copied()),
+            method: binding_export(module, export.name.as_ref(), |binding| {
+                layout.callables.get(&binding).copied()
+            }),
+            global: binding_export(module, export.name.as_ref(), |binding| {
+                layout.globals.get(&binding).copied()
+            }),
         })
         .collect()
+}
+
+fn binding_export<T, F>(module: &IrModule, export_name: &str, mut lower: F) -> Option<T>
+where
+    F: FnMut(NameBindingId) -> Option<T>,
+{
+    register::export_binding(module, export_name).and_then(&mut lower)
+}
+
+fn method_emitter<'artifact, 'module>(
+    artifact: &'artifact mut Artifact,
+    module_key: &'module ModuleKey,
+    layout: &'module ModuleLayout,
+    tables: EmitterTables<'module>,
+    locals: LocalSlots,
+) -> MethodEmitter<'artifact, 'module> {
+    let next_local = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+    let labels = initial_labels(artifact);
+    MethodEmitter {
+        artifact,
+        module_key,
+        layout,
+        tables,
+        locals,
+        temps: HashMap::new(),
+        next_local,
+        labels,
+        code: method_prologue(),
+    }
+}
+
+fn finish_emitter_method(emitter: MethodEmitter<'_, '_>, method_id: MethodId) {
+    finalize_method(
+        emitter.artifact,
+        method_id,
+        emitter.next_local.saturating_add(1),
+        emitter.labels,
+        emitter.code,
+    );
+}
+
+fn build_entry_method(artifact: &mut Artifact, name: &str, init_methods: &[MethodId]) -> MethodId {
+    let method_id = alloc_method(artifact, name, false, 0);
+    let labels = initial_labels(artifact);
+    finalize_method(artifact, method_id, 1, labels, entry_code(init_methods));
+    method_id
 }
 
 fn build_param_locals(params: &[IrParam]) -> LocalSlots {

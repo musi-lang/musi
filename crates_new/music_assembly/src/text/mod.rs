@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use music_bc::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor,
-    DataDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
     MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{
@@ -308,7 +308,10 @@ fn format_operand(
         Operand::Method(id) => {
             push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
         }
-        Operand::WideMethodCaptures { method: id, captures } => {
+        Operand::WideMethodCaptures {
+            method: id,
+            captures,
+        } => {
             push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
             out.push(' ');
             out.push_str(&captures.to_string());
@@ -605,7 +608,9 @@ impl TextBuilder {
 
     fn parse_meta(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
-            return Err(AssemblyError::Text("expected `.meta $Target $Key ...`".into()));
+            return Err(AssemblyError::Text(
+                "expected `.meta $Target $Key ...`".into(),
+            ));
         }
         let target = parse_symbol(must_get(parts.get(1), "meta target")?)?;
         let key = parse_symbol(must_get(parts.get(2), "meta key")?)?;
@@ -685,7 +690,8 @@ impl TextBuilder {
     fn parse_export(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
             return Err(AssemblyError::Text(
-                "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`".into(),
+                "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
+                    .into(),
             ));
         }
         let name = parse_symbol(must_get(parts.get(1), "export name")?)?;
@@ -695,44 +701,43 @@ impl TextBuilder {
             return Err(AssemblyError::Text("duplicate export".into()));
         }
         let name_id = self.intern_string(&name);
-        let target = match kind {
-            "method" => ExportTarget::Method(self.ensure_method_symbol(&name)),
-            "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
-            "foreign" => {
-                let foreign = *self
-                    .foreigns
-                    .get(&name)
-                    .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
-                ExportTarget::Foreign(foreign)
-            }
-            "type" => {
-                let ty = *self
-                    .types
-                    .get(&name)
-                    .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
-                ExportTarget::Type(ty)
-            }
-            "effect" => {
-                let effect = *self
-                    .effects
-                    .get(&name)
-                    .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${name}")))?;
-                ExportTarget::Effect(effect)
-            }
-            "class" => {
-                let class = *self
-                    .classes
-                    .get(&name)
-                    .ok_or_else(|| AssemblyError::Text(format!("unknown class ${name}")))?;
-                ExportTarget::Class(class)
-            }
-            _ => {
-                return Err(AssemblyError::Text(
+        let target =
+            match kind {
+                "method" => ExportTarget::Method(self.ensure_method_symbol(&name)),
+                "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
+                "foreign" => {
+                    let foreign = *self
+                        .foreigns
+                        .get(&name)
+                        .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
+                    ExportTarget::Foreign(foreign)
+                }
+                "type" => {
+                    let ty = *self
+                        .types
+                        .get(&name)
+                        .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
+                    ExportTarget::Type(ty)
+                }
+                "effect" => {
+                    let effect = *self
+                        .effects
+                        .get(&name)
+                        .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${name}")))?;
+                    ExportTarget::Effect(effect)
+                }
+                "class" => {
+                    let class = *self
+                        .classes
+                        .get(&name)
+                        .ok_or_else(|| AssemblyError::Text(format!("unknown class ${name}")))?;
+                    ExportTarget::Class(class)
+                }
+                _ => return Err(AssemblyError::Text(
                     "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
                         .into(),
-                ))
-            }
-        };
+                )),
+            };
         let id = self.artifact.exports.alloc(ExportDescriptor {
             name: name_id,
             opaque,
@@ -918,10 +923,7 @@ impl TextBuilder {
         Ok(Operand::Method(self.ensure_method_symbol(&name)))
     }
 
-    fn parse_wide_method_captures_operand(
-        &mut self,
-        parts: &[String],
-    ) -> AssemblyResult<Operand> {
+    fn parse_wide_method_captures_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
         let name = parse_symbol(must_get(parts.get(1), "method")?)?;
         let method = self.ensure_method_symbol(&name);
         let captures = must_get(parts.get(2), "capture count")?

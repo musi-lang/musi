@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::errors::ProjectError;
 use crate::ProjectResult;
+use crate::errors::ProjectError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistryPackage {

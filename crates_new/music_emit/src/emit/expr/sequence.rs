@@ -162,4 +162,3 @@ pub(super) fn compile_index(
         Operand::None,
     )));
 }
-

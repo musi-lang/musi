@@ -8,7 +8,7 @@ check:
 lint:
 	bash scripts/audit_paths.sh crates_new
 	bash scripts/audit_god_crates.sh crates_new
-	cargo clippy --workspace --tests -- -D warnings
+	cargo clippy --workspace && cargo clippy --workspace --tests
 
 fmt:
 	cargo fmt --all

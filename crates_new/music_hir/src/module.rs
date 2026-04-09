@@ -4,8 +4,8 @@ use music_names::Ident;
 
 use crate::expr::{
     HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirEffectItem,
-    HirExpr, HirFieldDef, HirHandleClause, HirLit, HirMemberDef, HirParam,
-    HirRecordItem, HirTemplatePart, HirVariantDef,
+    HirExpr, HirFieldDef, HirHandleClause, HirLit, HirMemberDef, HirParam, HirRecordItem,
+    HirTemplatePart, HirVariantDef,
 };
 use crate::pat::{HirPat, HirRecordPatField};
 use crate::ty::{HirDim, HirTy, HirTyField};

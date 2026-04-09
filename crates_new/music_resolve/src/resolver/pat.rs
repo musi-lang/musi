@@ -222,10 +222,7 @@ where
                 None
             };
 
-            fields.push(HirRecordPatField {
-                name,
-                value,
-            });
+            fields.push(HirRecordPatField { name, value });
         }
         self.store.record_pat_fields.alloc_from_iter(fields)
     }

@@ -67,11 +67,7 @@ where
         self.pop_scope();
 
         let params = self.store.idents.alloc_from_iter(params);
-        HirHandleClause {
-            op,
-            params,
-            body,
-        }
+        HirHandleClause { op, params, body }
     }
 
     pub(super) fn lower_resume_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -141,4 +137,3 @@ where
         )
     }
 }
-

@@ -125,10 +125,7 @@ fn render_array_ty(ctx: &PassBase<'_, '_, '_>, dims: SliceRange<HirDim>, item: H
     format!("Array[{}]", parts.join(", "))
 }
 
-fn render_record_ty(
-    ctx: &PassBase<'_, '_, '_>,
-    fields: SliceRange<HirTyField>,
-) -> String {
+fn render_record_ty(ctx: &PassBase<'_, '_, '_>, fields: SliceRange<HirTyField>) -> String {
     let mut parts = Vec::new();
     for field in ctx.ty_fields(fields) {
         parts.push(format!(

@@ -6,8 +6,8 @@ use music_hir::{
     HirTyKind,
 };
 
-use super::{CheckPass, PassBase};
 use super::normalize::lower_type_expr;
+use super::{CheckPass, PassBase};
 
 pub(super) fn extract_data_layout_hints(
     ctx: &mut PassBase<'_, '_, '_>,
@@ -104,7 +104,11 @@ fn validate_musi_lang_attr(
     }
 }
 
-fn validate_musi_intrinsic_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+fn validate_musi_intrinsic_attr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    attr: &HirAttr,
+    origin: HirOrigin,
+) {
     let opcode = parse_named_string_arg(ctx, attr, "opcode");
     if opcode.is_none() {
         ctx.diag(origin.span, "attr invalid value", "");
@@ -173,7 +177,9 @@ pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ab
         match path.as_slice() {
             ["link"] => validate_link_attr(ctx, &attr, ctx.expr(expr).origin),
             ["when"] => validate_when_attr(ctx, &attr, ctx.expr(expr).origin),
-            ["musi", "intrinsic"] => validate_musi_intrinsic_attr(ctx, &attr, ctx.expr(expr).origin),
+            ["musi", "intrinsic"] => {
+                validate_musi_intrinsic_attr(ctx, &attr, ctx.expr(expr).origin);
+            }
             _ => {}
         }
     }
@@ -196,7 +202,11 @@ fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTy
     }
 }
 
-pub(super) fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+pub(super) fn validate_link_attr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    attr: &HirAttr,
+    origin: HirOrigin,
+) {
     let known = ctx.known();
     for arg in ctx.attr_args(attr.args.clone()) {
         if let Some(name) = arg.name.map(|ident| ident.name) {
@@ -210,7 +220,11 @@ pub(super) fn validate_link_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr
     }
 }
 
-pub(super) fn validate_when_attr(ctx: &mut CheckPass<'_, '_, '_>, attr: &HirAttr, origin: HirOrigin) {
+pub(super) fn validate_when_attr(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    attr: &HirAttr,
+    origin: HirOrigin,
+) {
     let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
         .into_iter()
         .map(|name| ctx.intern(name))

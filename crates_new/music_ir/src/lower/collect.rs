@@ -17,20 +17,33 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
             collect_used_bindings(value, out);
         }
         IrExprKind::Assign { target, value } => collect_used_in_assign_target(value, target, out),
-        IrExprKind::Index { base, index } | IrExprKind::Binary { left: base, right: index, .. } => {
+        IrExprKind::Index { base, index }
+        | IrExprKind::Binary {
+            left: base,
+            right: index,
+            ..
+        } => {
             collect_used_bindings(base, out);
             collect_used_bindings(index, out);
         }
         IrExprKind::RecordGet { base, .. } => collect_used_bindings(base, out),
-        IrExprKind::Sequence { exprs } => collect_used_in_exprs(exprs, out),
-        IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => collect_used_in_exprs(items, out),
-        IrExprKind::ArrayCat { parts, .. } => collect_used_in_seq_parts(parts, out),
-        IrExprKind::Record { fields, .. } => collect_used_in_record_fields(fields, out),
+        IrExprKind::Sequence { exprs } => collect_expr_slice(exprs, out, collect_used_bindings),
+        IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => {
+            collect_expr_slice(items, out, collect_used_bindings);
+        }
+        IrExprKind::ArrayCat { parts, .. } => {
+            collect_seq_part_exprs(parts, out, collect_used_bindings);
+        }
+        IrExprKind::Record { fields, .. } => {
+            collect_record_field_exprs(fields, out, collect_used_bindings);
+        }
         IrExprKind::RecordUpdate { base, updates, .. } => {
             collect_used_bindings(base, out);
-            collect_used_in_record_fields(updates, out);
+            collect_record_field_exprs(updates, out, collect_used_bindings);
         }
-        IrExprKind::ClosureNew { captures, .. } => collect_used_in_exprs(captures, out),
+        IrExprKind::ClosureNew { captures, .. } => {
+            collect_expr_slice(captures, out, collect_used_bindings);
+        }
         IrExprKind::Not { expr } => collect_used_bindings(expr, out),
         IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
             collect_used_bindings(base, out);
@@ -41,14 +54,18 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
         }
         IrExprKind::Call { callee, args } => {
             collect_used_bindings(callee, out);
-            collect_used_in_call_args(args, out);
+            collect_call_arg_exprs(args, out, collect_used_bindings);
         }
         IrExprKind::CallSeq { callee, args } => {
             collect_used_bindings(callee, out);
-            collect_used_in_seq_parts(args, out);
+            collect_seq_part_exprs(args, out, collect_used_bindings);
         }
-        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => collect_used_in_exprs(args, out),
-        IrExprKind::PerformSeq { args, .. } => collect_used_in_seq_parts(args, out),
+        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
+            collect_expr_slice(args, out, collect_used_bindings);
+        }
+        IrExprKind::PerformSeq { args, .. } => {
+            collect_seq_part_exprs(args, out, collect_used_bindings);
+        }
         IrExprKind::Handle {
             value, ops, body, ..
         } => {
@@ -81,23 +98,40 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. } => {}
-        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } | IrExprKind::Assign { value, .. } => {
+        IrExprKind::Let { value, .. }
+        | IrExprKind::TempLet { value, .. }
+        | IrExprKind::Assign { value, .. } => {
             collect_local_decl_bindings(value, out);
         }
-        IrExprKind::Index { base, index } | IrExprKind::Binary { left: base, right: index, .. } => {
+        IrExprKind::Index { base, index }
+        | IrExprKind::Binary {
+            left: base,
+            right: index,
+            ..
+        } => {
             collect_local_decl_bindings(base, out);
             collect_local_decl_bindings(index, out);
         }
         IrExprKind::RecordGet { base, .. } => collect_local_decl_bindings(base, out),
-        IrExprKind::Sequence { exprs } => collect_local_in_exprs(exprs, out),
-        IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => collect_local_in_exprs(items, out),
-        IrExprKind::ArrayCat { parts, .. } => collect_local_in_seq_parts(parts, out),
-        IrExprKind::Record { fields, .. } => collect_local_in_record_fields(fields, out),
+        IrExprKind::Sequence { exprs } => {
+            collect_expr_slice(exprs, out, collect_local_decl_bindings);
+        }
+        IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => {
+            collect_expr_slice(items, out, collect_local_decl_bindings);
+        }
+        IrExprKind::ArrayCat { parts, .. } => {
+            collect_seq_part_exprs(parts, out, collect_local_decl_bindings);
+        }
+        IrExprKind::Record { fields, .. } => {
+            collect_record_field_exprs(fields, out, collect_local_decl_bindings);
+        }
         IrExprKind::RecordUpdate { base, updates, .. } => {
             collect_local_decl_bindings(base, out);
-            collect_local_in_record_fields(updates, out);
+            collect_record_field_exprs(updates, out, collect_local_decl_bindings);
         }
-        IrExprKind::ClosureNew { captures, .. } => collect_local_in_exprs(captures, out),
+        IrExprKind::ClosureNew { captures, .. } => {
+            collect_expr_slice(captures, out, collect_local_decl_bindings);
+        }
         IrExprKind::Not { expr } => collect_local_decl_bindings(expr, out),
         IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
             collect_local_decl_bindings(base, out);
@@ -114,14 +148,18 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
         }
         IrExprKind::Call { callee, args } => {
             collect_local_decl_bindings(callee, out);
-            collect_local_in_call_args(args, out);
+            collect_call_arg_exprs(args, out, collect_local_decl_bindings);
         }
         IrExprKind::CallSeq { callee, args } => {
             collect_local_decl_bindings(callee, out);
-            collect_local_in_seq_parts(args, out);
+            collect_seq_part_exprs(args, out, collect_local_decl_bindings);
         }
-        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => collect_local_in_exprs(args, out),
-        IrExprKind::PerformSeq { args, .. } => collect_local_in_seq_parts(args, out),
+        IrExprKind::VariantNew { args, .. } | IrExprKind::Perform { args, .. } => {
+            collect_expr_slice(args, out, collect_local_decl_bindings);
+        }
+        IrExprKind::PerformSeq { args, .. } => {
+            collect_seq_part_exprs(args, out, collect_local_decl_bindings);
+        }
         IrExprKind::Handle {
             value, ops, body, ..
         } => {
@@ -139,7 +177,11 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
     }
 }
 
-fn collect_used_in_assign_target(value: &IrExpr, target: &IrAssignTarget, out: &mut HashSet<NameBindingId>) {
+fn collect_used_in_assign_target(
+    value: &IrExpr,
+    target: &IrAssignTarget,
+    out: &mut HashSet<NameBindingId>,
+) {
     collect_used_bindings(value, out);
     match target {
         IrAssignTarget::Binding { .. } => {}
@@ -151,9 +193,13 @@ fn collect_used_in_assign_target(value: &IrExpr, target: &IrAssignTarget, out: &
     }
 }
 
-fn collect_used_in_exprs(exprs: &[IrExpr], out: &mut HashSet<NameBindingId>) {
+fn collect_expr_slice(
+    exprs: &[IrExpr],
+    out: &mut HashSet<NameBindingId>,
+    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+) {
     for expr in exprs {
-        collect_used_bindings(expr, out);
+        collect(expr, out);
     }
 }
 
@@ -165,19 +211,31 @@ fn for_each_seq_part_expr(parts: &[IrSeqPart], mut f: impl FnMut(&IrExpr)) {
     }
 }
 
-fn collect_used_in_seq_parts(parts: &[IrSeqPart], out: &mut HashSet<NameBindingId>) {
-    for_each_seq_part_expr(parts, |expr| collect_used_bindings(expr, out));
+fn collect_seq_part_exprs(
+    parts: &[IrSeqPart],
+    out: &mut HashSet<NameBindingId>,
+    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+) {
+    for_each_seq_part_expr(parts, |expr| collect(expr, out));
 }
 
-fn collect_used_in_record_fields(fields: &[IrRecordField], out: &mut HashSet<NameBindingId>) {
+fn collect_record_field_exprs(
+    fields: &[IrRecordField],
+    out: &mut HashSet<NameBindingId>,
+    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+) {
     for field in fields {
-        collect_used_bindings(&field.expr, out);
+        collect(&field.expr, out);
     }
 }
 
-fn collect_used_in_call_args(args: &[IrArg], out: &mut HashSet<NameBindingId>) {
+fn collect_call_arg_exprs(
+    args: &[IrArg],
+    out: &mut HashSet<NameBindingId>,
+    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+) {
     for arg in args {
-        collect_used_bindings(&arg.expr, out);
+        collect(&arg.expr, out);
     }
 }
 
@@ -187,27 +245,5 @@ fn collect_used_in_case_arms(arms: &[IrLoweredCaseArm], out: &mut HashSet<NameBi
             collect_used_bindings(guard, out);
         }
         collect_used_bindings(&arm.expr, out);
-    }
-}
-
-fn collect_local_in_exprs(exprs: &[IrExpr], out: &mut HashSet<NameBindingId>) {
-    for expr in exprs {
-        collect_local_decl_bindings(expr, out);
-    }
-}
-
-fn collect_local_in_seq_parts(parts: &[IrSeqPart], out: &mut HashSet<NameBindingId>) {
-    for_each_seq_part_expr(parts, |expr| collect_local_decl_bindings(expr, out));
-}
-
-fn collect_local_in_record_fields(fields: &[IrRecordField], out: &mut HashSet<NameBindingId>) {
-    for field in fields {
-        collect_local_decl_bindings(&field.expr, out);
-    }
-}
-
-fn collect_local_in_call_args(args: &[IrArg], out: &mut HashSet<NameBindingId>) {
-    for arg in args {
-        collect_local_decl_bindings(&arg.expr, out);
     }
 }

@@ -251,8 +251,7 @@ fn emits_closures_and_higher_order_calls() {
                 has_indirect_call = true;
             }
             if instruction.opcode == music_bc::Opcode::ClsNew {
-                if let music_bc::Operand::WideMethodCaptures { captures, .. } =
-                    &instruction.operand
+                if let music_bc::Operand::WideMethodCaptures { captures, .. } = &instruction.operand
                 {
                     if *captures != 0 {
                         has_capturing_closure = true;

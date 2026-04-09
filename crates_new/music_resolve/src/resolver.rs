@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
-use music_arena::SliceRange;
-use music_hir::{HirAttr, HirExpr, HirExprId, HirExprKind, HirMods, HirModule, HirOrigin, HirStore};
+use music_hir::{
+    HirAttr, HirExpr, HirExprId, HirExprKind, HirMods, HirModule, HirOrigin, HirStore,
+};
 use music_module::{
     ImportEnv, ModuleExportSummary, ModuleKey, ModuleSpecifier, collect_export_summary,
 };

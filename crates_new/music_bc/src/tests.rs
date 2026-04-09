@@ -81,7 +81,10 @@ fn validates_well_formed_artifact() {
             )),
             CodeEntry::Instruction(Instruction::new(
                 Opcode::EffInvkSeq,
-                Operand::Effect { effect: effect_id, op: 0 },
+                Operand::Effect {
+                    effect: effect_id,
+                    op: 0,
+                },
             )),
             CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
         ]),

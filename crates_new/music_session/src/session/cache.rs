@@ -248,11 +248,7 @@ impl Session {
             import_map: &import_map,
             module_keys: &module_keys,
         };
-        let import_env: Option<&dyn ImportEnv> = if has_imports {
-            Some(&import_env)
-        } else {
-            None
-        };
+        let import_env: Option<&dyn ImportEnv> = if has_imports { Some(&import_env) } else { None };
         Ok(resolve_module(
             source_id,
             key,

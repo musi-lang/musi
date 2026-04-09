@@ -54,17 +54,14 @@ pub(super) fn resolve_method(
             return Some(method);
         }
     }
-    binding
-        .and_then(|binding| emitter.layout.callables.get(&binding).copied())
-        .or_else(|| {
-            module_target.and_then(|target| {
-                emitter
-                    .qualified_methods
-                    .get(&(target.clone(), name.into()))
-                    .copied()
-            })
-        })
-        .or_else(|| emitter.unique_methods.get(name).copied())
+    resolve_named_binding(
+        binding,
+        name,
+        module_target,
+        &emitter.layout.callables,
+        &emitter.tables.qualified.methods,
+        &emitter.tables.unique.methods,
+    )
 }
 
 pub(super) fn resolve_foreign(
@@ -73,17 +70,14 @@ pub(super) fn resolve_foreign(
     name: &str,
     module_target: Option<&ModuleKey>,
 ) -> Option<ForeignId> {
-    binding
-        .and_then(|binding| emitter.layout.foreigns.get(&binding).copied())
-        .or_else(|| {
-            module_target.and_then(|target| {
-                emitter
-                    .qualified_foreigns
-                    .get(&(target.clone(), name.into()))
-                    .copied()
-            })
-        })
-        .or_else(|| emitter.unique_foreigns.get(name).copied())
+    resolve_named_binding(
+        binding,
+        name,
+        module_target,
+        &emitter.layout.foreigns,
+        &emitter.tables.qualified.foreigns,
+        &emitter.tables.unique.foreigns,
+    )
 }
 
 pub(super) fn resolve_global(
@@ -92,16 +86,28 @@ pub(super) fn resolve_global(
     name: &str,
     module_target: Option<&ModuleKey>,
 ) -> Option<GlobalId> {
-    binding
-        .and_then(|binding| emitter.layout.globals.get(&binding).copied())
-        .or_else(|| {
-            module_target.and_then(|target| {
-                emitter
-                    .qualified_globals
-                    .get(&(target.clone(), name.into()))
-                    .copied()
-            })
-        })
-        .or_else(|| emitter.unique_globals.get(name).copied())
+    resolve_named_binding(
+        binding,
+        name,
+        module_target,
+        &emitter.layout.globals,
+        &emitter.tables.qualified.globals,
+        &emitter.tables.unique.globals,
+    )
 }
 
+fn resolve_named_binding<T: Copy>(
+    binding: Option<NameBindingId>,
+    name: &str,
+    module_target: Option<&ModuleKey>,
+    locals: &HashMap<NameBindingId, T>,
+    qualified: &HashMap<(ModuleKey, Box<str>), T>,
+    unique: &HashMap<Box<str>, T>,
+) -> Option<T> {
+    binding
+        .and_then(|binding| locals.get(&binding).copied())
+        .or_else(|| {
+            module_target.and_then(|target| qualified.get(&(target.clone(), name.into())).copied())
+        })
+        .or_else(|| unique.get(name).copied())
+}

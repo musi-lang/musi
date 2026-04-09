@@ -236,9 +236,7 @@ impl Parser<'_> {
                     self.parse_paren_expr()
                 }
             }
-            TokenKind::LBracket => {
-                self.parse_array_expr()
-            }
+            TokenKind::LBracket => self.parse_array_expr(),
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
             TokenKind::KwCase => self.parse_case_expr(),

@@ -5,8 +5,8 @@ use music_resolve::{ResolveOptions, resolve_module};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
-use crate::{IrCasePattern, IrExprKind};
 use crate::lower_module;
+use crate::{IrCasePattern, IrExprKind};
 
 fn lower(src: &str) -> crate::IrModule {
     let lexed = Lexer::new(src).lex();

@@ -68,25 +68,13 @@ pub(super) fn compile_case(
             .iter()
             .all(|arm| pattern_variantish(&arm.pattern).is_some())
     {
-        for arm in &arms[0..variant_start] {
-            let next_label = alloc_label(emitter);
-            if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
-                continue;
-            }
-            if let Some(guard) = &arm.guard {
-                compile_expr(emitter, guard, true, diags);
-                emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::BrFalse,
-                    Operand::Label(next_label),
-                )));
-            }
-            compile_expr(emitter, &arm.expr, true, diags);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::Br,
-                Operand::Label(end_label),
-            )));
-            emitter.code.push(CodeEntry::Label(Label { id: next_label }));
-        }
+        emit_case_arms(
+            emitter,
+            scrutinee_slot,
+            &arms[0..variant_start],
+            Some(end_label),
+            diags,
+        );
 
         compile_case_variant_dispatch(
             emitter,
@@ -100,25 +88,7 @@ pub(super) fn compile_case(
         return;
     }
 
-    for arm in arms {
-        let next_label = alloc_label(emitter);
-        if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
-            continue;
-        }
-        if let Some(guard) = &arm.guard {
-            compile_expr(emitter, guard, true, diags);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::BrFalse,
-                Operand::Label(next_label),
-            )));
-        }
-        compile_expr(emitter, &arm.expr, true, diags);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::Br,
-            Operand::Label(end_label),
-        )));
-        emitter.code.push(CodeEntry::Label(Label { id: next_label }));
-    }
+    emit_case_arms(emitter, scrutinee_slot, arms, Some(end_label), diags);
 
     emit_zero(emitter);
     emitter.code.push(CodeEntry::Label(Label { id: end_label }));
@@ -187,7 +157,10 @@ fn compile_case_variant_dispatch(
     end_label: u16,
     diags: &mut EmitDiagList,
 ) {
-    let Some(first) = arms.first().and_then(|arm| pattern_variantish(&arm.pattern)) else {
+    let Some(first) = arms
+        .first()
+        .and_then(|arm| pattern_variantish(&arm.pattern))
+    else {
         return;
     };
     let origin = case_dispatch_origin(arms);
@@ -206,14 +179,7 @@ fn compile_case_variant_dispatch(
         return;
     }
 
-    let data_ty_name = qualified_name(&first.data_key.module, &first.data_key.name);
-    let Some(data_ty) = emitter.layout.types.get(data_ty_name.as_ref()).copied() else {
-        push_expr_diag(
-            diags,
-            emitter.module_key,
-            &origin,
-            format!("unknown emitted data type `{data_ty_name}`"),
-        );
+    let Some(data_ty) = resolve_variant_data_ty(emitter, first.data_key, &origin, diags) else {
         emit_zero(emitter);
         return;
     };
@@ -235,14 +201,10 @@ fn compile_case_variant_dispatch(
         diags,
     );
 
-    emitter.code.push(CodeEntry::Label(Label { id: default_label }));
-    emit_case_arms(
-        emitter,
-        scrutinee_slot,
-        tail,
-        Some(end_label),
-        diags,
-    );
+    emitter
+        .code
+        .push(CodeEntry::Label(Label { id: default_label }));
+    emit_case_arms(emitter, scrutinee_slot, tail, Some(end_label), diags);
     emit_zero(emitter);
 }
 
@@ -308,29 +270,24 @@ fn emit_variant_dispatch_tag_blocks(
                 continue;
             };
             let next_label = alloc_label(emitter);
-            if !compile_variant_arm_payload(
+            emit_case_arm(
                 emitter,
-                scrutinee_slot,
-                info.args,
-                info.as_binding,
                 next_label,
+                arm.guard.as_ref(),
+                &arm.expr,
+                Some(end_label),
                 diags,
-            ) {
-                continue;
-            }
-            if let Some(guard) = &arm.guard {
-                compile_expr(emitter, guard, true, diags);
-                emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::BrFalse,
-                    Operand::Label(next_label),
-                )));
-            }
-            compile_expr(emitter, &arm.expr, true, diags);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::Br,
-                Operand::Label(end_label),
-            )));
-            emitter.code.push(CodeEntry::Label(Label { id: next_label }));
+                |emitter, next_label, diags| {
+                    compile_variant_payload_patterns(
+                        emitter,
+                        scrutinee_slot,
+                        info.args,
+                        info.as_binding,
+                        next_label,
+                        diags,
+                    )
+                },
+            );
         }
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Br,
@@ -348,66 +305,62 @@ fn emit_case_arms(
 ) {
     for arm in arms {
         let next_label = alloc_label(emitter);
-        if !compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags) {
-            continue;
-        }
-        if let Some(guard) = &arm.guard {
-            compile_expr(emitter, guard, true, diags);
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::BrFalse,
-                Operand::Label(next_label),
-            )));
-        }
-        compile_expr(emitter, &arm.expr, true, diags);
-        if let Some(end_label) = end_label {
-            emitter.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::Br,
-                Operand::Label(end_label),
-            )));
-        }
-        emitter.code.push(CodeEntry::Label(Label { id: next_label }));
+        emit_case_arm(
+            emitter,
+            next_label,
+            arm.guard.as_ref(),
+            &arm.expr,
+            end_label,
+            diags,
+            |emitter, next_label, diags| {
+                compile_case_pattern(emitter, &arm.pattern, scrutinee_slot, next_label, diags)
+            },
+        );
     }
 }
 
-fn compile_variant_arm_payload(
+fn emit_case_arm<F>(
     emitter: &mut MethodEmitter<'_, '_>,
-    scrutinee_slot: u16,
-    args: &[IrCasePattern],
-    as_binding: Option<(NameBindingId, &str)>,
     next_label: u16,
+    guard: Option<&IrExpr>,
+    expr: &IrExpr,
+    end_label: Option<u16>,
     diags: &mut EmitDiagList,
-) -> bool {
-    for (idx, pat) in args.iter().enumerate() {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdLoc,
-            Operand::Local(scrutinee_slot),
-        )));
-        compile_i64(emitter, i64::try_from(idx).unwrap_or(i64::MAX));
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataGet,
-            Operand::None,
-        )));
-        let item_slot = reserve_temp_slot(emitter);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::StLoc,
-            Operand::Local(item_slot),
-        )));
-        if !compile_case_pattern(emitter, pat, item_slot, next_label, diags) {
-            return false;
-        }
+    mut compile_pattern: F,
+) where
+    F: FnMut(&mut MethodEmitter<'_, '_>, u16, &mut EmitDiagList) -> bool,
+{
+    if !compile_pattern(emitter, next_label, diags) {
+        return;
     }
-    if let Some((binding, _name)) = as_binding {
-        let slot = ensure_local_slot(emitter, binding);
+    emit_case_arm_body(emitter, next_label, guard, expr, end_label, diags);
+}
+
+fn emit_case_arm_body(
+    emitter: &mut MethodEmitter<'_, '_>,
+    next_label: u16,
+    guard: Option<&IrExpr>,
+    expr: &IrExpr,
+    end_label: Option<u16>,
+    diags: &mut EmitDiagList,
+) {
+    if let Some(guard) = guard {
+        compile_expr(emitter, guard, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdLoc,
-            Operand::Local(scrutinee_slot),
-        )));
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::StLoc,
-            Operand::Local(slot),
+            Opcode::BrFalse,
+            Operand::Label(next_label),
         )));
     }
-    true
+    compile_expr(emitter, expr, true, diags);
+    if let Some(end_label) = end_label {
+        emitter.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Br,
+            Operand::Label(end_label),
+        )));
+    }
+    emitter
+        .code
+        .push(CodeEntry::Label(Label { id: next_label }));
 }
 
 fn compile_case_pattern(
@@ -419,10 +372,22 @@ fn compile_case_pattern(
 ) -> bool {
     match pattern {
         IrCasePattern::Wildcard => true,
-        IrCasePattern::Bind { binding, .. } => compile_case_bind(emitter, scrutinee_slot, *binding),
-        IrCasePattern::Lit(lit) => compile_case_lit(emitter, scrutinee_slot, lit, next_label, diags),
+        IrCasePattern::Bind { binding, .. } => {
+            store_binding_value(emitter, scrutinee_slot, *binding);
+            true
+        }
+        IrCasePattern::Lit(lit) => {
+            compile_case_lit(emitter, scrutinee_slot, lit, next_label, diags)
+        }
         IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
-            compile_case_seq_pattern(emitter, scrutinee_slot, items, next_label, diags)
+            compile_projected_patterns(
+                emitter,
+                scrutinee_slot,
+                items,
+                Opcode::SeqGet,
+                next_label,
+                diags,
+            )
         }
         IrCasePattern::Variant {
             data_key,
@@ -439,22 +404,13 @@ fn compile_case_pattern(
             diags,
         ),
         IrCasePattern::As { pat, binding, .. } => {
-            compile_case_as_pattern(emitter, scrutinee_slot, pat, *binding, next_label, diags)
+            if !compile_case_pattern(emitter, pat, scrutinee_slot, next_label, diags) {
+                return false;
+            }
+            store_binding_value(emitter, scrutinee_slot, *binding);
+            true
         }
     }
-}
-
-fn compile_case_bind(emitter: &mut MethodEmitter<'_, '_>, scrutinee_slot: u16, binding: NameBindingId) -> bool {
-    let slot = ensure_local_slot(emitter, binding);
-    emitter.code.push(CodeEntry::Instruction(Instruction::new(
-        Opcode::LdLoc,
-        Operand::Local(scrutinee_slot),
-    )));
-    emitter.code.push(CodeEntry::Instruction(Instruction::new(
-        Opcode::StLoc,
-        Operand::Local(slot),
-    )));
-    true
 }
 
 fn compile_case_lit(
@@ -488,36 +444,6 @@ fn compile_case_lit(
     true
 }
 
-fn compile_case_seq_pattern(
-    emitter: &mut MethodEmitter<'_, '_>,
-    scrutinee_slot: u16,
-    items: &[IrCasePattern],
-    next_label: u16,
-    diags: &mut EmitDiagList,
-) -> bool {
-    for (idx, item) in items.iter().enumerate() {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdLoc,
-            Operand::Local(scrutinee_slot),
-        )));
-        let idx = i64::try_from(idx).unwrap_or(i64::MAX);
-        compile_i64(emitter, idx);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::SeqGet,
-            Operand::None,
-        )));
-        let item_slot = reserve_temp_slot(emitter);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::StLoc,
-            Operand::Local(item_slot),
-        )));
-        if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
-            return false;
-        }
-    }
-    true
-}
-
 fn compile_case_variant_pattern(
     emitter: &mut MethodEmitter<'_, '_>,
     scrutinee_slot: u16,
@@ -527,19 +453,92 @@ fn compile_case_variant_pattern(
     next_label: u16,
     diags: &mut EmitDiagList,
 ) -> bool {
-    let data_ty_name = qualified_name(&data_key.module, &data_key.name);
-    let Some(data_ty) = emitter.layout.types.get(data_ty_name.as_ref()).copied() else {
-        push_expr_diag(
-            diags,
-            emitter.module_key,
-            &IrOrigin {
-                source_id: SourceId::from_raw(0),
-                span: Span::new(0, 0),
-            },
-            format!("unknown emitted data type `{data_ty_name}`"),
-        );
+    let Some(data_ty) = resolve_variant_data_ty(
+        emitter,
+        data_key,
+        &IrOrigin {
+            source_id: SourceId::from_raw(0),
+            span: Span::new(0, 0),
+        },
+        diags,
+    ) else {
         return false;
     };
+    compile_variant_tag_match(emitter, scrutinee_slot, data_ty, tag_index, next_label);
+    compile_variant_payload_patterns(emitter, scrutinee_slot, args, None, next_label, diags)
+}
+
+fn compile_indexed_item(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    index: usize,
+    opcode: Opcode,
+) -> u16 {
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdLoc,
+        Operand::Local(scrutinee_slot),
+    )));
+    compile_i64(emitter, i64::try_from(index).unwrap_or(i64::MAX));
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        opcode,
+        Operand::None,
+    )));
+    let item_slot = reserve_temp_slot(emitter);
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::StLoc,
+        Operand::Local(item_slot),
+    )));
+    item_slot
+}
+
+fn compile_projected_patterns(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    items: &[IrCasePattern],
+    opcode: Opcode,
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    for (idx, item) in items.iter().enumerate() {
+        let item_slot = compile_indexed_item(emitter, scrutinee_slot, idx, opcode);
+        if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
+            return false;
+        }
+    }
+    true
+}
+
+fn compile_variant_payload_patterns(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    args: &[IrCasePattern],
+    as_binding: Option<(NameBindingId, &str)>,
+    next_label: u16,
+    diags: &mut EmitDiagList,
+) -> bool {
+    if !compile_projected_patterns(
+        emitter,
+        scrutinee_slot,
+        args,
+        Opcode::DataGet,
+        next_label,
+        diags,
+    ) {
+        return false;
+    }
+    if let Some((binding, _name)) = as_binding {
+        store_binding_value(emitter, scrutinee_slot, binding);
+    }
+    true
+}
+
+fn compile_variant_tag_match(
+    emitter: &mut MethodEmitter<'_, '_>,
+    scrutinee_slot: u16,
+    data_ty: TypeId,
+    tag_index: u16,
+    next_label: u16,
+) {
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdLoc,
         Operand::Local(scrutinee_slot),
@@ -557,39 +556,32 @@ fn compile_case_variant_pattern(
         Opcode::BrFalse,
         Operand::Label(next_label),
     )));
-    for (idx, item) in args.iter().enumerate() {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdLoc,
-            Operand::Local(scrutinee_slot),
-        )));
-        compile_i64(emitter, i64::try_from(idx).unwrap_or(i64::MAX));
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataGet,
-            Operand::None,
-        )));
-        let item_slot = reserve_temp_slot(emitter);
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::StLoc,
-            Operand::Local(item_slot),
-        )));
-        if !compile_case_pattern(emitter, item, item_slot, next_label, diags) {
-            return false;
-        }
-    }
-    true
 }
 
-fn compile_case_as_pattern(
+fn resolve_variant_data_ty(
+    emitter: &MethodEmitter<'_, '_>,
+    data_key: &DefinitionKey,
+    origin: &IrOrigin,
+    diags: &mut EmitDiagList,
+) -> Option<TypeId> {
+    let data_ty_name = qualified_name(&data_key.module, &data_key.name);
+    let Some(data_ty) = emitter.layout.types.get(data_ty_name.as_ref()).copied() else {
+        push_expr_diag(
+            diags,
+            emitter.module_key,
+            origin,
+            format!("unknown emitted data type `{data_ty_name}`"),
+        );
+        return None;
+    };
+    Some(data_ty)
+}
+
+fn store_binding_value(
     emitter: &mut MethodEmitter<'_, '_>,
     scrutinee_slot: u16,
-    pat: &IrCasePattern,
     binding: NameBindingId,
-    next_label: u16,
-    diags: &mut EmitDiagList,
-) -> bool {
-    if !compile_case_pattern(emitter, pat, scrutinee_slot, next_label, diags) {
-        return false;
-    }
+) {
     let slot = ensure_local_slot(emitter, binding);
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdLoc,
@@ -599,5 +591,4 @@ fn compile_case_as_pattern(
         Opcode::StLoc,
         Operand::Local(slot),
     )));
-    true
 }

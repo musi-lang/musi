@@ -65,7 +65,10 @@ pub(super) fn compile_record_literal(
     compile_i64(emitter, 0);
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::DataNew,
-        Operand::TypeLen { ty, len: field_count },
+        Operand::TypeLen {
+            ty,
+            len: field_count,
+        },
     )));
 }
 
@@ -166,4 +169,3 @@ pub(super) fn compile_record_update(
         },
     )));
 }
-

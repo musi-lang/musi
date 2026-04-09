@@ -194,7 +194,12 @@ fn format_effect_row(surface: &ModuleSurface, row: &SurfaceEffectRow) -> String 
     format!("with {{ {} }}", items.join(", "))
 }
 
-fn push_meta(out: &mut Vec<IrMetaRecord>, target: &str, key: &'static str, values: Box<[Box<str>]>) {
+fn push_meta(
+    out: &mut Vec<IrMetaRecord>,
+    target: &str,
+    key: &'static str,
+    values: Box<[Box<str>]>,
+) {
     out.push(IrMetaRecord {
         target: target.to_owned().into_boxed_str(),
         key: key.into(),
@@ -292,33 +297,68 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
     for class in &surface.exported_classes {
         let target = qualified_name(&class.key.module, class.key.name.as_ref());
         if !class.laws.is_empty() {
-            push_meta(&mut out, target.as_ref(), "class.laws", class.laws.to_vec().into_boxed_slice());
+            push_meta(
+                &mut out,
+                target.as_ref(),
+                "class.laws",
+                class.laws.to_vec().into_boxed_slice(),
+            );
         }
-        push_inert_and_musi_attrs(&mut out, target.as_ref(), &class.inert_attrs, &class.musi_attrs);
+        push_inert_and_musi_attrs(
+            &mut out,
+            target.as_ref(),
+            &class.inert_attrs,
+            &class.musi_attrs,
+        );
     }
 
     for effect in &surface.exported_effects {
         let target = qualified_name(&effect.key.module, effect.key.name.as_ref());
         if !effect.laws.is_empty() {
-            push_meta(&mut out, target.as_ref(), "effect.laws", effect.laws.to_vec().into_boxed_slice());
+            push_meta(
+                &mut out,
+                target.as_ref(),
+                "effect.laws",
+                effect.laws.to_vec().into_boxed_slice(),
+            );
         }
-        push_inert_and_musi_attrs(&mut out, target.as_ref(), &effect.inert_attrs, &effect.musi_attrs);
+        push_inert_and_musi_attrs(
+            &mut out,
+            target.as_ref(),
+            &effect.inert_attrs,
+            &effect.musi_attrs,
+        );
     }
 
     for data in &surface.exported_data {
         let target = qualified_name(&data.key.module, data.key.name.as_ref());
-        push_inert_and_musi_attrs(&mut out, target.as_ref(), &data.inert_attrs, &data.musi_attrs);
+        push_inert_and_musi_attrs(
+            &mut out,
+            target.as_ref(),
+            &data.inert_attrs,
+            &data.musi_attrs,
+        );
     }
 
     for export in &surface.exported_values {
         let target = qualified_name(&surface.module_key, export.name.as_ref());
-        push_inert_and_musi_attrs(&mut out, target.as_ref(), &export.inert_attrs, &export.musi_attrs);
+        push_inert_and_musi_attrs(
+            &mut out,
+            target.as_ref(),
+            &export.inert_attrs,
+            &export.musi_attrs,
+        );
         push_export_sig_meta(&mut out, surface, target.as_ref(), export);
     }
 
     for (idx, inst) in surface.exported_instances.iter().enumerate() {
         let target: Box<str> = format!("{}::instance::{idx}", surface.module_key.as_str()).into();
-        push_inert_and_musi_attrs(&mut out, target.as_ref(), &inst.inert_attrs, &inst.musi_attrs);
+        push_inert_and_musi_attrs(
+            &mut out,
+            target.as_ref(),
+            &inst.inert_attrs,
+            &inst.musi_attrs,
+        );
     }
 
     out.into_boxed_slice()

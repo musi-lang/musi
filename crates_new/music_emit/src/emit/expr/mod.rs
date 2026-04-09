@@ -253,11 +253,27 @@ fn compile_expr_type_ops(
 ) -> bool {
     match &expr.kind {
         IrExprKind::TyTest { base, ty_name } => {
-            compile_type_op_by_name(emitter, &expr.origin, base, ty_name, Opcode::TyChk, ":?", diags);
+            compile_type_op_by_name(
+                emitter,
+                &expr.origin,
+                base,
+                ty_name,
+                Opcode::TyChk,
+                ":?",
+                diags,
+            );
             true
         }
         IrExprKind::TyCast { base, ty_name } => {
-            compile_type_op_by_name(emitter, &expr.origin, base, ty_name, Opcode::TyCast, ":?>", diags);
+            compile_type_op_by_name(
+                emitter,
+                &expr.origin,
+                base,
+                ty_name,
+                Opcode::TyCast,
+                ":?>",
+                diags,
+            );
             true
         }
         _ => false,

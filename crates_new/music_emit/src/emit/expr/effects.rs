@@ -32,7 +32,10 @@ pub(super) fn compile_perform(
     };
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::EffInvk,
-        Operand::Effect { effect, op: op_index },
+        Operand::Effect {
+            effect,
+            op: op_index,
+        },
     )));
 }
 
@@ -132,7 +135,9 @@ pub(super) fn compile_perform_seq(
     };
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::EffInvkSeq,
-        Operand::Effect { effect, op: op_index },
+        Operand::Effect {
+            effect,
+            op: op_index,
+        },
     )));
 }
-

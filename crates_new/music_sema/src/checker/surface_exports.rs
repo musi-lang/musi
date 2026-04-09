@@ -1,18 +1,18 @@
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef, HirHandleClause, HirLitKind,
-    HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem, HirRecordPatField,
+    HirArg, HirArrayItem, HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef,
+    HirHandleClause, HirLitKind, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
     HirTemplatePart, HirVariantDef,
 };
-use music_names::{Ident, Interner, NameBindingId, NameSite};
+use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 
 use super::surface_types::{SurfaceTyBuilder, lower_surface_effect_row};
-use super::{DeclState, ModuleState, RuntimeEnv, TypingState};
+use super::{DeclState, ModuleState, TypingState};
 use crate::api::{
-    Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintSurface,
-    DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface, ExportedValue, InstanceSurface,
-    SurfaceEffectRow,
+    Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
+    ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
+    ExportedValue, InstanceSurface, SurfaceEffectRow,
 };
 
 #[derive(Debug, Clone)]
@@ -65,7 +65,15 @@ fn lower_attr_value(
         HirExprKind::Variant { tag, args } => {
             let tag: Box<str> = interner.resolve(tag.name).into();
             let mut lowered = Vec::new();
-            for arg in module.resolved.module.store.expr_ids.get(args).iter().copied() {
+            for arg in module
+                .resolved
+                .module
+                .store
+                .expr_ids
+                .get(args)
+                .iter()
+                .copied()
+            {
                 lowered.push(lower_attr_value(module, interner, arg)?);
             }
             Some(AttrValue::Variant {
@@ -118,7 +126,13 @@ fn lower_attr(module: &ModuleState, interner: &Interner, attr: &HirAttr) -> Opti
         .collect::<Vec<Box<str>>>()
         .into_boxed_slice();
     let mut args = Vec::<AttrArg>::new();
-    for arg in module.resolved.module.store.attr_args.get(attr.args.clone()) {
+    for arg in module
+        .resolved
+        .module
+        .store
+        .attr_args
+        .get(attr.args.clone())
+    {
         let name = arg.name.map(|ident| interner.resolve(ident.name).into());
         let value = lower_attr_value(module, interner, arg.value)?;
         args.push(AttrArg { name, value });
@@ -152,6 +166,50 @@ fn split_export_attrs(
     (inert.into_boxed_slice(), musi.into_boxed_slice())
 }
 
+fn lower_type_params(symbols: &[Symbol], interner: &Interner) -> Box<[Box<str>]> {
+    symbols
+        .iter()
+        .map(|symbol| interner.resolve(*symbol).into())
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn lower_constraints(
+    constraints: &[ConstraintFacts],
+    tys: &mut SurfaceTyBuilder<'_>,
+) -> Box<[ConstraintSurface]> {
+    constraints
+        .iter()
+        .map(|constraint| ConstraintSurface {
+            name: tys.interner.resolve(constraint.name).into(),
+            kind: constraint.kind,
+            value: tys.lower(constraint.value),
+            class_key: constraint.class_key.clone(),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn collect_binding_exports<T, F>(
+    module: &ModuleState,
+    exports: &ModuleExports,
+    tys: &mut SurfaceTyBuilder<'_>,
+    mut lower: F,
+) -> Box<[T]>
+where
+    F: FnMut(&ExportBinding, Box<[Attr]>, Box<[Attr]>, &mut SurfaceTyBuilder<'_>) -> Option<T>,
+{
+    exports
+        .bindings
+        .iter()
+        .filter_map(|export| {
+            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
+            lower(export, inert_attrs, musi_attrs, tys)
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
 pub(super) fn collect_exported_values(
     module: &ModuleState,
     typing: &TypingState,
@@ -159,40 +217,25 @@ pub(super) fn collect_exported_values(
     exports: &ModuleExports,
     tys: &mut SurfaceTyBuilder<'_>,
 ) -> Box<[ExportedValue]> {
-    exports
-        .bindings
-        .iter()
-        .filter_map(|export| {
+    collect_binding_exports(
+        module,
+        exports,
+        tys,
+        |export, inert_attrs, musi_attrs, tys| {
             if typing.is_gated_binding(export.binding) {
                 return None;
             }
             let ty = typing.binding_types().get(&export.binding).copied()?;
             let symbol = module.resolved.names.bindings.get(export.binding).name;
             let scheme = typing.binding_schemes().get(&export.binding);
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
             Some(ExportedValue {
                 name: export.name.clone(),
                 ty: tys.lower(ty),
                 type_params: scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
-                    scheme
-                        .type_params
-                        .iter()
-                        .map(|symbol| tys.interner.resolve(*symbol).into())
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
+                    lower_type_params(&scheme.type_params, tys.interner)
                 }),
                 constraints: scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
-                    scheme
-                        .constraints
-                        .iter()
-                        .map(|constraint| ConstraintSurface {
-                            name: tys.interner.resolve(constraint.name).into(),
-                            kind: constraint.kind,
-                            value: tys.lower(constraint.value),
-                            class_key: constraint.class_key.clone(),
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
+                    lower_constraints(&scheme.constraints, tys)
                 }),
                 effects: scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
                     lower_surface_effect_row(tys, &scheme.effects)
@@ -215,9 +258,8 @@ pub(super) fn collect_exported_values(
                 inert_attrs,
                 musi_attrs,
             })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        },
+    )
 }
 
 pub(super) fn collect_exported_data(
@@ -226,12 +268,12 @@ pub(super) fn collect_exported_data(
     exports: &ModuleExports,
     tys: &mut SurfaceTyBuilder<'_>,
 ) -> Box<[DataSurface]> {
-    exports
-        .bindings
-        .iter()
-        .filter_map(|export| {
+    collect_binding_exports(
+        module,
+        exports,
+        tys,
+        |export, inert_attrs, musi_attrs, tys| {
             let data = decls.data_def(export.name.as_ref())?;
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
             Some(DataSurface {
                 key: data.key.clone(),
                 variants: export
@@ -253,43 +295,31 @@ pub(super) fn collect_exported_data(
                 inert_attrs,
                 musi_attrs,
             })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        },
+    )
 }
 
 pub(super) fn collect_exported_classes(
     module: &ModuleState,
-    runtime: &RuntimeEnv<'_, '_>,
     decls: &DeclState,
     exports: &ModuleExports,
     tys: &mut SurfaceTyBuilder<'_>,
 ) -> Box<[ClassSurface]> {
-    exports
-        .bindings
-        .iter()
-        .filter_map(|export| {
+    collect_binding_exports(
+        module,
+        exports,
+        tys,
+        |export, inert_attrs, musi_attrs, tys| {
             let symbol = module.resolved.names.bindings.get(export.binding).name;
             let facts = decls.class_facts_by_name().get(&symbol)?;
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
             Some(ClassSurface {
                 key: facts.key.clone(),
-                constraints: facts
-                    .constraints
-                    .iter()
-                    .map(|constraint| ConstraintSurface {
-                        name: runtime.interner().resolve(constraint.name).into(),
-                        kind: constraint.kind,
-                        value: tys.lower(constraint.value),
-                        class_key: constraint.class_key.clone(),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                constraints: lower_constraints(&facts.constraints, tys),
                 members: facts
                     .members
                     .iter()
                     .map(|member| ClassMemberSurface {
-                        name: runtime.interner().resolve(member.name).into(),
+                        name: tys.interner.resolve(member.name).into(),
                         params: member
                             .params
                             .iter()
@@ -304,15 +334,14 @@ pub(super) fn collect_exported_classes(
                 laws: facts
                     .laws
                     .iter()
-                    .map(|law| runtime.interner().resolve(*law).into())
+                    .map(|law| tys.interner.resolve(*law).into())
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
                 inert_attrs,
                 musi_attrs,
             })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        },
+    )
 }
 
 pub(super) fn collect_exported_effects(
@@ -321,12 +350,12 @@ pub(super) fn collect_exported_effects(
     exports: &ModuleExports,
     tys: &mut SurfaceTyBuilder<'_>,
 ) -> Box<[EffectSurface]> {
-    exports
-        .bindings
-        .iter()
-        .filter_map(|export| {
+    collect_binding_exports(
+        module,
+        exports,
+        tys,
+        |export, inert_attrs, musi_attrs, tys| {
             let effect = decls.effect_def(export.name.as_ref())?;
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
             Some(EffectSurface {
                 key: effect.key.clone(),
                 ops: export
@@ -364,9 +393,8 @@ pub(super) fn collect_exported_effects(
                 inert_attrs,
                 musi_attrs,
             })
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        },
+    )
 }
 
 pub(super) fn collect_exported_instances(
@@ -385,39 +413,19 @@ pub(super) fn collect_exported_instances(
                 .find(|export| export.span == facts.origin.span)?;
             let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
             Some(InstanceSurface {
-            type_params: facts
-                .type_params
-                .iter()
-                .map(|symbol| tys.interner.resolve(*symbol).into())
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            class_key: facts.class_key.clone(),
-            class_args: facts
-                .class_args
-                .iter()
-                .copied()
-                .map(|ty| tys.lower(ty))
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            constraints: facts
-                .constraints
-                .iter()
-                .map(|constraint| ConstraintSurface {
-                    name: tys.interner.resolve(constraint.name).into(),
-                    kind: constraint.kind,
-                    value: tys.lower(constraint.value),
-                    class_key: constraint.class_key.clone(),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            member_names: facts
-                .member_names
-                .iter()
-                .map(|symbol| tys.interner.resolve(*symbol).into())
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            inert_attrs,
-            musi_attrs,
+                type_params: lower_type_params(&facts.type_params, tys.interner),
+                class_key: facts.class_key.clone(),
+                class_args: facts
+                    .class_args
+                    .iter()
+                    .copied()
+                    .map(|ty| tys.lower(ty))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                constraints: lower_constraints(&facts.constraints, tys),
+                member_names: lower_type_params(&facts.member_names, tys.interner),
+                inert_attrs,
+                musi_attrs,
             })
         })
         .collect::<Vec<_>>()
@@ -427,7 +435,7 @@ pub(super) fn collect_exported_instances(
 pub(super) fn collect_module_exports(module: &ModuleState, interner: &Interner) -> ModuleExports {
     let mut exports = ModuleExports::default();
     let mut attr_stack = Vec::<HirAttr>::new();
-    collect_exports_from_expr(
+    collect_expr(
         module,
         interner,
         module.resolved.module.root,
@@ -437,7 +445,7 @@ pub(super) fn collect_module_exports(module: &ModuleState, interner: &Interner) 
     exports
 }
 
-fn collect_exports_from_expr(
+fn collect_expr(
     module: &ModuleState,
     interner: &Interner,
     expr_id: HirExprId,
@@ -447,69 +455,83 @@ fn collect_exports_from_expr(
     let expr = module.resolved.module.store.exprs.get(expr_id);
     let start = attr_stack.len();
     if !expr.mods.attrs.is_empty() {
-        attr_stack.extend_from_slice(module.resolved.module.store.attrs.get(expr.mods.attrs.clone()));
+        attr_stack.extend_from_slice(
+            module
+                .resolved
+                .module
+                .store
+                .attrs
+                .get(expr.mods.attrs.clone()),
+        );
     }
     if let Some(export_mod) = &expr.mods.export {
-        collect_direct_exports(module, interner, expr_id, export_mod.opaque, exports, attr_stack);
+        collect_direct_exports(
+            module,
+            interner,
+            expr_id,
+            export_mod.opaque,
+            exports,
+            attr_stack,
+        );
     }
 
-    match expr.kind.clone() {
+    collect_exports_from_kind(module, interner, &expr.kind, exports, attr_stack);
+    attr_stack.truncate(start);
+}
+
+fn collect_exports_from_kind(
+    module: &ModuleState,
+    interner: &Interner,
+    kind: &HirExprKind,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    match kind {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
-            collect_expr_id_range(module, interner, exprs, exports, attr_stack);
+            collect_expr_id_range(module, interner, *exprs, exports, attr_stack);
         }
         HirExprKind::Array { items } => {
-            for item in module.resolved.module.store.array_items.get(items) {
-                collect_exports_from_expr(module, interner, item.expr, exports, attr_stack);
-            }
+            collect_array_exprs(module, interner, items, exports, attr_stack);
         }
         HirExprKind::Record { items } => {
-            collect_record_item_exports(module, interner, items, exports, attr_stack);
+            collect_recordish_exprs(module, interner, items, None, exports, attr_stack);
         }
         HirExprKind::RecordUpdate { base, items } => {
-            collect_record_item_exports(module, interner, items, exports, attr_stack);
-            collect_exports_from_expr(module, interner, base, exports, attr_stack);
+            collect_recordish_exprs(module, interner, items, Some(*base), exports, attr_stack);
         }
         HirExprKind::Template { parts } => {
-            for part in module.resolved.module.store.template_parts.get(parts) {
-                if let HirTemplatePart::Expr { expr } = part {
-                    collect_exports_from_expr(module, interner, *expr, exports, attr_stack);
-                }
-            }
+            collect_template_exprs(module, interner, parts, exports, attr_stack);
         }
         HirExprKind::Pi { binder_ty, ret, .. } => {
-            collect_exports_from_expr(module, interner, binder_ty, exports, attr_stack);
-            collect_exports_from_expr(module, interner, ret, exports, attr_stack);
+            collect_pair_exprs(module, interner, *binder_ty, *ret, exports, attr_stack);
         }
         HirExprKind::Lambda { body, .. }
         | HirExprKind::Import { arg: body }
         | HirExprKind::Perform { expr: body } => {
-            collect_exports_from_expr(module, interner, body, exports, attr_stack);
+            collect_expr(module, interner, *body, exports, attr_stack);
         }
         HirExprKind::Call { callee, args } => {
-            collect_exports_from_expr(module, interner, callee, exports, attr_stack);
-            for arg in module.resolved.module.store.args.get(args) {
-                collect_exports_from_expr(module, interner, arg.expr, exports, attr_stack);
-            }
+            collect_expr(module, interner, *callee, exports, attr_stack);
+            collect_arg_exprs(module, interner, args, exports, attr_stack);
         }
         HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
-            collect_exports_from_expr(module, interner, callee, exports, attr_stack);
-            collect_expr_id_range(module, interner, args, exports, attr_stack);
+            collect_expr(module, interner, *callee, exports, attr_stack);
+            collect_expr_id_range(module, interner, *args, exports, attr_stack);
         }
         HirExprKind::Field { base, .. }
         | HirExprKind::TypeTest { base, .. }
         | HirExprKind::TypeCast { base, .. }
         | HirExprKind::Prefix { expr: base, .. } => {
-            collect_exports_from_expr(module, interner, base, exports, attr_stack);
+            collect_expr(module, interner, *base, exports, attr_stack);
         }
         HirExprKind::Binary { left, right, .. } => {
-            collect_exports_from_expr(module, interner, left, exports, attr_stack);
-            collect_exports_from_expr(module, interner, right, exports, attr_stack);
+            collect_pair_exprs(module, interner, *left, *right, exports, attr_stack);
         }
         HirExprKind::Let { value, .. } => {
-            collect_exports_from_expr(module, interner, value, exports, attr_stack);
+            collect_expr(module, interner, *value, exports, attr_stack);
         }
         HirExprKind::Case { scrutinee, arms } => {
-            collect_case_exports(module, interner, scrutinee, arms, exports, attr_stack);
+            collect_case_exports(module, interner, *scrutinee, arms, exports, attr_stack);
         }
         HirExprKind::Data { variants, fields } => {
             collect_data_exports(module, interner, variants, fields, exports, attr_stack);
@@ -518,16 +540,14 @@ fn collect_exports_from_expr(
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
         HirExprKind::Instance { class, members, .. } => {
-            collect_exports_from_expr(module, interner, class, exports, attr_stack);
+            collect_expr(module, interner, *class, exports, attr_stack);
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
         HirExprKind::Handle { expr, clauses, .. } => {
-            collect_handle_exports(module, interner, expr, clauses, exports, attr_stack);
+            collect_handle_exports(module, interner, *expr, clauses, exports, attr_stack);
         }
         HirExprKind::Resume { expr } => {
-            if let Some(expr) = expr {
-                collect_exports_from_expr(module, interner, expr, exports, attr_stack);
-            }
+            collect_optional_expr(module, interner, *expr, exports, attr_stack);
         }
         HirExprKind::Quote { .. }
         | HirExprKind::Splice { .. }
@@ -537,8 +557,30 @@ fn collect_exports_from_expr(
         | HirExprKind::ArrayTy { .. }
         | HirExprKind::Variant { .. } => {}
     }
+}
 
-    attr_stack.truncate(start);
+fn collect_exprs<I>(
+    module: &ModuleState,
+    interner: &Interner,
+    exprs: I,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) where
+    I: IntoIterator<Item = HirExprId>,
+{
+    for expr_id in exprs {
+        collect_expr(module, interner, expr_id, exports, attr_stack);
+    }
+}
+
+fn collect_optional_expr(
+    module: &ModuleState,
+    interner: &Interner,
+    expr_id: Option<HirExprId>,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_exprs(module, interner, expr_id, exports, attr_stack);
 }
 
 fn collect_expr_id_range(
@@ -548,104 +590,186 @@ fn collect_expr_id_range(
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    for expr in module
-        .resolved
-        .module
-        .store
-        .expr_ids
-        .get(exprs)
-        .iter()
-        .copied()
-    {
-        collect_exports_from_expr(module, interner, expr, exports, attr_stack);
-    }
+    collect_exprs(
+        module,
+        interner,
+        module
+            .resolved
+            .module
+            .store
+            .expr_ids
+            .get(exprs)
+            .iter()
+            .copied(),
+        exports,
+        attr_stack,
+    );
+}
+
+fn collect_pair_exprs(
+    module: &ModuleState,
+    interner: &Interner,
+    left: HirExprId,
+    right: HirExprId,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_exprs(module, interner, [left, right], exports, attr_stack);
+}
+
+fn collect_array_exprs(
+    module: &ModuleState,
+    interner: &Interner,
+    items: &SliceRange<HirArrayItem>,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_exprs(
+        module,
+        interner,
+        module
+            .resolved
+            .module
+            .store
+            .array_items
+            .get(items.clone())
+            .iter()
+            .map(|item| item.expr),
+        exports,
+        attr_stack,
+    );
+}
+
+fn collect_arg_exprs(
+    module: &ModuleState,
+    interner: &Interner,
+    args: &SliceRange<HirArg>,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_exprs(
+        module,
+        interner,
+        module
+            .resolved
+            .module
+            .store
+            .args
+            .get(args.clone())
+            .iter()
+            .map(|arg| arg.expr),
+        exports,
+        attr_stack,
+    );
+}
+
+fn collect_template_exprs(
+    module: &ModuleState,
+    interner: &Interner,
+    parts: &SliceRange<HirTemplatePart>,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_exprs(
+        module,
+        interner,
+        module
+            .resolved
+            .module
+            .store
+            .template_parts
+            .get(parts.clone())
+            .iter()
+            .filter_map(|part| match part {
+                HirTemplatePart::Expr { expr } => Some(*expr),
+                HirTemplatePart::Text { .. } => None,
+            }),
+        exports,
+        attr_stack,
+    );
 }
 
 fn collect_record_item_exports(
     module: &ModuleState,
     interner: &Interner,
-    items: SliceRange<HirRecordItem>,
+    items: &SliceRange<HirRecordItem>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    for item in module.resolved.module.store.record_items.get(items) {
-        collect_exports_from_expr(module, interner, item.value, exports, attr_stack);
+    for item in module.resolved.module.store.record_items.get(items.clone()) {
+        collect_expr(module, interner, item.value, exports, attr_stack);
     }
+}
+
+fn collect_recordish_exprs(
+    module: &ModuleState,
+    interner: &Interner,
+    items: &SliceRange<HirRecordItem>,
+    base: Option<HirExprId>,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) {
+    collect_record_item_exports(module, interner, items, exports, attr_stack);
+    collect_optional_expr(module, interner, base, exports, attr_stack);
 }
 
 fn collect_case_exports(
     module: &ModuleState,
     interner: &Interner,
     scrutinee: HirExprId,
-    arms: SliceRange<HirCaseArm>,
+    arms: &SliceRange<HirCaseArm>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    collect_exports_from_expr(module, interner, scrutinee, exports, attr_stack);
-    for arm in module.resolved.module.store.case_arms.get(arms) {
-        if let Some(guard) = arm.guard {
-            collect_exports_from_expr(module, interner, guard, exports, attr_stack);
-        }
-        collect_exports_from_expr(module, interner, arm.expr, exports, attr_stack);
+    collect_expr(module, interner, scrutinee, exports, attr_stack);
+    for arm in module.resolved.module.store.case_arms.get(arms.clone()) {
+        collect_optional_expr(module, interner, arm.guard, exports, attr_stack);
+        collect_expr(module, interner, arm.expr, exports, attr_stack);
     }
 }
 
 fn collect_data_exports(
     module: &ModuleState,
     interner: &Interner,
-    variants: SliceRange<HirVariantDef>,
-    fields: SliceRange<HirFieldDef>,
+    variants: &SliceRange<HirVariantDef>,
+    fields: &SliceRange<HirFieldDef>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    for variant in module.resolved.module.store.variants.get(variants) {
-        if let Some(arg) = variant.arg {
-            collect_exports_from_expr(module, interner, arg, exports, attr_stack);
-        }
-        if let Some(value) = variant.value {
-            collect_exports_from_expr(module, interner, value, exports, attr_stack);
-        }
+    for variant in module.resolved.module.store.variants.get(variants.clone()) {
+        collect_optional_expr(module, interner, variant.arg, exports, attr_stack);
+        collect_optional_expr(module, interner, variant.value, exports, attr_stack);
     }
-    for field in module.resolved.module.store.fields.get(fields) {
-        collect_exports_from_expr(module, interner, field.ty, exports, attr_stack);
-        if let Some(value) = field.value {
-            collect_exports_from_expr(module, interner, value, exports, attr_stack);
-        }
+    for field in module.resolved.module.store.fields.get(fields.clone()) {
+        collect_expr(module, interner, field.ty, exports, attr_stack);
+        collect_optional_expr(module, interner, field.value, exports, attr_stack);
     }
 }
 
 fn collect_param_exports(
     module: &ModuleState,
     interner: &Interner,
-    params: SliceRange<HirParam>,
+    params: &SliceRange<HirParam>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    for param in module.resolved.module.store.params.get(params) {
-        if let Some(ty) = param.ty {
-            collect_exports_from_expr(module, interner, ty, exports, attr_stack);
-        }
-        if let Some(default) = param.default {
-            collect_exports_from_expr(module, interner, default, exports, attr_stack);
-        }
+    for param in module.resolved.module.store.params.get(params.clone()) {
+        collect_optional_expr(module, interner, param.ty, exports, attr_stack);
+        collect_optional_expr(module, interner, param.default, exports, attr_stack);
     }
 }
 
 fn collect_member_exports(
     module: &ModuleState,
     interner: &Interner,
-    members: SliceRange<HirMemberDef>,
+    members: &SliceRange<HirMemberDef>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    for member in module.resolved.module.store.members.get(members) {
-        collect_param_exports(module, interner, member.params.clone(), exports, attr_stack);
-        if let Some(sig) = member.sig {
-            collect_exports_from_expr(module, interner, sig, exports, attr_stack);
-        }
-        if let Some(value) = member.value {
-            collect_exports_from_expr(module, interner, value, exports, attr_stack);
-        }
+    for member in module.resolved.module.store.members.get(members.clone()) {
+        collect_param_exports(module, interner, &member.params, exports, attr_stack);
+        collect_optional_expr(module, interner, member.sig, exports, attr_stack);
+        collect_optional_expr(module, interner, member.value, exports, attr_stack);
     }
 }
 
@@ -653,13 +777,19 @@ fn collect_handle_exports(
     module: &ModuleState,
     interner: &Interner,
     expr: HirExprId,
-    clauses: SliceRange<HirHandleClause>,
+    clauses: &SliceRange<HirHandleClause>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    collect_exports_from_expr(module, interner, expr, exports, attr_stack);
-    for clause in module.resolved.module.store.handle_clauses.get(clauses) {
-        collect_exports_from_expr(module, interner, clause.body, exports, attr_stack);
+    collect_expr(module, interner, expr, exports, attr_stack);
+    for clause in module
+        .resolved
+        .module
+        .store
+        .handle_clauses
+        .get(clauses.clone())
+    {
+        collect_expr(module, interner, clause.body, exports, attr_stack);
     }
 }
 
@@ -671,9 +801,9 @@ fn collect_direct_exports(
     exports: &mut ModuleExports,
     attr_stack: &[HirAttr],
 ) {
-    match module.resolved.module.store.exprs.get(expr_id).kind.clone() {
+    match &module.resolved.module.store.exprs.get(expr_id).kind {
         HirExprKind::Let { pat, .. } => {
-            collect_export_bindings_from_pat(module, interner, pat, opaque, exports, attr_stack);
+            collect_export_bindings_from_pat(module, interner, *pat, opaque, exports, attr_stack);
         }
         HirExprKind::Instance { .. } => {
             let span = module.resolved.module.store.exprs.get(expr_id).origin.span;
@@ -708,28 +838,17 @@ fn collect_export_bindings_from_pat(
         HirPatKind::Tuple { items }
         | HirPatKind::Array { items }
         | HirPatKind::Variant { args: items, .. } => {
-            for item in module
-                .resolved
-                .module
-                .store
-                .pat_ids
-                .get(items)
-                .iter()
-                .copied()
-            {
-                collect_export_bindings_from_pat(module, interner, item, opaque, exports, attr_stack);
-            }
+            collect_pat_id_range(module, interner, items, opaque, exports, attr_stack);
         }
         HirPatKind::Record { fields } => {
             for field in module.resolved.module.store.record_pat_fields.get(fields) {
-                collect_export_binding_from_record_field(
-                    module,
-                    interner,
-                    field,
-                    opaque,
-                    exports,
-                    attr_stack,
-                );
+                if let Some(value) = field.value {
+                    collect_export_bindings_from_pat(
+                        module, interner, value, opaque, exports, attr_stack,
+                    );
+                } else {
+                    push_export_binding(module, interner, field.name, opaque, exports, attr_stack);
+                }
             }
         }
         HirPatKind::Or { left, right } => {
@@ -743,18 +862,24 @@ fn collect_export_bindings_from_pat(
     }
 }
 
-fn collect_export_binding_from_record_field(
+fn collect_pat_id_range(
     module: &ModuleState,
     interner: &Interner,
-    field: &HirRecordPatField,
+    items: SliceRange<HirPatId>,
     opaque: bool,
     exports: &mut ModuleExports,
     attr_stack: &[HirAttr],
 ) {
-    if let Some(value) = field.value {
-        collect_export_bindings_from_pat(module, interner, value, opaque, exports, attr_stack);
-    } else {
-        push_export_binding(module, interner, field.name, opaque, exports, attr_stack);
+    for item in module
+        .resolved
+        .module
+        .store
+        .pat_ids
+        .get(items)
+        .iter()
+        .copied()
+    {
+        collect_export_bindings_from_pat(module, interner, item, opaque, exports, attr_stack);
     }
 }
 

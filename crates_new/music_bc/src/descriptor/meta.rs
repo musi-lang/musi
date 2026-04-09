@@ -8,4 +8,3 @@ pub struct MetaDescriptor {
     pub key: Idx<StringRecord>,
     pub values: Box<[Idx<StringRecord>]>,
 }
-

@@ -430,7 +430,10 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::Constant(_), OperandShape::Constant)
             | (Operand::Global(_), OperandShape::Global)
             | (Operand::Method(_), OperandShape::Method)
-            | (Operand::WideMethodCaptures { .. }, OperandShape::WideMethodCaptures)
+            | (
+                Operand::WideMethodCaptures { .. },
+                OperandShape::WideMethodCaptures
+            )
             | (Operand::Foreign(_), OperandShape::Foreign)
             | (Operand::Effect { .. }, OperandShape::Effect)
             | (Operand::EffectId(_), OperandShape::EffectId)

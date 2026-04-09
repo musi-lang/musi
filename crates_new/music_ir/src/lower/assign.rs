@@ -4,7 +4,11 @@ use crate::api::{IrAssignTarget, IrExprKind};
 
 use super::{LowerCtx, lower_expr, lower_index_expr, record_layout_for_ty, use_binding_id};
 
-pub(super) fn lower_assign_expr(ctx: &mut LowerCtx<'_>, left: HirExprId, right: HirExprId) -> IrExprKind {
+pub(super) fn lower_assign_expr(
+    ctx: &mut LowerCtx<'_>,
+    left: HirExprId,
+    right: HirExprId,
+) -> IrExprKind {
     let Some(target) = lower_assign_target(ctx, left) else {
         return IrExprKind::Unsupported {
             description: "unsupported assignment target".into(),
@@ -59,4 +63,3 @@ fn lower_assign_target(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> Option<IrAssi
         _ => None,
     }
 }
-

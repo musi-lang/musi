@@ -88,11 +88,17 @@ fn append_array_spread_parts(
                 let Ok(index_u32) = u32::try_from(index) else {
                     continue;
                 };
-                parts.push(IrSeqPart::Expr(project_index(origin, temp_expr.clone(), index_u32)));
+                parts.push(IrSeqPart::Expr(project_index(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
             }
             Ok(false)
         }
-        HirTyKind::Array { dims, .. } => append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts),
+        HirTyKind::Array { dims, .. } => {
+            append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
+        }
         _ => Err(IrExprKind::Unsupported {
             description: "array spread source is not tuple/array".into(),
         }),
@@ -119,7 +125,11 @@ fn append_array_dim_spread_parts(
     match dims_vec[0] {
         HirDim::Int(len) => {
             for index_u32 in 0..len {
-                parts.push(IrSeqPart::Expr(project_index(origin, temp_expr.clone(), index_u32)));
+                parts.push(IrSeqPart::Expr(project_index(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
             }
             Ok(false)
         }

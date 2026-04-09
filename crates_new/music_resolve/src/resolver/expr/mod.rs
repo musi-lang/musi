@@ -3,10 +3,10 @@ use super::*;
 use music_arena::SliceRange;
 use music_hir::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
-    HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod,
-    HirExprId, HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirMemberDef,
-    HirMemberKind, HirMods, HirParam, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind,
-    HirRecordItem, HirSpliceKind, HirVariantDef,
+    HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod, HirExprId,
+    HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirMods,
+    HirParam, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind,
+    HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
@@ -97,5 +97,4 @@ where
             None
         }
     }
-
 }

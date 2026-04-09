@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirPatKind,
-    HirMemberKind, HirTyId, HirTyKind, HirVariantDef,
+    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirMemberKind,
+    HirPatKind, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_names::{Ident, NameBindingId};
 
@@ -172,7 +172,10 @@ pub(in super::super) fn check_foreign_let(
     Some(ty)
 }
 
-fn foreign_binding_from_let(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<(NameBindingId, Ident)> {
+fn foreign_binding_from_let(
+    ctx: &CheckPass<'_, '_, '_>,
+    expr: HirExprId,
+) -> Option<(NameBindingId, Ident)> {
     let HirExprKind::Let { pat, .. } = ctx.expr(expr).kind else {
         return None;
     };
@@ -216,17 +219,27 @@ fn when_attr_matches(
         };
 
         let matched = match name {
-            "os" => target.os.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
-            "arch" => target.arch.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
-            "env" => target.env.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
-            "abi" => target.abi.as_deref().is_some_and(|t| values.iter().any(|v| v == t)),
+            "os" => target
+                .os
+                .as_deref()
+                .is_some_and(|t| values.iter().any(|v| v == t)),
+            "arch" => target
+                .arch
+                .as_deref()
+                .is_some_and(|t| values.iter().any(|v| v == t)),
+            "env" => target
+                .env
+                .as_deref()
+                .is_some_and(|t| values.iter().any(|v| v == t)),
+            "abi" => target
+                .abi
+                .as_deref()
+                .is_some_and(|t| values.iter().any(|v| v == t)),
             "vendor" => target
                 .vendor
                 .as_deref()
                 .is_some_and(|t| values.iter().any(|v| v == t)),
-            "feature" => values
-                .iter()
-                .any(|v| target.features.contains(v.as_str())),
+            "feature" => values.iter().any(|v| target.features.contains(v.as_str())),
             _ => true,
         };
         if !matched {

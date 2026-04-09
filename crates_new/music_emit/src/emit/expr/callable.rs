@@ -39,7 +39,10 @@ pub(super) fn compile_variant_new(
 
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::DataNew,
-        Operand::TypeLen { ty, len: field_count },
+        Operand::TypeLen {
+            ty,
+            len: field_count,
+        },
     )));
 }
 

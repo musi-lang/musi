@@ -32,7 +32,9 @@ where
 
         let inherited_attrs = outer_mods.attrs.clone();
         let merged_attrs = self.merge_attrs(inherited_attrs, outer_attrs);
-        let base_mods = outer_mods.with_foreign(foreign_mod).with_attrs(merged_attrs);
+        let base_mods = outer_mods
+            .with_foreign(foreign_mod)
+            .with_attrs(merged_attrs);
 
         let decls_node = node.child_nodes().find(|n| {
             matches!(
@@ -45,7 +47,10 @@ where
         if let Some(n) = decls_node {
             match n.kind() {
                 SyntaxNodeKind::MemberList => {
-                    for member in n.child_nodes().filter(|m| m.kind() == SyntaxNodeKind::Member) {
+                    for member in n
+                        .child_nodes()
+                        .filter(|m| m.kind() == SyntaxNodeKind::Member)
+                    {
                         exprs.push(self.lower_foreign_member_let(member, base_mods.clone()));
                     }
                 }

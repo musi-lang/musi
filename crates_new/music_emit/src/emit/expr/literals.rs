@@ -125,4 +125,3 @@ fn parse_int_literal(raw: &str) -> Option<i64> {
         .ok()
         .map(|value| value * sign)
 }
-

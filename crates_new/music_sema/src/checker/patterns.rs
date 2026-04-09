@@ -148,12 +148,11 @@ fn bind_variant_pat(
         }
         _ => None,
     };
-    let expected_args: Vec<HirTyId> = expected_payload.map_or_else(Vec::new, |payload_ty| {
-        match &ctx.ty(payload_ty).kind {
+    let expected_args: Vec<HirTyId> =
+        expected_payload.map_or_else(Vec::new, |payload_ty| match &ctx.ty(payload_ty).kind {
             HirTyKind::Tuple { items } => ctx.ty_ids(*items),
             _ => vec![payload_ty],
-        }
-    });
+        });
     let args_vec = ctx.pat_ids(args);
     if expected_args.len() != args_vec.len() {
         ctx.diag(span, "variant pattern arity mismatch", "");
@@ -183,7 +182,10 @@ fn bind_or_pat(
     bind_pat(ctx, right, ty);
 }
 
-pub(super) fn binders_in_pat(ctx: &CheckPass<'_, '_, '_>, pat: HirPatId) -> BTreeSet<NameBindingId> {
+pub(super) fn binders_in_pat(
+    ctx: &CheckPass<'_, '_, '_>,
+    pat: HirPatId,
+) -> BTreeSet<NameBindingId> {
     let mut out = BTreeSet::<NameBindingId>::new();
     collect_binders(ctx, pat, &mut out);
     out

@@ -67,14 +67,17 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         }
     }
 
-    if sema.module().store.exprs.get(expr_id).mods.foreign.is_some() {
+    if sema
+        .module()
+        .store
+        .exprs
+        .get(expr_id)
+        .mods
+        .foreign
+        .is_some()
+    {
         items.foreigns.push(super::lower_foreign_let(
-            sema,
-            interner,
-            expr_id,
-            name,
-            params,
-            exported,
+            sema, interner, expr_id, name, params, exported,
         ));
         return;
     }
@@ -106,8 +109,10 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             let layout_pack = def.and_then(|data| data.layout_pack);
             items.data_defs.push(IrDataDef {
                 key,
-                variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
-                    .expect("variant count overflow"),
+                variant_count: u32::try_from(
+                    sema.module().store.variants.get(variants.clone()).len(),
+                )
+                .expect("variant count overflow"),
                 field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
                     .expect("field count overflow"),
                 repr_kind,
@@ -143,8 +148,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
 fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrParam]> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    sema
-        .module()
+    sema.module()
         .store
         .params
         .get(params)

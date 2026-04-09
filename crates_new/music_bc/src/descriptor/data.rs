@@ -11,4 +11,3 @@ pub struct DataDescriptor {
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
 }
-

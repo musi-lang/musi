@@ -8,11 +8,11 @@ use music_bc::Artifact;
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
 use music_sema::TargetInfo;
-use music_session::{CompiledOutput, Session, SessionOptions};
+use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use music_syntax::{Lexer, parse};
 
-use crate::errors::ProjectError;
 use crate::ProjectResult;
+use crate::errors::ProjectError;
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::registry::{RegistryPackage, resolve_registry_package};
@@ -120,10 +120,7 @@ struct LocalPackage {
 ///
 /// Returns [`ProjectError`] when the project manifest, workspace, or dependency graph cannot be
 /// loaded from `path`.
-pub fn load_project(
-    path: impl AsRef<Path>,
-    options: ProjectOptions,
-) -> ProjectResult<Project> {
+pub fn load_project(path: impl AsRef<Path>, options: ProjectOptions) -> ProjectResult<Project> {
     Project::load(path, options)
 }
 
@@ -391,45 +388,66 @@ impl Project {
         Ok(session)
     }
 
+    fn with_entry_session<T, F>(&self, entry: &ModuleKey, compile: F) -> ProjectResult<T>
+    where
+        F: FnOnce(&mut Session, &ModuleKey) -> ProjectResult<T>,
+    {
+        let mut session = self.build_session()?;
+        compile(&mut session, entry)
+    }
+
+    fn with_root_entry_session<T, F>(&self, compile: F) -> ProjectResult<T>
+    where
+        F: FnOnce(&mut Session, &ModuleKey) -> ProjectResult<T>,
+    {
+        let entry = self.root_entry()?;
+        self.with_entry_session(&entry.module_key, compile)
+    }
+
+    fn compile_root_entry_with<T, F>(&self, compile: F) -> ProjectResult<T>
+    where
+        F: FnOnce(&mut Session, &ModuleKey) -> Result<T, SessionError>,
+    {
+        self.with_root_entry_session(|session, entry| Ok(compile(session, entry)?))
+    }
+
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled through
     /// [`Session`].
     pub fn compile_root_entry(&self) -> ProjectResult<CompiledOutput> {
-        let mut session = self.build_session()?;
-        Ok(session.compile_entry(&self.root_entry()?.module_key)?)
+        self.compile_root_entry_with(Session::compile_entry)
     }
 
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be emitted to an artifact.
     pub fn compile_root_entry_artifact(&self) -> ProjectResult<Artifact> {
-        let mut session = self.build_session()?;
-        Ok(session.compile_entry_artifact(&self.root_entry()?.module_key)?)
+        self.compile_root_entry_with(Session::compile_entry_artifact)
     }
 
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled to bytes.
     pub fn compile_root_entry_bytes(&self) -> ProjectResult<Vec<u8>> {
-        let mut session = self.build_session()?;
-        Ok(session.compile_entry_bytes(&self.root_entry()?.module_key)?)
+        self.compile_root_entry_with(Session::compile_entry_bytes)
     }
 
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled to text.
     pub fn compile_root_entry_text(&self) -> ProjectResult<String> {
-        let mut session = self.build_session()?;
-        Ok(session.compile_entry_text(&self.root_entry()?.module_key)?)
+        self.compile_root_entry_with(Session::compile_entry_text)
     }
 
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the named package entry cannot be compiled.
     pub fn compile_package_entry(&self, name: &str) -> ProjectResult<CompiledOutput> {
-        let mut session = self.build_session()?;
-        Ok(session.compile_entry(&self.package_entry(name)?.module_key)?)
+        let entry = self.package_entry(name)?;
+        self.with_entry_session(&entry.module_key, |session, module_key| {
+            Ok(session.compile_entry(module_key)?)
+        })
     }
 }
 
@@ -548,11 +566,10 @@ fn load_local_packages(
 ) -> ProjectResult<BTreeMap<String, LocalPackage>> {
     let mut out = BTreeMap::new();
     if let Some(name) = manifest.name.clone() {
-        let version = manifest
+        let _ = manifest
             .version
             .clone()
             .ok_or_else(|| ProjectError::MissingPackageVersion { name: name.clone() })?;
-        let _ = version;
         let package = LocalPackage {
             manifest_path: root_manifest_path.to_path_buf(),
             root_dir: root_dir.to_path_buf(),
@@ -583,11 +600,10 @@ fn load_local_packages(
                     member_manifest_path.display()
                 ),
             })?;
-        let version = member_manifest
+        let _ = member_manifest
             .version
             .clone()
             .ok_or_else(|| ProjectError::MissingPackageVersion { name: name.clone() })?;
-        let _ = version;
         let package = LocalPackage {
             manifest_path: member_manifest_path,
             root_dir: member_root,

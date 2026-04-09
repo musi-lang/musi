@@ -6,10 +6,9 @@ use music_base::diag::Diag;
 use music_base::{SourceId, Span};
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirDim,
-    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause,
-    HirLit, HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId,
-    HirRecordItem, HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind,
-    HirVariantDef,
+    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause, HirLit,
+    HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
+    HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
@@ -18,9 +17,9 @@ use music_resolve::ResolvedModule;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, ExprFacts, InstanceFacts, PatFacts, SemaDiagList, SemaEnv, SemaModule,
-    SemaDataDef, SemaDataVariantDef, SemaEffectDef, SemaEffectOpDef, SemaModuleParts, SemaOptions,
-    DefinitionKey, ForeignLinkInfo, TargetInfo,
+    ClassFacts, DefinitionKey, ExprFacts, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef,
+    SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule,
+    SemaModuleParts, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -504,7 +503,13 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     }
 
     pub fn binders(&self, range: SliceRange<HirBinder>) -> Vec<HirBinder> {
-        self.module.resolved.module.store.binders.get(range).to_vec()
+        self.module
+            .resolved
+            .module
+            .store
+            .binders
+            .get(range)
+            .to_vec()
     }
 
     pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> Vec<HirTemplatePart> {
@@ -705,8 +710,18 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
         let key = DefinitionKey::new(self.module_key().clone(), name.clone());
         let variants = BTreeMap::from([
-            ("Left".into(), SemaDataVariantDef { payload: Some(left) }),
-            ("Right".into(), SemaDataVariantDef { payload: Some(right) }),
+            (
+                "Left".into(),
+                SemaDataVariantDef {
+                    payload: Some(left),
+                },
+            ),
+            (
+                "Right".into(),
+                SemaDataVariantDef {
+                    payload: Some(right),
+                },
+            ),
         ]);
         let _prev = self.decls.data_defs.insert(
             name.clone(),

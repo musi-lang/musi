@@ -73,53 +73,15 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     for export in &module.exports {
         let name = qualified_name(&module.module_key, export.name.as_ref());
         let name_id = state.artifact.intern_string(name.as_ref());
-        let opaque = export.opaque;
-
-        let target = module
-            .callables
-            .iter()
-            .find(|callable| callable.name.as_ref() == export.name.as_ref())
-            .and_then(|callable| callable.binding)
-            .and_then(|binding| layout.callables.get(&binding).copied())
-            .map(ExportTarget::Method)
-            .or_else(|| {
-                module
-                    .globals
-                    .iter()
-                    .find(|global| global.name.as_ref() == export.name.as_ref())
-                    .and_then(|global| global.binding)
-                    .and_then(|binding| layout.globals.get(&binding).copied())
-                    .map(ExportTarget::Global)
-            })
-            .or_else(|| {
-                module
-                    .foreigns
-                    .iter()
-                    .find(|foreign| foreign.name.as_ref() == export.name.as_ref())
-                    .and_then(|foreign| foreign.binding)
-                    .and_then(|binding| layout.foreigns.get(&binding).copied())
-                    .map(ExportTarget::Foreign)
-            })
-            .or_else(|| {
-                export.data_key.as_ref().map(|key| {
-                    let ty_name = qualified_name(&key.module, key.name.as_ref());
-                    ExportTarget::Type(ensure_type(state, layout, ty_name.as_ref()))
-                })
-            })
-            .or_else(|| {
-                export
-                    .effect_key
-                    .as_ref()
-                    .and_then(|key| layout.effects.get(key).copied())
-                    .map(ExportTarget::Effect)
-            })
-            .or_else(|| {
-                export
-                    .class_key
-                    .as_ref()
-                    .and_then(|key| layout.classes.get(key).copied())
-                    .map(ExportTarget::Class)
-            });
+        let target = export_target(
+            state,
+            module,
+            layout,
+            export.name.as_ref(),
+            export.data_key.as_ref(),
+            export.effect_key.as_ref(),
+            export.class_key.as_ref(),
+        );
 
         let Some(target) = target else {
             state.diags.push(Diag::error("export target missing"));
@@ -128,10 +90,71 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
 
         let _ = state.artifact.exports.alloc(ExportDescriptor {
             name: name_id,
-            opaque,
+            opaque: export.opaque,
             target,
         });
     }
+}
+
+fn export_target(
+    state: &mut ProgramState,
+    module: &IrModule,
+    layout: &mut ModuleLayout,
+    export_name: &str,
+    data_key: Option<&DefinitionKey>,
+    effect_key: Option<&DefinitionKey>,
+    class_key: Option<&DefinitionKey>,
+) -> Option<ExportTarget> {
+    if let Some(binding) = export_binding(module, export_name) {
+        if let Some(method) = layout.callables.get(&binding).copied() {
+            return Some(ExportTarget::Method(method));
+        }
+        if let Some(global) = layout.globals.get(&binding).copied() {
+            return Some(ExportTarget::Global(global));
+        }
+        if let Some(foreign) = layout.foreigns.get(&binding).copied() {
+            return Some(ExportTarget::Foreign(foreign));
+        }
+    }
+
+    if let Some(key) = data_key {
+        let ty_name = qualified_name(&key.module, key.name.as_ref());
+        return Some(ExportTarget::Type(ensure_type(
+            state,
+            layout,
+            ty_name.as_ref(),
+        )));
+    }
+
+    if let Some(effect) = effect_key.and_then(|key| layout.effects.get(key).copied()) {
+        return Some(ExportTarget::Effect(effect));
+    }
+
+    class_key
+        .and_then(|key| layout.classes.get(key).copied())
+        .map(ExportTarget::Class)
+}
+
+pub(super) fn export_binding(module: &IrModule, export_name: &str) -> Option<NameBindingId> {
+    module
+        .callables
+        .iter()
+        .find(|callable| callable.name.as_ref() == export_name)
+        .and_then(|callable| callable.binding)
+        .or_else(|| {
+            module
+                .globals
+                .iter()
+                .find(|global| global.name.as_ref() == export_name)
+                .and_then(|global| global.binding)
+        })
+        .or_else(|| {
+            module
+                .foreigns
+                .iter()
+                .find(|foreign| foreign.name.as_ref() == export_name)
+                .and_then(|foreign| foreign.binding)
+        })
 }
 
 fn register_meta(state: &mut ProgramState, module: &IrModule) {
@@ -144,7 +167,11 @@ fn register_meta(state: &mut ProgramState, module: &IrModule) {
             .map(|value| state.artifact.intern_string(value.as_ref()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let _ = state.artifact.meta.alloc(MetaDescriptor { target, key, values });
+        let _ = state.artifact.meta.alloc(MetaDescriptor {
+            target,
+            key,
+            values,
+        });
     }
 }
 
@@ -177,7 +204,12 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
     for callable in &module.callables {
         let name = qualified_name(&module.module_key, &callable.name);
         let params = u16::try_from(callable.params.len()).unwrap_or(u16::MAX);
-        let method_id = alloc_method(&mut state.artifact, name.as_ref(), callable.exported, params);
+        let method_id = alloc_method(
+            &mut state.artifact,
+            name.as_ref(),
+            callable.exported,
+            params,
+        );
         let _ = layout
             .callables_by_name
             .insert(callable.name.clone(), method_id);
@@ -221,17 +253,20 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
         | IrExprKind::Unsupported { .. } => {}
-        IrExprKind::Sequence { exprs } => collect_expr_types_slice(state, layout, exprs),
+        IrExprKind::Sequence { exprs } => collect_expr_types_iter(state, layout, exprs),
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             let _ = ensure_type(state, layout, ty_name);
-            collect_expr_types_slice(state, layout, items);
+            collect_expr_types_iter(state, layout, items);
         }
         IrExprKind::ArrayCat { ty_name, parts } => {
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_seq_parts(state, layout, parts);
         }
-        IrExprKind::Record { ty_name, fields, .. } => {
-            collect_expr_types_record_fields(state, layout, ty_name, fields);
+        IrExprKind::Record {
+            ty_name, fields, ..
+        } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types_iter(state, layout, fields.iter().map(|field| &field.expr));
         }
         IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
             collect_expr_types(state, layout, value);
@@ -250,8 +285,12 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             base,
             updates,
             ..
-        } => collect_expr_types_record_update(state, layout, ty_name, base, updates),
-        IrExprKind::ClosureNew { captures, .. } => collect_expr_types_slice(state, layout, captures),
+        } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types(state, layout, base);
+            collect_expr_types_iter(state, layout, updates.iter().map(|update| &update.expr));
+        }
+        IrExprKind::ClosureNew { captures, .. } => collect_expr_types_iter(state, layout, captures),
         IrExprKind::Binary { left, right, .. } => {
             collect_expr_types(state, layout, left);
             collect_expr_types(state, layout, right);
@@ -261,17 +300,30 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types(state, layout, base);
         }
-        IrExprKind::Case { scrutinee, arms } => collect_expr_types_case(state, layout, scrutinee, arms),
-        IrExprKind::Call { callee, args } => collect_expr_types_call(state, layout, callee, args),
+        IrExprKind::Case { scrutinee, arms } => {
+            collect_expr_types(state, layout, scrutinee);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_expr_types(state, layout, guard);
+                }
+                collect_expr_types(state, layout, &arm.expr);
+            }
+        }
+        IrExprKind::Call { callee, args } => {
+            collect_expr_types(state, layout, callee);
+            collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
+        }
         IrExprKind::CallSeq { callee, args } => {
             let _ = ensure_type(state, layout, "[]Any");
             collect_expr_types(state, layout, callee);
             collect_expr_types_seq_parts(state, layout, args);
         }
         IrExprKind::VariantNew { data_key, args, .. } => {
-            collect_expr_types_variant_new(state, layout, data_key, args);
+            let name = qualified_name(&data_key.module, &data_key.name);
+            let _ = ensure_type(state, layout, name.as_ref());
+            collect_expr_types_iter(state, layout, args);
         }
-        IrExprKind::Perform { args, .. } => collect_expr_types_slice(state, layout, args),
+        IrExprKind::Perform { args, .. } => collect_expr_types_iter(state, layout, args),
         IrExprKind::PerformSeq { args, .. } => {
             let _ = ensure_type(state, layout, "[]Any");
             collect_expr_types_seq_parts(state, layout, args);
@@ -282,7 +334,13 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             ops,
             body,
             ..
-        } => collect_expr_types_handle(state, layout, effect_key, value, ops, body),
+        } => {
+            let handler_ty = handler_type_name(effect_key);
+            let _ = ensure_type(state, layout, handler_ty.as_ref());
+            collect_expr_types(state, layout, value);
+            collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
+            collect_expr_types(state, layout, body);
+        }
         IrExprKind::Resume { expr } => {
             if let Some(expr) = expr.as_deref() {
                 collect_expr_types(state, layout, expr);
@@ -291,101 +349,27 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
     }
 }
 
-fn collect_expr_types_seq_parts(state: &mut ProgramState, layout: &mut ModuleLayout, parts: &[IrSeqPart]) {
-    for part in parts {
-        match part {
-            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
-                collect_expr_types(state, layout, expr);
-            }
-        }
-    }
+fn collect_expr_types_seq_parts(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    parts: &[IrSeqPart],
+) {
+    collect_expr_types_iter(
+        state,
+        layout,
+        parts.iter().map(|part| match part {
+            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => expr,
+        }),
+    );
 }
 
-fn collect_expr_types_slice(state: &mut ProgramState, layout: &mut ModuleLayout, exprs: &[IrExpr]) {
+fn collect_expr_types_iter<'a, I>(state: &mut ProgramState, layout: &mut ModuleLayout, exprs: I)
+where
+    I: IntoIterator<Item = &'a IrExpr>,
+{
     for expr in exprs {
         collect_expr_types(state, layout, expr);
     }
-}
-
-fn collect_expr_types_record_fields(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    ty_name: &str,
-    fields: &[IrRecordField],
-) {
-    let _ = ensure_type(state, layout, ty_name);
-    for field in fields {
-        collect_expr_types(state, layout, &field.expr);
-    }
-}
-
-fn collect_expr_types_record_update(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    ty_name: &str,
-    base: &IrExpr,
-    updates: &[IrRecordField],
-) {
-    let _ = ensure_type(state, layout, ty_name);
-    collect_expr_types(state, layout, base);
-    for update in updates {
-        collect_expr_types(state, layout, &update.expr);
-    }
-}
-
-fn collect_expr_types_case(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    scrutinee: &IrExpr,
-    arms: &[IrCaseArm],
-) {
-    collect_expr_types(state, layout, scrutinee);
-    for arm in arms {
-        if let Some(guard) = &arm.guard {
-            collect_expr_types(state, layout, guard);
-        }
-        collect_expr_types(state, layout, &arm.expr);
-    }
-}
-
-fn collect_expr_types_call(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    callee: &IrExpr,
-    args: &[IrArg],
-) {
-    collect_expr_types(state, layout, callee);
-    for arg in args {
-        collect_expr_types(state, layout, &arg.expr);
-    }
-}
-
-fn collect_expr_types_variant_new(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    data_key: &DefinitionKey,
-    args: &[IrExpr],
-) {
-    let name = qualified_name(&data_key.module, &data_key.name);
-    let _ = ensure_type(state, layout, name.as_ref());
-    collect_expr_types_slice(state, layout, args);
-}
-
-fn collect_expr_types_handle(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    effect_key: &DefinitionKey,
-    value: &IrExpr,
-    ops: &[IrHandleOp],
-    body: &IrExpr,
-) {
-    let handler_ty = handler_type_name(effect_key);
-    let _ = ensure_type(state, layout, handler_ty.as_ref());
-    collect_expr_types(state, layout, value);
-    for op in ops {
-        collect_expr_types(state, layout, &op.closure);
-    }
-    collect_expr_types(state, layout, body);
 }
 
 fn collect_assign_target_types(

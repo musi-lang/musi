@@ -26,10 +26,11 @@ pub(super) fn lower_record_expr(
         Ok(value) => value,
         Err(kind) => return kind,
     };
-    let lowered_fields = match lower_ordered_record_fields(interner, field_count, &indices, &sources) {
-        Ok(fields) => fields,
-        Err(kind) => return kind,
-    };
+    let lowered_fields =
+        match lower_ordered_record_fields(interner, field_count, &indices, &sources) {
+            Ok(fields) => fields,
+            Err(kind) => return kind,
+        };
 
     let mut exprs = prelude;
     exprs.push(IrExpr {
@@ -54,13 +55,17 @@ pub(super) fn lower_record_update_expr(
     let sema = ctx.sema;
     let interner = ctx.interner;
     let base_ty = sema.expr_ty(base);
-    let Some((_base_indices, base_fields, _base_count)) = record_layout_for_ty(sema, base_ty, interner) else {
+    let Some((_base_indices, base_fields, _base_count)) =
+        record_layout_for_ty(sema, base_ty, interner)
+    else {
         return IrExprKind::Unsupported {
             description: "record update without record base".into(),
         };
     };
     let result_ty = sema.expr_ty(expr_id);
-    let Some((result_indices, result_fields, result_count)) = record_layout_for_ty(sema, result_ty, interner) else {
+    let Some((result_indices, result_fields, result_count)) =
+        record_layout_for_ty(sema, result_ty, interner)
+    else {
         return IrExprKind::Unsupported {
             description: "record update without record result".into(),
         };

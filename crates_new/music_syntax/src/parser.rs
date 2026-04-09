@@ -175,12 +175,12 @@ impl<'a> Parser<'a> {
         let mut children = Vec::new();
         while !self.at(TokenKind::Eof) {
             let before = self.pos;
-            let res = if self.at_any(&[TokenKind::KwInfixl, TokenKind::KwInfixr, TokenKind::KwInfix])
-            {
-                self.parse_fixity_directive()
-            } else {
-                self.parse_stmt()
-            };
+            let res =
+                if self.at_any(&[TokenKind::KwInfixl, TokenKind::KwInfixr, TokenKind::KwInfix]) {
+                    self.parse_fixity_directive()
+                } else {
+                    self.parse_stmt()
+                };
             match res {
                 Ok(node) => children.push(SyntaxElementId::Node(node)),
                 Err(error) => {
@@ -201,10 +201,9 @@ impl<'a> Parser<'a> {
         let prec = self.expect_token(TokenKind::Int)?;
         let op = self.expect_token(TokenKind::OpIdent)?;
         let semi = self.expect_token(TokenKind::Semicolon)?;
-        Ok(self.builder.push_node_from_children(
-            SyntaxNodeKind::FixityDirective,
-            vec![kw, prec, op, semi],
-        ))
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::FixityDirective, vec![kw, prec, op, semi]))
     }
 
     fn parse_stmt(&mut self) -> ParseResult<SyntaxNodeId> {

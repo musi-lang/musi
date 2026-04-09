@@ -207,8 +207,14 @@ pub(in super::super) fn check_let_expr(
         }
         ty
     } else {
-        let value_facts =
-            check_non_callable_let_value(ctx, origin, is_module_stmt, bound_name, declared_ty, value);
+        let value_facts = check_non_callable_let_value(
+            ctx,
+            origin,
+            is_module_stmt,
+            bound_name,
+            declared_ty,
+            value,
+        );
         let ty = declared_ty.unwrap_or(value_facts.ty);
         type_mismatch(ctx, origin, ty, value_facts.ty);
         if let Some(binding) = binding {

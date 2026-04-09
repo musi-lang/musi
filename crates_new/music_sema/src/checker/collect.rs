@@ -9,8 +9,8 @@ use music_names::Ident;
 
 use crate::api::ClassFacts;
 
-use super::decls::member_signature;
 use super::attrs::extract_data_layout_hints;
+use super::decls::member_signature;
 use super::normalize::{lower_constraints, lower_type_expr};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
@@ -170,7 +170,10 @@ fn collect_bound_decl(
     let origin = outer_attrs.map_or_else(|| ctx.expr(value).origin, |(o, _)| *o);
     let attrs = outer_attrs.map_or_else(Vec::new, |(_, range)| vec![range.clone()]);
     match ctx.expr(value).kind {
-        HirExprKind::Data { variants, fields: _ } => collect_data_decl(ctx, origin, &attrs, name, variants),
+        HirExprKind::Data {
+            variants,
+            fields: _,
+        } => collect_data_decl(ctx, origin, &attrs, name, variants),
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
             constraints,
