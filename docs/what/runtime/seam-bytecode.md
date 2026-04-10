@@ -1,10 +1,5 @@
 # SEAM Bytecode
 
-**What**: stable bytecode and artifact contract for SEAM.
-**Why**: keeps executable transport, metadata, and opcode families independent from source sugar and runtime implementation details.
-**How**: use this when changing opcodes, operands, descriptors, artifact sections, or transport validation.
-**Where**: ISA ownership lives in `music_bc`; binary/text transport lives in `music_assembly`.
-
 ## Identity
 
 SEAM is the executable contract between compilation and runtime.

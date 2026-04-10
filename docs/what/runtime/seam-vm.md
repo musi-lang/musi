@@ -1,10 +1,5 @@
 # SEAM VM
 
-**What**: conceptual runtime model for SEAM execution.
-**Why**: keeps execution semantics explicit and separate from source-level meaning and bytecode transport.
-**How**: use this when changing VM semantics, runtime values, effect behavior, or embedding boundaries.
-**Where**: executable runtime lives in `crates/musi_vm`; bytecode contract lives in `docs/what/runtime/seam-bytecode.md`.
-
 ## Identity
 
 SEAM VM executes typed SEAM programs on a stack-based machine.

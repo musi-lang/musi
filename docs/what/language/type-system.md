@@ -1,10 +1,5 @@
 # Type System
 
-**What**: normative reference for Musi types, type-valued expressions, constraints, and rows.
-**Why**: keeps type/effect meaning in one place instead of scattering it across sema and lowering docs.
-**How**: use this when changing typing rules, exported type surface, or type-oriented tests.
-**Where**: semantic implementation lives mainly in `music_sema`; emitted type/runtime contracts continue into SEAM docs.
-
 ## Core Principles
 
 The type system is built around these defaults:

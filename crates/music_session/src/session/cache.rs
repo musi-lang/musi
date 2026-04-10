@@ -288,15 +288,8 @@ impl Session {
     fn build_sema_module(&mut self, key: &ModuleKey) -> Result<SemaModule, SessionError> {
         let resolved = self.resolve_module(key)?.clone();
         let mut surfaces = SurfaceMap::default();
-        let imports = resolved
-            .imports
-            .iter()
-            .map(|import| import.to.clone())
-            .collect::<Vec<_>>();
-        for imported in imports {
-            let sema = self.check_module(&imported)?;
-            let _ = surfaces.surfaces.insert(imported, sema.surface().clone());
-        }
+        let mut seen = BTreeSet::new();
+        self.collect_import_surfaces(&resolved, &mut seen, &mut surfaces)?;
         let env: Option<&dyn SemaEnv> = if surfaces.surfaces.is_empty() {
             None
         } else {
@@ -310,5 +303,23 @@ impl Session {
                 env,
             },
         ))
+    }
+
+    fn collect_import_surfaces(
+        &mut self,
+        resolved: &ResolvedModule,
+        seen: &mut BTreeSet<ModuleKey>,
+        surfaces: &mut SurfaceMap,
+    ) -> Result<(), SessionError> {
+        for imported in resolved.imports.iter().map(|import| import.to.clone()) {
+            if !seen.insert(imported.clone()) {
+                continue;
+            }
+            let sema = self.check_module(&imported)?;
+            let _ = surfaces.surfaces.insert(imported.clone(), sema.surface().clone());
+            let imported_resolved = self.resolve_module(&imported)?.clone();
+            self.collect_import_surfaces(&imported_resolved, seen, surfaces)?;
+        }
+        Ok(())
     }
 }

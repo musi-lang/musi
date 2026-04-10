@@ -1,10 +1,5 @@
 # Compiler Architecture
 
-**What**: rationale for the compiler and runtime ownership split.
-**Why**: Musi stays maintainable only if meaning, lowering, transport, and execution stay in the right layers.
-**How**: use this when changing crate responsibilities, phase contracts, or cross-layer behavior.
-**Where**: concrete crate placement lives in `docs/where/workspace-map.md` and `docs/where/phase-boundaries.md`.
-
 ## Core Principle
 
 Each layer should own one transformation or one runtime responsibility.

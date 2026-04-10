@@ -1,9 +1,6 @@
 # Phase Boundaries
 
-**What**: dependency DAG and layer edges across compiler, SEAM, runtime, and tooling crates.
-**Why**: keeps meaning, lowering, transport, runtime, and project workflow from collapsing into each other.
-**How**: use this when adding dependencies, moving APIs, or deciding where one feature belongs.
-**Where**: crate ownership lives in `docs/where/workspace-map.md`.
+This page records the dependency DAG and the layer stops.
 
 ## Compiler DAG
 
@@ -23,8 +20,10 @@ music_base
 music_ir -> music_emit -> music_session
 music_ir -> music_jit -> music_session   (planned)
 music_bc -> music_assembly -> musi_vm
+musi_vm -> musi_native
 music_session -> musi_rt
 musi_vm -> musi_rt
+musi_native -> musi_rt
 musi_project -> music_session
 ```
 
@@ -36,6 +35,7 @@ musi_project -> music_session
 - `music_ir` stops at codegen-facing executable facts
 - `music_emit` stops at validated SEAM artifacts
 - `musi_vm` starts at loaded `.seam` execution
+- `musi_native` owns repo-provided host integration
 - `musi_rt` composes compiler services with runtime services
 - `music_session` orchestrates phases
 - `musi_project` owns package/workspace integration
@@ -46,6 +46,7 @@ musi_project -> music_session
 - transport does not redefine runtime semantics
 - runtime does not own compile-time meaning
 - project tooling does not collapse into compiler-core crates
+- low-level runtime capabilities surface through `musi:*`; package wrappers stay in `@std/*`
 - pre-resolve contracts use `*Env`, not `*Resolver`
 
 ## See Also

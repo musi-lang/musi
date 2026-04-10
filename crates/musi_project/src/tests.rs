@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use music_bc::Artifact;
+use music_module::ModuleKey;
 
 use crate::{PackageSource, Project, ProjectError, ProjectOptions};
 
@@ -230,4 +231,282 @@ fn manifest_imports_remap_specifiers_before_project_resolution() {
         .expect("artifact compiles");
 
     assert!(artifact.validate().is_ok());
+}
+
+#[test]
+fn discovers_co_located_package_test_modules() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" },
+  "workspace": ["packages/std"]
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"export let answer : Int := 42;",
+    );
+    write_file(
+        temp.path(),
+        "packages/std/musi.json",
+        r#"{
+  "name": "@std",
+  "version": "0.1.0",
+  "exports": "./index.ms"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/index.ms",
+        r#"
+export let version := "0.1.0";
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/testing/index.ms",
+        r#"
+export let pass := { passed := .True, message := "" };
+export let describe (_name, _body) : Unit ~> Unit := _body();
+export let it (_name, _body) : Unit ~> Unit := _body();
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/math/abs.test.ms",
+        r"
+export let test () : Unit := 0;
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let tests = project.package_test_modules();
+
+    assert!(tests.iter().any(|test| test.package.name == "@std"));
+    assert!(
+        tests.iter().any(|test| test
+            .module_key
+            .as_str()
+            .contains("@@std@0.1.0/math/abs.test.ms"))
+    );
+}
+
+#[test]
+fn compiles_workspace_std_package_and_test_modules() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root should resolve");
+    let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
+
+    let output = project
+        .compile_package_entry("@std")
+        .expect("@std entry compiles");
+    assert!(output.artifact.validate().is_ok());
+
+    for test in project.package_test_modules() {
+        let output = project
+            .compile_module(&test.module_key)
+            .expect("package test module compiles");
+        assert!(output.artifact.validate().is_ok());
+    }
+}
+
+#[test]
+fn compiles_static_reexport_chain_across_packages() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "hub": "*" },
+  "workspace": ["packages/hub", "packages/dep"]
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"
+let Hub := import "hub";
+export let answer () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/hub/musi.json",
+        r#"{
+  "name": "hub",
+  "version": "0.1.0",
+  "main": "./index.ms",
+  "exports": {
+    ".": "./index.ms"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/hub/index.ms",
+        r#"
+export let Dep := import "dep";
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/dep/musi.json",
+        r#"{
+  "name": "dep",
+  "version": "0.1.0",
+  "main": "./index.ms",
+  "exports": {
+    ".": "./index.ms"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/dep/index.ms",
+        r#"
+export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+"#,
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let artifact = project
+        .compile_root_entry_artifact()
+        .expect("root entry compiles through static reexport chain");
+
+    assert!(artifact.validate().is_ok());
+}
+
+#[test]
+fn std_root_exports_keep_static_module_targets() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root should resolve");
+    let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
+    let entry = project.package_entry("@std").expect("@std package entry resolves");
+    let mut session = project.build_session().expect("project session builds");
+    let sema = session
+        .check_module(&entry.module_key)
+        .expect("@std sema should succeed");
+    let surface = sema.surface();
+
+    let bytes = surface
+        .exported_value("Bytes")
+        .expect("Bytes export should exist");
+    let math = surface
+        .exported_value("Math")
+        .expect("Math export should exist");
+    let option = surface
+        .exported_value("Option")
+        .expect("Option export should exist");
+
+    assert_eq!(
+        bytes.module_target.as_ref(),
+        Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+    );
+    assert_eq!(
+        math.module_target.as_ref(),
+        Some(&ModuleKey::new("@@std@0.1.0/math/index.ms"))
+    );
+    assert_eq!(
+        option.module_target.as_ref(),
+        Some(&ModuleKey::new("@@std@0.1.0/option/index.ms"))
+    );
+}
+
+#[test]
+fn std_root_test_import_resolves_to_std_entry() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root should resolve");
+    let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
+    let test_key = ModuleKey::new("@@std@0.1.0/index.test.ms");
+    let mut session = project.build_session().expect("project session builds");
+    let resolved = session
+        .resolve_module(&test_key)
+        .expect("@std index.test should resolve")
+        .clone();
+
+    assert!(
+        resolved
+            .imports
+            .iter()
+            .any(|import| import.to == ModuleKey::new("@@std@0.1.0/index.ms"))
+    );
+}
+
+#[test]
+fn std_root_member_alias_keeps_module_target() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" },
+  "workspace": ["packages/std"]
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"
+let Std := import "@std";
+export let Bytes := Std.Bytes;
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/musi.json",
+        r#"{
+  "name": "@std",
+  "version": "0.1.0",
+  "main": "./index.ms",
+  "exports": {
+    ".": "./index.ms",
+    "./bytes": "./bytes/index.ms"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/index.ms",
+        r#"
+export let Bytes := import "@std/bytes";
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/bytes/index.ms",
+        r#"
+export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+"#,
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let mut session = project.build_session().expect("project session builds");
+    let entry = project.root_entry().expect("root entry resolves");
+    let sema = session
+        .check_module(&entry.module_key)
+        .expect("root sema should succeed");
+    let bytes = sema
+        .surface()
+        .exported_value("Bytes")
+        .expect("Bytes export should exist");
+
+    assert_eq!(
+        bytes.module_target.as_ref(),
+        Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+    );
 }

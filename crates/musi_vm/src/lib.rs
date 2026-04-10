@@ -9,8 +9,8 @@ pub(crate) mod value;
 mod vm;
 
 pub use api::{
-    NativeHost, NativeLoader, Program, ProgramExport, ProgramExportKind, RecordView, SeqView,
-    StringView, Value, ValueView, Vm, VmHost, VmLoader, VmOptions,
+    Program, ProgramExport, ProgramExportKind, RecordView, RejectingHost, RejectingLoader,
+    SeqView, StringView, Value, ValueView, Vm, VmHost, VmLoader, VmOptions,
 };
 pub use error::{OperandShape, VmError, VmErrorKind, VmValueKind};
 pub use host::{EffectCall, ForeignCall};

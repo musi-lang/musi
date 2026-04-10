@@ -1,10 +1,5 @@
 # Compiler Attributes
 
-**What**: language-level attribute surface and reserved compiler namespaces.
-**Why**: attrs affect language-adjacent meaning, metadata, and tooling boundaries, so their tiers must stay explicit.
-**How**: use this when changing attr syntax, attr semantics, or compiler-reserved attr namespaces.
-**Where**: attribute validation lives mostly in `music_sema`; FFI-specific surface also relates to `docs/what/language/ffi.md`.
-
 ## Attribute Tiers
 
 Musi keeps three tiers:

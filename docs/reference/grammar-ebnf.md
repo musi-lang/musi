@@ -2,13 +2,13 @@
 
 `grammar/Musi.g4` is the canonical, tool-supported grammar.
 
-This document is the compact, implementer-facing formalization intended to be easy to implement in “primitive simple” languages (C/Go) with:
+This document is the compact grammar reference for hand-written implementations in simple languages such as C or Go:
 
 - a hand-written lexer
 - recursive descent for statements/constructs
 - a flat infix-chain parse for expressions, with precedence/associativity resolved semantically via fixity declarations
 
-It also defines CST shaping rules (“no unnecessary nodes”).
+It also defines CST shaping rules ("no unnecessary nodes").
 
 Use it when:
 
@@ -227,16 +227,16 @@ Indexing remains distinct:
 index_expr = expr ".[" expr_list? "]" ;
 ```
 
-## CST shaping rules (“no unnecessary nodes”)
+## CST shaping rules ("no unnecessary nodes")
 
-The syntax layer produces a full-fidelity CST, but it must avoid “padding nodes”.
+The syntax layer produces a full-fidelity CST, but it must avoid "padding nodes".
 
 Rules:
 
 - Do **not** create nodes for separator padding (leading/trailing commas/pipes/semicolons).
 - Prefer representing parentheses by **rewrapping** an existing node to include surrounding tokens, rather than introducing a `GroupExpr` wrapper node.
 - Create list nodes only when they carry meaning (e.g., `ParamList`, `ArgList`), not for generic `ExprList` unless it improves tooling.
-- Every construct corresponds to exactly one node kind (no “ExprLevel17” nodes mirroring precedence tiers).
+- Every construct corresponds to exactly one node kind (no "ExprLevel17" nodes mirroring precedence tiers).
 
 Minimal node inventory (term layer):
 

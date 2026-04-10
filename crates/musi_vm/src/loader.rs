@@ -10,9 +10,9 @@ pub trait VmLoader {
 }
 
 #[derive(Debug, Default)]
-pub struct NativeLoader;
+pub struct RejectingLoader;
 
-impl VmLoader for NativeLoader {
+impl VmLoader for RejectingLoader {
     fn load_program(&mut self, spec: &str) -> VmResult<Program> {
         Err(VmError::new(VmErrorKind::ModuleLoadRejected {
             spec: spec.into(),

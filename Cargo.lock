@@ -245,6 +245,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "musi_native"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "musi_vm",
+]
+
+[[package]]
 name = "musi_project"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -264,6 +271,7 @@ dependencies = [
 name = "musi_rt"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_native",
  "musi_vm",
  "music_module",
  "music_session",

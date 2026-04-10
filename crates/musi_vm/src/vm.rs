@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
 pub use super::host::{EffectCall, ForeignCall};
-pub use super::loader::{NativeLoader, VmLoader};
+pub use super::loader::{RejectingLoader, VmLoader};
 use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
     ClosureValuePtr, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr,
     ForeignValue, SeqValuePtr, ValueList,
 };
 pub use super::{
-    NativeHost, OperandShape, Program, RecordView, SeqView, StringView, Value, ValueView, VmError,
-    VmErrorKind, VmHost, VmResult, VmValueKind,
+    OperandShape, Program, RecordView, RejectingHost, SeqView, StringView, Value, ValueView,
+    VmError, VmErrorKind, VmHost, VmResult, VmValueKind,
 };
 
 mod dispatch;
@@ -63,8 +63,8 @@ impl Vm {
     }
 
     #[must_use]
-    pub fn with_native_host(program: Program, options: VmOptions) -> Self {
-        Self::new(program, NativeLoader, NativeHost, options)
+    pub fn with_rejecting_host(program: Program, options: VmOptions) -> Self {
+        Self::new(program, RejectingLoader, RejectingHost, options)
     }
 
     /// Runs synthesized module/program initialization exactly once.

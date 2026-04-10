@@ -1,9 +1,11 @@
 use music_arena::SliceRange;
 use music_hir::{HirExprId, HirExprKind, HirParam, HirPatKind, HirTyKind};
-use music_sema::{DefinitionKey, SemaDataDef};
+use music_module::ModuleKey;
+use music_names::{Ident, Interner, NameBindingId};
+use music_sema::{DefinitionKey, EffectRow, SemaDataDef, SemaModule};
 
 use super::{LetItemInput, LowerCtx, TopLevelItems};
-use crate::api::{IrCallable, IrDataDef, IrGlobal, IrParam};
+use crate::api::{IrCallable, IrDataDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrParam};
 
 pub(super) fn collect_top_level_items(
     ctx: &mut LowerCtx<'_>,
@@ -67,18 +69,10 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         }
     }
 
-    if sema
-        .module()
-        .store
-        .exprs
-        .get(expr_id)
-        .mods
-        .foreign
-        .is_some()
+    if let Some(foreign) =
+        lower_foreign_item(sema, interner, expr_id, name, params.clone(), exported)
     {
-        items.foreigns.push(super::lower_foreign_let(
-            sema, interner, expr_id, name, params, exported,
-        ));
+        items.foreigns.push(foreign);
         return;
     }
 
@@ -87,69 +81,203 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         .try_expr_effects(value)
         .expect("expr effects missing for top-level value")
         .clone();
+    if let Some(global) = lower_exported_import_global(
+        ctx,
+        ExportedImportGlobalInput {
+            binding,
+            name,
+            value,
+            exported,
+            effects: &effects,
+            module_target: module_target.clone(),
+        },
+    ) {
+        items.globals.push(global);
+        return;
+    }
+
+    if skip_module_value(sema, value) {
+        return;
+    }
+
+    if let Some(data_def) = lower_data_item(ctx, name, value) {
+        items.data_defs.push(data_def);
+        return;
+    }
+
     if matches!(
+        sema.module().store.exprs.get(value).kind,
+        HirExprKind::Effect { .. } | HirExprKind::Class { .. } | HirExprKind::Instance { .. }
+    ) {
+        return;
+    }
+
+    if is_callable {
+        items.callables.push(lower_callable_item(
+            ctx,
+            CallableItemInput {
+                binding,
+                name,
+                params,
+                value,
+                exported,
+                effects,
+                module_target,
+            },
+        ));
+        return;
+    }
+
+    items.globals.push(lower_global_item(
+        ctx,
+        GlobalItemInput {
+            binding,
+            name,
+            value,
+            exported,
+            effects,
+            module_target,
+        },
+    ));
+}
+
+fn lower_foreign_item(
+    sema: &SemaModule,
+    interner: &Interner,
+    expr_id: HirExprId,
+    name: Ident,
+    params: SliceRange<HirParam>,
+    exported: bool,
+) -> Option<IrForeignDef> {
+    sema.module()
+        .store
+        .exprs
+        .get(expr_id)
+        .mods
+        .foreign
+        .is_some()
+        .then(|| super::lower_foreign_let(sema, interner, expr_id, name, params, exported))
+}
+
+fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<IrDataDef> {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let HirExprKind::Data { variants, fields } = &sema.module().store.exprs.get(value).kind else {
+        return None;
+    };
+    let name_text: Box<str> = interner.resolve(name.name).into();
+    let def = sema.data_def(name_text.as_ref());
+    let key = def.map_or_else(
+        || DefinitionKey {
+            module: ctx.module_key.clone(),
+            name: name_text.clone(),
+        },
+        |data| data.key().clone(),
+    );
+    let repr_kind = def.and_then(|data| data.repr_kind().map(Into::into));
+    let layout_align = def.and_then(SemaDataDef::layout_align);
+    let layout_pack = def.and_then(SemaDataDef::layout_pack);
+    Some(IrDataDef {
+        key,
+        variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
+            .expect("variant count overflow"),
+        field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
+            .expect("field count overflow"),
+        repr_kind,
+        layout_align,
+        layout_pack,
+    })
+}
+
+struct CallableItemInput {
+    binding: Option<NameBindingId>,
+    name: Ident,
+    params: SliceRange<HirParam>,
+    value: HirExprId,
+    exported: bool,
+    effects: EffectRow,
+    module_target: Option<ModuleKey>,
+}
+
+fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCallable {
+    let interner = ctx.interner;
+    IrCallable {
+        binding: input.binding,
+        name: interner.resolve(input.name.name).into(),
+        params: lower_params(ctx, input.params),
+        body: super::lower_expr(ctx, input.value),
+        exported: input.exported,
+        effects: input.effects,
+        module_target: input.module_target,
+    }
+}
+
+struct GlobalItemInput {
+    binding: Option<NameBindingId>,
+    name: Ident,
+    value: HirExprId,
+    exported: bool,
+    effects: EffectRow,
+    module_target: Option<ModuleKey>,
+}
+
+fn lower_global_item(ctx: &mut LowerCtx<'_>, input: GlobalItemInput) -> IrGlobal {
+    let interner = ctx.interner;
+    IrGlobal {
+        binding: input.binding,
+        name: interner.resolve(input.name.name).into(),
+        body: super::lower_expr(ctx, input.value),
+        exported: input.exported,
+        effects: input.effects,
+        module_target: input.module_target,
+    }
+}
+
+struct ExportedImportGlobalInput<'a> {
+    binding: Option<NameBindingId>,
+    name: Ident,
+    value: HirExprId,
+    exported: bool,
+    effects: &'a EffectRow,
+    module_target: Option<ModuleKey>,
+}
+
+fn lower_exported_import_global(
+    ctx: &mut LowerCtx<'_>,
+    input: ExportedImportGlobalInput<'_>,
+) -> Option<IrGlobal> {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let HirExprKind::Import { arg } = &sema.module().store.exprs.get(input.value).kind else {
+        return None;
+    };
+    if !input.exported {
+        return None;
+    }
+    let spec = super::lower_expr(ctx, *arg);
+    Some(IrGlobal {
+        binding: input.binding,
+        name: interner.resolve(input.name.name).into(),
+        body: IrExpr {
+            origin: spec.origin,
+            kind: IrExprKind::DynamicImport {
+                spec: Box::new(spec),
+            },
+        },
+        exported: true,
+        effects: input.effects.clone(),
+        module_target: input.module_target,
+    })
+}
+
+fn skip_module_value(sema: &SemaModule, value: HirExprId) -> bool {
+    matches!(
         sema.ty(sema
             .try_expr_ty(value)
             .expect("expr type missing for top-level value"))
             .kind,
         HirTyKind::Module
-    ) || matches!(
-        sema.module().store.exprs.get(value).kind,
-        HirExprKind::Import { .. }
-    ) {
-        return;
-    }
-
-    match &sema.module().store.exprs.get(value).kind {
-        HirExprKind::Data { variants, fields } => {
-            let name_text: Box<str> = interner.resolve(name.name).into();
-            let def = sema.data_def(name_text.as_ref());
-            let key = def.map_or_else(
-                || DefinitionKey {
-                    module: ctx.module_key.clone(),
-                    name: name_text.clone(),
-                },
-                |data| data.key().clone(),
-            );
-            let repr_kind = def.and_then(|data| data.repr_kind().map(Into::into));
-            let layout_align = def.and_then(SemaDataDef::layout_align);
-            let layout_pack = def.and_then(SemaDataDef::layout_pack);
-            items.data_defs.push(IrDataDef {
-                key,
-                variant_count: u32::try_from(
-                    sema.module().store.variants.get(variants.clone()).len(),
-                )
-                .expect("variant count overflow"),
-                field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
-                    .expect("field count overflow"),
-                repr_kind,
-                layout_align,
-                layout_pack,
-            });
-        }
-        HirExprKind::Effect { .. } | HirExprKind::Class { .. } | HirExprKind::Instance { .. } => {}
-        _ if is_callable => {
-            items.callables.push(IrCallable {
-                binding,
-                name: interner.resolve(name.name).into(),
-                params: lower_params(ctx, params),
-                body: super::lower_expr(ctx, value),
-                exported,
-                effects,
-                module_target,
-            });
-        }
-        _ => {
-            items.globals.push(IrGlobal {
-                binding,
-                name: interner.resolve(name.name).into(),
-                body: super::lower_expr(ctx, value),
-                exported,
-                effects,
-                module_target,
-            });
-        }
-    }
+    )
 }
 
 fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrParam]> {

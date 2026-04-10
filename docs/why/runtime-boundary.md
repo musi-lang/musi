@@ -1,9 +1,6 @@
 # Runtime Boundary
 
-**What**: rationale for the split between SEAM contract, runtime execution, and host-owned behavior.
-**Why**: runtime features stay stable only if the VM boundary is explicit and external-world behavior stays outside it.
-**How**: use this when deciding whether behavior belongs in `music_emit`, `musi_vm`, `musi_rt`, or the embedding host.
-**Where**: runtime semantics live in `docs/what/runtime/seam-vm.md`; runtime usage lives in `docs/how/runtime/runtime-api.md`.
+This page explains where runtime behavior stops and host behavior starts.
 
 ## Why SEAM And Runtime Are Separate
 
@@ -34,13 +31,16 @@ Some runtime-adjacent behavior should stay host-owned:
 - dynamic module source policy
 - unhandled host effects
 
-These depend on environment and integration policy, not core VM semantics.
+These depend on environment and integration policy, not VM semantics.
 
 Source-backed runtime services belong one layer higher:
 
 - `musi_rt` compiles registered module text into `Program`
 - `musi_rt` implements `VmLoader`
 - `musi_rt` evaluates syntax by going back through `music_session`
+- `musi_rt` owns repo-provided foreign/effect handler registration for the default runtime path
+- `musi_native` is the repo-owned default host adapter layer above `musi_vm`
+- `musi:*` holds low-level capability roots and `@std/*` wraps them into user-facing library code
 
 ## Why This Matters For Design
 

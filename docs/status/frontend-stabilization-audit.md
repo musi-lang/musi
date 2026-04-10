@@ -1,8 +1,8 @@
 # Frontend Stabilization Audit (`crates/`)
 
-This document records the current stabilization audit for the pre-runtime frontend and service boundary.
+This document records the stabilization audit for the pre-runtime frontend and service boundary.
 
-Scope for this pass:
+Audit scope:
 
 - `music_base`
 - `music_names`
@@ -16,7 +16,7 @@ Scope for this pass:
 - `music_emit`
 - `music_session`
 
-Out of scope for this pass:
+Not in this audit:
 
 - `music_bc`
 - `music_assembly`
@@ -53,15 +53,15 @@ Primary public stability boundary:
 
 | Crate           | Status     | Reason                                                                                                                                       |
 | --------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `music_base`    | Freeze now | Small public surface, clear ownership, diagnostics surface already accessor-based                                                            |
-| `music_names`   | Freeze now | Small, focused interning and name-resolution support surface                                                                                 |
+| `music_base`    | Freeze now | Small public API, clear ownership, diagnostics already accessor-based                                                                        |
+| `music_names`   | Freeze now | Small, focused interning and name-resolution API                                                                                             |
 | `music_arena`   | Freeze now | Small, generic storage API with stable responsibility                                                                                        |
 | `music_hir`     | Freeze now | Internal semantic model crate with narrow root export role and no active instability signals in this audit                                   |
 | `music_syntax`  | Freeze now | Typed syntax errors already convert into canonical diagnostics and session coverage now exercises syntax-failure propagation                 |
 | `music_module`  | Freeze now | `ImportError` now has stable typed identity plus explicit message access; display no longer depends on `Debug` formatting                    |
-| `music_resolve` | Freeze now | Public surface is small and typed negative-path propagation is now covered through session integration tests                                 |
+| `music_resolve` | Freeze now | Public API is small and typed negative-path propagation is covered through session integration tests                                         |
 | `music_emit`    | Freeze now | `EmitDiagKind` extraction is now complete and code-based rather than message-based                                                           |
-| `music_session` | Freeze now | Parse failures use one canonical `SessionSyntaxErrors` shape and session tests now cover typed parse/resolve/sema/IR/emit propagation        |
+| `music_session` | Freeze now | Parse failures use one `SessionSyntaxErrors` shape and session tests cover typed parse/resolve/sema/IR/emit propagation                      |
 | `music_sema`    | Freeze now | Public reads are query-oriented, construction-only builders are internal, and downstream crates no longer rely on public storage layout      |
 | `music_ir`      | Freeze now | Full executable IR ADT is now the explicit pre-runtime backend contract and lowering invariants return typed diagnostics instead of aborting |
 
@@ -93,11 +93,11 @@ Largest audited non-test hotspots:
 
 Largest single-file hotspots from the current audit:
 
-- `crates/music_ir/src/lower/mod.rs` — `2625` LOC
-- `crates/music_syntax/src/parser/forms.rs` — `1158` LOC
-- `crates/music_sema/src/checker/exprs.rs` — `985` LOC
-- `crates/music_emit/src/emit/expr/control.rs` — `636` LOC
-- `crates/music_session/src/session/cache.rs` — `304` LOC
+- `crates/music_ir/src/lower/mod.rs`  --  `2625` LOC
+- `crates/music_syntax/src/parser/forms.rs`  --  `1158` LOC
+- `crates/music_sema/src/checker/exprs.rs`  --  `985` LOC
+- `crates/music_emit/src/emit/expr/control.rs`  --  `636` LOC
+- `crates/music_session/src/session/cache.rs`  --  `304` LOC
 
 These are not automatic freeze blockers by themselves, but they are the first places to inspect when behavior or API churn appears.
 

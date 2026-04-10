@@ -42,6 +42,14 @@ pub(in super::super) fn module_target_for_expr(
         HirExprKind::Name { name } => ctx
             .binding_id_for_use(name)
             .and_then(|binding| ctx.binding_module_target(binding).cloned()),
+        HirExprKind::Field { base, name, .. } => {
+            let target = module_target_for_expr(ctx, base)?;
+            let env = ctx.sema_env()?;
+            let surface = env.module_surface(&target)?;
+            surface
+                .exported_value(ctx.resolve_symbol(name.name))
+                .and_then(|export| export.module_target.clone())
+        }
         _ => None,
     }
 }

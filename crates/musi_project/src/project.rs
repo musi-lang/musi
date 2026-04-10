@@ -13,6 +13,9 @@ use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
 use crate::errors::ProjectError;
+use crate::intrinsics::{
+    TEST_INTRINSIC_MODULE, TEST_INTRINSIC_SPEC, extend_import_map, resolve_intrinsic_spec,
+};
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::registry::{RegistryPackage, resolve_registry_package};
@@ -377,11 +380,17 @@ impl Project {
     /// Returns [`ProjectError`] when the project modules cannot be registered into a configured
     /// [`Session`].
     pub fn build_session(&self) -> ProjectResult<Session> {
+        let mut import_map = self.import_map.clone();
+        extend_import_map(&mut import_map);
         let mut session = Session::new(SessionOptions {
             emit: self.options.emit,
-            import_map: self.import_map.clone(),
+            import_map,
             target: self.options.target.clone(),
         });
+        session.set_module_text(
+            &ModuleKey::new(TEST_INTRINSIC_SPEC),
+            TEST_INTRINSIC_MODULE.to_owned(),
+        )?;
         for (key, text) in &self.module_texts {
             session.set_module_text(key, text.clone())?;
         }
@@ -448,6 +457,11 @@ impl Project {
         self.with_entry_session(&entry.module_key, |session, module_key| {
             Ok(session.compile_entry(module_key)?)
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn compile_module(&self, module_key: &ModuleKey) -> ProjectResult<CompiledOutput> {
+        self.with_entry_session(module_key, |session, entry| Ok(session.compile_entry(entry)?))
     }
 }
 
@@ -1015,6 +1029,9 @@ fn resolve_import_spec(
     package_records: &BTreeMap<PackageId, PackageRecord>,
     package_name_index: &BTreeMap<String, PackageId>,
 ) -> Option<ModuleKey> {
+    if let Some(target) = resolve_intrinsic_spec(spec) {
+        return Some(target);
+    }
     if let Some(target) = resolve_compiler_path(
         &package.package.root_dir,
         &package.relative_modules,
@@ -1093,7 +1110,7 @@ fn resolve_module_target(
     from_module: Option<&Path>,
     spec: &str,
 ) -> Option<ModuleKey> {
-    let spec_path = normalize_spec_path(spec);
+    let spec_path = Path::new(spec);
     if spec_path.is_absolute() {
         return None;
     }
@@ -1105,14 +1122,14 @@ fn resolve_module_target(
         root_dir.join(base_dir).join(spec_path)
     } else if spec.starts_with('/') {
         root_dir.join(
-            spec_path
+            normalize_spec_path(spec)
                 .strip_prefix(Path::new("/"))
-                .unwrap_or(spec_path.as_path()),
+                .unwrap_or_else(|_| Path::new(spec)),
         )
     } else if spec.starts_with('.') {
         root_dir.join(base_dir).join(spec_path)
     } else {
-        root_dir.join(spec_path)
+        root_dir.join(normalize_spec_path(spec))
     };
     resolve_candidate_path(relative_modules, root_dir, &candidate)
 }

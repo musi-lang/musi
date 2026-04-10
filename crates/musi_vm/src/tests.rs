@@ -6,7 +6,7 @@ use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
 
 use super::{
-    EffectCall, ForeignCall, NativeLoader, Program, Value, Vm, VmError, VmErrorKind, VmHost,
+    EffectCall, ForeignCall, Program, RejectingLoader, Value, Vm, VmError, VmErrorKind, VmHost,
     VmLoader, VmOptions, VmResult,
 };
 
@@ -128,7 +128,7 @@ fn loads_program_and_lists_exports() {
 fn initializes_and_calls_export() {
     let program = compile_program(&[("main", "export let answer () : Int := 40 + 2;")], "main");
 
-    let mut vm = Vm::with_native_host(program, VmOptions);
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize().expect("vm init should succeed");
     let value = vm
         .call_export("answer", &[])
@@ -155,7 +155,7 @@ fn executes_closure_and_recursive_callable() {
         "main",
     );
 
-    let mut vm = Vm::with_native_host(program, VmOptions);
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize().expect("vm init should succeed");
     let value = vm
         .call_export("answer", &[Value::Int(3)])
@@ -180,7 +180,7 @@ fn executes_record_projection_and_update() {
         "main",
     );
 
-    let mut vm = Vm::with_native_host(program, VmOptions);
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize().expect("vm init should succeed");
     let value = vm
         .call_export("answer", &[])
@@ -211,7 +211,7 @@ fn executes_multi_index_get_and_set() {
         .next()
         .map(|(id, _)| id)
         .expect("type id");
-    let mut vm = Vm::with_native_host(program, VmOptions);
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize().expect("vm init should succeed");
     let inner = Value::sequence(outer_ty, vec![Value::Int(1), Value::Int(2)]);
     let grid = Value::sequence(outer_ty, vec![inner.clone(), inner]);
@@ -259,6 +259,35 @@ fn loads_dynamic_module_through_host() {
 }
 
 #[test]
+fn detects_module_init_cycle() {
+    let main = compile_program(
+        &[("main", "export let root () : Int := 0;")],
+        "main",
+    );
+    let dep = compile_program(
+        &[(
+            "dep",
+            r#"
+            let self_name : String := "dep";
+            export let answer : Int := (
+              let loaded := import self_name;
+              1
+            );
+        "#,
+        )],
+        "dep",
+    );
+
+    let mut loader = TestLoader::default();
+    let _ = loader.modules.insert("dep".into(), dep);
+    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
+    vm.initialize().unwrap();
+    let err = vm.load_module("dep").unwrap_err();
+
+    assert!(matches!(err.kind(), VmErrorKind::ModuleInitCycle { .. }));
+}
+
+#[test]
 fn handles_effect_value_clause_and_resume() {
     let program = compile_program(
         &[(
@@ -275,7 +304,7 @@ fn handles_effect_value_clause_and_resume() {
         "main",
     );
 
-    let mut vm = Vm::with_native_host(program, VmOptions);
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize().expect("vm init should succeed");
     let value = vm
         .call_export("answer", &[])
@@ -305,7 +334,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
     let host = SignatureHost {
         log: Rc::clone(&log),
     };
-    let mut vm = Vm::new(program, NativeLoader, host, VmOptions);
+    let mut vm = Vm::new(program, RejectingLoader, host, VmOptions);
     vm.initialize().expect("vm init should succeed");
 
     let foreign_value = vm

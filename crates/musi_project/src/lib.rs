@@ -1,8 +1,10 @@
 mod errors;
+mod intrinsics;
 mod lock;
 pub mod manifest;
 mod project;
 mod registry;
+mod testing;
 mod types;
 
 pub use errors::ProjectError;
@@ -12,6 +14,7 @@ pub use project::{
     PackageId, PackageSource, Project, ProjectEntry, ProjectOptions, ResolvedPackage, TaskSpec,
     WorkspaceGraph, load_project,
 };
+pub use testing::PackageTestModule;
 pub use types::ProjectResult;
 
 #[cfg(test)]

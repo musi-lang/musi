@@ -1,6 +1,6 @@
 # Public API Map (`crates/`)
 
-This document inventories the public Rust surface for the canonical compiler rewrite in `crates/`.
+This document lists the public Rust API in `crates/`.
 
 Use it when checking:
 
@@ -8,9 +8,9 @@ Use it when checking:
 - which crate owns one public concept
 - whether a change belongs in public API or behind internal modules
 
-Policy:
+Rules:
 
-- The `pub use ...` set from each crate root is the primary stability boundary.
+- Each crate root `pub use ...` set is the primary stability boundary.
 - Diagnostics are user-facing: error kinds and message style are part of the API contract.
 - Internal modules may change as long as the crate root surface stays coherent.
 
@@ -31,7 +31,8 @@ Policy:
 - `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
-- `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `NativeHost`, `VmLoader`, `NativeLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
+- `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `RejectingHost`, `VmLoader`, `RejectingLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
+- `musi_native`: repo-owned default host adapter (`NativeHost`)
 - `musi_rt`: source-aware runtime service (`Runtime`, `RuntimeOptions`, `RuntimeError*`)
 
 ## Service And Project Layer
@@ -43,28 +44,36 @@ Notes:
 
 - `music_base::Diag` / `DiagLabel` are accessor-driven (fields are not part of the public API).
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
-- `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
+- `music_syntax::LexedSource<'src>` retains source text so CST/AST views can slice token text without duplicating token payloads.
 - `music_module::ImportEnv` is resolve-only in `crates`: it maps import specifiers to module keys and does not expose opened-export visibility.
 - `music_module::ImportError` exposes stable typed failure identity through `ImportErrorKind` plus `ImportError::message()`; display formatting is no longer `Debug`-shaped.
-- `music_resolve::ResolvedModule` carries both the current `ModuleKey` and syntax-level export summary so sema can build semantic module surfaces without reopening syntax.
-- `music_sema` is query-oriented: semantic facts are accessed through `SemaModule` methods rather than public storage fields.
-- `music_sema::ModuleSurface`, `SemaEffectDef`, and `SemaDataDef` now use accessor-based read APIs for exported collections, keys, variants, and effect ops instead of exposing those storage fields directly.
-- `music_sema` construction-only builders are internal: crate-private build grouping stays behind `check_module`, and public reads use checked `try_*` accessors where semantic facts may be absent.
+- `music_resolve::ResolvedModule` carries the current `ModuleKey` and syntax-level export summary so sema can build semantic module data without reopening syntax.
+- `music_sema` is query-oriented: semantic facts are read through `SemaModule` methods, not public storage fields.
+- `music_sema::ModuleSurface`, `SemaEffectDef`, and `SemaDataDef` use accessors for exported collections, keys, variants, and effect ops instead of exposing storage fields directly.
+- `music_sema` construction-only builders are internal; public reads use checked `try_*` accessors where semantic facts may be absent.
 - `music_sema::SemaEnv` exchanges owned `ModuleSurface` snapshots rather than live foreign module references.
 - `music_sema::EffectKey` / `EffectRow` and sema-owned effect definitions are string-backed rather than `Symbol`-backed, so they are safe across interner boundaries.
-- `music_hir::HirTy*` is the authoritative typed boundary produced by sema. `music_sema` no longer exposes a parallel semantic type arena.
-- `music_ir` is the frozen executable backend ADT for the pre-runtime pipeline: `IrModule`, `IrExprKind`, related node types, and `lower_module` are the stable codegen-facing contract.
-- `music_ir` lowers sema facts into codegen-facing tables and owned executable bodies; `IrModule` now presents its top-level collections through accessors instead of public storage fields, so `music_emit` no longer depends on HIR shape or direct IR module storage layout.
+- `music_hir::HirTy*` is the typed boundary produced by sema. `music_sema` no longer exposes a parallel semantic type arena.
+- `music_ir` is the frozen executable backend ADT for the pre-runtime pipeline: `IrModule`, `IrExprKind`, related node types, and `lower_module` are the stable backend contract.
+- `music_ir` lowers sema facts into owned executable bodies; `IrModule` presents top-level collections through accessors instead of public storage fields.
 - lowering and emission invariants return typed diagnostics through `IrDiagKind` / `EmitDiagKind` instead of aborting process execution.
-- `music_bc` is the single source of truth for SEAM opcodes, operands, descriptor tables, section tags, and artifact validation.
+- `music_bc` is the source of truth for SEAM opcodes, operands, descriptor tables, section tags, and artifact validation.
 - `music_assembly` is transport-only over `music_bc`: it does not redefine the artifact or ISA.
-- `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values, and `emit_diag_kind` is code-based rather than message-based.
-- `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures now flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`, and stage-failure propagation is covered through typed parse/resolve/sema/IR/emit session tests.
+- `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values, and `emit_diag_kind` is code-based.
+- `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`.
 - `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
 - `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
+- `musi_vm::RejectingHost` / `RejectingLoader` are explicit reject-by-default seams, not practical runtime defaults.
 - `musi_vm::ForeignCall` and `musi_vm::EffectCall` now expose typed signature metadata through `param_tys`, `result_ty`, and runtime type-name helpers backed by the originating `Program`.
-- `musi_rt::Runtime` is the source-aware runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, and compiles module syntax into runtime module handles.
-- `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, and constructs the exact `music_session` module/import view used for package-aware compilation.
+- `musi_rt::Runtime` is the runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, compiles module syntax into runtime module handles, runs registered package-style test modules, and owns default foreign/effect handler registration.
+- `musi_native::NativeHost` is the first-party host adapter layer used by the default runtime path; it owns registered foreign/effect handlers and optional fallback host delegation.
+- `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, and constructs the `music_session` module/import view used for package-aware compilation.
+
+## First-Party Package Families
+
+- `@std`: first-party standard library root namespace under `packages/std`, with direct family re-exports such as `Assert`, `Bytes`, `Math`, `Option`, `Result`, and `Testing`
+- `@std/*`: portable first-party family API under `packages/std`, with family imports as the standard package API
+- `musi:*`: compiler-owned intrinsic namespace for low-level host/runtime capabilities
 
 ## Planned Phase Crates
 

@@ -1,10 +1,5 @@
 # FFI
 
-**What**: language-facing foreign-function interface surface.
-**Why**: FFI must stay explicit and auditable rather than blending into ordinary language calls.
-**How**: use this when changing foreign declarations, ABI strings, layout-sensitive types, or export-foreign behavior.
-**Where**: language-facing rules live here; runtime host execution seams continue in `docs/what/runtime/seam-vm.md`.
-
 ## Boundary Model
 
 Musi keeps FFI explicit:

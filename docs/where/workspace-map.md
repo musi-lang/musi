@@ -1,15 +1,12 @@
 # Workspace Map
 
-**What**: canonical inventory of crates and their ownership areas.
-**Why**: prevents “wrong crate, wrong layer” drift after `crates/` became canonical.
-**How**: use this when placing code, splitting modules, or checking dependency direction.
-**Where**: design rationale lives in `docs/why/compiler-architecture.md`.
+This page lists the crates and packages in the repo.
 
-## Canonical Workspace
+## Workspace
 
-All current compiler and runtime work lives in `crates/`.
+Rust crates live in `crates/`.
 
-There is no separate rewrite workspace anymore.
+First-party Musi packages live in `packages/`.
 
 ## Compiler Core
 
@@ -23,7 +20,7 @@ There is no separate rewrite workspace anymore.
 - `music_sema`
 - `music_ir`
 
-## Executable Contract And Runtime
+## Executable Contract and Runtime
 
 - `music_bc`
 - `music_assembly`
@@ -31,10 +28,19 @@ There is no separate rewrite workspace anymore.
 - `musi_vm`
 - `musi_rt`
 
-## Service And Project Layer
+## Service and Project Layer
 
 - `music_session`
 - `musi_project`
+
+## Native Integration
+
+- `musi_native`
+
+## First-Party Packages
+
+- `packages/std` (`@std`)
+- `musi:*` intrinsic namespace
 
 ## Planned
 
@@ -48,10 +54,12 @@ Use this order when orienting yourself:
 2. `docs/what/runtime/seam-vm.md`
 3. `docs/how/runtime/runtime-api.md`
 4. `docs/why/compiler-architecture.md`
-5. `docs/where/phase-boundaries.md`
+5. `docs/where/stack-map.md`
+6. `docs/where/phase-boundaries.md`
 
 ## See Also
 
 - `docs/where/phase-boundaries.md`
+- `docs/where/stack-map.md`
 - `docs/reference/public-api.md`
 - `docs/why/compiler-architecture.md`

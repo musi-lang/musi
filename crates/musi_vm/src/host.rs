@@ -157,9 +157,9 @@ pub trait VmHost {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct NativeHost;
+pub struct RejectingHost;
 
-impl VmHost for NativeHost {
+impl VmHost for RejectingHost {
     fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),

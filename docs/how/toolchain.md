@@ -1,18 +1,13 @@
 # Toolchain
 
-**What**: operational guide to Musi command surfaces and workflow boundaries.
-**Why**: contributors and tools need one place that explains which command owns which job.
-**How**: use this when shaping CLI behavior, package workflow, or project-facing tooling.
-**Where**: rationale for the split lives in `docs/why/toolchain-split.md`.
-
 ## Command Surfaces
 
-Musi has two command surfaces:
+Long term, Musi has two command surfaces. Today the repo still ships `musi` as the user-facing binary.
 
 - `music`: direct language and `.seam` tool
 - `musi`: package-aware operator tool
 
-They are related, but they do different jobs.
+They do different jobs.
 
 ## `music` Flow
 
@@ -23,7 +18,7 @@ They are related, but they do different jobs.
 - run source or `.seam`
 - inspect or disassemble artifacts
 
-Use it when the task is compiler/runtime direct, not package-aware.
+Use it when the task is compiler/runtime direct.
 
 ## `musi` Flow
 
@@ -47,7 +42,7 @@ Manifest-backed operator areas include:
 - test configuration
 - workspace wiring
 
-Schema-owned tooling areas such as fmt/lint/bench/publish/lock stay in the tool ecosystem without becoming compiler-core concerns.
+Manifest-backed tooling such as fmt/lint/bench/publish/lock stays above compiler-core crates.
 
 ## Entry Selection
 
@@ -57,7 +52,7 @@ Package-aware entry resolution follows:
 - manifest-configured entry next
 - package-style fallback such as `index.ms`
 
-Language startup itself still stays top-level-driven.
+Language startup still stays top-level-driven.
 
 ## See Also
 

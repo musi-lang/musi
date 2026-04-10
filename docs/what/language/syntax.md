@@ -1,10 +1,5 @@
 # Syntax
 
-**What**: front-door reference for Musi surface syntax.
-**Why**: defines the visible language shape before semantic meaning is applied.
-**How**: use this when reading or writing source, parser rules, or CST-facing tests.
-**Where**: canonical grammar lives in `grammar/Musi.g4` and `grammar/Musi.abnf`.
-
 ## Core Shape
 
 Musi is expression-driven:

@@ -1,19 +1,17 @@
 # Runtime API
 
-**What**: operational guide to loading, initializing, executing, and inspecting SEAM programs.
-**Why**: embedding should be easy to reason about without reading internal `musi_vm` code layout.
-**How**: use this when integrating `musi_vm` or `musi_rt` into tools, hosts, tests, or external applications.
-**Where**: public surface inventory lives in `docs/reference/public-api.md`; runtime model lives in `docs/what/runtime/seam-vm.md`.
+This page covers loading, initializing, executing, and inspecting SEAM programs.
 
 ## Core Runtime Roles
 
-The embedding boundary has two co-equal pieces:
+The runtime boundary has four main pieces:
 
 - `Program`: loaded `.seam` artifact view
 - `Vm`: execution engine over one root program and loaded modules
 - `Runtime`: source-aware runtime service over `music_session` + `musi_vm`
+- `NativeHost`: repo-owned default host adapter over `musi_vm`
 
-`VmHost` owns foreign calls and unhandled effects. `VmLoader` owns dynamic program loading. `musi_rt::Runtime` owns source-backed loading and syntax compilation/evaluation.
+`VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and registered foreign/effect handlers.
 
 ## Load
 
@@ -23,16 +21,25 @@ Typical flow starts by materializing a program:
 2. call `Program::from_bytes`
 3. inspect exports or metadata if needed
 
-Use this stage for loader-level validation and artifact inspection before execution.
+Use this stage for validation and inspection before execution.
 
 ## Build And Initialize
 
-Typical VM setup:
+Typical runtime setup:
+
+1. construct `Runtime`
+2. register module text or precompiled programs
+3. register foreign/effect handlers when external edges exist
+4. call `load_root`
+
+`Runtime::new()` uses `musi_native::NativeHost` by default.
+
+Raw VM setup stays available for embedding-specific integrations:
 
 1. construct `Vm`
 2. attach `VmLoader`
-3. attach `VmHost` or use `NativeHost` + `NativeLoader`
-3. call `initialize`
+3. attach `VmHost` or use `RejectingHost` + `RejectingLoader`
+4. call `initialize`
 
 Initialization runs synthesized entry/module-init logic exactly once per loaded module instance.
 
@@ -44,8 +51,9 @@ Execution entrypoints are:
 - `call_module_export`
 - `call_value`
 - `load_module`
+- `run_test_module`
 
-Use root-export calls for ordinary entrypoints and module-handle calls for dynamic module flow.
+Use root-export calls for normal entrypoints and module-handle calls for dynamic module flow.
 
 ## Inspect
 
@@ -57,30 +65,36 @@ Inspection APIs expose stable runtime views:
 - `RecordView`
 - `StringView`
 
-Use inspection for embedding and tests instead of reaching through VM internals.
+Use inspection instead of reaching through VM internals.
 
 ## Host Integration
 
-`VmHost` owns host-world seams:
+`VmHost` handles:
 
 - foreign call behavior
 - unhandled host effects
 - typed foreign/effect signature metadata through `ForeignCall` and `EffectCall`
 
-`VmLoader` owns runtime module source/program policy.
+`VmLoader` handles module source and program policy.
 
-`musi_rt::Runtime` owns:
+`Runtime` handles:
 
 - source registration
 - compile-on-demand module loading
 - expression syntax evaluation with explicit result type
 - module-syntax compilation and loading
+- default foreign handler registration
+- default effect handler registration
 
-Keep these policies in the host boundary rather than burying them inside the VM.
+`NativeHost` handles:
+
+- registered foreign handlers
+- registered effect handlers
+- optional fallback delegation into one embedding-specific `VmHost`
+
+`musi:test` is the current capability root used by first-party package testing.
 
 ## Integration Checklist
-
-When embedding:
 
 - validate/load bytes first
 - initialize before lookup/call

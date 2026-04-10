@@ -36,8 +36,9 @@ impl Vm {
         }
 
         self.module_mut(slot)?.state = ModuleState::Initializing;
+        let base_depth = self.frames.len();
         let result = entry.map_or(Ok(()), |entry| {
-            self.invoke_method(slot, entry, ValueList::new())
+            self.invoke_method_in_context(slot, entry, ValueList::new(), base_depth)
                 .map(|_| ())
         });
         match result {

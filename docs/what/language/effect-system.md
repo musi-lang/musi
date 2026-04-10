@@ -1,10 +1,5 @@
 # Effect System
 
-**What**: language reference for Musi resumable algebraic effects.
-**Why**: effect meaning must stay explicit and stable across sema, lowering, emit, and runtime.
-**How**: use this when changing effect syntax, type rules, handler behavior, or continuation semantics.
-**Where**: semantic checking lives in `music_sema`; runtime behavior continues in `docs/what/runtime/seam-vm.md`.
-
 ## Core Model
 
 Effects are first-class language features, not library sugar.

@@ -1,9 +1,8 @@
 # Toolchain Split
 
-**What**: rationale for keeping `music` and `musi` separate.
-**Why**: compiler/runtime work and package/operator work have different responsibilities and should not collapse into one giant surface.
-**How**: use this when shaping CLI commands, manifest behavior, or project-facing workflow.
-**Where**: operational command flow lives in `docs/how/toolchain.md`.
+This page explains why the long-term tool split is `music` + `musi`.
+
+The current repo still ships `musi` as the user-facing binary. This page is about the target split, not the current release surface.
 
 ## Why `music` Exists
 
@@ -37,13 +36,11 @@ One giant tool surface would blur:
 - package-manager responsibilities
 - workflow/operator responsibilities
 
-The split keeps those concerns explicit and easier to evolve.
+The split keeps those concerns separate.
 
 ## Why Schema-Owned Tooling Still Belongs Here
 
-Manifest-backed areas such as fmt/lint/bench/publish/lock belong to the Musi tool ecosystem.
-
-That does not mean they belong inside compiler-core crates.
+Manifest-backed areas such as fmt/lint/bench/publish/lock belong in tooling, not compiler-core crates.
 
 ## See Also
 

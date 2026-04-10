@@ -1,10 +1,5 @@
 # Metaprogramming
 
-**What**: reference for quote, splice, and syntax-valued language surface.
-**Why**: metaprogramming is part of the language model and should not be inferred from backend accidents.
-**How**: use this when changing quote/splice semantics, syntax-valued APIs, or compiler boundaries around elaboration.
-**Where**: syntax surface starts here; runtime-host seams continue in `docs/why/runtime-boundary.md`.
-
 ## Scope
 
 Current metaprogramming surface includes:
