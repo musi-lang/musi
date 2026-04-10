@@ -103,9 +103,12 @@ fn foreign_link_roundtrips_in_text_and_binary() {
     let abi = artifact.intern_string("c");
     let symbol = artifact.intern_string("puts");
     let link = artifact.intern_string("c");
+    let int_name = artifact.intern_string("Int");
+    let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
     let _ = artifact.foreigns.alloc(ForeignDescriptor {
         name,
-        params: 0,
+        param_tys: Box::new([]),
+        result_ty: int_ty,
         abi,
         symbol,
         link: Some(link),
@@ -258,11 +261,18 @@ fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
 
     let effect_name = artifact.intern_string("Abort");
     let op_name = artifact.intern_string("abort");
+    let int_ty = artifact
+        .types
+        .iter()
+        .next()
+        .map(|(id, _)| id)
+        .expect("sample artifact type");
     let effect = artifact.effects.alloc(EffectDescriptor {
         name: effect_name,
         ops: Box::new([EffectOpDescriptor {
             name: op_name,
-            params: 1,
+            param_tys: Box::new([int_ty]),
+            result_ty: int_ty,
         }]),
     });
 
@@ -271,7 +281,8 @@ fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
     let symbol = artifact.intern_string("puts");
     let foreign = artifact.foreigns.alloc(ForeignDescriptor {
         name: foreign_name,
-        params: 1,
+        param_tys: Box::new([int_ty]),
+        result_ty: int_ty,
         abi: c_abi,
         symbol,
         link: None,

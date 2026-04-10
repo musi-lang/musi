@@ -689,11 +689,9 @@ fn compiles_exported_foreign_declarations_into_artifact() {
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
 
     assert!(output.artifact.validate().is_ok());
-    assert!(
-        output
-            .text
-            .contains(".foreign $main::puts params 1 abi \"c\" symbol \"puts\" export")
-    );
+    assert!(output.text.contains(
+        ".foreign $main::puts param $CString result $Int abi \"c\" symbol \"puts\" export"
+    ));
 }
 
 #[test]
@@ -714,9 +712,9 @@ fn lowers_link_attrs_into_foreign_descriptors() {
     let output = session.compile_module(&ModuleKey::new("main")).unwrap();
     assert!(output.artifact.validate().is_ok());
     assert!(
-        output
-            .text
-            .contains(".foreign $main::sin params 1 abi \"c\" symbol \"sin\" link \"m\""),
+        output.text.contains(
+            ".foreign $main::sin param $Float result $Float abi \"c\" symbol \"sin\" link \"m\""
+        ),
         "{}",
         output.text
     );

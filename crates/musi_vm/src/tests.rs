@@ -1,11 +1,13 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
 
 use super::{
-    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmLoader, VmOptions,
-    VmResult,
+    EffectCall, ForeignCall, NativeLoader, Program, Value, Vm, VmError, VmErrorKind, VmHost,
+    VmLoader, VmOptions, VmResult,
 };
 
 #[derive(Default)]
@@ -28,16 +30,61 @@ struct TestHost;
 impl VmHost for TestHost {
     fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
-            foreign: foreign.name.clone(),
+            foreign: foreign.name().into(),
         }))
     }
 
     fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
-            effect: effect.effect_name.clone(),
-            op: Some(effect.op_name.clone()),
+            effect: effect.effect_name().into(),
+            op: Some(effect.op_name().into()),
             reason: "test host rejected effect call".into(),
         }))
+    }
+}
+
+#[derive(Default)]
+struct SignatureHost {
+    log: Rc<RefCell<SignatureLog>>,
+}
+
+type ForeignSignatureRecord = (Box<str>, Box<[Box<str>]>, Box<str>);
+type EffectSignatureRecord = (Box<str>, Box<str>, Box<[Box<str>]>, Box<str>);
+
+#[derive(Default)]
+struct SignatureLog {
+    foreign_calls: Vec<ForeignSignatureRecord>,
+    effect_calls: Vec<EffectSignatureRecord>,
+}
+
+impl VmHost for SignatureHost {
+    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+        self.log.borrow_mut().foreign_calls.push((
+            foreign.name().into(),
+            foreign
+                .param_tys()
+                .iter()
+                .map(|ty| foreign.type_name(*ty).into())
+                .collect::<Vec<Box<str>>>()
+                .into_boxed_slice(),
+            foreign.result_ty_name().into(),
+        ));
+        Ok(Value::Int(7))
+    }
+
+    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+        self.log.borrow_mut().effect_calls.push((
+            effect.effect_name().into(),
+            effect.op_name().into(),
+            effect
+                .param_tys()
+                .iter()
+                .map(|ty| effect.type_name(*ty).into())
+                .collect::<Vec<Box<str>>>()
+                .into_boxed_slice(),
+            effect.result_ty_name().into(),
+        ));
+        Ok(Value::Int(42))
     }
 }
 
@@ -235,4 +282,51 @@ fn handles_effect_value_clause_and_resume() {
         .expect("handled effect should succeed");
 
     assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn exposes_typed_foreign_and_effect_signatures_to_host() {
+    let program = compile_program(
+        &[(
+            "main",
+            r#"
+            foreign "c" (
+              let puts (value : Int) : Int;
+            );
+            let Console := effect { let readln (prompt : String) : Int; };
+            export let call_puts () : Int := puts(1);
+            export let call_readln () : Int := perform Console.readln(">");
+        "#,
+        )],
+        "main",
+    );
+
+    let log = Rc::new(RefCell::new(SignatureLog::default()));
+    let host = SignatureHost {
+        log: Rc::clone(&log),
+    };
+    let mut vm = Vm::new(program, NativeLoader, host, VmOptions);
+    vm.initialize().expect("vm init should succeed");
+
+    let foreign_value = vm
+        .call_export("call_puts", &[])
+        .expect("foreign call should succeed");
+    let effect_value = vm
+        .call_export("call_readln", &[])
+        .expect("effect call should succeed");
+
+    assert_eq!(foreign_value, Value::Int(7));
+    assert_eq!(effect_value, Value::Int(42));
+    let log = log.borrow();
+    assert_eq!(log.foreign_calls.len(), 1);
+    assert_eq!(log.foreign_calls[0].0.as_ref(), "main::puts");
+    assert_eq!(log.foreign_calls[0].1.len(), 1);
+    assert_eq!(log.foreign_calls[0].1[0].as_ref(), "Int");
+    assert_eq!(log.foreign_calls[0].2.as_ref(), "Int");
+    assert_eq!(log.effect_calls.len(), 1);
+    assert_eq!(log.effect_calls[0].0.as_ref(), "main::Console");
+    assert_eq!(log.effect_calls[0].1.as_ref(), "readln");
+    assert_eq!(log.effect_calls[0].2.len(), 1);
+    assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
+    assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
 }

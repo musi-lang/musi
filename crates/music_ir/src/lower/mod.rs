@@ -16,9 +16,9 @@ use music_sema::{DefinitionKey, SemaModule};
 use crate::IrDiagKind;
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
-    IrCaseRecordField, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind,
-    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin,
-    IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
+    IrCaseRecordField, IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr,
+    IrExprKind, IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef,
+    IrOrigin, IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 
 mod array;
@@ -151,16 +151,45 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
     let mut items = TopLevelItems::default();
     toplevel::collect_top_level_items(&mut ctx, sema.module().root, false, &mut items);
     items.callables.extend(ctx.extra_callables);
+    append_synthesized_sum_data_defs(sema, &mut items);
+    let meta = meta::collect_meta(sema);
+    let surface = sema.surface();
 
+    Ok(IrModule::new(
+        sema.resolved().module_key.clone(),
+        surface.static_imports().to_vec().into_boxed_slice(),
+        surface.types().to_vec().into_boxed_slice(),
+        (
+            surface.exported_values().to_vec().into_boxed_slice(),
+            items.callables.into_boxed_slice(),
+            items.globals.into_boxed_slice(),
+            items.data_defs.into_boxed_slice(),
+            items.foreigns.into_boxed_slice(),
+            build_effect_defs(sema, ctx.interner),
+            surface
+                .exported_classes()
+                .iter()
+                .map(IrClassDef::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            surface
+                .exported_instances()
+                .iter()
+                .map(IrInstanceDef::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            meta,
+        ),
+    ))
+}
+
+fn append_synthesized_sum_data_defs(sema: &SemaModule, items: &mut TopLevelItems) {
     let mut seen_data_keys = HashSet::<DefinitionKey>::new();
     for data_def in &items.data_defs {
         let _ = seen_data_keys.insert(data_def.key.clone());
     }
     for data in sema.data_defs() {
-        if !data.key().name.starts_with("__sum__") {
-            continue;
-        }
-        if seen_data_keys.contains(data.key()) {
+        if !data.key().name.starts_with("__sum__") || seen_data_keys.contains(data.key()) {
             continue;
         }
         let mut max_field_count = 0u32;
@@ -186,43 +215,33 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
             layout_pack: data.layout_pack(),
         });
     }
-    let meta = meta::collect_meta(sema);
-    let surface = sema.surface();
+}
 
-    Ok(IrModule::new(
-        sema.resolved().module_key.clone(),
-        surface.static_imports().to_vec().into_boxed_slice(),
-        surface.types().to_vec().into_boxed_slice(),
-        (
-            surface.exported_values().to_vec().into_boxed_slice(),
-            items.callables.into_boxed_slice(),
-            items.globals.into_boxed_slice(),
-            items.data_defs.into_boxed_slice(),
-            items.foreigns.into_boxed_slice(),
-            {
-                let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
-                for effect in sema.effect_defs() {
-                    let _ = seen
-                        .entry(effect.key().clone())
-                        .or_insert_with(|| IrEffectDef::from(effect));
-                }
-                seen.into_values().collect::<Vec<_>>().into_boxed_slice()
-            },
-            surface
-                .exported_classes()
-                .iter()
-                .map(IrClassDef::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            surface
-                .exported_instances()
-                .iter()
-                .map(IrInstanceDef::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            meta,
-        ),
-    ))
+fn build_effect_defs(sema: &SemaModule, interner: &Interner) -> Box<[IrEffectDef]> {
+    let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
+    for effect in sema.effect_defs() {
+        let _ = seen
+            .entry(effect.key().clone())
+            .or_insert_with(|| IrEffectDef {
+                key: effect.key().clone(),
+                ops: effect
+                    .ops()
+                    .map(|(name, def)| IrEffectOpDef {
+                        name: name.into(),
+                        param_tys: def
+                            .params()
+                            .iter()
+                            .copied()
+                            .map(|ty| render_ty_name(sema, ty, interner))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                        result_ty: render_ty_name(sema, def.result(), interner),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            });
+    }
+    seen.into_values().collect::<Vec<_>>().into_boxed_slice()
 }
 
 fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
@@ -2509,16 +2528,45 @@ fn lower_foreign_let(
         .as_ref()
         .and_then(|foreign| foreign.abi)
         .map_or("c", |sym| interner.resolve(sym));
+    let (param_tys, result_ty) = foreign_signature_tys(sema, interner, binding, expr_id, params);
     IrForeignDef {
         binding,
         symbol,
         name: name_text,
         abi: abi.into(),
-        param_count: u32::try_from(sema.module().store.params.get(params).len())
-            .expect("param count overflow"),
+        param_tys,
+        result_ty,
         link,
         exported,
     }
+}
+
+fn foreign_signature_tys(
+    sema: &SemaModule,
+    interner: &Interner,
+    binding: Option<NameBindingId>,
+    expr_id: HirExprId,
+    _params: SliceRange<HirParam>,
+) -> (Box<[Box<str>]>, Box<str>) {
+    if let Some(binding) = binding
+        && let Some(ty) = sema.binding_type(binding)
+        && let HirTyKind::Arrow { params, ret, .. } = &sema.ty(ty).kind
+    {
+        let param_tys = sema
+            .module()
+            .store
+            .ty_ids
+            .get(*params)
+            .iter()
+            .copied()
+            .map(|ty| render_ty_name(sema, ty, interner))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        return (param_tys, render_ty_name(sema, *ret, interner));
+    }
+
+    let _ = expr_id;
+    invalid_lowering_path("foreign signature type is missing")
 }
 
 fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {

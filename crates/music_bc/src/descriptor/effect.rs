@@ -1,11 +1,12 @@
 use music_arena::Idx;
 
-use crate::artifact::StringRecord;
+use crate::artifact::{StringRecord, TypeId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectOpDescriptor {
     pub name: Idx<StringRecord>,
-    pub params: u16,
+    pub param_tys: Box<[TypeId]>,
+    pub result_ty: TypeId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

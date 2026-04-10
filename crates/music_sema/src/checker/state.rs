@@ -238,6 +238,7 @@ pub fn finish_module(
             target: runtime.target.clone(),
             gated_bindings: typing.gated_bindings.clone(),
             foreign_links: typing.foreign_links.clone(),
+            binding_types: typing.binding_types().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,

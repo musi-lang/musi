@@ -11,7 +11,7 @@ use crate::descriptor::{
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 6;
+pub const BINARY_VERSION: u16 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -183,6 +183,12 @@ impl Artifact {
         &self.strings.get(id).text
     }
 
+    #[must_use]
+    pub fn type_name(&self, id: TypeId) -> &str {
+        let descriptor = self.types.get(id);
+        self.string_text(descriptor.name)
+    }
+
     /// Validates descriptor references, instruction operand shapes, and method label usage.
     ///
     /// # Errors
@@ -210,6 +216,10 @@ impl Artifact {
             self.require_string(descriptor.name)?;
             for op in &descriptor.ops {
                 self.require_string(op.name)?;
+                for ty in &op.param_tys {
+                    self.require_type(*ty)?;
+                }
+                self.require_type(op.result_ty)?;
             }
         }
         for (_, descriptor) in self.classes.iter() {
@@ -217,6 +227,10 @@ impl Artifact {
         }
         for (_, descriptor) in self.foreigns.iter() {
             self.require_string(descriptor.name)?;
+            for ty in &descriptor.param_tys {
+                self.require_type(*ty)?;
+            }
+            self.require_type(descriptor.result_ty)?;
             self.require_string(descriptor.abi)?;
             self.require_string(descriptor.symbol)?;
             if let Some(link) = descriptor.link {

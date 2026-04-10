@@ -52,6 +52,9 @@ fn lowers_exports_and_semantic_metadata() {
     assert!(ir.exported_value("id").is_some());
     assert_eq!(ir.callables().len(), 1);
     assert_eq!(ir.effects().len(), 1);
+    assert_eq!(ir.effects()[0].ops.len(), 1);
+    assert!(ir.effects()[0].ops[0].param_tys.is_empty());
+    assert_eq!(ir.effects()[0].ops[0].result_ty.as_ref(), "String");
     assert_eq!(ir.classes().len(), 1);
     assert_eq!(ir.instances().len(), 1);
     assert!(ir.static_imports().is_empty());
@@ -73,7 +76,9 @@ fn lowers_data_and_foreign_facts() {
     assert_eq!(ir.data_defs()[0].variant_count, 2);
     assert_eq!(ir.foreigns().len(), 1);
     assert_eq!(ir.foreigns()[0].abi.as_ref(), "c");
-    assert_eq!(ir.foreigns()[0].param_count, 1);
+    assert_eq!(ir.foreigns()[0].param_tys.len(), 1);
+    assert_eq!(ir.foreigns()[0].param_tys[0].as_ref(), "CString");
+    assert_eq!(ir.foreigns()[0].result_ty.as_ref(), "Int");
     assert!(ir.foreigns()[0].link.is_none());
     assert_eq!(ir.callables().len(), 1);
     assert_eq!(ir.exports().len(), 1);

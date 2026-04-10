@@ -29,12 +29,14 @@ fn validates_well_formed_artifact() {
         name: abort_name,
         ops: Box::new([EffectOpDescriptor {
             name: abort_op_name,
-            params: 0,
+            param_tys: Box::new([]),
+            result_ty: int_ty,
         }]),
     });
     let foreign_id = artifact.foreigns.alloc(ForeignDescriptor {
         name: puts_name,
-        params: 1,
+        param_tys: Box::new([int_ty]),
+        result_ty: int_ty,
         abi: c_name,
         symbol: symbol_name,
         link: None,

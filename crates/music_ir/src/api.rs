@@ -2,8 +2,7 @@ use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
 use music_names::NameBindingId;
 use music_sema::{
-    ClassSurface, DefinitionKey, EffectRow, EffectSurface, ExportedValue, InstanceSurface,
-    SemaEffectDef, SurfaceTy,
+    ClassSurface, DefinitionKey, EffectRow, ExportedValue, InstanceSurface, SurfaceTy,
 };
 
 use crate::IrDiagKind;
@@ -334,7 +333,8 @@ pub struct IrForeignDef {
     pub abi: Box<str>,
     pub symbol: Box<str>,
     pub link: Option<Box<str>>,
-    pub param_count: u32,
+    pub param_tys: Box<[Box<str>]>,
+    pub result_ty: Box<str>,
     pub exported: bool,
 }
 
@@ -357,7 +357,8 @@ pub struct IrEffectDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectOpDef {
     pub name: Box<str>,
-    pub params: u16,
+    pub param_tys: Box<[Box<str>]>,
+    pub result_ty: Box<str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -506,40 +507,6 @@ impl IrModule {
     #[must_use]
     pub fn class(&self, key: &DefinitionKey) -> Option<&IrClassDef> {
         self.classes.iter().find(|class| &class.key == key)
-    }
-}
-
-impl From<&EffectSurface> for IrEffectDef {
-    fn from(value: &EffectSurface) -> Self {
-        let mut ops = value
-            .ops
-            .iter()
-            .map(|op| IrEffectOpDef {
-                name: op.name.clone(),
-                params: u16::try_from(op.params.len()).unwrap_or(u16::MAX),
-            })
-            .collect::<Vec<_>>();
-        ops.sort_by(|left, right| left.name.cmp(&right.name));
-        Self {
-            key: value.key.clone(),
-            ops: ops.into_boxed_slice(),
-        }
-    }
-}
-
-impl From<&SemaEffectDef> for IrEffectDef {
-    fn from(value: &SemaEffectDef) -> Self {
-        Self {
-            key: value.key().clone(),
-            ops: value
-                .ops()
-                .map(|(name, def)| IrEffectOpDef {
-                    name: name.into(),
-                    params: u16::try_from(def.params().len()).unwrap_or(u16::MAX),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-        }
     }
 }
 

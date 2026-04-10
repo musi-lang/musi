@@ -26,6 +26,7 @@ pub(crate) struct SemaContextBuild {
     pub target: Option<TargetInfo>,
     pub gated_bindings: HashSet<NameBindingId>,
     pub foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+    pub binding_types: HashMap<NameBindingId, HirTyId>,
 }
 
 pub(crate) struct SemaFactsBuild {

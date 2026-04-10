@@ -62,6 +62,7 @@ Notes:
 - `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures now flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`, and stage-failure propagation is covered through typed parse/resolve/sema/IR/emit session tests.
 - `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
 - `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
+- `musi_vm::ForeignCall` and `musi_vm::EffectCall` now expose typed signature metadata through `param_tys`, `result_ty`, and runtime type-name helpers backed by the originating `Program`.
 - `musi_rt::Runtime` is the source-aware runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, and compiles module syntax into runtime module handles.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, and constructs the exact `music_session` module/import view used for package-aware compilation.
 

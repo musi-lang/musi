@@ -204,7 +204,14 @@ fn encode_effects(out: &mut Vec<u8>, artifact: &Artifact) {
         );
         for op in &entry.ops {
             push_u32(out, op.name.raw());
-            push_u16(out, op.params);
+            push_u16(
+                out,
+                u16::try_from(op.param_tys.len()).expect("too many effect op params"),
+            );
+            for ty in &op.param_tys {
+                push_u32(out, ty.raw());
+            }
+            push_u32(out, op.result_ty.raw());
         }
     }
 }
@@ -228,7 +235,14 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
     );
     for (_, entry) in artifact.foreigns.iter() {
         push_u32(out, entry.name.raw());
-        push_u16(out, entry.params);
+        push_u16(
+            out,
+            u16::try_from(entry.param_tys.len()).expect("too many foreign params"),
+        );
+        for ty in &entry.param_tys {
+            push_u32(out, ty.raw());
+        }
+        push_u32(out, entry.result_ty.raw());
         push_u32(out, entry.abi.raw());
         push_u32(out, entry.symbol.raw());
         if let Some(link) = entry.link {
@@ -512,9 +526,16 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let ops_len = usize::from(cursor.read_u16()?);
         let mut ops = Vec::with_capacity(ops_len);
         for _ in 0..ops_len {
+            let name = cursor.read_idx()?;
+            let param_len = usize::from(cursor.read_u16()?);
+            let mut param_tys = Vec::with_capacity(param_len);
+            for _ in 0..param_len {
+                param_tys.push(cursor.read_idx()?);
+            }
             ops.push(EffectOpDescriptor {
-                name: cursor.read_idx()?,
-                params: cursor.read_u16()?,
+                name,
+                param_tys: param_tys.into_boxed_slice(),
+                result_ty: cursor.read_idx()?,
             });
         }
         let _ = artifact.effects.alloc(EffectDescriptor {
@@ -539,7 +560,12 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
     require_section(cursor, SectionTag::Foreigns)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
-        let params = cursor.read_u16()?;
+        let param_len = usize::from(cursor.read_u16()?);
+        let mut param_tys = Vec::with_capacity(param_len);
+        for _ in 0..param_len {
+            param_tys.push(cursor.read_idx()?);
+        }
+        let result_ty = cursor.read_idx()?;
         let abi = cursor.read_idx()?;
         let symbol = cursor.read_idx()?;
         let link = match cursor.read_u8()? {
@@ -549,7 +575,8 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
         };
         let _ = artifact.foreigns.alloc(ForeignDescriptor {
             name,
-            params,
+            param_tys: param_tys.into_boxed_slice(),
+            result_ty,
             abi,
             symbol,
             link,

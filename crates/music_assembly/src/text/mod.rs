@@ -108,8 +108,12 @@ fn format_effects(out: &mut String, artifact: &Artifact) {
         for op in &descriptor.ops {
             out.push(' ');
             push_symbol_ref(out, artifact.string_text(op.name));
-            out.push_str(" params ");
-            out.push_str(&op.params.to_string());
+            for ty in &op.param_tys {
+                out.push_str(" param ");
+                push_symbol_ref(out, artifact.type_name(*ty));
+            }
+            out.push_str(" result ");
+            push_symbol_ref(out, artifact.type_name(op.result_ty));
         }
         out.push('\n');
     }
@@ -174,8 +178,12 @@ fn format_foreigns(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.foreigns.iter() {
         out.push_str(".foreign ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
-        out.push_str(" params ");
-        out.push_str(&descriptor.params.to_string());
+        for ty in &descriptor.param_tys {
+            out.push_str(" param ");
+            push_symbol_ref(out, artifact.type_name(*ty));
+        }
+        out.push_str(" result ");
+        push_symbol_ref(out, artifact.type_name(descriptor.result_ty));
         out.push_str(" abi ");
         push_quoted(out, artifact.string_text(descriptor.abi));
         out.push_str(" symbol ");
@@ -419,10 +427,18 @@ impl TextBuilder {
             return Err(AssemblyError::Text("expected `.type $Name`".into()));
         }
         let name = parse_symbol(&parts[1])?;
-        let name_id = self.intern_string(&name);
-        let ty = self.artifact.types.alloc(TypeDescriptor { name: name_id });
-        let _ = self.types.insert(name, ty);
+        let _ = self.ensure_type_symbol(&name);
         Ok(())
+    }
+
+    fn ensure_type_symbol(&mut self, name: &str) -> TypeId {
+        if let Some(id) = self.types.get(name).copied() {
+            return id;
+        }
+        let name_id = self.intern_string(name);
+        let ty = self.artifact.types.alloc(TypeDescriptor { name: name_id });
+        let _ = self.types.insert(name.into(), ty);
+        ty
     }
 
     fn parse_data(&mut self, parts: &[String]) -> AssemblyResult {
@@ -564,16 +580,23 @@ impl TextBuilder {
         while idx < parts.len() {
             let op_name = parse_symbol(must_get(parts.get(idx), "effect op")?)?;
             idx += 1;
-            let mut params = 0_u16;
-            if idx < parts.len() && parts[idx] == "params" {
-                params = must_get(parts.get(idx + 1), "effect op params")?
-                    .parse()
-                    .map_err(|_| AssemblyError::Text("invalid effect op params".into()))?;
+            let mut param_tys = Vec::new();
+            while idx < parts.len() && parts[idx] == "param" {
+                let ty = parse_symbol(must_get(parts.get(idx + 1), "effect op param type")?)?;
+                param_tys.push(self.ensure_type_symbol(&ty));
                 idx += 2;
             }
+            if parts.get(idx).map(String::as_str) != Some("result") {
+                return Err(AssemblyError::Text(
+                    "expected `result $Type` in `.effect`".into(),
+                ));
+            }
+            let result_ty = parse_symbol(must_get(parts.get(idx + 1), "effect op result type")?)?;
+            idx += 2;
             ops.push(EffectOpDescriptor {
                 name: self.intern_string(&op_name),
-                params,
+                param_tys: param_tys.into_boxed_slice(),
+                result_ty: self.ensure_type_symbol(&result_ty),
             });
         }
         let id = self.artifact.effects.alloc(EffectDescriptor {
@@ -632,29 +655,30 @@ impl TextBuilder {
     fn parse_foreign(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
             return Err(AssemblyError::Text(
-                "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
         let mut export = false;
         let mut link = None::<String>;
-        let mut params = 0_u16;
+        let mut param_tys = Vec::new();
         let mut base = 2;
-        if parts.get(base).map(String::as_str) == Some("params") {
-            params = must_get(parts.get(base + 1), "foreign params")?
-                .parse()
-                .map_err(|_| AssemblyError::Text("invalid foreign params".into()))?;
+        while parts.get(base).map(String::as_str) == Some("param") {
+            let ty = parse_symbol(must_get(parts.get(base + 1), "foreign param type")?)?;
+            param_tys.push(self.ensure_type_symbol(&ty));
             base += 2;
         }
-        if parts.get(base).map(String::as_str) != Some("abi")
-            || parts.get(base + 2).map(String::as_str) != Some("symbol")
+        if parts.get(base).map(String::as_str) != Some("result")
+            || parts.get(base + 2).map(String::as_str) != Some("abi")
+            || parts.get(base + 4).map(String::as_str) != Some("symbol")
         {
             return Err(AssemblyError::Text(
-                "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
-        let abi = parse_quoted(must_get(parts.get(base + 1), "foreign abi")?)?;
-        let symbol = parse_quoted(must_get(parts.get(base + 3), "foreign symbol")?)?;
-        let mut idx = base + 4;
+        let result_ty = parse_symbol(must_get(parts.get(base + 1), "foreign result type")?)?;
+        let abi = parse_quoted(must_get(parts.get(base + 3), "foreign abi")?)?;
+        let symbol = parse_quoted(must_get(parts.get(base + 5), "foreign symbol")?)?;
+        let mut idx = base + 6;
         while idx < parts.len() {
             match parts[idx].as_str() {
                 "export" => {
@@ -668,7 +692,7 @@ impl TextBuilder {
                 }
                 _ => {
                     return Err(AssemblyError::Text(
-                        "expected `.foreign $Name [params <count>] abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                        "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
                     ));
                 }
             }
@@ -676,7 +700,8 @@ impl TextBuilder {
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
         let descriptor = ForeignDescriptor {
             name: self.intern_string(&name),
-            params,
+            param_tys: param_tys.into_boxed_slice(),
+            result_ty: self.ensure_type_symbol(&result_ty),
             abi: self.intern_string(&abi),
             symbol: self.intern_string(&symbol),
             link: link.as_deref().map(|text| self.intern_string(text)),

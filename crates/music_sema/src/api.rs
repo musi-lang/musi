@@ -604,6 +604,7 @@ pub struct SemaModule {
     target: Option<TargetInfo>,
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+    binding_types: HashMap<NameBindingId, HirTyId>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -620,6 +621,7 @@ struct SemaContextTables {
     target: Option<TargetInfo>,
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+    binding_types: HashMap<NameBindingId, HirTyId>,
 }
 
 struct SemaFactTables {
@@ -642,6 +644,7 @@ impl From<crate::SemaModuleBuild> for SemaModule {
             target: build.context.target,
             gated_bindings: build.context.gated_bindings,
             foreign_links: build.context.foreign_links,
+            binding_types: build.context.binding_types,
         };
         let facts = SemaFactTables {
             expr_facts: build.facts.expr_facts,
@@ -720,6 +723,11 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn binding_type(&self, binding: NameBindingId) -> Option<HirTyId> {
+        self.binding_types.get(&binding).copied()
+    }
+
+    #[must_use]
     pub fn try_pat_ty(&self, id: HirPatId) -> Option<HirTyId> {
         self.pat_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
     }
@@ -770,6 +778,7 @@ impl SemaModule {
             target: context.target,
             gated_bindings: context.gated_bindings,
             foreign_links: context.foreign_links,
+            binding_types: context.binding_types,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_module_targets: facts.expr_module_targets,

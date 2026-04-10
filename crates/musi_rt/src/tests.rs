@@ -8,14 +8,14 @@ struct TestHost;
 impl VmHost for TestHost {
     fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
-            foreign: foreign.name.clone(),
+            foreign: foreign.name().into(),
         }))
     }
 
     fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
-            effect: effect.effect_name.clone(),
-            op: Some(effect.op_name.clone()),
+            effect: effect.effect_name().into(),
+            op: Some(effect.op_name().into()),
             reason: "test host rejected effect call".into(),
         }))
     }

@@ -132,12 +132,14 @@ impl Vm {
             self.finish_handled_effect(handler_index, result)
         } else {
             let effect_call = EffectCall {
+                program: module.program.clone(),
                 effect,
                 module: module.spec.clone(),
                 effect_name,
                 op,
                 op_name: module.program.string_text(op_desc.name).into(),
-                param_count: op_desc.params,
+                param_tys: op_desc.param_tys.clone(),
+                result_ty: op_desc.result_ty,
             };
             self.host.handle_effect(&effect_call, args)
         }
@@ -167,7 +169,7 @@ impl Vm {
                 op_count: descriptor.ops.len(),
             })
         })?;
-        self.pop_args(usize::from(op_desc.params))
+        self.pop_args(op_desc.param_tys.len())
     }
 
     pub(crate) fn handler_clause_closure(handler: &EffectHandler, index: usize) -> VmResult<Value> {

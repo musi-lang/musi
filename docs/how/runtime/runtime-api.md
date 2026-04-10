@@ -65,6 +65,7 @@ Use inspection for embedding and tests instead of reaching through VM internals.
 
 - foreign call behavior
 - unhandled host effects
+- typed foreign/effect signature metadata through `ForeignCall` and `EffectCall`
 
 `VmLoader` owns runtime module source/program policy.
 

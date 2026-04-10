@@ -51,7 +51,7 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
 
 fn register_effects(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
     for effect in module.effects() {
-        let effect_id = ensure_effect(state, effect);
+        let effect_id = ensure_effect(state, effect, layout);
         let _ = layout.effects.insert(effect.key.clone(), effect_id);
     }
 }
@@ -183,10 +183,17 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
             .link
             .as_deref()
             .map(|link| state.artifact.intern_string(link));
-        let params = u16::try_from(foreign.param_count).unwrap_or(u16::MAX);
+        let param_tys = foreign
+            .param_tys
+            .iter()
+            .map(|ty| ensure_type(state, layout, ty.as_ref()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let result_ty = ensure_type(state, layout, foreign.result_ty.as_ref());
         let foreign_id = state.artifact.foreigns.alloc(ForeignDescriptor {
             name: name_id,
-            params,
+            param_tys,
+            result_ty,
             abi: abi_id,
             symbol: symbol_id,
             link: link_id,
@@ -438,7 +445,11 @@ fn ensure_type(state: &mut ProgramState, layout: &mut ModuleLayout, ty_name: &st
     type_id
 }
 
-fn ensure_effect(state: &mut ProgramState, effect: &IrEffectDef) -> EffectId {
+fn ensure_effect(
+    state: &mut ProgramState,
+    effect: &IrEffectDef,
+    layout: &mut ModuleLayout,
+) -> EffectId {
     if let Some(id) = state.effects_by_key.get(&effect.key).copied() {
         return id;
     }
@@ -449,7 +460,13 @@ fn ensure_effect(state: &mut ProgramState, effect: &IrEffectDef) -> EffectId {
         .iter()
         .map(|op| EffectOpDescriptor {
             name: state.artifact.intern_string(op.name.as_ref()),
-            params: op.params,
+            param_tys: op
+                .param_tys
+                .iter()
+                .map(|ty| ensure_type(state, layout, ty.as_ref()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            result_ty: ensure_type(state, layout, op.result_ty.as_ref()),
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
