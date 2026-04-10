@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 pub use super::host::{EffectCall, ForeignCall};
+pub use super::loader::{NativeLoader, VmLoader};
+use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
     ClosureValuePtr, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr,
     ForeignValue, SeqValuePtr, ValueList,
@@ -9,7 +11,6 @@ pub use super::{
     NativeHost, OperandShape, Program, RecordView, SeqView, StringView, Value, ValueView, VmError,
     VmErrorKind, VmHost, VmResult, VmValueKind,
 };
-use super::opcode::{classify_opcode, VmOpcodeFamily};
 
 mod dispatch;
 mod module;
@@ -28,6 +29,7 @@ pub struct VmOptions;
 pub struct Vm {
     loaded_modules: LoadedModuleList,
     module_slots: ModuleSlotMap,
+    loader: Box<dyn VmLoader>,
     host: Box<dyn VmHost>,
     options: VmOptions,
     frames: CallFrameList,
@@ -39,11 +41,17 @@ pub struct Vm {
 
 impl Vm {
     #[must_use]
-    pub fn new(program: Program, host: impl VmHost + 'static, options: VmOptions) -> Self {
+    pub fn new(
+        program: Program,
+        loader: impl VmLoader + 'static,
+        host: impl VmHost + 'static,
+        options: VmOptions,
+    ) -> Self {
         let root_module = LoadedModule::new("<root>", program);
         Self {
             loaded_modules: vec![root_module],
             module_slots: HashMap::new(),
+            loader: Box::new(loader),
             host: Box::new(host),
             options,
             frames: Vec::new(),
@@ -56,7 +64,7 @@ impl Vm {
 
     #[must_use]
     pub fn with_native_host(program: Program, options: VmOptions) -> Self {
-        Self::new(program, NativeHost, options)
+        Self::new(program, NativeLoader, NativeHost, options)
     }
 
     /// Runs synthesized module/program initialization exactly once.
@@ -138,7 +146,7 @@ impl Vm {
             Value::Closure(closure) => {
                 let closure = closure.borrow();
                 let mut full_args = closure.captures.clone();
-                full_args.extend_from_slice(args);
+                full_args.extend(args.iter().cloned());
                 if base_depth == 0 {
                     self.invoke_method(closure.module_slot, closure.method, full_args)
                 } else {
@@ -171,24 +179,6 @@ impl Vm {
                 found: value.kind(),
             })),
         }
-    }
-
-    /// Delegates syntax evaluation to host boundary.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] if value is not string-backed syntax or host evaluation fails.
-    pub fn eval_syntax(&mut self, value: &Value) -> VmResult<Value> {
-        let syntax = match value {
-            Value::String(text) => text.as_ref(),
-            _ => {
-                return Err(VmError::new(VmErrorKind::InvalidValueKind {
-                    expected: VmValueKind::String,
-                    found: value.kind(),
-                }));
-            }
-        };
-        self.host.eval_syntax(syntax)
     }
 
     #[must_use]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::iter::repeat_n;
 
 use music_bc::{EffectId, MethodId};
 
@@ -51,7 +52,7 @@ pub enum StepOutcome {
 
 impl LoadedModule {
     pub(crate) fn new(spec: impl Into<Box<str>>, program: Program) -> Self {
-        let globals = vec![Value::Unit; program.artifact().globals.len()];
+        let globals = repeat_n(Value::Unit, program.artifact().globals.len()).collect();
         Self {
             spec: spec.into(),
             program,

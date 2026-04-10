@@ -37,7 +37,9 @@ That gives the pipeline:
 
 ## Why Runtime Stays Separate
 
-`musi_vm` executes SEAM and exposes embedding APIs.
+`musi_vm` executes SEAM and exposes low-level embedding APIs.
+
+`musi_rt` sits above that boundary and composes `music_session` with `musi_vm` for source-backed runtime services.
 
 It should not become:
 

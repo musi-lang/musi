@@ -8,12 +8,14 @@ impl Vm {
         let foreign = module.program.artifact().foreigns.get(foreign_id);
         ForeignCall {
             foreign: foreign_id,
+            module: module.spec.clone(),
             name: module.program.string_text(foreign.name).into(),
             abi: module.program.string_text(foreign.abi).into(),
             symbol: module.program.string_text(foreign.symbol).into(),
             link: foreign
                 .link
                 .map(|link| module.program.string_text(link).into()),
+            param_count: foreign.params,
         }
     }
 

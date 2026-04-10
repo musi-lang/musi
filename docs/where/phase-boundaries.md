@@ -23,6 +23,8 @@ music_base
 music_ir -> music_emit -> music_session
 music_ir -> music_jit -> music_session   (planned)
 music_bc -> music_assembly -> musi_vm
+music_session -> musi_rt
+musi_vm -> musi_rt
 musi_project -> music_session
 ```
 
@@ -34,6 +36,7 @@ musi_project -> music_session
 - `music_ir` stops at codegen-facing executable facts
 - `music_emit` stops at validated SEAM artifacts
 - `musi_vm` starts at loaded `.seam` execution
+- `musi_rt` composes compiler services with runtime services
 - `music_session` orchestrates phases
 - `musi_project` owns package/workspace integration
 

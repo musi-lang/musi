@@ -29,6 +29,7 @@ There is no separate rewrite workspace anymore.
 - `music_assembly`
 - `music_emit`
 - `musi_vm`
+- `musi_rt`
 
 ## Service And Project Layer
 

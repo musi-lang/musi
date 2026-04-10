@@ -1,6 +1,7 @@
 mod api;
 mod error;
 mod host;
+mod loader;
 mod opcode;
 pub(crate) mod program;
 mod types;
@@ -8,8 +9,8 @@ pub(crate) mod value;
 mod vm;
 
 pub use api::{
-    NativeHost, Program, ProgramExport, ProgramExportKind, RecordView, SeqView, StringView, Value,
-    ValueView, Vm, VmHost, VmOptions,
+    NativeHost, NativeLoader, Program, ProgramExport, ProgramExportKind, RecordView, SeqView,
+    StringView, Value, ValueView, Vm, VmHost, VmLoader, VmOptions,
 };
 pub use error::{OperandShape, VmError, VmErrorKind, VmValueKind};
 pub use host::{EffectCall, ForeignCall};

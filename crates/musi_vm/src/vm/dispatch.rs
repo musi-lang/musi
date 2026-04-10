@@ -4,8 +4,8 @@ use music_bc::{Instruction, MethodId};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
 use super::{
-    classify_opcode, ContinuationValuePtr, OperandShape, Value, VmError, VmErrorKind,
-    VmOpcodeFamily, VmResult,
+    ContinuationValuePtr, OperandShape, Value, ValueList, VmError, VmErrorKind, VmOpcodeFamily,
+    VmResult, classify_opcode,
 };
 
 use super::Vm;
@@ -15,7 +15,7 @@ impl Vm {
         &mut self,
         module_slot: usize,
         method: MethodId,
-        args: Vec<Value>,
+        args: ValueList,
     ) -> VmResult<Value> {
         self.push_frame(module_slot, method, args)?;
         self.run_current_state()
@@ -25,7 +25,7 @@ impl Vm {
         &mut self,
         module_slot: usize,
         method: MethodId,
-        args: Vec<Value>,
+        args: ValueList,
         base_depth: usize,
     ) -> VmResult<Value> {
         self.push_frame(module_slot, method, args)?;

@@ -62,8 +62,9 @@ Some seams remain host-owned by design:
 
 - foreign call implementation
 - unhandled host effects
-- syntax evaluation
-- dynamic module source policy
+- dynamic module program policy
+
+Higher-level runtime services such as source-backed module loading and syntax compilation live above the VM in `musi_rt`.
 
 The VM executes SEAM. The host decides external-world behavior.
 

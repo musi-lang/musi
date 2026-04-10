@@ -133,9 +133,11 @@ impl Vm {
         } else {
             let effect_call = EffectCall {
                 effect,
+                module: module.spec.clone(),
                 effect_name,
                 op,
                 op_name: module.program.string_text(op_desc.name).into(),
+                param_count: op_desc.params,
             };
             self.host.handle_effect(&effect_call, args)
         }
@@ -208,12 +210,12 @@ impl Vm {
             .iter()
             .cloned()
             .map(ContinuationFrame::from)
-            .collect::<Vec<_>>();
+            .collect();
         let handlers = self.handlers[handler_index..]
             .iter()
             .cloned()
             .map(ContinuationHandler::from)
-            .collect::<Vec<_>>();
+            .collect();
         match Value::continuation(frames, handlers) {
             Value::Continuation(continuation) => Ok(continuation),
             _ => Err(VmError::new(VmErrorKind::InvalidProgram {

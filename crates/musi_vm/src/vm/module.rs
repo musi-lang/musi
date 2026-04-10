@@ -1,6 +1,6 @@
 use music_bc::descriptor::ExportTarget;
 
-use super::{Value, VmError, VmErrorKind, VmResult, VmValueKind};
+use super::{Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
 
 use super::Vm;
 use super::state::{LoadedModule, ModuleState};
@@ -37,7 +37,8 @@ impl Vm {
 
         self.module_mut(slot)?.state = ModuleState::Initializing;
         let result = entry.map_or(Ok(()), |entry| {
-            self.invoke_method(slot, entry, Vec::new()).map(|_| ())
+            self.invoke_method(slot, entry, ValueList::new())
+                .map(|_| ())
         });
         match result {
             Ok(()) => {
@@ -132,7 +133,7 @@ impl Vm {
             self.initialize_slot(slot)?;
             return Ok(slot);
         }
-        let program = self.host.load_module(spec)?;
+        let program = self.loader.load_program(spec)?;
         let slot = self.loaded_modules.len();
         self.loaded_modules.push(LoadedModule::new(spec, program));
         let _ = self.module_slots.insert(spec.into(), slot);

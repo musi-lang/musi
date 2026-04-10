@@ -4,23 +4,28 @@ use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
 
 use super::{
-    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmLoader, VmOptions,
+    VmResult,
 };
 
 #[derive(Default)]
-struct TestHost {
+struct TestLoader {
     modules: HashMap<Box<str>, Program>,
-    syntax_results: HashMap<Box<str>, Value>,
 }
 
-impl VmHost for TestHost {
-    fn load_module(&mut self, spec: &str) -> VmResult<Program> {
+impl VmLoader for TestLoader {
+    fn load_program(&mut self, spec: &str) -> VmResult<Program> {
         self.modules
             .get(spec)
             .cloned()
             .ok_or_else(|| VmError::new(VmErrorKind::ModuleLoadRejected { spec: spec.into() }))
     }
+}
 
+#[derive(Default)]
+struct TestHost;
+
+impl VmHost for TestHost {
     fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name.clone(),
@@ -31,16 +36,8 @@ impl VmHost for TestHost {
         Err(VmError::new(VmErrorKind::EffectRejected {
             effect: effect.effect_name.clone(),
             op: Some(effect.op_name.clone()),
-            reason: "test host does not handle effect".into(),
+            reason: "test host rejected effect call".into(),
         }))
-    }
-
-    fn eval_syntax(&mut self, syntax: &str) -> VmResult<Value> {
-        self.syntax_results.get(syntax).cloned().ok_or_else(|| {
-            VmError::new(VmErrorKind::SyntaxEvalRejected {
-                syntax: syntax.into(),
-            })
-        })
     }
 }
 
@@ -189,48 +186,29 @@ fn loads_dynamic_module_through_host() {
     );
     let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
 
-    let mut host = TestHost::default();
-    let _ = host.modules.insert("dep".into(), dep);
-    let mut vm = Vm::new(main, host, VmOptions);
+    let mut loader = TestLoader::default();
+    let _ = loader.modules.insert("dep".into(), dep);
+    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
     vm.initialize().expect("vm init should succeed");
-    let loaded = vm
+    let module = vm
         .load_module("dep")
         .expect("dynamic import should succeed");
 
     assert_eq!(
-        vm.lookup_module_export(&loaded, "base")
+        vm.lookup_module_export(&module, "base")
             .expect("module global export should resolve"),
         Value::Int(41)
     );
     assert_eq!(
-        vm.call_module_export(&loaded, "answer", &[])
+        vm.call_module_export(&module, "answer", &[])
             .expect("module callable export should succeed"),
         Value::Int(42)
     );
     assert_eq!(
         vm.load_module("dep")
             .expect("cached dynamic load should succeed"),
-        loaded
+        module
     );
-}
-
-#[test]
-fn delegates_syntax_eval_to_host() {
-    let program = compile_program(
-        &[("main", "export let quoted : Syntax := quote (#(1 + 2));")],
-        "main",
-    );
-    let syntax = "quote (#(1 + 2))";
-    let mut host = TestHost::default();
-    let _ = host.syntax_results.insert(syntax.into(), Value::Int(42));
-    let mut vm = Vm::new(program, host, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let quoted = vm
-        .lookup_export("quoted")
-        .expect("quoted export should exist");
-    let result = vm.eval_syntax(&quoted).expect("syntax eval should succeed");
-
-    assert_eq!(result, Value::Int(42));
 }
 
 #[test]

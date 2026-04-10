@@ -31,7 +31,8 @@ Policy:
 - `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
-- `musi_vm`: initial SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `NativeHost`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
+- `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `NativeHost`, `VmLoader`, `NativeLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
+- `musi_rt`: source-aware runtime service (`Runtime`, `RuntimeOptions`, `RuntimeError*`)
 
 ## Service And Project Layer
 
@@ -60,6 +61,8 @@ Notes:
 - `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values, and `emit_diag_kind` is code-based rather than message-based.
 - `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures now flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`, and stage-failure propagation is covered through typed parse/resolve/sema/IR/emit session tests.
 - `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
+- `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
+- `musi_rt::Runtime` is the source-aware runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, and compiles module syntax into runtime module handles.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, and constructs the exact `music_session` module/import view used for package-aware compilation.
 
 ## Planned Phase Crates

@@ -2,12 +2,13 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 use music_bc::{ClassId, EffectId, ForeignId, MethodId, TypeId};
+use smallvec::SmallVec;
 
 use super::VmValueKind;
 
-pub type ValueList = Vec<Value>;
-pub type ContinuationFrameList = Vec<ContinuationFrame>;
-pub type ContinuationHandlerList = Vec<ContinuationHandler>;
+pub type ValueList = SmallVec<[Value; 8]>;
+pub type ContinuationFrameList = SmallVec<[ContinuationFrame; 4]>;
+pub type ContinuationHandlerList = SmallVec<[ContinuationHandler; 4]>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -131,28 +132,32 @@ impl Value {
     }
 
     #[must_use]
-    pub fn sequence(ty: TypeId, items: impl Into<ValueList>) -> Self {
+    pub fn sequence(ty: TypeId, items: impl IntoIterator<Item = Self>) -> Self {
         Self::Seq(Rc::new(RefCell::new(SequenceValue {
             ty,
-            items: items.into(),
+            items: items.into_iter().collect(),
         })))
     }
 
     #[must_use]
-    pub fn data(ty: TypeId, tag: i64, fields: impl Into<ValueList>) -> Self {
+    pub fn data(ty: TypeId, tag: i64, fields: impl IntoIterator<Item = Self>) -> Self {
         Self::Data(Rc::new(RefCell::new(DataValue {
             ty,
             tag,
-            fields: fields.into(),
+            fields: fields.into_iter().collect(),
         })))
     }
 
     #[must_use]
-    pub fn closure(module_slot: usize, method: MethodId, captures: impl Into<ValueList>) -> Self {
+    pub fn closure(
+        module_slot: usize,
+        method: MethodId,
+        captures: impl IntoIterator<Item = Self>,
+    ) -> Self {
         Self::Closure(Rc::new(RefCell::new(ClosureValue {
             module_slot,
             method,
-            captures: captures.into(),
+            captures: captures.into_iter().collect(),
         })))
     }
 

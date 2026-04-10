@@ -1,3 +1,5 @@
+use std::iter::repeat_n;
+
 use music_bc::{Instruction, MethodId};
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult};
@@ -33,7 +35,7 @@ impl Vm {
         &mut self,
         module_slot: usize,
         method: MethodId,
-        args: Vec<Value>,
+        args: ValueList,
     ) -> VmResult {
         let loaded = self
             .module(module_slot)?
@@ -50,7 +52,7 @@ impl Vm {
         }
 
         let local_count = usize::from(loaded.locals.max(loaded.params));
-        let mut locals = vec![Value::Unit; local_count];
+        let mut locals = repeat_n(Value::Unit, local_count).collect::<ValueList>();
         for (slot, arg) in args.into_iter().enumerate() {
             if let Some(local) = locals.get_mut(slot) {
                 *local = arg;
@@ -61,7 +63,7 @@ impl Vm {
             method,
             ip: 0,
             locals,
-            stack: Vec::new(),
+            stack: ValueList::new(),
         });
         Ok(())
     }
@@ -117,7 +119,7 @@ impl Vm {
             }));
         }
         let split = frame.stack.len().saturating_sub(len);
-        Ok(frame.stack.split_off(split))
+        Ok(frame.stack.drain(split..).collect())
     }
 
     pub(crate) fn pop_seq_args(&mut self) -> VmResult<ValueList> {
@@ -126,7 +128,7 @@ impl Vm {
         Ok(seq.borrow().items.clone())
     }
 
-    pub(crate) fn pop_index_list(&mut self, len: i16) -> VmResult<Vec<i64>> {
+    pub(crate) fn pop_index_list(&mut self, len: i16) -> VmResult<smallvec::SmallVec<[i64; 4]>> {
         let len = usize::try_from(len).map_err(|_| {
             VmError::new(VmErrorKind::InvalidProgram {
                 detail: "index count is negative".into(),

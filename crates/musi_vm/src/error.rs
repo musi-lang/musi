@@ -128,8 +128,9 @@ pub enum VmErrorKind {
         op: Option<Box<str>>,
         reason: Box<str>,
     },
-    SyntaxEvalRejected {
-        syntax: Box<str>,
+    RootModuleRequired,
+    ModuleSourceMissing {
+        spec: Box<str>,
     },
     CallArityMismatch {
         callee: Box<str>,
@@ -284,14 +285,15 @@ impl VmErrorKind {
                 if let Some(op) = op {
                     write!(
                         f,
-                        "effect `{effect}` operation `{op}` rejected because `{reason}`"
+                        "rejected effect `{effect}` operation `{op}` (`{reason}`)"
                     )
                 } else {
-                    write!(f, "effect `{effect}` rejected because `{reason}`")
+                    write!(f, "rejected effect `{effect}` (`{reason}`)")
                 }
             }
-            Self::SyntaxEvalRejected { syntax } => {
-                write!(f, "syntax evalulation rejected for `{syntax}`")
+            Self::RootModuleRequired => f.write_str("root module required"),
+            Self::ModuleSourceMissing { spec } => {
+                write!(f, "module source missing for `{spec}`")
             }
             Self::CallArityMismatch {
                 callee,
