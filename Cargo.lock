@@ -261,6 +261,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "musi_vm"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "music_assembly",
+ "music_bc",
+ "music_module",
+ "music_session",
+ "thiserror",
+]
+
+[[package]]
 name = "music_arena"
 version = "0.1.0-alpha.1"
 

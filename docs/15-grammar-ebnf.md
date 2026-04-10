@@ -40,20 +40,20 @@ This is **not** a parser contract anymore. Parsing produces a flat infix chain (
 - built-in fixities for built-in operators/keywords
 - explicit fixity declarations (`infixl`/`infixr`/`infix`) for user-defined symbolic operators
 
-| BP | Operators / forms                     | Assoc |
-| -- | -------------------------------------- | ----- |
-| 26 | calls `()`, bracket apply `[]`, postfix field/index/update | left  |
-| 24 | prefix `- not mut`                     | right |
-| 20 | `* / %`                                | left  |
-| 18 | `+ -`                                  | left  |
-| 16 | `shl shr`                              | left  |
-| 14 | `= /= < > <= >=`                       | none  |
-| 12 | `and`                                  | left  |
-| 10 | `xor`                                  | left  |
-| 8  | `or`                                   | left  |
-| 7  | `-> ~>`                                | right |
-| 6  | `|>`                                   | left  |
-| 2  | `:=`                                   | right |
+| BP  | Operators / forms                                          | Assoc |
+| --- | ---------------------------------------------------------- | ----- |
+| 26  | calls `()`, bracket apply `[]`, postfix field/index/update | left  |
+| 24  | prefix `- not mut`                                         | right |
+| 20  | `* / %`                                                    | left  |
+| 18  | `+ -`                                                      | left  |
+| 16  | `shl shr`                                                  | left  |
+| 14  | `= /= < > <= >=`                                           | none  |
+| 12  | `and`                                                      | left  |
+| 10  | `xor`                                                      | left  |
+| 8   | `or`                                                       | left  |
+| 7   | `-> ~>`                                                    | right |
+| 6   | `                                                          | >`    | left |
+| 2   | `:=`                                                       | right |
 
 ### Fixity declarations
 

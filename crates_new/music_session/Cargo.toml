@@ -23,7 +23,7 @@ music_names = { path = "../music_names" }
 music_resolve = { path = "../music_resolve" }
 music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }
-thiserror.workspace = true
+thiserror = { workspace = true }
 
 [lints]
 workspace = true

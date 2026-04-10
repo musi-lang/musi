@@ -37,6 +37,7 @@ Canonical crate domains (new workspace):
 - `music_bc`: SEAM bytecode contract (artifact tables + ISA)
 - `music_assembly`: encode/decode/format/validate for `music_bc`
 - `music_emit`: SEAM emission (lowering from sema/IR facts to `music_bc`)
+- `musi_vm`: SEAM runtime execution and embedding API
 - `music_jit`: native/JIT backend consuming `music_ir` (planned)
 - `music_session`: embeddable service layer (caching + orchestration)
 - `musi_project`: schema-backed project/manifest integration (`musi.json`, workspaces, package graph, registry/cache resolution)
@@ -57,6 +58,7 @@ Current implementation status (Cargo workspace members):
 - `music_emit`
 - `music_session`
 - `musi_project`
+- `musi_vm` (partial)
 
 The intended dependency shape is a DAG:
 
@@ -73,6 +75,7 @@ graph TD
   bc[music_bc]
   assembly[music_assembly]
   emit[music_emit]
+  vm[musi_vm]
   jit[music_jit]
   session[music_session]
   project[musi_project]
@@ -84,6 +87,7 @@ graph TD
   bc --> assembly --> session
   ir --> emit --> session
   ir --> jit --> session
+  assembly --> vm
   project --> session
 ```
 
@@ -173,10 +177,12 @@ SEAM is the handoff point between compilation and execution.
 The runtime layer owns:
 
 - loading `.seam` into a program object
-- execution through the VM
+- execution through a VM
 - host effect handling
 - native library and symbol resolution
 - stable value inspection for embedding
+
+Status note: this layer now exists as `crates_new/musi_vm`; current coverage includes core SEAM execution, eager dynamic module load with initialized module handles, loaded-module export access, and in-VM handled-effect continuation execution. Remaining host-owned seams are foreign calls, syntax eval, and unhandled host effects.
 
 The runtime boundary is documented in the runtime and SEAM docs, not redefined here.
 

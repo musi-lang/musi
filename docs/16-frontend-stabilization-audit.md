@@ -51,27 +51,27 @@ Primary public stability boundary:
 
 ## Freeze Decision
 
-| Crate | Status | Reason |
-| --- | --- | --- |
-| `music_base` | Freeze now | Small public surface, clear ownership, diagnostics surface already accessor-based |
-| `music_names` | Freeze now | Small, focused interning and name-resolution support surface |
-| `music_arena` | Freeze now | Small, generic storage API with stable responsibility |
-| `music_hir` | Freeze now | Internal semantic model crate with narrow root export role and no active instability signals in this audit |
-| `music_syntax` | Freeze now | Typed syntax errors already convert into canonical diagnostics and session coverage now exercises syntax-failure propagation |
-| `music_module` | Freeze now | `ImportError` now has stable typed identity plus explicit message access; display no longer depends on `Debug` formatting |
-| `music_resolve` | Freeze now | Public surface is small and typed negative-path propagation is now covered through session integration tests |
-| `music_emit` | Freeze now | `EmitDiagKind` extraction is now complete and code-based rather than message-based |
-| `music_session` | Freeze now | Parse failures use one canonical `SessionSyntaxErrors` shape and session tests now cover typed parse/resolve/sema/IR/emit propagation |
-| `music_sema` | Freeze now | Public reads are query-oriented, construction-only builders are internal, and downstream crates no longer rely on public storage layout |
-| `music_ir` | Freeze now | Full executable IR ADT is now the explicit pre-runtime backend contract and lowering invariants return typed diagnostics instead of aborting |
+| Crate           | Status     | Reason                                                                                                                                       |
+| --------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `music_base`    | Freeze now | Small public surface, clear ownership, diagnostics surface already accessor-based                                                            |
+| `music_names`   | Freeze now | Small, focused interning and name-resolution support surface                                                                                 |
+| `music_arena`   | Freeze now | Small, generic storage API with stable responsibility                                                                                        |
+| `music_hir`     | Freeze now | Internal semantic model crate with narrow root export role and no active instability signals in this audit                                   |
+| `music_syntax`  | Freeze now | Typed syntax errors already convert into canonical diagnostics and session coverage now exercises syntax-failure propagation                 |
+| `music_module`  | Freeze now | `ImportError` now has stable typed identity plus explicit message access; display no longer depends on `Debug` formatting                    |
+| `music_resolve` | Freeze now | Public surface is small and typed negative-path propagation is now covered through session integration tests                                 |
+| `music_emit`    | Freeze now | `EmitDiagKind` extraction is now complete and code-based rather than message-based                                                           |
+| `music_session` | Freeze now | Parse failures use one canonical `SessionSyntaxErrors` shape and session tests now cover typed parse/resolve/sema/IR/emit propagation        |
+| `music_sema`    | Freeze now | Public reads are query-oriented, construction-only builders are internal, and downstream crates no longer rely on public storage layout      |
+| `music_ir`      | Freeze now | Full executable IR ADT is now the explicit pre-runtime backend contract and lowering invariants return typed diagnostics instead of aborting |
 
 ## Ranked Blockers
 
-| # | Severity | File | Issue | Required fix |
-| --- | --- | --- | --- | --- |
-| 1 | Medium | `crates_new/music_ir/src/lower/mod.rs:123` | `music_ir` lowering still lives in one very large coordinator module | Continue decomposition so lowering mechanics do not calcify into one file even though the public IR contract is now frozen |
-| 2 | Medium | `crates_new/music_sema/src/checker/exprs.rs:1` | `music_sema` still carries a large checker hotspot even after API narrowing | Continue splitting semantic responsibilities so freeze does not imply one-file implementation ownership |
-| 3 | Low | `crates_new/music_session/src/session/cache.rs:1` | `music_session` stage orchestration remains concentrated in one cache module | Keep splitting cache/orchestration responsibilities if new behavior lands there |
+| #   | Severity | File                                              | Issue                                                                        | Required fix                                                                                                               |
+| --- | -------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Medium   | `crates_new/music_ir/src/lower/mod.rs:123`        | `music_ir` lowering still lives in one very large coordinator module         | Continue decomposition so lowering mechanics do not calcify into one file even though the public IR contract is now frozen |
+| 2   | Medium   | `crates_new/music_sema/src/checker/exprs.rs:1`    | `music_sema` still carries a large checker hotspot even after API narrowing  | Continue splitting semantic responsibilities so freeze does not imply one-file implementation ownership                    |
+| 3   | Low      | `crates_new/music_session/src/session/cache.rs:1` | `music_session` stage orchestration remains concentrated in one cache module | Keep splitting cache/orchestration responsibilities if new behavior lands there                                            |
 
 ## Coverage Gaps
 

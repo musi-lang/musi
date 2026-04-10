@@ -2,12 +2,20 @@
 
 SEAM is a typed runtime IR executed by a stack-based virtual machine. It is not generic machine assembly and it is not a byte-for-byte lowering of Musi surface syntax.
 
+## Implementation Status (as of 2026-04-10)
+
+This document defines the SEAM contract; it is not yet the implemented runtime API.
+
+- `music_bc` and `music_assembly` are implemented and can materialize/transport `.seam`.
+- `crates_new/musi_vm` now exists as the executable SEAM loader/runtime crate.
+- Current runtime coverage includes eager `mod.load`, loaded-module export access, and handled-effect continuation execution.
+
 The clean-room SEAM layer is split deliberately:
 
 - `music_bc` defines the runtime contract
 - `music_assembly` moves that contract between binary and text forms
 
-The VM that eventually executes SEAM is downstream of that boundary. The SEAM docs define what the machine must honor, not which crate currently happens to execute it.
+The VM that executes SEAM is downstream of that boundary. The current `musi_vm` landing executes the core emitted surface and keeps host-owned seams for foreign calls, unhandled host effects, and syntax evaluation.
 
 ## Identity
 
@@ -30,7 +38,7 @@ SEAM uses uniform runtime values plus metadata tables.
 - the artifact carries string, type, effect, class, foreign, method, and global metadata
 - the VM executes against decoded program metadata, not source syntax
 
-The VM directly understands runtime object categories such as:
+The runtime target should directly understand runtime object categories such as:
 
 - closures
 - continuations
@@ -57,7 +65,7 @@ There is no source-language `main` requirement and no `@main` attribute in the l
 
 ### Frames, Stack, And Globals
 
-The VM owns:
+The target runtime owns:
 
 - a call-frame stack
 - an operand stack inside the active frame
@@ -149,7 +157,7 @@ The important design rule is:
 SEAM is designed to embed cleanly.
 
 - hosts load a program artifact
-- hosts build a VM
+- hosts build a runtime VM instance
 - hosts initialize module top levels
 - hosts invoke exports explicitly
 - hosts inspect results through stable value views

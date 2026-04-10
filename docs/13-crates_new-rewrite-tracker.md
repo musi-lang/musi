@@ -31,6 +31,7 @@ Rules:
 - [x] `music_assembly` (bytecode codec + validation)
 - [x] `music_emit` (SEAM emission: lowering to bytecode contract)
 - [ ] `music_jit` (native/JIT backend consuming `music_ir`)
+- [x] `musi_vm` (SEAM runtime landing: loader + VM entry/execution path over `.seam`, eager dynamic module load, module-handle export access, handled effects)
 - [x] `music_session` (CaaS session: caching + orchestration)
 - [x] `musi_project` (`musi.json` parsing + project integration)
 

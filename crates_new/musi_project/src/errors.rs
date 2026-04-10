@@ -24,15 +24,15 @@ pub enum ProjectError {
         #[source]
         source: IoError,
     },
-    #[error("manifest validation failed: {message}")]
+    #[error("manifest validation failed with `{message}`")]
     Validation { message: String },
-    #[error("workspace member `{member}` is duplicated")]
+    #[error("duplicate workspace member `{member}`")]
     DuplicateWorkspaceMember { member: String },
-    #[error("package `{name}` is duplicated in the project graph")]
+    #[error("duplicate package `{name}` in project graph")]
     DuplicatePackageName { name: String },
-    #[error("package `{name}` is missing a version")]
+    #[error("missing version for package `{name}`")]
     MissingPackageVersion { name: String },
-    #[error("root project has no package entry")]
+    #[error("no package entry for root package")]
     NoRootPackage,
     #[error("entry module not found for package `{package}`")]
     MissingEntry { package: String },

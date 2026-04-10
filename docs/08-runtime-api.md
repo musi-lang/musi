@@ -2,12 +2,14 @@
 
 This document defines the intended embedding boundary for `.seam` programs.
 
+`crates_new/musi_vm` now provides the initial executable runtime crate, and this document defines its intended stable embedding boundary.
+
 The runtime surface has two co-equal roles:
 
 - `Program` as the loaded metadata view of a `.seam` artifact
 - `Vm` as the execution engine over a loaded program
 
-The Rust crate can be reorganized later. This document defines the intended boundary first.
+The Rust crate can be reorganized later. The stable boundary is the public API, not the current internal file layout.
 
 ## Runtime Roles
 
@@ -39,7 +41,7 @@ It owns:
 - effect handlers
 - initialization state
 
-`Vm` is the boundary for execution, export lookup, invocation, and runtime value inspection.
+`Vm` is the boundary for execution, export lookup, dynamic module load, invocation, and runtime value inspection.
 
 ## Runtime Flow
 
@@ -53,7 +55,7 @@ The result is opaque and validated. Embedding code interacts with it through sta
 
 A `Vm` is created from a loaded `Program`.
 
-The default construction path installs the standard native host implementation. Alternate construction installs a custom host boundary.
+The default construction path should install a standard native host implementation; an alternative construction path should support a custom host boundary.
 
 ### 3. Initialize
 
@@ -68,13 +70,16 @@ Initialization is part of the observable embedding contract, not an internal det
 
 Exports and ordinary invocation operate on an initialized runtime.
 
-### 4. Execute And Inspect
+### 4. Execute, Load, And Inspect
 
 After initialization, the runtime supports:
 
 - export lookup by source name
+- dynamic module load through the host boundary
+- export lookup by loaded module handle
 - invocation of a resolved callable value
 - invocation of an exported callable by name
+- invocation of an exported callable from one loaded module handle
 - host-owned inspection of returned values
 
 Stable value inspection belongs to view types, not raw heap/object internals.
@@ -86,8 +91,10 @@ The runtime host boundary is one host trait/object.
 It owns:
 
 - host effect handling
+- runtime module loading for `mod.load`
 - native library loading
 - native symbol resolution
+- syntax compile/eval for `Vm::eval_syntax`
 
 This stays one embedding seam instead of splitting effects and native interop into separate host-capability systems.
 
@@ -119,7 +126,7 @@ Those remain implementation details or repo-internal helpers.
 
 ## Relationship To The Language Model
 
-The runtime startup model follows the language model:
+Runtime startup model targeted by the language and this contract is:
 
 - the selected module’s top level is the program entry
 - initialization runs those top levels once
