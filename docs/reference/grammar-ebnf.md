@@ -10,6 +10,12 @@ This document is the compact, implementer-facing formalization intended to be ea
 
 It also defines CST shaping rules (“no unnecessary nodes”).
 
+Use it when:
+
+- checking parser contracts against language docs
+- validating fixity and precedence assumptions
+- comparing CST shape against syntax implementation
+
 ## Tokens (summary)
 
 Keywords:
@@ -241,3 +247,9 @@ Minimal node inventory (term layer):
 - `Case` (+ `CaseArm`), `Handle` (+ `HandleClause`)
 - `Let`, `Import`, `Resume`, `Perform`, `Instance`, `Quote`, `Splice`
 - `Attr` (+ `AttrArg`, `AttrValue`)
+
+## See Also
+
+- `docs/what/language/syntax.md`
+- `docs/status/antlr-grammar-tracker.md`
+- `grammar/Musi.g4`

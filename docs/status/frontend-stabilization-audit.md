@@ -47,7 +47,7 @@ Primary entrypoints:
 
 Primary public stability boundary:
 
-- crate-root `pub use ...` sets described in `docs/12-public-api.md`
+- crate-root `pub use ...` sets described in `docs/reference/public-api.md`
 
 ## Freeze Decision
 

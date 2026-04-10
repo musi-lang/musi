@@ -2,13 +2,19 @@
 
 This document inventories the public Rust surface for the canonical compiler rewrite in `crates/`.
 
+Use it when checking:
+
+- crate-root stability boundaries
+- which crate owns one public concept
+- whether a change belongs in public API or behind internal modules
+
 Policy:
 
 - The `pub use ...` set from each crate root is the primary stability boundary.
 - Diagnostics are user-facing: error kinds and message style are part of the API contract.
 - Internal modules may change as long as the crate root surface stays coherent.
 
-## Implemented (workspace members)
+## Core Language Pipeline
 
 - `music_base`: `Span`, `Spanned`, `SourceId`, `SourceMap`, and `music_base::diag::*`
 - `music_names`: `Symbol`, `Interner`, `Ident`, `NameSite`, `NameResolution`, `NameBinding*`, `KnownSymbols`
@@ -19,10 +25,16 @@ Policy:
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
 - `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
 - `music_ir`: codegen-facing lowered facts (`IrModule`, `IrCallable`, `IrGlobal`, `IrDataDef`, `IrForeignDef`, `IrEffectDef`, `IrClassDef`, `IrInstanceDef`, `IrExpr`, `IrExprKind`, `IrArg`, `IrLit`, `IrBinaryOp`, `IrOrigin`, `IrParam`, `IrDiagList`, `lower_module`)
+
+## Executable Contract And Runtime
+
 - `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
 - `musi_vm`: initial SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `NativeHost`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
+
+## Service And Project Layer
+
 - `music_session`: session orchestration + cached compile entrypoints (`Session`, `SessionOptions`, `SessionStats`, `ParsedModule`, `SessionSyntaxErrors`, `CompiledOutput`, `SessionDiagList`, `SessionError`, `compile_*`/phase entrypoints through `Session` methods)
 - `musi_project`: project/manifest integration over `music_session` (`Project`, `ProjectOptions`, `ProjectError`, `PackageId`, `PackageSource`, `ProjectEntry`, `ResolvedPackage`, `WorkspaceGraph`, `Lockfile`, `LockedPackage`, `LockedPackageSource`, `TaskSpec`, `PackageManifest`, `load_project`, plus namespaced manifest schema types under `musi_project::manifest::*`)
 
@@ -50,12 +62,14 @@ Notes:
 - `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, and constructs the exact `music_session` module/import view used for package-aware compilation.
 
-## Planned phase crates
+## Planned Phase Crates
 
 These crates are part of the canonical phase DAG but are not implemented as workspace members yet:
 
 - `music_jit`
 
-## Legacy (`crates/`)
+## See Also
 
-`crates/` is legacy reference-only. The rewrite does not add or stabilize new public API surface in legacy crates.
+- `docs/where/workspace-map.md`
+- `docs/where/phase-boundaries.md`
+- `docs/status/frontend-stabilization-audit.md`

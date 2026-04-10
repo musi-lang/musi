@@ -76,7 +76,7 @@ Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB fr
 - [ ] Relevant crates build cleanly with no warnings.
 - [ ] `cargo clippy -p <crate>` passes for each changed crate.
 - [ ] Tests pass for changed crates.
-- [ ] Grammar changes update `grammar/Musi.g4` and relevant docs (`docs/00-syntax.md`, `grammar/Musi.abnf` if the spec reference changes).
+- [ ] Grammar changes update `grammar/Musi.g4` and relevant docs (`docs/what/language/syntax.md`, `grammar/Musi.abnf` if the spec reference changes).
 - [ ] Commit messages explain intent (the *why*, not the *what*).
 - [ ] PR description covers motivation, approach, and how it was tested.
 

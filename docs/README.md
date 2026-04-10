@@ -1,25 +1,46 @@
-# Docs Index
+# Docs
 
-`grammar/Musi.g4` is the canonical, tool-supported grammar for the current language surface.
+Musi documentation follows **WWHW**:
 
-`grammar/Musi.abnf` is a strict RFC 5234 ABNF specification of the Musi surface syntax (kept aligned with `grammar/Musi.g4`).
+- **What** explains language and runtime concepts
+- **Why** explains design rules and tradeoffs
+- **How** explains operational flow and tooling use
+- **Where** explains repo layout, crate ownership, and phase boundaries
 
-Canonical docs are ordered from language, to runtime, to tooling:
+Reference and tracking material live separately so concept docs stay focused.
 
-1. `00-syntax.md`
-2. `01-type-system.md`
-3. `02-effect-system.md`
-4. `03-metaprogramming.md`
-5. `04-compiler-attributes.md`
-6. `05-ffi.md`
-7. `06-seam-vm.md`
-8. `07-seam-bytecode.md`
-9. `08-runtime-api.md`
-10. `09-architecture.md`
-11. `10-toolchain.md`
-12. `11-feature-matrix.md` (tracking)
-13. `12-public-api.md` (tracking)
-14. `14-antlr-grammar-tracker.md` (tracking)
-15. `15-grammar-ebnf.md` (formal, compact)
+## Start Here
 
-The rewrite lives in `crates/` (canonical). The subsystem names are documented in `09-architecture.md`.
+If you need language surface:
+- `docs/what/language/syntax.md`
+- `docs/what/language/type-system.md`
+- `docs/what/language/effect-system.md`
+
+If you need runtime and SEAM:
+- `docs/what/runtime/seam-vm.md`
+- `docs/what/runtime/seam-bytecode.md`
+- `docs/how/runtime/runtime-api.md`
+
+If you need compiler and repo ownership:
+- `docs/why/compiler-architecture.md`
+- `docs/why/runtime-boundary.md`
+- `docs/why/toolchain-split.md`
+- `docs/where/workspace-map.md`
+- `docs/where/phase-boundaries.md`
+
+If you need tool behavior:
+- `docs/how/toolchain.md`
+
+If you need stable inventories or status:
+- `docs/reference/public-api.md`
+- `docs/reference/grammar-ebnf.md`
+- `docs/status/feature-matrix.md`
+- `docs/status/frontend-stabilization-audit.md`
+
+## Canon
+
+`grammar/Musi.g4` is the canonical tool-supported grammar.
+
+`grammar/Musi.abnf` is the strict RFC 5234 ABNF spec for the current surface syntax.
+
+The canonical implementation lives in `crates/`.

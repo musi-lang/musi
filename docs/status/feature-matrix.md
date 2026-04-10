@@ -6,18 +6,18 @@ The canonical feature definitions live in:
 
 - `grammar/Musi.abnf`
 - `grammar/Musi.g4`
-- `docs/00-syntax.md`
-- `docs/01-type-system.md`
-- `docs/02-effect-system.md`
-- `docs/03-metaprogramming.md`
-- `docs/04-compiler-attributes.md`
-- `docs/05-ffi.md`
+- `docs/what/language/syntax.md`
+- `docs/what/language/type-system.md`
+- `docs/what/language/effect-system.md`
+- `docs/what/language/metaprogramming.md`
+- `docs/what/language/compiler-attributes.md`
+- `docs/what/language/ffi.md`
 
 Primary implementation truth comes from:
 
 - `Cargo.toml`
-- `docs/09-architecture.md`
-- `docs/12-public-api.md`
+- `docs/why/compiler-architecture.md`
+- `docs/reference/public-api.md`
 - current tests in `music_syntax`, `music_resolve`, `music_sema`, `music_emit`, `music_session`, and `musi_project`
 
 Legend:

@@ -3,9 +3,9 @@
 ## Canon
 
 Source of truth:
-- Syntax: `docs/00-syntax.md`, `grammar/Musi.g4`, `grammar/Musi.abnf`
-- Ownership and crate map: `docs/09-architecture.md`
-- Public API inventory: `docs/12-public-api.md`
+- Syntax: `docs/what/language/syntax.md`, `grammar/Musi.g4`, `grammar/Musi.abnf`
+- Ownership and crate map: `docs/where/workspace-map.md`
+- Public API inventory: `docs/reference/public-api.md`
 
 ## Scope And Structure
 
