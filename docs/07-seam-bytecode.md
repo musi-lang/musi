@@ -242,7 +242,7 @@ Pinning is not a public opcode. If the runtime needs to pin values for FFI, that
 
 ## Removed From The Clean-Room ISA
 
-These are intentionally absent from `crates_new/music_bc`:
+These are intentionally absent from `crates/music_bc`:
 
 - `ld.nil`
 - `ld.one`

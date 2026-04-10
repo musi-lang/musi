@@ -15,9 +15,9 @@ The architecture stays honest when:
 - SEAM owns runtime contracts, not source sugar
 - the runtime owns execution and embedding, not compile-time language decisions
 
-## Canonical Workspace (`crates_new/`)
+## Canonical Workspace (`crates/`)
 
-The canonical compiler implementation lives in `crates_new/` and is designed as an embeddable compiler-as-a-service (CaaS):
+The canonical compiler implementation lives in `crates/` and is designed as an embeddable compiler-as-a-service (CaaS):
 
 - Phase crates expose domain APIs for tooling and embedding.
 - The service/orchestration layer owns caching, invalidation, and project integration.
@@ -182,7 +182,7 @@ The runtime layer owns:
 - native library and symbol resolution
 - stable value inspection for embedding
 
-Status note: this layer now exists as `crates_new/musi_vm`; current coverage includes core SEAM execution, eager dynamic module load with initialized module handles, loaded-module export access, and in-VM handled-effect continuation execution. Remaining host-owned seams are foreign calls, syntax eval, and unhandled host effects.
+Status note: this layer now exists as `crates/musi_vm`; current coverage includes core SEAM execution, eager dynamic module load with initialized module handles, loaded-module export access, and in-VM handled-effect continuation execution. Remaining host-owned seams are foreign calls, syntax eval, and unhandled host effects.
 
 The runtime boundary is documented in the runtime and SEAM docs, not redefined here.
 

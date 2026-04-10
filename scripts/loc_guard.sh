@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="${1:-crates_new}"
+root="${1:-crates}"
 limit="${2:-2000}"
 
 if [[ ! -d "$root" ]]; then

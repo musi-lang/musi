@@ -7,7 +7,7 @@ SEAM is a typed runtime IR executed by a stack-based virtual machine. It is not 
 This document defines the SEAM contract; it is not yet the implemented runtime API.
 
 - `music_bc` and `music_assembly` are implemented and can materialize/transport `.seam`.
-- `crates_new/musi_vm` now exists as the executable SEAM loader/runtime crate.
+- `crates/musi_vm` now exists as the executable SEAM loader/runtime crate.
 - Current runtime coverage includes eager `mod.load`, loaded-module export access, and handled-effect continuation execution.
 
 The clean-room SEAM layer is split deliberately:
@@ -19,13 +19,13 @@ The VM that executes SEAM is downstream of that boundary. The current `musi_vm` 
 
 ## Identity
 
-| Property            | Value                                   |
-| ------------------- | --------------------------------------- |
-| Execution model     | stack machine                           |
-| IR level            | typed runtime IR                        |
-| Binary artifact     | `.seam`                                 |
-| Human-readable form | SEAM text IL                            |
-| Contract crates     | `crates_new/music_bc`, `crates_new/music_assembly` |
+| Property            | Value                                      |
+| ------------------- | ------------------------------------------ |
+| Execution model     | stack machine                              |
+| IR level            | typed runtime IR                           |
+| Binary artifact     | `.seam`                                    |
+| Human-readable form | SEAM text IL                               |
+| Contract crates     | `crates/music_bc`, `crates/music_assembly` |
 
 SEAM stays small by lowering source sugar away. It stays expressive by keeping explicit operations for the runtime concepts the VM actually owns.
 

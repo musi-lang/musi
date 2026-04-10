@@ -1,6 +1,6 @@
-# Feature Matrix (`crates_new/`)
+# Feature Matrix (`crates/`)
 
-This document tracks language and toolchain coverage across the canonical compiler rewrite in `crates_new/`.
+This document tracks language and toolchain coverage across the canonical compiler rewrite in `crates/`.
 
 The canonical feature definitions live in:
 
@@ -18,21 +18,20 @@ Primary implementation truth comes from:
 - `Cargo.toml`
 - `docs/09-architecture.md`
 - `docs/12-public-api.md`
-- `docs/13-crates_new-rewrite-tracker.md`
 - current tests in `music_syntax`, `music_resolve`, `music_sema`, `music_emit`, `music_session`, and `musi_project`
 
 Legend:
 
-| Emoji | State   | Meaning                                                                 |
-| ----- | ------- | ----------------------------------------------------------------------- |
-| ✅     | done    | Implemented in the canonical `crates_new` workspace and backed by tests |
-| 🟡     | partial | Implemented but incomplete/limited across phases                        |
-| ❌     | missing | Not implemented in the canonical `crates_new` stack                     |
-| ➖     | n/a     | Not applicable to this layer                                            |
+| Emoji | State   | Meaning                                                             |
+| ----- | ------- | ------------------------------------------------------------------- |
+| ✅     | done    | Implemented in the canonical `crates` workspace and backed by tests |
+| 🟡     | partial | Implemented but incomplete/limited across phases                    |
+| ❌     | missing | Not implemented in the canonical `crates` stack                     |
+| ➖     | n/a     | Not applicable to this layer                                        |
 
 This matrix is language-first. It does not claim runtime or JIT completion.
 
-Notes are descriptive: they reflect current `crates_new` behavior (accepted vs diagnosed), not language decisions.
+Notes are descriptive: they reflect current `crates` behavior (accepted vs diagnosed), not language decisions.
 
 ## Surface Syntax And Literals
 
@@ -121,7 +120,7 @@ Notes are descriptive: they reflect current `crates_new` behavior (accepted vs d
 
 | Feature                                  | Status | Notes                                                                                                                                                                                                                                    |
 | ---------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musi_vm` crate                          | ✅      | `crates_new/musi_vm` now loads `.seam` bytes into `Program`, executes core SEAM through `Vm`, and exposes host-owned embedding hooks                                                                                                     |
+| `musi_vm` crate                          | ✅      | `crates/musi_vm` now loads `.seam` bytes into `Program`, executes core SEAM through `Vm`, and exposes host-owned embedding hooks                                                                                                         |
 | SEAM runtime execution / VM              | 🟡      | Core emitted programs now execute through `musi_vm` (globals, calls, closures, records, sequences, type ops, eager `mod.load`, handled effects, `resume`); host-owned foreign calls, syntax eval, and broader runtime-engine work remain |
 | Runtime dynamic imports (module loading) | ✅      | `mod.load` now executes through `VmHost::load_module`, initializes one cached module instance once per spec, and supports runtime export lookup/call through module handles                                                              |
 | Runtime execution for quote/splice       | 🟡      | Quote/splice syntax data can now be passed to `Vm::eval_syntax`, which delegates compile/eval to the host; there is no VM-native staged execution model                                                                                  |

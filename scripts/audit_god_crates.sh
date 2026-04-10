@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="${1:-crates_new}"
+root="${1:-crates}"
 min_total="${2:-1500}"
 max_share="${3:-0.75}"
 

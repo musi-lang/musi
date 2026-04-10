@@ -136,7 +136,7 @@ The canonical grammar lives in `grammar/Musi.g4`. `grammar/Musi.abnf` is the str
 
 ## Project Structure
 
-The legacy crate structure lives under `crates/`. The canonical rewrite lives under `crates_new/`.
+The canonical rewrite lives under `crates/`.
 
 | Crate            | Role                                        |
 | ---------------- | ------------------------------------------- |

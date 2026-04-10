@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="${1:-crates_new}"
+root="${1:-crates}"
 
 if [[ ! -d "$root" ]]; then
   echo "missing $root/ directory" >&2

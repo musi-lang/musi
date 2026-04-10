@@ -1,4 +1,4 @@
-# Frontend Stabilization Audit (`crates_new/`)
+# Frontend Stabilization Audit (`crates/`)
 
 This document records the current stabilization audit for the pre-runtime frontend and service boundary.
 
@@ -28,8 +28,8 @@ Validation baseline at audit time:
 
 - `cargo test -q` passes
 - `cargo clippy -q --workspace --all-targets` passes
-- `scripts/audit_god_crates.sh crates_new` passes
-- `scripts/audit_paths.sh crates_new` passes
+- `scripts/audit_god_crates.sh crates` passes
+- `scripts/audit_paths.sh crates` passes
 
 ## Current Phase Boundary
 
@@ -39,11 +39,11 @@ Canonical phase DAG:
 
 Primary entrypoints:
 
-- parse: `crates_new/music_session/src/session/cache.rs:26`
-- resolve: `crates_new/music_session/src/session/cache.rs:66`
-- sema: `crates_new/music_session/src/session/cache.rs:105`
-- ir: `crates_new/music_session/src/session/cache.rs:143`
-- emit: `crates_new/music_session/src/session/cache.rs:184`
+- parse: `crates/music_session/src/session/cache.rs:26`
+- resolve: `crates/music_session/src/session/cache.rs:66`
+- sema: `crates/music_session/src/session/cache.rs:105`
+- ir: `crates/music_session/src/session/cache.rs:143`
+- emit: `crates/music_session/src/session/cache.rs:184`
 
 Primary public stability boundary:
 
@@ -67,11 +67,11 @@ Primary public stability boundary:
 
 ## Ranked Blockers
 
-| #   | Severity | File                                              | Issue                                                                        | Required fix                                                                                                               |
-| --- | -------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Medium   | `crates_new/music_ir/src/lower/mod.rs:123`        | `music_ir` lowering still lives in one very large coordinator module         | Continue decomposition so lowering mechanics do not calcify into one file even though the public IR contract is now frozen |
-| 2   | Medium   | `crates_new/music_sema/src/checker/exprs.rs:1`    | `music_sema` still carries a large checker hotspot even after API narrowing  | Continue splitting semantic responsibilities so freeze does not imply one-file implementation ownership                    |
-| 3   | Low      | `crates_new/music_session/src/session/cache.rs:1` | `music_session` stage orchestration remains concentrated in one cache module | Keep splitting cache/orchestration responsibilities if new behavior lands there                                            |
+| #   | Severity | File                                          | Issue                                                                        | Required fix                                                                                                               |
+| --- | -------- | --------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Medium   | `crates/music_ir/src/lower/mod.rs:123`        | `music_ir` lowering still lives in one very large coordinator module         | Continue decomposition so lowering mechanics do not calcify into one file even though the public IR contract is now frozen |
+| 2   | Medium   | `crates/music_sema/src/checker/exprs.rs:1`    | `music_sema` still carries a large checker hotspot even after API narrowing  | Continue splitting semantic responsibilities so freeze does not imply one-file implementation ownership                    |
+| 3   | Low      | `crates/music_session/src/session/cache.rs:1` | `music_session` stage orchestration remains concentrated in one cache module | Keep splitting cache/orchestration responsibilities if new behavior lands there                                            |
 
 ## Coverage Gaps
 
@@ -93,11 +93,11 @@ Largest audited non-test hotspots:
 
 Largest single-file hotspots from the current audit:
 
-- `crates_new/music_ir/src/lower/mod.rs` — `2625` LOC
-- `crates_new/music_syntax/src/parser/forms.rs` — `1158` LOC
-- `crates_new/music_sema/src/checker/exprs.rs` — `985` LOC
-- `crates_new/music_emit/src/emit/expr/control.rs` — `636` LOC
-- `crates_new/music_session/src/session/cache.rs` — `304` LOC
+- `crates/music_ir/src/lower/mod.rs` — `2625` LOC
+- `crates/music_syntax/src/parser/forms.rs` — `1158` LOC
+- `crates/music_sema/src/checker/exprs.rs` — `985` LOC
+- `crates/music_emit/src/emit/expr/control.rs` — `636` LOC
+- `crates/music_session/src/session/cache.rs` — `304` LOC
 
 These are not automatic freeze blockers by themselves, but they are the first places to inspect when behavior or API churn appears.
 

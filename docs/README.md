@@ -22,4 +22,4 @@ Canonical docs are ordered from language, to runtime, to tooling:
 14. `14-antlr-grammar-tracker.md` (tracking)
 15. `15-grammar-ebnf.md` (formal, compact)
 
-The rewrite lives in `crates_new/` (canonical). `crates/` is legacy reference-only. The subsystem names are documented in `09-architecture.md`.
+The rewrite lives in `crates/` (canonical). The subsystem names are documented in `09-architecture.md`.

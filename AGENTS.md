@@ -5,13 +5,11 @@
 Source of truth:
 - Syntax: `docs/00-syntax.md`, `grammar/Musi.g4`, `grammar/Musi.abnf`
 - Ownership and crate map: `docs/09-architecture.md`
-- Rewrite tracker: `docs/13-crates_new-rewrite-tracker.md`
 - Public API inventory: `docs/12-public-api.md`
 
 ## Scope And Structure
 
-- Edit `crates_new/` only. Treat `crates/` as legacy reference-only.
-- No placeholders in `crates_new/`: `todo!()`, `unimplemented!()`, placeholder panics, empty pipelines.
+- No placeholders in `crates/`: `todo!()`, `unimplemented!()`, placeholder panics, empty pipelines.
 - Documentation and feature-matrix notes describe current implementation behavior. They do not declare language support policy.
 - `src/` is production-only. Unit tests live in `module/tests.rs`. Benches live in `benches/` and use Criterion with `bench_` prefix.
 - Cargo TOML syntax:

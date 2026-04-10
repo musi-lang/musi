@@ -1,6 +1,6 @@
-# Public API Map (`crates_new/`)
+# Public API Map (`crates/`)
 
-This document inventories the public Rust surface for the canonical compiler rewrite in `crates_new/`.
+This document inventories the public Rust surface for the canonical compiler rewrite in `crates/`.
 
 Policy:
 
@@ -31,7 +31,7 @@ Notes:
 - `music_base::Diag` / `DiagLabel` are accessor-driven (fields are not part of the public API).
 - `music_base::diag::emit_to_stderr` returns `io::Result<()>`.
 - `music_syntax::LexedSource<'src>` now retains source text so CST/AST views can slice token text without duplicating token payloads.
-- `music_module::ImportEnv` is resolve-only in `crates_new`: it maps import specifiers to module keys and does not expose opened-export visibility.
+- `music_module::ImportEnv` is resolve-only in `crates`: it maps import specifiers to module keys and does not expose opened-export visibility.
 - `music_module::ImportError` exposes stable typed failure identity through `ImportErrorKind` plus `ImportError::message()`; display formatting is no longer `Debug`-shaped.
 - `music_resolve::ResolvedModule` carries both the current `ModuleKey` and syntax-level export summary so sema can build semantic module surfaces without reopening syntax.
 - `music_sema` is query-oriented: semantic facts are accessed through `SemaModule` methods rather than public storage fields.

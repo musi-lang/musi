@@ -2,7 +2,7 @@
 
 This document defines the intended embedding boundary for `.seam` programs.
 
-`crates_new/musi_vm` now provides the initial executable runtime crate, and this document defines its intended stable embedding boundary.
+`crates/musi_vm` now provides the initial executable runtime crate, and this document defines its intended stable embedding boundary.
 
 The runtime surface has two co-equal roles:
 
