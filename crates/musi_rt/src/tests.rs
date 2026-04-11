@@ -1,3 +1,4 @@
+use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
 use musi_vm::{Value, VmError, VmErrorKind, VmHost, VmResult};
 use music_module::ImportMap;
 
@@ -24,7 +25,7 @@ impl VmHost for TestHost {
 
 #[test]
 fn loads_root_and_calls_export() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let answer () : Int := 42;")
         .unwrap();
@@ -36,7 +37,7 @@ fn loads_root_and_calls_export() {
 
 #[test]
 fn loads_dynamic_module_from_registered_text() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -56,7 +57,7 @@ fn loads_dynamic_module_from_registered_text() {
 
 #[test]
 fn evaluates_expression_syntax_through_runtime_service() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -70,7 +71,7 @@ fn evaluates_expression_syntax_through_runtime_service() {
 
 #[test]
 fn loads_module_syntax_through_runtime_service() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -89,7 +90,12 @@ fn loads_module_syntax_through_runtime_service() {
 
 #[test]
 fn routes_foreign_calls_through_registered_handlers() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut host = NativeHost::new();
+    host.register_foreign_handler("main::puts", |_foreign, args| {
+        assert_eq!(args, &[Value::Int(42)]);
+        Ok(Value::Int(7))
+    });
+    let mut runtime = Runtime::new(host, RuntimeOptions::default());
     runtime
         .register_module_text(
             "main",
@@ -101,10 +107,6 @@ fn routes_foreign_calls_through_registered_handlers() {
         "#,
         )
         .unwrap();
-    runtime.register_foreign_handler("main::puts", |_foreign, args| {
-        assert_eq!(args, &[Value::Int(42)]);
-        Ok(Value::Int(7))
-    });
     runtime.load_root("main").unwrap();
 
     let value = runtime.call_export("answer", &[]).unwrap();
@@ -113,7 +115,12 @@ fn routes_foreign_calls_through_registered_handlers() {
 
 #[test]
 fn routes_effect_calls_through_registered_handlers() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut host = NativeHost::new();
+    host.register_effect_handler("main::Console", "readln", |_effect, args| {
+        assert_eq!(args, &[Value::string(">")]);
+        Ok(Value::Int(42))
+    });
+    let mut runtime = Runtime::new(host, RuntimeOptions::default());
     runtime
         .register_module_text(
             "main",
@@ -123,10 +130,6 @@ fn routes_effect_calls_through_registered_handlers() {
         "#,
         )
         .unwrap();
-    runtime.register_effect_handler("main::Console", "readln", |_effect, args| {
-        assert_eq!(args, &[Value::string(">")]);
-        Ok(Value::Int(42))
-    });
     runtime.load_root("main").unwrap();
 
     let value = runtime.call_export("answer", &[]).unwrap();
@@ -135,7 +138,7 @@ fn routes_effect_calls_through_registered_handlers() {
 
 #[test]
 fn rejects_invalid_syntax_value() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -150,7 +153,7 @@ fn rejects_invalid_syntax_value() {
 
 #[test]
 fn reports_parse_failure_for_expression_syntax() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -167,7 +170,7 @@ fn reports_parse_failure_for_expression_syntax() {
 
 #[test]
 fn reports_parse_failure_for_module_syntax() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text("main", "export let root () : Int := 0;")
         .unwrap();
@@ -184,7 +187,7 @@ fn reports_parse_failure_for_module_syntax() {
 
 #[test]
 fn reports_missing_root_source() {
-    let mut runtime = Runtime::new(RuntimeOptions::default());
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     let err = runtime.load_root("missing").unwrap_err();
     assert!(matches!(
         err.kind(),
@@ -194,7 +197,10 @@ fn reports_missing_root_source() {
 
 #[test]
 fn custom_host_still_handles_unregistered_edges() {
-    let mut runtime = Runtime::with_host(TestHost, RuntimeOptions::default());
+    let mut runtime = Runtime::new(
+        NativeHost::with_fallback(TestHost),
+        RuntimeOptions::default(),
+    );
     runtime
         .register_module_text(
             "main",
@@ -216,13 +222,16 @@ fn custom_host_still_handles_unregistered_edges() {
 fn runs_registered_test_module_and_collects_case_results() {
     let mut import_map = ImportMap::default();
     let _ = import_map.imports.insert("@std/".into(), "@std/".into());
-    let mut runtime = Runtime::new(RuntimeOptions {
-        session: music_session::SessionOptions {
-            import_map,
-            ..music_session::SessionOptions::default()
+    let mut runtime = Runtime::new(
+        NativeHost::new(),
+        RuntimeOptions {
+            session: music_session::SessionOptions {
+                import_map,
+                ..music_session::SessionOptions::default()
+            },
+            ..RuntimeOptions::default()
         },
-        ..RuntimeOptions::default()
-    });
+    );
     runtime
         .register_module_text(
             "suite",
@@ -243,25 +252,41 @@ export let test () :=
 
     let report = runtime.run_test_module("suite").unwrap();
 
-    assert_eq!(report.cases.len(), 2);
-    assert_eq!(report.cases[0].suite.as_ref(), "demo");
-    assert_eq!(report.cases[0].name.as_ref(), "first");
-    assert!(report.cases[0].passed);
-    assert_eq!(report.cases[1].name.as_ref(), "second");
-    assert!(!report.cases[1].passed);
+    assert_eq!(
+        report,
+        NativeTestReport {
+            module: "suite".into(),
+            cases: vec![
+                NativeTestCaseResult {
+                    suite: "demo".into(),
+                    name: "first".into(),
+                    passed: true,
+                },
+                NativeTestCaseResult {
+                    suite: "demo".into(),
+                    name: "second".into(),
+                    passed: false,
+                },
+            ]
+            .into_boxed_slice(),
+        }
+    );
 }
 
 #[test]
 fn runs_root_hub_std_test_module() {
     let mut import_map = ImportMap::default();
     let _ = import_map.imports.insert("@std/".into(), "@std/".into());
-    let mut runtime = Runtime::new(RuntimeOptions {
-        session: music_session::SessionOptions {
-            import_map,
-            ..music_session::SessionOptions::default()
+    let mut runtime = Runtime::new(
+        NativeHost::new(),
+        RuntimeOptions {
+            session: music_session::SessionOptions {
+                import_map,
+                ..music_session::SessionOptions::default()
+            },
+            ..RuntimeOptions::default()
         },
-        ..RuntimeOptions::default()
-    });
+    );
     runtime
         .register_module_text(
             "@std",

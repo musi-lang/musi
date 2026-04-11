@@ -11,6 +11,8 @@ The runtime boundary has four main pieces:
 - `Runtime`: source-aware runtime service over `music_session` + `musi_vm`
 - `NativeHost`: repo-owned host/world integration layer over `musi_vm`
 
+Supporting that boundary, `musi_foundation` is the Rust-side owner of the current `musi:*` module registry.
+
 `VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and the default runtime path built on `musi_native`.
 
 ## Load
@@ -29,10 +31,10 @@ Typical runtime setup:
 
 1. construct `Runtime`
 2. register module text or precompiled programs
-3. register foreign/effect handlers when external edges exist
+3. construct `NativeHost`
 4. call `load_root`
 
-`Runtime::new()` uses `musi_native::NativeHost` as the default repo-owned host/world implementation.
+`Runtime::new(host, options)` takes an explicit `musi_native::NativeHost`.
 
 Raw VM setup stays available for embedding-specific integrations:
 
@@ -83,16 +85,17 @@ Use inspection instead of reaching through VM internals.
 - compile-on-demand module loading
 - expression syntax evaluation with explicit result type
 - module-syntax compilation and loading
-- default foreign handler registration
-- default effect handler registration
+- source-aware test-module execution over one explicit host boundary
 
 `NativeHost` handles:
 
 - registered foreign handlers
 - registered effect handlers
+- `musi:test` session collection and report output
+- cfg-selected repo-owned platform dispatch
 - optional fallback delegation into one embedding-specific `VmHost`
 
-`musi:*` is the source-visible foundation namespace above the runtime and host boundary. `musi:test` is the currently implemented foundation root used by first-party package testing.
+`musi:*` is the source-visible foundation namespace above the runtime and host boundary. `musi_foundation` is the Rust-side owner of that namespace's current module registry. `musi:test` is the currently implemented foundation root used by first-party package testing.
 
 ## Integration Checklist
 

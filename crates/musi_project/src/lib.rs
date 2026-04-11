@@ -1,5 +1,4 @@
 mod errors;
-mod intrinsics;
 mod lock;
 pub mod manifest;
 mod project;

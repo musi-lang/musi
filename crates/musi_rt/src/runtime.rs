@@ -2,29 +2,17 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use musi_native::NativeHost;
-use musi_vm::{
-    EffectCall, ForeignCall, Program, RejectingHost, Value, ValueView, Vm, VmError, VmErrorKind,
-    VmHost, VmLoader, VmResult,
-};
-use music_module::{ImportMap, ModuleKey};
+use musi_foundation::{extend_import_map, register_modules};
+use musi_native::{NativeHost, NativeTestReport};
+use musi_vm::{Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmResult};
+use music_module::ModuleKey;
 use music_session::{Session, SessionError, SessionOptions};
 
 use crate::api::RuntimeOptions;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
-use crate::testing::{RuntimeTestReport, TestCollector, TestRuntimeHost};
 
 type ModuleTextMap = HashMap<Box<str>, String>;
 type ProgramMap = HashMap<Box<str>, Program>;
-
-const TEST_INTRINSIC_SPEC: &str = "musi:test";
-const TEST_INTRINSIC_MODULE: &str = r"
-export let Test := effect {
-  let suiteStart (name : String) : Unit;
-  let suiteEnd () : Unit;
-  let testCase (name : String, passed : Bool) : Unit;
-};
-";
 
 #[derive(Default)]
 struct RuntimeStore {
@@ -48,17 +36,7 @@ pub struct Runtime {
 
 impl Runtime {
     #[must_use]
-    pub fn new(options: RuntimeOptions) -> Self {
-        Self::with_native_host(NativeHost::with_fallback(RejectingHost), options)
-    }
-
-    #[must_use]
-    pub fn with_host(host: impl VmHost + 'static, options: RuntimeOptions) -> Self {
-        Self::with_native_host(NativeHost::with_fallback(host), options)
-    }
-
-    #[must_use]
-    pub fn with_native_host(host: NativeHost, options: RuntimeOptions) -> Self {
+    pub fn new(host: NativeHost, options: RuntimeOptions) -> Self {
         let mut session_options = options.session.clone();
         extend_import_map(&mut session_options.import_map);
         let store = Rc::new(RefCell::new(RuntimeStore {
@@ -74,23 +52,6 @@ impl Runtime {
         }
     }
 
-    pub fn register_foreign_handler(
-        &mut self,
-        name: impl Into<Box<str>>,
-        handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
-        self.host.register_foreign_handler(name, handler);
-    }
-
-    pub fn register_effect_handler(
-        &mut self,
-        effect: impl Into<Box<str>>,
-        op: impl Into<Box<str>>,
-        handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
-        self.host.register_effect_handler(effect, op, handler);
-    }
-
     /// Registers source text for one runtime module spec.
     ///
     /// # Errors
@@ -102,7 +63,11 @@ impl Runtime {
         text: impl Into<String>,
     ) -> RuntimeResult {
         let spec = spec.into();
-        let _ = self.store.borrow_mut().module_texts.insert(spec, text.into());
+        let _ = self
+            .store
+            .borrow_mut()
+            .module_texts
+            .insert(spec, text.into());
         self.invalidate_loaded_state();
         Ok(())
     }
@@ -253,17 +218,19 @@ impl Runtime {
     /// # Errors
     ///
     /// Returns [`RuntimeError`] if compilation, intrinsic test-event collection, or test-body execution fails.
-    pub fn run_test_module(&mut self, spec: &str) -> RuntimeResult<RuntimeTestReport> {
+    pub fn run_test_module(&mut self, spec: &str) -> RuntimeResult<NativeTestReport> {
         let program = self.compile_registered_program(spec)?;
         let loader = SessionLoader {
             store: Rc::clone(&self.store),
         };
-        let collector = Rc::new(RefCell::new(TestCollector::default()));
-        let host = TestRuntimeHost::new(self.host.clone(), Rc::clone(&collector));
+        let host = self.host.clone();
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
-        let _ = vm.call_export("test", &[])?;
-        Ok(collector.borrow_mut().finish_report(spec))
+        self.host.begin_test_session();
+        let result = vm.call_export("test", &[]);
+        let report = self.host.finish_test_session(spec);
+        let _ = result?;
+        Ok(report)
     }
 
     fn vm_mut(&mut self) -> RuntimeResult<&mut Vm> {
@@ -299,7 +266,7 @@ impl Runtime {
         drop(store);
 
         let mut session = Session::new(session_options);
-        register_intrinsic_modules(&mut session).map_err(runtime_session_error)?;
+        register_modules(&mut session).map_err(runtime_session_error)?;
         for (module, text) in &module_texts {
             session
                 .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
@@ -319,7 +286,7 @@ impl Runtime {
         drop(store);
 
         let mut session = Session::new(session_options);
-        register_intrinsic_modules(&mut session).map_err(runtime_session_error)?;
+        register_modules(&mut session).map_err(runtime_session_error)?;
         for (module, text) in &module_texts {
             if module.as_ref() == spec {
                 continue;
@@ -367,7 +334,7 @@ impl VmLoader for SessionLoader {
 
         let store = self.store.borrow();
         let mut session = Session::new(store.session_options.clone());
-        register_intrinsic_modules(&mut session).map_err(|err| vm_session_error(&err))?;
+        register_modules(&mut session).map_err(|err| vm_session_error(&err))?;
         for (module, text) in &store.module_texts {
             session
                 .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
@@ -421,17 +388,4 @@ fn vm_session_error(err: &SessionError) -> VmError {
     VmError::new(VmErrorKind::InvalidProgram {
         detail: format!("{stage} (`{detail}`)").into(),
     })
-}
-
-fn extend_import_map(import_map: &mut ImportMap) {
-    let _ = import_map
-        .imports
-        .insert(TEST_INTRINSIC_SPEC.into(), TEST_INTRINSIC_SPEC.into());
-}
-
-fn register_intrinsic_modules(session: &mut Session) -> Result<(), SessionError> {
-    session.set_module_text(
-        &ModuleKey::new(TEST_INTRINSIC_SPEC),
-        TEST_INTRINSIC_MODULE.to_owned(),
-    )
 }

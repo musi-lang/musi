@@ -246,11 +246,7 @@ fn discovers_co_located_package_test_modules() {
   "workspace": ["packages/std"]
 }"#,
     );
-    write_file(
-        temp.path(),
-        "index.ms",
-        r"export let answer : Int := 42;",
-    );
+    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
     write_file(
         temp.path(),
         "packages/std/musi.json",
@@ -288,12 +284,11 @@ export let test () : Unit := 0;
     let tests = project.package_test_modules();
 
     assert!(tests.iter().any(|test| test.package.name == "@std"));
-    assert!(
-        tests.iter().any(|test| test
-            .module_key
+    assert!(tests.iter().any(|test| {
+        test.module_key
             .as_str()
-            .contains("@@std@0.1.0/math/abs.test.ms"))
-    );
+            .contains("@@std@0.1.0/math/abs.test.ms")
+    }));
 }
 
 #[test]
@@ -392,7 +387,9 @@ fn std_root_exports_keep_static_module_targets() {
         .canonicalize()
         .expect("repo root should resolve");
     let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
-    let entry = project.package_entry("@std").expect("@std package entry resolves");
+    let entry = project
+        .package_entry("@std")
+        .expect("@std package entry resolves");
     let mut session = project.build_session().expect("project session builds");
     let sema = session
         .check_module(&entry.module_key)

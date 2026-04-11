@@ -47,6 +47,7 @@ These do not belong in `musi:*`:
 - `musi_vm` executes SEAM
 - `musi_native` owns repo-provided host/world integration
 - `musi_rt` composes source-aware runtime flow
+- `musi_foundation` owns the current Rust-side registry for first-party `musi:*` modules
 - `musi:*` exposes the foundation above those runtime seams
 - `@std/*` builds portable library surface on top of that foundation
 - `@musi.*` remains compiler-only attribute space
@@ -54,6 +55,8 @@ These do not belong in `musi:*`:
 ## Current State
 
 `musi:test` is the currently implemented foundation root.
+
+`musi_foundation` is the current Rust-side source of truth for registering that root into project and runtime compilation flows.
 
 The broader foundation inventory is not complete yet.
 

@@ -1,5 +1,5 @@
 [package]
-name = "musi_native"
+name = "musi_foundation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,10 +13,6 @@ categories.workspace = true
 publish.workspace = true
 
 [dependencies]
-musi_foundation = { path = "../musi_foundation" }
-musi_vm = { path = "../musi_vm" }
-
-[dev-dependencies]
 music_module = { path = "../music_module" }
 music_session = { path = "../music_session" }
 

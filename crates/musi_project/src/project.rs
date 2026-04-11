@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use musi_foundation::{extend_import_map, register_modules, resolve_spec};
 use music_base::SourceId;
 use music_bc::Artifact;
 use music_emit::EmitOptions;
@@ -13,9 +14,6 @@ use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
 use crate::errors::ProjectError;
-use crate::intrinsics::{
-    TEST_INTRINSIC_MODULE, TEST_INTRINSIC_SPEC, extend_import_map, resolve_intrinsic_spec,
-};
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::registry::{RegistryPackage, resolve_registry_package};
@@ -387,10 +385,7 @@ impl Project {
             import_map,
             target: self.options.target.clone(),
         });
-        session.set_module_text(
-            &ModuleKey::new(TEST_INTRINSIC_SPEC),
-            TEST_INTRINSIC_MODULE.to_owned(),
-        )?;
+        register_modules(&mut session)?;
         for (key, text) in &self.module_texts {
             session.set_module_text(key, text.clone())?;
         }
@@ -461,7 +456,9 @@ impl Project {
 
     #[cfg(test)]
     pub(crate) fn compile_module(&self, module_key: &ModuleKey) -> ProjectResult<CompiledOutput> {
-        self.with_entry_session(module_key, |session, entry| Ok(session.compile_entry(entry)?))
+        self.with_entry_session(module_key, |session, entry| {
+            Ok(session.compile_entry(entry)?)
+        })
     }
 }
 
@@ -1029,7 +1026,7 @@ fn resolve_import_spec(
     package_records: &BTreeMap<PackageId, PackageRecord>,
     package_name_index: &BTreeMap<String, PackageId>,
 ) -> Option<ModuleKey> {
-    if let Some(target) = resolve_intrinsic_spec(spec) {
+    if let Some(target) = resolve_spec(spec) {
         return Some(target);
     }
     if let Some(target) = resolve_compiler_path(

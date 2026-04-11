@@ -31,8 +31,9 @@ Rules:
 - `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
+- `musi_foundation`: source-visible foundation registry for first-party `musi:*` modules (`extend_import_map`, `resolve_spec`, `register_modules`, `module_source`, `test::*`)
 - `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `RejectingHost`, `VmLoader`, `RejectingLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
-- `musi_native`: repo-owned host/world integration layer (`NativeHost`)
+- `musi_native`: repo-owned host/world integration layer (`NativeHost`, `NativeTestReport`, `NativeTestCaseResult`)
 - `musi_rt`: source-aware runtime service (`Runtime`, `RuntimeOptions`, `RuntimeError*`)
 
 ## Service And Project Layer
@@ -65,8 +66,9 @@ Notes:
 - `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
 - `musi_vm::RejectingHost` / `RejectingLoader` are explicit reject-by-default seams, not practical runtime defaults.
 - `musi_vm::ForeignCall` and `musi_vm::EffectCall` now expose typed signature metadata through `param_tys`, `result_ty`, and runtime type-name helpers backed by the originating `Program`.
-- `musi_rt::Runtime` is the runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, compiles module syntax into runtime module handles, runs registered package-style test modules, and owns default foreign/effect handler registration.
-- `musi_native::NativeHost` is the first-party host/world integration layer used by the default runtime path; it owns registered foreign/effect handlers and optional fallback host delegation.
+- `musi_foundation` is the single Rust-side source of truth for the current `musi:*` module registry; runtime and project layers consume it rather than redefining foundation modules locally.
+- `musi_rt::Runtime` is the runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, compiles module syntax into runtime module handles, and runs source-aware package-style test modules over one explicit `NativeHost`.
+- `musi_native::NativeHost` is the first-party host/world integration layer used by the default runtime path; it owns registered foreign/effect handlers, `musi:test` session collection, cfg-selected platform dispatch, and optional fallback host delegation.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, and constructs the `music_session` module/import view used for package-aware compilation.
 
 ## First-Party Package Families

@@ -22,6 +22,7 @@ First-party Musi packages live in `packages/`.
 
 ## Executable Contract and Runtime
 
+- `musi_foundation`
 - `music_bc`
 - `music_assembly`
 - `music_emit`
@@ -40,7 +41,7 @@ First-party Musi packages live in `packages/`.
 ## First-Party Packages
 
 - `packages/std` (`@std`)
-- `musi:*` intrinsic namespace
+- `musi:*` foundation namespace
 
 ## Planned
 
