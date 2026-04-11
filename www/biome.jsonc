@@ -20,7 +20,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["apps/www/src/**/*.tsx"],
+			"includes": ["src/**/*.tsx"],
 			"linter": {
 				"rules": {
 					"security": {
@@ -33,7 +33,7 @@
 			}
 		},
 		{
-			"includes": ["apps/www/src/env.d.ts"],
+			"includes": ["src/env.d.ts"],
 			"linter": {
 				"rules": {
 					"style": {
@@ -43,7 +43,7 @@
 			}
 		},
 		{
-			"includes": ["apps/www/src/generated-content.ts"],
+			"includes": ["src/generated-content.ts"],
 			"formatter": {
 				"enabled": false
 			},

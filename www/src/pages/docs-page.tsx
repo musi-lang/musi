@@ -37,7 +37,7 @@ export function DocsIndexPage() {
 								Chapter groups
 							</Title>
 						</Box>
-						<InlineAction href="https://github.com/musi-lang/musi/tree/main/site/apps/www/src/content/docs">
+						<InlineAction href="https://github.com/musi-lang/musi/tree/main/www/src/content/docs">
 							Source
 						</InlineAction>
 					</Group>

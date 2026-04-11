@@ -5,21 +5,26 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/website.yml"
-      - ".github/workflows/cloudflare-pages.yml"
-      - "site/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig.json"
+      - "tsconfig.base.json"
+      - "www/**"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/website.yml"
-      - ".github/workflows/cloudflare-pages.yml"
-      - "site/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig.json"
+      - "tsconfig.base.json"
+      - "www/**"
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: site
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2

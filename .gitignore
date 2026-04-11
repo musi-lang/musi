@@ -217,6 +217,11 @@ coverage
 # nyc test coverage
 .nyc_output
 
+# Website workspace
+node_modules/
+www/dist/
+*.tsbuildinfo
+
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
