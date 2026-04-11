@@ -5,13 +5,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/website.yml"
-      - ".github/workflows/cloudflare-pages.yml"
       - "site/**"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/website.yml"
-      - ".github/workflows/cloudflare-pages.yml"
       - "site/**"
 
 jobs:
