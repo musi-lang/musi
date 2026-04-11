@@ -2,7 +2,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CONFIG_DEFAULTS, getConfig } from "./config.ts";
-import { getCargoBinDir, getCliBinaryName, isWindows } from "./utils.ts";
+import {
+	getCargoBinDir,
+	getCliBinaryName,
+	getLspBinaryName,
+	isWindows,
+} from "./utils.ts";
 
 function workspaceCandidates(binaryName: string): string[] {
 	const workspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -36,6 +41,7 @@ function firstExisting(candidates: readonly string[]): string | undefined {
 function configuredBinary(
 	configuredPath: string | undefined,
 	defaultValue: string,
+	displayName: string,
 ): string | undefined {
 	if (!(configuredPath && configuredPath !== defaultValue)) {
 		return undefined;
@@ -44,19 +50,41 @@ function configuredBinary(
 		return configuredPath;
 	}
 	void vscode.window.showWarningMessage(
-		`Configured Musi CLI path does not exist: ${configuredPath}`,
+		`Configured ${displayName} path does not exist: ${configuredPath}`,
 	);
 	return undefined;
 }
 
-export function findCliPath(): string | undefined {
-	const config = getConfig();
-	const binaryName = getCliBinaryName();
-
+function findBinaryPath(
+	configuredPath: string,
+	defaultValue: string,
+	binaryName: string,
+	displayName: string,
+): string | undefined {
 	return (
-		configuredBinary(config.cliPath, CONFIG_DEFAULTS.cliPath) ??
+		configuredBinary(configuredPath, defaultValue, displayName) ??
 		firstExisting(workspaceCandidates(binaryName)) ??
 		firstExisting(globalCandidates(binaryName))
+	);
+}
+
+export function findCliPath(): string | undefined {
+	const config = getConfig();
+	return findBinaryPath(
+		config.cliPath,
+		CONFIG_DEFAULTS.cliPath,
+		getCliBinaryName(),
+		"Musi CLI",
+	);
+}
+
+export function findLspPath(): string | undefined {
+	const config = getConfig();
+	return findBinaryPath(
+		config.lspPath,
+		CONFIG_DEFAULTS.lspPath,
+		getLspBinaryName(),
+		"Musi LSP",
 	);
 }
 
@@ -69,6 +97,19 @@ export async function showCliNotFoundUI() {
 		await vscode.commands.executeCommand(
 			"workbench.action.openSettings",
 			"musi.cliPath",
+		);
+	}
+}
+
+export async function showLspNotFoundUI() {
+	const action = await vscode.window.showErrorMessage(
+		"Musi LSP binary not found. Configure musi.lspPath to an installed `musi_lsp` executable.",
+		"Open Settings",
+	);
+	if (action === "Open Settings") {
+		await vscode.commands.executeCommand(
+			"workbench.action.openSettings",
+			"musi.lspPath",
 		);
 	}
 }

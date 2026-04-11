@@ -1,4 +1,4 @@
-use music_bc::{EffectId, ForeignId, TypeId};
+use music_seam::{EffectId, ForeignId, TypeId};
 use music_term::TypeTerm;
 
 use super::{Program, Value, VmError, VmErrorKind, VmResult};

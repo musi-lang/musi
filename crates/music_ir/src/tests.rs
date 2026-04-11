@@ -5,10 +5,12 @@ use music_resolve::{ResolveOptions, resolve_module};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
-use crate::lower_module;
-use crate::{IrBinaryOp, IrCasePattern, IrExprKind};
+use crate::{
+    IrAssignTarget, IrBinaryOp, IrCasePattern, IrExpr, IrExprKind, IrModule, IrSeqPart,
+    lower_module,
+};
 
-fn lower(src: &str) -> crate::IrModule {
+fn lower(src: &str) -> IrModule {
     let lexed = Lexer::new(src).lex();
     let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -345,10 +347,10 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     assert!(contains_closure_callee(&loop_fn.body));
 }
 
-fn contains_strcat(expr: &crate::IrExpr) -> bool {
+fn contains_strcat(expr: &IrExpr) -> bool {
     match &expr.kind {
         IrExprKind::Binary {
-            op: crate::IrBinaryOp::StrCat,
+            op: IrBinaryOp::StrCat,
             ..
         } => true,
         IrExprKind::Sequence { exprs } => exprs.iter().any(contains_strcat),
@@ -374,7 +376,7 @@ fn contains_strcat(expr: &crate::IrExpr) -> bool {
     }
 }
 
-fn contains_named_value_ref(expr: &crate::IrExpr, expected: &str) -> bool {
+fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
     match &expr.kind {
         IrExprKind::Name { name, .. } => name.as_ref() == expected,
         IrExprKind::Sequence { exprs } => exprs
@@ -408,7 +410,7 @@ fn contains_named_value_ref(expr: &crate::IrExpr, expected: &str) -> bool {
             .any(|expr| contains_named_value_ref(expr, expected)),
         IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallSeq { args: parts, .. } => {
             parts.iter().any(|part| match part {
-                crate::IrSeqPart::Expr(expr) | crate::IrSeqPart::Spread(expr) => {
+                IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
                     contains_named_value_ref(expr, expected)
                 }
             })
@@ -444,7 +446,7 @@ fn contains_named_value_ref(expr: &crate::IrExpr, expected: &str) -> bool {
             .iter()
             .any(|expr| contains_named_value_ref(expr, expected)),
         IrExprKind::PerformSeq { args, .. } => args.iter().any(|part| match part {
-            crate::IrSeqPart::Expr(expr) | crate::IrSeqPart::Spread(expr) => {
+            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
                 contains_named_value_ref(expr, expected)
             }
         }),
@@ -468,20 +470,20 @@ fn contains_named_value_ref(expr: &crate::IrExpr, expected: &str) -> bool {
     }
 }
 
-fn contains_named_value_ref_in_target(target: &crate::IrAssignTarget, expected: &str) -> bool {
+fn contains_named_value_ref_in_target(target: &IrAssignTarget, expected: &str) -> bool {
     match target {
-        crate::IrAssignTarget::Binding { .. } => false,
-        crate::IrAssignTarget::Index { base, indices } => {
+        IrAssignTarget::Binding { .. } => false,
+        IrAssignTarget::Index { base, indices } => {
             contains_named_value_ref(base, expected)
                 || indices
                     .iter()
                     .any(|expr| contains_named_value_ref(expr, expected))
         }
-        crate::IrAssignTarget::RecordField { base, .. } => contains_named_value_ref(base, expected),
+        IrAssignTarget::RecordField { base, .. } => contains_named_value_ref(base, expected),
     }
 }
 
-fn contains_record_pattern(expr: &crate::IrExpr) -> bool {
+fn contains_record_pattern(expr: &IrExpr) -> bool {
     match &expr.kind {
         IrExprKind::Case { scrutinee, arms } => {
             contains_record_pattern(scrutinee)
@@ -499,7 +501,7 @@ fn contains_record_pattern(expr: &crate::IrExpr) -> bool {
     }
 }
 
-fn contains_closure_callee(expr: &crate::IrExpr) -> bool {
+fn contains_closure_callee(expr: &IrExpr) -> bool {
     match &expr.kind {
         IrExprKind::Call { callee, args } => {
             matches!(callee.kind, IrExprKind::ClosureNew { .. })

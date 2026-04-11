@@ -19,12 +19,14 @@ music_base
 ```text
 music_ir -> music_emit -> music_session
 music_ir -> music_jit -> music_session   (planned)
-music_bc -> music_assembly -> musi_vm
+music_emit -> music_seam
+music_seam -> musi_vm
 musi_vm -> musi_native
 music_session -> musi_rt
 musi_vm -> musi_rt
 musi_native -> musi_rt
 musi_project -> music_session
+musi_tooling -> musi_lsp
 ```
 
 ## Ownership Stops
@@ -39,6 +41,8 @@ musi_project -> music_session
 - `musi_rt` composes compiler services with runtime services
 - `music_session` orchestrates phases
 - `musi_project` owns package/workspace integration
+- `musi_tooling` owns shared external-tool analysis and diagnostics helpers
+- `musi_lsp` owns editor-protocol transport over `musi_tooling`
 
 ## Stable Rules
 

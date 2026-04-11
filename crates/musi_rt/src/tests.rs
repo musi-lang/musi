@@ -1,6 +1,7 @@
 use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
-use musi_vm::{Value, VmError, VmErrorKind, VmHost, VmResult};
+use musi_vm::{EffectCall, ForeignCall, Value, VmError, VmErrorKind, VmHost, VmResult};
 use music_module::ImportMap;
+use music_session::SessionOptions;
 use music_term::{SyntaxShape, SyntaxTerm, SyntaxTermError};
 
 use crate::{Runtime, RuntimeErrorKind, RuntimeOptions};
@@ -9,13 +10,13 @@ use crate::{Runtime, RuntimeErrorKind, RuntimeOptions};
 struct TestHost;
 
 impl VmHost for TestHost {
-    fn call_foreign(&mut self, foreign: &musi_vm::ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &musi_vm::EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
             effect: effect.effect_name().into(),
             op: Some(effect.op_name().into()),
@@ -256,9 +257,9 @@ fn runs_registered_test_module_and_collects_case_results() {
     let mut runtime = Runtime::new(
         NativeHost::new(),
         RuntimeOptions {
-            session: music_session::SessionOptions {
+            session: SessionOptions {
                 import_map,
-                ..music_session::SessionOptions::default()
+                ..SessionOptions::default()
             },
             ..RuntimeOptions::default()
         },
@@ -311,9 +312,9 @@ fn runs_root_hub_std_test_module() {
     let mut runtime = Runtime::new(
         NativeHost::new(),
         RuntimeOptions {
-            session: music_session::SessionOptions {
+            session: SessionOptions {
                 import_map,
-                ..music_session::SessionOptions::default()
+                ..SessionOptions::default()
             },
             ..RuntimeOptions::default()
         },

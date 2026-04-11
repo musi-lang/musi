@@ -51,7 +51,7 @@ impl DiagCode {
 
 impl Display for DiagCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "ms{:04}", self.0)
+        write!(f, "MS{:04}", self.0)
     }
 }
 

@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use music_base::diag::Diag;
-use music_bc::Artifact;
-use music_bc::descriptor::ConstantValue;
 use music_emit::{EmitDiagKind, emit_diag_kind};
 use music_ir::{IrDiagKind, ir_diag_kind};
 use music_module::{ImportMap, ModuleKey};
 use music_resolve::{ResolveDiagKind, resolve_diag_kind};
+use music_seam::Artifact;
+use music_seam::descriptor::ConstantValue;
 use music_sema::{SemaDiagKind, TargetInfo, sema_diag_kind};
 use music_syntax::{ParseErrorKind, TokenKind};
 

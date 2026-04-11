@@ -1,5 +1,5 @@
 use music_base::SourceId;
-use music_syntax::Lexer;
+use music_syntax::{Lexer, parse};
 
 use super::{ImportSiteKind, collect_export_summary, collect_import_sites};
 
@@ -10,7 +10,7 @@ fn collects_static_and_dynamic_import_sites() {
         let dyn := import module_path;
     "#;
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
     assert_eq!(sites.len(), 2);
     assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
@@ -23,7 +23,7 @@ fn collects_static_template_import_site() {
         let IO := import `std/io`;
     ";
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
     assert_eq!(sites.len(), 1);
     assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
@@ -36,7 +36,7 @@ fn import_sites_ignore_quote_expr() {
         quote { let B := import "b"; };
     "#;
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
     assert_eq!(sites.len(), 1);
@@ -50,7 +50,7 @@ fn collects_exports_and_marks_opaque() {
         export opaque let y := 2;
     ";
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     assert!(parsed.errors().is_empty());
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
 
@@ -67,7 +67,7 @@ fn record_pattern_without_colon_binds_field_name() {
         export let {x, y} := r;
     ";
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     let exports: Vec<&str> = summary.exports().collect();
     assert!(exports.contains(&"x"));
@@ -80,7 +80,7 @@ fn record_pattern_with_colon_binds_inner_pattern() {
         export let {x: y} := r;
     ";
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     let exports: Vec<&str> = summary.exports().collect();
     assert!(!exports.contains(&"x"));
@@ -96,7 +96,7 @@ fn export_foreign_group_collects_binding_names() {
         );
     "#;
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     let exports: Vec<&str> = summary.exports().collect();
@@ -110,7 +110,7 @@ fn export_instance_is_tracked_separately() {
         export instance Eq[Int] { };
     ";
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     assert_eq!(summary.exported_instance_count(), 1);
@@ -128,7 +128,7 @@ fn opaque_export_marking_is_order_independent() {
         export opaque let x := 2;
     "#;
     let lexed = Lexer::new(src).lex();
-    let parsed = music_syntax::parse(lexed);
+    let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
     let exports: Vec<&str> = summary.exports().collect();

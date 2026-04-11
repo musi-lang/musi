@@ -13,6 +13,27 @@ use super::Session;
 use super::graph::{SessionImportEnv, SurfaceMap};
 
 impl Session {
+    #[must_use]
+    pub fn parsed_module_cached(
+        &self,
+        key: &ModuleKey,
+    ) -> Result<Option<&ParsedModule>, SessionError> {
+        Ok(self.module_record(key)?.parsed.as_ref())
+    }
+
+    #[must_use]
+    pub fn resolved_module_cached(
+        &self,
+        key: &ModuleKey,
+    ) -> Result<Option<&ResolvedModule>, SessionError> {
+        Ok(self.module_record(key)?.resolved.as_ref())
+    }
+
+    #[must_use]
+    pub fn sema_module_cached(&self, key: &ModuleKey) -> Result<Option<&SemaModule>, SessionError> {
+        Ok(self.module_record(key)?.sema.as_ref())
+    }
+
     /// Parses the module source and returns the cached parse summary.
     ///
     /// # Errors

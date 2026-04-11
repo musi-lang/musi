@@ -69,11 +69,27 @@ cargo build --tests -p musi_vm
 
 Run `cargo clippy -p <crate>` on every crate you touch.
 
+Install `rscheck` for local Rust style checks:
+
+```bash
+cargo install --git https://github.com/xsyetopz/rscheck --locked rscheck-cli
+```
+
+Run it from the repo root:
+
+```bash
+rscheck check --with-clippy=false
+```
+
+This repo treats `absolute_module_paths` as the blocking `rscheck` rule. Other configured
+rules currently report triage-visible warnings and may still exit with status `1`.
+
 Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB free RAM.
 
 ## Pull Request Checklist
 
 - [ ] Relevant crates build cleanly with no warnings.
+- [ ] `rscheck check --with-clippy=false` is clean or reviewed for new warnings.
 - [ ] `cargo clippy -p <crate>` passes for each changed crate.
 - [ ] Tests pass for changed crates.
 - [ ] Grammar changes update `grammar/Musi.g4` and relevant docs (`docs/what/language/syntax.md`, `grammar/Musi.abnf` if the spec reference changes).
@@ -122,6 +138,9 @@ cargo build --release
 
 # Lint
 cargo clippy --workspace
+
+# Rust style and repo-specific path checks
+rscheck check --with-clippy=false
 ```
 
 ## Using AI Assistants

@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
-use music_assembly::AssemblyError;
-use music_bc::{Opcode, Operand};
+use music_seam::AssemblyError;
+use music_seam::{Opcode, Operand};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

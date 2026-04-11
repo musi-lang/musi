@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use music_base::diag::DiagCode;
-use music_bc::Artifact;
 use music_module::ModuleKey;
+use music_seam::Artifact;
 
 use crate::{PackageSource, Project, ProjectError, ProjectOptions};
 

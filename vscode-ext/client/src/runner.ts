@@ -23,10 +23,21 @@ export interface DiagnosticRangePoint {
 	readonly character: number;
 }
 
+export interface FlatDiagnosticRangePayload {
+	readonly start_line: number;
+	readonly start_col: number;
+	readonly end_line: number;
+	readonly end_col: number;
+}
+
 export interface DiagnosticRangePayload {
 	readonly start: DiagnosticRangePoint;
 	readonly end: DiagnosticRangePoint;
 }
+
+type RawDiagnosticRangePayload =
+	| DiagnosticRangePayload
+	| FlatDiagnosticRangePayload;
 
 export interface DiagnosticLabelPayload {
 	readonly file?: string;
@@ -56,6 +67,115 @@ export interface StructuredCheckResult {
 	readonly stdout: string;
 	readonly stderr: string;
 	readonly payload: StructuredDiagnosticsPayload;
+}
+
+function normalizeRangePoint(value: unknown): DiagnosticRangePoint | undefined {
+	if (!(value && typeof value === "object")) {
+		return undefined;
+	}
+	const point = value as Partial<DiagnosticRangePoint>;
+	if (typeof point.line !== "number" || typeof point.character !== "number") {
+		return undefined;
+	}
+	return { line: point.line, character: point.character };
+}
+
+function normalizeRange(value: unknown): DiagnosticRangePayload | undefined {
+	if (!(value && typeof value === "object")) {
+		return undefined;
+	}
+	const range = value as Partial<DiagnosticRangePayload> &
+		Partial<FlatDiagnosticRangePayload>;
+	const start = normalizeRangePoint(range.start);
+	const end = normalizeRangePoint(range.end);
+	if (start && end) {
+		return { start, end };
+	}
+	if (
+		typeof range.start_line === "number" &&
+		typeof range.start_col === "number" &&
+		typeof range.end_line === "number" &&
+		typeof range.end_col === "number"
+	) {
+		return {
+			start: { line: range.start_line, character: range.start_col },
+			end: { line: range.end_line, character: range.end_col },
+		};
+	}
+	return undefined;
+}
+
+function normalizeLabel(value: unknown): DiagnosticLabelPayload | undefined {
+	if (!(value && typeof value === "object")) {
+		return undefined;
+	}
+	const label = value as {
+		file?: unknown;
+		message?: unknown;
+		range?: RawDiagnosticRangePayload;
+	};
+	const range =
+		label.range !== undefined ? normalizeRange(label.range) : undefined;
+	return {
+		...(typeof label.file === "string" ? { file: label.file } : {}),
+		...(typeof label.message === "string" ? { message: label.message } : {}),
+		...(range ? { range } : {}),
+	};
+}
+
+function normalizeDiagnostic(value: unknown): DiagnosticPayload | undefined {
+	if (!(value && typeof value === "object")) {
+		return undefined;
+	}
+	const payload = value as {
+		file?: unknown;
+		severity?: unknown;
+		level?: unknown;
+		code?: unknown;
+		message?: unknown;
+		range?: RawDiagnosticRangePayload;
+		primaryRange?: RawDiagnosticRangePayload;
+		labels?: unknown;
+		notes?: unknown;
+		hint?: unknown;
+	};
+	if (typeof payload.message !== "string") {
+		return undefined;
+	}
+	const range =
+		payload.range !== undefined ? normalizeRange(payload.range) : undefined;
+	const primaryRange =
+		payload.primaryRange !== undefined
+			? normalizeRange(payload.primaryRange)
+			: undefined;
+	return {
+		message: payload.message,
+		...(typeof payload.file === "string" ? { file: payload.file } : {}),
+		...(typeof payload.severity === "string"
+			? { severity: payload.severity }
+			: {}),
+		...(typeof payload.level === "string" ? { level: payload.level } : {}),
+		...(typeof payload.code === "string" ? { code: payload.code } : {}),
+		...(range ? { range } : {}),
+		...(primaryRange ? { primaryRange } : {}),
+		...(Array.isArray(payload.labels)
+			? {
+					labels: payload.labels
+						.map(normalizeLabel)
+						.filter(
+							(entry): entry is DiagnosticLabelPayload => entry !== undefined,
+						),
+				}
+			: {}),
+		...(Array.isArray(payload.notes)
+			? {
+					notes: payload.notes.filter(
+						(entry): entry is string => typeof entry === "string",
+					),
+				}
+			: {}),
+		...(typeof payload.hint === "string" ? { hint: payload.hint } : {}),
+	};
 }
 
 function shellJoin(parts: readonly string[]): string {
@@ -193,10 +313,18 @@ function parseStructuredDiagnostics(
 			| StructuredDiagnosticsPayload
 			| DiagnosticPayload[];
 		if (Array.isArray(parsed)) {
-			return { diagnostics: parsed };
+			return {
+				diagnostics: parsed
+					.map(normalizeDiagnostic)
+					.filter((entry): entry is DiagnosticPayload => entry !== undefined),
+			};
 		}
 		if (Array.isArray(parsed.diagnostics)) {
-			return parsed;
+			return {
+				diagnostics: parsed.diagnostics
+					.map(normalizeDiagnostic)
+					.filter((entry): entry is DiagnosticPayload => entry !== undefined),
+			};
 		}
 		throw new Error("structured diagnostics payload missing `diagnostics`");
 	};

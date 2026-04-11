@@ -26,6 +26,7 @@ export interface RunConfiguration {
 
 export interface Config {
 	readonly cliPath: string;
+	readonly lspPath: string;
 	readonly checkOnSave: boolean;
 	readonly runtime: RuntimeConfig;
 	readonly terminal: TerminalConfig;
@@ -47,6 +48,7 @@ const TERMINAL_DEFAULTS: TerminalConfig = {
 
 export const CONFIG_DEFAULTS: Config = {
 	cliPath: "musi",
+	lspPath: "musi_lsp",
 	checkOnSave: true,
 	runtime: RUNTIME_DEFAULTS,
 	terminal: TERMINAL_DEFAULTS,
@@ -58,6 +60,7 @@ export function getConfig(): Config {
 
 	return {
 		cliPath: cfg.get("cliPath", CONFIG_DEFAULTS.cliPath),
+		lspPath: cfg.get("lspPath", CONFIG_DEFAULTS.lspPath),
 		checkOnSave: cfg.get("checkOnSave", CONFIG_DEFAULTS.checkOnSave),
 		runtime: {
 			args: cfg.get("runtime.args", RUNTIME_DEFAULTS.args),

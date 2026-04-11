@@ -1,15 +1,17 @@
 use music_base::SourceId;
 use music_base::diag::{Diag, DiagCode};
-use music_bc::descriptor::ConstantValue;
+use music_ir::{IrModule, lower_module};
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
+use music_seam::{CodeEntry, Opcode};
+use music_seam::descriptor::ConstantValue;
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::{EmitDiagKind, EmitOptions, emit_diag_kind, lower_ir_module, lower_ir_program};
 
-fn lower_ir(src: &str, key: &str) -> music_ir::IrModule {
+fn lower_ir(src: &str, key: &str) -> IrModule {
     let lexed = Lexer::new(src).lex();
     let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -30,7 +32,7 @@ fn lower_ir(src: &str, key: &str) -> music_ir::IrModule {
             env: None,
         },
     );
-    music_ir::lower_module(&sema, &interner).expect("ir lowering should succeed")
+    lower_module(&sema, &interner).expect("ir lowering should succeed")
 }
 
 #[test]
@@ -121,17 +123,17 @@ fn emits_globals_locals_assignment_index_and_case() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
 
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&music_bc::Opcode::LdGlob));
-    assert!(opcodes.contains(&music_bc::Opcode::StGlob));
-    assert!(opcodes.contains(&music_bc::Opcode::SeqGet));
-    assert!(opcodes.contains(&music_bc::Opcode::SeqSet));
-    assert!(opcodes.contains(&music_bc::Opcode::BrFalse));
+    assert!(opcodes.contains(&Opcode::LdGlob));
+    assert!(opcodes.contains(&Opcode::StGlob));
+    assert!(opcodes.contains(&Opcode::SeqGet));
+    assert!(opcodes.contains(&Opcode::SeqSet));
+    assert!(opcodes.contains(&Opcode::BrFalse));
 }
 
 #[test]
@@ -154,15 +156,15 @@ fn emits_multi_index_get_set_and_dynamic_import() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
 
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&music_bc::Opcode::ModLoad));
-    assert!(opcodes.contains(&music_bc::Opcode::SeqGetN));
-    assert!(opcodes.contains(&music_bc::Opcode::SeqSetN));
+    assert!(opcodes.contains(&Opcode::ModLoad));
+    assert!(opcodes.contains(&Opcode::SeqGetN));
+    assert!(opcodes.contains(&Opcode::SeqSetN));
 }
 
 #[test]
@@ -184,14 +186,14 @@ fn emits_dynamic_module_export_lookup() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
 
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&music_bc::Opcode::ModLoad));
-    assert!(opcodes.contains(&music_bc::Opcode::ModGet));
+    assert!(opcodes.contains(&Opcode::ModLoad));
+    assert!(opcodes.contains(&Opcode::ModGet));
 }
 
 #[test]
@@ -217,12 +219,12 @@ fn emits_case_tuple_and_array_patterns() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
-    assert!(opcodes.contains(&music_bc::Opcode::SeqGet));
-    assert!(opcodes.contains(&music_bc::Opcode::BrFalse));
+    assert!(opcodes.contains(&Opcode::SeqGet));
+    assert!(opcodes.contains(&Opcode::BrFalse));
 }
 
 #[test]
@@ -261,13 +263,13 @@ fn emits_named_type_values_as_ty_id() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
 
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&music_bc::Opcode::TyId));
+    assert!(opcodes.contains(&Opcode::TyId));
 }
 
 #[test]
@@ -292,12 +294,12 @@ fn emits_records_with_projection_and_update() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
-    assert!(opcodes.contains(&music_bc::Opcode::DataNew));
-    assert!(opcodes.contains(&music_bc::Opcode::DataGet));
+    assert!(opcodes.contains(&Opcode::DataNew));
+    assert!(opcodes.contains(&Opcode::DataGet));
 }
 
 #[test]
@@ -321,10 +323,10 @@ fn emits_foreign_calls() {
             .iter()
             .flat_map(|(_, method)| method.code.iter())
             .filter_map(|entry| match entry {
-                music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-                music_bc::CodeEntry::Label(_) => None,
+                CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+                CodeEntry::Label(_) => None,
             })
-            .any(|opcode| opcode == music_bc::Opcode::FfiCall)
+            .any(|opcode| opcode == Opcode::FfiCall)
     );
 }
 
@@ -350,14 +352,15 @@ fn emits_closures_and_higher_order_calls() {
     let mut has_capturing_closure = false;
     for (_, method) in emitted.artifact.methods.iter() {
         for entry in &method.code {
-            let music_bc::CodeEntry::Instruction(instruction) = entry else {
+            let CodeEntry::Instruction(instruction) = entry else {
                 continue;
             };
-            if instruction.opcode == music_bc::Opcode::CallCls {
+            if instruction.opcode == Opcode::CallCls {
                 has_indirect_call = true;
             }
-            if instruction.opcode == music_bc::Opcode::ClsNew {
-                if let music_bc::Operand::WideMethodCaptures { captures, .. } = &instruction.operand
+            if instruction.opcode == Opcode::ClsNew {
+                if let music_seam::Operand::WideMethodCaptures { captures, .. } =
+                    &instruction.operand
                 {
                     if *captures != 0 {
                         has_capturing_closure = true;
@@ -413,12 +416,12 @@ fn emits_type_test_and_cast() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
-    assert!(opcodes.contains(&music_bc::Opcode::TyChk));
-    assert!(opcodes.contains(&music_bc::Opcode::TyCast));
+    assert!(opcodes.contains(&Opcode::TyChk));
+    assert!(opcodes.contains(&Opcode::TyCast));
 }
 
 #[test]
@@ -445,21 +448,21 @@ fn emits_type_values_record_patterns_and_capturing_recursion() {
         .iter()
         .flat_map(|(_, method)| method.code.iter())
         .filter_map(|entry| match entry {
-            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            music_bc::CodeEntry::Label(_) => None,
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
         })
         .collect::<Vec<_>>();
-    assert!(opcodes.contains(&music_bc::Opcode::DataGet));
-    assert!(opcodes.contains(&music_bc::Opcode::CallCls));
+    assert!(opcodes.contains(&Opcode::DataGet));
+    assert!(opcodes.contains(&Opcode::CallCls));
 
     assert!(
         emitted.artifact.methods.iter().any(|(_, method)| {
             method.code.iter().any(|entry| {
                 matches!(
                     entry,
-                    music_bc::CodeEntry::Instruction(music_bc::Instruction {
-                        opcode: music_bc::Opcode::ClsNew,
-                        operand: music_bc::Operand::WideMethodCaptures { captures, .. },
+                    CodeEntry::Instruction(music_seam::Instruction {
+                        opcode: Opcode::ClsNew,
+                        operand: music_seam::Operand::WideMethodCaptures { captures, .. },
                     }) if *captures > 0
                 )
             })

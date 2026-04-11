@@ -1,7 +1,7 @@
-use music_assembly::{encode_binary, format_text};
-use music_bc::Artifact;
 use music_emit::lower_ir_program;
 use music_module::ModuleKey;
+use music_seam::Artifact;
+use music_seam::{encode_binary, format_text};
 
 use crate::api::{CompiledOutput, SessionError};
 

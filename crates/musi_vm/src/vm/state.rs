@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::iter::repeat_n;
 
-use music_bc::{EffectId, MethodId};
+use music_seam::{EffectId, MethodId};
 
 use super::{ContinuationValuePtr, Program, Value, ValueList};
 

@@ -1,7 +1,7 @@
 use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
-use music_bc::{ClassId, EffectId, ForeignId, MethodId, TypeId};
+use music_seam::{ClassId, EffectId, ForeignId, MethodId, TypeId};
 use music_term::SyntaxTerm;
 use smallvec::SmallVec;
 

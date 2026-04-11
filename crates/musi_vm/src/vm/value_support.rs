@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use music_bc::descriptor::ConstantValue;
+use music_seam::descriptor::ConstantValue;
 use music_term::SyntaxTerm;
 
 use super::{

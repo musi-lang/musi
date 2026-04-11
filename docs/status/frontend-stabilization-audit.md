@@ -18,8 +18,8 @@ Audit scope:
 
 Not in this audit:
 
-- `music_bc`
-- `music_assembly`
+- `music_seam`
+- `music_seam`
 - `musi_project`
 - runtime / VM
 - native / JIT backend
@@ -29,7 +29,7 @@ Validation baseline at audit time:
 - `cargo test -q` passes
 - `cargo clippy -q --workspace --all-targets` passes
 - `scripts/audit_god_crates.sh crates` passes
-- `scripts/audit_paths.sh crates` passes
+- `make rscheck` runs without deny-level path findings
 
 ## Current Phase Boundary
 

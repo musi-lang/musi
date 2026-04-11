@@ -1,8 +1,8 @@
-use music_assembly::AssemblyError;
 use music_base::{Diag, SourceId, SourceMapError};
-use music_bc::Artifact;
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSite, ModuleExportSummary, ModuleKey};
+use music_seam::Artifact;
+use music_seam::AssemblyError;
 use music_sema::TargetInfo;
 use music_syntax::{LexError, ParseError};
 use thiserror::Error;

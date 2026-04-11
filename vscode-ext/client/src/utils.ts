@@ -6,6 +6,10 @@ export function getCliBinaryName(): string {
 	return isWindows() ? "musi.exe" : "musi";
 }
 
+export function getLspBinaryName(): string {
+	return isWindows() ? "musi_lsp.exe" : "musi_lsp";
+}
+
 export function isWindows(): boolean {
 	return os.platform() === "win32";
 }

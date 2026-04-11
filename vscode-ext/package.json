@@ -1,7 +1,7 @@
 {
 	"name": "vscode-musi",
 	"displayName": "Musi",
-	"description": "Musi package-aware syntax and CLI tooling",
+	"description": "Musi package-aware syntax, LSP, and CLI tooling",
 	"version": "0.1.0-alpha.1",
 	"author": {
 		"name": "xsyetopz"
@@ -35,6 +35,7 @@
 		"vscode": "^1.75.0"
 	},
 	"activationEvents": [
+		"onLanguage:musi",
 		"workspaceContains:**/musi.json"
 	],
 	"contributes": {
@@ -145,10 +146,15 @@
 					"default": "musi",
 					"markdownDescription": "Path to the `musi` CLI binary. If not set, the extension searches workspace build outputs, Cargo bin, and PATH."
 				},
+				"musi.lspPath": {
+					"type": "string",
+					"default": "musi_lsp",
+					"markdownDescription": "Path to the `musi_lsp` binary. If not set, the extension searches workspace build outputs, Cargo bin, and PATH."
+				},
 				"musi.checkOnSave": {
 					"type": "boolean",
 					"default": true,
-					"description": "Run `musi check --diagnostics-format json` for the owning package when saving a `.ms` file or `musi.json`."
+					"description": "Run fallback CLI checks when LSP diagnostics are unavailable, and keep manifest checks active on save."
 				},
 				"musi.runtime.args": {
 					"type": "array",
@@ -264,7 +270,9 @@
 		"biome:lint": "bunx biome lint . --write --max-diagnostics 16384",
 		"vscode:prepublish": "bun run build"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.1"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.11",
 		"@types/bun": "1.3.12",

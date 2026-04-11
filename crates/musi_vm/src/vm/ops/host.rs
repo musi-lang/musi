@@ -1,4 +1,4 @@
-use music_bc::{ForeignId, Instruction, Opcode, Operand};
+use music_seam::{ForeignId, Instruction, Opcode, Operand};
 
 use super::{ForeignCall, StepOutcome, Value, Vm, VmResult};
 

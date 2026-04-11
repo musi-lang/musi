@@ -18,6 +18,7 @@ import type { PackageRoot } from "./types.ts";
 const CHECK_DEBOUNCE_MS = 250;
 
 type PendingTimer = ReturnType<typeof setTimeout>;
+type DiagnosticsMode = "disabled" | "full" | "manifest-only";
 
 function toSeverity(value: string | undefined): vscode.DiagnosticSeverity {
 	switch (value?.toLowerCase()) {
@@ -125,9 +126,18 @@ export class DiagnosticsController {
 	#timers = new Map<string, PendingTimer>();
 	#running = new Map<string, AbortController>();
 	#trackedFiles = new Map<string, Set<string>>();
+	#mode: DiagnosticsMode = "full";
 
 	constructor(statusBar: StatusBar) {
 		this.#statusBar = statusBar;
+	}
+
+	setMode(mode: DiagnosticsMode) {
+		this.#mode = mode;
+	}
+
+	mode() {
+		return this.#mode;
 	}
 
 	dispose() {
@@ -160,7 +170,7 @@ export class DiagnosticsController {
 	}
 
 	scheduleDocumentCheck(document: vscode.TextDocument) {
-		if (!getConfig().checkOnSave) {
+		if (!getConfig().checkOnSave || !this.#shouldCheckDocument(document)) {
 			return;
 		}
 
@@ -191,6 +201,16 @@ export class DiagnosticsController {
 			return;
 		}
 		await this.checkManifestPath(manifestPath);
+	}
+
+	#shouldCheckDocument(document: vscode.TextDocument): boolean {
+		if (this.#mode === "disabled") {
+			return false;
+		}
+		if (this.#mode === "full") {
+			return true;
+		}
+		return path.basename(document.uri.fsPath) === "musi.json";
 	}
 
 	async checkManifestPath(manifestPath: string) {

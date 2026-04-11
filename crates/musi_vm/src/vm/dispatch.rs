@@ -1,6 +1,6 @@
 use std::mem;
 
-use music_bc::{Instruction, MethodId};
+use music_seam::{Instruction, MethodId};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
 use super::{

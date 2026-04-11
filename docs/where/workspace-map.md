@@ -23,8 +23,7 @@ First-party Musi packages live in `packages/`.
 ## Executable Contract and Runtime
 
 - `musi_foundation`
-- `music_bc`
-- `music_assembly`
+- `music_seam`
 - `music_emit`
 - `musi_vm`
 - `musi_rt`
@@ -33,7 +32,8 @@ First-party Musi packages live in `packages/`.
 
 - `music_session`
 - `musi_project`
-- `music_tooling`
+- `musi_tooling`
+- `musi_lsp`
 
 ## Tooling
 

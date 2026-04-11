@@ -1,4 +1,4 @@
-use music_bc::Opcode;
+use music_seam::Opcode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmOpcodeFamily {

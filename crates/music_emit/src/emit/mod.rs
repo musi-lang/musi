@@ -3,15 +3,6 @@ use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
-use music_bc::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, MethodDescriptor, TypeDescriptor,
-};
-use music_bc::{
-    Artifact, ClassId, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId,
-    Opcode, Operand, StringId, TypeId,
-};
 use music_ir::{
     DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrCaseRecordField,
     IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam,
@@ -19,6 +10,15 @@ use music_ir::{
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;
+use music_seam::descriptor::{
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    MetaDescriptor, MethodDescriptor, TypeDescriptor,
+};
+use music_seam::{
+    Artifact, ClassId, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, MethodId,
+    Opcode, Operand, StringId, TypeId,
+};
 
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
 use crate::diag::EmitDiagKind;

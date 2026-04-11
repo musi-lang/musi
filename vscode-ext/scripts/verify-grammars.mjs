@@ -89,7 +89,7 @@ for (const prefix of fixtures.requiredSnippetPrefixes) {
 
 assert(
 	snippetPrefixes.length === fixtures.requiredSnippetPrefixes.length,
-	"snippets define prefixes outside the canonical pre-LSP set",
+	"snippets define prefixes outside the canonical editor set",
 );
 
 assert(

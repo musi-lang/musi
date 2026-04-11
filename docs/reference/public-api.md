@@ -28,8 +28,7 @@ Rules:
 
 ## Executable Contract And Runtime
 
-- `music_bc`: SEAM contract model (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`)
-- `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
+- `music_seam`: SEAM executable contract (`Artifact`, `ArtifactError`, `Table`, `StringRecord`, typed ids, `SectionTag`, `SEAM_MAGIC`, `BINARY_VERSION`, descriptor types, `Instruction`, `CodeEntry`, `Operand`, `OperandShape`, `Label`, `LabelId`, `Opcode`, `OpcodeFamily`, `AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
 - `musi_foundation`: source-visible foundation registry for first-party `musi:*` modules (`extend_import_map`, `resolve_spec`, `register_modules`, `module_source`, `test::*`, `syntax::*`)
 - `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `RejectingHost`, `VmLoader`, `RejectingLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
@@ -40,7 +39,8 @@ Rules:
 
 - `music_session`: session orchestration + cached compile entrypoints (`Session`, `SessionOptions`, `SessionStats`, `ParsedModule`, `SessionSyntaxErrors`, `CompiledOutput`, `SessionDiagList`, `SessionError`, `compile_*`/phase entrypoints through `Session` methods)
 - `musi_project`: project/manifest integration over `music_session` (`Project`, `ProjectOptions`, `ProjectError`, `PackageId`, `PackageSource`, `ProjectEntry`, `ResolvedPackage`, `WorkspaceGraph`, `Lockfile`, `LockedPackage`, `LockedPackageSource`, `TaskSpec`, `PackageManifest`, `load_project`, plus namespaced manifest schema types under `musi_project::manifest::*`)
-- `music_tooling`: shared CLI support for direct-source loading, artifact I/O, and structured diagnostics (`DirectGraph`, `load_direct_graph`, `DiagnosticsFormat`, `CliDiagnostics*`, `session_error_report`, `project_error_report`, `read_artifact_bytes`, `write_artifact_bytes`)
+- `musi_tooling`: shared external-tool support for direct-source loading, artifact I/O, structured diagnostics, and package-aware analysis (`DirectGraph`, `load_direct_graph`, `DiagnosticsFormat`, `CliDiagnostics*`, `session_error_report`, `project_error_report`, `read_artifact_bytes`, `write_artifact_bytes`, `collect_project_diagnostics*`, `hover_for_project_file*`, `ToolHover`)
+- `musi_lsp`: LSP server binary crate for diagnostics and hover over package-owned Musi source files
 - `music`: direct source and `.seam` binary crate
 - `musi`: package-aware operator binary crate
 
@@ -61,9 +61,8 @@ Notes:
 - `music_ir` is the frozen executable backend ADT for the pre-runtime pipeline: `IrModule`, `IrExprKind`, related node types, and `lower_module` are the stable backend contract.
 - `music_ir` lowers sema facts into owned executable bodies; `IrModule` presents top-level collections through accessors instead of public storage fields.
 - lowering and emission invariants return typed diagnostics through `IrDiagKind` / `EmitDiagKind` instead of aborting process execution.
-- `music_bc` is the source of truth for SEAM opcodes, operands, descriptor tables, section tags, and artifact validation.
-- `music_assembly` is transport-only over `music_bc`: it does not redefine the artifact or ISA.
-- `music_emit` lowers one IR module or a reachable IR module set into validated `music_bc::Artifact` values, and `emit_diag_kind` is code-based.
+- `music_seam` is the source of truth for SEAM opcodes, operands, descriptor tables, section tags, binary/text transport, and artifact validation.
+- `music_emit` lowers one IR module or a reachable IR module set into validated `music_seam::Artifact` values, and `emit_diag_kind` is code-based.
 - `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`.
 - `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
 - `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
@@ -74,7 +73,7 @@ Notes:
 - `musi_native::NativeHost` is the first-party host/world integration layer used by the repo-owned runtime path; it owns registered foreign/effect handlers, `musi:test` session collection, cfg-selected platform dispatch, and embedding fallback host delegation.
 - the `musi:*` inventory is `musi:test` and `musi:syntax`; `musi:syntax` is the source-visible bridge for syntax evaluation and quoted module registration.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, constructs the `music_session` module/import view used for package-aware compilation, and can now load from the nearest ancestor manifest.
-- `music_tooling` sits above compiler/runtime crates and below the CLI binaries: it owns direct-file graph loading and machine-readable diagnostics shaping without pulling package policy into compiler-core crates.
+- `musi_tooling` sits above compiler/runtime crates and below external tool binaries: it owns direct-file graph loading, machine-readable diagnostics shaping, and package-aware editor analysis without pulling package policy into compiler-core crates.
 
 ## First-Party Package Families
 

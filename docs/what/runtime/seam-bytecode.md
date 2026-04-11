@@ -15,12 +15,12 @@ It is not an AST dump and not a generic hardware assembly.
 
 ## Layers
 
-The SEAM layer is intentionally split:
+`music_seam` owns the full SEAM executable-contract layer:
 
-- `music_bc` owns artifact model, descriptors, ids, operands, opcodes, and validation rules
-- `music_assembly` owns binary encoding, decoding, text form, and transport validation
-
-That split keeps transport from redefining semantics.
+- artifact model, descriptors, ids, operands, opcodes, and validation rules
+- binary encoding and decoding
+- text format and parsing
+- transport validation
 
 ## Operand Model
 

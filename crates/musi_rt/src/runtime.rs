@@ -4,7 +4,10 @@ use std::rc::Rc;
 
 use musi_foundation::{extend_import_map, register_modules, syntax};
 use musi_native::{NativeHost, NativeTestReport, WeakNativeHost};
-use musi_vm::{Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmOptions, VmResult};
+use musi_vm::{
+    EffectCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmOptions,
+    VmResult, VmValueKind,
+};
 use music_module::ModuleKey;
 use music_session::{Session, SessionError, SessionOptions};
 use music_term::SyntaxTerm;
@@ -463,7 +466,7 @@ fn compile_synthetic_program(
     Program::from_bytes(&output.bytes).map_err(Into::into)
 }
 
-fn invalid_syntax_effect(effect: &musi_vm::EffectCall, reason: &'static str) -> VmError {
+fn invalid_syntax_effect(effect: &EffectCall, reason: &'static str) -> VmError {
     VmError::new(VmErrorKind::EffectRejected {
         effect: effect.effect_name().into(),
         op: Some(effect.op_name().into()),
@@ -490,7 +493,7 @@ fn vm_runtime_error(err: RuntimeError) -> VmError {
         }
         RuntimeErrorKind::InvalidSyntaxValue { found } => {
             VmError::new(VmErrorKind::InvalidValueKind {
-                expected: musi_vm::VmValueKind::Syntax,
+                expected: VmValueKind::Syntax,
                 found: *found,
             })
         }

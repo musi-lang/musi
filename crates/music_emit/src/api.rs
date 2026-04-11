@@ -1,6 +1,6 @@
 use music_base::diag::Diag;
-use music_bc::{Artifact, GlobalId, MethodId};
 use music_module::ModuleKey;
+use music_seam::{Artifact, GlobalId, MethodId};
 
 use crate::EmitDiagKind;
 

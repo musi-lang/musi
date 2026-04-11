@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use music_bc::{Instruction, Opcode};
+use music_seam::{Instruction, Opcode};
 
 use super::{StepOutcome, Value, Vm, VmResult};
 

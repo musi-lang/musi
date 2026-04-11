@@ -1,6 +1,6 @@
 use std::iter::repeat_n;
 
-use music_bc::{Instruction, MethodId};
+use music_seam::{Instruction, MethodId};
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult};
 

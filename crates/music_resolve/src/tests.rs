@@ -5,7 +5,7 @@ use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
 };
 use music_names::{Interner, NameBindingKind, NameSite};
-use music_syntax::{Lexer, SyntaxNodeKind, canonical_name_text, parse};
+use music_syntax::{Lexer, SyntaxNodeKind, SyntaxTree, TokenKind, canonical_name_text, parse};
 
 use crate::{ResolveDiagKind, ResolveOptions, resolve_diag_kind, resolve_module};
 
@@ -32,7 +32,7 @@ impl ImportEnv for TestImportEnv {
 
 fn find_nth_name_site(
     source_id: SourceId,
-    tree: &music_syntax::SyntaxTree,
+    tree: &SyntaxTree,
     spelling: &str,
     nth: usize,
 ) -> Option<NameSite> {
@@ -43,7 +43,7 @@ fn find_nth_name_site(
             let tok = node.child_tokens().find(|t| {
                 matches!(
                     t.kind(),
-                    music_syntax::TokenKind::Ident | music_syntax::TokenKind::OpIdent
+                    TokenKind::Ident | TokenKind::OpIdent
                 )
             });
             if let Some(tok) = tok {

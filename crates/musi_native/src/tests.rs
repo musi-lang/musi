@@ -1,6 +1,7 @@
 use musi_foundation::{register_modules, test};
 use musi_vm::{
-    Program, RejectingLoader, Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, RejectingLoader, Value, Vm, VmError, VmErrorKind, VmHost,
+    VmOptions, VmResult,
 };
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
@@ -11,7 +12,7 @@ use crate::{NativeHost, NativeTestCaseResult, NativeTestReport};
 struct FallbackHost;
 
 impl VmHost for FallbackHost {
-    fn call_foreign(&mut self, foreign: &musi_vm::ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
         if foreign.name() == "main::puts" {
             return Ok(Value::Int(11));
         }
@@ -20,7 +21,7 @@ impl VmHost for FallbackHost {
         }))
     }
 
-    fn handle_effect(&mut self, effect: &musi_vm::EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
         if effect.effect_name() == "main::Console" && effect.op_name() == "readln" {
             return Ok(Value::Int(9));
         }

@@ -3,6 +3,7 @@ use std::fs;
 use std::mem::drop;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Output;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -45,7 +46,7 @@ fn write_file(root: &Path, relative: &str, text: &str) {
     fs::write(path, text).expect("file should be written");
 }
 
-fn run_musi(args: &[&str], cwd: &Path) -> std::process::Output {
+fn run_musi(args: &[&str], cwd: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_musi"))
         .args(args)
         .current_dir(cwd)

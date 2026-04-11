@@ -5,15 +5,15 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use cli::{Cli, Command, DiagnosticsFormatArg};
-use musi_vm::{Program, Value, ValueView, Vm, VmError, VmOptions};
-use music_assembly::{decode_binary, format_text};
-use music_bc::descriptor::ExportTarget;
-use music_session::{Session, SessionError, SessionOptions};
-use music_tooling::{
+use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, load_direct_graph, read_artifact_bytes,
     render_session_error, render_tooling_error, session_error_report, tooling_error_report,
     write_artifact_bytes,
 };
+use musi_vm::{Program, Value, ValueView, Vm, VmError, VmOptions};
+use music_seam::descriptor::ExportTarget;
+use music_seam::{AssemblyError, BINARY_VERSION, decode_binary, format_text};
+use music_session::{Session, SessionError, SessionOptions};
 use thiserror::Error;
 
 type MusicResult<T = ()> = Result<T, MusicError>;
@@ -25,7 +25,7 @@ enum MusicError {
     #[error(transparent)]
     SessionCompilationFailed(#[from] SessionError),
     #[error(transparent)]
-    ArtifactTransportFailed(#[from] music_assembly::AssemblyError),
+    ArtifactTransportFailed(#[from] AssemblyError),
     #[error(transparent)]
     VmExecutionFailed(#[from] VmError),
     #[error(transparent)]
@@ -119,7 +119,7 @@ fn inspect(path: &Path) -> MusicResult {
     let bytes = read_artifact_bytes(path)?;
     let artifact = decode_binary(&bytes)?;
 
-    println!("binaryVersion: {}", music_bc::BINARY_VERSION);
+    println!("binaryVersion: {}", BINARY_VERSION);
     println!("strings: {}", artifact.strings.len());
     println!("types: {}", artifact.types.len());
     println!("globals: {}", artifact.globals.len());

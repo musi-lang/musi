@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use music_bc::{EffectId, Instruction, Opcode, Operand};
+use music_seam::{EffectId, Instruction, Opcode, Operand};
 
 use super::{
     CallFrame, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, EffectCall,

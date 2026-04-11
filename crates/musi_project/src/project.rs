@@ -6,9 +6,9 @@ use std::path::{Component, Path, PathBuf};
 use musi_foundation::{extend_import_map, register_modules, resolve_spec};
 use music_base::SourceId;
 use music_base::diag::DiagCode;
-use music_bc::Artifact;
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
+use music_seam::Artifact;
 use music_sema::TargetInfo;
 use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use music_syntax::{Lexer, parse};
@@ -296,6 +296,18 @@ impl Project {
         self.module_texts.get(key).map(String::as_str)
     }
 
+    #[must_use]
+    pub fn module_key_for_path(&self, path: &Path) -> Option<ModuleKey> {
+        let target = normalize_lookup_path(path);
+        self.workspace
+            .packages
+            .values()
+            .flat_map(|package| package.module_keys.iter())
+            .find_map(|(key, module_path)| {
+                (normalize_lookup_path(module_path) == target).then(|| key.clone())
+            })
+    }
+
     pub fn module_texts(&self) -> impl Iterator<Item = (&ModuleKey, &str)> {
         self.module_texts
             .iter()
@@ -324,7 +336,7 @@ impl Project {
     pub fn root_package(&self) -> ProjectResult<&ResolvedPackage> {
         let Some(id) = &self.workspace.root_package else {
             return Err(self.root_manifest_source.error_with_hint(
-                music_base::diag::DiagCode::new(3610),
+                DiagCode::new(3610),
                 "root package entry missing",
                 self.root_manifest_source.insertion_span(),
                 "`name` field missing",
@@ -333,7 +345,7 @@ impl Project {
         };
         self.workspace.packages.get(id).ok_or_else(|| {
             self.root_manifest_source.error_with_hint(
-                music_base::diag::DiagCode::new(3610),
+                DiagCode::new(3610),
                 "root package entry missing",
                 self.root_manifest_source.insertion_span(),
                 "root package record missing",
@@ -590,7 +602,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .value_span("/name")
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
-                music_base::diag::DiagCode::new(3606),
+                DiagCode::new(3606),
                 "package name empty",
                 span,
                 "`name` must not be empty",
@@ -605,7 +617,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .or_else(|| source.value_span("/exports"))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
-                music_base::diag::DiagCode::new(3606),
+                DiagCode::new(3606),
                 format!("export key `{export_name}` invalid"),
                 span,
                 "export key must be `.` or start with `./`",
@@ -618,7 +630,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .or_else(|| source.value_span("/exports"))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
-                music_base::diag::DiagCode::new(3606),
+                DiagCode::new(3606),
                 format!("export target `{export_path}` invalid"),
                 span,
                 "export target must start with `./`",
@@ -663,7 +675,7 @@ fn validate_task_node(
                     .value_span(&pointer)
                     .unwrap_or_else(|| source.insertion_span());
                 return Err(source.error(
-                    music_base::diag::DiagCode::new(3606),
+                    DiagCode::new(3606),
                     format!("task dependency `{dependency}` not found"),
                     span,
                     format!("task `{name}` depends on unknown task `{dependency}`"),
@@ -732,7 +744,7 @@ fn load_local_packages(
         validate_manifest(&member_manifest, &member_source)?;
         let name = member_manifest.name.clone().ok_or_else(|| {
             member_source.error_with_hint(
-                music_base::diag::DiagCode::new(3606),
+                DiagCode::new(3606),
                 "workspace member name missing",
                 member_source.insertion_span(),
                 "`name` field missing",
@@ -761,7 +773,7 @@ fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> 
     let LoadedManifest { manifest, source } = read_manifest(&manifest_path)?;
     manifest.name.ok_or_else(|| {
         source.error_with_hint(
-            music_base::diag::DiagCode::new(3606),
+            DiagCode::new(3606),
             "workspace member name missing",
             source.insertion_span(),
             "`name` field missing",
@@ -1376,6 +1388,10 @@ fn normalize_spec_path(spec: &str) -> PathBuf {
         }
     }
     out
+}
+
+fn normalize_lookup_path(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn build_lockfile(package_records: &BTreeMap<PackageId, PackageRecord>) -> Lockfile {

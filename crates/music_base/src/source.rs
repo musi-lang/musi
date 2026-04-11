@@ -109,6 +109,27 @@ impl Source {
         (line_index + 1, col_usize + 1)
     }
 
+    /// Convert a 1-based (line, column) pair to a byte offset.
+    #[must_use]
+    pub fn offset(&self, line: usize, column: usize) -> Option<u32> {
+        if line == 0 || column == 0 || line > self.line_starts.len() {
+            return None;
+        }
+        let line_start = *self.line_starts.get(line - 1)?;
+        let line_text = self.line_text(line)?;
+        let max_column = line_text.chars().count().saturating_add(1);
+        if column > max_column {
+            return None;
+        }
+        let char_offset = line_text
+            .chars()
+            .take(column.saturating_sub(1))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        let byte_offset = line_start.saturating_add(u32::try_from(char_offset).ok()?);
+        Some(byte_offset)
+    }
+
     /// Return the text of a 1-based line number, without the trailing newline.
     #[must_use]
     pub fn line_text(&self, line: usize) -> Option<&str> {

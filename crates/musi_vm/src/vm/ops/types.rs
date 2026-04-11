@@ -1,4 +1,4 @@
-use music_bc::{Instruction, Opcode, Operand, TypeId};
+use music_seam::{Instruction, Opcode, Operand, TypeId};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 

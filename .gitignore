@@ -2,6 +2,11 @@
 .agents/
 .claude/
 
+# Hidden until actually properly done
+site/
+.github/workflows/cloudflare-pages.yml
+.github/workflows/website.yml
+
 .cursorignore
 .cursorindexingignore
 

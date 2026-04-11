@@ -15,7 +15,7 @@ publish.workspace = true
 [dependencies]
 clap = { workspace = true }
 music_session = { path = "../music_session" }
-music_tooling = { path = "../music_tooling" }
+musi_tooling = { path = "../musi_tooling" }
 musi_native = { path = "../musi_native" }
 musi_project = { path = "../musi_project" }
 musi_rt = { path = "../musi_rt" }

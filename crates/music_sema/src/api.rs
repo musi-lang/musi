@@ -7,6 +7,7 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
+use crate::SemaModuleBuild;
 use crate::diag::SemaDiagKind;
 use crate::effects::EffectRow;
 
@@ -638,8 +639,8 @@ struct SemaDeclTables {
     instance_facts: HashMap<HirExprId, InstanceFacts>,
 }
 
-impl From<crate::SemaModuleBuild> for SemaModule {
-    fn from(build: crate::SemaModuleBuild) -> Self {
+impl From<SemaModuleBuild> for SemaModule {
+    fn from(build: SemaModuleBuild) -> Self {
         let context = SemaContextTables {
             target: build.context.target,
             gated_bindings: build.context.gated_bindings,

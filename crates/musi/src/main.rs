@@ -11,14 +11,14 @@ use musi_native::NativeHost;
 use musi_project::{
     Project, ProjectEntry, ProjectError, ProjectOptions, TaskSpec, load_project_ancestor,
 };
-use musi_rt::{Runtime, RuntimeOptions};
+use musi_rt::{Runtime, RuntimeError, RuntimeOptions};
+use musi_tooling::{
+    CliDiagnosticsReport, DiagnosticsFormat, ToolingError, project_error_report,
+    render_project_error, render_session_error, session_error_report, write_artifact_bytes,
+};
 use musi_vm::{Value, ValueView};
 use music_sema::TargetInfo;
 use music_session::{Session, SessionError};
-use music_tooling::{
-    CliDiagnosticsReport, DiagnosticsFormat, project_error_report, render_project_error,
-    render_session_error, session_error_report, write_artifact_bytes,
-};
 use thiserror::Error;
 
 type MusiResult<T = ()> = Result<T, MusiError>;
@@ -30,9 +30,9 @@ enum MusiError {
     #[error(transparent)]
     SessionCompilationFailed(#[from] SessionError),
     #[error(transparent)]
-    RuntimeExecutionFailed(#[from] musi_rt::RuntimeError),
+    RuntimeExecutionFailed(#[from] RuntimeError),
     #[error(transparent)]
-    ToolingIoFailed(#[from] music_tooling::ToolingError),
+    ToolingIoFailed(#[from] ToolingError),
     #[error(transparent)]
     JsonSerializationFailed(#[from] serde_json::Error),
     #[error("current directory unavailable")]
@@ -88,7 +88,7 @@ fn new_package(name: &str) -> MusiResult {
             name: name.to_owned(),
         });
     }
-    fs::create_dir_all(&root).map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
+    fs::create_dir_all(&root).map_err(|source| ToolingError::ToolingIoFailed {
         path: root.clone(),
         source,
     })?;
@@ -99,18 +99,18 @@ fn new_package(name: &str) -> MusiResult {
             name
         ),
     )
-    .map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
+    .map_err(|source| ToolingError::ToolingIoFailed {
         path: root.join("musi.json"),
         source,
     })?;
     fs::write(root.join("index.ms"), "export let main () : Int := 42;\n").map_err(|source| {
-        music_tooling::ToolingError::ToolingIoFailed {
+        ToolingError::ToolingIoFailed {
             path: root.join("index.ms"),
             source,
         }
     })?;
     fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
-        music_tooling::ToolingError::ToolingIoFailed {
+        ToolingError::ToolingIoFailed {
             path: root.join(".gitignore"),
             source,
         }
@@ -259,7 +259,7 @@ fn run_task_command(project: &Project, task: &TaskSpec) -> MusiResult {
         .args(["-lc", task.command.as_str()])
         .current_dir(project.root_dir())
         .status();
-    let status = status.map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
+    let status = status.map_err(|source| ToolingError::ToolingIoFailed {
         path: project.root_dir().to_path_buf(),
         source,
     })?;

@@ -6,7 +6,7 @@ mod store;
 #[cfg(test)]
 use music_base::Diag;
 use music_base::{Source, SourceId, SourceMap};
-use music_names::Interner;
+use music_names::{Interner, Symbol};
 
 use crate::api::{SessionOptions, SessionStats};
 
@@ -57,6 +57,11 @@ impl Session {
     #[must_use]
     pub fn source(&self, id: SourceId) -> Option<&Source> {
         self.store.sources.get(id)
+    }
+
+    #[must_use]
+    pub fn resolve_symbol(&self, symbol: Symbol) -> &str {
+        self.interner.resolve(symbol)
     }
 
     #[cfg(test)]

@@ -1,4 +1,4 @@
-use music_bc::descriptor::ExportTarget;
+use music_seam::descriptor::ExportTarget;
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
 

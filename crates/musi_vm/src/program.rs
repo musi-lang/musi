@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use music_assembly::decode_binary;
-use music_bc::descriptor::ExportTarget;
-use music_bc::{Artifact, CodeEntry, ExportId, Instruction, LabelId, MethodId, StringId, TypeId};
+use music_seam::decode_binary;
+use music_seam::descriptor::ExportTarget;
+use music_seam::{Artifact, CodeEntry, ExportId, Instruction, LabelId, MethodId, StringId, TypeId};
 use music_term::TypeTerm;
 
 use super::opcode::classify_opcode;
