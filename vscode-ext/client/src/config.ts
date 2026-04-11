@@ -3,18 +3,8 @@ import * as vscode from "vscode";
 export interface RuntimeConfig {
 	readonly args: string[];
 	readonly env: Record<string, string>;
-	readonly inheritEnv: boolean;
 	readonly envFile: string;
 	readonly cwd: string;
-}
-
-export interface CompilerConfig {
-	readonly path: string | null;
-	readonly args: string[];
-	readonly target: string;
-	readonly strict: boolean;
-	readonly noEmitOnError: boolean;
-	readonly buildBeforeRun: boolean;
 }
 
 export interface TerminalConfig {
@@ -25,8 +15,8 @@ export interface TerminalConfig {
 
 export interface RunConfiguration {
 	readonly name: string;
-	readonly file?: string;
-	readonly compilerArgs?: string[];
+	readonly entry?: string;
+	readonly cliArgs?: string[];
 	readonly runtimeArgs?: string[];
 	readonly env?: Record<string, string>;
 	readonly envFile?: string;
@@ -34,14 +24,10 @@ export interface RunConfiguration {
 	readonly preLaunchTask?: string;
 }
 
-/**
- * Extension configuration values from VS Code settings.
- */
 export interface Config {
 	readonly cliPath: string;
 	readonly checkOnSave: boolean;
 	readonly runtime: RuntimeConfig;
-	readonly compiler: CompilerConfig;
 	readonly terminal: TerminalConfig;
 	readonly runConfigurations: RunConfiguration[];
 }
@@ -49,18 +35,8 @@ export interface Config {
 const RUNTIME_DEFAULTS: RuntimeConfig = {
 	args: [],
 	env: {},
-	inheritEnv: true,
 	envFile: "",
 	cwd: "",
-};
-
-const COMPILER_DEFAULTS: CompilerConfig = {
-	path: null,
-	args: [],
-	target: "MS2025",
-	strict: false,
-	noEmitOnError: true,
-	buildBeforeRun: true,
 };
 
 const TERMINAL_DEFAULTS: TerminalConfig = {
@@ -73,15 +49,10 @@ export const CONFIG_DEFAULTS: Config = {
 	cliPath: "musi",
 	checkOnSave: true,
 	runtime: RUNTIME_DEFAULTS,
-	compiler: COMPILER_DEFAULTS,
 	terminal: TERMINAL_DEFAULTS,
 	runConfigurations: [],
 };
 
-/**
- * Retrieve current Musi extension configuration from VS Code settings.
- * Falls back to defaults for any unset values.
- */
 export function getConfig(): Config {
 	const cfg = vscode.workspace.getConfiguration("musi");
 
@@ -91,23 +62,8 @@ export function getConfig(): Config {
 		runtime: {
 			args: cfg.get("runtime.args", RUNTIME_DEFAULTS.args),
 			env: cfg.get("runtime.env", RUNTIME_DEFAULTS.env),
-			inheritEnv: cfg.get("runtime.inheritEnv", RUNTIME_DEFAULTS.inheritEnv),
 			envFile: cfg.get("runtime.envFile", RUNTIME_DEFAULTS.envFile),
 			cwd: cfg.get("runtime.cwd", RUNTIME_DEFAULTS.cwd),
-		},
-		compiler: {
-			path: cfg.get("compiler.path", COMPILER_DEFAULTS.path),
-			args: cfg.get("compiler.args", COMPILER_DEFAULTS.args),
-			target: cfg.get("compiler.target", COMPILER_DEFAULTS.target),
-			strict: cfg.get("compiler.strict", COMPILER_DEFAULTS.strict),
-			noEmitOnError: cfg.get(
-				"compiler.noEmitOnError",
-				COMPILER_DEFAULTS.noEmitOnError,
-			),
-			buildBeforeRun: cfg.get(
-				"compiler.buildBeforeRun",
-				COMPILER_DEFAULTS.buildBeforeRun,
-			),
 		},
 		terminal: {
 			clearBeforeRun: cfg.get(
@@ -127,11 +83,6 @@ export function getConfig(): Config {
 	};
 }
 
-/**
- * Subscribe to configuration changes for Musi settings.
- * @param callback Function to invoke when any `musi.*` setting changes.
- * @returns Disposable to unsubscribe from changes.
- */
 export function onConfigChange(
 	callback: (event: vscode.ConfigurationChangeEvent) => void,
 ): vscode.Disposable {

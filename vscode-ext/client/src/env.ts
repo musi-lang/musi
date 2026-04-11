@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as vscode from "vscode";
 
 export function parseEnvFile(filePath: string): Record<string, string> {
 	const env: Record<string, string> = {};
@@ -14,12 +13,12 @@ export function parseEnvFile(filePath: string): Record<string, string> {
 		if (!trimmed || trimmed.startsWith("#")) {
 			continue;
 		}
-		const eqIdx = trimmed.indexOf("=");
-		if (eqIdx < 0) {
+		const separator = trimmed.indexOf("=");
+		if (separator < 0) {
 			continue;
 		}
-		const key = trimmed.slice(0, eqIdx).trim();
-		let value = trimmed.slice(eqIdx + 1).trim();
+		const key = trimmed.slice(0, separator).trim();
+		let value = trimmed.slice(separator + 1).trim();
 		if (
 			(value.startsWith('"') && value.endsWith('"')) ||
 			(value.startsWith("'") && value.endsWith("'"))
@@ -31,26 +30,22 @@ export function parseEnvFile(filePath: string): Record<string, string> {
 	return env;
 }
 
-export function resolveEnvFile(envFile: string): string {
+export function resolveEnvFile(envFile: string, baseDir: string): string {
 	if (!envFile) {
 		return "";
 	}
 	if (path.isAbsolute(envFile)) {
 		return envFile;
 	}
-	const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!wsFolder) {
-		return envFile;
-	}
-	return path.join(wsFolder, envFile);
+	return path.join(baseDir, envFile);
 }
 
 export function mergeEnv(
 	...sources: Record<string, string>[]
 ): Record<string, string> {
 	const merged: Record<string, string> = {};
-	for (const src of sources) {
-		Object.assign(merged, src);
+	for (const source of sources) {
+		Object.assign(merged, source);
 	}
 	return merged;
 }

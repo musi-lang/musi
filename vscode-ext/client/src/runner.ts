@@ -1,178 +1,254 @@
 import { spawn } from "node:child_process";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { findCliPath, showCliNotFoundUI } from "./bootstrap.ts";
 import type { RunConfiguration } from "./config.ts";
 import { getConfig } from "./config.ts";
 import { mergeEnv, parseEnvFile, resolveEnvFile } from "./env.ts";
+import type { MsTaskSpec, PackageRoot } from "./types.ts";
 import { TERMINAL_NAME } from "./utils.ts";
 
-let _cachedCompilerPath: string | undefined;
-
-export interface ExecutionRequest {
-	readonly file: string;
-	readonly compilerArgs: string[];
+export interface PackageExecutionRequest {
+	readonly pkg: PackageRoot;
+	readonly entry?: string;
+	readonly cliArgs: string[];
 	readonly runtimeArgs: string[];
 	readonly env: Record<string, string>;
 	readonly cwd: string;
-	readonly buildBeforeRun: boolean;
+	readonly preLaunchTask?: string;
 }
 
-export function buildExecutionRequest(
-	file: string,
-	runConfig?: RunConfiguration,
-): ExecutionRequest {
-	const config = getConfig();
-	const rt = config.runtime;
-	const cc = config.compiler;
-
-	const envFileVars = parseEnvFile(
-		resolveEnvFile(runConfig?.envFile ?? rt.envFile),
-	);
-	const env = mergeEnv(envFileVars, rt.env, runConfig?.env ?? {});
-
-	return {
-		file: runConfig?.file ?? file,
-		compilerArgs: [...cc.args, ...(runConfig?.compilerArgs ?? [])],
-		runtimeArgs: [...rt.args, ...(runConfig?.runtimeArgs ?? [])],
-		env,
-		cwd: runConfig?.cwd ?? rt.cwd,
-		buildBeforeRun: cc.buildBeforeRun,
-	};
+export interface DiagnosticRangePoint {
+	readonly line: number;
+	readonly character: number;
 }
 
-export async function findCompilerPath(): Promise<string | undefined> {
-	if (_cachedCompilerPath) {
-		return _cachedCompilerPath;
-	}
-
-	const config = getConfig();
-	if (config.compiler.path) {
-		if (fs.existsSync(config.compiler.path)) {
-			_cachedCompilerPath = config.compiler.path;
-			return _cachedCompilerPath;
-		}
-	}
-
-	const cliPath = findCliPath();
-	if (cliPath) {
-		// musi compiler is co-located with the musi CLI - both built from the same cargo workspace
-		const dir = path.dirname(cliPath);
-		const musicPath = path.join(dir, "musi");
-		if (fs.existsSync(musicPath)) {
-			_cachedCompilerPath = musicPath;
-			return _cachedCompilerPath;
-		}
-	}
-
-	return undefined;
+export interface DiagnosticRangePayload {
+	readonly start: DiagnosticRangePoint;
+	readonly end: DiagnosticRangePoint;
 }
 
-export function clearCompilerPathCache() {
-	_cachedCompilerPath = undefined;
+export interface DiagnosticLabelPayload {
+	readonly file?: string;
+	readonly message?: string;
+	readonly range?: DiagnosticRangePayload;
 }
 
-export interface TestProcessResult {
+export interface DiagnosticPayload {
+	readonly file?: string;
+	readonly severity?: string;
+	readonly level?: string;
+	readonly code?: string;
+	readonly message: string;
+	readonly range?: DiagnosticRangePayload;
+	readonly primaryRange?: DiagnosticRangePayload;
+	readonly labels?: DiagnosticLabelPayload[];
+	readonly notes?: string[];
+	readonly hint?: string;
+}
+
+export interface StructuredDiagnosticsPayload {
+	readonly diagnostics: DiagnosticPayload[];
+}
+
+export interface StructuredCheckResult {
 	readonly exitCode: number;
 	readonly stdout: string;
 	readonly stderr: string;
+	readonly payload: StructuredDiagnosticsPayload;
 }
 
-export async function spawnTestProcess(
-	request: ExecutionRequest,
-	nameFilter?: string,
-): Promise<TestProcessResult> {
-	const compilerPath = await findCompilerPath();
-	if (!compilerPath) {
-		return { exitCode: 1, stdout: "", stderr: "Compiler not found" };
-	}
-
-	const args: string[] = ["test", request.file];
-	if (nameFilter) {
-		args.push("--name", nameFilter);
-	}
-
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-	return new Promise((resolve) => {
-		const proc = spawn(compilerPath, args, {
-			cwd: request.cwd || workspaceRoot || undefined,
-			env: { ...process.env, ...request.env },
-			stdio: ["ignore", "pipe", "pipe"],
-		});
-
-		const timeout = setTimeout(() => {
-			proc.kill();
-		}, 30_000);
-
-		let stdout = "";
-		let stderr = "";
-		proc.stdout.on("data", (d: Buffer) => {
-			stdout += d.toString();
-		});
-		proc.stderr.on("data", (d: Buffer) => {
-			stderr += d.toString();
-		});
-		proc.on("close", (code) => {
-			clearTimeout(timeout);
-			resolve({ exitCode: code ?? 1, stdout, stderr });
-		});
-		proc.on("error", (err) => {
-			clearTimeout(timeout);
-			resolve({ exitCode: 1, stdout: "", stderr: err.message });
-		});
-	});
+function shellJoin(parts: readonly string[]): string {
+	return parts.map((part) => JSON.stringify(part)).join(" ");
 }
 
-export async function executeInTerminal(
-	request: ExecutionRequest,
-	subcommand: "run" | "build" | "check" | "test",
-	nameFilter?: string,
-): Promise<void> {
+function resolveCwd(pkg: PackageRoot, cwdOverride?: string): string {
+	if (!cwdOverride) {
+		return pkg.rootDir;
+	}
+	if (path.isAbsolute(cwdOverride)) {
+		return cwdOverride;
+	}
+	return path.join(pkg.rootDir, cwdOverride);
+}
+
+function buildEnv(
+	pkg: PackageRoot,
+	runConfig?: RunConfiguration,
+): Record<string, string> {
+	const runtime = getConfig().runtime;
+	const envFileVars = parseEnvFile(
+		resolveEnvFile(runConfig?.envFile ?? runtime.envFile, pkg.rootDir),
+	);
+	return mergeEnv(runtime.env, envFileVars, runConfig?.env ?? {});
+}
+
+function terminalForRequest(request: PackageExecutionRequest): vscode.Terminal {
+	const terminalConfig = getConfig().terminal;
+	const options: vscode.TerminalOptions = {
+		name: TERMINAL_NAME,
+		cwd: request.cwd,
+		...(Object.keys(request.env).length > 0 ? { env: request.env } : {}),
+	};
+
+	if (terminalConfig.reuseTerminal) {
+		return (
+			vscode.window.terminals.find(
+				(terminal) => terminal.name === TERMINAL_NAME,
+			) ?? vscode.window.createTerminal(options)
+		);
+	}
+	return vscode.window.createTerminal(options);
+}
+
+export function buildPackageExecutionRequest(
+	pkg: PackageRoot,
+	runConfig?: RunConfiguration,
+): PackageExecutionRequest {
 	const config = getConfig();
-	const tc = config.terminal;
+	return {
+		pkg,
+		...(runConfig?.entry !== undefined ? { entry: runConfig.entry } : {}),
+		cliArgs: [...(runConfig?.cliArgs ?? [])],
+		runtimeArgs: [...config.runtime.args, ...(runConfig?.runtimeArgs ?? [])],
+		env: buildEnv(pkg, runConfig),
+		cwd: resolveCwd(pkg, runConfig?.cwd ?? config.runtime.cwd),
+		...(runConfig?.preLaunchTask !== undefined
+			? { preLaunchTask: runConfig.preLaunchTask }
+			: {}),
+	};
+}
 
-	const compilerPath = await findCompilerPath();
-	if (!compilerPath) {
+export async function executePackageCommandInTerminal(
+	request: PackageExecutionRequest,
+	subcommand: "run" | "build" | "test",
+	taskPlan: readonly MsTaskSpec[] = [],
+): Promise<void> {
+	const cliPath = findCliPath();
+	if (!cliPath) {
 		await showCliNotFoundUI();
 		return;
 	}
 
-	const args: string[] = [subcommand];
-	if (subcommand === "run" || subcommand === "build") {
-		args.push(...request.compilerArgs);
-	}
-	args.push(JSON.stringify(request.file));
-	if (subcommand === "test" && nameFilter) {
-		args.push("--name", JSON.stringify(nameFilter));
+	const terminal = terminalForRequest(request);
+	const terminalConfig = getConfig().terminal;
+	const commands = taskPlan.map((task) => task.command);
+	const args = [cliPath, subcommand, ...request.cliArgs];
+
+	if (request.entry) {
+		args.push(request.entry);
 	}
 	if (subcommand === "run" && request.runtimeArgs.length > 0) {
 		args.push("--", ...request.runtimeArgs);
 	}
 
-	const cmd = `${JSON.stringify(compilerPath)} ${args.join(" ")}`;
+	commands.push(shellJoin(args));
 
-	const terminalOptions: vscode.TerminalOptions = {
-		name: TERMINAL_NAME,
-		...(Object.keys(request.env).length > 0 ? { env: request.env } : {}),
-		...(request.cwd ? { cwd: request.cwd } : {}),
-	};
-
-	let terminal: vscode.Terminal;
-	if (tc.reuseTerminal) {
-		terminal =
-			vscode.window.terminals.find((t) => t.name === TERMINAL_NAME) ??
-			vscode.window.createTerminal(terminalOptions);
-	} else {
-		terminal = vscode.window.createTerminal(terminalOptions);
-	}
-
-	if (tc.clearBeforeRun) {
+	if (terminalConfig.clearBeforeRun) {
 		terminal.sendText("clear");
 	}
-	if (tc.focusOnRun) {
+	if (terminalConfig.focusOnRun) {
 		terminal.show();
 	}
-	terminal.sendText(cmd);
+	terminal.sendText(
+		`cd ${JSON.stringify(request.cwd)} && ${commands.join(" && ")}`,
+	);
+}
+
+export async function executeTaskPlanInTerminal(
+	request: PackageExecutionRequest,
+	taskPlan: readonly MsTaskSpec[],
+): Promise<void> {
+	const terminal = terminalForRequest(request);
+	const terminalConfig = getConfig().terminal;
+	const commands = taskPlan.map((task) => task.command);
+	if (commands.length === 0) {
+		return;
+	}
+
+	if (terminalConfig.clearBeforeRun) {
+		terminal.sendText("clear");
+	}
+	if (terminalConfig.focusOnRun) {
+		terminal.show();
+	}
+	terminal.sendText(
+		`cd ${JSON.stringify(request.cwd)} && ${commands.join(" && ")}`,
+	);
+}
+
+function parseStructuredDiagnostics(
+	stdout: string,
+	stderr: string,
+): StructuredDiagnosticsPayload {
+	const parseCandidate = (
+		text: string,
+	): StructuredDiagnosticsPayload | undefined => {
+		const trimmed = text.trim();
+		if (!trimmed) {
+			return undefined;
+		}
+
+		const parsed = JSON.parse(trimmed) as
+			| StructuredDiagnosticsPayload
+			| DiagnosticPayload[];
+		if (Array.isArray(parsed)) {
+			return { diagnostics: parsed };
+		}
+		if (Array.isArray(parsed.diagnostics)) {
+			return parsed;
+		}
+		throw new Error("structured diagnostics payload missing `diagnostics`");
+	};
+
+	return (
+		parseCandidate(stdout) ?? parseCandidate(stderr) ?? { diagnostics: [] }
+	);
+}
+
+export async function runStructuredPackageCheck(
+	pkg: PackageRoot,
+	signal?: AbortSignal,
+): Promise<StructuredCheckResult> {
+	const cliPath = findCliPath();
+	if (!cliPath) {
+		throw new Error("Musi CLI binary not found");
+	}
+
+	const request = buildPackageExecutionRequest(pkg);
+	const args = ["check", "--diagnostics-format", "json"];
+
+	return new Promise((resolve, reject) => {
+		const proc = spawn(cliPath, args, {
+			cwd: request.cwd,
+			env: { ...process.env, ...request.env },
+			stdio: ["ignore", "pipe", "pipe"],
+			signal,
+		});
+
+		let stdout = "";
+		let stderr = "";
+
+		proc.stdout.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString();
+		});
+		proc.stderr.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString();
+		});
+		proc.on("error", (error) => {
+			reject(error);
+		});
+		proc.on("close", (code) => {
+			try {
+				resolve({
+					exitCode: code ?? 1,
+					stdout,
+					stderr,
+					payload: parseStructuredDiagnostics(stdout, stderr),
+				});
+			} catch (error) {
+				reject(error);
+			}
+		});
+	});
 }
