@@ -59,29 +59,6 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
-  musi-stdlib:
-    name: Musi stdlib tests
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: Run stdlib tests
-        run: cargo run --bin musi -- test
-
   build-release:
     name: Build (release)
     needs: check

@@ -1,20 +1,23 @@
 # Musi
 
-A programming language with a type system, functional features, and a stack-based bytecode VM.
+A programming language with typed effects, a SEAM bytecode pipeline, and a runtime built on `musi:` and `@std`.
 
 > [!WARNING]
-> Musi is `v0.1.0-rc1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
+> Musi is `v0.1.0-alpha.1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
 
 ## What Musi Is
 
-Musi source files use the `.ms` extension. The toolchain has two binaries:
+Musi source files use the `.ms` extension. The repo now ships two user-facing binaries:
 
-| Binary | What it does                                                              |
-| ------ | ------------------------------------------------------------------------- |
-| `musi` | Universal driver - run, check, build, test, format, lint, manage projects |
-| `msc`  | Standalone compiler - type-check and compile without the VM               |
+| Binary  | What it does                                  |
+| ------- | --------------------------------------------- |
+| `music` | Direct `.ms` and `.seam` work                 |
+| `musi`  | Package-aware manifest and workspace workflow |
 
-You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.seam` bytecode without running it).
+- `musi:...` is the low-level capability namespace.
+- `@std/<family>` is the standard library built on top of `musi:`.
+- `@std` re-exports the standard-library families.
+- `*.test.ms` files export `test`; `musi test` runs them through `musi:test`.
 
 ## Prerequisites
 
@@ -55,7 +58,7 @@ sudo dnf install libffi-devel
 
 ### 3. Git
 
-You probably already have this. If not: <https://git-scm.com/downloads>
+If you do not already have Git: <https://git-scm.com/downloads>
 
 ## Install from Source
 
@@ -69,9 +72,8 @@ cargo build --release
 
 Binaries land in `./target/release/`:
 
-- `musi` (toolchain driver)
-- `msc` (standalone compiler)
-- `msc_lsp` (LSP server)
+- `music`
+- `musi`
 
 Add to your PATH:
 
@@ -95,69 +97,137 @@ hello/
   .gitignore
 ```
 
-Look at the generated `index.ms`:
-
-```musi
-import "@std/rt" as rt;
-
-rt.writeln("hello, world!");
-```
-
 Run it:
 
 ```bash
 musi run
 ```
 
-Other commands:
+Current commands:
 
 ```bash
-musi check              # type-check without running
-musi build              # compile to .seam bytecode
-musi exec index.seam    # run compiled bytecode directly
+musi check              # type-check the owning package
+musi build              # compile the package entry to .seam bytecode
+musi run                # run the package entry
 musi test               # discover and run *.test.ms files
-musi fmt                # format source files
-musi lint               # lint source files
+music check index.ms    # check one direct source graph
+music build index.ms    # emit one direct .seam artifact
+music run index.seam    # run compiled bytecode directly
 ```
 
-## A Taste of the Language
+## Imports and Packages
 
-TODO
+- `@std` is the first-party standard library root namespace under `packages/std`.
+- `@std/<family>` is the canonical import shape for standard library code such as `@std/bytes`, `@std/math`, `@std/assert`, `@std/option`, `@std/result`, and `@std/testing`.
+- `@std` re-exports those family modules directly from its root module.
+- `musi:...` is the compiler-owned intrinsic namespace for low-level host/runtime capabilities.
+- Prelude names such as builtin types and core classes are injected by the compiler. They are not loaded from `@std`.
+
+Rules:
+
+- Standard library code should prefer family imports such as `@std/bytes` and `@std/math`.
+- Root imports through `@std` are supported.
+- `@std` is the only first-party package family.
+- Low-level runtime capabilities live in `musi:`.
+- Test files export `test`, not `suite`.
+
+Import style:
+
+```musi
+let Bytes := import "@std/bytes";
+let Math := import "@std/math";
+```
+
+Root import is supported:
+
+```musi
+let Std := import "@std";
+let Bytes := Std.Bytes;
+let Math := Std.Math;
+```
+
+## Example
+
+```musi
+let Bytes := import "@std/bytes";
+let Math := import "@std/math";
+
+export let normalized_port () : Int := (
+  let configured := Option.none[Int]();
+  let fallback := 8080;
+  Math.clamp(Option.unwrap_or[Int](configured, fallback), 1024, 65535)
+);
+
+export let payload () : Array[Int] :=
+  Bytes.concat([1, 2, 3], [4, 5]);
+
+export let main () : Int := normalized_port();
+```
+
+Test:
+
+```musi
+let Testing := import "@std/testing";
+let Std := import "@std";
+
+export let test () := (
+  let (Math, Option) := (Std.Math, Std.Option);
+  Testing.describe("app");
+  Testing.it("normalizes default port", Testing.to_be(Math.clamp(Option.unwrap_or[Int](Option.none[Int](), 8080), 1024, 65535), 8080));
+  Testing.end_describe()
+);
+```
+
+## Runtime
+
+- `musi_vm` executes validated SEAM programs.
+- `musi_rt` is the source-aware runtime layer used by the repo tooling.
+- `musi_native` is the first-party native host adapter behind low-level runtime capabilities.
+- `music` is the direct source/artifact CLI.
+- `musi` is the package-aware CLI.
 
 ## Project Structure
 
-| Crate          | Role                                          |
-| -------------- | --------------------------------------------- |
-| `msc`          | Compiler library + CLI                        |
-| `musi`         | Toolchain driver CLI                          |
-| `msc_lsp`      | LSP server                                    |
-| `msc_shared`   | Spans, source database, interner, diagnostics |
-| `msc_lex`      | Lexer                                         |
-| `msc_ast`      | AST node types                                |
-| `msc_parse`    | Parser                                        |
-| `msc_sema`     | Semantic analysis / type-checker              |
-| `msc_resolve`  | Module resolution                             |
-| `msc_emit`     | Bytecode emitter                              |
-| `msc_bc`       | Bytecode format definitions                   |
-| `msc_vm`       | Bytecode interpreter / VM                     |
-| `msc_builtins` | Standard library runtime + FFI                |
-| `msc_manifest` | `musi.json` parser                            |
+Rust crates live under `crates/`.
+
+First-party Musi packages live under `packages/`.
+
+Canonical reading order:
+
+1. `docs/what/language/syntax.md`
+2. `docs/what/runtime/seam-vm.md`
+3. `docs/how/runtime/runtime-api.md`
+4. `docs/where/workspace-map.md`
+5. `docs/where/stack-map.md`
+
+Grammar and language reference:
+
+- `grammar/Musi.g4`
+- `grammar/Musi.abnf`
+- `docs/what/language/syntax.md`
 
 ## Editor Support
 
-The `msc_lsp` binary is built alongside the compiler. Point your editor's LSP client at it. A VS Code extension is in development at `tools/vscode/`.
+VS Code syntax support lives under `vscode-ext/`.
 
 ## Testing
 
 ```bash
-cargo test -p msc_parse        # test a specific crate
-cargo clippy -p msc_parse      # lint a specific crate
-musi test                      # run Musi stdlib tests
+cargo test -p music_syntax     # test a specific crate
+cargo clippy -p music_syntax   # lint a specific crate
+musi test                      # run Musi tests
 ```
+
+Test layout:
+
+- co-locate tests as `*.test.ms`
+- export `test`
+- import `@std/testing`
+- emit test events through `musi:test`
 
 Avoid `cargo test --workspace` on machines with less than 16 GB of free RAM.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor workflow and project rules.
 
 ## Contributing
 
@@ -179,4 +249,4 @@ All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## License
 
-MIT OR Apache-2.0 - see [LICENSE](LICENSE) for details.
+[MIT OR Apache-2.0](LICENSE)

@@ -1,0 +1,21 @@
+[package]
+name = "musi_foundation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_module = { path = "../music_module" }
+music_session = { path = "../music_session" }
+music_term = { path = "../music_term" }
+
+[lints]
+workspace = true

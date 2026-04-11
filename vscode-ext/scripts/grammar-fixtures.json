@@ -1,0 +1,45 @@
+{
+	"requiredKeywordPatterns": [
+		"let",
+		"rec",
+		"opaque",
+		"foreign",
+		"data",
+		"effect",
+		"class",
+		"instance",
+		"handle",
+		"perform",
+		"resume",
+		"case",
+		"of",
+		"quote",
+		"forall",
+		"where",
+		"with"
+	],
+	"requiredOperatorPatterns": [
+		":=",
+		":\\?>",
+		":\\?",
+		"=>",
+		"->",
+		"~>",
+		"\\|>",
+		"<:",
+		"\\.\\.\\."
+	],
+	"requiredAccessorScope": "punctuation.accessor.musi",
+	"requiredSnippetPrefixes": [
+		"let",
+		"letrec",
+		"case",
+		"data",
+		"effect",
+		"handle",
+		"quote",
+		"quotemod",
+		"foreign",
+		"forall"
+	]
+}

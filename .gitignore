@@ -1,4 +1,6 @@
 !.github/workflows
+.agents/
+.claude/
 
 .cursorignore
 .cursorindexingignore
@@ -7,7 +9,10 @@
 
 *~
 
-# temporary files which can be created if a process still has a handle open of a deleted file
+# ANTLR generated artifacts
+grammar/.antlr/
+
+# fuse hidden
 .fuse_hidden*
 
 # Metadata left by Dolphin file manager, which comes with KDE Plasma
@@ -19,7 +24,7 @@
 # .nfs files are created when an open file is removed but is still being accessed
 .nfs*
 
-# Log files created by default by the nohup command
+# nohup
 nohup.out
 
 # General
@@ -109,7 +114,7 @@ GitHub.sublime-settings
 Session.vim
 Sessionx.vim
 
-# Temporary
+# netrw
 .netrwhist
 *~
 # Auto-generated tag files
@@ -182,6 +187,8 @@ target
 #.idea/
 .claude/worktrees/
 .claude/session-handoff.md
+.worktrees/
+local/
 
 # Logs
 logs

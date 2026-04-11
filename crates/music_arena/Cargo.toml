@@ -1,0 +1,13 @@
+[package]
+name = "music_arena"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Typed ids and arena-backed storage for canonical compiler crates"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

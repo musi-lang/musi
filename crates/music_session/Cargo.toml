@@ -1,0 +1,28 @@
+[package]
+name = "music_session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_seam = { path = "../music_seam" }
+music_base = { path = "../music_base" }
+music_emit = { path = "../music_emit" }
+music_ir = { path = "../music_ir" }
+music_module = { path = "../music_module" }
+music_names = { path = "../music_names" }
+music_resolve = { path = "../music_resolve" }
+music_sema = { path = "../music_sema" }
+music_syntax = { path = "../music_syntax" }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

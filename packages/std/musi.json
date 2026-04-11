@@ -1,0 +1,16 @@
+{
+    "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json",
+    "name": "@std",
+    "version": "0.1.0",
+    "description": "The Musi standard library.",
+    "main": "./index.ms",
+    "exports": {
+        ".": "./index.ms",
+        "./assert": "./assert/index.ms",
+        "./bytes": "./bytes/index.ms",
+        "./math": "./math/index.ms",
+        "./option": "./option/index.ms",
+        "./result": "./result/index.ms",
+        "./testing": "./testing/index.ms"
+    }
+}

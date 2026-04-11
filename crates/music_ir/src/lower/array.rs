@@ -1,0 +1,196 @@
+use super::*;
+
+pub(super) fn lower_array_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    items: SliceRange<HirArrayItem>,
+) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let array_items = sema.module().store.array_items.get(items);
+    if !array_items.iter().any(|array_item| array_item.spread) {
+        return IrExprKind::Array {
+            ty_name: render_ty_name(
+                sema,
+                sema.try_expr_ty(expr_id)
+                    .expect("expr type missing for array literal"),
+                interner,
+            ),
+            items: array_items
+                .iter()
+                .map(|array_item| lower_expr(ctx, array_item.expr))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        };
+    }
+
+    let origin = expr_origin(sema, expr_id);
+    let mut prelude = Vec::<IrExpr>::new();
+    let mut parts = Vec::<IrSeqPart>::new();
+    let mut has_runtime_spread = false;
+    for array_item in array_items {
+        let temp_expr = lower_item_temp(ctx, origin, array_item.expr, &mut prelude);
+        if !array_item.spread {
+            parts.push(IrSeqPart::Expr(temp_expr));
+            continue;
+        }
+        has_runtime_spread |=
+            append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts);
+    }
+
+    prelude.push(IrExpr {
+        origin,
+        kind: array_tail_kind(sema, interner, expr_id, has_runtime_spread, parts),
+    });
+    IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
+    }
+}
+
+fn expr_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
+    let origin = sema.module().store.exprs.get(expr_id).origin;
+    IrOrigin {
+        source_id: origin.source_id,
+        span: origin.span,
+    }
+}
+
+fn lower_item_temp(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    expr_id: HirExprId,
+    prelude: &mut Vec<IrExpr>,
+) -> IrExpr {
+    let temp = fresh_temp(ctx);
+    prelude.push(IrExpr {
+        origin,
+        kind: IrExprKind::TempLet {
+            temp,
+            value: Box::new(lower_expr(ctx, expr_id)),
+        },
+    });
+    IrExpr {
+        origin,
+        kind: IrExprKind::Temp { temp },
+    }
+}
+
+fn append_array_spread_parts(
+    sema: &SemaModule,
+    origin: IrOrigin,
+    spread_expr: HirExprId,
+    temp_expr: &IrExpr,
+    parts: &mut Vec<IrSeqPart>,
+) -> bool {
+    let spread_ty = sema
+        .try_expr_ty(spread_expr)
+        .expect("expr type missing for array spread");
+    match &sema.ty(spread_ty).kind {
+        HirTyKind::Tuple { items } => {
+            for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
+                let Ok(index_u32) = u32::try_from(index) else {
+                    continue;
+                };
+                parts.push(IrSeqPart::Expr(project_index(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
+            }
+            false
+        }
+        HirTyKind::Array { dims, .. } => {
+            append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
+        }
+        _ => invalid_lowering_path("array spread source is not tuple/array"),
+    }
+}
+
+fn append_array_dim_spread_parts(
+    sema: &SemaModule,
+    origin: IrOrigin,
+    dims: &SliceRange<HirDim>,
+    temp_expr: &IrExpr,
+    parts: &mut Vec<IrSeqPart>,
+) -> bool {
+    let dims_vec = sema.module().store.dims.get(dims.clone());
+    if dims_vec.is_empty() {
+        parts.push(IrSeqPart::Spread(temp_expr.clone()));
+        return true;
+    }
+    if dims_vec.len() != 1 {
+        invalid_lowering_path("array spread requires 1D array");
+    }
+    match dims_vec[0] {
+        HirDim::Int(len) => {
+            for index_u32 in 0..len {
+                parts.push(IrSeqPart::Expr(project_index(
+                    origin,
+                    temp_expr.clone(),
+                    index_u32,
+                )));
+            }
+            false
+        }
+        HirDim::Unknown | HirDim::Name(_) => {
+            parts.push(IrSeqPart::Spread(temp_expr.clone()));
+            true
+        }
+    }
+}
+
+fn project_index(origin: IrOrigin, base: IrExpr, index_u32: u32) -> IrExpr {
+    IrExpr {
+        origin,
+        kind: IrExprKind::Index {
+            base: Box::new(base),
+            indices: vec![IrExpr {
+                origin,
+                kind: IrExprKind::Lit(IrLit::Int {
+                    raw: index_u32.to_string().into(),
+                }),
+            }]
+            .into_boxed_slice(),
+        },
+    }
+}
+
+fn array_tail_kind(
+    sema: &SemaModule,
+    interner: &Interner,
+    expr_id: HirExprId,
+    has_runtime_spread: bool,
+    parts: Vec<IrSeqPart>,
+) -> IrExprKind {
+    if has_runtime_spread {
+        return IrExprKind::ArrayCat {
+            ty_name: render_ty_name(
+                sema,
+                sema.try_expr_ty(expr_id)
+                    .expect("expr type missing for array cat"),
+                interner,
+            ),
+            parts: parts.into_boxed_slice(),
+        };
+    }
+    let items = parts
+        .into_iter()
+        .map(|part| match part {
+            IrSeqPart::Expr(expr) => Some(expr),
+            IrSeqPart::Spread(_) => None,
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(Vec::into_boxed_slice);
+    let Some(items) = items else {
+        invalid_lowering_path("array spread lowering invariant");
+    };
+    IrExprKind::Array {
+        ty_name: render_ty_name(
+            sema,
+            sema.try_expr_ty(expr_id)
+                .expect("expr type missing for array literal"),
+            interner,
+        ),
+        items,
+    }
+}

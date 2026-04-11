@@ -1,0 +1,15 @@
+[package]
+name = "music_names"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Interning, identifiers, known symbols, and name-resolution data structures"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_base = { path = "../music_base" }
+music_arena = { path = "../music_arena" }
+
+[lints]
+workspace = true

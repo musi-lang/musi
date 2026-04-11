@@ -1,0 +1,59 @@
+include = ["**/*.rs"]
+exclude = ["target/**", ".git/**"]
+
+[output]
+format = "human"
+with_clippy = false
+
+[rules.absolute_module_paths]
+level = "deny"
+allow_prefixes = []
+roots = [
+  "std",
+  "core",
+  "alloc",
+  "crate",
+  "music",
+  "music_arena",
+  "music_base",
+  "music_emit",
+  "music_hir",
+  "music_ir",
+  "music_module",
+  "music_names",
+  "music_resolve",
+  "music_seam",
+  "music_sema",
+  "music_session",
+  "music_syntax",
+  "music_term",
+  "musi",
+  "musi_foundation",
+  "musi_lsp",
+  "musi_native",
+  "musi_project",
+  "musi_rt",
+  "musi_tooling",
+  "musi_vm",
+]
+allow_crate_root_macros = true
+allow_crate_root_consts = true
+allow_crate_root_fn_calls = true
+
+[rules.absolute_filesystem_paths]
+level = "warn"
+check_comments = false
+allow_globs = []
+allow_regex = []
+
+[rules.file_complexity]
+level = "warn"
+
+[rules.duplicate_logic]
+level = "warn"
+
+[rules.duplicate_types_alias_candidate]
+level = "warn"
+
+[rules.srp_heuristic]
+level = "warn"

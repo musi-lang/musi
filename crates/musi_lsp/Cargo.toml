@@ -1,0 +1,21 @@
+[package]
+name = "musi_lsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-lsp = { version = "0.2.3", features = ["tokio", "stdio"] }
+musi_tooling = { path = "../musi_tooling" }
+tokio = { version = "1.51.1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

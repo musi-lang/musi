@@ -1,0 +1,289 @@
+{
+	"name": "vscode-musi",
+	"displayName": "Musi",
+	"description": "Musi package-aware syntax, LSP, and CLI tooling",
+	"version": "0.1.0-alpha.1",
+	"author": {
+		"name": "xsyetopz"
+	},
+	"license": "MIT",
+	"private": true,
+	"publisher": "musi-lang",
+	"homepage": "https://github.com/musi-lang/musi",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/musi-lang/musi.git"
+	},
+	"bugs": {
+		"url": "https://github.com/musi-lang/musi/issues"
+	},
+	"keywords": [
+		"Musi"
+	],
+	"categories": [
+		"Linters",
+		"Programming Languages"
+	],
+	"icon": "logo.png",
+	"galleryBanner": {
+		"color": "#cc0000",
+		"theme": "dark"
+	},
+	"readme": "README.md",
+	"main": "./dist/extension.js",
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"activationEvents": [
+		"onLanguage:musi",
+		"workspaceContains:**/musi.json"
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "musi",
+				"aliases": [
+					"Musi",
+					"musi"
+				],
+				"extensions": [
+					".ms"
+				],
+				"configuration": "language-configuration.json",
+				"icon": {
+					"light": "logo.png",
+					"dark": "logo.png"
+				}
+			},
+			{
+				"id": "musi-injection",
+				"aliases": [
+					"musi-inj"
+				]
+			}
+		],
+		"grammars": [
+			{
+				"language": "musi",
+				"scopeName": "source.musi",
+				"path": "syntaxes/musi.tmLanguage.json",
+				"balancedBracketScopes": [
+					"punctuation.section",
+					"punctuation.definition.type-params"
+				]
+			},
+			{
+				"language": "musi-injection",
+				"path": "syntaxes/musi_codeblock.tmLanguage.json",
+				"scopeName": "text.musi.codeblock",
+				"injectTo": [
+					"text.html.markdown",
+					"text.html.markdown.gfm"
+				],
+				"embeddedLanguages": {
+					"meta.embedded.block.musi": "musi"
+				}
+			}
+		],
+		"snippets": [
+			{
+				"language": "musi",
+				"path": "snippets/musi_snippets.json"
+			}
+		],
+		"commands": [
+			{
+				"command": "musi.runPackageEntry",
+				"title": "Run Package Entry",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.checkPackage",
+				"title": "Check Package",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.buildPackage",
+				"title": "Build Package",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runPackageTests",
+				"title": "Run Package Tests",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runTask",
+				"title": "Run Task",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.selectRunConfiguration",
+				"title": "Select Run Configuration",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runWithArgs",
+				"title": "Run Package Entry With Arguments",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.editRunConfigurations",
+				"title": "Edit Run Configurations",
+				"category": "Musi"
+			}
+		],
+		"keybindings": [],
+		"menus": {
+			"commandPalette": [],
+			"view/item/context": []
+		},
+		"configuration": {
+			"title": "Musi",
+			"properties": {
+				"musi.cliPath": {
+					"type": "string",
+					"default": "musi",
+					"markdownDescription": "Path to the `musi` CLI binary. If not set, the extension searches workspace build outputs, Cargo bin, and PATH."
+				},
+				"musi.lspPath": {
+					"type": "string",
+					"default": "musi_lsp",
+					"markdownDescription": "Path to the `musi_lsp` binary. If not set, the extension searches workspace build outputs, Cargo bin, and PATH."
+				},
+				"musi.checkOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Run fallback CLI checks when LSP diagnostics are unavailable, and keep manifest checks active on save."
+				},
+				"musi.runtime.args": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Extra runtime arguments appended after `--` when running the owning package entry."
+				},
+				"musi.runtime.env": {
+					"type": "object",
+					"additionalProperties": {
+						"type": "string"
+					},
+					"default": {},
+					"description": "Environment variables added to Musi package commands."
+				},
+				"musi.runtime.envFile": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Path to an env file, resolved relative to the owning package root unless absolute."
+				},
+				"musi.runtime.cwd": {
+					"type": "string",
+					"default": "",
+					"description": "Working directory override for package commands, resolved relative to the owning package root unless absolute."
+				},
+				"musi.terminal.clearBeforeRun": {
+					"type": "boolean",
+					"default": false,
+					"description": "Clear the integrated terminal before running a package command."
+				},
+				"musi.terminal.focusOnRun": {
+					"type": "boolean",
+					"default": true,
+					"description": "Focus the integrated terminal when running a package command."
+				},
+				"musi.terminal.reuseTerminal": {
+					"type": "boolean",
+					"default": true,
+					"description": "Reuse the existing Musi terminal instead of opening a new one."
+				},
+				"musi.runConfigurations": {
+					"type": "array",
+					"default": [],
+					"items": {
+						"type": "object",
+						"required": [
+							"name"
+						],
+						"properties": {
+							"name": {
+								"type": "string",
+								"description": "Configuration name."
+							},
+							"entry": {
+								"type": "string",
+								"description": "Package entry override passed to `musi run`."
+							},
+							"cliArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Extra CLI arguments inserted before the entry argument."
+							},
+							"runtimeArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Extra runtime arguments appended after `--`."
+							},
+							"env": {
+								"type": "object",
+								"additionalProperties": {
+									"type": "string"
+								},
+								"description": "Environment variables merged into the package command environment."
+							},
+							"envFile": {
+								"type": "string",
+								"description": "Env file path resolved from the owning package root unless absolute."
+							},
+							"cwd": {
+								"type": "string",
+								"description": "Working directory override resolved from the owning package root unless absolute."
+							},
+							"preLaunchTask": {
+								"type": "string",
+								"description": "Task name from the owning `musi.json` to run before the package entry."
+							}
+						}
+					},
+					"markdownDescription": "Named package-entry run configurations."
+				}
+			}
+		},
+		"jsonValidation": [
+			{
+				"fileMatch": "musi.json",
+				"url": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json"
+			}
+		]
+	},
+	"scripts": {
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs --minify",
+		"grammar:check": "node ./scripts/verify-grammars.mjs",
+		"package": "bun run build && vsce package --no-dependencies",
+		"typecheck": "tsc --noEmit",
+		"biome:check": "bunx biome check . --write --unsafe --max-diagnostics 16384",
+		"biome:format": "bunx biome format . --write --max-diagnostics 16384",
+		"biome:lint": "bunx biome lint . --write --max-diagnostics 16384",
+		"vscode:prepublish": "bun run build"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.11",
+		"@types/bun": "1.3.12",
+		"@types/node": "25.6.0",
+		"@types/vscode": "^1.75.0",
+		"@vscode/vsce": "3.7.1",
+		"typescript": "6.0.2"
+	},
+	"trustedDependencies": [
+		"@biomejs/biome",
+		"@vscode/vsce-sign",
+		"keytar"
+	]
+}

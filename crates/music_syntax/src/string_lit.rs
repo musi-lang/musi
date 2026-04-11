@@ -1,0 +1,326 @@
+use core::fmt;
+use core::str;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringLitErrorKind {
+    LiteralUnterminated,
+    EscapeInvalid,
+    EscapeHexDigitsMissing,
+    EscapeHexDigitInvalid,
+    UnicodeScalarInvalid,
+    RuneScalarCountInvalid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StringLitError {
+    pub kind: StringLitErrorKind,
+    pub offset: usize,
+}
+
+pub type StringLitResult<T> = Result<T, StringLitError>;
+
+impl fmt::Display for StringLitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} at byte {}", self.kind, self.offset)
+    }
+}
+
+/// Decode a quoted string literal into its cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated or contains an
+/// invalid escape sequence.
+pub fn decode_string_lit(raw: &str) -> StringLitResult<String> {
+    decode_delimited(raw, b'"')
+}
+
+/// Decode a rune literal into its scalar value.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated, contains an
+/// invalid escape sequence, or does not decode to exactly one rune.
+pub fn decode_rune_lit(raw: &str) -> StringLitResult<u32> {
+    let s = decode_delimited(raw, b'\'')?;
+    let mut chars = s.chars();
+    let Some(ch) = chars.next() else {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::RuneScalarCountInvalid,
+            offset: 0,
+        });
+    };
+    if chars.next().is_some() {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::RuneScalarCountInvalid,
+            offset: 0,
+        });
+    }
+    Ok(u32::from(ch))
+}
+
+/// Decode a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is malformed or contains an
+/// invalid escape sequence.
+pub fn decode_template_lit(raw: &str) -> StringLitResult<String> {
+    decode_template_no_subst(raw)
+}
+
+/// Decode a template literal without substitutions into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the literal is unterminated or contains an
+/// invalid escape sequence.
+pub fn decode_template_no_subst(raw: &str) -> StringLitResult<String> {
+    decode_delimited(raw, b'`')
+}
+
+/// Decode the head chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
+pub fn decode_template_head(raw: &str) -> StringLitResult<String> {
+    decode_template_chunk(raw, TemplateChunkStyle::Head)
+}
+
+/// Decode a middle chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
+pub fn decode_template_middle(raw: &str) -> StringLitResult<String> {
+    decode_template_chunk(raw, TemplateChunkStyle::Middle)
+}
+
+/// Decode the tail chunk of a template literal into cooked text.
+///
+/// # Errors
+///
+/// Returns `StringLitError` when the chunk delimiters are invalid or the chunk
+/// contains an invalid escape sequence.
+pub fn decode_template_tail(raw: &str) -> StringLitResult<String> {
+    decode_template_chunk(raw, TemplateChunkStyle::Tail)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TemplateChunkStyle {
+    Head,
+    Middle,
+    Tail,
+}
+
+fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> StringLitResult<String> {
+    let b = raw.as_bytes();
+    match style {
+        TemplateChunkStyle::Head => {
+            if b.len() < 3 || b[0] != b'`' || !raw.ends_with("${") {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::LiteralUnterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len() - 2)
+        }
+        TemplateChunkStyle::Middle => {
+            if b.len() < 3 || b[0] != b'}' || !raw.ends_with("${") {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::LiteralUnterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len() - 2)
+        }
+        TemplateChunkStyle::Tail => {
+            if b.len() < 2 || b[0] != b'}' || *b.last().unwrap_or(&0) != b'`' {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::LiteralUnterminated,
+                    offset: 0,
+                });
+            }
+            decode_inner(b, 1, b.len().saturating_sub(1))
+        }
+    }
+}
+
+fn decode_delimited(raw: &str, delim: u8) -> StringLitResult<String> {
+    let raw_bytes = raw.as_bytes();
+    if raw_bytes.len() < 2 || raw_bytes[0] != delim {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::LiteralUnterminated,
+            offset: 0,
+        });
+    }
+    if *raw_bytes.last().unwrap_or(&0) != delim {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::LiteralUnterminated,
+            offset: raw_bytes.len(),
+        });
+    }
+    decode_inner(raw_bytes, 1, raw_bytes.len().saturating_sub(1))
+}
+
+fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> StringLitResult<String> {
+    let mut out = String::new();
+    let mut i: usize = start;
+    while i < end {
+        if raw_bytes.get(i).copied() == Some(b'\\') {
+            i += 1;
+            if i >= end {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::EscapeInvalid,
+                    offset: i.saturating_sub(1),
+                });
+            }
+            let esc = raw_bytes.get(i).copied().unwrap_or(0);
+            match esc {
+                b'\\' => out.push('\\'),
+                b'"' => out.push('"'),
+                b'\'' => out.push('\''),
+                b'`' => out.push('`'),
+                b'$' => out.push('$'),
+                b'n' => out.push('\n'),
+                b'r' => out.push('\r'),
+                b't' => out.push('\t'),
+                b'0' => out.push('\0'),
+                b'x' => {
+                    let (b, next_i) = decode_hex_u8(raw_bytes, i + 1, end)?;
+                    out.push(char::from(b));
+                    i = next_i - 1;
+                }
+                b'u' => {
+                    let (ch, next_i) = decode_unicode_scalar(raw_bytes, i + 1, end)?;
+                    out.push(ch);
+                    i = next_i - 1;
+                }
+                _ => {
+                    return Err(StringLitError {
+                        kind: StringLitErrorKind::EscapeInvalid,
+                        offset: i.saturating_sub(1),
+                    });
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        let Some(slice) = raw_bytes.get(i..end) else {
+            break;
+        };
+        let Ok(s) = str::from_utf8(slice) else {
+            break;
+        };
+        let Some((ch, size)) = s.chars().next().map(|ch| (ch, ch.len_utf8())) else {
+            break;
+        };
+        out.push(ch);
+        i += size;
+    }
+    Ok(out)
+}
+
+fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(u8, usize)> {
+    if start + 2 > end {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::EscapeHexDigitsMissing,
+            offset: start.saturating_sub(2),
+        });
+    }
+    let hi = bytes.get(start).copied().unwrap_or(0);
+    let lo = bytes.get(start + 1).copied().unwrap_or(0);
+    let Some(hi) = hex_value(hi) else {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::EscapeHexDigitInvalid,
+            offset: start,
+        });
+    };
+    let Some(lo) = hex_value(lo) else {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::EscapeHexDigitInvalid,
+            offset: start + 1,
+        });
+    };
+    Ok(((hi << 4) | lo, start + 2))
+}
+
+fn decode_unicode_scalar(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(char, usize)> {
+    let (mut value, mut i) = decode_hex_u32(bytes, start, end, 4)?;
+    match (bytes.get(i).copied(), bytes.get(i + 1).copied()) {
+        (Some(a), Some(b)) if a.is_ascii_hexdigit() && b.is_ascii_hexdigit() => {
+            let Some(a) = hex_value(a) else {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::EscapeHexDigitInvalid,
+                    offset: i,
+                });
+            };
+            let Some(b) = hex_value(b) else {
+                return Err(StringLitError {
+                    kind: StringLitErrorKind::EscapeHexDigitInvalid,
+                    offset: i + 1,
+                });
+            };
+            value = (value << 8) | u32::from((a << 4) | b);
+            i += 2;
+        }
+        (Some(a), _) if a.is_ascii_hexdigit() => {
+            return Err(StringLitError {
+                kind: StringLitErrorKind::EscapeHexDigitsMissing,
+                offset: i,
+            });
+        }
+        _ => {}
+    }
+
+    let Some(ch) = char::from_u32(value) else {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::UnicodeScalarInvalid,
+            offset: start.saturating_sub(2),
+        });
+    };
+    Ok((ch, i))
+}
+
+fn decode_hex_u32(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    digits: usize,
+) -> StringLitResult<(u32, usize)> {
+    if start + digits > end {
+        return Err(StringLitError {
+            kind: StringLitErrorKind::EscapeHexDigitsMissing,
+            offset: start.saturating_sub(2),
+        });
+    }
+    let mut value: u32 = 0;
+    for j in 0..digits {
+        let b = bytes.get(start + j).copied().unwrap_or(0);
+        let Some(v) = hex_value(b) else {
+            return Err(StringLitError {
+                kind: StringLitErrorKind::EscapeHexDigitInvalid,
+                offset: start + j,
+            });
+        };
+        value = (value << 4) | u32::from(v);
+    }
+    Ok((value, start + digits))
+}
+
+const fn hex_value(b: u8) -> Option<u8> {
+    Some(match b {
+        b'0'..=b'9' => b - b'0',
+        b'a'..=b'f' => b - b'a' + 10,
+        b'A'..=b'F' => b - b'A' + 10,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests;

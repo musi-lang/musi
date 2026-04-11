@@ -1,0 +1,654 @@
+; Musi Language - Surface Syntax (RFC 5234 ABNF)
+;
+; Canonical, tool-supported grammar:
+;   `grammar/Musi.g4` (ANTLR4)
+;
+; This file is a strict RFC 5234 ABNF specification of the Musi surface syntax.
+; It is kept aligned with `grammar/Musi.g4`, but does not attempt to model
+; lexer implementation details (priority / maximal munch) inside ABNF.
+;
+; Notes:
+; - The grammar is specified over UTF-8 octets (`octet`).
+; - Trivia (whitespace / newline / comments) is defined for reference. Grammar
+;   productions are written as if trivia is already skipped.
+;
+; ---------------------------------------------------------------------------
+; 0. Core terminals (octets)
+; ---------------------------------------------------------------------------
+octet                              = %x00-FF
+
+lf                                 = %x0A
+
+cr                                 = %x0D
+
+htab                               = %x09
+
+sp                                 = %x20
+
+dquote                             = %x22
+
+squote                             = %x27
+
+backslash                          = %x5C
+
+backtick                           = %x60
+
+dollar                             = %x24
+
+alpha                              = %x41-5A
+                                     / %x61-7A
+
+digit                              = %x30-39
+
+hexdig                             = digit
+                                     / %x41-46
+                                     / %x61-66
+
+underscore                         = %x5F
+
+not-lf                             = %x00-09
+                                     / %x0B-FF
+
+not-cr-or-lf                       = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-FF
+
+not-star                           = %x00-29
+                                     / %x2B-FF  ; OCTET except "*"
+
+not-slash                          = %x00-2E
+                                     / %x30-FF  ; OCTET except "/"
+
+not-dquote-or-backslash            = %x00-21
+                                     / %x23-5B
+                                     / %x5D-FF
+
+not-squote-or-backslash            = %x00-26
+                                     / %x28-5B
+                                     / %x5D-FF
+
+not-dquote-or-backslash-or-newline = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-21
+                                     / %x23-5B
+                                     / %x5D-FF
+
+not-squote-or-backslash-or-newline = %x00-09
+                                     / %x0B-0C
+                                     / %x0E-26
+                                     / %x28-5B
+                                     / %x5D-FF
+
+not-backtick-or-backslash          = %x00-5B
+                                     / %x5D-5F
+                                     / %x61-FF
+; ---------------------------------------------------------------------------
+; 1. Terminals
+; ---------------------------------------------------------------------------
+; --- Keywords (case-sensitive; encoded as %x sequences) ---
+kw-and      = %x61.6E.64
+
+kw-as       = %x61.73
+
+kw-case     = %x63.61.73.65
+
+kw-class    = %x63.6C.61.73.73
+
+kw-data     = %x64.61.74.61
+
+kw-effect   = %x65.66.66.65.63.74
+
+kw-export   = %x65.78.70.6F.72.74
+
+kw-foreign  = %x66.6F.72.65.69.67.6E
+
+kw-forall   = %x66.6F.72.61.6C.6C
+
+kw-handle   = %x68.61.6E.64.6C.65
+
+kw-if       = %x69.66
+
+kw-import   = %x69.6D.70.6F.72.74
+
+kw-in       = %x69.6E
+
+kw-infix    = %x69.6E.66.69.78
+
+kw-infixl   = %x69.6E.66.69.78.6C
+
+kw-infixr   = %x69.6E.66.69.78.72
+
+kw-instance = %x69.6E.73.74.61.6E.63.65
+
+kw-law      = %x6C.61.77
+
+kw-let      = %x6C.65.74
+
+kw-mut      = %x6D.75.74
+
+kw-rec      = %x72.65.63
+
+kw-not      = %x6E.6F.74
+
+kw-of       = %x6F.66
+
+kw-opaque   = %x6F.70.61.71.75.65
+
+kw-or       = %x6F.72
+
+kw-perform  = %x70.65.72.66.6F.72.6D
+
+kw-quote    = %x71.75.6F.74.65
+
+kw-resume   = %x72.65.73.75.6D.65
+
+kw-shl      = %x73.68.6C
+
+kw-shr      = %x73.68.72
+
+kw-where    = %x77.68.65.72.65
+
+kw-with     = %x77.69.74.68
+
+kw-xor      = %x78.6F.72
+; --- Fixed multi-octet tokens ---
+colon-eq           = ":="
+
+colon-question-gt = ":?>"
+
+dot-dot-dot       = "..."
+
+dot-lbrace        = ".{"
+
+dot-lbracket      = ".["
+
+eq-gt             = "=>"
+
+
+minus-gt          = "->"
+
+slash-eq          = "/="
+
+lt-eq             = "<="
+
+lt-colon          = "<:"
+
+gt-eq             = ">="
+
+
+pipe-gt           = "|>"
+
+tilde-gt          = "~>"
+
+colon-question    = ":?"
+; --- Prefixes ---
+at     = "@"
+
+hash   = "#"
+
+bslash = %x5C
+; --- Delimiters / separators ---
+lbrace    = "{"
+
+rbrace    = "}"
+
+lbracket  = "["
+
+rbracket  = "]"
+
+lparen    = "("
+
+rparen    = ")"
+
+comma     = ","
+
+semicolon = ";"
+; --- Single-char operators / punctuation ---
+dot     = "."
+
+colon   = ":"
+
+pipe    = "|"
+
+plus    = "+"
+
+minus   = "-"
+
+star    = "*"
+
+slash   = "/"
+
+percent = "%"
+
+eq      = "="
+
+lt      = "<"
+
+gt      = ">"
+; --- Literals ---
+dec-digits         = digit *(digit / (underscore digit))
+
+hex-digits         = hexdig *(hexdig / (underscore hexdig))
+
+oct-digit          = %x30-37
+
+oct-digits         = oct-digit *(oct-digit / (underscore oct-digit))
+
+bin-digit          = %x30
+                     / %x31  ; "0" / "1"
+
+bin-digits         = bin-digit *(bin-digit / (underscore bin-digit))
+
+exp-part           = (%x65 / %x45) [plus / minus] dec-digits
+
+int-lit            = %x30.78 hex-digits  ; "0x"
+                     / %x30.6F oct-digits  ; "0o"
+                     / %x30.62 bin-digits  ; "0b"
+                     / dec-digits
+
+float-lit          = dec-digits dot dec-digits [exp-part]
+                     / dot dec-digits [exp-part]
+                     / dec-digits exp-part
+
+esc-simple         = squote
+                     / dquote
+                     / backtick
+                     / backslash
+                     / dollar
+                     / %x6E
+                     / %x72
+                     / %x74
+                     / %x30
+
+esc-hex            = %x78 2hexdig
+
+esc-uni            = %x75 4hexdig [2hexdig]
+
+esc-seq            = backslash (esc-simple / esc-hex / esc-uni)
+
+string-body-char   = esc-seq
+                     / not-dquote-or-backslash-or-newline
+
+rune-body-char     = esc-seq
+                     / not-squote-or-backslash-or-newline
+
+string-lit         = dquote *(string-body-char) dquote
+
+template-body-char = esc-seq
+                     / not-backtick-or-backslash
+
+template-no-subst  = backtick *(template-body-char) backtick
+
+template-head      = backtick *(template-body-char) "${"
+
+template-middle    = "}" *(template-body-char) "${"
+
+template-tail      = "}" *(template-body-char) backtick
+
+template-lit       = template-no-subst
+                     / (template-head expr *(template-middle expr)
+                       template-tail)
+;
+; Template literals are lexically stateful in the canonical ANTLR grammar:
+; - Template text may contain raw newlines.
+; - Interpolation ends at the `}` that closes the `${` (i.e. when brace depth returns to 0).
+; - This ABNF specifies the surface spelling only; it does not model brace-nesting or lexer modes.
+rune-lit = squote *(rune-body-char) squote
+
+literal  = int-lit
+           / float-lit
+           / string-lit
+           / rune-lit
+; --- Idents ---
+plain-ident = alpha *(alpha / digit / underscore)
+
+ident       = plain-ident
+
+sym-char    = star
+              / plus
+              / minus
+              / slash
+              / percent
+              / eq
+              / lt
+              / gt
+
+symbolic-op = 2*sym-char
+
+op-single   = plus
+              / minus
+              / star
+              / slash
+              / percent
+              / eq
+              / lt
+              / gt
+
+op-ident    = lparen (symbolic-op / op-single) rparen
+; --- Trivia (skipped) ---
+newline           = lf
+
+ws                = 1*(sp / htab / cr)
+
+line-doc-comment  = "///" *(not-cr-or-lf)
+
+line-comment      = "//" *(not-cr-or-lf)
+
+block-body        = *(not-star / (star not-slash))
+
+block-doc-comment = "/**" block-body "*/"
+
+block-comment     = "/*" block-body "*/"
+
+trivia            = ws
+                    / newline
+                    / line-doc-comment
+                    / line-comment
+                    / block-doc-comment
+                    / block-comment
+; ---------------------------------------------------------------------------
+; 2. Parser grammar (over the token stream, trivia-skipped)
+; ---------------------------------------------------------------------------
+root        = *(root-stmt)
+
+root-stmt   = fixity-decl
+              / stmt
+
+stmt        = expr semicolon
+
+fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
+; --- Expressions (semantic precedence; parse as flat infix chain) ---
+expr              = infix-expr
+
+infix-op          = colon-eq
+                        / pipe-gt
+                        / minus-gt
+                        / tilde-gt
+                        / kw-or
+                        / kw-xor
+                    / kw-and
+                    / eq
+                    / slash-eq
+                    / lt
+                    / gt
+                    / lt-eq
+                    / gt-eq
+                    / kw-in
+                    / kw-shl
+                    / kw-shr
+                    / plus
+                    / minus
+                    / star
+                    / slash
+                    / percent
+                    / symbolic-op
+
+infix-expr        = prefix-expr *(infix-op prefix-expr)
+
+prefix-op         = minus
+                    / kw-not
+                    / kw-mut
+
+prefix-expr       = prefix-op prefix-expr
+                    / postfix-expr
+
+postfix-expr      = atom *(postfix-op)
+
+	postfix-op        = call-op
+	                    / bracket-apply-op
+	                    / index-op
+	                    / record-update-op
+	                    / field-access-op
+	                    / type-test-op
+	                    / type-cast-op
+
+call-op           = lparen [arg-list] rparen
+
+bracket-apply-op  = lbracket [expr-list] rbracket
+
+index-op          = dot-lbracket [expr-list] rbracket
+
+record-update-op  = dot-lbrace [record-fields] rbrace
+
+field-access-op   = dot field-target
+
+	type-test-op      = colon-question expr [kw-as ident]
+
+type-cast-op      = colon-question-gt expr
+
+field-target      = ident
+                    / int-lit
+; --- Atoms ---
+	atom                  = literal
+	                        / template-lit
+	                        / splice
+	                        / ident
+	                        / op-ident
+	                        / pi-expr
+	                        / lambda-expr
+	                        / paren-expr
+	                        / array-expr
+	                        / record-literal-expr
+                        / dot-prefix-expr
+                        / case-expr
+                        / let-expr
+                        / resume-expr
+                        / import-expr
+                        / data-expr
+                        / effect-expr
+                        / class-expr
+                        / instance-expr
+                        / perform-expr
+                        / handle-expr
+                        / quote-expr
+                        / with-mods-expr
+
+pi-expr               = kw-forall lparen ident colon expr rparen (minus-gt /
+                        tilde-gt) expr
+
+lambda-expr           = bslash params [colon expr] eq-gt expr
+
+paren-expr            = lparen rparen
+                        / lparen comma rparen
+                        / lparen semicolon rparen
+                        / lparen grouped-or-tuple-body rparen
+                        / lparen sequence-body rparen
+
+grouped-or-tuple-body = expr [comma [expr-list] [comma]]
+
+sequence-body         = expr *(semicolon expr) [semicolon]
+
+	case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
+	                        case-arm) [pipe] rparen
+
+	case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
+
+	array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
+
+array-items           = array-item *(comma array-item)
+
+array-item            = spread
+                        / expr
+
+record-literal-expr   = lbrace [record-fields] rbrace
+
+record-fields         = comma-pad [record-field *(comma record-field)] comma-pad
+
+record-field          = ident [colon-eq expr]
+                        / spread
+
+spread                = dot-dot-dot expr
+
+dot-prefix-expr       = dot ident [lparen [expr-list] rparen]
+
+resume-expr           = kw-resume [expr]
+
+import-expr           = kw-import expr
+
+let-modifier          = kw-rec
+
+let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
+                        [where-clause] [with-clause] [type-annot] colon-eq expr
+
+bracket-params        = lbracket ident *(comma ident) [comma] rbracket
+
+with-clause           = kw-with effect-set
+
+data-expr             = kw-data lbrace data-body rbrace
+
+data-body             = variant-list
+                        / rec-def-fields
+                        / pipe
+                        / semicolon
+
+variant-list          = [pipe] variant *(pipe variant) [pipe]
+
+variant               = [attrs] ident [colon expr] [colon-eq expr]
+
+rec-def-fields        = [semicolon] rec-def-field *(semicolon rec-def-field)
+                        [semicolon]
+
+rec-def-field         = ident colon expr [colon-eq expr]
+
+effect-expr           = kw-effect lbrace [effect-member *(semicolon
+                        effect-member)] [semicolon] rbrace
+
+effect-member         = fn-decl
+                        / law-decl
+
+class-expr            = kw-class [where-clause] lbrace *(class-member) rbrace
+
+class-member          = (fn-decl / law-decl) [semicolon]
+
+instance-expr         = kw-instance [bracket-params] [where-clause] expr
+                        instance-body
+
+perform-expr          = kw-perform expr
+
+handle-expr           = kw-handle expr kw-with ident kw-of lparen [pipe]
+                        handle-clause *(pipe handle-clause) [pipe] rparen
+
+handle-clause         = ident eq-gt expr
+                        / ident lparen [ident-list] rparen eq-gt expr
+
+foreign-let-group     = lparen 1*(kw-let foreign-binding semicolon) rparen
+
+quote-expr            = kw-quote (lparen expr rparen / lbrace *(stmt) rbrace)
+
+splice                = hash ident
+                        / hash lparen expr rparen
+                        / hash lbracket [expr-list] rbracket
+
+with-attrs-expr       = with-mods-expr
+; `export` is a modifier that applies to an expression (like attributes), not an
+; expression form itself.
+export-mod            = kw-export [kw-opaque]
+
+foreign-mod           = kw-foreign [string-lit]
+
+modifier              = attr
+                        / export-mod
+                        / foreign-mod
+
+with-mods-expr        = attrs [export-mod] [foreign-mod] (expr / foreign-let-group / let-expr)
+                        / export-mod [foreign-mod] (expr / foreign-let-group / let-expr)
+                        / foreign-mod (foreign-let-group / let-expr)
+
+	let-rest              = [let-modifier] pattern [bracket-params] [params]
+	                        [where-clause] [with-clause] [type-annot]
+	                        [colon-eq expr]
+
+instance-body         = lbrace *(class-member) rbrace
+
+foreign-binding       = [attrs] ident [bracket-params] [params] [where-clause]
+                        [colon expr]
+
+fn-decl               = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
+
+law-decl              = kw-law ident [params] colon-eq expr
+
+op-or-ident           = ident
+                        / op-ident
+; --- Unified annotation / constraint helpers ---
+type-annot     = colon expr
+
+effect-set     = lbrace comma-pad [effect-entries] comma-pad rbrace
+
+effect-entries = effect-list [comma effect-rest]
+                 / effect-rest
+
+effect-rest    = dot-dot-dot ident
+
+effect-list    = effect-item *(comma effect-item)
+
+effect-item    = ident [lbracket expr rbracket]
+
+where-clause   = kw-where constraint *(comma constraint) [comma]
+
+constraint     = ident lt-colon expr
+                 / ident colon expr
+; --- Patterns ---
+pattern         = pattern-as *(kw-or pattern-as)
+
+pattern-as      = pattern-primary [kw-as ident]
+
+pattern-primary = underscore
+                  / literal
+                  / ident
+                  / dot ident [lparen [pat-list] rparen]
+                  / lbrace [rec-pat-fields] rbrace
+                  / lparen [pat-list] rparen
+                  / lbracket [pat-list] rbracket
+
+rec-pat-fields  = rec-pat-field *(comma rec-pat-field)
+
+rec-pat-field   = ident [colon pattern]
+
+pat-list        = pattern *(comma pattern)
+; --- Attributes ---
+attrs              = 1*(attr)
+
+attr               = at attr-path [lparen [attr-args] rparen]
+
+attr-path          = ident *(dot ident)
+
+attr-args          = attr-arg *(comma attr-arg)
+
+attr-arg           = ident colon-eq attr-value
+                        / attr-value
+
+attr-value         = string-lit
+                     / int-lit
+                     / rune-lit
+                     / attr-variant
+                     / attr-array
+                     / attr-record
+
+attr-variant       = dot ident [lparen [attr-value-list] rparen]
+
+attr-array         = lbracket [attr-value-list] rbracket
+
+attr-record        = lbrace [attr-record-fields] rbrace
+
+attr-record-fields = attr-record-field *(comma attr-record-field) comma-pad
+
+attr-record-field  = ident colon-eq attr-value
+
+attr-value-list    = attr-value *(comma attr-value) comma-pad
+; --- Shared helpers ---
+expr-list  = expr *(comma expr)
+
+arg-list   = arg *(comma arg)
+
+arg        = spread
+             / expr
+
+params     = lparen [param-list] rparen
+
+param-list = param *(comma param)
+
+param      = ident [type-annot] [colon-eq expr]
+
+ident-list = comma-pad ident *(comma ident) comma-pad
+
+comma-pad  = *(comma)

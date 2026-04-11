@@ -1,0 +1,83 @@
+{
+	"Let Binding": {
+		"prefix": "let",
+		"body": [
+			"let ${1:name} := ${0:value};"
+		],
+		"description": "Value binding"
+	},
+	"Let-Rec Callable": {
+		"prefix": "letrec",
+		"body": [
+			"let rec ${1:name}(${2:x}: ${3:Int}) : ${4:Int} := ${0:body};"
+		],
+		"description": "Recursive callable binding"
+	},
+	"Case Expression": {
+		"prefix": "case",
+		"body": [
+			"case ${1:expr} of (",
+			"\t| ${2:pattern} => ${0:result}",
+			")"
+		],
+		"description": "Case analysis expression"
+	},
+	"Data Declaration": {
+		"prefix": "data",
+		"body": [
+			"let ${1:Type} := data {",
+			"\t| ${2:Variant}(${3:value}: ${4:Type})",
+			"};"
+		],
+		"description": "Data declaration"
+	},
+	"Effect Declaration": {
+		"prefix": "effect",
+		"body": [
+			"let ${1:Effect} := effect {",
+			"\tlet ${2:op}(${3:payload}: ${4:Type}) : ${5:Type};",
+			"\tlaw ${6:name}(${7:x}: ${8:Type}) := ${0:body};",
+			"};"
+		],
+		"description": "Effect declaration with operation and law"
+	},
+	"Handle Expression": {
+		"prefix": "handle",
+		"body": [
+			"handle ${1:expr} with ${2:effect} of (",
+			"\t| ${3:op}(${4:value}) => ${0:result}",
+			")"
+		],
+		"description": "Handler expression"
+	},
+	"Quote Expression": {
+		"prefix": "quote",
+		"body": [
+			"quote (${0:expr})"
+		],
+		"description": "Quoted expression syntax"
+	},
+	"Quote Module": {
+		"prefix": "quotemod",
+		"body": [
+			"quote {",
+			"\t${0:let value := 1;}",
+			"}"
+		],
+		"description": "Quoted module syntax"
+	},
+	"Foreign Let Binding": {
+		"prefix": "foreign",
+		"body": [
+			"foreign ${1:\"c\"} let ${2:name}(${3:x}: ${4:Int}) : ${5:Int};"
+		],
+		"description": "Foreign let binding"
+	},
+	"Forall Type": {
+		"prefix": "forall",
+		"body": [
+			"forall (${1:T}: Type) -> ${0:T}"
+		],
+		"description": "Forall type expression"
+	}
+}
