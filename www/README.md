@@ -1,0 +1,21 @@
+# Musi Website
+
+Cloudflare Pages should build this site from the repository root.
+
+Use these Pages settings:
+
+- Root directory: repository root
+- Build command: `bun install --frozen-lockfile && bun run build`
+- Build output directory: `www/dist`
+
+Recommended Pages environment variables:
+
+- `BUN_VERSION=1.3.12`
+- `SKIP_DEPENDENCY_INSTALL=1`
+
+Local commands from repo root:
+
+- `bun run dev`
+- `bun run check`
+- `bun run test`
+- `bun run build`

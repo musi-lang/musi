@@ -31,7 +31,7 @@ export const exampleGroups: readonly ExampleGroup[] = [
 				sourceText: `Optional<Integer> configured = Optional.of(8080);
 int port = configured.orElse(3000);`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 22,
 				},
 			},
@@ -49,7 +49,7 @@ Option.unwrap_or[Int](configured, 3000);`,
 				sourceText: `let configured = Some(8080);
 let port = configured.unwrap_or(3000);`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 39,
 				},
 			},
@@ -58,7 +58,7 @@ let port = configured.unwrap_or(3000);`,
 				sourceText: `const configured: number | null = 8080;
 const port = configured ?? 3000;`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 46,
 				},
 			},
@@ -80,7 +80,7 @@ const port = configured ?? 3000;`,
 
 int answer = twice(21);`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 63,
 				},
 			},
@@ -102,7 +102,7 @@ twice(21);`,
 
 let answer = twice(21);`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 78,
 				},
 			},
@@ -114,7 +114,7 @@ let answer = twice(21);`,
 
 const answer = twice(21);`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 85,
 				},
 			},
@@ -132,7 +132,7 @@ const answer = twice(21);`,
 				language: "java",
 				sourceText: "import java.util.Optional;",
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 102,
 				},
 			},
@@ -149,7 +149,7 @@ let Option := Std.Option;`,
 				language: "rust",
 				sourceText: "use std::option::Option;",
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 115,
 				},
 			},
@@ -157,7 +157,7 @@ let Option := Std.Option;`,
 				language: "typescript",
 				sourceText: `import { readFileSync } from "node:fs";`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 121,
 				},
 			},
@@ -178,7 +178,7 @@ void sums_values() {
     assertEquals(3, 1 + 2);
 }`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 138,
 				},
 			},
@@ -200,7 +200,7 @@ fn sums_values() {
     assert_eq!(1 + 2, 3);
 }`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 154,
 				},
 			},
@@ -210,7 +210,7 @@ fn sums_values() {
   expect(1 + 2).toBe(3);
 });`,
 				evidence: {
-					path: "site/apps/www/src/content/example-registry.ts",
+					path: "www/src/content/example-registry.ts",
 					line: 161,
 				},
 			},

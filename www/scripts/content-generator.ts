@@ -84,8 +84,6 @@ const grammarPath = join(
 	scriptsDirectory,
 	"..",
 	"..",
-	"..",
-	"..",
 	"vscode-ext",
 	"syntaxes",
 	"musi.tmLanguage.json",

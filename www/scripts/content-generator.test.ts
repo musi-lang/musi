@@ -28,8 +28,6 @@ describe("content watch paths", () => {
 					root,
 					"..",
 					"..",
-					"..",
-					"..",
 					"vscode-ext",
 					"syntaxes",
 					"musi.tmLanguage.json",
