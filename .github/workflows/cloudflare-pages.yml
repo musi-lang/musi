@@ -9,6 +9,7 @@ on:
 
 jobs:
   deploy:
+    if: github.repository == 'musi-lang/musi' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
