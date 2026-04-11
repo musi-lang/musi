@@ -9,10 +9,10 @@ A programming language with typed effects, a SEAM bytecode pipeline, and a runti
 
 Musi source files use the `.ms` extension. The repo now ships two user-facing binaries:
 
-| Binary | What it does |
-| ------ | ------------- |
-| `music` | Direct `.ms` and `.seam` work |
-| `musi` | Package-aware manifest and workspace workflow |
+| Binary  | What it does                                  |
+| ------- | --------------------------------------------- |
+| `music` | Direct `.ms` and `.seam` work                 |
+| `musi`  | Package-aware manifest and workspace workflow |
 
 - `musi:...` is the low-level capability namespace.
 - `@std/<family>` is the standard library built on top of `musi:`.
@@ -136,7 +136,6 @@ Import style:
 ```musi
 let Bytes := import "@std/bytes";
 let Math := import "@std/math";
-let Option := import "@std/option";
 ```
 
 Root import is supported:
@@ -152,7 +151,6 @@ let Math := Std.Math;
 ```musi
 let Bytes := import "@std/bytes";
 let Math := import "@std/math";
-let Option := import "@std/option";
 
 export let normalized_port () : Int := (
   let configured := Option.none[Int]();
