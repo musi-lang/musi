@@ -42,6 +42,7 @@ They exist for:
 - runtime-layout and codegen metadata
 
 They are not general user metadata names.
+They are not the same thing as the `musi:*` foundation namespace.
 
 ## Inert Metadata
 

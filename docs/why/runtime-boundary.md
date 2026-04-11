@@ -38,9 +38,9 @@ Source-backed runtime services belong one layer higher:
 - `musi_rt` compiles registered module text into `Program`
 - `musi_rt` implements `VmLoader`
 - `musi_rt` evaluates syntax by going back through `music_session`
-- `musi_rt` owns repo-provided foreign/effect handler registration for the default runtime path
-- `musi_native` is the repo-owned default host adapter layer above `musi_vm`
-- `musi:*` holds low-level capability roots and `@std/*` wraps them into user-facing library code
+- `musi_rt` owns source-backed runtime composition for the default runtime path
+- `musi_native` is the repo-owned host/world integration layer above `musi_vm`
+- `musi:*` is the source-visible foundation namespace, and `@std/*` wraps that foundation into portable library code
 
 ## Why This Matters For Design
 
@@ -55,4 +55,5 @@ When deciding placement:
 
 - `docs/what/runtime/seam-vm.md`
 - `docs/what/runtime/seam-bytecode.md`
+- `docs/what/runtime/foundation-namespace.md`
 - `docs/how/runtime/runtime-api.md`

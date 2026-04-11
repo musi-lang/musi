@@ -9,9 +9,9 @@ The runtime boundary has four main pieces:
 - `Program`: loaded `.seam` artifact view
 - `Vm`: execution engine over one root program and loaded modules
 - `Runtime`: source-aware runtime service over `music_session` + `musi_vm`
-- `NativeHost`: repo-owned default host adapter over `musi_vm`
+- `NativeHost`: repo-owned host/world integration layer over `musi_vm`
 
-`VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and registered foreign/effect handlers.
+`VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and the default runtime path built on `musi_native`.
 
 ## Load
 
@@ -32,7 +32,7 @@ Typical runtime setup:
 3. register foreign/effect handlers when external edges exist
 4. call `load_root`
 
-`Runtime::new()` uses `musi_native::NativeHost` by default.
+`Runtime::new()` uses `musi_native::NativeHost` as the default repo-owned host/world implementation.
 
 Raw VM setup stays available for embedding-specific integrations:
 
@@ -92,7 +92,7 @@ Use inspection instead of reaching through VM internals.
 - registered effect handlers
 - optional fallback delegation into one embedding-specific `VmHost`
 
-`musi:test` is the current capability root used by first-party package testing.
+`musi:*` is the source-visible foundation namespace above the runtime and host boundary. `musi:test` is the currently implemented foundation root used by first-party package testing.
 
 ## Integration Checklist
 
@@ -106,4 +106,5 @@ Use inspection instead of reaching through VM internals.
 
 - `docs/what/runtime/seam-vm.md`
 - `docs/what/runtime/seam-bytecode.md`
+- `docs/what/runtime/foundation-namespace.md`
 - `docs/reference/public-api.md`

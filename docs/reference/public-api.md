@@ -32,7 +32,7 @@ Rules:
 - `music_assembly`: SEAM transport/validation (`AssemblyError`, `encode_binary`, `decode_binary`, `validate_binary`, `format_text`, `parse_text`, `validate_text`)
 - `music_emit`: SEAM emission (`EmitOptions`, `EmitDiagList`, `EmitDiagKind`, `EmittedBinding`, `EmittedModule`, `EmittedProgram`, `emit_diag_kind`, `lower_ir_module`, `lower_ir_program`)
 - `musi_vm`: SEAM runtime + embedding surface (`Program`, `ProgramExport*`, `Vm`, `VmOptions`, `VmHost`, `RejectingHost`, `VmLoader`, `RejectingLoader`, `Value`, `ValueView`, `SeqView`, `RecordView`, `StringView`, `ForeignCall`, `EffectCall`, `VmError*`, `VmResult`)
-- `musi_native`: repo-owned default host adapter (`NativeHost`)
+- `musi_native`: repo-owned host/world integration layer (`NativeHost`)
 - `musi_rt`: source-aware runtime service (`Runtime`, `RuntimeOptions`, `RuntimeError*`)
 
 ## Service And Project Layer
@@ -66,14 +66,14 @@ Notes:
 - `musi_vm::RejectingHost` / `RejectingLoader` are explicit reject-by-default seams, not practical runtime defaults.
 - `musi_vm::ForeignCall` and `musi_vm::EffectCall` now expose typed signature metadata through `param_tys`, `result_ty`, and runtime type-name helpers backed by the originating `Program`.
 - `musi_rt::Runtime` is the runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, compiles module syntax into runtime module handles, runs registered package-style test modules, and owns default foreign/effect handler registration.
-- `musi_native::NativeHost` is the first-party host adapter layer used by the default runtime path; it owns registered foreign/effect handlers and optional fallback host delegation.
+- `musi_native::NativeHost` is the first-party host/world integration layer used by the default runtime path; it owns registered foreign/effect handlers and optional fallback host delegation.
 - `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, and constructs the `music_session` module/import view used for package-aware compilation.
 
 ## First-Party Package Families
 
 - `@std`: first-party standard library root namespace under `packages/std`, with direct family re-exports such as `Assert`, `Bytes`, `Math`, `Option`, `Result`, and `Testing`
 - `@std/*`: portable first-party family API under `packages/std`, with family imports as the standard package API
-- `musi:*`: compiler-owned intrinsic namespace for low-level host/runtime capabilities
+- `musi:*`: source-visible foundation namespace for capabilities that must not depend on hidden compiler/package magic
 
 ## Planned Phase Crates
 
