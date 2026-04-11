@@ -301,7 +301,9 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
     match module.resolved.module.store.pats.get(pat_id).kind.clone() {
         HirPatKind::Bind { name } => {
             let site = NameSite::new(module.resolved.module.source_id, name.span);
-            module.binding_id_at_site(site).is_some_and(|found| found == binding)
+            module
+                .binding_id_at_site(site)
+                .is_some_and(|found| found == binding)
         }
         HirPatKind::Tuple { items }
         | HirPatKind::Array { items }
@@ -325,7 +327,9 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
                 field.value.map_or_else(
                     || {
                         let site = NameSite::new(module.resolved.module.source_id, field.name.span);
-                        module.binding_id_at_site(site).is_some_and(|found| found == binding)
+                        module
+                            .binding_id_at_site(site)
+                            .is_some_and(|found| found == binding)
                     },
                     |value| pat_binds(module, value, binding),
                 )
@@ -336,7 +340,9 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
         HirPatKind::As { pat, name } => {
             pat_binds(module, pat, binding) || {
                 let site = NameSite::new(module.resolved.module.source_id, name.span);
-                module.binding_id_at_site(site).is_some_and(|found| found == binding)
+                module
+                    .binding_id_at_site(site)
+                    .is_some_and(|found| found == binding)
             }
         }
         HirPatKind::Error | HirPatKind::Wildcard | HirPatKind::Lit { .. } => false,

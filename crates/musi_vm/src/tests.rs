@@ -260,10 +260,7 @@ fn loads_dynamic_module_through_host() {
 
 #[test]
 fn detects_module_init_cycle() {
-    let main = compile_program(
-        &[("main", "export let root () : Int := 0;")],
-        "main",
-    );
+    let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
     let dep = compile_program(
         &[(
             "dep",

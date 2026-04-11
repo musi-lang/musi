@@ -316,7 +316,9 @@ impl Session {
                 continue;
             }
             let sema = self.check_module(&imported)?;
-            let _ = surfaces.surfaces.insert(imported.clone(), sema.surface().clone());
+            let _ = surfaces
+                .surfaces
+                .insert(imported.clone(), sema.surface().clone());
             let imported_resolved = self.resolve_module(&imported)?.clone();
             self.collect_import_surfaces(&imported_resolved, seen, surfaces)?;
         }
