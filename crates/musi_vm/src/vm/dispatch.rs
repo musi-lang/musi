@@ -77,7 +77,7 @@ impl Vm {
                 frame.stack.push(value);
                 self.run_current_state()
             }
-            None => Err(VmError::new(VmErrorKind::InvalidProgram {
+            None => Err(VmError::new(VmErrorKind::ProgramShapeInvalid {
                 detail: "continuation frame list is empty".into(),
             })),
         };
@@ -121,7 +121,7 @@ impl Vm {
     }
 
     pub(crate) fn invalid_dispatch(instruction: &Instruction, family: &str) -> VmError {
-        VmError::new(VmErrorKind::InvalidProgram {
+        VmError::new(VmErrorKind::ProgramShapeInvalid {
             detail: format!(
                 "opcode `{}` reached `{family}` executor",
                 instruction.opcode.mnemonic()

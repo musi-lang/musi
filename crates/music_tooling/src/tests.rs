@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
 
-use musi_project::ProjectError;
+use musi_project::{Project, ProjectError};
 
 use crate::{
     ToolingError, load_direct_graph, project_error_report, session_error_report,
@@ -50,6 +50,11 @@ fn write_file(root: &Path, relative: &str, text: &str) {
         fs::create_dir_all(parent).expect("parent dirs should exist");
     }
     fs::write(path, text).expect("file should be written");
+}
+
+fn load_project_error(root: &Path) -> ProjectError {
+    Project::load(root, musi_project::ProjectOptions::default())
+        .expect_err("project load should fail")
 }
 
 #[test]
@@ -133,7 +138,7 @@ fn tooling_error_report_carries_typed_code() {
 
 #[test]
 fn project_error_report_carries_typed_code() {
-    let error = ProjectError::Validation {
+    let error = ProjectError::ManifestValidationFailed {
         message: "name is required".into(),
     };
 
@@ -141,4 +146,27 @@ fn project_error_report_carries_typed_code() {
 
     assert_eq!(report.diagnostics[0].phase, "project");
     assert_eq!(report.diagnostics[0].code.as_deref(), Some("ms3606"));
+}
+
+#[test]
+fn project_error_report_carries_manifest_source_range() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "exports": {
+    "bad": "./index.ms"
+  }
+}"#,
+    );
+
+    let error = load_project_error(temp.path());
+    let report = project_error_report("musi", "check", None, None, &error);
+
+    assert_eq!(report.diagnostics[0].phase, "project");
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("ms3606"));
+    assert!(report.diagnostics[0].file.is_some());
+    assert!(report.diagnostics[0].range.is_some());
+    assert_eq!(report.diagnostics[0].message, "export key `bad` invalid");
 }

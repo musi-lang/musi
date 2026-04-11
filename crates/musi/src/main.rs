@@ -26,15 +26,15 @@ type MusiResult<T = ()> = Result<T, MusiError>;
 #[derive(Debug, Error)]
 enum MusiError {
     #[error(transparent)]
-    Project(#[from] ProjectError),
+    ProjectModelFailed(#[from] ProjectError),
     #[error(transparent)]
-    Session(#[from] SessionError),
+    SessionCompilationFailed(#[from] SessionError),
     #[error(transparent)]
-    Runtime(#[from] musi_rt::RuntimeError),
+    RuntimeExecutionFailed(#[from] musi_rt::RuntimeError),
     #[error(transparent)]
-    Tooling(#[from] music_tooling::ToolingError),
+    ToolingIoFailed(#[from] music_tooling::ToolingError),
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    JsonSerializationFailed(#[from] serde_json::Error),
     #[error("current directory unavailable")]
     MissingCurrentDirectory,
     #[error("task `{name}` failed")]
@@ -45,14 +45,14 @@ enum MusiError {
     PackageExists { name: String },
     #[error("target `{target}` not found in project")]
     UnknownTarget { target: PathBuf },
-    #[error("check failed")]
-    CheckFailed,
+    #[error("check command failed")]
+    CheckCommandFailed,
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
-        Err(MusiError::CheckFailed) => ExitCode::from(1),
+        Err(MusiError::CheckCommandFailed) => ExitCode::from(1),
         Err(error) => {
             eprintln!("{error}");
             ExitCode::from(1)
@@ -88,7 +88,7 @@ fn new_package(name: &str) -> MusiResult {
             name: name.to_owned(),
         });
     }
-    fs::create_dir_all(&root).map_err(|source| music_tooling::ToolingError::Io {
+    fs::create_dir_all(&root).map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
         path: root.clone(),
         source,
     })?;
@@ -99,18 +99,18 @@ fn new_package(name: &str) -> MusiResult {
             name
         ),
     )
-    .map_err(|source| music_tooling::ToolingError::Io {
+    .map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
         path: root.join("musi.json"),
         source,
     })?;
     fs::write(root.join("index.ms"), "export let main () : Int := 42;\n").map_err(|source| {
-        music_tooling::ToolingError::Io {
+        music_tooling::ToolingError::ToolingIoFailed {
             path: root.join("index.ms"),
             source,
         }
     })?;
     fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
-        music_tooling::ToolingError::Io {
+        music_tooling::ToolingError::ToolingIoFailed {
             path: root.join(".gitignore"),
             source,
         }
@@ -133,7 +133,7 @@ fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiRe
             }
             Ok(())
         }
-        Err(CheckProjectError::Project {
+        Err(CheckProjectFailure::ProjectModelFailure {
             package_root,
             manifest,
             error,
@@ -151,9 +151,9 @@ fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiRe
                     println!("{}", serde_json::to_string_pretty(&report)?);
                 }
             }
-            Err(MusiError::CheckFailed)
+            Err(MusiError::CheckCommandFailed)
         }
-        Err(CheckProjectError::Session {
+        Err(CheckProjectFailure::SessionCompilationFailure {
             project,
             session,
             error,
@@ -172,7 +172,7 @@ fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiRe
                     println!("{}", serde_json::to_string_pretty(&report)?);
                 }
             }
-            Err(MusiError::CheckFailed)
+            Err(MusiError::CheckCommandFailed)
         }
     }
 }
@@ -259,7 +259,7 @@ fn run_task_command(project: &Project, task: &TaskSpec) -> MusiResult {
         .args(["-lc", task.command.as_str()])
         .current_dir(project.root_dir())
         .status();
-    let status = status.map_err(|source| music_tooling::ToolingError::Io {
+    let status = status.map_err(|source| music_tooling::ToolingError::ToolingIoFailed {
         path: project.root_dir().to_path_buf(),
         source,
     })?;
@@ -425,32 +425,33 @@ fn ok_report(
     }
 }
 
-enum CheckProjectError {
-    Project {
+enum CheckProjectFailure {
+    ProjectModelFailure {
         package_root: Option<PathBuf>,
         manifest: Option<PathBuf>,
         error: ProjectError,
     },
-    Session {
+    SessionCompilationFailure {
         project: Project,
         session: Session,
         error: SessionError,
     },
 }
 
-fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), CheckProjectError> {
-    let anchor = project_anchor(target).map_err(|error| CheckProjectError::Project {
-        package_root: None,
-        manifest: None,
-        error: match error {
-            MusiError::Project(project) => project,
-            other => ProjectError::Validation {
-                message: other.to_string(),
+fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), CheckProjectFailure> {
+    let anchor =
+        project_anchor(target).map_err(|error| CheckProjectFailure::ProjectModelFailure {
+            package_root: None,
+            manifest: None,
+            error: match error {
+                MusiError::ProjectModelFailed(project) => project,
+                other => ProjectError::ManifestValidationFailed {
+                    message: other.to_string(),
+                },
             },
-        },
-    })?;
+        })?;
     let project = load_project_ancestor(&anchor, ProjectOptions::default()).map_err(|error| {
-        CheckProjectError::Project {
+        CheckProjectFailure::ProjectModelFailure {
             package_root: anchor
                 .is_dir()
                 .then(|| anchor.clone())
@@ -460,24 +461,29 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
             error,
         }
     })?;
-    let entry =
-        resolve_project_entry(&project, target).map_err(|error| CheckProjectError::Project {
+    let entry = resolve_project_entry(&project, target).map_err(|error| {
+        CheckProjectFailure::ProjectModelFailure {
             package_root: Some(project.root_dir().to_path_buf()),
             manifest: Some(project.root_manifest_path().to_path_buf()),
-            error: ProjectError::Validation {
-                message: error.to_string(),
+            error: match error {
+                MusiError::ProjectModelFailed(project) => project,
+                other => ProjectError::ManifestValidationFailed {
+                    message: other.to_string(),
+                },
             },
-        })?;
-    let mut session = project
-        .build_session()
-        .map_err(|error| CheckProjectError::Project {
-            package_root: Some(project.root_dir().to_path_buf()),
-            manifest: Some(project.root_manifest_path().to_path_buf()),
-            error,
-        })?;
+        }
+    })?;
+    let mut session =
+        project
+            .build_session()
+            .map_err(|error| CheckProjectFailure::ProjectModelFailure {
+                package_root: Some(project.root_dir().to_path_buf()),
+                manifest: Some(project.root_manifest_path().to_path_buf()),
+                error,
+            })?;
     match session.check_module(&entry.module_key) {
         Ok(_) => Ok((project, entry)),
-        Err(error) => Err(CheckProjectError::Session {
+        Err(error) => Err(CheckProjectFailure::SessionCompilationFailure {
             project,
             session,
             error,

@@ -21,8 +21,8 @@ impl Resolver<'_, '_, '_, '_> {
                     }),
                     Err(err) => {
                         let label = match err.kind {
-                            ImportErrorKind::NotFound => "module not found",
-                            ImportErrorKind::InvalidSpecifier => "invalid module specifier",
+                            ImportErrorKind::ModuleNotFound => "module not found",
+                            ImportErrorKind::SpecifierInvalid => "invalid module specifier",
                         };
                         self.diags.push(
                             Diag::error(ResolveDiagKind::ImportResolveFailed.message())

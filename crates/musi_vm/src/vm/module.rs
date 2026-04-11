@@ -14,7 +14,7 @@ impl Vm {
         {
             Ok(())
         } else {
-            Err(VmError::new(VmErrorKind::InitializationRequired))
+            Err(VmError::new(VmErrorKind::VmInitializationRequired))
         }
     }
 

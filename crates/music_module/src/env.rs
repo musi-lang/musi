@@ -4,15 +4,15 @@ use crate::{ModuleKey, ModuleSpecifier};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportErrorKind {
-    NotFound,
-    InvalidSpecifier,
+    ModuleNotFound,
+    SpecifierInvalid,
 }
 
 impl fmt::Display for ImportErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::NotFound => "module not found",
-            Self::InvalidSpecifier => "invalid module specifier",
+            Self::ModuleNotFound => "module not found",
+            Self::SpecifierInvalid => "module specifier invalid",
         })
     }
 }
@@ -58,7 +58,7 @@ pub trait ImportEnv {
     ///
     /// # Errors
     ///
-    /// Returns `ImportError` when the specifier is invalid or the environment cannot resolve it.
+    /// Returns `ImportError` when the specifier is invalid or resolution fails.
     fn resolve(&self, from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult;
 }
 
@@ -68,17 +68,20 @@ mod tests {
 
     #[test]
     fn import_error_kind_display_is_stable() {
-        assert_eq!(ImportErrorKind::NotFound.to_string(), "module not found");
         assert_eq!(
-            ImportErrorKind::InvalidSpecifier.to_string(),
-            "invalid module specifier"
+            ImportErrorKind::ModuleNotFound.to_string(),
+            "module not found"
+        );
+        assert_eq!(
+            ImportErrorKind::SpecifierInvalid.to_string(),
+            "module specifier invalid"
         );
     }
 
     #[test]
     fn import_error_display_includes_kind_and_message() {
-        let err = ImportError::new(ImportErrorKind::NotFound, "dep/math");
-        assert_eq!(err.kind(), ImportErrorKind::NotFound);
+        let err = ImportError::new(ImportErrorKind::ModuleNotFound, "dep/math");
+        assert_eq!(err.kind(), ImportErrorKind::ModuleNotFound);
         assert_eq!(err.message(), "dep/math");
         assert_eq!(err.to_string(), "module not found: dep/math");
     }

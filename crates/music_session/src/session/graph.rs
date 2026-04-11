@@ -37,7 +37,7 @@ impl ImportEnv for SessionImportEnv<'_> {
             Ok(target)
         } else {
             Err(ImportError::new(
-                ImportErrorKind::NotFound,
+                ImportErrorKind::ModuleNotFound,
                 format!("unknown module `{}`", spec.as_str()),
             ))
         }

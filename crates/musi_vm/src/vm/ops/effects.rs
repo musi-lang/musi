@@ -220,7 +220,7 @@ impl Vm {
             .collect();
         match Value::continuation(frames, handlers) {
             Value::Continuation(continuation) => Ok(continuation),
-            _ => Err(VmError::new(VmErrorKind::InvalidProgram {
+            _ => Err(VmError::new(VmErrorKind::ProgramShapeInvalid {
                 detail: "continuation construction failed".into(),
             })),
         }

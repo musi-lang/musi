@@ -82,7 +82,7 @@ fn load_module_recursive(
     if !seen.insert(path.to_path_buf()) {
         return Ok(());
     }
-    let text = fs::read_to_string(path).map_err(|source| ToolingError::Io {
+    let text = fs::read_to_string(path).map_err(|source| ToolingError::ToolingIoFailed {
         path: path.to_path_buf(),
         source,
     })?;
@@ -182,7 +182,7 @@ fn canonical_source_path(path: &Path) -> ToolingResult<PathBuf> {
         if source_path.is_file() {
             return source_path
                 .canonicalize()
-                .map_err(|source| ToolingError::Io {
+                .map_err(|source| ToolingError::ToolingIoFailed {
                     path: source_path,
                     source,
                 });
@@ -193,10 +193,11 @@ fn canonical_source_path(path: &Path) -> ToolingResult<PathBuf> {
             path: path.to_path_buf(),
         });
     }
-    path.canonicalize().map_err(|source| ToolingError::Io {
-        path: path.to_path_buf(),
-        source,
-    })
+    path.canonicalize()
+        .map_err(|source| ToolingError::ToolingIoFailed {
+            path: path.to_path_buf(),
+            source,
+        })
 }
 
 fn module_key_for_path(path: &Path) -> ModuleKey {

@@ -21,25 +21,25 @@ type MusicResult<T = ()> = Result<T, MusicError>;
 #[derive(Debug, Error)]
 enum MusicError {
     #[error(transparent)]
-    Tooling(#[from] ToolingError),
+    DirectToolingFailed(#[from] ToolingError),
     #[error(transparent)]
-    Session(#[from] SessionError),
+    SessionCompilationFailed(#[from] SessionError),
     #[error(transparent)]
-    Assembly(#[from] music_assembly::AssemblyError),
+    ArtifactTransportFailed(#[from] music_assembly::AssemblyError),
     #[error(transparent)]
-    Vm(#[from] VmError),
+    VmExecutionFailed(#[from] VmError),
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    JsonSerializationFailed(#[from] serde_json::Error),
     #[error("run arguments unsupported")]
     RunArgsUnsupported,
-    #[error("check failed")]
-    CheckFailed,
+    #[error("check command failed")]
+    CheckCommandFailed,
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
-        Err(MusicError::CheckFailed) => ExitCode::from(1),
+        Err(MusicError::CheckCommandFailed) => ExitCode::from(1),
         Err(error) => {
             eprintln!("{error}");
             ExitCode::from(1)
@@ -70,10 +70,10 @@ fn check(path: &Path, diagnostics_format: DiagnosticsFormat) -> MusicResult {
             }
             Ok(())
         }
-        Err(CheckError::Tooling(error)) => {
+        Err(CheckCommandFailure::DirectToolingFailure(error)) => {
             emit_tooling_check_error("music", "check", diagnostics_format, &error)
         }
-        Err(CheckError::Session { session, error }) => {
+        Err(CheckCommandFailure::SessionCompilationFailure { session, error }) => {
             emit_session_check_error("music", "check", diagnostics_format, &session, &error)
         }
     }
@@ -214,7 +214,7 @@ fn emit_tooling_check_error(
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
-    Err(MusicError::CheckFailed)
+    Err(MusicError::CheckCommandFailed)
 }
 
 fn emit_session_check_error(
@@ -233,26 +233,26 @@ fn emit_session_check_error(
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
-    Err(MusicError::CheckFailed)
+    Err(MusicError::CheckCommandFailed)
 }
 
-enum CheckError {
-    Tooling(ToolingError),
-    Session {
+enum CheckCommandFailure {
+    DirectToolingFailure(ToolingError),
+    SessionCompilationFailure {
         session: Session,
         error: SessionError,
     },
 }
 
-fn check_session(path: &Path) -> Result<(), CheckError> {
-    let graph = load_direct_graph(path).map_err(CheckError::Tooling)?;
+fn check_session(path: &Path) -> Result<(), CheckCommandFailure> {
+    let graph = load_direct_graph(path).map_err(CheckCommandFailure::DirectToolingFailure)?;
     let mut session = graph
         .build_session(SessionOptions::default())
-        .map_err(CheckError::Tooling)?;
+        .map_err(CheckCommandFailure::DirectToolingFailure)?;
     session
         .check_module(graph.entry_key())
         .map(|_| ())
-        .map_err(|error| CheckError::Session { session, error })
+        .map_err(|error| CheckCommandFailure::SessionCompilationFailure { session, error })
 }
 
 impl From<DiagnosticsFormatArg> for DiagnosticsFormat {

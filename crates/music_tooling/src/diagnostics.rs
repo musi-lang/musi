@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use musi_project::ProjectError;
+use musi_project::{ProjectError, ProjectSourceDiagnostic};
 use music_base::diag::{emit, supports_color};
 use music_base::{Diag, SourceMap};
 use music_base::{DiagLabel, Source};
@@ -132,6 +132,9 @@ pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingR
 }
 
 pub fn render_project_error(error: &ProjectError) -> String {
+    if let Some(diag) = error.source_diag() {
+        return render_project_source_error(diag);
+    }
     render_simple_error_line(
         error.diag_code().map(|code| code.to_string()),
         error
@@ -153,27 +156,27 @@ pub fn render_tooling_error(error: &ToolingError) -> String {
 
 fn session_error_diags(error: &SessionError) -> &[Diag] {
     match error {
-        SessionError::Parse { syntax, .. } => syntax.diags(),
-        SessionError::Resolve { diags, .. }
-        | SessionError::Sema { diags, .. }
-        | SessionError::Ir { diags, .. }
-        | SessionError::Emit { diags, .. } => diags,
-        SessionError::UnknownModule { .. }
-        | SessionError::SourceMap { .. }
-        | SessionError::Assembly(_) => &[],
+        SessionError::ModuleParseFailed { syntax, .. } => syntax.diags(),
+        SessionError::ModuleResolveFailed { diags, .. }
+        | SessionError::ModuleSemanticCheckFailed { diags, .. }
+        | SessionError::ModuleLoweringFailed { diags, .. }
+        | SessionError::ModuleEmissionFailed { diags, .. } => diags,
+        SessionError::ModuleNotRegistered { .. }
+        | SessionError::SourceMapUpdateFailed { .. }
+        | SessionError::ArtifactTransportFailed(_) => &[],
     }
 }
 
 fn session_phase(error: &SessionError) -> &'static str {
     match error {
-        SessionError::Parse { .. } => "parse",
-        SessionError::Resolve { .. } => "resolve",
-        SessionError::Sema { .. } => "sema",
-        SessionError::Ir { .. } => "ir",
-        SessionError::Emit { .. } => "emit",
-        SessionError::UnknownModule { .. } => "session",
-        SessionError::SourceMap { .. } => "source",
-        SessionError::Assembly(_) => "assembly",
+        SessionError::ModuleParseFailed { .. } => "parse",
+        SessionError::ModuleResolveFailed { .. } => "resolve",
+        SessionError::ModuleSemanticCheckFailed { .. } => "sema",
+        SessionError::ModuleLoweringFailed { .. } => "ir",
+        SessionError::ModuleEmissionFailed { .. } => "emit",
+        SessionError::ModuleNotRegistered { .. } => "session",
+        SessionError::SourceMapUpdateFailed { .. } => "source",
+        SessionError::ArtifactTransportFailed(_) => "assembly",
     }
 }
 
@@ -231,9 +234,10 @@ fn range_for_label(source: &Source, label: &DiagLabel) -> Option<CliDiagnosticRa
 fn tooling_diag(error: &ToolingError) -> CliDiagnostic {
     let file = match error {
         ToolingError::MissingEntrySource { path }
-        | ToolingError::Io { path, .. }
+        | ToolingError::ToolingIoFailed { path, .. }
         | ToolingError::MissingImport { path, .. } => Some(path.display().to_string()),
-        ToolingError::PackageImportRequiresMusi { .. } | ToolingError::Session(_) => None,
+        ToolingError::PackageImportRequiresMusi { .. }
+        | ToolingError::SessionCompilationFailed(_) => None,
     };
     CliDiagnostic {
         phase: "tooling",
@@ -252,30 +256,34 @@ fn tooling_diag(error: &ToolingError) -> CliDiagnostic {
 }
 
 fn project_diag(error: &ProjectError) -> CliDiagnostic {
+    if let Some(diag) = error.source_diag() {
+        return project_source_diag(diag);
+    }
     let file = match error {
         ProjectError::MissingManifest { path }
         | ProjectError::MissingManifestAncestor { path }
         | ProjectError::MissingPackageRoot { path }
         | ProjectError::MissingModule { path }
-        | ProjectError::ManifestJson { path, .. }
-        | ProjectError::Io { path, .. }
+        | ProjectError::ManifestJsonInvalid { path, .. }
+        | ProjectError::ProjectIoFailed { path, .. }
         | ProjectError::MissingFrozenLockfile { path }
         | ProjectError::FrozenLockfileOutOfDate { path } => Some(path.display().to_string()),
-        ProjectError::Validation { .. }
+        ProjectError::ManifestValidationFailed { .. }
         | ProjectError::DuplicateWorkspaceMember { .. }
         | ProjectError::DuplicatePackageName { .. }
         | ProjectError::MissingPackageVersion { .. }
         | ProjectError::NoRootPackage
-        | ProjectError::MissingEntry { .. }
+        | ProjectError::PackageEntryModuleMissing { .. }
         | ProjectError::UnknownTask { .. }
-        | ProjectError::TaskCycle { .. }
-        | ProjectError::DependencyCycle { .. }
+        | ProjectError::TaskDependencyCycle { .. }
+        | ProjectError::PackageDependencyCycle { .. }
         | ProjectError::UnresolvedDependency { .. }
         | ProjectError::MissingRegistryRoot { .. }
         | ProjectError::MissingCacheRoot { .. }
         | ProjectError::RegistryVersionNotFound { .. }
         | ProjectError::InvalidVersionRequirement { .. }
-        | ProjectError::Session(_) => None,
+        | ProjectError::SessionCompilationFailed(_)
+        | ProjectError::ManifestSourceDiagnostic(_) => None,
     };
     CliDiagnostic {
         phase: "project",
@@ -293,6 +301,24 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
     }
 }
 
+fn project_source_diag(error: &ProjectSourceDiagnostic) -> CliDiagnostic {
+    let mut sources = SourceMap::new();
+    let Ok(source_id) = sources.add(error.path().to_path_buf(), error.text().to_owned()) else {
+        return CliDiagnostic {
+            phase: "project",
+            severity: "error",
+            code: Some(error.code().to_string()),
+            message: error.message().to_owned(),
+            file: Some(error.path().display().to_string()),
+            range: None,
+            labels: Vec::new(),
+            notes: Vec::new(),
+            hint: error.hint().map(str::to_owned),
+        };
+    };
+    cli_diag(&sources, "project", &error.to_diag(source_id))
+}
+
 fn path_string(path: &Path) -> String {
     path.display().to_string()
 }
@@ -302,4 +328,17 @@ fn render_simple_error_line(code: Option<String>, message: &str) -> String {
         Some(code) => format!("error[{code}]: {message}\n"),
         None => format!("error: {message}\n"),
     }
+}
+
+fn render_project_source_error(error: &ProjectSourceDiagnostic) -> String {
+    let mut sources = SourceMap::new();
+    let Ok(source_id) = sources.add(error.path().to_path_buf(), error.text().to_owned()) else {
+        return render_simple_error_line(Some(error.code().to_string()), error.message());
+    };
+    let diag = error.to_diag(source_id);
+    let mut output = Vec::new();
+    if emit(&mut output, &diag, &sources, supports_color()).is_err() {
+        return render_simple_error_line(Some(error.code().to_string()), error.message());
+    }
+    String::from_utf8_lossy(&output).into_owned()
 }

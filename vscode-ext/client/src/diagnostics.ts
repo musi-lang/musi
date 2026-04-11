@@ -36,7 +36,10 @@ function toPosition(point: {
 	line: number;
 	character: number;
 }): vscode.Position {
-	return new vscode.Position(point.line, point.character);
+	return new vscode.Position(
+		Math.max(0, point.line - 1),
+		Math.max(0, point.character - 1),
+	);
 }
 
 function toRange(range: DiagnosticRangePayload | undefined): vscode.Range {

@@ -19,16 +19,16 @@ pub struct SyntaxTerm {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum SyntaxTermError {
     #[error("syntax fragment is empty")]
-    Empty,
+    FragmentEmpty,
     #[error("syntax fragment parse failed")]
-    Parse,
+    FragmentParseFailed,
 }
 
 impl SyntaxTerm {
     pub fn parse(shape: SyntaxShape, text: &str) -> SyntaxTermResult<Self> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
-            return Err(SyntaxTermError::Empty);
+            return Err(SyntaxTermError::FragmentEmpty);
         }
         match shape {
             SyntaxShape::Expr => validate_expr_fragment(trimmed)?,
@@ -43,11 +43,11 @@ impl SyntaxTerm {
     pub fn from_quote_source(raw: &str) -> SyntaxTermResult<Self> {
         let trimmed = raw.trim();
         let Some(rest) = trimmed.strip_prefix("quote") else {
-            return Err(SyntaxTermError::Parse);
+            return Err(SyntaxTermError::FragmentParseFailed);
         };
         let rest = rest.trim_start();
         if rest.len() < 2 {
-            return Err(SyntaxTermError::Parse);
+            return Err(SyntaxTermError::FragmentParseFailed);
         }
         match (rest.chars().next(), rest.chars().last()) {
             (Some('('), Some(')')) => Ok(Self {
@@ -58,7 +58,7 @@ impl SyntaxTerm {
                 shape: SyntaxShape::Module,
                 text: rest[1..rest.len() - 1].trim().into(),
             }),
-            _ => Err(SyntaxTermError::Parse),
+            _ => Err(SyntaxTermError::FragmentParseFailed),
         }
     }
 
@@ -79,7 +79,7 @@ fn validate_expr_fragment(text: &str) -> SyntaxTermResult {
     if parsed.errors().is_empty() {
         Ok(())
     } else {
-        Err(SyntaxTermError::Parse)
+        Err(SyntaxTermError::FragmentParseFailed)
     }
 }
 
@@ -88,6 +88,6 @@ fn validate_module_fragment(text: &str) -> SyntaxTermResult {
     if parsed.errors().is_empty() {
         Ok(())
     } else {
-        Err(SyntaxTermError::Parse)
+        Err(SyntaxTermError::FragmentParseFailed)
     }
 }

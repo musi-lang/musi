@@ -3,12 +3,12 @@ use core::str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StringLitErrorKind {
-    Unterminated,
-    InvalidEscape,
-    MissingHexDigits,
-    InvalidHexDigit,
-    InvalidUnicodeScalar,
-    RuneCharCount,
+    LiteralUnterminated,
+    EscapeInvalid,
+    EscapeHexDigitsMissing,
+    EscapeHexDigitInvalid,
+    UnicodeScalarInvalid,
+    RuneScalarCountInvalid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,13 +46,13 @@ pub fn decode_rune_lit(raw: &str) -> StringLitResult<u32> {
     let mut chars = s.chars();
     let Some(ch) = chars.next() else {
         return Err(StringLitError {
-            kind: StringLitErrorKind::RuneCharCount,
+            kind: StringLitErrorKind::RuneScalarCountInvalid,
             offset: 0,
         });
     };
     if chars.next().is_some() {
         return Err(StringLitError {
-            kind: StringLitErrorKind::RuneCharCount,
+            kind: StringLitErrorKind::RuneScalarCountInvalid,
             offset: 0,
         });
     }
@@ -122,7 +122,7 @@ fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> StringLitResul
         TemplateChunkStyle::Head => {
             if b.len() < 3 || b[0] != b'`' || !raw.ends_with("${") {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::Unterminated,
+                    kind: StringLitErrorKind::LiteralUnterminated,
                     offset: 0,
                 });
             }
@@ -131,7 +131,7 @@ fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> StringLitResul
         TemplateChunkStyle::Middle => {
             if b.len() < 3 || b[0] != b'}' || !raw.ends_with("${") {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::Unterminated,
+                    kind: StringLitErrorKind::LiteralUnterminated,
                     offset: 0,
                 });
             }
@@ -140,7 +140,7 @@ fn decode_template_chunk(raw: &str, style: TemplateChunkStyle) -> StringLitResul
         TemplateChunkStyle::Tail => {
             if b.len() < 2 || b[0] != b'}' || *b.last().unwrap_or(&0) != b'`' {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::Unterminated,
+                    kind: StringLitErrorKind::LiteralUnterminated,
                     offset: 0,
                 });
             }
@@ -153,13 +153,13 @@ fn decode_delimited(raw: &str, delim: u8) -> StringLitResult<String> {
     let raw_bytes = raw.as_bytes();
     if raw_bytes.len() < 2 || raw_bytes[0] != delim {
         return Err(StringLitError {
-            kind: StringLitErrorKind::Unterminated,
+            kind: StringLitErrorKind::LiteralUnterminated,
             offset: 0,
         });
     }
     if *raw_bytes.last().unwrap_or(&0) != delim {
         return Err(StringLitError {
-            kind: StringLitErrorKind::Unterminated,
+            kind: StringLitErrorKind::LiteralUnterminated,
             offset: raw_bytes.len(),
         });
     }
@@ -174,7 +174,7 @@ fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> StringLitResult<S
             i += 1;
             if i >= end {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::InvalidEscape,
+                    kind: StringLitErrorKind::EscapeInvalid,
                     offset: i.saturating_sub(1),
                 });
             }
@@ -201,7 +201,7 @@ fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> StringLitResult<S
                 }
                 _ => {
                     return Err(StringLitError {
-                        kind: StringLitErrorKind::InvalidEscape,
+                        kind: StringLitErrorKind::EscapeInvalid,
                         offset: i.saturating_sub(1),
                     });
                 }
@@ -228,7 +228,7 @@ fn decode_inner(raw_bytes: &[u8], start: usize, end: usize) -> StringLitResult<S
 fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(u8, usize)> {
     if start + 2 > end {
         return Err(StringLitError {
-            kind: StringLitErrorKind::MissingHexDigits,
+            kind: StringLitErrorKind::EscapeHexDigitsMissing,
             offset: start.saturating_sub(2),
         });
     }
@@ -236,13 +236,13 @@ fn decode_hex_u8(bytes: &[u8], start: usize, end: usize) -> StringLitResult<(u8,
     let lo = bytes.get(start + 1).copied().unwrap_or(0);
     let Some(hi) = hex_value(hi) else {
         return Err(StringLitError {
-            kind: StringLitErrorKind::InvalidHexDigit,
+            kind: StringLitErrorKind::EscapeHexDigitInvalid,
             offset: start,
         });
     };
     let Some(lo) = hex_value(lo) else {
         return Err(StringLitError {
-            kind: StringLitErrorKind::InvalidHexDigit,
+            kind: StringLitErrorKind::EscapeHexDigitInvalid,
             offset: start + 1,
         });
     };
@@ -255,13 +255,13 @@ fn decode_unicode_scalar(bytes: &[u8], start: usize, end: usize) -> StringLitRes
         (Some(a), Some(b)) if a.is_ascii_hexdigit() && b.is_ascii_hexdigit() => {
             let Some(a) = hex_value(a) else {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::InvalidHexDigit,
+                    kind: StringLitErrorKind::EscapeHexDigitInvalid,
                     offset: i,
                 });
             };
             let Some(b) = hex_value(b) else {
                 return Err(StringLitError {
-                    kind: StringLitErrorKind::InvalidHexDigit,
+                    kind: StringLitErrorKind::EscapeHexDigitInvalid,
                     offset: i + 1,
                 });
             };
@@ -270,7 +270,7 @@ fn decode_unicode_scalar(bytes: &[u8], start: usize, end: usize) -> StringLitRes
         }
         (Some(a), _) if a.is_ascii_hexdigit() => {
             return Err(StringLitError {
-                kind: StringLitErrorKind::MissingHexDigits,
+                kind: StringLitErrorKind::EscapeHexDigitsMissing,
                 offset: i,
             });
         }
@@ -279,7 +279,7 @@ fn decode_unicode_scalar(bytes: &[u8], start: usize, end: usize) -> StringLitRes
 
     let Some(ch) = char::from_u32(value) else {
         return Err(StringLitError {
-            kind: StringLitErrorKind::InvalidUnicodeScalar,
+            kind: StringLitErrorKind::UnicodeScalarInvalid,
             offset: start.saturating_sub(2),
         });
     };
@@ -294,7 +294,7 @@ fn decode_hex_u32(
 ) -> StringLitResult<(u32, usize)> {
     if start + digits > end {
         return Err(StringLitError {
-            kind: StringLitErrorKind::MissingHexDigits,
+            kind: StringLitErrorKind::EscapeHexDigitsMissing,
             offset: start.saturating_sub(2),
         });
     }
@@ -303,7 +303,7 @@ fn decode_hex_u32(
         let b = bytes.get(start + j).copied().unwrap_or(0);
         let Some(v) = hex_value(b) else {
             return Err(StringLitError {
-                kind: StringLitErrorKind::InvalidHexDigit,
+                kind: StringLitErrorKind::EscapeHexDigitInvalid,
                 offset: start + j,
             });
         };

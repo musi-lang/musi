@@ -74,13 +74,15 @@ impl Vm {
                 self.push_value(export)?;
                 Ok(StepOutcome::Continue)
             }
-            _ => Err(super::VmError::new(super::VmErrorKind::InvalidProgram {
-                detail: format!(
-                    "host opcode family mismatch for `{}`",
-                    instruction.opcode.mnemonic()
-                )
-                .into(),
-            })),
+            _ => Err(super::VmError::new(
+                super::VmErrorKind::ProgramShapeInvalid {
+                    detail: format!(
+                        "host opcode family mismatch for `{}`",
+                        instruction.opcode.mnemonic()
+                    )
+                    .into(),
+                },
+            )),
         }
     }
 }

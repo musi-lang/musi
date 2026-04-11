@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules, resolve_spec};
 use music_base::SourceId;
+use music_base::diag::DiagCode;
 use music_bc::Artifact;
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
@@ -16,6 +17,7 @@ use crate::ProjectResult;
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
+use crate::manifest_source::ManifestSource;
 use crate::registry::{RegistryPackage, resolve_registry_package};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -83,6 +85,7 @@ pub struct Project {
     options: ProjectOptions,
     root_dir: PathBuf,
     root_manifest_path: PathBuf,
+    root_manifest_source: ManifestSource,
     manifest: PackageManifest,
     workspace: WorkspaceGraph,
     import_map: ImportMap,
@@ -114,7 +117,14 @@ struct PackageRecord {
 struct LocalPackage {
     manifest_path: PathBuf,
     root_dir: PathBuf,
+    source: ManifestSource,
     manifest: PackageManifest,
+}
+
+#[derive(Debug, Clone)]
+struct LoadedManifest {
+    manifest: PackageManifest,
+    source: ManifestSource,
 }
 
 /// # Errors
@@ -149,8 +159,11 @@ impl Project {
             .ok_or_else(|| ProjectError::MissingPackageRoot {
                 path: root_manifest_path.clone(),
             })?;
-        let manifest = read_manifest(&root_manifest_path)?;
-        validate_manifest(&manifest, &root_manifest_path)?;
+        let LoadedManifest {
+            manifest,
+            source: root_manifest_source,
+        } = read_manifest(&root_manifest_path)?;
+        validate_manifest(&manifest, &root_manifest_source)?;
 
         let lockfile_path = root_dir.join(manifest.lock_path());
         if manifest.is_lock_frozen() && !lockfile_path.exists() {
@@ -160,7 +173,12 @@ impl Project {
         }
         let loaded_lockfile = load_lockfile(&lockfile_path)?;
 
-        let local_packages = load_local_packages(&root_dir, &manifest, &root_manifest_path)?;
+        let local_packages = load_local_packages(
+            &root_dir,
+            &manifest,
+            &root_manifest_path,
+            &root_manifest_source,
+        )?;
         let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
         let mut package_name_index = BTreeMap::<String, PackageId>::new();
         let mut resolving = BTreeSet::<String>::new();
@@ -169,6 +187,7 @@ impl Project {
             let package_record = load_package_record(
                 package.root_dir.clone(),
                 package.manifest_path.clone(),
+                package.source.clone(),
                 package.manifest.clone(),
                 PackageSource::Workspace,
             )?;
@@ -236,6 +255,7 @@ impl Project {
             options,
             root_dir,
             root_manifest_path,
+            root_manifest_source,
             manifest,
             workspace,
             import_map,
@@ -303,12 +323,23 @@ impl Project {
     /// Returns [`ProjectError::NoRootPackage`] when the loaded manifest is workspace-only.
     pub fn root_package(&self) -> ProjectResult<&ResolvedPackage> {
         let Some(id) = &self.workspace.root_package else {
-            return Err(ProjectError::NoRootPackage);
+            return Err(self.root_manifest_source.error_with_hint(
+                music_base::diag::DiagCode::new(3610),
+                "root package entry missing",
+                self.root_manifest_source.insertion_span(),
+                "`name` field missing",
+                "add `name` and `version`, or target workspace member explicitly",
+            ));
         };
-        self.workspace
-            .packages
-            .get(id)
-            .ok_or(ProjectError::NoRootPackage)
+        self.workspace.packages.get(id).ok_or_else(|| {
+            self.root_manifest_source.error_with_hint(
+                music_base::diag::DiagCode::new(3610),
+                "root package entry missing",
+                self.root_manifest_source.insertion_span(),
+                "root package record missing",
+                "declare `name` and `version` in `musi.json`",
+            )
+        })
     }
 
     /// # Errors
@@ -348,12 +379,12 @@ impl Project {
     /// Returns [`ProjectError`] when the resolved lockfile cannot be serialized or written.
     pub fn write_lockfile(&self) -> ProjectResult {
         let text = serde_json::to_string_pretty(&self.resolved_lockfile).map_err(|source| {
-            ProjectError::ManifestJson {
+            ProjectError::ManifestJsonInvalid {
                 path: self.lockfile_path.clone(),
                 source,
             }
         })?;
-        fs::write(&self.lockfile_path, text).map_err(|source| ProjectError::Io {
+        fs::write(&self.lockfile_path, text).map_err(|source| ProjectError::ProjectIoFailed {
             path: self.lockfile_path.clone(),
             source,
         })
@@ -396,7 +427,7 @@ impl Project {
             return Ok(());
         }
         if !active.insert(name.into()) {
-            return Err(ProjectError::TaskCycle { name: name.into() });
+            return Err(ProjectError::TaskDependencyCycle { name: name.into() });
         }
         let task = self
             .task(name)
@@ -542,52 +573,67 @@ fn manifest_ancestor_path_for(path: &Path) -> ProjectResult<PathBuf> {
     })
 }
 
-fn read_manifest(path: &Path) -> ProjectResult<PackageManifest> {
-    let text = fs::read_to_string(path).map_err(|source| ProjectError::Io {
+fn read_manifest(path: &Path) -> ProjectResult<LoadedManifest> {
+    let text = fs::read_to_string(path).map_err(|source| ProjectError::ProjectIoFailed {
         path: path.to_path_buf(),
         source,
     })?;
-    serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJson {
-        path: path.to_path_buf(),
-        source,
-    })
+    let source = ManifestSource::from_text(path.to_path_buf(), text.clone());
+    let manifest = serde_json::from_str(&text).map_err(|error| source.parse_error(&error))?;
+    Ok(LoadedManifest { manifest, source })
 }
 
-fn validate_manifest(manifest: &PackageManifest, path: &Path) -> ProjectResult {
+fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
     if let Some(name) = &manifest.name {
         if name.trim().is_empty() {
-            return Err(ProjectError::Validation {
-                message: format!("package name in `{}` must not be empty", path.display()),
-            });
+            let span = source
+                .value_span("/name")
+                .unwrap_or_else(|| source.insertion_span());
+            return Err(source.error(
+                music_base::diag::DiagCode::new(3606),
+                "package name empty",
+                span,
+                "`name` must not be empty",
+            ));
         }
     }
     for (export_name, export_path) in manifest.export_map() {
         if export_name != "." && !export_name.starts_with("./") {
-            return Err(ProjectError::Validation {
-                message: format!(
-                    "export key `{export_name}` in `{}` must be `.` or start with `./`",
-                    path.display()
-                ),
-            });
+            let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
+            let span = source
+                .key_span(&pointer)
+                .or_else(|| source.value_span("/exports"))
+                .unwrap_or_else(|| source.insertion_span());
+            return Err(source.error(
+                music_base::diag::DiagCode::new(3606),
+                format!("export key `{export_name}` invalid"),
+                span,
+                "export key must be `.` or start with `./`",
+            ));
         }
         if !export_path.starts_with("./") {
-            return Err(ProjectError::Validation {
-                message: format!(
-                    "export target `{export_path}` in `{}` must start with `./`",
-                    path.display()
-                ),
-            });
+            let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
+            let span = source
+                .value_span(&pointer)
+                .or_else(|| source.value_span("/exports"))
+                .unwrap_or_else(|| source.insertion_span());
+            return Err(source.error(
+                music_base::diag::DiagCode::new(3606),
+                format!("export target `{export_path}` invalid"),
+                span,
+                "export target must start with `./`",
+            ));
         }
     }
-    validate_task_graph(manifest)?;
+    validate_task_graph(manifest, source)?;
     Ok(())
 }
 
-fn validate_task_graph(manifest: &PackageManifest) -> ProjectResult {
+fn validate_task_graph(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
     let mut seen = BTreeSet::new();
     let mut active = BTreeSet::new();
     for name in manifest.tasks.keys() {
-        validate_task_node(name, manifest, &mut seen, &mut active)?;
+        validate_task_node(name, manifest, source, &mut seen, &mut active)?;
     }
     Ok(())
 }
@@ -595,6 +641,7 @@ fn validate_task_graph(manifest: &PackageManifest) -> ProjectResult {
 fn validate_task_node(
     name: &str,
     manifest: &PackageManifest,
+    source: &ManifestSource,
     seen: &mut BTreeSet<String>,
     active: &mut BTreeSet<String>,
 ) -> ProjectResult {
@@ -602,16 +649,27 @@ fn validate_task_node(
         return Ok(());
     }
     if !active.insert(name.into()) {
-        return Err(ProjectError::TaskCycle { name: name.into() });
+        return Err(ProjectError::TaskDependencyCycle { name: name.into() });
     }
     if let Some(task) = manifest.task_config(name) {
-        for dependency in task.dependencies {
+        for (index, dependency) in task.dependencies.into_iter().enumerate() {
             if manifest.task_config(&dependency).is_none() {
-                return Err(ProjectError::Validation {
-                    message: format!("task `{name}` depends on unknown task `{dependency}`"),
-                });
+                let pointer = format!(
+                    "/tasks/{}/dependencies/{}",
+                    escape_pointer_segment(name),
+                    index
+                );
+                let span = source
+                    .value_span(&pointer)
+                    .unwrap_or_else(|| source.insertion_span());
+                return Err(source.error(
+                    music_base::diag::DiagCode::new(3606),
+                    format!("task dependency `{dependency}` not found"),
+                    span,
+                    format!("task `{name}` depends on unknown task `{dependency}`"),
+                ));
             }
-            validate_task_node(&dependency, manifest, seen, active)?;
+            validate_task_node(&dependency, manifest, source, seen, active)?;
         }
     }
     let _ = active.remove(name);
@@ -625,11 +683,11 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
             packages: Vec::new(),
         });
     }
-    let text = fs::read_to_string(path).map_err(|source| ProjectError::Io {
+    let text = fs::read_to_string(path).map_err(|source| ProjectError::ProjectIoFailed {
         path: path.to_path_buf(),
         source,
     })?;
-    serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJson {
+    serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJsonInvalid {
         path: path.to_path_buf(),
         source,
     })
@@ -639,6 +697,7 @@ fn load_local_packages(
     root_dir: &Path,
     manifest: &PackageManifest,
     root_manifest_path: &Path,
+    root_manifest_source: &ManifestSource,
 ) -> ProjectResult<BTreeMap<String, LocalPackage>> {
     let mut out = BTreeMap::new();
     if let Some(name) = manifest.name.clone() {
@@ -649,6 +708,7 @@ fn load_local_packages(
         let package = LocalPackage {
             manifest_path: root_manifest_path.to_path_buf(),
             root_dir: root_dir.to_path_buf(),
+            source: root_manifest_source.clone(),
             manifest: manifest.clone(),
         };
         if out.insert(name.clone(), package).is_some() {
@@ -665,17 +725,20 @@ fn load_local_packages(
             });
         }
         let member_manifest_path = manifest_path_for(&member_root)?;
-        let member_manifest = read_manifest(&member_manifest_path)?;
-        validate_manifest(&member_manifest, &member_manifest_path)?;
-        let name = member_manifest
-            .name
-            .clone()
-            .ok_or_else(|| ProjectError::Validation {
-                message: format!(
-                    "workspace member `{}` must declare `name`",
-                    member_manifest_path.display()
-                ),
-            })?;
+        let LoadedManifest {
+            manifest: member_manifest,
+            source: member_source,
+        } = read_manifest(&member_manifest_path)?;
+        validate_manifest(&member_manifest, &member_source)?;
+        let name = member_manifest.name.clone().ok_or_else(|| {
+            member_source.error_with_hint(
+                music_base::diag::DiagCode::new(3606),
+                "workspace member name missing",
+                member_source.insertion_span(),
+                "`name` field missing",
+                "add `name` to this workspace member manifest",
+            )
+        })?;
         let _ = member_manifest
             .version
             .clone()
@@ -683,6 +746,7 @@ fn load_local_packages(
         let package = LocalPackage {
             manifest_path: member_manifest_path,
             root_dir: member_root,
+            source: member_source,
             manifest: member_manifest,
         };
         if out.insert(name.clone(), package).is_some() {
@@ -694,12 +758,15 @@ fn load_local_packages(
 
 fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> {
     let manifest_path = manifest_path_for(&root_dir.join(member))?;
-    let manifest = read_manifest(&manifest_path)?;
-    manifest.name.ok_or_else(|| ProjectError::Validation {
-        message: format!(
-            "workspace member `{}` must declare `name`",
-            manifest_path.display()
-        ),
+    let LoadedManifest { manifest, source } = read_manifest(&manifest_path)?;
+    manifest.name.ok_or_else(|| {
+        source.error_with_hint(
+            music_base::diag::DiagCode::new(3606),
+            "workspace member name missing",
+            source.insertion_span(),
+            "`name` field missing",
+            "add `name` to this workspace member manifest",
+        )
     })
 }
 
@@ -713,7 +780,7 @@ fn resolve_package_dependencies(
     resolving: &mut BTreeSet<String>,
 ) -> ProjectResult {
     if !resolving.insert(package_id.name.clone()) {
-        return Err(ProjectError::DependencyCycle {
+        return Err(ProjectError::PackageDependencyCycle {
             name: package_id.name.clone(),
         });
     }
@@ -800,6 +867,7 @@ fn resolve_dependency(
             let record = load_package_record(
                 package.root_dir.clone(),
                 package.manifest_path.clone(),
+                package.source.clone(),
                 package.manifest.clone(),
                 PackageSource::Workspace,
             )?;
@@ -842,8 +910,8 @@ fn resolve_dependency(
     };
 
     let manifest_path = manifest_path_for(&registry_package.cache_dir)?;
-    let manifest = read_manifest(&manifest_path)?;
-    validate_manifest(&manifest, &manifest_path)?;
+    let LoadedManifest { manifest, source } = read_manifest(&manifest_path)?;
+    validate_manifest(&manifest, &source)?;
     let version = manifest
         .version
         .clone()
@@ -856,6 +924,7 @@ fn resolve_dependency(
         let record = load_package_record(
             registry_package.cache_dir.clone(),
             manifest_path,
+            source,
             manifest,
             PackageSource::Registry {
                 registry_dir: registry_package.registry_dir,
@@ -900,25 +969,29 @@ fn locked_or_latest_registry_package(
 fn load_package_record(
     root_dir: PathBuf,
     manifest_path: PathBuf,
+    manifest_source: ManifestSource,
     manifest: PackageManifest,
     source: PackageSource,
 ) -> ProjectResult<PackageRecord> {
     let id = PackageId {
-        name: manifest
-            .name
-            .clone()
-            .ok_or_else(|| ProjectError::Validation {
-                message: format!("package `{}` must declare `name`", manifest_path.display()),
-            })?,
-        version: manifest
-            .version
-            .clone()
-            .ok_or_else(|| ProjectError::Validation {
-                message: format!(
-                    "package `{}` must declare `version`",
-                    manifest_path.display()
-                ),
-            })?,
+        name: manifest.name.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package name missing",
+                manifest_source.insertion_span(),
+                "`name` field missing",
+                "add `name` to this package manifest",
+            )
+        })?,
+        version: manifest.version.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package version missing",
+                manifest_source.insertion_span(),
+                "`version` field missing",
+                "add `version` to this package manifest",
+            )
+        })?,
     };
 
     let modules = discover_modules(&id, &root_dir)?;
@@ -932,16 +1005,12 @@ fn load_package_record(
         .collect::<BTreeMap<_, _>>();
     let entry_key =
         resolve_module_target(&root_dir, &relative_modules, None, manifest.main_entry())
-            .ok_or_else(|| ProjectError::MissingEntry {
-                package: id.name.clone(),
+            .ok_or_else(|| {
+                package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
             })?;
-    let entry_path =
-        module_keys
-            .get(&entry_key)
-            .cloned()
-            .ok_or_else(|| ProjectError::MissingEntry {
-                package: id.name.clone(),
-            })?;
+    let entry_path = module_keys.get(&entry_key).cloned().ok_or_else(|| {
+        package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
+    })?;
     let entry = ProjectEntry {
         package: id.clone(),
         module_key: entry_key,
@@ -951,12 +1020,7 @@ fn load_package_record(
     let mut exports = BTreeMap::new();
     for (name, target) in manifest.export_map() {
         let export_key = resolve_module_target(&root_dir, &relative_modules, None, &target)
-            .ok_or_else(|| ProjectError::Validation {
-                message: format!(
-                    "export target `{target}` does not exist for package `{}`",
-                    id.name
-                ),
-            })?;
+            .ok_or_else(|| missing_export_target(&manifest_source, &id.name, &name, &target))?;
         let _ = exports.insert(name, export_key);
     }
 
@@ -982,6 +1046,55 @@ fn load_package_record(
     })
 }
 
+fn package_entry_missing(
+    manifest_source: &ManifestSource,
+    package_name: &str,
+    main_target: Option<&str>,
+) -> ProjectError {
+    let span = main_target
+        .and_then(|_| manifest_source.value_span("/main"))
+        .unwrap_or_else(|| manifest_source.insertion_span());
+    let label = match main_target {
+        Some(target) => format!("entry target `{target}` does not resolve"),
+        None => "`main` field missing and `index.ms` was not found".into(),
+    };
+    let hint = match main_target {
+        Some(_) => "update `main` to an existing module path",
+        None => "add `main`, or create `index.ms` at package root",
+    };
+    manifest_source.error_with_hint(
+        DiagCode::new(3611),
+        format!("package `{package_name}` entry module missing"),
+        span,
+        label,
+        hint,
+    )
+}
+
+fn missing_export_target(
+    manifest_source: &ManifestSource,
+    package_name: &str,
+    export_name: &str,
+    target: &str,
+) -> ProjectError {
+    let pointer = format!("/exports/{}", escape_pointer_segment(export_name));
+    let span = manifest_source
+        .value_span(&pointer)
+        .or_else(|| manifest_source.key_span(&pointer))
+        .unwrap_or_else(|| manifest_source.insertion_span());
+    manifest_source.error_with_hint(
+        DiagCode::new(3606),
+        format!("export target `{target}` missing"),
+        span,
+        format!("export `{export_name}` in package `{package_name}` points to missing module"),
+        "update export target or add target module",
+    )
+}
+
+fn escape_pointer_segment(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
+}
+
 fn discover_modules(
     package_id: &PackageId,
     root_dir: &Path,
@@ -997,12 +1110,12 @@ fn discover_modules_recursive(
     dir: &Path,
     out: &mut BTreeMap<ModuleKey, LoadedModule>,
 ) -> ProjectResult {
-    let entries = fs::read_dir(dir).map_err(|source| ProjectError::Io {
+    let entries = fs::read_dir(dir).map_err(|source| ProjectError::ProjectIoFailed {
         path: dir.to_path_buf(),
         source,
     })?;
     for entry in entries {
-        let entry = entry.map_err(|source| ProjectError::Io {
+        let entry = entry.map_err(|source| ProjectError::ProjectIoFailed {
             path: dir.to_path_buf(),
             source,
         })?;
@@ -1014,7 +1127,7 @@ fn discover_modules_recursive(
         if path.extension() != Some(OsStr::new("ms")) {
             continue;
         }
-        let text = fs::read_to_string(&path).map_err(|source| ProjectError::Io {
+        let text = fs::read_to_string(&path).map_err(|source| ProjectError::ProjectIoFailed {
             path: path.clone(),
             source,
         })?;

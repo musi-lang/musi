@@ -262,7 +262,7 @@ pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
             continue;
         }
         if line == ".end" {
-            return Err(AssemblyError::Text("unexpected .end".into()));
+            return Err(AssemblyError::TextParseFailed("unexpected `.end`".into()));
         }
         if line.starts_with(".method ") {
             let method_lines = collect_method_lines(&lines, &mut index)?;
@@ -298,7 +298,9 @@ fn collect_method_lines<'text>(
             return Ok(lines[start..index.saturating_sub(1)].to_vec());
         }
     }
-    Err(AssemblyError::Text("unterminated .method block".into()))
+    Err(AssemblyError::TextParseFailed(
+        "unterminated `.method` block".into(),
+    ))
 }
 
 fn format_operand(
@@ -429,13 +431,15 @@ impl TextBuilder {
             ".foreign" => self.parse_foreign(&parts),
             ".export" => self.parse_export(&parts),
             ".meta" => self.parse_meta(&parts),
-            other => Err(AssemblyError::Text(format!("unknown directive {other}"))),
+            other => Err(AssemblyError::TextParseFailed(format!(
+                "unknown directive {other}"
+            ))),
         }
     }
 
     fn parse_type(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 4 || parts[2] != "term" {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.type $Name term \"...\"`".into(),
             ));
         }
@@ -461,30 +465,30 @@ impl TextBuilder {
 
     fn parse_data(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.data $Name variants <count> fields <count> ...`".into(),
             ));
         }
         let name = parse_symbol(must_get(parts.get(1), "data name")?)?;
         if self.data.contains_key(&name) {
-            return Err(AssemblyError::Text("duplicate data".into()));
+            return Err(AssemblyError::TextParseFailed("duplicate data".into()));
         }
         if must_get(parts.get(2), "variants keyword")? != "variants" {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.data $Name variants <count> fields <count> ...`".into(),
             ));
         }
         let variant_count: u32 = must_get(parts.get(3), "variant count")?
             .parse()
-            .map_err(|_| AssemblyError::Text("invalid variant count".into()))?;
+            .map_err(|_| AssemblyError::TextParseFailed("invalid variant count".into()))?;
         if must_get(parts.get(4), "fields keyword")? != "fields" {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.data $Name variants <count> fields <count> ...`".into(),
             ));
         }
         let field_count: u32 = must_get(parts.get(5), "field count")?
             .parse()
-            .map_err(|_| AssemblyError::Text("invalid field count".into()))?;
+            .map_err(|_| AssemblyError::TextParseFailed("invalid field count".into()))?;
 
         let mut repr_kind: Option<StringId> = None;
         let mut layout_align: Option<u32> = None;
@@ -500,17 +504,21 @@ impl TextBuilder {
                     layout_align = Some(
                         value
                             .parse()
-                            .map_err(|_| AssemblyError::Text("invalid align".into()))?,
+                            .map_err(|_| AssemblyError::TextParseFailed("invalid align".into()))?,
                     );
                 }
                 "pack" => {
                     layout_pack = Some(
                         value
                             .parse()
-                            .map_err(|_| AssemblyError::Text("invalid pack".into()))?,
+                            .map_err(|_| AssemblyError::TextParseFailed("invalid pack".into()))?,
                     );
                 }
-                _ => return Err(AssemblyError::Text("unknown data metadata".into())),
+                _ => {
+                    return Err(AssemblyError::TextParseFailed(
+                        "unknown data metadata".into(),
+                    ));
+                }
             }
             idx = idx.saturating_add(2);
         }
@@ -530,7 +538,7 @@ impl TextBuilder {
 
     fn parse_const(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 4 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.const $Name <kind> <value>`".into(),
             ));
         }
@@ -538,37 +546,46 @@ impl TextBuilder {
         let name_id = self.intern_string(&name);
         let kind = must_get(parts.get(2), "constant kind")?;
         let raw_value = must_get(parts.get(3), "constant value")?;
-        let value = match kind {
-            "int" => ConstantValue::Int(
-                raw_value
-                    .parse()
-                    .map_err(|_| AssemblyError::Text("invalid integer constant".into()))?,
-            ),
-            "float" => ConstantValue::Float(
-                raw_value
-                    .parse()
-                    .map_err(|_| AssemblyError::Text("invalid float constant".into()))?,
-            ),
-            "bool" => ConstantValue::Bool(match raw_value {
-                "true" => true,
-                "false" => false,
-                _ => return Err(AssemblyError::Text("invalid bool constant".into())),
-            }),
-            "string" => ConstantValue::String(self.intern_string(&parse_quoted(raw_value)?)),
-            "syntax" => {
-                let shape = match must_get(parts.get(3), "syntax shape")? {
-                    "expr" => SyntaxShape::Expr,
-                    "module" => SyntaxShape::Module,
-                    _ => return Err(AssemblyError::Text("invalid syntax constant shape".into())),
-                };
-                let text = parse_quoted(must_get(parts.get(4), "syntax value")?)?;
-                ConstantValue::Syntax {
-                    shape,
-                    text: self.intern_string(&text),
+        let value =
+            match kind {
+                "int" => ConstantValue::Int(raw_value.parse().map_err(|_| {
+                    AssemblyError::TextParseFailed("invalid integer constant".into())
+                })?),
+                "float" => ConstantValue::Float(raw_value.parse().map_err(|_| {
+                    AssemblyError::TextParseFailed("invalid float constant".into())
+                })?),
+                "bool" => ConstantValue::Bool(match raw_value {
+                    "true" => true,
+                    "false" => false,
+                    _ => {
+                        return Err(AssemblyError::TextParseFailed(
+                            "invalid bool constant".into(),
+                        ));
+                    }
+                }),
+                "string" => ConstantValue::String(self.intern_string(&parse_quoted(raw_value)?)),
+                "syntax" => {
+                    let shape = match must_get(parts.get(3), "syntax shape")? {
+                        "expr" => SyntaxShape::Expr,
+                        "module" => SyntaxShape::Module,
+                        _ => {
+                            return Err(AssemblyError::TextParseFailed(
+                                "invalid syntax constant shape".into(),
+                            ));
+                        }
+                    };
+                    let text = parse_quoted(must_get(parts.get(4), "syntax value")?)?;
+                    ConstantValue::Syntax {
+                        shape,
+                        text: self.intern_string(&text),
+                    }
                 }
-            }
-            _ => return Err(AssemblyError::Text("unknown constant kind".into())),
-        };
+                _ => {
+                    return Err(AssemblyError::TextParseFailed(
+                        "unknown constant kind".into(),
+                    ));
+                }
+            };
         let id = self.artifact.constants.alloc(ConstantDescriptor {
             name: name_id,
             value,
@@ -579,7 +596,9 @@ impl TextBuilder {
 
     fn parse_global(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 2 {
-            return Err(AssemblyError::Text("expected `.global $Name ...`".into()));
+            return Err(AssemblyError::TextParseFailed(
+                "expected `.global $Name ...`".into(),
+            ));
         }
         let name = parse_symbol(&parts[1])?;
         let mut export = false;
@@ -601,7 +620,9 @@ impl TextBuilder {
 
     fn parse_effect(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 2 {
-            return Err(AssemblyError::Text("expected `.effect $Name ...`".into()));
+            return Err(AssemblyError::TextParseFailed(
+                "expected `.effect $Name ...`".into(),
+            ));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
@@ -617,7 +638,7 @@ impl TextBuilder {
                 idx += 2;
             }
             if parts.get(idx).map(String::as_str) != Some("result") {
-                return Err(AssemblyError::Text(
+                return Err(AssemblyError::TextParseFailed(
                     "expected `result $Type` in `.effect`".into(),
                 ));
             }
@@ -639,7 +660,9 @@ impl TextBuilder {
 
     fn parse_class(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 2 {
-            return Err(AssemblyError::Text("expected `.class $Name`".into()));
+            return Err(AssemblyError::TextParseFailed(
+                "expected `.class $Name`".into(),
+            ));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
@@ -661,7 +684,7 @@ impl TextBuilder {
 
     fn parse_meta(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.meta $Target $Key ...`".into(),
             ));
         }
@@ -684,7 +707,7 @@ impl TextBuilder {
 
     fn parse_foreign(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
@@ -701,7 +724,7 @@ impl TextBuilder {
             || parts.get(base + 2).map(String::as_str) != Some("abi")
             || parts.get(base + 4).map(String::as_str) != Some("symbol")
         {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
@@ -721,7 +744,7 @@ impl TextBuilder {
                     idx += 2;
                 }
                 _ => {
-                    return Err(AssemblyError::Text(
+                    return Err(AssemblyError::TextParseFailed(
                         "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
                     ));
                 }
@@ -744,7 +767,7 @@ impl TextBuilder {
 
     fn parse_export(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
                     .into(),
             ));
@@ -753,7 +776,7 @@ impl TextBuilder {
         let kind = must_get(parts.get(2), "export kind")?;
         let opaque = parts.iter().skip(3).any(|part| part == "opaque");
         if self.exports.contains_key(&name) {
-            return Err(AssemblyError::Text("duplicate export".into()));
+            return Err(AssemblyError::TextParseFailed("duplicate export".into()));
         }
         let name_id = self.intern_string(&name);
         let target =
@@ -761,34 +784,30 @@ impl TextBuilder {
                 "method" => ExportTarget::Method(self.ensure_method_symbol(&name)),
                 "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
                 "foreign" => {
-                    let foreign = *self
-                        .foreigns
-                        .get(&name)
-                        .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
+                    let foreign = *self.foreigns.get(&name).ok_or_else(|| {
+                        AssemblyError::TextParseFailed(format!("unknown foreign ${name}"))
+                    })?;
                     ExportTarget::Foreign(foreign)
                 }
                 "type" => {
-                    let ty = *self
-                        .types
-                        .get(&name)
-                        .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
+                    let ty = *self.types.get(&name).ok_or_else(|| {
+                        AssemblyError::TextParseFailed(format!("unknown type ${name}"))
+                    })?;
                     ExportTarget::Type(ty)
                 }
                 "effect" => {
-                    let effect = *self
-                        .effects
-                        .get(&name)
-                        .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${name}")))?;
+                    let effect = *self.effects.get(&name).ok_or_else(|| {
+                        AssemblyError::TextParseFailed(format!("unknown effect ${name}"))
+                    })?;
                     ExportTarget::Effect(effect)
                 }
                 "class" => {
-                    let class = *self
-                        .classes
-                        .get(&name)
-                        .ok_or_else(|| AssemblyError::Text(format!("unknown class ${name}")))?;
+                    let class = *self.classes.get(&name).ok_or_else(|| {
+                        AssemblyError::TextParseFailed(format!("unknown class ${name}"))
+                    })?;
                     ExportTarget::Class(class)
                 }
-                _ => return Err(AssemblyError::Text(
+                _ => return Err(AssemblyError::TextParseFailed(
                     "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
                         .into(),
                 )),
@@ -805,7 +824,7 @@ impl TextBuilder {
     fn parse_method(&mut self, header: &str, lines: &[&str]) -> AssemblyResult {
         let parts = tokenize(header)?;
         if parts.len() < 4 {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.method $Name [params <count>] locals <count> [export]`".into(),
             ));
         }
@@ -815,17 +834,17 @@ impl TextBuilder {
         if parts.get(idx).map(String::as_str) == Some("params") {
             params = must_get(parts.get(idx + 1), "method params")?
                 .parse()
-                .map_err(|_| AssemblyError::Text("invalid params count".into()))?;
+                .map_err(|_| AssemblyError::TextParseFailed("invalid params count".into()))?;
             idx += 2;
         }
         if parts.get(idx).map(String::as_str) != Some("locals") {
-            return Err(AssemblyError::Text(
+            return Err(AssemblyError::TextParseFailed(
                 "expected `.method $Name [params <count>] locals <count> [export]`".into(),
             ));
         }
         let locals = must_get(parts.get(idx + 1), "locals count")?
             .parse()
-            .map_err(|_| AssemblyError::Text("invalid locals count".into()))?;
+            .map_err(|_| AssemblyError::TextParseFailed("invalid locals count".into()))?;
         let export = parts.iter().skip(idx + 2).any(|part| part == "export");
 
         let mut labels = Vec::<StringId>::new();
@@ -870,10 +889,12 @@ impl TextBuilder {
     ) -> AssemblyResult<Instruction> {
         let parts = tokenize(line)?;
         let Some(opcode_text) = parts.first() else {
-            return Err(AssemblyError::Text("empty instruction".into()));
+            return Err(AssemblyError::TextParseFailed("empty instruction".into()));
         };
         let Some(opcode) = Opcode::from_mnemonic(opcode_text) else {
-            return Err(AssemblyError::Text(format!("unknown opcode {opcode_text}")));
+            return Err(AssemblyError::TextParseFailed(format!(
+                "unknown opcode {opcode_text}"
+            )));
         };
         let operand = self.parse_operand(opcode.operand_shape(), &parts, labels, label_ids)?;
         Ok(Instruction::new(opcode, operand))
@@ -909,7 +930,7 @@ impl TextBuilder {
         Ok(Operand::I16(
             must_get(parts.get(1), "i16 operand")?
                 .parse()
-                .map_err(|_| AssemblyError::Text("invalid i16 operand".into()))?,
+                .map_err(|_| AssemblyError::TextParseFailed("invalid i16 operand".into()))?,
         ))
     }
 
@@ -924,7 +945,7 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown type ${name}")))?;
+            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown type ${name}")))?;
         Ok(Operand::Type(ty))
     }
 
@@ -933,7 +954,7 @@ impl TextBuilder {
         let constant = *self
             .constants
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown constant ${name}")))?;
+            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown constant ${name}")))?;
         Ok(Operand::Constant(constant))
     }
 
@@ -983,7 +1004,7 @@ impl TextBuilder {
         let method = self.ensure_method_symbol(&name);
         let captures = must_get(parts.get(2), "capture count")?
             .parse::<u8>()
-            .map_err(|_| AssemblyError::Text("invalid capture count".into()))?;
+            .map_err(|_| AssemblyError::TextParseFailed("invalid capture count".into()))?;
         Ok(Operand::WideMethodCaptures { method, captures })
     }
 
@@ -992,36 +1013,36 @@ impl TextBuilder {
         let foreign = *self
             .foreigns
             .get(&name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown foreign ${name}")))?;
+            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown foreign ${name}")))?;
         Ok(Operand::Foreign(foreign))
     }
 
     fn parse_effect_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
         let op_name = parse_symbol(must_get(parts.get(2), "effect op")?)?;
-        let effect_id = *self
-            .effects
-            .get(&effect_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${effect_name}")))?;
+        let effect_id = *self.effects.get(&effect_name).ok_or_else(|| {
+            AssemblyError::TextParseFailed(format!("unknown effect ${effect_name}"))
+        })?;
         let effect = self.artifact.effects.get(effect_id);
         let op = effect
             .ops
             .iter()
             .position(|candidate| self.artifact.string_text(candidate.name) == op_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect op ${op_name}")))?;
+            .ok_or_else(|| {
+                AssemblyError::TextParseFailed(format!("unknown effect op ${op_name}"))
+            })?;
         Ok(Operand::Effect {
             effect: effect_id,
             op: u16::try_from(op)
-                .map_err(|_| AssemblyError::Text("effect op index overflow".into()))?,
+                .map_err(|_| AssemblyError::TextParseFailed("effect op index overflow".into()))?,
         })
     }
 
     fn parse_effect_id_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
-        let effect_id = *self
-            .effects
-            .get(&effect_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown effect ${effect_name}")))?;
+        let effect_id = *self.effects.get(&effect_name).ok_or_else(|| {
+            AssemblyError::TextParseFailed(format!("unknown effect ${effect_name}"))
+        })?;
         Ok(Operand::EffectId(effect_id))
     }
 
@@ -1045,10 +1066,10 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&type_name)
-            .ok_or_else(|| AssemblyError::Text(format!("unknown type ${type_name}")))?;
+            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown type ${type_name}")))?;
         let len = must_get(parts.get(2), "length")?
             .parse()
-            .map_err(|_| AssemblyError::Text("invalid sequence length".into()))?;
+            .map_err(|_| AssemblyError::TextParseFailed("invalid sequence length".into()))?;
         Ok(Operand::TypeLen { ty, len })
     }
 
@@ -1088,17 +1109,17 @@ fn ensure_label(
         return Ok(id);
     }
     let name_id = artifact.intern_string(&name);
-    let id =
-        u16::try_from(labels.len()).map_err(|_| AssemblyError::Text("too many labels".into()))?;
+    let id = u16::try_from(labels.len())
+        .map_err(|_| AssemblyError::TextParseFailed("too many labels".into()))?;
     labels.push(name_id);
     let _ = label_ids.insert(name, id);
     Ok(id)
 }
 
 fn parse_symbol(token: &str) -> AssemblyResult<String> {
-    let body = token
-        .strip_prefix('$')
-        .ok_or_else(|| AssemblyError::Text(format!("expected symbolic name, got `{token}`")))?;
+    let body = token.strip_prefix('$').ok_or_else(|| {
+        AssemblyError::TextParseFailed(format!("expected symbolic name, got `{token}`"))
+    })?;
     if body.starts_with('"') {
         parse_quoted(body)
     } else {
@@ -1110,9 +1131,9 @@ fn parse_local(token: Option<&String>) -> AssemblyResult<u16> {
     let token = must_get(token, "local")?;
     token
         .strip_prefix('%')
-        .ok_or_else(|| AssemblyError::Text("expected local slot like `%0`".into()))?
+        .ok_or_else(|| AssemblyError::TextParseFailed("expected local slot like `%0`".into()))?
         .parse()
-        .map_err(|_| AssemblyError::Text("invalid local slot".into()))
+        .map_err(|_| AssemblyError::TextParseFailed("invalid local slot".into()))
 }
 
 fn parse_quoted(token: &str) -> AssemblyResult<String> {
@@ -1120,7 +1141,7 @@ fn parse_quoted(token: &str) -> AssemblyResult<String> {
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
     else {
-        return Err(AssemblyError::Text(format!(
+        return Err(AssemblyError::TextParseFailed(format!(
             "expected quoted string, got `{token}`"
         )));
     };
@@ -1130,7 +1151,7 @@ fn parse_quoted(token: &str) -> AssemblyResult<String> {
 fn must_get<'a>(token: Option<&'a String>, name: &str) -> AssemblyResult<&'a str> {
     token
         .map(String::as_str)
-        .ok_or_else(|| AssemblyError::Text(format!("missing {name} operand")))
+        .ok_or_else(|| AssemblyError::TextParseFailed(format!("missing {name} operand")))
 }
 
 fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
@@ -1179,7 +1200,9 @@ fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
     }
 
     if in_string {
-        return Err(AssemblyError::Text("unterminated string literal".into()));
+        return Err(AssemblyError::TextParseFailed(
+            "unterminated string literal".into(),
+        ));
     }
     if !current.is_empty() {
         tokens.push(current);

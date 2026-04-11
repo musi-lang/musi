@@ -321,4 +321,4 @@ fn parse_int_lit(raw: &str) -> Option<u32> {
     u32::from_str_radix(digits, radix).ok()
 }
 
-// Note: wrapper forms (export/attrs/foreign) are modeled via `HirExpr.mods`, not `HirExprKind`.
+// Wrapper forms (`export`, attrs, `foreign`) live in `HirExpr.mods`, not `HirExprKind`.

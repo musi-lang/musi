@@ -84,7 +84,7 @@ pub struct TypeField {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TypeTermError {
     #[error("type term parse failed")]
-    Parse,
+    TermParseFailed,
 }
 
 impl TypeTerm {
@@ -99,7 +99,7 @@ impl TypeTerm {
     }
 
     pub fn from_json(text: &str) -> Result<Self, TypeTermError> {
-        serde_json::from_str(text).map_err(|_| TypeTermError::Parse)
+        serde_json::from_str(text).map_err(|_| TypeTermError::TermParseFailed)
     }
 }
 
@@ -220,7 +220,7 @@ impl<'a> Parser<'a> {
         if self.pos == self.text.len() {
             Ok(term)
         } else {
-            Err(TypeTermError::Parse)
+            Err(TypeTermError::TermParseFailed)
         }
     }
 
@@ -409,7 +409,7 @@ impl<'a> Parser<'a> {
         }
         if let Some(value) = self.parse_nat_lit() {
             return Ok(TypeDim::Int(
-                u32::try_from(value).map_err(|_| TypeTermError::Parse)?,
+                u32::try_from(value).map_err(|_| TypeTermError::TermParseFailed)?,
             ));
         }
         Ok(TypeDim::Name(self.parse_ident()?.into()))
@@ -436,7 +436,7 @@ impl<'a> Parser<'a> {
             self.bump();
         }
         if self.pos == start {
-            return Err(TypeTermError::Parse);
+            return Err(TypeTermError::TermParseFailed);
         }
         Ok(self.text[start..self.pos].to_owned())
     }
@@ -445,7 +445,7 @@ impl<'a> Parser<'a> {
         let before = self.pos;
         self.skip_ws();
         if self.pos == before {
-            Err(TypeTermError::Parse)
+            Err(TypeTermError::TermParseFailed)
         } else {
             Ok(())
         }
@@ -455,7 +455,7 @@ impl<'a> Parser<'a> {
         if self.consume(token) {
             Ok(())
         } else {
-            Err(TypeTermError::Parse)
+            Err(TypeTermError::TermParseFailed)
         }
     }
 

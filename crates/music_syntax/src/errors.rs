@@ -183,7 +183,7 @@ impl LexErrorKind {
             Self::InvalidDigitForBase { base, .. } => {
                 format!("invalid digit in base {base} literal")
             }
-            Self::UnexpectedUnderscoreInNumberLiteral => "underscore is not valid".into(),
+            Self::UnexpectedUnderscoreInNumberLiteral => "underscore invalid".into(),
             Self::MissingDigitAfterUnderscoreInNumberLiteral => {
                 "digit after `_` is required".into()
             }
@@ -336,7 +336,7 @@ fn snippet_text(source_text: &str, span: Span) -> Option<String> {
         }
     }
     if raw.chars().count() > 24 {
-        escaped.push('…');
+        escaped.push_str("...");
     }
     Some(format!("`{escaped}`"))
 }

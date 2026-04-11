@@ -26,7 +26,7 @@ impl ImportEnv for TestImportEnv {
         self.modules
             .get(spec.as_str())
             .cloned()
-            .ok_or_else(|| ImportError::new(ImportErrorKind::NotFound, spec.as_str()))
+            .ok_or_else(|| ImportError::new(ImportErrorKind::ModuleNotFound, spec.as_str()))
     }
 }
 

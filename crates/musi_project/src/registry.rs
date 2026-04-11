@@ -20,12 +20,12 @@ pub fn resolve_registry_package(
     let package_root = registry_root.join(name);
     let mut best: Option<(VersionKey, PathBuf)> = None;
 
-    let entries = fs::read_dir(&package_root).map_err(|source| ProjectError::Io {
+    let entries = fs::read_dir(&package_root).map_err(|source| ProjectError::ProjectIoFailed {
         path: package_root.clone(),
         source,
     })?;
     for entry in entries {
-        let entry = entry.map_err(|source| ProjectError::Io {
+        let entry = entry.map_err(|source| ProjectError::ProjectIoFailed {
             path: package_root.clone(),
             source,
         })?;
@@ -111,16 +111,16 @@ fn version_matches(requirement: &str, version: &VersionKey) -> bool {
 }
 
 fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
-    fs::create_dir_all(to).map_err(|source| ProjectError::Io {
+    fs::create_dir_all(to).map_err(|source| ProjectError::ProjectIoFailed {
         path: to.to_path_buf(),
         source,
     })?;
-    let entries = fs::read_dir(from).map_err(|source| ProjectError::Io {
+    let entries = fs::read_dir(from).map_err(|source| ProjectError::ProjectIoFailed {
         path: from.to_path_buf(),
         source,
     })?;
     for entry in entries {
-        let entry = entry.map_err(|source| ProjectError::Io {
+        let entry = entry.map_err(|source| ProjectError::ProjectIoFailed {
             path: from.to_path_buf(),
             source,
         })?;
@@ -129,10 +129,11 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
-            let _ = fs::copy(&src_path, &dst_path).map_err(|source| ProjectError::Io {
-                path: dst_path.clone(),
-                source,
-            })?;
+            let _ =
+                fs::copy(&src_path, &dst_path).map_err(|source| ProjectError::ProjectIoFailed {
+                    path: dst_path.clone(),
+                    source,
+                })?;
         }
     }
     Ok(())

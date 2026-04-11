@@ -1,12 +1,13 @@
 mod errors;
 mod lock;
 pub mod manifest;
+mod manifest_source;
 mod project;
 mod registry;
 mod testing;
 mod types;
 
-pub use errors::ProjectError;
+pub use errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
 pub use lock::{LockedPackage, LockedPackageSource, Lockfile};
 pub use manifest::PackageManifest;
 pub use project::{

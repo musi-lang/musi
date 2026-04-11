@@ -36,5 +36,5 @@ fn rune_must_be_one_char() {
     assert_eq!(v, u32::from('a'));
 
     let err = decode_rune_lit("'ab'").unwrap_err();
-    assert_eq!(err.kind, StringLitErrorKind::RuneCharCount);
+    assert_eq!(err.kind, StringLitErrorKind::RuneScalarCountInvalid);
 }

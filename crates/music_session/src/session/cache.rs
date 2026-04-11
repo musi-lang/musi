@@ -17,8 +17,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns [`SessionError::UnknownModule`] if the module is not registered, or
-    /// [`SessionError::Parse`] if lexing or parsing produced errors.
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered, or
+    /// [`SessionError::ModuleParseFailed`] if lexing or parsing produced errors.
     ///
     /// # Panics
     ///
@@ -43,7 +43,7 @@ impl Session {
         if parsed.syntax.is_empty() {
             Ok(parsed)
         } else {
-            Err(SessionError::Parse {
+            Err(SessionError::ModuleParseFailed {
                 module: key.clone(),
                 syntax: parsed.syntax.clone(),
             })
@@ -54,8 +54,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns [`SessionError::UnknownModule`] if the module is not registered,
-    /// [`SessionError::Parse`] if parsing failed, or [`SessionError::Resolve`] if
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered,
+    /// [`SessionError::ModuleParseFailed`] if parsing failed, or [`SessionError::ModuleResolveFailed`] if
     /// resolution diagnostics were produced.
     ///
     /// # Panics
@@ -82,7 +82,7 @@ impl Session {
         if resolved.diags.is_empty() {
             Ok(resolved)
         } else {
-            Err(SessionError::Resolve {
+            Err(SessionError::ModuleResolveFailed {
                 module: key.clone(),
                 diags: resolved.diags.clone().into_boxed_slice(),
             })
@@ -93,9 +93,9 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns [`SessionError::UnknownModule`] if the module is not registered,
-    /// [`SessionError::Parse`] or [`SessionError::Resolve`] if earlier phases failed,
-    /// or [`SessionError::Sema`] if semantic diagnostics were produced.
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered,
+    /// [`SessionError::ModuleParseFailed`] or [`SessionError::ModuleResolveFailed`] if earlier phases failed,
+    /// or [`SessionError::ModuleSemanticCheckFailed`] if semantic diagnostics were produced.
     ///
     /// # Panics
     ///
@@ -120,7 +120,7 @@ impl Session {
         if sema.diags().is_empty() {
             Ok(sema)
         } else {
-            Err(SessionError::Sema {
+            Err(SessionError::ModuleSemanticCheckFailed {
                 module: key.clone(),
                 diags: sema.diags().to_vec().into_boxed_slice(),
             })
@@ -131,8 +131,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns [`SessionError::UnknownModule`] if the module is not registered,
-    /// any earlier phase error, or [`SessionError::Ir`] if IR lowering fails.
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered,
+    /// any earlier phase error, or [`SessionError::ModuleLoweringFailed`] if IR lowering fails.
     ///
     /// # Panics
     ///
@@ -148,7 +148,7 @@ impl Session {
         {
             #[cfg(test)]
             if let Some(diags) = self.test_hooks.ir_failure.take() {
-                return Err(SessionError::Ir {
+                return Err(SessionError::ModuleLoweringFailed {
                     module: key.clone(),
                     diags,
                 });
@@ -160,9 +160,11 @@ impl Session {
                     .sema
                     .as_ref()
                     .expect("sema cache missing after successful check");
-                lower_module(sema, &self.interner).map_err(|diags| SessionError::Ir {
-                    module: key.clone(),
-                    diags: diags.into_boxed_slice(),
+                lower_module(sema, &self.interner).map_err(|diags| {
+                    SessionError::ModuleLoweringFailed {
+                        module: key.clone(),
+                        diags: diags.into_boxed_slice(),
+                    }
                 })?
             };
             self.module_record_mut(key)?.ir = Some(ir);
@@ -179,8 +181,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns [`SessionError::UnknownModule`] if the module is not registered,
-    /// any earlier phase error, or [`SessionError::Emit`] if artifact emission fails.
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered,
+    /// any earlier phase error, or [`SessionError::ModuleEmissionFailed`] if artifact emission fails.
     ///
     /// # Panics
     ///
@@ -196,7 +198,7 @@ impl Session {
         {
             #[cfg(test)]
             if let Some(diags) = self.test_hooks.emit_failure.take() {
-                return Err(SessionError::Emit {
+                return Err(SessionError::ModuleEmissionFailed {
                     module: key.clone(),
                     diags,
                 });
@@ -209,9 +211,11 @@ impl Session {
                     .ir
                     .as_ref()
                     .expect("ir cache missing after successful lowering");
-                lower_ir_module(ir, emit_options).map_err(|diags| SessionError::Emit {
-                    module: key.clone(),
-                    diags: diags.into_boxed_slice(),
+                lower_ir_module(ir, emit_options).map_err(|diags| {
+                    SessionError::ModuleEmissionFailed {
+                        module: key.clone(),
+                        diags: diags.into_boxed_slice(),
+                    }
                 })?
             };
             self.module_record_mut(key)?.emitted = Some(emitted);

@@ -433,4 +433,4 @@ pub(super) fn check_bound_class(
     check_class_expr(ctx, expr_id, constraints, members, Some(name))
 }
 
-// Note: attribute and export wrappers are modeled via `HirExpr.mods`, not `HirExprKind`.
+// Attribute and export wrappers live in `HirExpr.mods`, not `HirExprKind`.

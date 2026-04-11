@@ -50,7 +50,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     }
     let version = cursor.read_u16()?;
     if version != BINARY_VERSION {
-        return Err(AssemblyError::UnsupportedVersion(version));
+        return Err(AssemblyError::BinaryVersionUnsupported(version));
     }
 
     let mut artifact = Artifact::new();
@@ -65,11 +65,15 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     decode_exports(&mut cursor, &mut artifact)?;
     decode_data(&mut cursor, &mut artifact)?;
     if !cursor.is_eof() {
-        let next = cursor.peek_u8().ok_or(AssemblyError::TruncatedBinary)?;
+        let next = cursor
+            .peek_u8()
+            .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         if next == section_tag_byte(SectionTag::Meta) {
             decode_meta(&mut cursor, &mut artifact)?;
         } else {
-            return Err(AssemblyError::Text("unknown trailing section".into()));
+            return Err(AssemblyError::TextParseFailed(
+                "unknown trailing section".into(),
+            ));
         }
     }
     artifact.validate()?;
@@ -434,7 +438,8 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     require_section(cursor, SectionTag::Strings)?;
     for _ in 0..cursor.read_u32()? {
         let bytes = cursor.read_bytes()?;
-        let text = String::from_utf8(bytes).map_err(|err| AssemblyError::Text(err.to_string()))?;
+        let text = String::from_utf8(bytes)
+            .map_err(|err| AssemblyError::TextParseFailed(err.to_string()))?;
         let _ = artifact.intern_string(&text);
     }
     Ok(())
@@ -464,11 +469,19 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
                 shape: match cursor.read_u8()? {
                     0 => SyntaxShape::Expr,
                     1 => SyntaxShape::Module,
-                    _ => return Err(AssemblyError::Text("unknown syntax shape".into())),
+                    _ => {
+                        return Err(AssemblyError::TextParseFailed(
+                            "unknown syntax shape".into(),
+                        ));
+                    }
                 },
                 text: cursor.read_idx()?,
             },
-            _ => return Err(AssemblyError::Text("unknown constant kind".into())),
+            _ => {
+                return Err(AssemblyError::TextParseFailed(
+                    "unknown constant kind".into(),
+                ));
+            }
         };
         let _ = artifact.constants.alloc(ConstantDescriptor { name, value });
     }
@@ -517,12 +530,16 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
                 1 => {
                     let opcode_code = cursor.read_u16()?;
                     let Some(opcode) = Opcode::from_wire_code(opcode_code) else {
-                        return Err(AssemblyError::UnknownOpcode(opcode_code));
+                        return Err(AssemblyError::OpcodeUnknown(opcode_code));
                     };
                     let operand = decode_operand(cursor)?;
                     CodeEntry::Instruction(Instruction::new(opcode, operand))
                 }
-                _ => return Err(AssemblyError::Text("unknown code entry kind".into())),
+                _ => {
+                    return Err(AssemblyError::TextParseFailed(
+                        "unknown code entry kind".into(),
+                    ));
+                }
             };
             code.push(entry);
         }
@@ -590,7 +607,11 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
         let link = match cursor.read_u8()? {
             0 => None,
             1 => Some(cursor.read_idx()?),
-            _ => return Err(AssemblyError::Text("invalid foreign link marker".into())),
+            _ => {
+                return Err(AssemblyError::TextParseFailed(
+                    "invalid foreign link marker".into(),
+                ));
+            }
         };
         let _ = artifact.foreigns.alloc(ForeignDescriptor {
             name,
@@ -717,7 +738,7 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> AssemblyResult<Operand> {
             }
             Operand::BranchTable(labels.into_boxed_slice())
         }
-        _ => return Err(AssemblyError::Text("unknown operand tag".into())),
+        _ => return Err(AssemblyError::TextParseFailed("unknown operand tag".into())),
     })
 }
 
@@ -730,7 +751,7 @@ fn require_section(cursor: &mut Cursor<'_>, tag: SectionTag) -> AssemblyResult {
     if found == section_tag_byte(tag) {
         Ok(())
     } else {
-        Err(AssemblyError::UnknownSection(found))
+        Err(AssemblyError::SectionTagUnknown(found))
     }
 }
 
@@ -795,13 +816,13 @@ impl<'bytes> Cursor<'bytes> {
 
     fn read_exact(&mut self, len: usize) -> AssemblyResult<[u8; 4]> {
         if len != 4 {
-            return Err(AssemblyError::TruncatedBinary);
+            return Err(AssemblyError::BinaryPayloadTruncated);
         }
         let end = self.offset.saturating_add(4);
         let slice = self
             .bytes
             .get(self.offset..end)
-            .ok_or(AssemblyError::TruncatedBinary)?;
+            .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         self.offset = end;
         let mut out = [0_u8; 4];
         out.copy_from_slice(slice);
@@ -812,7 +833,7 @@ impl<'bytes> Cursor<'bytes> {
         let value = *self
             .bytes
             .get(self.offset)
-            .ok_or(AssemblyError::TruncatedBinary)?;
+            .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         self.offset = self.offset.saturating_add(1);
         Ok(value)
     }
@@ -852,7 +873,7 @@ impl<'bytes> Cursor<'bytes> {
         let slice = self
             .bytes
             .get(self.offset..end)
-            .ok_or(AssemblyError::TruncatedBinary)?;
+            .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         self.offset = end;
         Ok(slice.to_vec())
     }
@@ -862,7 +883,7 @@ impl<'bytes> Cursor<'bytes> {
         let slice = self
             .bytes
             .get(self.offset..end)
-            .ok_or(AssemblyError::TruncatedBinary)?;
+            .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         self.offset = end;
         let mut out = [0_u8; N];
         out.copy_from_slice(slice);
@@ -872,5 +893,5 @@ impl<'bytes> Cursor<'bytes> {
 
 fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> AssemblyResult<usize> {
     usize::try_from(cursor.read_u32()?)
-        .map_err(|_| AssemblyError::Text(format!("{what} does not fit in usize")))
+        .map_err(|_| AssemblyError::TextParseFailed(format!("{what} does not fit in usize")))
 }

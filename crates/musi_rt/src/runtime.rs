@@ -476,8 +476,8 @@ fn vm_runtime_error(err: RuntimeError) -> VmError {
         RuntimeErrorKind::SessionSetupFailed { detail }
         | RuntimeErrorKind::SessionParseFailed { detail }
         | RuntimeErrorKind::SessionResolveFailed { detail }
-        | RuntimeErrorKind::SessionSemaFailed { detail }
-        | RuntimeErrorKind::SessionIrFailed { detail }
+        | RuntimeErrorKind::SessionSemanticCheckFailed { detail }
+        | RuntimeErrorKind::SessionLoweringFailed { detail }
         | RuntimeErrorKind::SessionEmitFailed { detail } => {
             VmError::new(VmErrorKind::EffectRejected {
                 effect: syntax::EFFECT.into(),
@@ -494,23 +494,23 @@ fn vm_runtime_error(err: RuntimeError) -> VmError {
                 found: *found,
             })
         }
-        RuntimeErrorKind::RootModuleRequired => VmError::new(VmErrorKind::InvalidProgram {
+        RuntimeErrorKind::RootModuleRequired => VmError::new(VmErrorKind::ProgramShapeInvalid {
             detail: "root module required".into(),
         }),
-        RuntimeErrorKind::Vm(err) => err.clone(),
+        RuntimeErrorKind::VmExecutionFailed(err) => err.clone(),
     }
 }
 
 fn session_error_detail(err: &SessionError) -> Box<str> {
     match err {
-        SessionError::Parse { syntax, .. } => syntax
+        SessionError::ModuleParseFailed { syntax, .. } => syntax
             .diags()
             .first()
             .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
-        SessionError::Resolve { diags, .. }
-        | SessionError::Sema { diags, .. }
-        | SessionError::Ir { diags, .. }
-        | SessionError::Emit { diags, .. } => diags
+        SessionError::ModuleResolveFailed { diags, .. }
+        | SessionError::ModuleSemanticCheckFailed { diags, .. }
+        | SessionError::ModuleLoweringFailed { diags, .. }
+        | SessionError::ModuleEmissionFailed { diags, .. } => diags
             .first()
             .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
         _ => err.to_string().into(),
@@ -519,15 +519,15 @@ fn session_error_detail(err: &SessionError) -> Box<str> {
 
 fn vm_session_error(err: &SessionError) -> VmError {
     let stage = match &err {
-        SessionError::Parse { .. } => "parse failed",
-        SessionError::Resolve { .. } => "resolve failed",
-        SessionError::Sema { .. } => "sema failed",
-        SessionError::Ir { .. } => "ir failed",
-        SessionError::Emit { .. } => "emit failed",
+        SessionError::ModuleParseFailed { .. } => "parse failed",
+        SessionError::ModuleResolveFailed { .. } => "resolve failed",
+        SessionError::ModuleSemanticCheckFailed { .. } => "semantic check failed",
+        SessionError::ModuleLoweringFailed { .. } => "lowering failed",
+        SessionError::ModuleEmissionFailed { .. } => "emission failed",
         _ => "session setup failed",
     };
     let detail = session_error_detail(err);
-    VmError::new(VmErrorKind::InvalidProgram {
+    VmError::new(VmErrorKind::ProgramShapeInvalid {
         detail: format!("{stage} (`{detail}`)").into(),
     })
 }

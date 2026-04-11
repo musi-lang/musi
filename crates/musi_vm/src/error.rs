@@ -44,13 +44,13 @@ pub enum VmValueKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VmErrorKind {
-    DecodeFailed {
+    SeamDecodeFailed {
         detail: Box<str>,
     },
-    InvalidProgram {
+    ProgramShapeInvalid {
         detail: Box<str>,
     },
-    InitializationRequired,
+    VmInitializationRequired,
     ModuleInitCycle {
         spec: Box<str>,
     },
@@ -177,7 +177,7 @@ impl VmError {
 
 impl From<AssemblyError> for VmError {
     fn from(value: AssemblyError) -> Self {
-        Self::new(VmErrorKind::DecodeFailed {
+        Self::new(VmErrorKind::SeamDecodeFailed {
             detail: value.to_string().into(),
         })
     }
@@ -186,13 +186,13 @@ impl From<AssemblyError> for VmError {
 impl VmErrorKind {
     fn fmt_decode_and_lookup(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DecodeFailed { detail } => {
-                write!(f, "decode failed for SEAM bytes (`{detail}`)")
+            Self::SeamDecodeFailed { detail } => {
+                write!(f, "SEAM decode failed (`{detail}`)")
             }
-            Self::InvalidProgram { detail } => {
-                write!(f, "program is invalid (`{detail}`)")
+            Self::ProgramShapeInvalid { detail } => {
+                write!(f, "program shape invalid (`{detail}`)")
             }
-            Self::InitializationRequired => f.write_str("vm initialization required"),
+            Self::VmInitializationRequired => f.write_str("vm initialization required"),
             Self::ModuleInitCycle { spec } => {
                 write!(f, "module init cycle detected for `{spec}`")
             }
@@ -328,9 +328,9 @@ impl VmErrorKind {
                     "effect `{effect}` operation index `{op_index}` out of bounds for `{op_count}` operations"
                 )
             }
-            Self::DecodeFailed { .. }
-            | Self::InvalidProgram { .. }
-            | Self::InitializationRequired
+            Self::SeamDecodeFailed { .. }
+            | Self::ProgramShapeInvalid { .. }
+            | Self::VmInitializationRequired
             | Self::ModuleInitCycle { .. }
             | Self::ExportNotFound { .. }
             | Self::NonCallableValue { .. }

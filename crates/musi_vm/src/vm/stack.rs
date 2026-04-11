@@ -130,7 +130,7 @@ impl Vm {
 
     pub(crate) fn pop_index_list(&mut self, len: i16) -> VmResult<smallvec::SmallVec<[i64; 4]>> {
         let len = usize::try_from(len).map_err(|_| {
-            VmError::new(VmErrorKind::InvalidProgram {
+            VmError::new(VmErrorKind::ProgramShapeInvalid {
                 detail: "index count is negative".into(),
             })
         })?;

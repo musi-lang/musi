@@ -88,7 +88,7 @@ fn parse_failures_expose_typed_syntax_errors_and_diags() {
         .unwrap();
 
     let err = session.parse_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Parse { syntax, .. } = err else {
+    let SessionError::ModuleParseFailed { syntax, .. } = err else {
         panic!("parse error expected");
     };
 
@@ -113,7 +113,7 @@ fn compile_module_propagates_parse_failures() {
         .unwrap();
 
     let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Parse { syntax, .. } = err else {
+    let SessionError::ModuleParseFailed { syntax, .. } = err else {
         panic!("parse error expected");
     };
 
@@ -130,7 +130,7 @@ fn compile_entry_propagates_parse_failures() {
         .unwrap();
 
     let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Parse { syntax, .. } = err else {
+    let SessionError::ModuleParseFailed { syntax, .. } = err else {
         panic!("parse error expected");
     };
 
@@ -318,7 +318,7 @@ fn resolve_failures_surface_session_resolve_error() {
         .unwrap();
 
     let err = session.resolve_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Resolve { diags, .. } = err else {
+    let SessionError::ModuleResolveFailed { diags, .. } = err else {
         panic!("resolve error expected");
     };
 
@@ -341,7 +341,7 @@ fn sema_failures_surface_session_sema_error() {
         .unwrap();
 
     let err = session.check_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Sema { diags, .. } = err else {
+    let SessionError::ModuleSemanticCheckFailed { diags, .. } = err else {
         panic!("sema error expected");
     };
 
@@ -369,7 +369,7 @@ fn lower_module_propagates_ir_failure_with_typed_kind() {
     );
 
     let err = session.lower_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Ir { diags, .. } = err else {
+    let SessionError::ModuleLoweringFailed { diags, .. } = err else {
         panic!("ir error expected");
     };
 
@@ -395,7 +395,7 @@ fn compile_module_propagates_emit_failure_with_typed_kind() {
     );
 
     let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Emit { diags, .. } = err else {
+    let SessionError::ModuleEmissionFailed { diags, .. } = err else {
         panic!("emit error expected");
     };
 
@@ -421,7 +421,7 @@ fn compile_entry_propagates_emit_failure_with_typed_kind() {
     );
 
     let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::Emit { diags, .. } = err else {
+    let SessionError::ModuleEmissionFailed { diags, .. } = err else {
         panic!("emit error expected");
     };
 

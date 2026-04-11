@@ -85,7 +85,7 @@ impl Session {
         self.store
             .modules
             .get(key)
-            .ok_or_else(|| SessionError::UnknownModule { key: key.clone() })
+            .ok_or_else(|| SessionError::ModuleNotRegistered { key: key.clone() })
     }
 
     pub(super) fn module_record_mut(
@@ -95,6 +95,6 @@ impl Session {
         self.store
             .modules
             .get_mut(key)
-            .ok_or_else(|| SessionError::UnknownModule { key: key.clone() })
+            .ok_or_else(|| SessionError::ModuleNotRegistered { key: key.clone() })
     }
 }

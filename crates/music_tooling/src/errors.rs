@@ -14,14 +14,14 @@ pub enum ToolingError {
     PackageImportRequiresMusi { spec: String },
     #[error("import `{spec}` not found from `{path}`")]
     MissingImport { path: PathBuf, spec: String },
-    #[error("io error at `{path}`")]
-    Io {
+    #[error("tooling I/O failed at `{path}`")]
+    ToolingIoFailed {
         path: PathBuf,
         #[source]
         source: IoError,
     },
-    #[error("session error")]
-    Session(#[from] SessionError),
+    #[error("session compilation failed")]
+    SessionCompilationFailed(#[from] SessionError),
 }
 
 pub type ToolingResult<T = ()> = Result<T, ToolingError>;
@@ -33,8 +33,8 @@ impl ToolingError {
             Self::MissingEntrySource { .. } => 3630,
             Self::PackageImportRequiresMusi { .. } => 3631,
             Self::MissingImport { .. } => 3632,
-            Self::Io { .. } => 3633,
-            Self::Session(_) => return None,
+            Self::ToolingIoFailed { .. } => 3633,
+            Self::SessionCompilationFailed(_) => return None,
         }))
     }
 
@@ -46,8 +46,8 @@ impl ToolingError {
                 Cow::Owned(format!("import `{spec}` requires `musi` package context"))
             }
             Self::MissingImport { spec, .. } => Cow::Owned(format!("import `{spec}` not found")),
-            Self::Io { .. } => Cow::Borrowed("tooling io failed"),
-            Self::Session(_) => return None,
+            Self::ToolingIoFailed { .. } => Cow::Borrowed("tooling I/O failed"),
+            Self::SessionCompilationFailed(_) => return None,
         })
     }
 }

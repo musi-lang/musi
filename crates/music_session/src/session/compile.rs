@@ -69,13 +69,13 @@ impl Session {
             let modules = self.collect_reachable_ir_modules(key)?;
             #[cfg(test)]
             if let Some(diags) = self.test_hooks.emit_failure.take() {
-                return Err(SessionError::Emit {
+                return Err(SessionError::ModuleEmissionFailed {
                     module: key.clone(),
                     diags,
                 });
             }
             let program = lower_ir_program(&modules, key, self.options.emit).map_err(|diags| {
-                SessionError::Emit {
+                SessionError::ModuleEmissionFailed {
                     module: key.clone(),
                     diags: diags.into_boxed_slice(),
                 }

@@ -193,14 +193,14 @@ fn frozen_lock_requires_existing_lockfile() {
 
 #[test]
 fn validation_error_carries_typed_diag_identity() {
-    let error = ProjectError::Validation {
+    let error = ProjectError::ManifestValidationFailed {
         message: "name is required".into(),
     };
 
     assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
     assert_eq!(
         error.diag_message().as_deref(),
-        Some("manifest validation failed: `name is required`")
+        Some("manifest validation failed (`name is required`)")
     );
 }
 

@@ -85,50 +85,50 @@ pub struct CompiledOutput {
 
 #[derive(Debug, Error)]
 pub enum SessionError {
-    #[error("unknown module `{key}`")]
-    UnknownModule { key: ModuleKey },
-    #[error("source map error")]
-    SourceMap { kind: SessionSourceMapError },
-    #[error("parse failed for module `{module}`")]
-    Parse {
+    #[error("module `{key}` not registered")]
+    ModuleNotRegistered { key: ModuleKey },
+    #[error("source map update failed")]
+    SourceMapUpdateFailed { kind: SessionSourceMapError },
+    #[error("module `{module}` parse failed")]
+    ModuleParseFailed {
         module: ModuleKey,
         syntax: SessionSyntaxErrors,
     },
-    #[error("resolve failed for module `{module}`")]
-    Resolve {
+    #[error("module `{module}` resolve failed")]
+    ModuleResolveFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("semantic analysis failed for module `{module}`")]
-    Sema {
+    #[error("module `{module}` semantic check failed")]
+    ModuleSemanticCheckFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("ir lowering failed for module `{module}`")]
-    Ir {
+    #[error("module `{module}` lowering failed")]
+    ModuleLoweringFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("emit failed for module `{module}`")]
-    Emit {
+    #[error("module `{module}` emission failed")]
+    ModuleEmissionFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("assembly error")]
-    Assembly(#[from] AssemblyError),
+    #[error("artifact transport failed")]
+    ArtifactTransportFailed(#[from] AssemblyError),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SessionSourceMapError {
-    #[error("source map overflow")]
-    Overflow,
+    #[error("source registry overflow")]
+    SourceRegistryOverflow,
     #[error("source text too large ({len} bytes)")]
     SourceTooLarge { len: usize },
 }
 
 impl From<SourceMapError> for SessionError {
     fn from(value: SourceMapError) -> Self {
-        Self::SourceMap {
+        Self::SourceMapUpdateFailed {
             kind: SessionSourceMapError::from(value),
         }
     }
@@ -137,7 +137,7 @@ impl From<SourceMapError> for SessionError {
 impl From<SourceMapError> for SessionSourceMapError {
     fn from(value: SourceMapError) -> Self {
         match value {
-            SourceMapError::Overflow => Self::Overflow,
+            SourceMapError::Overflow => Self::SourceRegistryOverflow,
             SourceMapError::SourceTooLarge { len } => Self::SourceTooLarge { len },
         }
     }

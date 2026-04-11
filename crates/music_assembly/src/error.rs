@@ -4,17 +4,17 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AssemblyError {
     #[error("{0}")]
-    Artifact(#[from] ArtifactError),
+    ArtifactValidationFailed(#[from] ArtifactError),
     #[error("invalid binary header")]
     InvalidBinaryHeader,
-    #[error("unsupported binary version {0}")]
-    UnsupportedVersion(u16),
-    #[error("unknown section tag {0}")]
-    UnknownSection(u8),
-    #[error("truncated binary payload")]
-    TruncatedBinary,
-    #[error("unknown opcode {0}")]
-    UnknownOpcode(u16),
-    #[error("text parse error: {0}")]
-    Text(String),
+    #[error("binary version `{0}` unsupported")]
+    BinaryVersionUnsupported(u16),
+    #[error("section tag `{0}` unknown")]
+    SectionTagUnknown(u8),
+    #[error("binary payload truncated")]
+    BinaryPayloadTruncated,
+    #[error("opcode `{0}` unknown")]
+    OpcodeUnknown(u16),
+    #[error("text parse failed (`{0}`)")]
+    TextParseFailed(String),
 }

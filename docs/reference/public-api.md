@@ -11,7 +11,7 @@ Use it when checking:
 Rules:
 
 - Each crate root `pub use ...` set is the primary stability boundary.
-- Diagnostics are user-facing: error kinds and message style are part of the API contract.
+- Diagnostics are user-facing: `Error` / `ErrorKind` names and message style are part of the API contract.
 - Internal modules may change as long as the crate root surface stays coherent.
 
 ## Core Language Pipeline

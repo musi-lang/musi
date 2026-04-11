@@ -204,13 +204,13 @@ fn rejects_invalid_syntax_value() {
 #[test]
 fn reports_parse_failure_for_expression_syntax() {
     let err = SyntaxTerm::parse(SyntaxShape::Expr, "(").unwrap_err();
-    assert_eq!(err, SyntaxTermError::Parse);
+    assert_eq!(err, SyntaxTermError::FragmentParseFailed);
 }
 
 #[test]
 fn reports_parse_failure_for_module_syntax() {
     let err = SyntaxTerm::parse(SyntaxShape::Module, "export let := ;").unwrap_err();
-    assert_eq!(err, SyntaxTermError::Parse);
+    assert_eq!(err, SyntaxTermError::FragmentParseFailed);
 }
 
 #[test]
@@ -243,7 +243,10 @@ fn custom_host_still_handles_unregistered_edges() {
     runtime.load_root("main").unwrap();
 
     let err = runtime.call_export("answer", &[]).unwrap_err();
-    assert!(matches!(err.kind(), RuntimeErrorKind::Vm(VmError { .. })));
+    assert!(matches!(
+        err.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
 }
 
 #[test]
