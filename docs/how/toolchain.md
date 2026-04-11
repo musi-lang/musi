@@ -2,7 +2,7 @@
 
 ## Command Surfaces
 
-Long term, Musi has two command surfaces. Today the repo still ships `musi` as the user-facing binary.
+Musi has two command surfaces:
 
 - `music`: direct language and `.seam` tool
 - `musi`: package-aware operator tool
@@ -13,10 +13,11 @@ They do different jobs.
 
 `music` owns direct file and artifact work:
 
-- analyze source
-- emit `.seam`
-- run source or `.seam`
-- inspect or disassemble artifacts
+- `check <source.ms>`
+- `build <source.ms> [--out PATH]`
+- `run <source.ms|artifact.seam>`
+- `inspect <artifact.seam>`
+- `disasm <artifact.seam>`
 
 Use it when the task is compiler/runtime direct.
 
@@ -24,8 +25,8 @@ Use it when the task is compiler/runtime direct.
 
 `musi` owns package and operator workflow:
 
-- package-aware `run`
-- `test`
+- `new <name>`
+- package-aware `check`, `build`, `run`, and `test`
 - task execution
 - dependency and workspace operations
 
@@ -51,6 +52,18 @@ Package-aware entry resolution follows:
 - explicit CLI target first
 - manifest-configured entry next
 - package-style fallback such as `index.ms`
+
+Package ownership comes from the nearest ancestor `musi.json`.
+
+## Diagnostics Contract
+
+Package-aware editor diagnostics flow through:
+
+- `musi check --diagnostics-format json`
+
+Direct source diagnostics flow through:
+
+- `music check --diagnostics-format json`
 
 Language startup still stays top-level-driven.
 

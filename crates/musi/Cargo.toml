@@ -1,0 +1,29 @@
+[package]
+name = "musi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+music_session = { path = "../music_session" }
+music_tooling = { path = "../music_tooling" }
+musi_native = { path = "../musi_native" }
+musi_project = { path = "../musi_project" }
+musi_rt = { path = "../musi_rt" }
+musi_vm = { path = "../musi_vm" }
+music_module = { path = "../music_module" }
+music_sema = { path = "../music_sema" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

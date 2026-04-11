@@ -7,11 +7,12 @@ A programming language with typed effects, a SEAM bytecode pipeline, and a runti
 
 ## What Musi Is
 
-Musi source files use the `.ms` extension. Today the repo ships one user-facing binary:
+Musi source files use the `.ms` extension. The repo now ships two user-facing binaries:
 
-| Binary | What it does                              |
-| ------ | ----------------------------------------- |
-| `musi` | Check, build, run, and test Musi projects |
+| Binary | What it does |
+| ------ | ------------- |
+| `music` | Direct `.ms` and `.seam` work |
+| `musi` | Package-aware manifest and workspace workflow |
 
 - `musi:...` is the low-level capability namespace.
 - `@std/<family>` is the standard library built on top of `musi:`.
@@ -71,6 +72,7 @@ cargo build --release
 
 Binaries land in `./target/release/`:
 
+- `music`
 - `musi`
 
 Add to your PATH:
@@ -104,10 +106,13 @@ musi run
 Current commands:
 
 ```bash
-musi check              # type-check without running
-musi build              # compile to .seam bytecode
-musi run index.seam     # run compiled bytecode directly
+musi check              # type-check the owning package
+musi build              # compile the package entry to .seam bytecode
+musi run                # run the package entry
 musi test               # discover and run *.test.ms files
+music check index.ms    # check one direct source graph
+music build index.ms    # emit one direct .seam artifact
+music run index.seam    # run compiled bytecode directly
 ```
 
 ## Imports and Packages
@@ -180,6 +185,8 @@ export let test () := (
 - `musi_vm` executes validated SEAM programs.
 - `musi_rt` is the source-aware runtime layer used by the repo tooling.
 - `musi_native` is the first-party native host adapter behind low-level runtime capabilities.
+- `music` is the direct source/artifact CLI.
+- `musi` is the package-aware CLI.
 
 ## Project Structure
 

@@ -40,6 +40,9 @@ Rules:
 
 - `music_session`: session orchestration + cached compile entrypoints (`Session`, `SessionOptions`, `SessionStats`, `ParsedModule`, `SessionSyntaxErrors`, `CompiledOutput`, `SessionDiagList`, `SessionError`, `compile_*`/phase entrypoints through `Session` methods)
 - `musi_project`: project/manifest integration over `music_session` (`Project`, `ProjectOptions`, `ProjectError`, `PackageId`, `PackageSource`, `ProjectEntry`, `ResolvedPackage`, `WorkspaceGraph`, `Lockfile`, `LockedPackage`, `LockedPackageSource`, `TaskSpec`, `PackageManifest`, `load_project`, plus namespaced manifest schema types under `musi_project::manifest::*`)
+- `music_tooling`: shared CLI support for direct-source loading, artifact I/O, and structured diagnostics (`DirectGraph`, `load_direct_graph`, `DiagnosticsFormat`, `CliDiagnostics*`, `session_error_report`, `project_error_report`, `read_artifact_bytes`, `write_artifact_bytes`)
+- `music`: direct source and `.seam` binary crate
+- `musi`: package-aware operator binary crate
 
 Notes:
 
@@ -70,7 +73,8 @@ Notes:
 - `musi_rt::Runtime` is the runtime layer above `musi_vm`: it registers source/program inputs, loads root modules, supports typed expression-syntax evaluation, compiles module syntax into runtime module handles, and runs source-aware package-style test modules over one explicit `NativeHost`.
 - `musi_native::NativeHost` is the first-party host/world integration layer used by the repo-owned runtime path; it owns registered foreign/effect handlers, `musi:test` session collection, cfg-selected platform dispatch, and embedding fallback host delegation.
 - the `musi:*` inventory is `musi:test` and `musi:syntax`; `musi:syntax` is the source-visible bridge for syntax evaluation and quoted module registration.
-- `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, and constructs the `music_session` module/import view used for package-aware compilation.
+- `musi_project` loads `musi.json`, builds workspace/package graphs, resolves registry packages into a local cache, discovers co-located `*.test.ms` modules, constructs the `music_session` module/import view used for package-aware compilation, and can now load from the nearest ancestor manifest.
+- `music_tooling` sits above compiler/runtime crates and below the CLI binaries: it owns direct-file graph loading and machine-readable diagnostics shaping without pulling package policy into compiler-core crates.
 
 ## First-Party Package Families
 

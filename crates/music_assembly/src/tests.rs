@@ -3,6 +3,7 @@ use music_bc::descriptor::{
     GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use music_bc::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand};
+use music_term::SyntaxShape;
 
 use crate::{decode_binary, encode_binary, format_text, parse_text};
 
@@ -97,6 +98,30 @@ fn float_constants_roundtrip_in_text_and_binary() {
     });
 
     let text = format_text(&artifact);
+    let parsed = parse_text(&text).unwrap();
+    assert_eq!(format_text(&parsed), text);
+
+    let bytes = encode_binary(&artifact).unwrap();
+    let decoded = decode_binary(&bytes).unwrap();
+    assert_eq!(decoded, artifact);
+}
+
+#[test]
+fn syntax_constants_roundtrip_in_text_and_binary() {
+    let mut artifact = Artifact::new();
+    let syntax_name = artifact.intern_string("quoted.const");
+    let syntax_text = artifact.intern_string("#(1 + 2)");
+    let _ = artifact.constants.alloc(ConstantDescriptor {
+        name: syntax_name,
+        value: ConstantValue::Syntax {
+            shape: SyntaxShape::Expr,
+            text: syntax_text,
+        },
+    });
+
+    let text = format_text(&artifact);
+    assert!(text.contains("syntax expr \"#(1 + 2)\""));
+
     let parsed = parse_text(&text).unwrap();
     assert_eq!(format_text(&parsed), text);
 

@@ -5,6 +5,7 @@ mod store;
 
 #[cfg(test)]
 use music_base::Diag;
+use music_base::{Source, SourceId, SourceMap};
 use music_names::Interner;
 
 use crate::api::{SessionOptions, SessionStats};
@@ -46,6 +47,16 @@ impl Session {
     #[must_use]
     pub const fn stats(&self) -> &SessionStats {
         &self.stats
+    }
+
+    #[must_use]
+    pub fn source_map(&self) -> &SourceMap {
+        &self.store.sources
+    }
+
+    #[must_use]
+    pub fn source(&self, id: SourceId) -> Option<&Source> {
+        self.store.sources.get(id)
     }
 
     #[cfg(test)]

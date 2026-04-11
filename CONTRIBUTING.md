@@ -105,17 +105,20 @@ Feature requests should describe the use case and why it fits the language desig
 # Build the toolchain
 cargo build
 
-# Build release binary
+# Build release binaries
 cargo build --release
 
-# Run a Musi program
-./target/release/musi run examples/hello.ms
+# Run one direct source file
+./target/release/music run path/to/main.ms
 
-# Type-check a file
-./target/release/musi check myfile.ms
+# Type-check one direct source file
+./target/release/music check myfile.ms
 
-# Run tests in a file
-./target/release/musi test myfile.test.ms
+# Check one package root
+./target/release/musi check /path/to/package
+
+# Run package tests
+./target/release/musi test /path/to/package
 
 # Lint
 cargo clippy --workspace

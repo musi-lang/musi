@@ -33,6 +33,12 @@ First-party Musi packages live in `packages/`.
 
 - `music_session`
 - `musi_project`
+- `music_tooling`
+
+## Tooling
+
+- `music`
+- `musi`
 
 ## Native Integration
 

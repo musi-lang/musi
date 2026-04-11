@@ -181,15 +181,15 @@ impl LexErrorKind {
                 format!("base {base} literal requires digits")
             }
             Self::InvalidDigitForBase { base, .. } => {
-                format!("digit is not valid in base {base} literal")
+                format!("invalid digit in base {base} literal")
             }
-            Self::UnexpectedUnderscoreInNumberLiteral => "underscore is not valid here".into(),
+            Self::UnexpectedUnderscoreInNumberLiteral => "underscore is not valid".into(),
             Self::MissingDigitAfterUnderscoreInNumberLiteral => {
-                "digit is required after `_`".into()
+                "digit after `_` is required".into()
             }
             Self::MissingExponentDigits => "exponent requires digits".into(),
             Self::MissingEscapeCode => "escape requires code".into(),
-            Self::UnexpectedEscape { .. } => "escape is not valid".into(),
+            Self::UnexpectedEscape { .. } => "invalid escape".into(),
             Self::MissingHexDigitsInByteEscape => "`\\x` escape requires hex digits".into(),
             Self::InvalidHexDigitInByteEscape { .. } => {
                 "`\\x` escape contains invalid hex digit".into()
@@ -202,7 +202,7 @@ impl LexErrorKind {
                 "`\\u` escape requires 4 or 6 hex digits".into()
             }
             Self::InvalidUnicodeScalar { value } => {
-                format!("unicode scalar `U+{value:06X}` is not valid")
+                format!("invalid unicode scalar `U+{value:06X}`")
             }
         }
     }

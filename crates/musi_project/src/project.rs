@@ -125,6 +125,17 @@ pub fn load_project(path: impl AsRef<Path>, options: ProjectOptions) -> ProjectR
     Project::load(path, options)
 }
 
+/// # Errors
+///
+/// Returns [`ProjectError`] when no ancestor `musi.json` can be found from `path`, or the
+/// discovered project cannot be loaded.
+pub fn load_project_ancestor(
+    path: impl AsRef<Path>,
+    options: ProjectOptions,
+) -> ProjectResult<Project> {
+    Project::load_ancestor(path, options)
+}
+
 impl Project {
     /// # Errors
     ///
@@ -236,6 +247,15 @@ impl Project {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns [`ProjectError`] when no ancestor `musi.json` can be found from `path`, or the
+    /// discovered project cannot be loaded.
+    pub fn load_ancestor(path: impl AsRef<Path>, options: ProjectOptions) -> ProjectResult<Self> {
+        let manifest_path = manifest_ancestor_path_for(path.as_ref())?;
+        Self::load(manifest_path, options)
+    }
+
     #[must_use]
     pub const fn manifest(&self) -> &PackageManifest {
         &self.manifest
@@ -252,8 +272,24 @@ impl Project {
     }
 
     #[must_use]
+    pub fn module_text(&self, key: &ModuleKey) -> Option<&str> {
+        self.module_texts.get(key).map(String::as_str)
+    }
+
+    pub fn module_texts(&self) -> impl Iterator<Item = (&ModuleKey, &str)> {
+        self.module_texts
+            .iter()
+            .map(|(key, text)| (key, text.as_str()))
+    }
+
+    #[must_use]
     pub const fn workspace(&self) -> &WorkspaceGraph {
         &self.workspace
+    }
+
+    #[must_use]
+    pub const fn import_map(&self) -> &ImportMap {
+        &self.import_map
     }
 
     #[must_use]
@@ -475,6 +511,35 @@ fn manifest_path_for(path: &Path) -> ProjectResult<PathBuf> {
             path: manifest_path,
         })
     }
+}
+
+fn manifest_ancestor_path_for(path: &Path) -> ProjectResult<PathBuf> {
+    let start_dir = if path.file_name() == Some(OsStr::new("musi.json")) {
+        path.parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| ProjectError::MissingPackageRoot {
+                path: path.to_path_buf(),
+            })?
+    } else if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| ProjectError::MissingPackageRoot {
+                path: path.to_path_buf(),
+            })?
+    };
+
+    for ancestor in start_dir.ancestors() {
+        let manifest_path = ancestor.join("musi.json");
+        if manifest_path.is_file() {
+            return Ok(manifest_path);
+        }
+    }
+
+    Err(ProjectError::MissingManifestAncestor {
+        path: path.to_path_buf(),
+    })
 }
 
 fn read_manifest(path: &Path) -> ProjectResult<PackageManifest> {

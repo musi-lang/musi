@@ -1,0 +1,26 @@
+[package]
+name = "music"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+music_assembly = { path = "../music_assembly" }
+music_bc = { path = "../music_bc" }
+music_session = { path = "../music_session" }
+music_tooling = { path = "../music_tooling" }
+musi_vm = { path = "../musi_vm" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

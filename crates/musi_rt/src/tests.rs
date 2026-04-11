@@ -1,7 +1,7 @@
 use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
 use musi_vm::{Value, VmError, VmErrorKind, VmHost, VmResult};
 use music_module::ImportMap;
-use music_term::{SyntaxShape, SyntaxTerm};
+use music_term::{SyntaxShape, SyntaxTerm, SyntaxTermError};
 
 use crate::{Runtime, RuntimeErrorKind, RuntimeOptions};
 
@@ -204,13 +204,13 @@ fn rejects_invalid_syntax_value() {
 #[test]
 fn reports_parse_failure_for_expression_syntax() {
     let err = SyntaxTerm::parse(SyntaxShape::Expr, "(").unwrap_err();
-    assert_eq!(err.to_string(), "syntax fragment parse failed");
+    assert_eq!(err, SyntaxTermError::Parse);
 }
 
 #[test]
 fn reports_parse_failure_for_module_syntax() {
     let err = SyntaxTerm::parse(SyntaxShape::Module, "export let := ;").unwrap_err();
-    assert_eq!(err.to_string(), "syntax fragment parse failed");
+    assert_eq!(err, SyntaxTermError::Parse);
 }
 
 #[test]

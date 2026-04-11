@@ -11,7 +11,7 @@ pub use lock::{LockedPackage, LockedPackageSource, Lockfile};
 pub use manifest::PackageManifest;
 pub use project::{
     PackageId, PackageSource, Project, ProjectEntry, ProjectOptions, ResolvedPackage, TaskSpec,
-    WorkspaceGraph, load_project,
+    WorkspaceGraph, load_project, load_project_ancestor,
 };
 pub use testing::PackageTestModule;
 pub use types::ProjectResult;

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use music_base::diag::DiagCode;
 use music_bc::Artifact;
 use music_module::ModuleKey;
 
@@ -91,6 +92,31 @@ fn compiles_root_package_with_workspace_member_dependency() {
 }
 
 #[test]
+fn loads_project_from_nearest_manifest_ancestor() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(temp.path(), "index.ms", "export let answer : Int := 42;");
+    write_file(
+        temp.path(),
+        "src/main.ms",
+        "export let main () : Int := 42;",
+    );
+
+    let project =
+        crate::load_project_ancestor(temp.path().join("src/main.ms"), ProjectOptions::default())
+            .expect("ancestor project should load");
+
+    assert_eq!(project.root_dir(), temp.path());
+}
+
+#[test]
 fn resolves_registry_dependency_and_caches_it_locally() {
     let temp = TempDir::new();
     let registry_root = temp.path().join("registry");
@@ -162,6 +188,20 @@ fn frozen_lock_requires_existing_lockfile() {
     let error =
         Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
     assert!(matches!(error, ProjectError::MissingFrozenLockfile { .. }));
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3620)));
+}
+
+#[test]
+fn validation_error_carries_typed_diag_identity() {
+    let error = ProjectError::Validation {
+        message: "name is required".into(),
+    };
+
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("manifest validation failed: `name is required`")
+    );
 }
 
 #[test]

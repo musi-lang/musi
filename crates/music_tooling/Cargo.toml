@@ -1,0 +1,29 @@
+[package]
+name = "music_tooling"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+musi_foundation = { path = "../musi_foundation" }
+musi_project = { path = "../musi_project" }
+music_assembly = { path = "../music_assembly" }
+music_base = { path = "../music_base" }
+music_bc = { path = "../music_bc" }
+music_module = { path = "../music_module" }
+music_session = { path = "../music_session" }
+music_syntax = { path = "../music_syntax" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,8 +2,6 @@
 
 This page explains why the long-term tool split is `music` + `musi`.
 
-The current repo still ships `musi` as the user-facing binary. This page is about the target split, not the current release surface.
-
 ## Why `music` Exists
 
 `music` is the direct language and artifact tool.
@@ -26,6 +24,7 @@ It should own:
 - tests
 - dependency workflows
 - workspace behavior
+- structured package diagnostics for editor tooling
 
 ## Why They Should Not Collapse
 

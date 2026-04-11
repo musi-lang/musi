@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use music_base::diag::Diag;
 use music_bc::Artifact;
+use music_bc::descriptor::ConstantValue;
 use music_emit::{EmitDiagKind, emit_diag_kind};
 use music_ir::{IrDiagKind, ir_diag_kind};
 use music_module::{ImportMap, ModuleKey};
@@ -272,7 +273,14 @@ fn compiles_dynamic_import_multi_index_and_quote() {
     assert!(output.text.contains("mod.load"));
     assert!(output.text.contains("seq.getn"));
     assert!(output.text.contains("seq.setn"));
-    assert!(output.text.contains("quote (#(1 + 2))"));
+    assert!(output.text.contains("syntax expr \"#(1 + 2)\""));
+    assert!(output.artifact.constants.iter().any(|(_, constant)| {
+        matches!(
+            constant.value,
+            ConstantValue::Syntax { text, .. }
+                if output.artifact.string_text(text).contains("#(1 + 2)")
+        )
+    }));
 }
 
 #[test]
