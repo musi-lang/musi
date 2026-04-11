@@ -1,4 +1,6 @@
 use super::*;
+use music_ir::lower_surface_type_term;
+use music_term::{TypeModuleRef, TypeTerm, TypeTermKind, parse_type_term};
 pub(super) fn register_module(
     state: &mut ProgramState,
     module: &IrModule,
@@ -19,12 +21,18 @@ pub(super) fn register_module(
 }
 
 fn register_types(state: &mut ProgramState, module: &IrModule) {
-    let mut seen = BTreeSet::<Box<str>>::new();
-    for index in 0..module.types().len() {
-        let name: Box<str> = format!("{}::type::{index}", module.module_key().as_str()).into();
+    let mut seen = BTreeSet::<String>::new();
+    for ty in module.types() {
+        let term = lower_surface_type_term(module.types(), ty);
+        let name = term.to_string();
         if seen.insert(name.clone()) {
-            let name_id = state.artifact.intern_string(name.as_ref());
-            let _ = state.artifact.types.alloc(TypeDescriptor { name: name_id });
+            let name_id = state.artifact.intern_string(&name);
+            let term_json = term.to_json();
+            let term_id = state.artifact.intern_string(&term_json);
+            let _ = state.artifact.types.alloc(TypeDescriptor {
+                name: name_id,
+                term: term_id,
+            });
         }
     }
 }
@@ -288,6 +296,7 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             collect_expr_types_iter(state, layout, indices.iter());
         }
         IrExprKind::DynamicImport { spec } => collect_expr_types(state, layout, spec),
+        IrExprKind::ModuleGet { base, .. } => collect_expr_types(state, layout, base),
         IrExprKind::RecordGet { base, .. } => collect_expr_types(state, layout, base),
         IrExprKind::RecordUpdate {
             ty_name,
@@ -439,7 +448,13 @@ fn ensure_type(state: &mut ProgramState, layout: &mut ModuleLayout, ty_name: &st
         return id;
     }
     let name_id = state.artifact.intern_string(ty_name);
-    let type_id = state.artifact.types.alloc(TypeDescriptor { name: name_id });
+    let term = parse_type_term(ty_name).unwrap_or_else(|_| lower_named_term(ty_name, Box::new([])));
+    let term_json = term.to_json();
+    let term_id = state.artifact.intern_string(&term_json);
+    let type_id = state.artifact.types.alloc(TypeDescriptor {
+        name: name_id,
+        term: term_id,
+    });
     let _ = state.types_by_name.insert(ty_name.into(), type_id);
     let _ = layout.types.insert(ty_name.into(), type_id);
     type_id
@@ -476,4 +491,22 @@ fn ensure_effect(
         .alloc(EffectDescriptor { name: name_id, ops });
     let _ = state.effects_by_key.insert(effect.key.clone(), id);
     id
+}
+
+fn lower_named_term(name: &str, args: Box<[TypeTerm]>) -> TypeTerm {
+    let (module, local_name) = name
+        .rsplit_once("::")
+        .map_or((None, name), |(module, tail)| {
+            (
+                Some(TypeModuleRef {
+                    spec: module.into(),
+                }),
+                tail,
+            )
+        });
+    TypeTerm::new(TypeTermKind::Named {
+        module,
+        name: local_name.into(),
+        args,
+    })
 }

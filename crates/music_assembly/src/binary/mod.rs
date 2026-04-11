@@ -8,6 +8,7 @@ use music_bc::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
     SectionTag,
 };
+use music_term::SyntaxShape;
 
 use crate::{AssemblyError, AssemblyResult};
 
@@ -104,6 +105,7 @@ fn encode_types(out: &mut Vec<u8>, artifact: &Artifact) {
     );
     for (_, entry) in artifact.types.iter() {
         push_u32(out, entry.name.raw());
+        push_u32(out, entry.term.raw());
     }
 }
 
@@ -131,6 +133,14 @@ fn encode_constants(out: &mut Vec<u8>, artifact: &Artifact) {
             ConstantValue::String(id) => {
                 out.push(3);
                 push_u32(out, id.raw());
+            }
+            ConstantValue::Syntax { shape, text } => {
+                out.push(4);
+                out.push(match shape {
+                    SyntaxShape::Expr => 0,
+                    SyntaxShape::Module => 1,
+                });
+                push_u32(out, text.raw());
             }
         }
     }
@@ -434,7 +444,8 @@ fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyRes
     require_section(cursor, SectionTag::Types)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
-        let _ = artifact.types.alloc(TypeDescriptor { name });
+        let term = cursor.read_idx()?;
+        let _ = artifact.types.alloc(TypeDescriptor { name, term });
     }
     Ok(())
 }
@@ -449,6 +460,14 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
             1 => ConstantValue::Float(f64::from_bits(cursor.read_u64()?)),
             2 => ConstantValue::Bool(cursor.read_u8()? != 0),
             3 => ConstantValue::String(cursor.read_idx()?),
+            4 => ConstantValue::Syntax {
+                shape: match cursor.read_u8()? {
+                    0 => SyntaxShape::Expr,
+                    1 => SyntaxShape::Module,
+                    _ => return Err(AssemblyError::Text("unknown syntax shape".into())),
+                },
+                text: cursor.read_idx()?,
+            },
             _ => return Err(AssemblyError::Text("unknown constant kind".into())),
         };
         let _ = artifact.constants.alloc(ConstantDescriptor { name, value });

@@ -72,6 +72,7 @@ pub enum Opcode {
     FfiCall,
     FfiCallSeq,
     ModLoad,
+    ModGet,
 }
 
 impl Opcode {
@@ -119,7 +120,7 @@ impl Opcode {
                 OpcodeFamily::Eff
             }
             Self::FfiCall | Self::FfiCallSeq => OpcodeFamily::Ffi,
-            Self::ModLoad => OpcodeFamily::Module,
+            Self::ModLoad | Self::ModGet => OpcodeFamily::Module,
         }
     }
 
@@ -181,6 +182,7 @@ impl Opcode {
             Self::FfiCall => "ffi.call",
             Self::FfiCallSeq => "ffi.call.seq",
             Self::ModLoad => "mod.load",
+            Self::ModGet => "mod.get",
         }
     }
 
@@ -220,6 +222,7 @@ impl Opcode {
             | Self::DataGet
             | Self::DataSet
             | Self::ModLoad => OperandShape::None,
+            Self::ModGet => OperandShape::String,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
             Self::Call | Self::CallSeq | Self::CallTail => OperandShape::Method,
@@ -290,6 +293,7 @@ impl Opcode {
             Self::FfiCall => 0x0901,
             Self::FfiCallSeq => 0x0902,
             Self::ModLoad => 0x0A01,
+            Self::ModGet => 0x0A02,
         }
     }
 
@@ -351,6 +355,7 @@ impl Opcode {
             "ffi.call" => Self::FfiCall,
             "ffi.call.seq" => Self::FfiCallSeq,
             "mod.load" => Self::ModLoad,
+            "mod.get" => Self::ModGet,
             _ => return None,
         })
     }
@@ -413,6 +418,7 @@ impl Opcode {
             0x0901 => Self::FfiCall,
             0x0902 => Self::FfiCallSeq,
             0x0A01 => Self::ModLoad,
+            0x0A02 => Self::ModGet,
             _ => return None,
         })
     }

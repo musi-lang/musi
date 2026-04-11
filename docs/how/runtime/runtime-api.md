@@ -11,9 +11,9 @@ The runtime boundary has four main pieces:
 - `Runtime`: source-aware runtime service over `music_session` + `musi_vm`
 - `NativeHost`: repo-owned host/world integration layer over `musi_vm`
 
-Supporting that boundary, `musi_foundation` is the Rust-side owner of the current `musi:*` module registry.
+Supporting that boundary, `musi_foundation` is the Rust-side owner of the `musi:*` module registry.
 
-`VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and the default runtime path built on `musi_native`.
+`VmHost` handles foreign calls and unhandled effects. `VmLoader` handles dynamic program loading. `Runtime` handles source-backed loading, syntax execution, and the repo-owned runtime path built on `musi_native`.
 
 ## Load
 
@@ -92,10 +92,11 @@ Use inspection instead of reaching through VM internals.
 - registered foreign handlers
 - registered effect handlers
 - `musi:test` session collection and report output
-- cfg-selected repo-owned platform dispatch
-- optional fallback delegation into one embedding-specific `VmHost`
+- cfg-selected repo-owned platform dispatch for macOS/Linux/Windows
+- explicit unsupported-target rejection
+- embedding fallback delegation into one explicit `VmHost`
 
-`musi:*` is the source-visible foundation namespace above the runtime and host boundary. `musi_foundation` is the Rust-side owner of that namespace's current module registry. `musi:test` is the currently implemented foundation root used by first-party package testing.
+`musi:*` is the source-visible foundation namespace above the runtime and host boundary. `musi_foundation` is the Rust-side owner of that namespace's module registry. The foundation inventory is `musi:test` and `musi:syntax`.
 
 ## Integration Checklist
 

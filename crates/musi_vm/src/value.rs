@@ -2,6 +2,7 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 use music_bc::{ClassId, EffectId, ForeignId, MethodId, TypeId};
+use music_term::SyntaxTerm;
 use smallvec::SmallVec;
 
 use super::VmValueKind;
@@ -9,6 +10,7 @@ use super::VmValueKind;
 pub type ValueList = SmallVec<[Value; 8]>;
 pub type ContinuationFrameList = SmallVec<[ContinuationFrame; 4]>;
 pub type ContinuationHandlerList = SmallVec<[ContinuationHandler; 4]>;
+pub type SyntaxValuePtr = Rc<SyntaxTerm>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -17,6 +19,7 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     String(Rc<str>),
+    Syntax(SyntaxValuePtr),
     Seq(SeqValuePtr),
     Data(DataValuePtr),
     Closure(ClosureValuePtr),
@@ -98,6 +101,7 @@ pub enum ValueView<'a> {
     Float(f64),
     Bool(bool),
     String(StringView<'a>),
+    Syntax(SyntaxView<'a>),
     Seq(SeqView<'a>),
     Record(RecordView<'a>),
     Data(RecordView<'a>),
@@ -116,6 +120,11 @@ pub struct StringView<'a> {
 }
 
 #[derive(Debug)]
+pub struct SyntaxView<'a> {
+    pub(crate) inner: &'a SyntaxTerm,
+}
+
+#[derive(Debug)]
 pub struct SeqView<'a> {
     pub(crate) inner: Ref<'a, SequenceValue>,
 }
@@ -129,6 +138,11 @@ impl Value {
     #[must_use]
     pub fn string(text: impl Into<Rc<str>>) -> Self {
         Self::String(text.into())
+    }
+
+    #[must_use]
+    pub fn syntax(term: SyntaxTerm) -> Self {
+        Self::Syntax(Rc::new(term))
     }
 
     #[must_use]
@@ -190,6 +204,7 @@ impl Value {
             Self::Float(_) => VmValueKind::Float,
             Self::Bool(_) => VmValueKind::Bool,
             Self::String(_) => VmValueKind::String,
+            Self::Syntax(_) => VmValueKind::Syntax,
             Self::Seq(_) => VmValueKind::Seq,
             Self::Data(_) => VmValueKind::Data,
             Self::Closure(_) => VmValueKind::Closure,
@@ -207,6 +222,13 @@ impl<'a> StringView<'a> {
     #[must_use]
     pub const fn as_str(&self) -> &'a str {
         self.text
+    }
+}
+
+impl<'a> SyntaxView<'a> {
+    #[must_use]
+    pub const fn term(&self) -> &'a SyntaxTerm {
+        self.inner
     }
 }
 

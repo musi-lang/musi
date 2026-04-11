@@ -4,6 +4,7 @@ use std::sync::Arc;
 use music_assembly::decode_binary;
 use music_bc::descriptor::ExportTarget;
 use music_bc::{Artifact, CodeEntry, ExportId, Instruction, LabelId, MethodId, StringId, TypeId};
+use music_term::TypeTerm;
 
 use super::opcode::classify_opcode;
 use super::{VmError, VmErrorKind, VmResult};
@@ -90,6 +91,12 @@ impl Program {
     pub fn type_name(&self, id: TypeId) -> &str {
         let descriptor = self.inner.artifact.types.get(id);
         self.string_text(descriptor.name)
+    }
+
+    #[must_use]
+    pub fn type_term(&self, id: TypeId) -> TypeTerm {
+        TypeTerm::from_json(self.inner.artifact.type_term_json(id))
+            .expect("artifact type descriptors must carry valid type terms")
     }
 
     #[must_use]

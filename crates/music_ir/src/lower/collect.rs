@@ -30,6 +30,7 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
             collect_used_bindings(base, out);
             collect_expr_slice(indices, out, collect_used_bindings);
         }
+        IrExprKind::ModuleGet { base, .. } => collect_used_bindings(base, out),
         IrExprKind::RecordGet { base, .. } => collect_used_bindings(base, out),
         IrExprKind::Sequence { exprs } => collect_expr_slice(exprs, out, collect_used_bindings),
         IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => {
@@ -121,6 +122,7 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
             collect_local_decl_bindings(base, out);
             collect_expr_slice(indices, out, collect_local_decl_bindings);
         }
+        IrExprKind::ModuleGet { base, .. } => collect_local_decl_bindings(base, out),
         IrExprKind::RecordGet { base, .. } => collect_local_decl_bindings(base, out),
         IrExprKind::Sequence { exprs } => {
             collect_expr_slice(exprs, out, collect_local_decl_bindings);

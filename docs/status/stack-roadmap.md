@@ -6,24 +6,25 @@ Unlike `docs/status/feature-matrix.md`, this page is not limited to current impl
 
 ## Current Lanes
 
-| Lane                                         | Status | Notes                                                                                                                                                              |
-| -------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Compiler pipeline (`music_*`)                | ✅      | Frontend through SEAM emission is the main backend path                                                                                                            |
-| Runtime execution (`musi_vm` + `musi_rt`)    | ✅      | Canonical SEAM runtime path exists                                                                                                                                 |
-| Repo-owned native host layer (`musi_native`) | 🟡      | `NativeHost` now owns the runtime host boundary, test-session collection, and desktop dispatch structure; broader platform capability coverage is still incomplete |
-| Portable first-party packages (`@std/*`)     | ✅      | First-party package family is repo-owned in `packages/std`, compiles through normal project/runtime flow, and carries co-located tests                             |
-| Foundation namespace (`musi:*`)              | 🟡      | `musi:test` exists and `musi_foundation` now owns the canonical Rust-side registry, but the full source-visible foundation that replaces hidden compiler/package magic is not complete yet |
+| Lane                                         | Status | Notes                                                                                                                                                                                                                        |
+| -------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compiler pipeline (`music_*`)                | ✅      | Frontend through SEAM emission is the main backend path                                                                                                                                                                      |
+| Runtime execution (`musi_vm` + `musi_rt`)    | ✅      | Canonical SEAM runtime path exists                                                                                                                                                                                           |
+| Repo-owned native host layer (`musi_native`) | ✅      | `NativeHost` owns the repo-provided host/world boundary for the supported desktop target set, including test-session collection, platform dispatch, explicit unsupported-target rejection, and embedding fallback delegation |
+| Portable first-party packages (`@std/*`)     | ✅      | First-party package family is repo-owned in `packages/std`, compiles through normal project/runtime flow, and carries co-located tests                                                                                       |
+| Foundation namespace (`musi:*`)              | ✅      | `musi_foundation` owns the canonical Rust-side registry for the foundation inventory: `musi:test` and `musi:syntax`                                                                                                          |
 
-## Near-Term Focus
+## Stable Boundaries
 
-- complete the documented host/world boundary in `musi_native`
-- define the full long-term contract for `musi:*` as foundational surface, not STL surface
-- keep `@std/*` above the foundation as portable library surface rather than builtin-package magic
-- document capability boundaries between `musi:*`, `@std/*`, `musi_rt`, `musi_native`, and `@musi.*`
+- `musi_native` owns repo-provided host/world integration for macOS, Linux, and Windows
+- `musi:*` is the source-visible foundation namespace, not STL surface and not compiler-owned package magic
+- the foundation inventory is `musi:test` and `musi:syntax`
+- `@std/*` stays portable library surface above that foundation
+- docs describe one canonical stack from source to runtime to first-party packages without hidden compiler/package magic
 
 ## Done Criteria
 
-- `musi_native` fully owns repo-provided host/world integration for the supported target set
+- `musi_native` fully owns repo-provided host/world integration for the supported desktop target set
 - `musi:*` has an explicit foundation inventory and placement rule for what belongs there
 - `@std/*` stays portable library surface above that foundation
 - docs describe one canonical stack from source to runtime to first-party packages without hidden compiler/package magic

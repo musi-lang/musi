@@ -4,7 +4,7 @@ mod platform;
 mod registered;
 mod testing;
 
-pub use api::NativeHost;
+pub use api::{NativeHost, WeakNativeHost};
 pub use api::{NativeTestCaseResult, NativeTestReport};
 
 #[cfg(test)]

@@ -47,18 +47,23 @@ These do not belong in `musi:*`:
 - `musi_vm` executes SEAM
 - `musi_native` owns repo-provided host/world integration
 - `musi_rt` composes source-aware runtime flow
-- `musi_foundation` owns the current Rust-side registry for first-party `musi:*` modules
+- `musi_foundation` owns the Rust-side registry for first-party `musi:*` modules
 - `musi:*` exposes the foundation above those runtime seams
 - `@std/*` builds portable library surface on top of that foundation
 - `@musi.*` remains compiler-only attribute space
 
-## Current State
+## Inventory
 
-`musi:test` is the currently implemented foundation root.
+The foundation inventory is:
 
-`musi_foundation` is the current Rust-side source of truth for registering that root into project and runtime compilation flows.
+- `musi:test`
+- `musi:syntax`
 
-The broader foundation inventory is not complete yet.
+`musi_foundation` is the Rust-side source of truth for registering those roots into project and runtime compilation flows.
+
+`musi:test` owns the source-visible test-event root used by first-party package testing.
+
+`musi:syntax` owns the source-visible syntax bridge for evaluating quoted expressions against first-class `Type` values and registering quoted module bodies under explicit module specs.
 
 ## Done Criteria
 

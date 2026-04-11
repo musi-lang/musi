@@ -1,11 +1,11 @@
 use music_arena::Idx;
 
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 use crate::descriptor::MethodDescriptor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalDescriptor {
-    pub name: Idx<StringRecord>,
+    pub name: StringId,
     pub export: bool,
     pub initializer: Option<Idx<MethodDescriptor>>,
 }

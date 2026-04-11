@@ -2,8 +2,10 @@ use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
 use music_names::NameBindingId;
 use music_sema::{
-    ClassSurface, DefinitionKey, EffectRow, ExportedValue, InstanceSurface, SurfaceTy,
+    ClassSurface, DefinitionKey, EffectRow, ExportedValue, InstanceSurface, SurfaceDim, SurfaceTy,
+    SurfaceTyId, SurfaceTyKind,
 };
+use music_term::{TypeDim, TypeField, TypeModuleRef, TypeTerm, TypeTermKind};
 
 use crate::IrDiagKind;
 
@@ -12,6 +14,121 @@ pub type IrDiagList = Vec<Diag>;
 #[must_use]
 pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
     IrDiagKind::from_diag(diag)
+}
+
+#[must_use]
+pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm {
+    match &ty.kind {
+        SurfaceTyKind::Error => TypeTerm::new(TypeTermKind::Error),
+        SurfaceTyKind::Unknown => TypeTerm::new(TypeTermKind::Unknown),
+        SurfaceTyKind::Type => TypeTerm::new(TypeTermKind::Type),
+        SurfaceTyKind::Syntax => TypeTerm::new(TypeTermKind::Syntax),
+        SurfaceTyKind::Any => TypeTerm::new(TypeTermKind::Any),
+        SurfaceTyKind::Empty => TypeTerm::new(TypeTermKind::Empty),
+        SurfaceTyKind::Unit => TypeTerm::new(TypeTermKind::Unit),
+        SurfaceTyKind::Bool => TypeTerm::new(TypeTermKind::Bool),
+        SurfaceTyKind::Nat => TypeTerm::new(TypeTermKind::Nat),
+        SurfaceTyKind::Int => TypeTerm::new(TypeTermKind::Int),
+        SurfaceTyKind::Float => TypeTerm::new(TypeTermKind::Float),
+        SurfaceTyKind::String => TypeTerm::new(TypeTermKind::String),
+        SurfaceTyKind::CString => TypeTerm::new(TypeTermKind::CString),
+        SurfaceTyKind::CPtr => TypeTerm::new(TypeTermKind::CPtr),
+        SurfaceTyKind::Module => TypeTerm::new(TypeTermKind::Module),
+        SurfaceTyKind::NatLit(value) => TypeTerm::new(TypeTermKind::NatLit(*value)),
+        SurfaceTyKind::Named { name, args } => lower_named_term(
+            name,
+            args.iter()
+                .map(|arg| lower_surface_type_term_id(types, *arg))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        ),
+        SurfaceTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        } => TypeTerm::new(TypeTermKind::Pi {
+            binder: binder.clone(),
+            binder_ty: Box::new(lower_surface_type_term_id(types, *binder_ty)),
+            body: Box::new(lower_surface_type_term_id(types, *body)),
+            is_effectful: *is_effectful,
+        }),
+        SurfaceTyKind::Arrow {
+            params,
+            ret,
+            is_effectful,
+        } => TypeTerm::new(TypeTermKind::Arrow {
+            params: params
+                .iter()
+                .map(|param| lower_surface_type_term_id(types, *param))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            ret: Box::new(lower_surface_type_term_id(types, *ret)),
+            is_effectful: *is_effectful,
+        }),
+        SurfaceTyKind::Sum { left, right } => TypeTerm::new(TypeTermKind::Sum {
+            left: Box::new(lower_surface_type_term_id(types, *left)),
+            right: Box::new(lower_surface_type_term_id(types, *right)),
+        }),
+        SurfaceTyKind::Tuple { items } => TypeTerm::new(TypeTermKind::Tuple {
+            items: items
+                .iter()
+                .map(|item| lower_surface_type_term_id(types, *item))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        }),
+        SurfaceTyKind::Array { dims, item } => TypeTerm::new(TypeTermKind::Array {
+            dims: dims
+                .iter()
+                .map(|dim| match dim {
+                    SurfaceDim::Unknown => TypeDim::Unknown,
+                    SurfaceDim::Name(name) => TypeDim::Name(name.clone()),
+                    SurfaceDim::Int(value) => TypeDim::Int(*value),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            item: Box::new(lower_surface_type_term_id(types, *item)),
+        }),
+        SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
+            inner: Box::new(lower_surface_type_term_id(types, *inner)),
+        }),
+        SurfaceTyKind::Record { fields } => TypeTerm::new(TypeTermKind::Record {
+            fields: fields
+                .iter()
+                .map(|field| TypeField {
+                    name: field.name.clone(),
+                    ty: lower_surface_type_term_id(types, field.ty),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        }),
+    }
+}
+
+fn lower_surface_type_term_id(types: &[SurfaceTy], ty: SurfaceTyId) -> TypeTerm {
+    let index = usize::try_from(ty.raw()).unwrap_or(usize::MAX);
+    types.get(index).map_or_else(
+        || TypeTerm::new(TypeTermKind::Error),
+        |item| lower_surface_type_term(types, item),
+    )
+}
+
+fn lower_named_term(name: &str, args: Box<[TypeTerm]>) -> TypeTerm {
+    let (module, local_name) = name
+        .rsplit_once("::")
+        .map_or((None, name), |(module, tail)| {
+            (
+                Some(TypeModuleRef {
+                    spec: module.into(),
+                }),
+                tail,
+            )
+        });
+    TypeTerm::new(TypeTermKind::Named {
+        module,
+        name: local_name.into(),
+        args,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,6 +349,10 @@ pub enum IrExprKind {
     },
     DynamicImport {
         spec: Box<IrExpr>,
+    },
+    ModuleGet {
+        base: Box<IrExpr>,
+        name: Box<str>,
     },
     TypeValue {
         ty_name: Box<str>,

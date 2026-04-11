@@ -1,6 +1,6 @@
 use music_arena::Idx;
 
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 use crate::descriptor::{
     ClassDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
     TypeDescriptor,
@@ -18,7 +18,7 @@ pub enum ExportTarget {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportDescriptor {
-    pub name: Idx<StringRecord>,
+    pub name: StringId,
     pub opaque: bool,
     pub target: ExportTarget,
 }

@@ -257,6 +257,28 @@ fn lowers_type_test_and_cast() {
 }
 
 #[test]
+fn capitalized_local_name_stays_value_expr() {
+    let ir = lower(
+        r"
+        export let answer () : Int := (
+          let Result : Int := 41;
+          Result + 1
+        );
+    ",
+    );
+
+    let answer = ir
+        .callables()
+        .iter()
+        .find(|callable| callable.name.as_ref() == "answer")
+        .expect("answer callable");
+    assert!(
+        contains_named_value_ref(&answer.body, "Result"),
+        "capitalized local binding should lower as a value reference"
+    );
+}
+
+#[test]
 fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     let ir = lower(
         r"
@@ -334,6 +356,7 @@ fn contains_strcat(expr: &crate::IrExpr) -> bool {
         | IrExprKind::TempLet { value, .. }
         | IrExprKind::Not { expr: value }
         | IrExprKind::DynamicImport { spec: value }
+        | IrExprKind::ModuleGet { base: value, .. }
         | IrExprKind::RecordGet { base: value, .. }
         | IrExprKind::TyTest { base: value, .. }
         | IrExprKind::TyCast { base: value, .. } => contains_strcat(value),
@@ -348,6 +371,113 @@ fn contains_strcat(expr: &crate::IrExpr) -> bool {
                 })
         }
         _ => false,
+    }
+}
+
+fn contains_named_value_ref(expr: &crate::IrExpr, expected: &str) -> bool {
+    match &expr.kind {
+        IrExprKind::Name { name, .. } => name.as_ref() == expected,
+        IrExprKind::Sequence { exprs } => exprs
+            .iter()
+            .any(|expr| contains_named_value_ref(expr, expected)),
+        IrExprKind::Let { value, .. }
+        | IrExprKind::TempLet { value, .. }
+        | IrExprKind::Not { expr: value }
+        | IrExprKind::DynamicImport { spec: value }
+        | IrExprKind::ModuleGet { base: value, .. }
+        | IrExprKind::RecordGet { base: value, .. }
+        | IrExprKind::TyTest { base: value, .. }
+        | IrExprKind::TyCast { base: value, .. } => contains_named_value_ref(value, expected),
+        IrExprKind::Assign { target, value } => {
+            contains_named_value_ref_in_target(target, expected)
+                || contains_named_value_ref(value, expected)
+        }
+        IrExprKind::Index { base, indices } => {
+            contains_named_value_ref(base, expected)
+                || indices
+                    .iter()
+                    .any(|expr| contains_named_value_ref(expr, expected))
+        }
+        IrExprKind::Tuple { items, .. }
+        | IrExprKind::Array { items, .. }
+        | IrExprKind::ClosureNew {
+            captures: items, ..
+        }
+        | IrExprKind::Perform { args: items, .. } => items
+            .iter()
+            .any(|expr| contains_named_value_ref(expr, expected)),
+        IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallSeq { args: parts, .. } => {
+            parts.iter().any(|part| match part {
+                crate::IrSeqPart::Expr(expr) | crate::IrSeqPart::Spread(expr) => {
+                    contains_named_value_ref(expr, expected)
+                }
+            })
+        }
+        IrExprKind::Record { fields, .. } => fields
+            .iter()
+            .any(|field| contains_named_value_ref(&field.expr, expected)),
+        IrExprKind::RecordUpdate { base, updates, .. } => {
+            contains_named_value_ref(base, expected)
+                || updates
+                    .iter()
+                    .any(|update| contains_named_value_ref(&update.expr, expected))
+        }
+        IrExprKind::Binary { left, right, .. } => {
+            contains_named_value_ref(left, expected) || contains_named_value_ref(right, expected)
+        }
+        IrExprKind::Case { scrutinee, arms } => {
+            contains_named_value_ref(scrutinee, expected)
+                || arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|guard| contains_named_value_ref(guard, expected))
+                        || contains_named_value_ref(&arm.expr, expected)
+                })
+        }
+        IrExprKind::Call { callee, args } => {
+            contains_named_value_ref(callee, expected)
+                || args
+                    .iter()
+                    .any(|arg| contains_named_value_ref(&arg.expr, expected))
+        }
+        IrExprKind::VariantNew { args, .. } => args
+            .iter()
+            .any(|expr| contains_named_value_ref(expr, expected)),
+        IrExprKind::PerformSeq { args, .. } => args.iter().any(|part| match part {
+            crate::IrSeqPart::Expr(expr) | crate::IrSeqPart::Spread(expr) => {
+                contains_named_value_ref(expr, expected)
+            }
+        }),
+        IrExprKind::Handle {
+            value, ops, body, ..
+        } => {
+            contains_named_value_ref(value, expected)
+                || ops
+                    .iter()
+                    .any(|op| contains_named_value_ref(&op.closure, expected))
+                || contains_named_value_ref(body, expected)
+        }
+        IrExprKind::Resume { expr } => expr
+            .as_deref()
+            .is_some_and(|expr| contains_named_value_ref(expr, expected)),
+        IrExprKind::Unit
+        | IrExprKind::Temp { .. }
+        | IrExprKind::Lit(_)
+        | IrExprKind::TypeValue { .. }
+        | IrExprKind::SyntaxValue { .. } => false,
+    }
+}
+
+fn contains_named_value_ref_in_target(target: &crate::IrAssignTarget, expected: &str) -> bool {
+    match target {
+        crate::IrAssignTarget::Binding { .. } => false,
+        crate::IrAssignTarget::Index { base, indices } => {
+            contains_named_value_ref(base, expected)
+                || indices
+                    .iter()
+                    .any(|expr| contains_named_value_ref(expr, expected))
+        }
+        crate::IrAssignTarget::RecordField { base, .. } => contains_named_value_ref(base, expected),
     }
 }
 

@@ -252,16 +252,11 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         source_id: expr.origin.source_id,
         span: expr.origin.span,
     };
-    if is_type_value_expr(sema, expr_id) {
+    if is_type_value_expr(sema, expr_id, interner) {
         return IrExpr {
             origin,
             kind: IrExprKind::TypeValue {
-                ty_name: render_ty_name(
-                    sema,
-                    sema.try_expr_ty(expr_id)
-                        .expect("expr type missing for type value"),
-                    interner,
-                ),
+                ty_name: render_type_value_expr_name(sema, expr_id, interner),
             },
         };
     }
@@ -339,11 +334,19 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
     IrExpr { origin, kind }
 }
 
-fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
+fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner) -> bool {
     match &sema.module().store.exprs.get(expr_id).kind {
         HirExprKind::Error => true,
         HirExprKind::Name { name } => {
-            use_binding_id(sema, *name).is_none() && sema.expr_module_target(expr_id).is_none()
+            if sema.expr_module_target(expr_id).is_some() {
+                return false;
+            }
+            let symbol_text = interner.resolve(name.name);
+            match use_binding_id(sema, *name) {
+                None => true,
+                Some(_) if is_builtin_type_name_symbol(symbol_text) => true,
+                Some(_) => false,
+            }
         }
         HirExprKind::Tuple { items } => sema
             .module()
@@ -352,13 +355,14 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
             .get(*items)
             .iter()
             .copied()
-            .all(|item| is_type_value_expr(sema, item)),
-        HirExprKind::ArrayTy { item, .. } => is_type_value_expr(sema, *item),
+            .all(|item| is_type_value_expr(sema, item, interner)),
+        HirExprKind::ArrayTy { item, .. } => is_type_value_expr(sema, *item, interner),
         HirExprKind::Pi { binder_ty, ret, .. } => {
-            is_type_value_expr(sema, *binder_ty) && is_type_value_expr(sema, *ret)
+            is_type_value_expr(sema, *binder_ty, interner)
+                && is_type_value_expr(sema, *ret, interner)
         }
         HirExprKind::Apply { callee, args } => {
-            is_type_value_expr(sema, *callee)
+            is_type_value_expr(sema, *callee, interner)
                 && sema
                     .module()
                     .store
@@ -366,37 +370,37 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
                     .get(*args)
                     .iter()
                     .copied()
-                    .all(|arg| type_apply_arg_expr(sema, arg))
+                    .all(|arg| type_apply_arg_expr(sema, arg, interner))
         }
         HirExprKind::Binary { op, left, right } => {
             matches!(
                 op,
                 HirBinaryOp::Add | HirBinaryOp::Arrow | HirBinaryOp::EffectArrow
-            ) && is_type_value_expr(sema, *left)
-                && is_type_value_expr(sema, *right)
+            ) && is_type_value_expr(sema, *left, interner)
+                && is_type_value_expr(sema, *right, interner)
         }
         HirExprKind::Prefix {
             op: HirPrefixOp::Mut,
             expr,
-        } => is_type_value_expr(sema, *expr),
+        } => is_type_value_expr(sema, *expr, interner),
         HirExprKind::Record { items } => sema
             .module()
             .store
             .record_items
             .get(items.clone())
             .iter()
-            .all(|item| is_type_value_expr(sema, item.value)),
+            .all(|item| is_type_value_expr(sema, item.value, interner)),
         _ => false,
     }
 }
 
-fn type_apply_arg_expr(sema: &SemaModule, expr_id: HirExprId) -> bool {
+fn type_apply_arg_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner) -> bool {
     match &sema.module().store.exprs.get(expr_id).kind {
         HirExprKind::Lit { lit } => matches!(
             sema.module().store.lits.get(*lit).kind,
             HirLitKind::Int { .. }
         ),
-        _ => is_type_value_expr(sema, expr_id),
+        _ => is_type_value_expr(sema, expr_id, interner),
     }
 }
 
@@ -1126,6 +1130,15 @@ fn rewrite_recursive_binding_storage_kind(
             input.callable_name,
             input.captures,
         ),
+        IrExprKind::ModuleGet { base, name } => rewrite_module_get_kind(
+            input.ctx,
+            input.origin,
+            *base,
+            name,
+            input.binding,
+            input.callable_name,
+            input.captures,
+        ),
         other => rewrite_recursive_binding_compute_kind(input, other),
     }
 }
@@ -1510,6 +1523,28 @@ fn rewrite_dynamic_import_kind(
             callable_name,
             captures,
         )),
+    }
+}
+
+fn rewrite_module_get_kind(
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    base: IrExpr,
+    name: Box<str>,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
+) -> IrExprKind {
+    IrExprKind::ModuleGet {
+        base: Box::new(rewrite_recursive_binding_refs(
+            ctx,
+            origin,
+            base,
+            binding,
+            callable_name,
+            captures,
+        )),
+        name,
     }
 }
 
@@ -2128,17 +2163,184 @@ fn lower_field_expr(
         };
     }
 
-    sema.expr_module_target(expr_id)
-        .cloned()
-        .or_else(|| sema.expr_module_target(base).cloned())
-        .map_or_else(
-            || invalid_lowering_path(format!("{kind:?}")),
-            |module_target| IrExprKind::Name {
+    let module_ty = match sema.ty(base_ty).kind {
+        HirTyKind::Mut { inner } => inner,
+        _ => base_ty,
+    };
+    if matches!(sema.ty(module_ty).kind, HirTyKind::Module) {
+        if let Some(module_target) = sema
+            .expr_module_target(expr_id)
+            .cloned()
+            .or_else(|| sema.expr_module_target(base).cloned())
+        {
+            return IrExprKind::Name {
                 binding: None,
                 name: interner.resolve(symbol).into(),
                 module_target: Some(module_target),
-            },
-        )
+            };
+        }
+        return IrExprKind::ModuleGet {
+            base: Box::new(lower_expr(ctx, base)),
+            name: interner.resolve(symbol).into(),
+        };
+    }
+
+    invalid_lowering_path(format!("{kind:?}"))
+}
+
+fn render_type_value_expr_name(
+    sema: &SemaModule,
+    expr_id: HirExprId,
+    interner: &Interner,
+) -> Box<str> {
+    match &sema.module().store.exprs.get(expr_id).kind {
+        HirExprKind::Error => "Error".into(),
+        HirExprKind::Name { name } => interner.resolve(name.name).into(),
+        HirExprKind::Tuple { items } => {
+            let items = sema
+                .module()
+                .store
+                .expr_ids
+                .get(*items)
+                .iter()
+                .copied()
+                .map(|item| render_type_value_expr_name(sema, item, interner).into_string())
+                .collect::<Vec<_>>();
+            format!("({})", items.join(", ")).into()
+        }
+        HirExprKind::ArrayTy { dims, item } => {
+            render_array_type_value_expr_name(sema, dims.clone(), *item, interner)
+        }
+        HirExprKind::Pi {
+            binder,
+            binder_ty,
+            ret,
+            is_effectful,
+        } => {
+            let binder = interner.resolve(binder.name);
+            let binder_ty = render_type_value_expr_name(sema, *binder_ty, interner);
+            let ret = render_type_value_expr_name(sema, *ret, interner);
+            let arrow = if *is_effectful { "~>" } else { "->" };
+            format!("forall ({binder} : {binder_ty}) {arrow} {ret}").into()
+        }
+        HirExprKind::Apply { callee, args } => {
+            render_apply_type_value_expr_name(sema, *callee, *args, interner)
+        }
+        HirExprKind::Binary { op, left, right } => {
+            let left = render_type_value_expr_name(sema, *left, interner);
+            let right = render_type_value_expr_name(sema, *right, interner);
+            match op {
+                HirBinaryOp::Arrow => format!("{left} -> {right}").into(),
+                HirBinaryOp::EffectArrow => format!("{left} ~> {right}").into(),
+                HirBinaryOp::Add => format!("{left} + {right}").into(),
+                _ => invalid_lowering_path("invalid type-value binary op"),
+            }
+        }
+        HirExprKind::Prefix {
+            op: HirPrefixOp::Mut,
+            expr,
+        } => format!("mut {}", render_type_value_expr_name(sema, *expr, interner)).into(),
+        HirExprKind::Record { items } => {
+            let fields = sema
+                .module()
+                .store
+                .record_items
+                .get(items.clone())
+                .iter()
+                .filter_map(|item| {
+                    item.name.map(|name| {
+                        let name = interner.resolve(name.name);
+                        let value = render_type_value_expr_name(sema, item.value, interner);
+                        format!("{name} : {value}")
+                    })
+                })
+                .collect::<Vec<_>>();
+            format!("{{ {} }}", fields.join(", ")).into()
+        }
+        other => invalid_lowering_path(format!("invalid type value expr {other:?}")),
+    }
+}
+
+fn render_apply_type_value_expr_name(
+    sema: &SemaModule,
+    callee: HirExprId,
+    args: SliceRange<HirExprId>,
+    interner: &Interner,
+) -> Box<str> {
+    let HirExprKind::Name { name } = sema.module().store.exprs.get(callee).kind else {
+        invalid_lowering_path("invalid type-value callee");
+    };
+    let callee_name = interner.resolve(name.name);
+    let args = sema
+        .module()
+        .store
+        .expr_ids
+        .get(args)
+        .iter()
+        .copied()
+        .map(|arg| render_type_value_apply_arg_name(sema, arg, interner).into_string())
+        .collect::<Vec<_>>();
+    format!("{callee_name}[{}]", args.join(", ")).into()
+}
+
+fn render_type_value_apply_arg_name(
+    sema: &SemaModule,
+    expr_id: HirExprId,
+    interner: &Interner,
+) -> Box<str> {
+    match &sema.module().store.exprs.get(expr_id).kind {
+        HirExprKind::Lit { lit } => match &sema.module().store.lits.get(*lit).kind {
+            HirLitKind::Int { raw } => raw.clone(),
+            _ => invalid_lowering_path("invalid type-value literal arg"),
+        },
+        _ => render_type_value_expr_name(sema, expr_id, interner),
+    }
+}
+
+fn is_builtin_type_name_symbol(text: &str) -> bool {
+    matches!(
+        text,
+        "Type"
+            | "Any"
+            | "Unknown"
+            | "Syntax"
+            | "Empty"
+            | "Unit"
+            | "Bool"
+            | "Nat"
+            | "Int"
+            | "Float"
+            | "String"
+            | "CString"
+            | "CPtr"
+            | "Module"
+    )
+}
+
+fn render_array_type_value_expr_name(
+    sema: &SemaModule,
+    dims: SliceRange<HirDim>,
+    item: HirExprId,
+    interner: &Interner,
+) -> Box<str> {
+    let item = render_type_value_expr_name(sema, item, interner);
+    let dims = sema
+        .module()
+        .store
+        .dims
+        .get(dims)
+        .iter()
+        .map(|dim| match dim {
+            HirDim::Int(value) => value.to_string(),
+            HirDim::Unknown => "_".into(),
+            HirDim::Name(name) => interner.resolve(name.name).into(),
+        })
+        .collect::<Vec<_>>();
+    if dims.is_empty() {
+        format!("Array[{item}]").into()
+    } else {
+        format!("Array[{item}, {}]", dims.join(", ")).into()
+    }
 }
 
 fn lower_record_update_expr(

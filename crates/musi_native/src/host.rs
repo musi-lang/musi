@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use musi_vm::{EffectCall, ForeignCall, Value, VmError, VmErrorKind, VmHost, VmResult};
 
@@ -12,6 +12,11 @@ struct NativeHostState {
     registered: RegisteredHost,
     testing: TestHost,
     platform: PlatformHost,
+}
+
+#[derive(Clone)]
+pub struct WeakNativeHost {
+    state: Weak<RefCell<NativeHostState>>,
 }
 
 #[derive(Clone)]
@@ -82,6 +87,13 @@ impl NativeHost {
         self.state.borrow_mut().testing.finish_session(module)
     }
 
+    #[must_use]
+    pub fn downgrade(&self) -> WeakNativeHost {
+        WeakNativeHost {
+            state: Rc::downgrade(&self.state),
+        }
+    }
+
     fn call_fallback<R>(&self, f: impl FnOnce(&mut dyn VmHost) -> VmResult<R>) -> VmResult<R> {
         let mut state = self.state.borrow_mut();
         let Some(fallback) = state.fallback.as_mut() else {
@@ -90,6 +102,13 @@ impl NativeHost {
             }));
         };
         f(fallback.as_mut())
+    }
+}
+
+impl WeakNativeHost {
+    #[must_use]
+    pub fn upgrade(&self) -> Option<NativeHost> {
+        self.state.upgrade().map(|state| NativeHost { state })
     }
 }
 

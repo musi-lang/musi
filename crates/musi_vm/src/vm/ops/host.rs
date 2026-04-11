@@ -59,6 +59,21 @@ impl Vm {
                 self.push_value(Value::module(spec.as_ref(), slot))?;
                 Ok(StepOutcome::Continue)
             }
+            Opcode::ModGet => {
+                let Operand::String(name) = instruction.operand else {
+                    return Err(Self::invalid_operand(instruction));
+                };
+                let module = self.pop_value()?;
+                let module_slot = self.current_module_slot()?;
+                let export_name = self
+                    .module(module_slot)?
+                    .program
+                    .string_text(name)
+                    .to_owned();
+                let export = self.lookup_module_export(&module, &export_name)?;
+                self.push_value(export)?;
+                Ok(StepOutcome::Continue)
+            }
             _ => Err(super::VmError::new(super::VmErrorKind::InvalidProgram {
                 detail: format!(
                     "host opcode family mismatch for `{}`",

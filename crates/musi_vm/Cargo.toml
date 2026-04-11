@@ -15,6 +15,7 @@ publish.workspace = true
 [dependencies]
 music_assembly = { path = "../music_assembly" }
 music_bc = { path = "../music_bc" }
+music_term = { path = "../music_term" }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
 

@@ -16,9 +16,29 @@ export let Test := effect {
     pub const TEST_CASE_OP: &str = "testCase";
 }
 
+pub mod syntax {
+    pub const SPEC: &str = "musi:syntax";
+    pub const MODULE: &str = r#"
+export let SyntaxOps := effect {
+  let eval (body : Syntax, result : Type) : Any;
+  let registerModule (spec : String, body : Syntax) : Unit;
+};
+
+export let eval (body : Syntax, result : Type) : Any :=
+    perform SyntaxOps.eval(body, result);
+
+export let register_module (spec : String, body : Syntax) : Unit :=
+    perform SyntaxOps.registerModule(spec, body);
+"#;
+    pub const EFFECT: &str = "musi:syntax::SyntaxOps";
+    pub const EVAL_OP: &str = "eval";
+    pub const REGISTER_MODULE_OP: &str = "registerModule";
+}
+
 type FoundationModule = (&'static str, &'static str);
 
-const FOUNDATION_MODULES: [FoundationModule; 1] = [(test::SPEC, test::MODULE)];
+const FOUNDATION_MODULES: [FoundationModule; 2] =
+    [(test::SPEC, test::MODULE), (syntax::SPEC, syntax::MODULE)];
 
 pub fn extend_import_map(import_map: &mut ImportMap) {
     for (spec, _) in FOUNDATION_MODULES {

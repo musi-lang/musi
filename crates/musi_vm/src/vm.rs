@@ -5,7 +5,7 @@ pub use super::loader::{RejectingLoader, VmLoader};
 use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
     ClosureValuePtr, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr,
-    ForeignValue, SeqValuePtr, ValueList,
+    ForeignValue, SeqValuePtr, SyntaxView, ValueList,
 };
 pub use super::{
     OperandShape, Program, RecordView, RejectingHost, SeqView, StringView, Value, ValueView,
@@ -189,6 +189,9 @@ impl Vm {
             Value::Float(value) => ValueView::Float(*value),
             Value::Bool(value) => ValueView::Bool(*value),
             Value::String(text) => ValueView::String(StringView { text }),
+            Value::Syntax(term) => ValueView::Syntax(SyntaxView {
+                inner: term.as_ref(),
+            }),
             Value::Seq(seq) => ValueView::Seq(SeqView {
                 inner: seq.borrow(),
             }),

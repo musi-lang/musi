@@ -1,13 +1,14 @@
-use music_arena::Idx;
+use music_term::SyntaxShape;
 
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 
 #[derive(Debug, Clone)]
 pub enum ConstantValue {
     Int(i64),
     Float(f64),
     Bool(bool),
-    String(Idx<StringRecord>),
+    String(StringId),
+    Syntax { shape: SyntaxShape, text: StringId },
 }
 
 impl PartialEq for ConstantValue {
@@ -17,6 +18,16 @@ impl PartialEq for ConstantValue {
             (Self::Float(left), Self::Float(right)) => left.to_bits() == right.to_bits(),
             (Self::Bool(left), Self::Bool(right)) => left == right,
             (Self::String(left), Self::String(right)) => left == right,
+            (
+                Self::Syntax {
+                    shape: left_shape,
+                    text: left_text,
+                },
+                Self::Syntax {
+                    shape: right_shape,
+                    text: right_text,
+                },
+            ) => left_shape == right_shape && left_text == right_text,
             _ => false,
         }
     }
@@ -26,6 +37,6 @@ impl Eq for ConstantValue {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstantDescriptor {
-    pub name: Idx<StringRecord>,
+    pub name: StringId,
     pub value: ConstantValue,
 }

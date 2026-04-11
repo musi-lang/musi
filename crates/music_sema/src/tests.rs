@@ -153,6 +153,56 @@ fn imported_module_field_access_uses_export_surface() {
 }
 
 #[test]
+fn dynamic_module_field_access_stays_runtime_typed() {
+    let sema = check_module_src(
+        14,
+        "main",
+        r#"
+        export let read_any (name : String) : Any := (
+          let loaded := import name;
+          loaded.answer
+        );
+    "#,
+        None,
+        None,
+    );
+    let field_expr = find_expr(&sema, |kind| matches!(kind, HirExprKind::Field { .. }))
+        .expect("dynamic module field expr");
+    assert!(matches!(
+        sema.ty(sema
+            .try_expr_ty(field_expr)
+            .expect("field expr type missing"))
+            .kind,
+        HirTyKind::Any
+    ));
+    assert!(
+        !has_diag(&sema, SemaDiagKind::UnknownExport),
+        "dynamic module field access should not require static export surface"
+    );
+}
+
+#[test]
+fn dynamic_module_field_access_is_not_callable_without_cast() {
+    let sema = check_module_src(
+        15,
+        "main",
+        r#"
+        export let call_any (name : String) : Any := (
+          let loaded := import name;
+          loaded.answer()
+        );
+    "#,
+        None,
+        None,
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn imported_module_record_pattern_binds_exported_values() {
     let import_env = TestImportEnv::default().with_module("std/io", "std/io");
     let io = check_module_src(

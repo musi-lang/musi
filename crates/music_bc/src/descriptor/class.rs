@@ -1,8 +1,6 @@
-use music_arena::Idx;
-
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDescriptor {
-    pub name: Idx<StringRecord>,
+    pub name: StringId,
 }

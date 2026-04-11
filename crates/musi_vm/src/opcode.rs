@@ -63,6 +63,8 @@ pub const fn classify_opcode(opcode: Opcode) -> VmOpcodeFamily {
         | Opcode::EffInvk
         | Opcode::EffInvkSeq
         | Opcode::EffResume => VmOpcodeFamily::Effects,
-        Opcode::FfiCall | Opcode::FfiCallSeq | Opcode::ModLoad => VmOpcodeFamily::Host,
+        Opcode::FfiCall | Opcode::FfiCallSeq | Opcode::ModLoad | Opcode::ModGet => {
+            VmOpcodeFamily::Host
+        }
     }
 }

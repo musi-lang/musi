@@ -13,7 +13,10 @@ fn sample_artifact() -> Artifact {
     let answer = artifact.intern_string("answer");
     let int = artifact.intern_string("Int");
     let constant_name = artifact.intern_string("answer.const");
-    let int_ty = artifact.types.alloc(TypeDescriptor { name: int });
+    let int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int,
+        term: int,
+    });
     let constant = artifact.constants.alloc(ConstantDescriptor {
         name: constant_name,
         value: ConstantValue::Int(41),
@@ -69,7 +72,10 @@ fn text_roundtrip_preserves_artifact_shape() {
 fn text_roundtrip_supports_quoted_symbolic_names() {
     let mut artifact = sample_artifact();
     let record_name = artifact.intern_string("{ x: Int; y: Int }");
-    let _ = artifact.types.alloc(TypeDescriptor { name: record_name });
+    let _ = artifact.types.alloc(TypeDescriptor {
+        name: record_name,
+        term: record_name,
+    });
 
     let text = format_text(&artifact);
     let decoded = parse_text(&text).unwrap();
@@ -81,7 +87,10 @@ fn float_constants_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let float_name = artifact.intern_string("Float");
     let constant_name = artifact.intern_string("pi.const");
-    let _ = artifact.types.alloc(TypeDescriptor { name: float_name });
+    let _ = artifact.types.alloc(TypeDescriptor {
+        name: float_name,
+        term: float_name,
+    });
     let _ = artifact.constants.alloc(ConstantDescriptor {
         name: constant_name,
         value: ConstantValue::Float(3.5),
@@ -104,7 +113,10 @@ fn foreign_link_roundtrips_in_text_and_binary() {
     let symbol = artifact.intern_string("puts");
     let link = artifact.intern_string("c");
     let int_name = artifact.intern_string("Int");
-    let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
+    let int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int_name,
+        term: int_name,
+    });
     let _ = artifact.foreigns.alloc(ForeignDescriptor {
         name,
         param_tys: Box::new([]),
@@ -152,7 +164,10 @@ fn global_and_sequence_operands_roundtrip_in_text_and_binary() {
     let label = artifact.intern_string("L0");
     let answer = artifact.intern_string("answer");
     let int = artifact.intern_string("Int");
-    let int_ty = artifact.types.alloc(TypeDescriptor { name: int });
+    let int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int,
+        term: int,
+    });
     let global = artifact.globals.alloc(GlobalDescriptor {
         name: answer,
         export: true,
@@ -244,7 +259,10 @@ fn closures_roundtrip_in_text_and_binary() {
 fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let int = artifact.intern_string("Int");
-    let _int_ty = artifact.types.alloc(TypeDescriptor { name: int });
+    let _int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int,
+        term: int,
+    });
 
     let callee_name = artifact.intern_string("callee");
     let callee = artifact.methods.alloc(MethodDescriptor {

@@ -437,32 +437,32 @@
 				{ "include": "#identifiers" }
 			]
 		},
-			"type-expression": {
-				"patterns": [
-					{
-						"name": "meta.type.arguments.musi",
-						"begin": "\\[(?=\\s*[A-Za-z_])",
-						"end": "\\]",
-						"beginCaptures": { "0": { "name": "punctuation.definition.type-arguments.begin.musi" } },
-						"endCaptures": { "0": { "name": "punctuation.definition.type-arguments.end.musi" } },
-						"patterns": [
-							{ "include": "#type-expression" },
-							{ "include": "#numeric" },
-							{ "include": "#operators" },
-							{ "include": "#punctuation" }
-						]
-					},
-					{
-						"name": "storage.modifier.musi",
-						"match": "\\bmut\\b"
-					},
-					{
-						"name": "keyword.operator.arrow.musi",
-						"match": "->|~>"
-					},
-					{ "include": "#identifiers" }
-				]
-			},
+		"type-expression": {
+			"patterns": [
+				{
+					"name": "meta.type.arguments.musi",
+					"begin": "\\[(?=\\s*[A-Za-z_])",
+					"end": "\\]",
+					"beginCaptures": { "0": { "name": "punctuation.definition.type-arguments.begin.musi" } },
+					"endCaptures": { "0": { "name": "punctuation.definition.type-arguments.end.musi" } },
+					"patterns": [
+						{ "include": "#type-expression" },
+						{ "include": "#numeric" },
+						{ "include": "#operators" },
+						{ "include": "#punctuation" }
+					]
+				},
+				{
+					"name": "storage.modifier.musi",
+					"match": "\\bmut\\b"
+				},
+				{
+					"name": "keyword.operator.arrow.musi",
+					"match": "->|~>"
+				},
+				{ "include": "#identifiers" }
+			]
+		},
 		"parameter-list": {
 			"name": "meta.parameters.musi",
 			"begin": "\\(",
@@ -621,21 +621,21 @@
 				}
 			]
 		},
-			"identifiers": {
-				"patterns": [
-					{
-						"name": "constant.language.wildcard.musi",
-						"match": "\\b_\\b"
-					},
-					{
-						"name": "entity.name.function.call.musi",
-						"match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\()"
-					},
-					{
-						"name": "variable.other.musi",
-						"match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
-					}
-				]
-			}
+		"identifiers": {
+			"patterns": [
+				{
+					"name": "constant.language.wildcard.musi",
+					"match": "\\b_\\b"
+				},
+				{
+					"name": "entity.name.function.call.musi",
+					"match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\()"
+				},
+				{
+					"name": "variable.other.musi",
+					"match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+				}
+			]
+		}
 	}
 }

@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_term::SyntaxTerm;
 
 pub(super) fn compile_lit(
     emitter: &mut MethodEmitter<'_, '_>,
@@ -22,6 +23,39 @@ pub(super) fn compile_string_constant(emitter: &mut MethodEmitter<'_, '_>, value
     let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
         name: name_id,
         value: ConstantValue::String(string_id),
+    });
+    emitter.code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::LdConst,
+        Operand::Constant(constant_id),
+    )));
+}
+
+pub(super) fn compile_syntax_constant(
+    emitter: &mut MethodEmitter<'_, '_>,
+    raw: &str,
+    origin: &IrOrigin,
+    diags: &mut EmitDiagList,
+) {
+    let Ok(term) = SyntaxTerm::from_quote_source(raw) else {
+        super::support::push_expr_diag(
+            diags,
+            emitter.module_key,
+            origin,
+            &EmitDiagKind::InvalidSyntaxLiteral,
+            format!("invalid syntax literal `{raw}`"),
+        );
+        emit_zero(emitter);
+        return;
+    };
+    let text_id = emitter.artifact.intern_string(term.text());
+    let const_name = format!("const:syntax:{}", emitter.artifact.constants.len());
+    let name_id = emitter.artifact.intern_string(&const_name);
+    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
+        name: name_id,
+        value: ConstantValue::Syntax {
+            shape: term.shape(),
+            text: text_id,
+        },
     });
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdConst,

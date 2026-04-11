@@ -1,6 +1,7 @@
 use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
 use musi_vm::{Value, VmError, VmErrorKind, VmHost, VmResult};
 use music_module::ImportMap;
+use music_term::{SyntaxShape, SyntaxTerm};
 
 use crate::{Runtime, RuntimeErrorKind, RuntimeOptions};
 
@@ -21,6 +22,14 @@ impl VmHost for TestHost {
             reason: "test host rejected effect call".into(),
         }))
     }
+}
+
+fn expr_syntax(text: &str) -> Value {
+    Value::syntax(SyntaxTerm::parse(SyntaxShape::Expr, text).unwrap())
+}
+
+fn module_syntax(text: &str) -> Value {
+    Value::syntax(SyntaxTerm::parse(SyntaxShape::Module, text).unwrap())
 }
 
 #[test]
@@ -63,9 +72,7 @@ fn evaluates_expression_syntax_through_runtime_service() {
         .unwrap();
     runtime.load_root("main").unwrap();
 
-    let value = runtime
-        .eval_expr_syntax(&Value::string("42"), "Int")
-        .unwrap();
+    let value = runtime.eval_expr_syntax(&expr_syntax("42"), "Int").unwrap();
     assert_eq!(value, Value::Int(42));
 }
 
@@ -80,11 +87,54 @@ fn loads_module_syntax_through_runtime_service() {
     let module = runtime
         .load_module_syntax(
             "generated",
-            &Value::string("export let answer () : Int := 42;"),
+            &module_syntax("export let answer () : Int := 42;"),
         )
         .unwrap();
     let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
 
+    assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn evaluates_expression_through_musi_syntax_root() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r#"
+            let Syntax := import "musi:syntax";
+            export let answer () : Int := Syntax.eval(quote (40 + 2), Int) :?> Int;
+            "#,
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    let value = runtime.call_export("answer", &[]).unwrap();
+    assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn registers_module_syntax_through_musi_syntax_root() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r#"
+            let Syntax := import "musi:syntax";
+            export let answer () : Int := (
+              let name : String := "generated";
+              Syntax.register_module(name, quote {
+                export let answer : Int := 42;
+              });
+              let loaded := import name;
+              loaded.answer :?> Int
+            );
+            "#,
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    let value = runtime.call_export("answer", &[]).unwrap();
     assert_eq!(value, Value::Int(42));
 }
 
@@ -153,36 +203,14 @@ fn rejects_invalid_syntax_value() {
 
 #[test]
 fn reports_parse_failure_for_expression_syntax() {
-    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
-    runtime
-        .register_module_text("main", "export let root () : Int := 0;")
-        .unwrap();
-    runtime.load_root("main").unwrap();
-
-    let err = runtime
-        .eval_expr_syntax(&Value::string("("), "Int")
-        .unwrap_err();
-    assert!(matches!(
-        err.kind(),
-        RuntimeErrorKind::SessionParseFailed { .. }
-    ));
+    let err = SyntaxTerm::parse(SyntaxShape::Expr, "(").unwrap_err();
+    assert_eq!(err.to_string(), "syntax fragment parse failed");
 }
 
 #[test]
 fn reports_parse_failure_for_module_syntax() {
-    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
-    runtime
-        .register_module_text("main", "export let root () : Int := 0;")
-        .unwrap();
-    runtime.load_root("main").unwrap();
-
-    let err = runtime
-        .load_module_syntax("generated", &Value::string("export let := ;"))
-        .unwrap_err();
-    assert!(matches!(
-        err.kind(),
-        RuntimeErrorKind::SessionParseFailed { .. }
-    ));
+    let err = SyntaxTerm::parse(SyntaxShape::Module, "export let := ;").unwrap_err();
+    assert_eq!(err.to_string(), "syntax fragment parse failed");
 }
 
 #[test]

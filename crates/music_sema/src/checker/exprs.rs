@@ -533,8 +533,7 @@ fn check_field_expr(
                 ctx.set_expr_callable_effects(expr_id, scheme.effects.clone());
                 scheme.ty
             } else {
-                ctx.diag(origin.span, DiagKind::UnknownExport, "");
-                builtins.unknown
+                builtins.any
             }
         }
         _ => {

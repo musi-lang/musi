@@ -1,10 +1,8 @@
-use music_arena::Idx;
-
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetaDescriptor {
-    pub target: Idx<StringRecord>,
-    pub key: Idx<StringRecord>,
-    pub values: Box<[Idx<StringRecord>]>,
+    pub target: StringId,
+    pub key: StringId,
+    pub values: Box<[StringId]>,
 }

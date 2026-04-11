@@ -1,4 +1,5 @@
 use music_bc::{EffectId, ForeignId, TypeId};
+use music_term::TypeTerm;
 
 use super::{Program, Value, VmError, VmErrorKind, VmResult};
 
@@ -72,6 +73,11 @@ impl ForeignCall {
     pub fn type_name(&self, ty: TypeId) -> &str {
         self.program.type_name(ty)
     }
+
+    #[must_use]
+    pub fn type_term(&self, ty: TypeId) -> TypeTerm {
+        self.program.type_term(ty)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +143,11 @@ impl EffectCall {
     #[must_use]
     pub fn type_name(&self, ty: TypeId) -> &str {
         self.program.type_name(ty)
+    }
+
+    #[must_use]
+    pub fn type_term(&self, ty: TypeId) -> TypeTerm {
+        self.program.type_term(ty)
     }
 }
 

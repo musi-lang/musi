@@ -9,6 +9,7 @@ use music_bc::{
     Artifact, ClassId, CodeEntry, ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId,
     Instruction, Label, MethodId, Opcode, Operand, OperandShape, StringId, TypeId,
 };
+use music_term::SyntaxShape;
 
 use crate::{AssemblyError, AssemblyResult};
 
@@ -47,6 +48,8 @@ fn format_types(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.types.iter() {
         out.push_str(".type ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push_str(" term ");
+        push_quoted(out, artifact.string_text(descriptor.term));
         out.push('\n');
     }
 }
@@ -94,6 +97,14 @@ fn format_constants(out: &mut String, artifact: &Artifact) {
             }
             ConstantValue::String(text) => {
                 out.push_str(" string ");
+                push_quoted(out, artifact.string_text(text));
+            }
+            ConstantValue::Syntax { shape, text } => {
+                out.push_str(" syntax ");
+                out.push_str(match shape {
+                    SyntaxShape::Expr => "expr ",
+                    SyntaxShape::Module => "module ",
+                });
                 push_quoted(out, artifact.string_text(text));
             }
         }
@@ -423,20 +434,27 @@ impl TextBuilder {
     }
 
     fn parse_type(&mut self, parts: &[String]) -> AssemblyResult {
-        if parts.len() != 2 {
-            return Err(AssemblyError::Text("expected `.type $Name`".into()));
+        if parts.len() != 4 || parts[2] != "term" {
+            return Err(AssemblyError::Text(
+                "expected `.type $Name term \"...\"`".into(),
+            ));
         }
         let name = parse_symbol(&parts[1])?;
-        let _ = self.ensure_type_symbol(&name);
+        let term = parse_quoted(&parts[3])?;
+        let _ = self.ensure_type_symbol(&name, &term);
         Ok(())
     }
 
-    fn ensure_type_symbol(&mut self, name: &str) -> TypeId {
+    fn ensure_type_symbol(&mut self, name: &str, term: &str) -> TypeId {
         if let Some(id) = self.types.get(name).copied() {
             return id;
         }
         let name_id = self.intern_string(name);
-        let ty = self.artifact.types.alloc(TypeDescriptor { name: name_id });
+        let term_id = self.intern_string(term);
+        let ty = self.artifact.types.alloc(TypeDescriptor {
+            name: name_id,
+            term: term_id,
+        });
         let _ = self.types.insert(name.into(), ty);
         ty
     }
@@ -537,6 +555,18 @@ impl TextBuilder {
                 _ => return Err(AssemblyError::Text("invalid bool constant".into())),
             }),
             "string" => ConstantValue::String(self.intern_string(&parse_quoted(raw_value)?)),
+            "syntax" => {
+                let shape = match must_get(parts.get(3), "syntax shape")? {
+                    "expr" => SyntaxShape::Expr,
+                    "module" => SyntaxShape::Module,
+                    _ => return Err(AssemblyError::Text("invalid syntax constant shape".into())),
+                };
+                let text = parse_quoted(must_get(parts.get(4), "syntax value")?)?;
+                ConstantValue::Syntax {
+                    shape,
+                    text: self.intern_string(&text),
+                }
+            }
             _ => return Err(AssemblyError::Text("unknown constant kind".into())),
         };
         let id = self.artifact.constants.alloc(ConstantDescriptor {
@@ -583,7 +613,7 @@ impl TextBuilder {
             let mut param_tys = Vec::new();
             while idx < parts.len() && parts[idx] == "param" {
                 let ty = parse_symbol(must_get(parts.get(idx + 1), "effect op param type")?)?;
-                param_tys.push(self.ensure_type_symbol(&ty));
+                param_tys.push(self.ensure_type_symbol(&ty, &ty));
                 idx += 2;
             }
             if parts.get(idx).map(String::as_str) != Some("result") {
@@ -596,7 +626,7 @@ impl TextBuilder {
             ops.push(EffectOpDescriptor {
                 name: self.intern_string(&op_name),
                 param_tys: param_tys.into_boxed_slice(),
-                result_ty: self.ensure_type_symbol(&result_ty),
+                result_ty: self.ensure_type_symbol(&result_ty, &result_ty),
             });
         }
         let id = self.artifact.effects.alloc(EffectDescriptor {
@@ -664,7 +694,7 @@ impl TextBuilder {
         let mut base = 2;
         while parts.get(base).map(String::as_str) == Some("param") {
             let ty = parse_symbol(must_get(parts.get(base + 1), "foreign param type")?)?;
-            param_tys.push(self.ensure_type_symbol(&ty));
+            param_tys.push(self.ensure_type_symbol(&ty, &ty));
             base += 2;
         }
         if parts.get(base).map(String::as_str) != Some("result")
@@ -701,7 +731,7 @@ impl TextBuilder {
         let descriptor = ForeignDescriptor {
             name: self.intern_string(&name),
             param_tys: param_tys.into_boxed_slice(),
-            result_ty: self.ensure_type_symbol(&result_ty),
+            result_ty: self.ensure_type_symbol(&result_ty, &result_ty),
             abi: self.intern_string(&abi),
             symbol: self.intern_string(&symbol),
             link: link.as_deref().map(|text| self.intern_string(text)),

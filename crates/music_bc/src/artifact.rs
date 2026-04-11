@@ -189,6 +189,12 @@ impl Artifact {
         self.string_text(descriptor.name)
     }
 
+    #[must_use]
+    pub fn type_term_json(&self, id: TypeId) -> &str {
+        let descriptor = self.types.get(id);
+        self.string_text(descriptor.term)
+    }
+
     /// Validates descriptor references, instruction operand shapes, and method label usage.
     ///
     /// # Errors
@@ -198,11 +204,13 @@ impl Artifact {
     pub fn validate(&self) -> Result<(), ArtifactError> {
         for (_, descriptor) in self.types.iter() {
             self.require_string(descriptor.name)?;
+            self.require_string(descriptor.term)?;
         }
         for (_, descriptor) in self.constants.iter() {
             self.require_string(descriptor.name)?;
             match descriptor.value {
                 ConstantValue::String(id) => self.require_string(id)?,
+                ConstantValue::Syntax { text, .. } => self.require_string(text)?,
                 ConstantValue::Int(_) | ConstantValue::Float(_) | ConstantValue::Bool(_) => {}
             }
         }

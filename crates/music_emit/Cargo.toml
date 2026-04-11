@@ -18,6 +18,7 @@ music_bc = { path = "../music_bc" }
 music_ir = { path = "../music_ir" }
 music_module = { path = "../music_module" }
 music_names = { path = "../music_names" }
+music_term = { path = "../music_term" }
 
 [dev-dependencies]
 music_resolve = { path = "../music_resolve" }

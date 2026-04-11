@@ -1,6 +1,6 @@
 use music_arena::Idx;
 
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 use crate::descriptor::{
     ConstantDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
     TypeDescriptor,
@@ -38,7 +38,7 @@ pub enum Operand {
     None,
     I16(i16),
     Local(u16),
-    String(Idx<StringRecord>),
+    String(StringId),
     Type(Idx<TypeDescriptor>),
     Constant(Idx<ConstantDescriptor>),
     Global(Idx<GlobalDescriptor>),

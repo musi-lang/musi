@@ -1,14 +1,12 @@
-use music_arena::Idx;
-
-use crate::artifact::StringRecord;
+use crate::artifact::StringId;
 use crate::instruction::CodeEntry;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodDescriptor {
-    pub name: Idx<StringRecord>,
+    pub name: StringId,
     pub params: u16,
     pub locals: u16,
     pub export: bool,
-    pub labels: Box<[Idx<StringRecord>]>,
+    pub labels: Box<[StringId]>,
     pub code: Box<[CodeEntry]>,
 }

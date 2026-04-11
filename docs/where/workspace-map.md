@@ -36,6 +36,7 @@ First-party Musi packages live in `packages/`.
 
 ## Native Integration
 
+- `musi_foundation`
 - `musi_native`
 
 ## First-Party Packages

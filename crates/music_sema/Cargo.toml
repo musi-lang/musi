@@ -14,6 +14,7 @@ music_hir = { path = "../music_hir" }
 music_module = { path = "../music_module" }
 music_names = { path = "../music_names" }
 music_resolve = { path = "../music_resolve" }
+music_term = { path = "../music_term" }
 
 [dev-dependencies]
 music_module = { path = "../music_module" }

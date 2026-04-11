@@ -13,7 +13,8 @@ impl Vm {
             "Int" => matches!(value, Value::Int(_)),
             "Float" => matches!(value, Value::Float(_)),
             "Bool" => matches!(value, Value::Bool(_)),
-            "String" | "CString" | "Syntax" => matches!(value, Value::String(_)),
+            "String" | "CString" => matches!(value, Value::String(_)),
+            "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
             _ => match value {
                 Value::Seq(seq) => seq.borrow().ty == ty,

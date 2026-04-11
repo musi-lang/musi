@@ -20,7 +20,10 @@ fn validates_well_formed_artifact() {
     let symbol_name = artifact.intern_string("puts");
     let callee_name = artifact.intern_string("callee");
 
-    let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
+    let int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int_name,
+        term: int_name,
+    });
     let const_id = artifact.constants.alloc(ConstantDescriptor {
         name: const_name,
         value: ConstantValue::Int(41),
@@ -142,7 +145,10 @@ fn validates_global_and_sequence_operands() {
     let global_name = artifact.intern_string("answer");
     let int_name = artifact.intern_string("Int");
 
-    let int_ty = artifact.types.alloc(TypeDescriptor { name: int_name });
+    let int_ty = artifact.types.alloc(TypeDescriptor {
+        name: int_name,
+        term: int_name,
+    });
     let global_id = artifact.globals.alloc(GlobalDescriptor {
         name: global_name,
         export: true,

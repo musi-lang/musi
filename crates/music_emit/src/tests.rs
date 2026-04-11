@@ -166,6 +166,35 @@ fn emits_multi_index_get_set_and_dynamic_import() {
 }
 
 #[test]
+fn emits_dynamic_module_export_lookup() {
+    let ir = lower_ir(
+        r"
+        export let read (name : String) : Any := (
+          let loaded := import name;
+          loaded.answer
+        );
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(opcodes.contains(&music_bc::Opcode::ModLoad));
+    assert!(opcodes.contains(&music_bc::Opcode::ModGet));
+}
+
+#[test]
 fn emits_case_tuple_and_array_patterns() {
     let ir = lower_ir(
         r"
@@ -210,10 +239,35 @@ fn emits_quote_as_syntax_constant() {
     assert!(emitted.artifact.constants.iter().any(|(_, constant)| {
         matches!(
             constant.value,
-            ConstantValue::String(value)
-                if emitted.artifact.string_text(value).contains("quote (#(1 + 2))")
+            ConstantValue::Syntax { shape: music_term::SyntaxShape::Expr, text }
+                if emitted.artifact.string_text(text).contains("#(1 + 2)")
         )
     }));
+}
+
+#[test]
+fn emits_named_type_values_as_ty_id() {
+    let ir = lower_ir(
+        r"
+        export let ty : Type := Int;
+    ",
+        "main",
+    );
+
+    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    let opcodes = emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            music_bc::CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            music_bc::CodeEntry::Label(_) => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(emitted.artifact.validate().is_ok());
+    assert!(opcodes.contains(&music_bc::Opcode::TyId));
 }
 
 #[test]

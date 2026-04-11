@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -29,9 +29,7 @@
 			}
 		},
 		{
-			"includes": [
-				"client/**"
-			],
+			"includes": ["client/**"],
 			"linter": {
 				"rules": {
 					"performance": {
@@ -144,10 +142,7 @@
 		}
 	},
 	"javascript": {
-		"globals": [
-			"Bun",
-			"$"
-		],
+		"globals": ["Bun", "$"],
 		"formatter": {
 			"quoteStyle": "double"
 		}

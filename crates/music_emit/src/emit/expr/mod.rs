@@ -14,7 +14,7 @@ mod support;
 use callable::{compile_call, compile_call_seq, compile_closure_new, compile_variant_new};
 use control::{compile_binary, compile_case};
 use effects::{compile_handle, compile_perform, compile_perform_seq, compile_resume};
-use literals::compile_string_constant;
+use literals::compile_syntax_constant;
 use names::compile_name;
 use records::{compile_record_get, compile_record_literal, compile_record_update};
 use sequence::{compile_array_cat, compile_index, compile_sequence, compile_sequence_literal};
@@ -146,6 +146,15 @@ fn compile_expr_sequence_and_data(
             )));
             true
         }
+        IrExprKind::ModuleGet { base, name } => {
+            compile_expr(emitter, base, true, diags);
+            let name = emitter.artifact.intern_string(name);
+            emitter.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::ModGet,
+                Operand::String(name),
+            )));
+            true
+        }
         IrExprKind::TypeValue { ty_name } => {
             let Some(ty) = emitter.layout.types.get(ty_name).copied() else {
                 support::push_expr_diag(
@@ -165,7 +174,7 @@ fn compile_expr_sequence_and_data(
             true
         }
         IrExprKind::SyntaxValue { raw } => {
-            compile_string_constant(emitter, raw);
+            compile_syntax_constant(emitter, raw, &expr.origin, diags);
             true
         }
         _ => false,
