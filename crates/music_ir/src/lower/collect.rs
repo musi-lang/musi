@@ -30,8 +30,10 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
             collect_used_bindings(base, out);
             collect_expr_slice(indices, out, collect_used_bindings);
         }
-        IrExprKind::ModuleGet { base, .. } => collect_used_bindings(base, out),
-        IrExprKind::RecordGet { base, .. } => collect_used_bindings(base, out),
+        IrExprKind::ModuleGet { base, .. }
+        | IrExprKind::RecordGet { base, .. }
+        | IrExprKind::TyTest { base, .. }
+        | IrExprKind::TyCast { base, .. } => collect_used_bindings(base, out),
         IrExprKind::Sequence { exprs } => collect_expr_slice(exprs, out, collect_used_bindings),
         IrExprKind::Tuple { items, .. } | IrExprKind::Array { items, .. } => {
             collect_expr_slice(items, out, collect_used_bindings);
@@ -50,9 +52,6 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
             collect_expr_slice(captures, out, collect_used_bindings);
         }
         IrExprKind::Not { expr } => collect_used_bindings(expr, out),
-        IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
-            collect_used_bindings(base, out);
-        }
         IrExprKind::Case { scrutinee, arms } => {
             collect_used_bindings(scrutinee, out);
             collect_used_in_case_arms(arms, out);
@@ -122,8 +121,10 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
             collect_local_decl_bindings(base, out);
             collect_expr_slice(indices, out, collect_local_decl_bindings);
         }
-        IrExprKind::ModuleGet { base, .. } => collect_local_decl_bindings(base, out),
-        IrExprKind::RecordGet { base, .. } => collect_local_decl_bindings(base, out),
+        IrExprKind::ModuleGet { base, .. }
+        | IrExprKind::RecordGet { base, .. }
+        | IrExprKind::TyTest { base, .. }
+        | IrExprKind::TyCast { base, .. } => collect_local_decl_bindings(base, out),
         IrExprKind::Sequence { exprs } => {
             collect_expr_slice(exprs, out, collect_local_decl_bindings);
         }
@@ -144,9 +145,6 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
             collect_expr_slice(captures, out, collect_local_decl_bindings);
         }
         IrExprKind::Not { expr } => collect_local_decl_bindings(expr, out),
-        IrExprKind::TyTest { base, .. } | IrExprKind::TyCast { base, .. } => {
-            collect_local_decl_bindings(base, out);
-        }
         IrExprKind::Case { scrutinee, arms } => {
             collect_local_decl_bindings(scrutinee, out);
             for arm in arms {

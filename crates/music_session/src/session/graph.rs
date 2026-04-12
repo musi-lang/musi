@@ -61,14 +61,21 @@ impl Session {
         self.clear_all_resolve_caches();
     }
 
+    pub(super) fn collect_reachable_module_keys(
+        &mut self,
+        key: &ModuleKey,
+    ) -> Result<Vec<ModuleKey>, SessionError> {
+        let mut order = Vec::new();
+        let mut seen = BTreeSet::new();
+        self.collect_reachable_keys(key, &mut seen, &mut order)?;
+        Ok(order)
+    }
+
     pub(super) fn collect_reachable_ir_modules(
         &mut self,
         key: &ModuleKey,
     ) -> Result<Vec<IrModule>, SessionError> {
-        let mut order = Vec::new();
-        let mut seen = BTreeSet::new();
-        self.collect_reachable_keys(key, &mut seen, &mut order)?;
-        order
+        self.collect_reachable_module_keys(key)?
             .into_iter()
             .map(|module_key| self.lower_module(&module_key).cloned())
             .collect::<Result<Vec<_>, _>>()

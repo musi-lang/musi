@@ -56,6 +56,7 @@ Execution entrypoints are:
 - `run_test_module`
 
 Use root-export calls for normal entrypoints and module-handle calls for dynamic module flow.
+Opaque exports remain visible in program metadata but are rejected by runtime export lookup/call APIs.
 
 ## Inspect
 

@@ -9,7 +9,8 @@ use super::super::schemes::{instantiate_monomorphic_scheme, scheme_from_export};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
-    ClassFacts, ClassMemberFacts, ConstraintFacts, ExportedValue, ModuleSurface, PatFacts,
+    ClassFacts, ClassMemberFacts, ConstraintFacts, ExportedValue, LawFacts, LawParamFacts,
+    ModuleSurface, PatFacts,
 };
 use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
 
@@ -196,7 +197,18 @@ fn import_class_alias(
         laws: surface
             .laws
             .iter()
-            .map(|law| ctx.intern(law))
+            .map(|law| LawFacts {
+                name: ctx.intern(&law.name),
+                params: law
+                    .params
+                    .iter()
+                    .map(|param| LawParamFacts {
+                        name: ctx.intern(&param.name),
+                        ty: import_surface_ty(ctx, module_surface, param.ty),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     };
@@ -230,7 +242,18 @@ fn import_effect_alias(
     let laws = surface
         .laws
         .iter()
-        .map(|law| ctx.intern(law))
+        .map(|law| LawFacts {
+            name: ctx.intern(&law.name),
+            params: law
+                .params
+                .iter()
+                .map(|param| LawParamFacts {
+                    name: ctx.intern(&param.name),
+                    ty: import_surface_ty(ctx, module_surface, param.ty),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        })
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
@@ -253,6 +276,13 @@ fn import_data_alias(
                     variant
                         .payload
                         .map(|ty| import_surface_ty(ctx, module_surface, ty)),
+                    variant
+                        .field_tys
+                        .iter()
+                        .copied()
+                        .map(|ty| import_surface_ty(ctx, module_surface, ty))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
                 ),
             )
         })

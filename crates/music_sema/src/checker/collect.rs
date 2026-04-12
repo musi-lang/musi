@@ -3,14 +3,14 @@ use std::collections::{BTreeMap, HashMap};
 use music_arena::SliceRange;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
+    HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_names::Ident;
 
 use crate::api::ClassFacts;
 
 use super::attrs::extract_data_layout_hints;
-use super::decls::member_signature;
+use super::decls::{member_law_facts, member_signature};
 use super::normalize::{lower_constraints, lower_type_expr};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
@@ -170,10 +170,9 @@ fn collect_bound_decl(
     let origin = outer_attrs.map_or_else(|| ctx.expr(value).origin, |(o, _)| *o);
     let attrs = outer_attrs.map_or_else(Vec::new, |(_, range)| vec![range.clone()]);
     match ctx.expr(value).kind {
-        HirExprKind::Data {
-            variants,
-            fields: _,
-        } => collect_data_decl(ctx, origin, &attrs, name, variants),
+        HirExprKind::Data { variants, fields } => {
+            collect_data_decl(ctx, origin, &attrs, name, variants, fields)
+        }
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
             constraints,
@@ -189,6 +188,7 @@ fn collect_data_decl(
     attrs: &[SliceRange<HirAttr>],
     name: Ident,
     variants: SliceRange<HirVariantDef>,
+    fields: SliceRange<HirFieldDef>,
 ) {
     let data_name: Box<str> = ctx.resolve_symbol(name.name).into();
     if ctx.data_def(&data_name).is_some() {
@@ -203,7 +203,9 @@ fn collect_data_decl(
             let origin = ctx.expr(expr).origin;
             lower_type_expr(ctx, expr, origin)
         });
-        let prev = variant_map.insert(tag, DataVariantDef::new(payload));
+        let field_tys =
+            payload.map_or_else(Box::<[_]>::default, |ty| flatten_data_field_tys(ctx, ty));
+        let prev = variant_map.insert(tag, DataVariantDef::new(payload, field_tys));
         if prev.is_some() {
             ctx.diag(
                 variant.origin.span,
@@ -212,12 +214,33 @@ fn collect_data_decl(
             );
         }
     }
+    if variant_map.is_empty() {
+        let field_tys = ctx
+            .fields(fields)
+            .into_iter()
+            .map(|field| {
+                let origin = ctx.expr(field.ty).origin;
+                lower_type_expr(ctx, field.ty, origin)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        if !field_tys.is_empty() {
+            let _ = variant_map.insert(data_name.clone(), DataVariantDef::new(None, field_tys));
+        }
+    }
 
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
     ctx.insert_data_def(
         data_name,
         DataDef::new(key, variant_map, repr_kind, layout_align, layout_pack),
     );
+}
+
+fn flatten_data_field_tys(ctx: &CollectPass<'_, '_, '_>, ty: HirTyId) -> Box<[HirTyId]> {
+    match &ctx.ty(ty).kind {
+        HirTyKind::Tuple { items } => ctx.ty_ids(*items).into_boxed_slice(),
+        _ => vec![ty].into_boxed_slice(),
+    }
 }
 
 fn collect_effect_decl(
@@ -261,7 +284,7 @@ fn collect_effect_decl(
     let laws = members_vec
         .iter()
         .filter(|member| member.kind == HirMemberKind::Law)
-        .map(|member| member.name.name)
+        .map(|member| member_law_facts(ctx, member))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
@@ -309,7 +332,7 @@ fn collect_class_decl(
     let laws = members_vec
         .iter()
         .filter(|member| member.kind == HirMemberKind::Law)
-        .map(|member| member.name.name)
+        .map(|member| member_law_facts(ctx, member))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     ctx.insert_class_id(name.name, value);

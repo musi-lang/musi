@@ -33,6 +33,17 @@ fn module_syntax(text: &str) -> Value {
     Value::syntax(SyntaxTerm::parse(SyntaxShape::Module, text).unwrap())
 }
 
+fn register_runtime_module(runtime: &mut Runtime, spec: &str, text: &str) {
+    runtime.register_module_text(spec, text).unwrap();
+}
+
+fn run_main_answer(main_source: &str) -> Value {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime.register_module_text("main", main_source).unwrap();
+    runtime.load_root("main").unwrap();
+    runtime.call_export("answer", &[]).unwrap()
+}
+
 #[test]
 fn loads_root_and_calls_export() {
     let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
@@ -63,6 +74,39 @@ fn loads_dynamic_module_from_registered_text() {
     let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
 
     assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn rejects_opaque_exports_through_runtime_api() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            "export opaque let secret : Int := 7; export let root () : Int := 0;",
+        )
+        .unwrap();
+    runtime
+        .register_module_text(
+            "dep",
+            "export opaque let hidden : Int := 41; export let answer () : Int := 42;",
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    let err = runtime.lookup_export("secret").unwrap_err();
+    assert!(matches!(
+        err.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
+
+    let module = runtime.load_module("dep").unwrap();
+    let err = runtime
+        .call_module_export(&module, "hidden", &[])
+        .unwrap_err();
+    assert!(matches!(
+        err.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
 }
 
 #[test]
@@ -98,29 +142,19 @@ fn loads_module_syntax_through_runtime_service() {
 
 #[test]
 fn evaluates_expression_through_musi_syntax_root() {
-    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
-    runtime
-        .register_module_text(
-            "main",
-            r#"
+    let value = run_main_answer(
+        r#"
             let Syntax := import "musi:syntax";
             export let answer () : Int := Syntax.eval(quote (40 + 2), Int) :?> Int;
             "#,
-        )
-        .unwrap();
-    runtime.load_root("main").unwrap();
-
-    let value = runtime.call_export("answer", &[]).unwrap();
+    );
     assert_eq!(value, Value::Int(42));
 }
 
 #[test]
 fn registers_module_syntax_through_musi_syntax_root() {
-    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
-    runtime
-        .register_module_text(
-            "main",
-            r#"
+    let value = run_main_answer(
+        r#"
             let Syntax := import "musi:syntax";
             export let answer () : Int := (
               let name : String := "generated";
@@ -131,11 +165,7 @@ fn registers_module_syntax_through_musi_syntax_root() {
               loaded.answer :?> Int
             );
             "#,
-        )
-        .unwrap();
-    runtime.load_root("main").unwrap();
-
-    let value = runtime.call_export("answer", &[]).unwrap();
+    );
     assert_eq!(value, Value::Int(42));
 }
 
@@ -319,42 +349,39 @@ fn runs_root_hub_std_test_module() {
             ..RuntimeOptions::default()
         },
     );
-    runtime
-        .register_module_text(
-            "@std",
-            r#"
+    register_runtime_module(
+        &mut runtime,
+        "@std",
+        r#"
 export let Bytes := import "@std/bytes";
 export let Math := import "@std/math";
 export let Option := import "@std/option";
 export let Testing := import "@std/testing";
 "#,
-        )
-        .unwrap();
-    runtime
-        .register_module_text(
-            "@std/bytes",
-            r#"
+    );
+    register_runtime_module(
+        &mut runtime,
+        "@std/bytes",
+        r"
 export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
-"#,
-        )
-        .unwrap();
-    runtime
-        .register_module_text(
-            "@std/math",
-            r#"
+",
+    );
+    register_runtime_module(
+        &mut runtime,
+        "@std/math",
+        r"
 export let clamp (value : Int, low : Int, high : Int) : Int :=
     case () of (
         | _ if value < low => low
         | _ if value > high => high
         | _ => value
     );
-"#,
-        )
-        .unwrap();
-    runtime
-        .register_module_text(
-            "@std/option",
-            r#"
+",
+    );
+    register_runtime_module(
+        &mut runtime,
+        "@std/option",
+        r"
 export let Option[T] := data {
     | Some : T
     | None
@@ -367,13 +394,12 @@ export let unwrap_or [T] (value : Option[T], fallback : T) : T :=
         | .Some(item) => item
         | .None => fallback
     );
-"#,
-        )
-        .unwrap();
-    runtime
-        .register_module_text(
-            "@std/testing",
-            r#"
+",
+    );
+    register_runtime_module(
+        &mut runtime,
+        "@std/testing",
+        r#"
 let Intrinsics := import "musi:test";
 let Test := Intrinsics.Test;
 
@@ -387,12 +413,11 @@ export let end_describe () :=
 export let it (name : String, passed : Bool) :=
     perform Test.testCase(name, passed);
 "#,
-        )
-        .unwrap();
-    runtime
-        .register_module_text(
-            "suite",
-            r#"
+    );
+    register_runtime_module(
+        &mut runtime,
+        "suite",
+        r#"
 let Testing := import "@std/testing";
 let Std := import "@std";
 
@@ -408,8 +433,7 @@ export let test () :=
       Testing.end_describe()
     );
 "#,
-        )
-        .unwrap();
+    );
 
     let report = runtime.run_test_module("suite").unwrap();
 

@@ -7,6 +7,8 @@ use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField};
 use music_syntax::SyntaxElement;
 use music_syntax::{SyntaxNodeKind, pattern_binder_tokens};
 
+type PatItemList = SliceRange<HirPatId>;
+
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,
@@ -108,20 +110,18 @@ where
     }
 
     fn lower_pat_tuple(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
-        let origin = self.origin_node(node);
-        let items: Vec<_> = node
-            .child_nodes()
-            .filter(|n| n.kind().is_pat())
-            .map(|n| self.lower_pat(n))
-            .collect();
-        let items = self.store.alloc_pat_list(items);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Tuple { items },
-        })
+        self.lower_pat_sequence(node, tuple_pat_kind)
     }
 
     fn lower_pat_array(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
+        self.lower_pat_sequence(node, array_pat_kind)
+    }
+
+    fn lower_pat_sequence(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+        kind: fn(PatItemList) -> HirPatKind,
+    ) -> HirPatId {
         let origin = self.origin_node(node);
         let items: Vec<_> = node
             .child_nodes()
@@ -131,7 +131,7 @@ where
         let items = self.store.alloc_pat_list(items);
         self.store.alloc_pat(HirPat {
             origin,
-            kind: HirPatKind::Array { items },
+            kind: kind(items),
         })
     }
 
@@ -226,4 +226,12 @@ where
         }
         self.store.record_pat_fields.alloc_from_iter(fields)
     }
+}
+
+const fn tuple_pat_kind(items: PatItemList) -> HirPatKind {
+    HirPatKind::Tuple { items }
+}
+
+const fn array_pat_kind(items: PatItemList) -> HirPatKind {
+    HirPatKind::Array { items }
 }

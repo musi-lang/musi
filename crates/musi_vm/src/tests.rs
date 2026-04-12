@@ -3,11 +3,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use music_module::ModuleKey;
+use music_seam::Artifact;
+use music_seam::descriptor::{DataDescriptor, DataVariantDescriptor, TypeDescriptor};
 use music_session::{Session, SessionOptions};
+use music_term::{TypeTerm, TypeTermKind};
 
 use super::{
-    EffectCall, ForeignCall, Program, RejectingLoader, Value, Vm, VmError, VmErrorKind, VmHost,
-    VmLoader, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value, ValueView, Vm,
+    VmError, VmErrorKind, VmHost, VmLoader, VmOptions, VmResult,
 };
 
 #[derive(Default)]
@@ -259,6 +262,46 @@ fn loads_dynamic_module_through_host() {
 }
 
 #[test]
+fn rejects_opaque_exports_from_root_and_dynamic_modules() {
+    let dep = compile_program(
+        &[(
+            "dep",
+            "export opaque let hidden : Int := 41; export let answer () : Int := 42;",
+        )],
+        "dep",
+    );
+    let main = compile_program(
+        &[(
+            "main",
+            "export opaque let secret : Int := 7; export let root () : Int := 0;",
+        )],
+        "main",
+    );
+
+    let mut loader = TestLoader::default();
+    let _ = loader.modules.insert("dep".into(), dep);
+    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
+    vm.initialize().expect("vm init should succeed");
+
+    let err = vm.lookup_export("secret").unwrap_err();
+    assert!(matches!(
+        err.kind(),
+        VmErrorKind::OpaqueExport { module, export }
+            if module.as_ref() == "<root>" && export.as_ref() == "secret"
+    ));
+
+    let module = vm
+        .load_module("dep")
+        .expect("dynamic import should succeed");
+    let err = vm.lookup_module_export(&module, "hidden").unwrap_err();
+    assert!(matches!(
+        err.kind(),
+        VmErrorKind::OpaqueExport { module, export }
+            if module.as_ref() == "dep" && export.as_ref() == "hidden"
+    ));
+}
+
+#[test]
 fn detects_module_init_cycle() {
     let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
     let dep = compile_program(
@@ -355,4 +398,158 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
     assert_eq!(log.effect_calls[0].2.len(), 1);
     assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
     assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
+}
+
+#[test]
+fn inspects_cptr_values() {
+    let program = compile_program(&[("main", "export let answer () : Int := 0;")], "main");
+    let vm = Vm::with_rejecting_host(program, VmOptions);
+    let value = Value::c_ptr(0xDEAD_BEEF);
+
+    assert!(matches!(vm.inspect(&value), ValueView::CPtr(0xDEAD_BEEF)));
+}
+
+#[test]
+fn exposes_data_layout_descriptors_for_named_types() {
+    let program = compile_program(
+        &[(
+            "main",
+            r"
+            let Maybe := data { | Some : Int | None };
+            export let answer () : Int := 0;
+        ",
+        )],
+        "main",
+    );
+
+    let maybe_ty = program
+        .artifact()
+        .types
+        .iter()
+        .find_map(|(id, descriptor)| {
+            (program.string_text(descriptor.name) == "main::Maybe").then_some(id)
+        })
+        .expect("type id for Maybe");
+    let layout = program
+        .type_data_layout(maybe_ty)
+        .expect("data layout for Maybe");
+    assert_eq!(layout.name.as_ref(), "main::Maybe");
+    assert_eq!(layout.variant_count, 2);
+    assert_eq!(layout.field_count, 1);
+    assert!(!layout.is_single_variant_product());
+    assert_eq!(layout.repr_kind, None);
+    assert_eq!(
+        program.type_abi_kind(maybe_ty),
+        ProgramTypeAbiKind::Unsupported
+    );
+}
+
+#[test]
+fn classifies_named_data_native_abi_kinds() {
+    let mut artifact = Artifact::new();
+    let repr_c = artifact.intern_string("c");
+    let transparent = artifact.intern_string("transparent");
+
+    let point_name = artifact.intern_string("main::Point");
+    let point_term = artifact.intern_string(
+        &TypeTerm::new(TypeTermKind::Named {
+            module: None,
+            name: "Point".into(),
+            args: Box::new([]),
+        })
+        .to_json(),
+    );
+    let point_ty = artifact.types.alloc(TypeDescriptor {
+        name: point_name,
+        term: point_term,
+    });
+    let point_variant_name = artifact.intern_string("Point");
+    let _ = artifact.data.alloc(DataDescriptor {
+        name: point_name,
+        variant_count: 1,
+        field_count: 2,
+        variants: Box::new([DataVariantDescriptor {
+            name: point_variant_name,
+            field_tys: Box::new([point_ty, point_ty]),
+        }]),
+        repr_kind: Some(repr_c),
+        layout_align: Some(8),
+        layout_pack: Some(4),
+    });
+
+    let handle_name = artifact.intern_string("main::Handle");
+    let handle_term = artifact.intern_string(
+        &TypeTerm::new(TypeTermKind::Named {
+            module: None,
+            name: "Handle".into(),
+            args: Box::new([]),
+        })
+        .to_json(),
+    );
+    let handle_ty = artifact.types.alloc(TypeDescriptor {
+        name: handle_name,
+        term: handle_term,
+    });
+    let handle_variant_name = artifact.intern_string("Handle");
+    let _ = artifact.data.alloc(DataDescriptor {
+        name: handle_name,
+        variant_count: 1,
+        field_count: 1,
+        variants: Box::new([DataVariantDescriptor {
+            name: handle_variant_name,
+            field_tys: Box::new([handle_ty]),
+        }]),
+        repr_kind: Some(transparent),
+        layout_align: None,
+        layout_pack: None,
+    });
+
+    let maybe_name = artifact.intern_string("main::Maybe");
+    let maybe_term = artifact.intern_string(
+        &TypeTerm::new(TypeTermKind::Named {
+            module: None,
+            name: "Maybe".into(),
+            args: Box::new([]),
+        })
+        .to_json(),
+    );
+    let maybe_ty = artifact.types.alloc(TypeDescriptor {
+        name: maybe_name,
+        term: maybe_term,
+    });
+    let none_variant_name = artifact.intern_string("None");
+    let some_variant_name = artifact.intern_string("Some");
+    let _ = artifact.data.alloc(DataDescriptor {
+        name: maybe_name,
+        variant_count: 2,
+        field_count: 1,
+        variants: Box::new([
+            DataVariantDescriptor {
+                name: none_variant_name,
+                field_tys: Box::new([]),
+            },
+            DataVariantDescriptor {
+                name: some_variant_name,
+                field_tys: Box::new([maybe_ty]),
+            },
+        ]),
+        repr_kind: Some(repr_c),
+        layout_align: None,
+        layout_pack: None,
+    });
+
+    let program = Program::from_artifact(artifact).expect("program load should succeed");
+
+    assert_eq!(
+        program.type_abi_kind(point_ty),
+        ProgramTypeAbiKind::DataReprCProduct
+    );
+    assert_eq!(
+        program.type_abi_kind(handle_ty),
+        ProgramTypeAbiKind::DataTransparent
+    );
+    assert_eq!(
+        program.type_abi_kind(maybe_ty),
+        ProgramTypeAbiKind::Unsupported
+    );
 }

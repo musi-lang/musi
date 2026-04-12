@@ -2,7 +2,7 @@ use super::super::*;
 use crate::EmitDiagKind;
 
 pub(super) fn ensure_local_slot(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     binding: NameBindingId,
 ) -> u16 {
     if let Some(slot) = emitter.locals.get(&binding).copied() {
@@ -13,7 +13,7 @@ pub(super) fn ensure_local_slot(
     slot
 }
 
-pub(super) fn ensure_temp_slot(emitter: &mut MethodEmitter<'_, '_>, temp: IrTempId) -> u16 {
+pub(super) fn ensure_temp_slot(emitter: ExprEmitterMut<'_, '_, '_>, temp: IrTempId) -> u16 {
     if let Some(slot) = emitter.temps.get(&temp).copied() {
         return slot;
     }
@@ -22,17 +22,17 @@ pub(super) fn ensure_temp_slot(emitter: &mut MethodEmitter<'_, '_>, temp: IrTemp
     slot
 }
 
-pub(super) const fn reserve_temp_slot(emitter: &mut MethodEmitter<'_, '_>) -> u16 {
+pub(super) const fn reserve_temp_slot(emitter: ExprEmitterMut<'_, '_, '_>) -> u16 {
     let slot = emitter.next_local;
     emitter.next_local = emitter.next_local.saturating_add(1);
     slot
 }
 
-pub(super) const fn scratch_slot(emitter: &MethodEmitter<'_, '_>) -> u16 {
+pub(super) const fn scratch_slot(emitter: ExprEmitterRef<'_, '_, '_>) -> u16 {
     emitter.next_local
 }
 
-pub(super) fn alloc_label(emitter: &mut MethodEmitter<'_, '_>) -> u16 {
+pub(super) fn alloc_label(emitter: ExprEmitterMut<'_, '_, '_>) -> u16 {
     let id = u16::try_from(emitter.labels.len()).unwrap_or(u16::MAX);
     let name = format!("L{id}");
     emitter.labels.push(emitter.artifact.intern_string(&name));

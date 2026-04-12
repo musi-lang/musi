@@ -57,15 +57,9 @@ fn check_instance_member(
         ctx.diag(member.origin.span, DiagKind::UnknownInstanceMember, "");
     }
     if let Some(value) = member.value {
-        let params = ctx.alloc_ty_list(signature.params.iter().copied());
-        let expected = ctx.alloc_ty(HirTyKind::Arrow {
-            params,
-            ret: signature.result,
-            is_effectful: false,
-        });
         let facts = check_expr(ctx, value);
         let origin = ctx.expr(value).origin;
-        type_mismatch(ctx, origin, expected, facts.ty);
+        type_mismatch(ctx, origin, signature.result, facts.ty);
     } else {
         ctx.diag(
             member.origin.span,

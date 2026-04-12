@@ -11,7 +11,7 @@ use crate::descriptor::{
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 7;
+pub const BINARY_VERSION: u16 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -195,6 +195,21 @@ impl Artifact {
         self.string_text(descriptor.term)
     }
 
+    #[must_use]
+    pub fn data_for_type(&self, ty: TypeId) -> Option<(DataId, &DataDescriptor)> {
+        let type_name = self.type_name(ty);
+        self.data.iter().find(|(_, descriptor)| {
+            same_source_or_qualified_name(self.string_text(descriptor.name), type_name)
+        })
+    }
+
+    #[must_use]
+    pub fn data_by_name(&self, name: &str) -> Option<(DataId, &DataDescriptor)> {
+        self.data.iter().find(|(_, descriptor)| {
+            same_source_or_qualified_name(self.string_text(descriptor.name), name)
+        })
+    }
+
     /// Validates descriptor references, instruction operand shapes, and method label usage.
     ///
     /// # Errors
@@ -247,6 +262,12 @@ impl Artifact {
         }
         for (_, descriptor) in self.data.iter() {
             self.require_string(descriptor.name)?;
+            for variant in &descriptor.variants {
+                self.require_string(variant.name)?;
+                for ty in &variant.field_tys {
+                    self.require_type(*ty)?;
+                }
+            }
             if let Some(repr) = descriptor.repr_kind {
                 self.require_string(repr)?;
             }
@@ -428,6 +449,14 @@ impl Artifact {
             .ok_or(ArtifactError::InvalidReference { table: "foreigns" })?;
         Ok(())
     }
+}
+
+fn same_source_or_qualified_name(left: &str, right: &str) -> bool {
+    left == right || source_name(left) == source_name(right)
+}
+
+fn source_name(name: &str) -> &str {
+    name.rsplit_once("::").map_or(name, |(_, tail)| tail)
 }
 
 fn require_label(method: &MethodDescriptor, id: LabelId) -> Result<(), ArtifactError> {

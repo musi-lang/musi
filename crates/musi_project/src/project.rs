@@ -127,6 +127,19 @@ struct LoadedManifest {
     source: ManifestSource,
 }
 
+struct WorkspaceSeed {
+    package_records: BTreeMap<PackageId, PackageRecord>,
+    package_name_index: BTreeMap<String, PackageId>,
+}
+
+struct ResolvedWorkspaceState {
+    workspace: WorkspaceGraph,
+    package_name_index: BTreeMap<String, PackageId>,
+    import_map: ImportMap,
+    module_texts: BTreeMap<ModuleKey, String>,
+    resolved_lockfile: Lockfile,
+}
+
 /// # Errors
 ///
 /// Returns [`ProjectError`] when the project manifest, workspace, or dependency graph cannot be
@@ -172,67 +185,20 @@ impl Project {
             });
         }
         let loaded_lockfile = load_lockfile(&lockfile_path)?;
-
-        let local_packages = load_local_packages(
+        let ResolvedWorkspaceState {
+            workspace,
+            package_name_index,
+            import_map,
+            module_texts,
+            resolved_lockfile,
+        } = resolve_workspace_state(
             &root_dir,
-            &manifest,
             &root_manifest_path,
             &root_manifest_source,
+            &manifest,
+            &options,
+            &loaded_lockfile,
         )?;
-        let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
-        let mut package_name_index = BTreeMap::<String, PackageId>::new();
-        let mut resolving = BTreeSet::<String>::new();
-
-        for (name, package) in &local_packages {
-            let package_record = load_package_record(
-                package.root_dir.clone(),
-                package.manifest_path.clone(),
-                package.source.clone(),
-                package.manifest.clone(),
-                PackageSource::Workspace,
-            )?;
-            let _ = package_name_index.insert(name.clone(), package_record.package.id.clone());
-            let _ = package_records.insert(package_record.package.id.clone(), package_record);
-        }
-
-        let root_package = manifest
-            .name
-            .as_ref()
-            .and_then(|name| package_name_index.get(name).cloned());
-        let members = manifest
-            .workspace_members()
-            .iter()
-            .map(|member| member_manifest_name(&root_dir, member))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .filter_map(|name| package_name_index.get(&name).cloned())
-            .collect::<Vec<_>>();
-
-        let package_ids = package_records.keys().cloned().collect::<Vec<_>>();
-        for package_id in package_ids {
-            resolve_package_dependencies(
-                &package_id,
-                &local_packages,
-                &options,
-                &loaded_lockfile,
-                &mut package_records,
-                &mut package_name_index,
-                &mut resolving,
-            )?;
-        }
-
-        let import_map = build_import_map(&package_records, &package_name_index)?;
-        let module_texts = package_records
-            .values()
-            .flat_map(|record| {
-                record
-                    .modules
-                    .values()
-                    .map(|module| (module.key.clone(), module.text.clone()))
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let resolved_lockfile = build_lockfile(&package_records);
         if manifest.is_lock_frozen()
             && loaded_lockfile.clone().normalized() != resolved_lockfile.clone().normalized()
         {
@@ -240,16 +206,6 @@ impl Project {
                 path: lockfile_path,
             });
         }
-
-        let packages = package_records
-            .into_iter()
-            .map(|(id, record)| (id, record.package))
-            .collect();
-        let workspace = WorkspaceGraph {
-            root_package,
-            members,
-            packages,
-        };
 
         Ok(Self {
             options,
@@ -541,6 +497,78 @@ impl Project {
     }
 }
 
+fn resolve_workspace_state(
+    root_dir: &Path,
+    root_manifest_path: &Path,
+    root_manifest_source: &ManifestSource,
+    manifest: &PackageManifest,
+    options: &ProjectOptions,
+    loaded_lockfile: &Lockfile,
+) -> ProjectResult<ResolvedWorkspaceState> {
+    let local_packages =
+        load_local_packages(root_dir, manifest, root_manifest_path, root_manifest_source)?;
+    let WorkspaceSeed {
+        mut package_records,
+        mut package_name_index,
+    } = seed_workspace_packages(&local_packages)?;
+    let mut resolving = BTreeSet::<String>::new();
+
+    let root_package = manifest
+        .name
+        .as_ref()
+        .and_then(|name| package_name_index.get(name).cloned());
+    let members = manifest
+        .workspace_members()
+        .iter()
+        .map(|member| member_manifest_name(root_dir, member))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter_map(|name| package_name_index.get(&name).cloned())
+        .collect::<Vec<_>>();
+
+    let package_ids = package_records.keys().cloned().collect::<Vec<_>>();
+    for package_id in package_ids {
+        resolve_package_dependencies(
+            &package_id,
+            &local_packages,
+            options,
+            loaded_lockfile,
+            &mut package_records,
+            &mut package_name_index,
+            &mut resolving,
+        )?;
+    }
+
+    let import_map = build_import_map(&package_records, &package_name_index)?;
+    let module_texts = package_records
+        .values()
+        .flat_map(|record| {
+            record
+                .modules
+                .values()
+                .map(|module| (module.key.clone(), module.text.clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let resolved_lockfile = build_lockfile(&package_records);
+    let packages = package_records
+        .into_iter()
+        .map(|(id, record)| (id, record.package))
+        .collect();
+    let workspace = WorkspaceGraph {
+        root_package,
+        members,
+        packages,
+    };
+
+    Ok(ResolvedWorkspaceState {
+        workspace,
+        package_name_index,
+        import_map,
+        module_texts,
+        resolved_lockfile,
+    })
+}
+
 fn manifest_path_for(path: &Path) -> ProjectResult<PathBuf> {
     let manifest_path = if path.file_name() == Some(OsStr::new("musi.json")) {
         path.to_path_buf()
@@ -599,7 +627,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     if let Some(name) = &manifest.name {
         if name.trim().is_empty() {
             let span = source
-                .value_span("/name")
+                .value_span(&json_pointer(&["name"]))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -614,7 +642,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
             let span = source
                 .key_span(&pointer)
-                .or_else(|| source.value_span("/exports"))
+                .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -627,7 +655,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
             let span = source
                 .value_span(&pointer)
-                .or_else(|| source.value_span("/exports"))
+                .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -702,6 +730,28 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
     serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJsonInvalid {
         path: path.to_path_buf(),
         source,
+    })
+}
+
+fn seed_workspace_packages(
+    local_packages: &BTreeMap<String, LocalPackage>,
+) -> ProjectResult<WorkspaceSeed> {
+    let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
+    let mut package_name_index = BTreeMap::<String, PackageId>::new();
+    for (name, package) in local_packages {
+        let package_record = load_package_record(
+            package.root_dir.clone(),
+            package.manifest_path.clone(),
+            &package.source,
+            package.manifest.clone(),
+            PackageSource::Workspace,
+        )?;
+        let _ = package_name_index.insert(name.clone(), package_record.package.id.clone());
+        let _ = package_records.insert(package_record.package.id.clone(), package_record);
+    }
+    Ok(WorkspaceSeed {
+        package_records,
+        package_name_index,
     })
 }
 
@@ -879,7 +929,7 @@ fn resolve_dependency(
             let record = load_package_record(
                 package.root_dir.clone(),
                 package.manifest_path.clone(),
-                package.source.clone(),
+                &package.source,
                 package.manifest.clone(),
                 PackageSource::Workspace,
             )?;
@@ -936,7 +986,7 @@ fn resolve_dependency(
         let record = load_package_record(
             registry_package.cache_dir.clone(),
             manifest_path,
-            source,
+            &source,
             manifest,
             PackageSource::Registry {
                 registry_dir: registry_package.registry_dir,
@@ -981,7 +1031,7 @@ fn locked_or_latest_registry_package(
 fn load_package_record(
     root_dir: PathBuf,
     manifest_path: PathBuf,
-    manifest_source: ManifestSource,
+    manifest_source: &ManifestSource,
     manifest: PackageManifest,
     source: PackageSource,
 ) -> ProjectResult<PackageRecord> {
@@ -1018,10 +1068,10 @@ fn load_package_record(
     let entry_key =
         resolve_module_target(&root_dir, &relative_modules, None, manifest.main_entry())
             .ok_or_else(|| {
-                package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
+                package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
             })?;
     let entry_path = module_keys.get(&entry_key).cloned().ok_or_else(|| {
-        package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
+        package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
     })?;
     let entry = ProjectEntry {
         package: id.clone(),
@@ -1032,7 +1082,7 @@ fn load_package_record(
     let mut exports = BTreeMap::new();
     for (name, target) in manifest.export_map() {
         let export_key = resolve_module_target(&root_dir, &relative_modules, None, &target)
-            .ok_or_else(|| missing_export_target(&manifest_source, &id.name, &name, &target))?;
+            .ok_or_else(|| missing_export_target(manifest_source, &id.name, &name, &target))?;
         let _ = exports.insert(name, export_key);
     }
 
@@ -1064,12 +1114,12 @@ fn package_entry_missing(
     main_target: Option<&str>,
 ) -> ProjectError {
     let span = main_target
-        .and_then(|_| manifest_source.value_span("/main"))
+        .and_then(|_| manifest_source.value_span(&json_pointer(&["main"])))
         .unwrap_or_else(|| manifest_source.insertion_span());
-    let label = match main_target {
-        Some(target) => format!("entry target `{target}` does not resolve"),
-        None => "`main` field missing and `index.ms` was not found".into(),
-    };
+    let label = main_target.map_or_else(
+        || "`main` field missing and `index.ms` was not found".into(),
+        |target| format!("entry target `{target}` does not resolve"),
+    );
     let hint = match main_target {
         Some(_) => "update `main` to an existing module path",
         None => "add `main`, or create `index.ms` at package root",
@@ -1081,6 +1131,15 @@ fn package_entry_missing(
         label,
         hint,
     )
+}
+
+fn json_pointer(segments: &[&str]) -> String {
+    let mut pointer = String::new();
+    for segment in segments {
+        pointer.push('/');
+        pointer.push_str(segment);
+    }
+    pointer
 }
 
 fn missing_export_target(

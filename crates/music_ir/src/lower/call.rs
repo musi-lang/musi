@@ -4,11 +4,11 @@ pub(super) fn lower_call_expr(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
     args: &SliceRange<HirArg>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let arg_nodes = sema.module().store.args.get(args.clone());
     if !arg_nodes.iter().any(|arg| arg.spread) {
-        return IrExprKind::Call {
+        return Ok(IrExprKind::Call {
             callee: Box::new(lower_expr(ctx, callee)),
             args: arg_nodes
                 .iter()
@@ -18,7 +18,7 @@ pub(super) fn lower_call_expr(
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
-        };
+        });
     }
 
     let origin = lower_origin(sema, callee);
@@ -37,10 +37,7 @@ pub(super) fn lower_call_expr(
     };
 
     let (arg_prelude, parts, has_runtime_spread) =
-        match lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call) {
-            Ok(value) => value,
-            Err(kind) => return kind,
-        };
+        lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call)?;
     prelude.extend(arg_prelude);
 
     prelude.push(IrExpr {
@@ -63,7 +60,7 @@ pub(super) fn lower_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                invalid_lowering_path("call spread lowering invariant");
+                return Err("call spread lowering invariant".into());
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -72,18 +69,19 @@ pub(super) fn lower_call_expr(
         },
     });
 
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
-    }
+    })
 }
 
-pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrExprKind {
+pub(super) fn lower_perform_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr: HirExprId,
+) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let (effect_key, op_index, args) = match resolve_perform_target(sema, interner, expr) {
-        Ok(value) => value,
-        Err(description) => invalid_lowering_path(description),
-    };
+    let (effect_key, op_index, args) =
+        resolve_perform_target(sema, interner, expr).map_err(Box::<str>::from)?;
     let args_nodes = sema.module().store.args.get(args);
     if !args_nodes.iter().any(|arg| arg.spread) {
         let lowered_args = args_nodes
@@ -91,19 +89,16 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
             .map(|arg| lower_expr(ctx, arg.expr))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        return IrExprKind::Perform {
+        return Ok(IrExprKind::Perform {
             effect_key,
             op_index,
             args: lowered_args,
-        };
+        });
     }
 
     let origin = lower_origin(sema, expr);
     let (prelude, parts, has_runtime_spread) =
-        match lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform) {
-            Ok(value) => value,
-            Err(kind) => return kind,
-        };
+        lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform)?;
     let mut exprs = prelude;
     exprs.push(IrExpr {
         origin,
@@ -123,7 +118,7 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                invalid_lowering_path("perform spread lowering invariant");
+                return Err("perform spread lowering invariant".into());
             };
             IrExprKind::Perform {
                 effect_key,
@@ -132,9 +127,9 @@ pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> IrE
             }
         },
     });
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
-    }
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -205,7 +200,7 @@ fn lower_spread_args(
     origin: IrOrigin,
     args_nodes: &[HirArg],
     mode: SpreadMode,
-) -> Result<(Vec<IrExpr>, Vec<IrSeqPart>, bool), IrExprKind> {
+) -> Result<(Vec<IrExpr>, Vec<IrSeqPart>, bool), Box<str>> {
     let sema = ctx.sema;
     let mut prelude = Vec::<IrExpr>::new();
     let mut parts = Vec::<IrSeqPart>::new();
@@ -240,10 +235,10 @@ fn lower_spread_arg(
     origin: IrOrigin,
     parts: &mut Vec<IrSeqPart>,
     mode: SpreadMode,
-) -> Result<bool, IrExprKind> {
+) -> Result<bool, Box<str>> {
     let spread_ty = sema
         .try_expr_ty(spread_expr)
-        .expect("expr type missing for spread arg");
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for spread arg"));
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -261,7 +256,7 @@ fn lower_spread_arg(
         HirTyKind::Array { dims, item } => {
             lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode)
         }
-        _ => invalid_lowering_path(mode.source_message()),
+        _ => Err(mode.source_message().into()),
     }
 }
 
@@ -273,17 +268,17 @@ fn lower_spread_array_arg(
     origin: IrOrigin,
     parts: &mut Vec<IrSeqPart>,
     mode: SpreadMode,
-) -> Result<bool, IrExprKind> {
+) -> Result<bool, Box<str>> {
     let dims_vec = sema.module().store.dims.get(dims.clone());
     if dims_vec.is_empty() {
         if matches!(sema.ty(item).kind, HirTyKind::Any) {
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             return Ok(true);
         }
-        invalid_lowering_path(mode.runtime_any_message());
+        return Err(mode.runtime_any_message().into());
     }
     if dims_vec.len() != 1 {
-        invalid_lowering_path(mode.dims_message());
+        return Err(mode.dims_message().into());
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -300,7 +295,7 @@ fn lower_spread_array_arg(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             Ok(true)
         }
-        HirDim::Unknown | HirDim::Name(_) => invalid_lowering_path(mode.runtime_any_message()),
+        HirDim::Unknown | HirDim::Name(_) => Err(mode.runtime_any_message().into()),
     }
 }
 

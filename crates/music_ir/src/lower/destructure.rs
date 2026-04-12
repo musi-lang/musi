@@ -11,7 +11,7 @@ pub(super) fn lower_destructure_let(
     origin: IrOrigin,
     pat: HirPatId,
     value: HirExprId,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let module_target = ctx.sema.expr_module_target(value);
 
     let value_expr = lower_expr(ctx, value);
@@ -29,14 +29,14 @@ pub(super) fn lower_destructure_let(
         origin,
         kind: IrExprKind::Temp { temp },
     };
-    lower_irrefutable_pat_bindings(ctx, origin, module_target, pat, base, &mut exprs);
+    lower_irrefutable_pat_bindings(ctx, origin, module_target, pat, base, &mut exprs)?;
     exprs.push(IrExpr {
         origin,
         kind: IrExprKind::Unit,
     });
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
-    }
+    })
 }
 
 fn lower_irrefutable_pat_bindings(
@@ -46,7 +46,7 @@ fn lower_irrefutable_pat_bindings(
     pat: HirPatId,
     base: IrExpr,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let input = IrrefutablePatInput {
         origin,
@@ -56,16 +56,17 @@ fn lower_irrefutable_pat_bindings(
         HirPatKind::Error | HirPatKind::Wildcard => {}
         HirPatKind::Bind { name } => lower_irrefutable_bind(ctx, input, *name, base, out),
         HirPatKind::As { pat: inner, name } => {
-            lower_irrefutable_as(ctx, input, *inner, *name, base, out);
+            lower_irrefutable_as(ctx, input, *inner, *name, base, out)?;
         }
         HirPatKind::Tuple { items } | HirPatKind::Array { items } => {
-            lower_irrefutable_sequence(ctx, input, *items, base, out);
+            lower_irrefutable_sequence(ctx, input, *items, base, out)?;
         }
         HirPatKind::Record { fields } => {
-            lower_irrefutable_record(ctx, input, fields.clone(), pat, base, out);
+            lower_irrefutable_record(ctx, input, fields.clone(), pat, base, out)?;
         }
-        other => invalid_lowering_path(format!("invalid local let pattern in lowering: {other:?}")),
+        other => return Err(format!("invalid local let pattern in lowering: {other:?}").into()),
     }
+    Ok(())
 }
 
 fn lower_irrefutable_bind(
@@ -94,7 +95,7 @@ fn lower_irrefutable_as(
     name: Ident,
     base: IrExpr,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let stored = store_in_temp(ctx, input.origin, base, out);
@@ -106,7 +107,8 @@ fn lower_irrefutable_as(
             value: Box::new(stored.clone()),
         },
     });
-    lower_irrefutable_pat_bindings(ctx, input.origin, input.module_target, inner, stored, out);
+    lower_irrefutable_pat_bindings(ctx, input.origin, input.module_target, inner, stored, out)?;
+    Ok(())
 }
 
 fn lower_irrefutable_sequence(
@@ -115,15 +117,16 @@ fn lower_irrefutable_sequence(
     items: SliceRange<HirPatId>,
     base: IrExpr,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let stored = store_in_temp(ctx, input.origin, base, out);
     for (index, item) in sema.module().store.pat_ids.get(items).iter().enumerate() {
         let Some(proj) = project_index_expr(input.origin, stored.clone(), index) else {
             continue;
         };
-        lower_irrefutable_pat_bindings(ctx, input.origin, input.module_target, *item, proj, out);
+        lower_irrefutable_pat_bindings(ctx, input.origin, input.module_target, *item, proj, out)?;
     }
+    Ok(())
 }
 
 fn lower_irrefutable_record(
@@ -133,20 +136,21 @@ fn lower_irrefutable_record(
     pat: HirPatId,
     base: IrExpr,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let pat_ty = sema
         .try_pat_ty(pat)
-        .expect("pattern type missing for destructuring");
+        .unwrap_or_else(|| invalid_lowering_path("pattern type missing for destructuring"));
     match &sema.ty(pat_ty).kind {
         HirTyKind::Module => {
-            lower_irrefutable_module_record(ctx, input.origin, input.module_target, fields, out);
+            lower_irrefutable_module_record(ctx, input.origin, input.module_target, fields, out)?;
         }
         HirTyKind::Record { .. } => {
-            lower_irrefutable_value_record(ctx, input, fields, pat_ty, base, out);
+            lower_irrefutable_value_record(ctx, input, fields, pat_ty, base, out)?;
         }
-        _ => invalid_lowering_path("record destructuring without record base"),
+        _ => return Err("record destructuring without record base".into()),
     }
+    Ok(())
 }
 
 fn lower_irrefutable_module_record(
@@ -155,11 +159,11 @@ fn lower_irrefutable_module_record(
     module_target: Option<&ModuleKey>,
     fields: SliceRange<HirRecordPatField>,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let Some(module_target) = module_target else {
-        invalid_lowering_path("module destructuring without module target");
+        return Err("module destructuring without module target".into());
     };
     for field in sema.module().store.record_pat_fields.get(fields) {
         let name_text: Box<str> = interner.resolve(field.name.name).into();
@@ -181,8 +185,9 @@ fn lower_irrefutable_module_record(
             proj,
             name_text,
             out,
-        );
+        )?;
     }
+    Ok(())
 }
 
 fn lower_irrefutable_value_record(
@@ -192,17 +197,17 @@ fn lower_irrefutable_value_record(
     pat_ty: HirTyId,
     base: IrExpr,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let stored = store_in_temp(ctx, input.origin, base, out);
     let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, pat_ty, interner)
     else {
-        invalid_lowering_path("record destructuring without record layout");
+        return Err("record destructuring without record layout".into());
     };
     for field in sema.module().store.record_pat_fields.get(fields) {
         let Some(index) = indices.get(&field.name.name).copied() else {
-            invalid_lowering_path("record destructuring missing field");
+            return Err("record destructuring missing field".into());
         };
         let proj = IrExpr {
             origin: input.origin,
@@ -212,8 +217,9 @@ fn lower_irrefutable_value_record(
             },
         };
         let name_text: Box<str> = interner.resolve(field.name.name).into();
-        lower_irrefutable_record_field(ctx, input, field, proj, name_text, out);
+        lower_irrefutable_record_field(ctx, input, field, proj, name_text, out)?;
     }
+    Ok(())
 }
 
 fn lower_irrefutable_record_field(
@@ -223,7 +229,7 @@ fn lower_irrefutable_record_field(
     proj: IrExpr,
     name: Box<str>,
     out: &mut Vec<IrExpr>,
-) {
+) -> Result<(), Box<str>> {
     if let Some(value_pat) = field.value {
         lower_irrefutable_pat_bindings(
             ctx,
@@ -232,8 +238,8 @@ fn lower_irrefutable_record_field(
             value_pat,
             proj,
             out,
-        );
-        return;
+        )?;
+        return Ok(());
     }
     out.push(IrExpr {
         origin: input.origin,
@@ -243,6 +249,7 @@ fn lower_irrefutable_record_field(
             value: Box::new(proj),
         },
     });
+    Ok(())
 }
 
 fn project_index_expr(origin: IrOrigin, base: IrExpr, index: usize) -> Option<IrExpr> {

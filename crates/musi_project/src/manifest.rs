@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+pub type ManifestStringMap = BTreeMap<String, String>;
+pub type ManifestScopeMap = BTreeMap<String, ManifestStringMap>;
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PackageManifest {
@@ -18,16 +21,16 @@ pub struct PackageManifest {
     pub homepage: Option<String>,
     pub bugs: Option<Bugs>,
     pub keywords: Vec<String>,
-    pub imports: BTreeMap<String, String>,
-    pub scopes: BTreeMap<String, BTreeMap<String, String>>,
-    pub dependencies: BTreeMap<String, String>,
+    pub imports: ManifestStringMap,
+    pub scopes: ManifestScopeMap,
+    pub dependencies: ManifestStringMap,
     #[serde(rename = "devDependencies")]
-    pub dev_dependencies: BTreeMap<String, String>,
+    pub dev_dependencies: ManifestStringMap,
     #[serde(rename = "peerDependencies")]
-    pub peer_dependencies: BTreeMap<String, String>,
+    pub peer_dependencies: ManifestStringMap,
     #[serde(rename = "optionalDependencies")]
-    pub optional_dependencies: BTreeMap<String, String>,
-    pub overrides: BTreeMap<String, String>,
+    pub optional_dependencies: ManifestStringMap,
+    pub overrides: ManifestStringMap,
     #[serde(rename = "compilerOptions")]
     pub compiler_options: Option<CompilerOptions>,
     pub tasks: BTreeMap<String, TaskDefinition>,
@@ -46,7 +49,7 @@ pub struct PackageManifest {
 #[serde(untagged)]
 pub enum Exports {
     Main(String),
-    Map(BTreeMap<String, String>),
+    Map(ManifestStringMap),
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -261,16 +264,16 @@ impl PackageManifest {
     }
 
     #[must_use]
-    pub fn export_map(&self) -> BTreeMap<String, String> {
+    pub fn export_map(&self) -> ManifestStringMap {
         match &self.exports {
             Some(Exports::Main(path)) => {
-                let mut map = BTreeMap::new();
+                let mut map = ManifestStringMap::new();
                 let _ = map.insert(".".into(), path.clone());
                 map
             }
             Some(Exports::Map(map)) => map.clone(),
             None => {
-                let mut map = BTreeMap::new();
+                let mut map = ManifestStringMap::new();
                 let _ = map.insert(".".into(), format!("./{}", self.main_entry()));
                 map
             }
@@ -278,7 +281,7 @@ impl PackageManifest {
     }
 
     #[must_use]
-    pub const fn dependency_maps(&self) -> [(&str, &BTreeMap<String, String>); 4] {
+    pub const fn dependency_maps(&self) -> [(&str, &ManifestStringMap); 4] {
         [
             ("dependencies", &self.dependencies),
             ("devDependencies", &self.dev_dependencies),

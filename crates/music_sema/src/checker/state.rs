@@ -718,8 +718,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
         let key = DefinitionKey::new(self.module_key().clone(), name.clone());
         let variants = BTreeMap::from([
-            ("Left".into(), SemaDataVariantDef::new(Some(left))),
-            ("Right".into(), SemaDataVariantDef::new(Some(right))),
+            (
+                "Left".into(),
+                SemaDataVariantDef::new(Some(left), vec![left].into_boxed_slice()),
+            ),
+            (
+                "Right".into(),
+                SemaDataVariantDef::new(Some(right), vec![right].into_boxed_slice()),
+            ),
         ]);
         let _prev = self.decls.data_defs.insert(
             name.clone(),

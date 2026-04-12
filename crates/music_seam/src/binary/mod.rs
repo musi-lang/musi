@@ -1,7 +1,7 @@
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, MethodDescriptor, TypeDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
+    EffectDescriptor, EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
+    GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use crate::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
@@ -316,6 +316,20 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u32(out, entry.name.raw());
         push_u32(out, entry.variant_count);
         push_u32(out, entry.field_count);
+        push_u32(
+            out,
+            u32::try_from(entry.variants.len()).expect("data variant overflow"),
+        );
+        for variant in &entry.variants {
+            push_u32(out, variant.name.raw());
+            push_u32(
+                out,
+                u32::try_from(variant.field_tys.len()).expect("data field overflow"),
+            );
+            for ty in &variant.field_tys {
+                push_u32(out, ty.raw());
+            }
+        }
         match entry.repr_kind {
             Some(id) => {
                 out.push(1);
@@ -658,6 +672,21 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         let name = Idx::from_raw(cursor.read_u32()?);
         let variant_count = cursor.read_u32()?;
         let field_count = cursor.read_u32()?;
+        let variant_len = cursor.read_u32()?;
+        let mut variants = Vec::with_capacity(usize::try_from(variant_len).unwrap_or(usize::MAX));
+        for _ in 0..variant_len {
+            let variant_name = Idx::from_raw(cursor.read_u32()?);
+            let field_len = cursor.read_u32()?;
+            let mut field_tys =
+                Vec::with_capacity(usize::try_from(field_len).unwrap_or(usize::MAX));
+            for _ in 0..field_len {
+                field_tys.push(Idx::from_raw(cursor.read_u32()?));
+            }
+            variants.push(DataVariantDescriptor {
+                name: variant_name,
+                field_tys: field_tys.into_boxed_slice(),
+            });
+        }
         let repr_kind = if cursor.read_u8()? != 0 {
             Some(Idx::from_raw(cursor.read_u32()?))
         } else {
@@ -677,6 +706,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
             name,
             variant_count,
             field_count,
+            variants: variants.into_boxed_slice(),
             repr_kind,
             layout_align,
             layout_pack,

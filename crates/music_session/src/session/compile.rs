@@ -7,13 +7,15 @@ use crate::api::{CompiledOutput, SessionError};
 
 use super::Session;
 
+type SessionCompiledOutputResult = Result<CompiledOutput, SessionError>;
+
 impl Session {
     /// Compiles one module into the in-memory artifact plus binary and text encodings.
     ///
     /// # Errors
     ///
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error for the target module.
-    pub fn compile_module(&mut self, key: &ModuleKey) -> Result<CompiledOutput, SessionError> {
+    pub fn compile_module(&mut self, key: &ModuleKey) -> SessionCompiledOutputResult {
         let artifact = self.compile_module_artifact(key)?;
         Self::build_output(artifact)
     }
@@ -50,7 +52,7 @@ impl Session {
     /// # Errors
     ///
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error from the reachable graph.
-    pub fn compile_entry(&mut self, key: &ModuleKey) -> Result<CompiledOutput, SessionError> {
+    pub fn compile_entry(&mut self, key: &ModuleKey) -> SessionCompiledOutputResult {
         let artifact = self.compile_entry_artifact(key)?;
         Self::build_output(artifact)
     }
@@ -110,7 +112,7 @@ impl Session {
         Ok(self.compile_entry(key)?.text)
     }
 
-    fn build_output(artifact: Artifact) -> Result<CompiledOutput, SessionError> {
+    fn build_output(artifact: Artifact) -> SessionCompiledOutputResult {
         Ok(CompiledOutput {
             bytes: encode_binary(&artifact)?,
             text: format_text(&artifact),

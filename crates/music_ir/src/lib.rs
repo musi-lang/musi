@@ -4,9 +4,10 @@ mod lower;
 
 pub use api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm, IrCasePattern, IrCaseRecordField,
-    IrClassDef, IrDataDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
-    IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField,
-    IrRecordLayoutField, IrSeqPart, IrTempId, ir_diag_kind, lower_surface_type_term,
+    IrClassDef, IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef, IrExpr, IrExprKind,
+    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrModule, IrNameRef, IrOrigin,
+    IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId, ir_diag_kind,
+    lower_surface_type_term,
 };
 pub use diag::IrDiagKind;
 pub use lower::lower_module;

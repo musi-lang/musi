@@ -76,13 +76,13 @@ impl ManifestSource {
         span: Span,
         label: impl Into<String>,
     ) -> ProjectError {
-        ProjectError::ManifestSourceDiagnostic(ProjectSourceDiagnostic::new(
+        ProjectError::ManifestSourceDiagnostic(Box::new(ProjectSourceDiagnostic::new(
             self.path.clone(),
             self.text.clone(),
             code,
             message,
             ProjectSourceLabel::new(span, label),
-        ))
+        )))
     }
 
     pub fn error_with_hint(
@@ -101,7 +101,7 @@ impl ManifestSource {
             ProjectSourceLabel::new(span, label),
         );
         diag.set_hint(hint);
-        ProjectError::ManifestSourceDiagnostic(diag)
+        ProjectError::ManifestSourceDiagnostic(Box::new(diag))
     }
 }
 

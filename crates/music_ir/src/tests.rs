@@ -76,6 +76,13 @@ fn lowers_data_and_foreign_facts() {
 
     assert_eq!(ir.data_defs().len(), 1);
     assert_eq!(ir.data_defs()[0].variant_count, 2);
+    assert_eq!(ir.data_defs()[0].variants.len(), 2);
+    let some_variant = ir.data_defs()[0]
+        .variants
+        .iter()
+        .find(|variant| variant.name.as_ref() == "Some")
+        .expect("Some variant");
+    assert_eq!(some_variant.field_tys[0].as_ref(), "Int");
     assert_eq!(ir.foreigns().len(), 1);
     assert_eq!(ir.foreigns()[0].abi.as_ref(), "c");
     assert_eq!(ir.foreigns()[0].param_tys.len(), 1);
@@ -198,6 +205,7 @@ fn lowers_sum_constructors_as_synthetic_variants() {
         .find(|data| data.key.name.starts_with("__sum__"))
         .expect("synthetic sum data def");
     assert_eq!(synth.variant_count, 2);
+    assert_eq!(synth.variants.len(), 2);
 
     let x = ir
         .globals()

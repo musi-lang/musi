@@ -10,8 +10,12 @@ use super::{
 use super::Vm;
 
 impl Vm {
-    pub(crate) fn constant_value(&self, module_slot: usize, value: &ConstantValue) -> Value {
-        match value {
+    pub(crate) fn constant_value(
+        &self,
+        module_slot: usize,
+        value: &ConstantValue,
+    ) -> VmResult<Value> {
+        Ok(match value {
             ConstantValue::Int(value) => Value::Int(*value),
             ConstantValue::Float(value) => Value::Float(*value),
             ConstantValue::Bool(value) => Value::Bool(*value),
@@ -23,11 +27,14 @@ impl Vm {
                 let text = self
                     .module(module_slot)
                     .map_or("", |module| module.program.string_text(*text));
-                let term = SyntaxTerm::parse(*shape, text)
-                    .expect("artifact syntax constants must carry valid syntax fragments");
+                let term = SyntaxTerm::parse(*shape, text).map_err(|detail| {
+                    VmError::new(VmErrorKind::SyntaxConstantInvalid {
+                        detail: detail.to_string().into(),
+                    })
+                })?;
                 Value::syntax(term)
             }
-        }
+        })
     }
 
     pub(crate) const fn expect_int(value: &Value) -> VmResult<i64> {

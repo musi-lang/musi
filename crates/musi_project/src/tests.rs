@@ -9,7 +9,10 @@ use music_base::diag::DiagCode;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
-use crate::{PackageSource, Project, ProjectError, ProjectOptions};
+use crate::{
+    PackageSource, Project, ProjectError, ProjectOptions, ProjectTestTargetKind,
+    ProjectTestTargetSource,
+};
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -274,7 +277,7 @@ fn manifest_imports_remap_specifiers_before_project_resolution() {
 }
 
 #[test]
-fn discovers_co_located_package_test_modules() {
+fn discovers_co_located_project_test_targets() {
     let temp = TempDir::new();
     write_file(
         temp.path(),
@@ -321,7 +324,7 @@ export let test () : Unit := 0;
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
-    let tests = project.package_test_modules();
+    let tests = project.test_targets().expect("test targets should resolve");
 
     assert!(tests.iter().any(|test| test.package.name == "@std"));
     assert!(tests.iter().any(|test| {
@@ -329,6 +332,59 @@ export let test () : Unit := 0;
             .as_str()
             .contains("@@std@0.1.0/math/abs.test.ms")
     }));
+}
+
+#[test]
+fn merges_synthetic_law_suites_into_project_test_targets() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"
+foreign let musi_true () : Bool;
+
+export let Console := effect {
+  let readln () : String;
+  law total () := musi_true();
+};
+",
+    );
+    write_file(
+        temp.path(),
+        "laws.test.ms",
+        r"
+export let test () := 0;
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let targets = project
+        .test_targets()
+        .expect("test targets should synthesize");
+
+    assert_eq!(targets.len(), 2);
+    assert_eq!(targets[0].kind, ProjectTestTargetKind::Module);
+    assert_eq!(targets[1].kind, ProjectTestTargetKind::SyntheticLawSuite);
+    assert_eq!(
+        targets[1].module_key,
+        ModuleKey::new("@app@1.0.0/index.ms::__laws")
+    );
+    assert_eq!(
+        targets[1].source_module_key,
+        ModuleKey::new("@app@1.0.0/index.ms")
+    );
+    assert_eq!(targets[1].export_name.as_ref(), "__laws_test");
+    let ProjectTestTargetSource::SyntheticModule = &targets[1].source else {
+        panic!("synthetic suite source expected");
+    };
 }
 
 #[test]
@@ -344,7 +400,10 @@ fn compiles_workspace_std_package_and_test_modules() {
         .expect("@std entry compiles");
     assert!(output.artifact.validate().is_ok());
 
-    for test in project.package_test_modules() {
+    for test in project.test_targets().expect("test targets should resolve") {
+        if test.kind != ProjectTestTargetKind::Module {
+            continue;
+        }
         let output = project
             .compile_module(&test.module_key)
             .expect("package test module compiles");
@@ -407,9 +466,9 @@ export let Dep := import "dep";
     write_file(
         temp.path(),
         "packages/dep/index.ms",
-        r#"
+        r"
 export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
-"#,
+",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
@@ -526,9 +585,9 @@ export let Bytes := import "@std/bytes";
     write_file(
         temp.path(),
         "packages/std/bytes/index.ms",
-        r#"
+        r"
 export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
-"#,
+",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");

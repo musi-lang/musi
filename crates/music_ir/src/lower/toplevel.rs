@@ -1,11 +1,13 @@
 use music_arena::SliceRange;
-use music_hir::{HirExprId, HirExprKind, HirParam, HirPatKind, HirTyKind};
+use music_hir::{HirExprId, HirExprKind, HirParam, HirPatKind, HirTyId, HirTyKind};
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId};
 use music_sema::{DefinitionKey, EffectRow, SemaDataDef, SemaModule};
 
 use super::{LetItemInput, LowerCtx, TopLevelItems};
-use crate::api::{IrCallable, IrDataDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrParam};
+use crate::api::{
+    IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrParam,
+};
 
 pub(super) fn collect_top_level_items(
     ctx: &mut LowerCtx<'_>,
@@ -79,7 +81,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
     let module_target = sema.expr_module_target(value).cloned();
     let effects = sema
         .try_expr_effects(value)
-        .expect("expr effects missing for top-level value")
+        .unwrap_or_else(|| super::invalid_lowering_path("expr effects missing for top-level value"))
         .clone();
     if let Some(global) = lower_exported_import_global(
         ctx,
@@ -162,7 +164,11 @@ fn lower_foreign_item(
 fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<IrDataDef> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let HirExprKind::Data { variants, fields } = &sema.module().store.exprs.get(value).kind else {
+    let HirExprKind::Data {
+        variants: _,
+        fields,
+    } = &sema.module().store.exprs.get(value).kind
+    else {
         return None;
     };
     let name_text: Box<str> = interner.resolve(name.name).into();
@@ -177,16 +183,97 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
     let repr_kind = def.and_then(|data| data.repr_kind().map(Into::into));
     let layout_align = def.and_then(SemaDataDef::layout_align);
     let layout_pack = def.and_then(SemaDataDef::layout_pack);
+    let variants = def.map_or_else(
+        || {
+            let field_tys = sema
+                .module()
+                .store
+                .fields
+                .get(fields.clone())
+                .iter()
+                .map(|_| Box::<str>::from("Unknown"))
+                .collect::<Vec<_>>();
+            vec![IrDataVariantDef {
+                name: name_text.clone(),
+                field_tys: field_tys.into_boxed_slice(),
+            }]
+            .into_boxed_slice()
+        },
+        |data| {
+            data.variants()
+                .map(|(variant_name, variant)| IrDataVariantDef {
+                    name: variant_name.into(),
+                    field_tys: variant
+                        .field_tys()
+                        .iter()
+                        .copied()
+                        .map(|ty| render_hir_ty_name(sema, ty, interner))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+        },
+    );
+    let field_count = variants
+        .iter()
+        .map(|variant| variant.field_tys.len())
+        .max()
+        .unwrap_or_else(|| sema.module().store.fields.get(fields.clone()).len());
     Some(IrDataDef {
         key,
-        variant_count: u32::try_from(sema.module().store.variants.get(variants.clone()).len())
-            .expect("variant count overflow"),
-        field_count: u32::try_from(sema.module().store.fields.get(fields.clone()).len())
-            .expect("field count overflow"),
+        variant_count: u32::try_from(variants.len())
+            .unwrap_or_else(|_| super::invalid_lowering_path("variant count overflow")),
+        field_count: u32::try_from(field_count)
+            .unwrap_or_else(|_| super::invalid_lowering_path("field count overflow")),
+        variants,
         repr_kind,
         layout_align,
         layout_pack,
     })
+}
+
+fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
+    match &sema.ty(ty).kind {
+        HirTyKind::Error => "<error>".into(),
+        HirTyKind::Unknown => "Unknown".into(),
+        HirTyKind::Type => "Type".into(),
+        HirTyKind::Syntax => "Syntax".into(),
+        HirTyKind::Any => "Any".into(),
+        HirTyKind::Empty => "Empty".into(),
+        HirTyKind::Unit => "Unit".into(),
+        HirTyKind::Bool => "Bool".into(),
+        HirTyKind::Nat => "Nat".into(),
+        HirTyKind::Int => "Int".into(),
+        HirTyKind::Float => "Float".into(),
+        HirTyKind::String => "String".into(),
+        HirTyKind::CString => "CString".into(),
+        HirTyKind::CPtr => "CPtr".into(),
+        HirTyKind::Module => "Module".into(),
+        HirTyKind::NatLit(value) => value.to_string().into(),
+        HirTyKind::Named { name, args } => {
+            super::render_named_ty_name(sema, *name, *args, interner)
+        }
+        HirTyKind::Tuple { items } => format!(
+            "({})",
+            sema.module()
+                .store
+                .ty_ids
+                .get(*items)
+                .iter()
+                .copied()
+                .map(|item| render_hir_ty_name(sema, item, interner).into_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+        .into_boxed_str(),
+        HirTyKind::Array { .. }
+        | HirTyKind::Pi { .. }
+        | HirTyKind::Arrow { .. }
+        | HirTyKind::Sum { .. }
+        | HirTyKind::Mut { .. }
+        | HirTyKind::Record { .. } => super::render_ty_name(sema, ty, interner),
+    }
 }
 
 struct CallableItemInput {
@@ -274,8 +361,10 @@ fn skip_module_value(sema: &SemaModule, value: HirExprId) -> bool {
     matches!(
         sema.ty(sema
             .try_expr_ty(value)
-            .expect("expr type missing for top-level value"))
-            .kind,
+            .unwrap_or_else(|| super::invalid_lowering_path(
+                "expr type missing for top-level value"
+            )))
+        .kind,
         HirTyKind::Module
     )
 }
@@ -289,7 +378,8 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         .get(params)
         .iter()
         .map(|param| IrParam {
-            binding: super::decl_binding_id(sema, param.name).expect("param binding missing"),
+            binding: super::decl_binding_id(sema, param.name)
+                .unwrap_or_else(|| super::invalid_lowering_path("param binding missing")),
             name: interner.resolve(param.name.name).into(),
         })
         .collect::<Vec<_>>()

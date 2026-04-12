@@ -3,13 +3,23 @@ use music_session::{Session, SessionError};
 
 pub mod test {
     pub const SPEC: &str = "musi:test";
-    pub const MODULE: &str = r#"
+    pub const MODULE: &str = r"
+export let SampleCase[T] := data {
+  | Case
+};
+
+export let SampleList[T] := data {
+  | Nil
+};
+
+export let Sample[T] := class { };
+
 export let Test := effect {
   let suiteStart (name : String) : Unit;
   let suiteEnd () : Unit;
   let testCase (name : String, passed : Bool) : Unit;
 };
-"#;
+";
     pub const EFFECT: &str = "musi:test::Test";
     pub const SUITE_START_OP: &str = "suiteStart";
     pub const SUITE_END_OP: &str = "suiteEnd";
@@ -18,7 +28,7 @@ export let Test := effect {
 
 pub mod syntax {
     pub const SPEC: &str = "musi:syntax";
-    pub const MODULE: &str = r#"
+    pub const MODULE: &str = r"
 export let SyntaxOps := effect {
   let eval (body : Syntax, result : Type) : Any;
   let registerModule (spec : String, body : Syntax) : Unit;
@@ -29,7 +39,7 @@ export let eval (body : Syntax, result : Type) : Any :=
 
 export let register_module (spec : String, body : Syntax) : Unit :=
     perform SyntaxOps.registerModule(spec, body);
-"#;
+";
     pub const EFFECT: &str = "musi:syntax::SyntaxOps";
     pub const EVAL_OP: &str = "eval";
     pub const REGISTER_MODULE_OP: &str = "registerModule";
@@ -58,6 +68,9 @@ pub fn module_source(spec: &str) -> Option<&'static str> {
         .find_map(|(module_spec, module_text)| (spec == *module_spec).then_some(*module_text))
 }
 
+/// # Errors
+///
+/// Returns [`SessionError`] if any foundation module cannot be interned into the session source map.
 pub fn register_modules(session: &mut Session) -> Result<(), SessionError> {
     for (spec, text) in FOUNDATION_MODULES {
         session.set_module_text(&ModuleKey::new(spec), text.to_owned())?;

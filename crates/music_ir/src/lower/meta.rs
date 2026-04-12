@@ -83,11 +83,10 @@ fn format_attr(attr: &Attr) -> String {
 }
 
 fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
-    match &surface
-        .try_ty(ty)
-        .expect("surface type missing while formatting meta")
-        .kind
-    {
+    let Some(ty) = surface.try_ty(ty) else {
+        return "Unknown".into();
+    };
+    match &ty.kind {
         SurfaceTyKind::Error => "<error>".into(),
         SurfaceTyKind::Unknown => "Unknown".into(),
         SurfaceTyKind::Type => "Type".into(),
@@ -305,7 +304,12 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
                 &mut out,
                 target.as_ref(),
                 "class.laws",
-                class.laws.to_vec().into_boxed_slice(),
+                class
+                    .laws
+                    .iter()
+                    .map(|law| law.name.clone())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             );
         }
         push_inert_and_musi_attrs(
@@ -323,7 +327,12 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
                 &mut out,
                 target.as_ref(),
                 "effect.laws",
-                effect.laws.to_vec().into_boxed_slice(),
+                effect
+                    .laws
+                    .iter()
+                    .map(|law| law.name.clone())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             );
         }
         push_inert_and_musi_attrs(

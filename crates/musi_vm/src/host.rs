@@ -1,7 +1,9 @@
 use music_seam::{EffectId, ForeignId, TypeId};
 use music_term::TypeTerm;
 
-use super::{Program, Value, VmError, VmErrorKind, VmResult};
+use super::{
+    Program, ProgramDataLayout, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmResult,
+};
 
 #[derive(Debug, Clone)]
 pub struct ForeignCall {
@@ -78,6 +80,38 @@ impl ForeignCall {
     pub fn type_term(&self, ty: TypeId) -> TypeTerm {
         self.program.type_term(ty)
     }
+
+    #[must_use]
+    pub fn type_data_layout(&self, ty: TypeId) -> Option<&ProgramDataLayout> {
+        self.program.type_data_layout(ty)
+    }
+
+    #[must_use]
+    pub fn type_abi_kind(&self, ty: TypeId) -> ProgramTypeAbiKind {
+        self.program.type_abi_kind(ty)
+    }
+
+    #[must_use]
+    pub fn param_data_layout(&self, index: usize) -> Option<&ProgramDataLayout> {
+        let ty = *self.param_tys.get(index)?;
+        self.type_data_layout(ty)
+    }
+
+    #[must_use]
+    pub fn param_abi_kind(&self, index: usize) -> Option<ProgramTypeAbiKind> {
+        let ty = *self.param_tys.get(index)?;
+        Some(self.type_abi_kind(ty))
+    }
+
+    #[must_use]
+    pub fn result_data_layout(&self) -> Option<&ProgramDataLayout> {
+        self.type_data_layout(self.result_ty)
+    }
+
+    #[must_use]
+    pub fn result_abi_kind(&self) -> ProgramTypeAbiKind {
+        self.type_abi_kind(self.result_ty)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +182,38 @@ impl EffectCall {
     #[must_use]
     pub fn type_term(&self, ty: TypeId) -> TypeTerm {
         self.program.type_term(ty)
+    }
+
+    #[must_use]
+    pub fn type_data_layout(&self, ty: TypeId) -> Option<&ProgramDataLayout> {
+        self.program.type_data_layout(ty)
+    }
+
+    #[must_use]
+    pub fn type_abi_kind(&self, ty: TypeId) -> ProgramTypeAbiKind {
+        self.program.type_abi_kind(ty)
+    }
+
+    #[must_use]
+    pub fn param_data_layout(&self, index: usize) -> Option<&ProgramDataLayout> {
+        let ty = *self.param_tys.get(index)?;
+        self.type_data_layout(ty)
+    }
+
+    #[must_use]
+    pub fn param_abi_kind(&self, index: usize) -> Option<ProgramTypeAbiKind> {
+        let ty = *self.param_tys.get(index)?;
+        Some(self.type_abi_kind(ty))
+    }
+
+    #[must_use]
+    pub fn result_data_layout(&self) -> Option<&ProgramDataLayout> {
+        self.type_data_layout(self.result_ty)
+    }
+
+    #[must_use]
+    pub fn result_abi_kind(&self) -> ProgramTypeAbiKind {
+        self.type_abi_kind(self.result_ty)
     }
 }
 

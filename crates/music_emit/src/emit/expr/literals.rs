@@ -2,8 +2,10 @@ use super::super::*;
 use crate::EmitDiagKind;
 use music_term::SyntaxTerm;
 
+type LiteralEmitter<'emitter, 'artifact, 'module> = ExprEmitterMut<'emitter, 'artifact, 'module>;
+
 pub(super) fn compile_lit(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: LiteralEmitter<'_, '_, '_>,
     lit: &IrLit,
     origin: &IrOrigin,
     diags: &mut EmitDiagList,
@@ -16,7 +18,7 @@ pub(super) fn compile_lit(
     }
 }
 
-pub(super) fn compile_string_constant(emitter: &mut MethodEmitter<'_, '_>, value: &str) {
+pub(super) fn compile_string_constant(emitter: LiteralEmitter<'_, '_, '_>, value: &str) {
     let string_id = emitter.artifact.intern_string(value);
     let const_name = format!("const:string:{}", emitter.artifact.constants.len());
     let name_id = emitter.artifact.intern_string(&const_name);
@@ -31,7 +33,7 @@ pub(super) fn compile_string_constant(emitter: &mut MethodEmitter<'_, '_>, value
 }
 
 pub(super) fn compile_syntax_constant(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: LiteralEmitter<'_, '_, '_>,
     raw: &str,
     origin: &IrOrigin,
     diags: &mut EmitDiagList,
@@ -64,7 +66,7 @@ pub(super) fn compile_syntax_constant(
 }
 
 fn compile_int_literal(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: LiteralEmitter<'_, '_, '_>,
     raw: &str,
     origin: &IrOrigin,
     diags: &mut EmitDiagList,
@@ -83,12 +85,12 @@ fn compile_int_literal(
     }
 }
 
-fn compile_string_literal(emitter: &mut MethodEmitter<'_, '_>, value: &str) {
+fn compile_string_literal(emitter: LiteralEmitter<'_, '_, '_>, value: &str) {
     compile_string_constant(emitter, value);
 }
 
 fn compile_float_literal(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: LiteralEmitter<'_, '_, '_>,
     raw: &str,
     origin: &IrOrigin,
     diags: &mut EmitDiagList,
@@ -117,7 +119,7 @@ fn compile_float_literal(
     )));
 }
 
-pub(super) fn compile_i64(emitter: &mut MethodEmitter<'_, '_>, value: i64) {
+pub(super) fn compile_i64(emitter: LiteralEmitter<'_, '_, '_>, value: i64) {
     if let Ok(short) = i16::try_from(value) {
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::LdSmi,

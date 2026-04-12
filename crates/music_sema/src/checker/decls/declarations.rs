@@ -13,7 +13,9 @@ use super::super::exprs::check_expr;
 use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
 use super::super::surface::surface_key;
 use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
-use crate::api::{ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, TargetInfo};
+use crate::api::{
+    ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
+};
 use crate::effects::EffectRow;
 
 pub(in super::super) fn member_signature(
@@ -52,6 +54,29 @@ pub(in super::super) fn member_signature(
         name: member.name.name,
         params,
         result,
+    }
+}
+
+pub(in super::super) fn member_law_facts(
+    ctx: &mut PassBase<'_, '_, '_>,
+    member: &HirMemberDef,
+) -> LawFacts {
+    let builtins = ctx.builtins();
+    let params = ctx
+        .params(member.params.clone())
+        .into_iter()
+        .map(|param| LawParamFacts {
+            name: param.name.name,
+            ty: param.ty.map_or(builtins.unknown, |expr| {
+                let origin = ctx.expr(expr).origin;
+                lower_type_expr(ctx, expr, origin)
+            }),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    LawFacts {
+        name: member.name.name,
+        params,
     }
 }
 
@@ -99,6 +124,9 @@ pub(in super::super) fn check_class_expr(
                 let law_facts = check_expr(ctx, value);
                 let origin = ctx.expr(value).origin;
                 type_mismatch(ctx, origin, builtins.bool_, law_facts.ty);
+                if !law_facts.effects.is_pure() {
+                    ctx.diag(origin.span, DiagKind::LawMustBePure, "");
+                }
             } else {
                 let _ = member_signature(ctx, &member, true);
             }
@@ -325,12 +353,32 @@ pub(super) fn check_bound_data(
                 let origin = ctx.expr(expr).origin;
                 lower_type_expr(ctx, expr, origin)
             });
-            let prev = variant_map.insert(tag, super::super::DataVariantDef::new(payload));
+            let field_tys =
+                payload.map_or_else(Box::<[_]>::default, |ty| flatten_data_field_tys(ctx, ty));
+            let prev =
+                variant_map.insert(tag, super::super::DataVariantDef::new(payload, field_tys));
             if prev.is_some() {
                 ctx.diag(
                     variant.origin.span,
                     DiagKind::CollectDuplicateDataVariant,
                     "",
+                );
+            }
+        }
+        if variant_map.is_empty() {
+            let field_tys = ctx
+                .fields(fields.clone())
+                .into_iter()
+                .map(|field| {
+                    let origin = ctx.expr(field.ty).origin;
+                    lower_type_expr(ctx, field.ty, origin)
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            if !field_tys.is_empty() {
+                let _ = variant_map.insert(
+                    data_name.clone(),
+                    super::super::DataVariantDef::new(None, field_tys),
                 );
             }
         }
@@ -341,6 +389,13 @@ pub(super) fn check_bound_data(
         );
     }
     check_data_expr(ctx, variants, fields)
+}
+
+fn flatten_data_field_tys(ctx: &CheckPass<'_, '_, '_>, ty: HirTyId) -> Box<[HirTyId]> {
+    match &ctx.ty(ty).kind {
+        HirTyKind::Tuple { items } => ctx.ty_ids(*items).into_boxed_slice(),
+        _ => vec![ty].into_boxed_slice(),
+    }
 }
 
 pub(super) fn check_bound_effect(
@@ -367,7 +422,7 @@ pub(super) fn check_bound_effect(
         let laws = members_vec
             .iter()
             .filter(|member| member.kind == HirMemberKind::Law)
-            .map(|member| member.name.name)
+            .map(|member| member_law_facts(ctx, member))
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
@@ -387,6 +442,9 @@ pub(super) fn check_bound_effect(
                     let law_facts = check_expr(ctx, value);
                     let origin = ctx.expr(value).origin;
                     type_mismatch(ctx, origin, builtins.bool_, law_facts.ty);
+                    if !law_facts.effects.is_pure() {
+                        ctx.diag(origin.span, DiagKind::LawMustBePure, "");
+                    }
                 }
             }
         }
@@ -416,7 +474,7 @@ pub(super) fn check_bound_class(
         let laws = members_vec
             .iter()
             .filter(|member| member.kind == HirMemberKind::Law)
-            .map(|member| member.name.name)
+            .map(|member| member_law_facts(ctx, member))
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let constraints_facts = lower_constraints(ctx, constraints.clone());

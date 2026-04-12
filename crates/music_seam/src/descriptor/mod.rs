@@ -11,7 +11,7 @@ mod type_desc;
 
 pub use class::ClassDescriptor;
 pub use constant::{ConstantDescriptor, ConstantValue};
-pub use data::DataDescriptor;
+pub use data::{DataDescriptor, DataVariantDescriptor};
 pub use effect::{EffectDescriptor, EffectOpDescriptor};
 pub use export::{ExportDescriptor, ExportTarget};
 pub use foreign::ForeignDescriptor;

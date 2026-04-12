@@ -21,7 +21,7 @@ use sequence::{compile_array_cat, compile_index, compile_sequence, compile_seque
 use storage::{compile_assign, compile_let, compile_temp, compile_temp_let};
 
 pub(super) fn compile_expr(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     keep_result: bool,
     diags: &mut EmitDiagList,
@@ -32,7 +32,16 @@ pub(super) fn compile_expr(
         || compile_expr_control_ops(emitter, expr, diags)
         || compile_expr_effect_ops(emitter, expr, diags)
         || compile_expr_type_ops(emitter, expr, diags);
-    debug_assert!(matched);
+    if !matched {
+        support::push_expr_diag(
+            diags,
+            emitter.module_key,
+            &expr.origin,
+            &EmitDiagKind::EmitInvariantViolated,
+            format!("expr `{:?}` has no emitted form", expr.kind),
+        );
+        return;
+    }
     if !keep_result {
         let slot = support::scratch_slot(emitter);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
@@ -43,7 +52,7 @@ pub(super) fn compile_expr(
 }
 
 fn compile_expr_literal(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -74,7 +83,7 @@ fn compile_expr_literal(
 }
 
 fn compile_expr_sequence_and_data(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -138,6 +147,16 @@ fn compile_expr_sequence_and_data(
             compile_index(emitter, base, indices, diags);
             true
         }
+        _ => compile_expr_module_and_type_ops(emitter, expr, diags),
+    }
+}
+
+fn compile_expr_module_and_type_ops(
+    emitter: ExprEmitterMut<'_, '_, '_>,
+    expr: &IrExpr,
+    diags: &mut EmitDiagList,
+) -> bool {
+    match &expr.kind {
         IrExprKind::DynamicImport { spec } => {
             compile_expr(emitter, spec, true, diags);
             emitter.code.push(CodeEntry::Instruction(Instruction::new(
@@ -182,7 +201,7 @@ fn compile_expr_sequence_and_data(
 }
 
 fn compile_expr_storage_ops(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -209,7 +228,7 @@ fn compile_expr_storage_ops(
 }
 
 fn compile_expr_control_ops(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -248,7 +267,7 @@ fn compile_expr_control_ops(
 }
 
 fn compile_expr_effect_ops(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -287,7 +306,7 @@ fn compile_expr_effect_ops(
 }
 
 fn compile_expr_type_ops(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: &IrExpr,
     diags: &mut EmitDiagList,
 ) -> bool {
@@ -321,7 +340,7 @@ fn compile_expr_type_ops(
 }
 
 fn compile_type_op_by_name(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     origin: &IrOrigin,
     base: &IrExpr,
     ty_name: &str,

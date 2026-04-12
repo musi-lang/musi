@@ -19,6 +19,7 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     String(Rc<str>),
+    CPtr(usize),
     Syntax(SyntaxValuePtr),
     Seq(SeqValuePtr),
     Data(DataValuePtr),
@@ -101,6 +102,7 @@ pub enum ValueView<'a> {
     Float(f64),
     Bool(bool),
     String(StringView<'a>),
+    CPtr(usize),
     Syntax(SyntaxView<'a>),
     Seq(SeqView<'a>),
     Record(RecordView<'a>),
@@ -143,6 +145,11 @@ impl Value {
     #[must_use]
     pub fn syntax(term: SyntaxTerm) -> Self {
         Self::Syntax(Rc::new(term))
+    }
+
+    #[must_use]
+    pub const fn c_ptr(address: usize) -> Self {
+        Self::CPtr(address)
     }
 
     #[must_use]
@@ -204,6 +211,7 @@ impl Value {
             Self::Float(_) => VmValueKind::Float,
             Self::Bool(_) => VmValueKind::Bool,
             Self::String(_) => VmValueKind::String,
+            Self::CPtr(_) => VmValueKind::CPtr,
             Self::Syntax(_) => VmValueKind::Syntax,
             Self::Seq(_) => VmValueKind::Seq,
             Self::Data(_) => VmValueKind::Data,
@@ -214,6 +222,24 @@ impl Value {
             Self::Foreign(_) => VmValueKind::Foreign,
             Self::Effect(_) => VmValueKind::Effect,
             Self::Class(_) => VmValueKind::Class,
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(text) => Some(text.as_ref()),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_record(&self) -> Option<RecordView<'_>> {
+        match self {
+            Self::Data(value) => Some(RecordView {
+                inner: value.borrow(),
+            }),
+            _ => None,
         }
     }
 }
@@ -289,6 +315,7 @@ impl PartialEq for Value {
             (Self::Float(left), Self::Float(right)) => left.to_bits() == right.to_bits(),
             (Self::Bool(left), Self::Bool(right)) => left == right,
             (Self::String(left), Self::String(right)) => left == right,
+            (Self::CPtr(left), Self::CPtr(right)) => left == right,
             (Self::Seq(left), Self::Seq(right)) => {
                 let left = left.borrow();
                 let right = right.borrow();

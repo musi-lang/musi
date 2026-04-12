@@ -11,7 +11,7 @@ use music_syntax::{Lexer, parse};
 
 use super::{
     EffectKey, EffectRow, ModuleSurface, SemaDiagKind, SemaEnv, SemaModule, SemaOptions,
-    check_module, sema_diag_kind,
+    SurfaceTyKind, check_module, sema_diag_kind,
 };
 
 #[derive(Default)]
@@ -157,12 +157,12 @@ fn dynamic_module_field_access_stays_runtime_typed() {
     let sema = check_module_src(
         14,
         "main",
-        r#"
+        r"
         export let read_any (name : String) : Any := (
           let loaded := import name;
           loaded.answer
         );
-    "#,
+    ",
         None,
         None,
     );
@@ -186,12 +186,12 @@ fn dynamic_module_field_access_is_not_callable_without_cast() {
     let sema = check_module_src(
         15,
         "main",
-        r#"
+        r"
         export let call_any (name : String) : Any := (
           let loaded := import name;
           loaded.answer()
         );
-    "#,
+    ",
         None,
         None,
     );
@@ -501,10 +501,10 @@ fn class_and_instance_queries_return_facts() {
         r"
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
-          law reflexive (x : T) := true;
+          law reflexive (x : T) := .True;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := .True;
         };
     ",
     );
@@ -514,6 +514,81 @@ fn class_and_instance_queries_return_facts() {
         .expect("expected instance expr");
     assert!(sema.class_facts(class_id).is_some());
     assert!(sema.instance_facts(instance_id).is_some());
+}
+
+#[test]
+fn exported_class_and_effect_laws_keep_structured_params() {
+    let sema = check(
+        r"
+        export let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+          law reflexive (x : T) := .True;
+        };
+        export let Console := effect {
+          let readln () : String;
+          law total (attempts : Int) := .True;
+        };
+    ",
+    );
+
+    let surface = sema.surface();
+
+    let class = surface
+        .exported_classes()
+        .iter()
+        .find(|item| item.key.name.as_ref() == "Eq")
+        .expect("expected exported class");
+    let class_law = class.laws.first().expect("expected exported class law");
+    assert_eq!(class_law.name.as_ref(), "reflexive");
+    assert_eq!(class_law.params.len(), 1);
+    assert_eq!(class_law.params[0].name.as_ref(), "x");
+    let class_law_ty = surface
+        .try_ty(class_law.params[0].ty)
+        .expect("expected class law param type");
+    let class_member_ty = surface
+        .try_ty(class.members[0].params[0])
+        .expect("expected class member param type");
+    assert_eq!(class_law_ty, class_member_ty);
+
+    let effect = surface
+        .exported_effects()
+        .iter()
+        .find(|item| item.key.name.as_ref() == "Console")
+        .expect("expected exported effect");
+    let effect_law = effect.laws.first().expect("expected exported effect law");
+    assert_eq!(effect_law.name.as_ref(), "total");
+    assert_eq!(effect_law.params.len(), 1);
+    assert_eq!(effect_law.params[0].name.as_ref(), "attempts");
+    let attempts_ty = surface
+        .try_ty(effect_law.params[0].ty)
+        .expect("expected effect law param type");
+    assert!(matches!(&attempts_ty.kind, SurfaceTyKind::Int));
+}
+
+#[test]
+fn effectful_laws_report_purity_diag() {
+    let sema = check(
+        r#"
+        let Console := effect {
+          let readln () : String;
+          law total () := perform Console.readln() == "";
+        };
+
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+          law noisy (x : T) := (
+            perform Console.readln();
+            .True
+          );
+        };
+    "#,
+    );
+
+    assert!(
+        has_diag(&sema, SemaDiagKind::LawMustBePure),
+        "{:?}",
+        sema.diags()
+    );
 }
 
 #[test]

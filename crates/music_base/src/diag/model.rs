@@ -26,7 +26,7 @@ impl DiagLevel {
     }
 }
 
-/// Stable diagnostic code (`msNNNN`).
+/// Stable diagnostic code (`MSNNNN`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DiagCode(u16);
 

@@ -193,7 +193,7 @@ impl Opcode {
             Self::LdGlob | Self::StGlob => OperandShape::Global,
             Self::LdConst => OperandShape::Constant,
             Self::LdSmi | Self::SeqGetN | Self::SeqSetN => OperandShape::I16,
-            Self::LdStr => OperandShape::String,
+            Self::LdStr | Self::ModGet => OperandShape::String,
             Self::IAdd
             | Self::ISub
             | Self::IMul
@@ -222,7 +222,6 @@ impl Opcode {
             | Self::DataGet
             | Self::DataSet
             | Self::ModLoad => OperandShape::None,
-            Self::ModGet => OperandShape::String,
             Self::Br | Self::BrFalse => OperandShape::Label,
             Self::BrTbl => OperandShape::BranchTable,
             Self::Call | Self::CallSeq | Self::CallTail => OperandShape::Method,

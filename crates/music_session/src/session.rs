@@ -1,6 +1,7 @@
 mod cache;
 mod compile;
 mod graph;
+mod laws;
 mod store;
 
 #[cfg(test)]
@@ -50,7 +51,7 @@ impl Session {
     }
 
     #[must_use]
-    pub fn source_map(&self) -> &SourceMap {
+    pub const fn source_map(&self) -> &SourceMap {
         &self.store.sources
     }
 

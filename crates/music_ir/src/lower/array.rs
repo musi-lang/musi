@@ -4,16 +4,17 @@ pub(super) fn lower_array_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     items: SliceRange<HirArrayItem>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let array_items = sema.module().store.array_items.get(items);
     if !array_items.iter().any(|array_item| array_item.spread) {
-        return IrExprKind::Array {
+        return Ok(IrExprKind::Array {
             ty_name: render_ty_name(
                 sema,
-                sema.try_expr_ty(expr_id)
-                    .expect("expr type missing for array literal"),
+                sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+                    invalid_lowering_path("expr type missing for array literal")
+                }),
                 interner,
             ),
             items: array_items
@@ -21,7 +22,7 @@ pub(super) fn lower_array_expr(
                 .map(|array_item| lower_expr(ctx, array_item.expr))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
-        };
+        });
     }
 
     let origin = expr_origin(sema, expr_id);
@@ -35,16 +36,16 @@ pub(super) fn lower_array_expr(
             continue;
         }
         has_runtime_spread |=
-            append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts);
+            append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts)?;
     }
 
     prelude.push(IrExpr {
         origin,
-        kind: array_tail_kind(sema, interner, expr_id, has_runtime_spread, parts),
+        kind: array_tail_kind(sema, interner, expr_id, has_runtime_spread, parts)?,
     });
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
-    }
+    })
 }
 
 fn expr_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
@@ -81,10 +82,10 @@ fn append_array_spread_parts(
     spread_expr: HirExprId,
     temp_expr: &IrExpr,
     parts: &mut Vec<IrSeqPart>,
-) -> bool {
+) -> Result<bool, Box<str>> {
     let spread_ty = sema
         .try_expr_ty(spread_expr)
-        .expect("expr type missing for array spread");
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for array spread"));
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -97,12 +98,12 @@ fn append_array_spread_parts(
                     index_u32,
                 )));
             }
-            false
+            Ok(false)
         }
         HirTyKind::Array { dims, .. } => {
             append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
         }
-        _ => invalid_lowering_path("array spread source is not tuple/array"),
+        _ => Err("array spread source is not tuple/array".into()),
     }
 }
 
@@ -112,14 +113,14 @@ fn append_array_dim_spread_parts(
     dims: &SliceRange<HirDim>,
     temp_expr: &IrExpr,
     parts: &mut Vec<IrSeqPart>,
-) -> bool {
+) -> Result<bool, Box<str>> {
     let dims_vec = sema.module().store.dims.get(dims.clone());
     if dims_vec.is_empty() {
         parts.push(IrSeqPart::Spread(temp_expr.clone()));
-        return true;
+        return Ok(true);
     }
     if dims_vec.len() != 1 {
-        invalid_lowering_path("array spread requires 1D array");
+        return Err("array spread requires 1D array".into());
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -130,11 +131,11 @@ fn append_array_dim_spread_parts(
                     index_u32,
                 )));
             }
-            false
+            Ok(false)
         }
         HirDim::Unknown | HirDim::Name(_) => {
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
-            true
+            Ok(true)
         }
     }
 }
@@ -161,17 +162,17 @@ fn array_tail_kind(
     expr_id: HirExprId,
     has_runtime_spread: bool,
     parts: Vec<IrSeqPart>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     if has_runtime_spread {
-        return IrExprKind::ArrayCat {
+        return Ok(IrExprKind::ArrayCat {
             ty_name: render_ty_name(
                 sema,
                 sema.try_expr_ty(expr_id)
-                    .expect("expr type missing for array cat"),
+                    .unwrap_or_else(|| invalid_lowering_path("expr type missing for array cat")),
                 interner,
             ),
             parts: parts.into_boxed_slice(),
-        };
+        });
     }
     let items = parts
         .into_iter()
@@ -182,15 +183,15 @@ fn array_tail_kind(
         .collect::<Option<Vec<_>>>()
         .map(Vec::into_boxed_slice);
     let Some(items) = items else {
-        invalid_lowering_path("array spread lowering invariant");
+        return Err("array spread lowering invariant".into());
     };
-    IrExprKind::Array {
+    Ok(IrExprKind::Array {
         ty_name: render_ty_name(
             sema,
             sema.try_expr_ty(expr_id)
-                .expect("expr type missing for array literal"),
+                .unwrap_or_else(|| invalid_lowering_path("expr type missing for array literal")),
             interner,
         ),
         items,
-    }
+    })
 }

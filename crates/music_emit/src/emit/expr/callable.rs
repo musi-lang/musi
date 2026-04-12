@@ -7,7 +7,7 @@ use super::sequence::compile_seq_parts_any;
 use super::support::push_expr_diag;
 
 pub(super) fn compile_variant_new(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     data_key: &DefinitionKey,
     tag_index: u16,
     field_count: u16,
@@ -49,7 +49,7 @@ pub(super) fn compile_variant_new(
 }
 
 pub(super) fn compile_call(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     callee: &IrExpr,
     args: &[IrArg],
     diags: &mut EmitDiagList,
@@ -110,7 +110,7 @@ pub(super) fn compile_call(
 }
 
 pub(super) fn compile_call_seq(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     callee: &IrExpr,
     args: &[IrSeqPart],
     diags: &mut EmitDiagList,
@@ -160,7 +160,7 @@ pub(super) fn compile_call_seq(
 }
 
 pub(super) fn compile_closure_new(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     callee: &IrNameRef,
     captures: &[IrExpr],
     diags: &mut EmitDiagList,

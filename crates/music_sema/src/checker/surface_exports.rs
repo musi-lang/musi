@@ -13,7 +13,7 @@ use super::{DeclState, ModuleState, TypingState};
 use crate::api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
     ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
-    ExportedValue, InstanceSurface, SurfaceEffectRow,
+    ExportedValue, InstanceSurface, LawParamSurface, LawSurface, SurfaceEffectRow,
 };
 
 #[derive(Debug, Clone)]
@@ -394,6 +394,13 @@ pub(super) fn collect_exported_data(
                             .map(|(name, variant)| DataVariantSurface {
                                 name: name.into(),
                                 payload: variant.payload().map(|ty| tys.lower(ty)),
+                                field_tys: variant
+                                    .field_tys()
+                                    .iter()
+                                    .copied()
+                                    .map(|ty| tys.lower(ty))
+                                    .collect::<Vec<_>>()
+                                    .into_boxed_slice(),
                             })
                             .collect::<Vec<_>>()
                             .into_boxed_slice()
@@ -443,7 +450,18 @@ pub(super) fn collect_exported_classes(
                 laws: facts
                     .laws
                     .iter()
-                    .map(|law| tys.interner.resolve(*law).into())
+                    .map(|law| LawSurface {
+                        name: tys.interner.resolve(law.name).into(),
+                        params: law
+                            .params
+                            .iter()
+                            .map(|param| LawParamSurface {
+                                name: tys.interner.resolve(param.name).into(),
+                                ty: tys.lower(param.ty),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
                 inert_attrs,
@@ -489,12 +507,23 @@ pub(super) fn collect_exported_effects(
                     }),
                 laws: export
                     .opaque
-                    .then(Box::<[Box<str>]>::default)
+                    .then(Box::<[LawSurface]>::default)
                     .unwrap_or_else(|| {
                         effect
                             .laws()
                             .iter()
-                            .map(|symbol| tys.interner.resolve(*symbol).into())
+                            .map(|law| LawSurface {
+                                name: tys.interner.resolve(law.name).into(),
+                                params: law
+                                    .params
+                                    .iter()
+                                    .map(|param| LawParamSurface {
+                                        name: tys.interner.resolve(param.name).into(),
+                                        ty: tys.lower(param.ty),
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .into_boxed_slice(),
+                            })
                             .collect::<Vec<_>>()
                             .into_boxed_slice()
                     }),

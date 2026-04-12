@@ -1,6 +1,8 @@
 use super::*;
 use music_ir::lower_surface_type_term;
+use music_seam::descriptor::DataVariantDescriptor;
 use music_term::{TypeModuleRef, TypeTerm, TypeTermKind, parse_type_term};
+
 pub(super) fn register_module(
     state: &mut ProgramState,
     module: &IrModule,
@@ -46,10 +48,25 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
             .as_deref()
             .map(|kind| state.artifact.intern_string(kind));
         let name_id = state.artifact.intern_string(name.as_ref());
+        let variants = data
+            .variants
+            .iter()
+            .map(|variant| DataVariantDescriptor {
+                name: state.artifact.intern_string(variant.name.as_ref()),
+                field_tys: variant
+                    .field_tys
+                    .iter()
+                    .map(|ty| ensure_type(state, layout, ty.as_ref()))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let _ = state.artifact.data.alloc(DataDescriptor {
             name: name_id,
             variant_count: data.variant_count,
             field_count: data.field_count,
+            variants,
             repr_kind,
             layout_align: data.layout_align,
             layout_pack: data.layout_pack,
@@ -91,7 +108,12 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
         );
 
         let Some(target) = target else {
-            super::invalid_emit_path(format!("export target missing for `{}`", export.name));
+            state.diags.push(
+                Diag::error(EmitDiagKind::ExportTargetMissing.message())
+                    .with_code(EmitDiagKind::ExportTargetMissing.code())
+                    .with_note(format!("export `{}`", export.name)),
+            );
+            continue;
         };
 
         let _ = state.artifact.exports.alloc(ExportDescriptor {
@@ -260,44 +282,72 @@ fn register_expr_types(state: &mut ProgramState, module: &IrModule, layout: &mut
 }
 
 fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr: &IrExpr) {
+    let handled = collect_expr_types_leaf(state, layout, expr)
+        || collect_expr_types_aggregate(state, layout, expr)
+        || collect_expr_types_binding_and_control(state, layout, expr)
+        || collect_expr_types_call_and_effect(state, layout, expr);
+    debug_assert!(handled, "unhandled expr type collection path");
+}
+
+fn collect_expr_types_leaf(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    expr: &IrExpr,
+) -> bool {
     match &expr.kind {
         IrExprKind::Unit
         | IrExprKind::Name { .. }
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
-        | IrExprKind::SyntaxValue { .. } => {}
+        | IrExprKind::SyntaxValue { .. } => true,
         IrExprKind::TypeValue { ty_name } => {
             let _ = ensure_type(state, layout, ty_name);
+            true
         }
-        IrExprKind::Sequence { exprs } => collect_expr_types_iter(state, layout, exprs),
+        _ => false,
+    }
+}
+
+fn collect_expr_types_aggregate(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    expr: &IrExpr,
+) -> bool {
+    match &expr.kind {
+        IrExprKind::Sequence { exprs } => {
+            collect_expr_types_iter(state, layout, exprs);
+            true
+        }
         IrExprKind::Tuple { ty_name, items } | IrExprKind::Array { ty_name, items } => {
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_iter(state, layout, items);
+            true
         }
         IrExprKind::ArrayCat { ty_name, parts } => {
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_seq_parts(state, layout, parts);
+            true
         }
         IrExprKind::Record {
             ty_name, fields, ..
         } => {
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_iter(state, layout, fields.iter().map(|field| &field.expr));
-        }
-        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
-            collect_expr_types(state, layout, value);
-        }
-        IrExprKind::Assign { target, value } => {
-            collect_assign_target_types(state, layout, target);
-            collect_expr_types(state, layout, value);
+            true
         }
         IrExprKind::Index { base, indices } => {
             collect_expr_types(state, layout, base);
             collect_expr_types_iter(state, layout, indices.iter());
+            true
         }
-        IrExprKind::DynamicImport { spec } => collect_expr_types(state, layout, spec),
-        IrExprKind::ModuleGet { base, .. } => collect_expr_types(state, layout, base),
-        IrExprKind::RecordGet { base, .. } => collect_expr_types(state, layout, base),
+        IrExprKind::DynamicImport { spec } => {
+            collect_expr_types(state, layout, spec);
+            true
+        }
+        IrExprKind::ModuleGet { base, .. } | IrExprKind::RecordGet { base, .. } => {
+            collect_expr_types(state, layout, base);
+            true
+        }
         IrExprKind::RecordUpdate {
             ty_name,
             base,
@@ -307,33 +357,81 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types(state, layout, base);
             collect_expr_types_iter(state, layout, updates.iter().map(|update| &update.expr));
-        }
-        IrExprKind::ClosureNew { captures, .. } => collect_expr_types_iter(state, layout, captures),
-        IrExprKind::Binary { left, right, .. } => {
-            collect_expr_types(state, layout, left);
-            collect_expr_types(state, layout, right);
-        }
-        IrExprKind::Not { expr } => collect_expr_types(state, layout, expr),
-        IrExprKind::TyTest { base, ty_name } | IrExprKind::TyCast { base, ty_name } => {
-            let _ = ensure_type(state, layout, ty_name);
-            collect_expr_types(state, layout, base);
-        }
-        IrExprKind::Case { scrutinee, arms } => {
-            collect_case_expr_types(state, layout, scrutinee, arms);
-        }
-        IrExprKind::Call { callee, args } => collect_call_expr_types(state, layout, callee, args),
-        IrExprKind::CallSeq { callee, args } => {
-            collect_call_seq_expr_types(state, layout, callee, args);
+            true
         }
         IrExprKind::VariantNew { data_key, args, .. } => {
             let name = qualified_name(&data_key.module, &data_key.name);
             let _ = ensure_type(state, layout, name.as_ref());
             collect_expr_types_iter(state, layout, args);
+            true
         }
-        IrExprKind::Perform { args, .. } => collect_expr_types_iter(state, layout, args),
+        _ => false,
+    }
+}
+
+fn collect_expr_types_binding_and_control(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    expr: &IrExpr,
+) -> bool {
+    match &expr.kind {
+        IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
+            collect_expr_types(state, layout, value);
+            true
+        }
+        IrExprKind::Assign { target, value } => {
+            collect_assign_target_types(state, layout, target);
+            collect_expr_types(state, layout, value);
+            true
+        }
+        IrExprKind::ClosureNew { captures, .. } => {
+            collect_expr_types_iter(state, layout, captures);
+            true
+        }
+        IrExprKind::Binary { left, right, .. } => {
+            collect_expr_types(state, layout, left);
+            collect_expr_types(state, layout, right);
+            true
+        }
+        IrExprKind::Not { expr } => {
+            collect_expr_types(state, layout, expr);
+            true
+        }
+        IrExprKind::TyTest { base, ty_name } | IrExprKind::TyCast { base, ty_name } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types(state, layout, base);
+            true
+        }
+        IrExprKind::Case { scrutinee, arms } => {
+            collect_case_expr_types(state, layout, scrutinee, arms);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn collect_expr_types_call_and_effect(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    expr: &IrExpr,
+) -> bool {
+    match &expr.kind {
+        IrExprKind::Call { callee, args } => {
+            collect_call_expr_types(state, layout, callee, args);
+            true
+        }
+        IrExprKind::CallSeq { callee, args } => {
+            collect_call_seq_expr_types(state, layout, callee, args);
+            true
+        }
+        IrExprKind::Perform { args, .. } => {
+            collect_expr_types_iter(state, layout, args);
+            true
+        }
         IrExprKind::PerformSeq { args, .. } => {
             let _ = ensure_type(state, layout, "[]Any");
             collect_expr_types_seq_parts(state, layout, args);
+            true
         }
         IrExprKind::Handle {
             effect_key,
@@ -341,12 +439,17 @@ fn collect_expr_types(state: &mut ProgramState, layout: &mut ModuleLayout, expr:
             ops,
             body,
             ..
-        } => collect_handle_expr_types(state, layout, effect_key, value, ops, body),
+        } => {
+            collect_handle_expr_types(state, layout, effect_key, value, ops, body);
+            true
+        }
         IrExprKind::Resume { expr } => {
             if let Some(expr) = expr.as_deref() {
                 collect_expr_types(state, layout, expr);
             }
+            true
         }
+        _ => false,
     }
 }
 

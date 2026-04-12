@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::Symbol;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Interner {
     map: HashMap<Box<str>, Symbol>,
     strings: Vec<Box<str>>,

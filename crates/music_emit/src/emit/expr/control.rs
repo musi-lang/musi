@@ -6,7 +6,7 @@ use super::literals::{compile_i64, compile_lit};
 use super::support::{alloc_label, ensure_local_slot, push_expr_diag, reserve_temp_slot};
 
 pub(super) fn compile_binary(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     op: &IrBinaryOp,
     left: &IrExpr,
     right: &IrExpr,
@@ -50,7 +50,7 @@ pub(super) fn compile_binary(
 }
 
 pub(super) fn compile_case(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee: &IrExpr,
     arms: &[IrCaseArm],
     diags: &mut EmitDiagList,
@@ -152,7 +152,7 @@ fn pattern_variantish(pattern: &IrCasePattern) -> Option<Variantish<'_>> {
 }
 
 fn compile_case_variant_dispatch(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     arms: &[IrCaseArm],
     tail: &[IrCaseArm],
@@ -222,7 +222,7 @@ fn case_dispatch_origin(arms: &[IrCaseArm]) -> IrOrigin {
 }
 
 fn emit_variant_dispatch_table(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     data_ty: TypeId,
     tag_labels: &[u16],
@@ -258,7 +258,7 @@ fn group_variant_arms_by_tag(arms: &[IrCaseArm], variant_count: u16) -> Vec<Vec<
 }
 
 fn emit_variant_dispatch_tag_blocks(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     tag_labels: &[u16],
     arms_by_tag: &[Vec<&IrCaseArm>],
@@ -300,7 +300,7 @@ fn emit_variant_dispatch_tag_blocks(
 }
 
 fn emit_case_arms(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     arms: &[IrCaseArm],
     end_label: Option<u16>,
@@ -323,7 +323,7 @@ fn emit_case_arms(
 }
 
 fn emit_case_arm<F>(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     next_label: u16,
     guard: Option<&IrExpr>,
     expr: &IrExpr,
@@ -331,7 +331,7 @@ fn emit_case_arm<F>(
     diags: &mut EmitDiagList,
     mut compile_pattern: F,
 ) where
-    F: FnMut(&mut MethodEmitter<'_, '_>, u16, &mut EmitDiagList) -> bool,
+    F: FnMut(ExprEmitterMut<'_, '_, '_>, u16, &mut EmitDiagList) -> bool,
 {
     if !compile_pattern(emitter, next_label, diags) {
         return;
@@ -340,7 +340,7 @@ fn emit_case_arm<F>(
 }
 
 fn emit_case_arm_body(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     next_label: u16,
     guard: Option<&IrExpr>,
     expr: &IrExpr,
@@ -367,7 +367,7 @@ fn emit_case_arm_body(
 }
 
 fn compile_case_pattern(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     pattern: &IrCasePattern,
     scrutinee_slot: u16,
     next_label: u16,
@@ -420,7 +420,7 @@ fn compile_case_pattern(
 }
 
 fn compile_case_lit(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     lit: &IrLit,
     next_label: u16,
@@ -451,7 +451,7 @@ fn compile_case_lit(
 }
 
 fn compile_case_variant_pattern(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     data_key: &DefinitionKey,
     tag_index: u16,
@@ -475,7 +475,7 @@ fn compile_case_variant_pattern(
 }
 
 fn compile_indexed_item(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     index: usize,
     opcode: Opcode,
@@ -498,7 +498,7 @@ fn compile_indexed_item(
 }
 
 fn compile_projected_patterns(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     items: &[IrCasePattern],
     opcode: Opcode,
@@ -515,7 +515,7 @@ fn compile_projected_patterns(
 }
 
 fn compile_record_patterns(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     fields: &[IrCaseRecordField],
     next_label: u16,
@@ -531,7 +531,7 @@ fn compile_record_patterns(
 }
 
 fn compile_record_item(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     index: u16,
 ) -> u16 {
@@ -553,7 +553,7 @@ fn compile_record_item(
 }
 
 fn compile_variant_payload_patterns(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     args: &[IrCasePattern],
     as_binding: Option<(NameBindingId, &str)>,
@@ -577,7 +577,7 @@ fn compile_variant_payload_patterns(
 }
 
 fn compile_variant_tag_match(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     data_ty: TypeId,
     tag_index: u16,
@@ -603,7 +603,7 @@ fn compile_variant_tag_match(
 }
 
 fn resolve_variant_data_ty(
-    emitter: &MethodEmitter<'_, '_>,
+    emitter: ExprEmitterRef<'_, '_, '_>,
     data_key: &DefinitionKey,
     origin: &IrOrigin,
     diags: &mut EmitDiagList,
@@ -623,7 +623,7 @@ fn resolve_variant_data_ty(
 }
 
 fn store_binding_value(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     scrutinee_slot: u16,
     binding: NameBindingId,
 ) {

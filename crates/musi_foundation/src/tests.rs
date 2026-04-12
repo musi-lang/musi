@@ -3,6 +3,18 @@ use music_session::{Session, SessionOptions};
 
 use crate::{extend_import_map, module_source, register_modules, resolve_spec, syntax, test};
 
+fn compile_main_entry_with_source(source: &str) {
+    let mut options = SessionOptions::default();
+    extend_import_map(&mut options.import_map);
+    let mut session = Session::new(options);
+    register_modules(&mut session).unwrap();
+    session
+        .set_module_text(&ModuleKey::new("main"), source)
+        .unwrap();
+    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
+    assert!(!output.bytes.is_empty());
+}
+
 #[test]
 fn extend_import_map_registers_foundation_specs() {
     let mut import_map = ImportMap::default();
@@ -33,44 +45,27 @@ fn module_source_maps_known_specs() {
     assert_eq!(module_source(test::SPEC), Some(test::MODULE));
     assert_eq!(module_source(syntax::SPEC), Some(syntax::MODULE));
     assert_eq!(module_source("musi:missing"), None);
+    assert!(test::MODULE.contains("export let Sample[T] := class"));
+    assert!(test::MODULE.contains("export let SampleList[T] := data"));
+    assert!(test::MODULE.contains("export let SampleCase[T] := data"));
 }
 
 #[test]
 fn register_modules_installs_foundation_modules() {
-    let mut options = SessionOptions::default();
-    extend_import_map(&mut options.import_map);
-    let mut session = Session::new(options);
-    register_modules(&mut session).unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    compile_main_entry_with_source(
+        r#"
 let Intrinsics := import "musi:test";
 export let answer : Int := 1;
 "#,
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-    assert!(!output.bytes.is_empty());
+    );
 }
 
 #[test]
 fn register_modules_installs_syntax_root() {
-    let mut options = SessionOptions::default();
-    extend_import_map(&mut options.import_map);
-    let mut session = Session::new(options);
-    register_modules(&mut session).unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    compile_main_entry_with_source(
+        r#"
 let Syntax := import "musi:syntax";
 export let answer (body : Syntax, result : Type) : Any := Syntax.eval(body, result);
 "#,
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-    assert!(!output.bytes.is_empty());
+    );
 }

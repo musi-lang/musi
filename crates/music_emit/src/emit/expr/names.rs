@@ -2,7 +2,7 @@ use super::super::*;
 use crate::EmitDiagKind;
 
 pub(super) fn compile_name(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     binding: Option<NameBindingId>,
     name: &str,
     module_target: Option<&ModuleKey>,
@@ -46,7 +46,7 @@ pub(super) fn compile_name(
 }
 
 pub(super) fn resolve_method(
-    emitter: &MethodEmitter<'_, '_>,
+    emitter: ExprEmitterRef<'_, '_, '_>,
     binding: Option<NameBindingId>,
     name: &str,
     module_target: Option<&ModuleKey>,
@@ -67,7 +67,7 @@ pub(super) fn resolve_method(
 }
 
 pub(super) fn resolve_foreign(
-    emitter: &MethodEmitter<'_, '_>,
+    emitter: ExprEmitterRef<'_, '_, '_>,
     binding: Option<NameBindingId>,
     name: &str,
     module_target: Option<&ModuleKey>,
@@ -83,7 +83,7 @@ pub(super) fn resolve_foreign(
 }
 
 pub(super) fn resolve_global(
-    emitter: &MethodEmitter<'_, '_>,
+    emitter: ExprEmitterRef<'_, '_, '_>,
     binding: Option<NameBindingId>,
     name: &str,
     module_target: Option<&ModuleKey>,

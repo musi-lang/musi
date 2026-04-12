@@ -5,7 +5,7 @@ use super::literals::compile_i64;
 use super::support::push_expr_diag;
 
 pub(super) fn compile_perform(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     effect_key: &DefinitionKey,
     op_index: u16,
     args: &[IrExpr],
@@ -42,7 +42,7 @@ pub(super) fn compile_perform(
 }
 
 pub(super) fn compile_handle(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     effect_key: &DefinitionKey,
     value: &IrExpr,
     ops: &[IrHandleOp],
@@ -101,7 +101,7 @@ pub(super) fn compile_handle(
 }
 
 pub(super) fn compile_resume(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     expr: Option<&IrExpr>,
     diags: &mut EmitDiagList,
 ) {
@@ -117,7 +117,7 @@ pub(super) fn compile_resume(
 }
 
 pub(super) fn compile_perform_seq(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     effect_key: &DefinitionKey,
     op_index: u16,
     args: &[IrSeqPart],

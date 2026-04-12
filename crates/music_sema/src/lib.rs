@@ -13,10 +13,11 @@ use std::collections::{HashMap, HashSet};
 pub use api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintKind,
     ConstraintSurface, DataSurface, DataVariantSurface, DefinitionKey, EffectOpSurface,
-    EffectSurface, ExportedValue, InstanceSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef,
-    SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim,
-    SurfaceEffectItem, SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
-    TargetInfo, sema_diag_kind,
+    EffectSurface, ExportedValue, InstanceSurface, LawFacts, LawParamFacts, LawParamSurface,
+    LawSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef,
+    SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem,
+    SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind, TargetInfo,
+    sema_diag_kind,
 };
 pub use checker::check_module;
 pub use diag::SemaDiagKind;

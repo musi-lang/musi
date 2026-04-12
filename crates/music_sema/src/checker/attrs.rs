@@ -190,7 +190,7 @@ pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ab
 }
 
 fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTyId) {
-    match ctx.ty(ty).kind {
+    let valid = match ctx.ty(ty).kind {
         HirTyKind::Int
         | HirTyKind::Float
         | HirTyKind::Bool
@@ -198,11 +198,13 @@ fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTy
         | HirTyKind::CString
         | HirTyKind::CPtr
         | HirTyKind::Unknown
-        | HirTyKind::Error => {}
-        _ => {
-            let span = ctx.expr(expr).origin.span;
-            ctx.diag(span, DiagKind::InvalidFfiType, "");
-        }
+        | HirTyKind::Error => true,
+        HirTyKind::Named { name, .. } => ctx.data_def(ctx.resolve_symbol(name)).is_some(),
+        _ => false,
+    };
+    if !valid {
+        let span = ctx.expr(expr).origin.span;
+        ctx.diag(span, DiagKind::InvalidFfiType, "");
     }
 }
 

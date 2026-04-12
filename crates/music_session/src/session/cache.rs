@@ -13,7 +13,9 @@ use super::Session;
 use super::graph::{SessionImportEnv, SurfaceMap};
 
 impl Session {
-    #[must_use]
+    /// # Errors
+    ///
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered.
     pub fn parsed_module_cached(
         &self,
         key: &ModuleKey,
@@ -21,7 +23,9 @@ impl Session {
         Ok(self.module_record(key)?.parsed.as_ref())
     }
 
-    #[must_use]
+    /// # Errors
+    ///
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered.
     pub fn resolved_module_cached(
         &self,
         key: &ModuleKey,
@@ -29,7 +33,9 @@ impl Session {
         Ok(self.module_record(key)?.resolved.as_ref())
     }
 
-    #[must_use]
+    /// # Errors
+    ///
+    /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered.
     pub fn sema_module_cached(&self, key: &ModuleKey) -> Result<Option<&SemaModule>, SessionError> {
         Ok(self.module_record(key)?.sema.as_ref())
     }

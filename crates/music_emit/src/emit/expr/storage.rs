@@ -6,7 +6,7 @@ use super::names::resolve_global;
 use super::support::{ensure_local_slot, ensure_temp_slot, push_expr_diag, scratch_slot};
 
 pub(super) fn compile_let(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     binding: Option<NameBindingId>,
     _name: &str,
     value: &IrExpr,
@@ -29,7 +29,7 @@ pub(super) fn compile_let(
     emit_zero(emitter);
 }
 
-pub(super) fn compile_temp(emitter: &mut MethodEmitter<'_, '_>, temp: IrTempId) {
+pub(super) fn compile_temp(emitter: ExprEmitterMut<'_, '_, '_>, temp: IrTempId) {
     let slot = ensure_temp_slot(emitter, temp);
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdLoc,
@@ -38,7 +38,7 @@ pub(super) fn compile_temp(emitter: &mut MethodEmitter<'_, '_>, temp: IrTempId) 
 }
 
 pub(super) fn compile_temp_let(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     temp: IrTempId,
     value: &IrExpr,
     diags: &mut EmitDiagList,
@@ -53,7 +53,7 @@ pub(super) fn compile_temp_let(
 }
 
 pub(super) fn compile_assign(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     target: &IrAssignTarget,
     value: &IrExpr,
     diags: &mut EmitDiagList,

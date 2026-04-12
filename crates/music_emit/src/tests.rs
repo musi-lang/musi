@@ -4,8 +4,8 @@ use music_ir::{IrModule, lower_module};
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
-use music_seam::{CodeEntry, Opcode};
 use music_seam::descriptor::ConstantValue;
+use music_seam::{CodeEntry, Opcode};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
@@ -257,19 +257,18 @@ fn emits_named_type_values_as_ty_id() {
     );
 
     let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
-
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&Opcode::TyId));
+    assert!(
+        emitted
+            .artifact
+            .methods
+            .iter()
+            .flat_map(|(_, method)| method.code.iter())
+            .any(|entry| matches!(
+                entry,
+                CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::TyId
+            ))
+    );
 }
 
 #[test]

@@ -56,6 +56,17 @@ impl Vm {
     pub(crate) fn lookup_export_in_slot(&mut self, slot: usize, name: &str) -> VmResult<Value> {
         self.initialize_slot(slot)?;
         let module_name = self.module(slot)?.spec.clone();
+        if self
+            .module(slot)?
+            .program
+            .is_export_opaque(name)
+            .unwrap_or(false)
+        {
+            return Err(VmError::new(VmErrorKind::OpaqueExport {
+                module: module_name,
+                export: name.into(),
+            }));
+        }
         let target = self
             .module(slot)?
             .program

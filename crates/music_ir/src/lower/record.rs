@@ -12,18 +12,18 @@ pub(super) fn lower_record_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     items: SliceRange<HirRecordItem>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let ty = sema
         .try_expr_ty(expr_id)
-        .expect("expr type missing for record literal");
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for record literal"));
     let Some((indices, _layout, field_count)) = record_layout_for_ty(sema, ty, interner) else {
-        invalid_lowering_path("record without record type");
+        return Err("record without record type".into());
     };
     let origin = to_ir_origin(sema, expr_id);
-    let (prelude, sources) = collect_record_sources(ctx, origin, items, &indices);
-    let lowered_fields = lower_ordered_record_fields(interner, field_count, &indices, &sources);
+    let (prelude, sources) = collect_record_sources(ctx, origin, items, &indices)?;
+    let lowered_fields = lower_ordered_record_fields(interner, field_count, &indices, &sources)?;
 
     let mut exprs = prelude;
     exprs.push(IrExpr {
@@ -34,9 +34,9 @@ pub(super) fn lower_record_expr(
             fields: lowered_fields.into_boxed_slice(),
         },
     });
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
-    }
+    })
 }
 
 pub(super) fn lower_record_update_expr(
@@ -44,24 +44,24 @@ pub(super) fn lower_record_update_expr(
     expr_id: HirExprId,
     base: HirExprId,
     items: SliceRange<HirRecordItem>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let base_ty = sema
         .try_expr_ty(base)
-        .expect("expr type missing for record update base");
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for record update base"));
     let Some((_base_indices, base_fields, _base_count)) =
         record_layout_for_ty(sema, base_ty, interner)
     else {
-        invalid_lowering_path("record update without record base");
+        return Err("record update without record base".into());
     };
     let result_ty = sema
         .try_expr_ty(expr_id)
-        .expect("expr type missing for record update result");
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for record update result"));
     let Some((result_indices, result_fields, result_count)) =
         record_layout_for_ty(sema, result_ty, interner)
     else {
-        invalid_lowering_path("record update without record result");
+        return Err("record update without record result".into());
     };
     let update_items = sema.module().store.record_items.get(items);
     let layout = RecordUpdateLayout {
@@ -85,12 +85,15 @@ fn to_ir_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
     }
 }
 
+type RecordSourceMap = BTreeMap<Symbol, IrExpr>;
+type RecordSourceResult = Result<(Vec<IrExpr>, RecordSourceMap), Box<str>>;
+
 fn collect_record_sources(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
     items: SliceRange<HirRecordItem>,
     indices: &BTreeMap<Symbol, u16>,
-) -> (Vec<IrExpr>, BTreeMap<Symbol, IrExpr>) {
+) -> RecordSourceResult {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let mut prelude = Vec::<IrExpr>::new();
@@ -100,11 +103,11 @@ fn collect_record_sources(
         if record_item.spread {
             let spread_ty = sema
                 .try_expr_ty(record_item.value)
-                .expect("expr type missing for record spread");
+                .unwrap_or_else(|| invalid_lowering_path("expr type missing for record spread"));
             let Some((spread_indices, _spread_layout, _spread_count)) =
                 record_layout_for_ty(sema, spread_ty, interner)
             else {
-                invalid_lowering_path("record spread without record type");
+                return Err("record spread without record type".into());
             };
             for (symbol, index) in spread_indices {
                 if !indices.contains_key(&symbol) {
@@ -124,14 +127,14 @@ fn collect_record_sources(
             continue;
         }
         let Some(name) = record_item.name else {
-            invalid_lowering_path("record item without name");
+            return Err("record item without name".into());
         };
         if !indices.contains_key(&name.name) {
-            invalid_lowering_path("record item name missing from record type");
+            return Err("record item name missing from record type".into());
         }
         let _ = sources.insert(name.name, temp_expr);
     }
-    (prelude, sources)
+    Ok((prelude, sources))
 }
 
 fn lower_item_temp(
@@ -159,7 +162,7 @@ fn lower_ordered_record_fields(
     field_count: u16,
     indices: &BTreeMap<Symbol, u16>,
     sources: &BTreeMap<Symbol, IrExpr>,
-) -> Vec<IrRecordField> {
+) -> Result<Vec<IrRecordField>, Box<str>> {
     let mut symbol_by_index = vec![None::<Symbol>; usize::from(field_count)];
     for (symbol, index) in indices {
         let idx = usize::from(*index);
@@ -171,10 +174,10 @@ fn lower_ordered_record_fields(
     let mut lowered_fields = Vec::<IrRecordField>::new();
     for (idx, symbol) in symbol_by_index.into_iter().enumerate() {
         let Some(symbol) = symbol else {
-            invalid_lowering_path("record layout missing symbol");
+            return Err("record layout missing symbol".into());
         };
         let Some(expr) = sources.get(&symbol).cloned() else {
-            invalid_lowering_path("record missing field value");
+            return Err("record missing field value".into());
         };
         lowered_fields.push(IrRecordField {
             name: interner.resolve(symbol).into(),
@@ -182,7 +185,7 @@ fn lower_ordered_record_fields(
             expr,
         });
     }
-    lowered_fields
+    Ok(lowered_fields)
 }
 
 fn lower_record_update_without_spread(
@@ -190,7 +193,7 @@ fn lower_record_update_without_spread(
     base: HirExprId,
     update_items: &[HirRecordItem],
     layout: RecordUpdateLayout<'_>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let RecordUpdateLayout {
         result_ty,
         result_indices,
@@ -203,10 +206,10 @@ fn lower_record_update_without_spread(
     let mut updates = Vec::new();
     for record_item in update_items {
         let Some(name) = record_item.name else {
-            invalid_lowering_path("record update item without name");
+            return Err("record update item without name".into());
         };
         let Some(index) = result_indices.get(&name.name).copied() else {
-            invalid_lowering_path("record update field missing from record type");
+            return Err("record update field missing from record type".into());
         };
         updates.push(IrRecordField {
             name: interner.resolve(name.name).into(),
@@ -214,14 +217,14 @@ fn lower_record_update_without_spread(
             expr: lower_expr(ctx, record_item.value),
         });
     }
-    IrExprKind::RecordUpdate {
+    Ok(IrExprKind::RecordUpdate {
         ty_name: render_ty_name(sema, result_ty, interner),
         field_count: result_count,
         base: Box::new(lower_expr(ctx, base)),
         base_fields,
         result_fields,
         updates: updates.into_boxed_slice(),
-    }
+    })
 }
 
 fn lower_record_update_with_spread(
@@ -230,7 +233,7 @@ fn lower_record_update_with_spread(
     base: HirExprId,
     update_items: &[HirRecordItem],
     layout: RecordUpdateLayout<'_>,
-) -> IrExprKind {
+) -> Result<IrExprKind, Box<str>> {
     let RecordUpdateLayout {
         result_ty,
         result_indices,
@@ -247,13 +250,13 @@ fn lower_record_update_with_spread(
     for record_item in update_items {
         let temp_expr = lower_item_temp(ctx, origin, record_item.value, &mut prelude);
         if record_item.spread {
-            let spread_ty = sema
-                .try_expr_ty(record_item.value)
-                .expect("expr type missing for record update spread");
+            let spread_ty = sema.try_expr_ty(record_item.value).unwrap_or_else(|| {
+                invalid_lowering_path("expr type missing for record update spread")
+            });
             let Some((spread_indices, _spread_fields, _spread_count)) =
                 record_layout_for_ty(sema, spread_ty, interner)
             else {
-                invalid_lowering_path("record update spread without record type");
+                return Err("record update spread without record type".into());
             };
             for (symbol, spread_index) in spread_indices {
                 let Some(result_index) = result_indices.get(&symbol).copied() else {
@@ -274,10 +277,10 @@ fn lower_record_update_with_spread(
             continue;
         }
         let Some(name) = record_item.name else {
-            invalid_lowering_path("record update item without name");
+            return Err("record update item without name".into());
         };
         let Some(index) = result_indices.get(&name.name).copied() else {
-            invalid_lowering_path("record update field missing from record type");
+            return Err("record update field missing from record type".into());
         };
         updates.push(IrRecordField {
             name: interner.resolve(name.name).into(),
@@ -296,7 +299,7 @@ fn lower_record_update_with_spread(
             updates: updates.into_boxed_slice(),
         },
     });
-    IrExprKind::Sequence {
+    Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
-    }
+    })
 }

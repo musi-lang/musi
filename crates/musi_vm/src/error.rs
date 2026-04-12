@@ -30,6 +30,7 @@ pub enum VmValueKind {
     Float,
     Bool,
     String,
+    CPtr,
     Syntax,
     Seq,
     Data,
@@ -50,11 +51,22 @@ pub enum VmErrorKind {
     ProgramShapeInvalid {
         detail: Box<str>,
     },
+    TypeTermInvalid {
+        ty: Box<str>,
+        detail: Box<str>,
+    },
+    SyntaxConstantInvalid {
+        detail: Box<str>,
+    },
     VmInitializationRequired,
     ModuleInitCycle {
         spec: Box<str>,
     },
     ExportNotFound {
+        module: Box<str>,
+        export: Box<str>,
+    },
+    OpaqueExport {
         module: Box<str>,
         export: Box<str>,
     },
@@ -124,6 +136,29 @@ pub enum VmErrorKind {
     ForeignCallRejected {
         foreign: Box<str>,
     },
+    NativeLibraryLoadFailed {
+        foreign: Box<str>,
+        library: Box<str>,
+        detail: Box<str>,
+    },
+    NativeSymbolLoadFailed {
+        foreign: Box<str>,
+        symbol: Box<str>,
+        detail: Box<str>,
+    },
+    NativeAbiUnsupported {
+        foreign: Box<str>,
+        reason: Box<str>,
+    },
+    NativeArgInvalid {
+        foreign: Box<str>,
+        index: usize,
+        reason: Box<str>,
+    },
+    NativeResultInvalid {
+        foreign: Box<str>,
+        reason: Box<str>,
+    },
     EffectRejected {
         effect: Box<str>,
         op: Option<Box<str>>,
@@ -192,12 +227,24 @@ impl VmErrorKind {
             Self::ProgramShapeInvalid { detail } => {
                 write!(f, "program shape invalid (`{detail}`)")
             }
+            Self::TypeTermInvalid { ty, detail } => {
+                write!(f, "type term invalid for `{ty}` (`{detail}`)")
+            }
+            Self::SyntaxConstantInvalid { detail } => {
+                write!(f, "syntax constant invalid (`{detail}`)")
+            }
             Self::VmInitializationRequired => f.write_str("vm initialization required"),
             Self::ModuleInitCycle { spec } => {
                 write!(f, "module init cycle detected for `{spec}`")
             }
             Self::ExportNotFound { module, export } => {
                 write!(f, "export `{export}` not found in `{module}`")
+            }
+            Self::OpaqueExport { module, export } => {
+                write!(
+                    f,
+                    "opaque export `{export}` is not accessible from `{module}`"
+                )
             }
             Self::NonCallableValue { found } => {
                 write!(f, "call requires callable value, found `{found}`")
@@ -255,33 +302,50 @@ impl VmErrorKind {
         }
     }
 
-    fn fmt_value_and_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt_native_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidValueKind { expected, found } => {
+            Self::NativeLibraryLoadFailed {
+                foreign,
+                library,
+                detail,
+            } => {
                 write!(
                     f,
-                    "value kind `{found}` does not match expected `{expected}`"
+                    "native library load failed for `{foreign}` from `{library}` (`{detail}`)"
                 )
             }
-            Self::InvalidSequenceIndex { index, len } => {
-                write!(f, "sequence index `{index}` invalid for length `{len}`")
-            }
-            Self::EmptySequenceIndexList => f.write_str("empty sequence index list"),
-            Self::InvalidDataIndex { index, len } => {
-                write!(f, "data field index `{index}` invalid for length `{len}`")
-            }
-            Self::InvalidTypeCast { expected, found } => {
+            Self::NativeSymbolLoadFailed {
+                foreign,
+                symbol,
+                detail,
+            } => {
                 write!(
                     f,
-                    "type cast to `{expected}` failed for value kind `{found}`"
+                    "native symbol load failed for `{foreign}` symbol `{symbol}` (`{detail}`)"
                 )
             }
-            Self::ModuleLoadRejected { spec } => {
-                write!(f, "module load rejected for `{spec}`")
+            Self::NativeAbiUnsupported { foreign, reason } => {
+                write!(f, "native abi unsupported for `{foreign}` (`{reason}`)")
             }
-            Self::ForeignCallRejected { foreign } => {
-                write!(f, "foreign call rejected for `{foreign}`")
+            Self::NativeArgInvalid {
+                foreign,
+                index,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "native argument `{index}` invalid for `{foreign}` (`{reason}`)"
+                )
             }
+            Self::NativeResultInvalid { foreign, reason } => {
+                write!(f, "native result invalid for `{foreign}` (`{reason}`)")
+            }
+            _ => self.fmt_effect_and_runtime(f),
+        }
+    }
+
+    fn fmt_effect_and_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
             Self::EffectRejected { effect, op, reason } => {
                 if let Some(op) = op {
                     write!(
@@ -328,11 +392,57 @@ impl VmErrorKind {
                     "effect `{effect}` operation index `{op_index}` out of bounds for `{op_count}` operations"
                 )
             }
+            _ => self.fmt_decode_and_lookup(f),
+        }
+    }
+
+    fn fmt_value_and_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidValueKind { expected, found } => {
+                write!(
+                    f,
+                    "value kind `{found}` does not match expected `{expected}`"
+                )
+            }
+            Self::InvalidSequenceIndex { index, len } => {
+                write!(f, "sequence index `{index}` invalid for length `{len}`")
+            }
+            Self::EmptySequenceIndexList => f.write_str("empty sequence index list"),
+            Self::InvalidDataIndex { index, len } => {
+                write!(f, "data field index `{index}` invalid for length `{len}`")
+            }
+            Self::InvalidTypeCast { expected, found } => {
+                write!(
+                    f,
+                    "type cast to `{expected}` failed for value kind `{found}`"
+                )
+            }
+            Self::ModuleLoadRejected { spec } => {
+                write!(f, "module load rejected for `{spec}`")
+            }
+            Self::ForeignCallRejected { foreign } => {
+                write!(f, "foreign call rejected for `{foreign}`")
+            }
+            Self::NativeLibraryLoadFailed { .. }
+            | Self::NativeSymbolLoadFailed { .. }
+            | Self::NativeAbiUnsupported { .. }
+            | Self::NativeArgInvalid { .. }
+            | Self::NativeResultInvalid { .. }
+            | Self::EffectRejected { .. }
+            | Self::RootModuleRequired
+            | Self::ModuleSourceMissing { .. }
+            | Self::CallArityMismatch { .. }
+            | Self::HandlerFrameMissing { .. }
+            | Self::MatchingHandlerPopMissing { .. }
+            | Self::EffectOpOutOfBounds { .. } => self.fmt_native_runtime(f),
             Self::SeamDecodeFailed { .. }
             | Self::ProgramShapeInvalid { .. }
+            | Self::TypeTermInvalid { .. }
+            | Self::SyntaxConstantInvalid { .. }
             | Self::VmInitializationRequired
             | Self::ModuleInitCycle { .. }
             | Self::ExportNotFound { .. }
+            | Self::OpaqueExport { .. }
             | Self::NonCallableValue { .. }
             | Self::MissingEntryMethod { .. }
             | Self::EmptyCallFrameStack
@@ -387,6 +497,7 @@ impl Display for VmValueKind {
             Self::Float => "Float",
             Self::Bool => "Bool",
             Self::String => "String",
+            Self::CPtr => "CPtr",
             Self::Syntax => "Syntax",
             Self::Seq => "Seq",
             Self::Data => "Data",

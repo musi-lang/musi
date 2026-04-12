@@ -64,10 +64,16 @@ Notes are descriptive: they reflect current `crates` behavior (accepted vs diagn
 | `perform`, `handle`, `resume`                      | ✅         | ✅           | ✅    | ✅   | ✅         | Handler clauses bind params as written (`op(args, k) => ...`), `value => ...` has an implicit `value` binder, and `k` is typed as `op_result ~> handled_result`; lowering emits `hdl.push/hdl.pop`, `eff.invk`, and `eff.resume`              |
 | Static imports (`import "..."`)                    | ✅         | ✅           | ✅    | ✅   | ✅         | Static import discovery, module keys, and session/project integration exist                                                                                                                                                                   |
 | Dynamic imports (`import expr`)                    | ✅         | ✅           | ✅    | ✅   | ✅         | Static `import "..."` stays compile-time-only; non-static `import expr` preserves an explicit IR node and emits `mod.load`. Dynamic import sites do not add static graph edges, while runtime loading now runs through `VmLoader` / `musi_rt` |
-| Exports and opaque modules                         | ✅         | ✅           | ✅    | ✅   | ✅         | Export collection, opaque marking, and SEAM metadata emission exist; runtime export hiding is not implemented                                                                                                                                 |
+| Exports and opaque modules                         | ✅         | ✅           | ✅    | ✅   | ✅         | Export collection, opaque marking, SEAM metadata emission, and runtime export hiding exist                                                                                                                                                    |
 | Imported module member typing                      | ➖         | ✅           | ✅    | ✅   | ✅         | Imported globals and generic callables compile through semantic module surfaces                                                                                                                                                               |
 | Destructured module imports and aliases            | ✅         | ✅           | ✅    | ✅   | ✅         | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation                                                                                                              |
-| Class and effect laws                              | ✅         | ✅           | ✅    | ✅   | ✅         | Laws are parsed, typechecked, and emitted as metadata; no runtime/property-check execution                                                                                                                                                    |
+| Class and effect laws                              | ✅         | ✅           | ✅    | ✅   | ✅         | Laws are parsed/typechecked, carried as structured sema/export surfaces, and emitted as metadata; no runtime/property-check execution yet                                                                                                      |
+
+### Law Suite Touchpoints (Next Slice)
+
+- `music_session`: consume `SemaModule::surface()` law records and synthesize deterministic test modules for class/effect law execution.
+- `musi_project`: add discovery/planning that merges `*.test.ms` modules with synthesized law suites in one ordered execution list.
+- `musi_rt`: execute synthesized suite module keys through existing `run_test_module` and report them under normal test-report channels.
 
 ## Types, Constraints, And Effects
 

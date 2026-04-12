@@ -4,6 +4,7 @@ use musi_vm::{EffectCall, ForeignCall, Value, VmResult};
 
 type ForeignHandler = Box<dyn FnMut(&ForeignCall, &[Value]) -> VmResult<Value>>;
 type EffectHandler = Box<dyn FnMut(&EffectCall, &[Value]) -> VmResult<Value>>;
+type HandlerName = Box<str>;
 type ForeignHandlerMap = HashMap<Box<str>, ForeignHandler>;
 type EffectHandlerKey = (Box<str>, Box<str>);
 type EffectHandlerMap = HashMap<EffectHandlerKey, EffectHandler>;
@@ -15,20 +16,25 @@ pub struct RegisteredHost {
 }
 
 impl RegisteredHost {
-    pub fn register_foreign_handler(
+    pub fn register_foreign_handler<Name>(
         &mut self,
-        name: impl Into<Box<str>>,
+        name: Name,
         handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
+    ) where
+        Name: Into<HandlerName>,
+    {
         let _ = self.foreign_handlers.insert(name.into(), Box::new(handler));
     }
 
-    pub fn register_effect_handler(
+    pub fn register_effect_handler<Effect, Op>(
         &mut self,
-        effect: impl Into<Box<str>>,
-        op: impl Into<Box<str>>,
+        effect: Effect,
+        op: Op,
         handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
+    ) where
+        Effect: Into<HandlerName>,
+        Op: Into<HandlerName>,
+    {
         let _ = self
             .effect_handlers
             .insert((effect.into(), op.into()), Box::new(handler));

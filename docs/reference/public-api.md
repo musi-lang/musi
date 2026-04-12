@@ -23,7 +23,7 @@ Rules:
 - `music_module`: module/specifier + import environment (`ModuleSpecifier`, `ModuleKey`, `ImportMap`, `ImportEnv`, `ImportError*`, `collect_import_sites`, `collect_export_summary`, `ImportSite*`, `ModuleExportSummary` (incl. exported instance tracking))
 - `music_hir`: HIR model + authoritative semantic type arena (`HirOrigin`, `HirStore`, `HirModule`, `HirExpr*`, `HirPat*`, `HirTy*`)
 - `music_resolve`: resolve + lowering (`ResolveOptions`, `ResolvedModule`, `ResolvedImport`, `resolve_module`)
-- `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
+- `music_sema`: semantic queries + cross-module semantic boundary (`SemaOptions`, `TargetInfo`, `DefinitionKey`, `ModuleSurface`, `ExportedValue`, `ClassSurface`, `ClassMemberSurface`, `EffectSurface`, `EffectOpSurface`, `LawSurface`, `LawParamSurface`, `InstanceSurface`, `ConstraintSurface`, `SurfaceTy`, `SurfaceTyKind`, `SurfaceTyId`, `SurfaceTyField`, `SurfaceDim`, `SurfaceEffectRow`, `SurfaceEffectItem`, `SemaEnv`, `SemaModule`, `SemaDiagList`, `EffectKey`, `EffectRow`, `check_module`)
 - `music_ir`: codegen-facing lowered facts (`IrModule`, `IrCallable`, `IrGlobal`, `IrDataDef`, `IrForeignDef`, `IrEffectDef`, `IrClassDef`, `IrInstanceDef`, `IrExpr`, `IrExprKind`, `IrArg`, `IrLit`, `IrBinaryOp`, `IrOrigin`, `IrParam`, `IrDiagList`, `lower_module`)
 
 ## Executable Contract And Runtime
@@ -54,6 +54,7 @@ Notes:
 - `music_resolve::ResolvedModule` carries the current `ModuleKey` and syntax-level export summary so sema can build semantic module data without reopening syntax.
 - `music_sema` is query-oriented: semantic facts are read through `SemaModule` methods, not public storage fields.
 - `music_sema::ModuleSurface`, `SemaEffectDef`, and `SemaDataDef` use accessors for exported collections, keys, variants, and effect ops instead of exposing storage fields directly.
+- `music_sema` class/effect laws are now structured semantic records (`LawSurface`/`LawParamSurface`) across module boundaries, not name-only strings.
 - `music_sema` construction-only builders are internal; public reads use checked `try_*` accessors where semantic facts may be absent.
 - `music_sema::SemaEnv` exchanges owned `ModuleSurface` snapshots rather than live foreign module references.
 - `music_sema::EffectKey` / `EffectRow` and sema-owned effect definitions are string-backed rather than `Symbol`-backed, so they are safe across interner boundaries.
@@ -64,7 +65,7 @@ Notes:
 - `music_seam` is the source of truth for SEAM opcodes, operands, descriptor tables, section tags, binary/text transport, and artifact validation.
 - `music_emit` lowers one IR module or a reachable IR module set into validated `music_seam::Artifact` values, and `emit_diag_kind` is code-based.
 - `music_session` is the project-facing compiler shell below `musi_project`: it caches parse/resolve/sema/IR/emit products and can compile a module or reachable entry graph to artifact, bytes, or text. Syntax failures flow through the single `SessionSyntaxErrors` shape in both `ParsedModule` and `SessionError::Parse`.
-- `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values.
+- `musi_vm::Vm` now includes runtime module operations (`load_module`, `lookup_module_export`, `call_module_export`) in addition to root-export execution, and `Value` includes first-class module and continuation runtime values. Opaque exports stay listed in program metadata but are rejected through runtime lookup/call paths.
 - `musi_vm` splits host seams cleanly: `VmHost` owns foreign/effect edges, while `VmLoader` owns runtime program loading.
 - `musi_vm::RejectingHost` / `RejectingLoader` are explicit reject-by-default seams, not practical runtime defaults.
 - `musi_vm::ForeignCall` and `musi_vm::EffectCall` now expose typed signature metadata through `param_tys`, `result_ty`, and runtime type-name helpers backed by the originating `Program`.

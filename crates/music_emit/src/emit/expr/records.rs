@@ -7,7 +7,7 @@ use super::literals::compile_i64;
 use super::support::{push_expr_diag, reserve_temp_slot};
 
 pub(super) fn compile_record_literal(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     ty_name: &str,
     field_count: u16,
     fields: &[IrRecordField],
@@ -76,7 +76,7 @@ pub(super) fn compile_record_literal(
 }
 
 pub(super) fn compile_record_get(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     base: &IrExpr,
     index: u16,
     diags: &mut EmitDiagList,
@@ -90,7 +90,7 @@ pub(super) fn compile_record_get(
 }
 
 pub(super) fn compile_record_update(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     input: RecordUpdateInput<'_>,
     diags: &mut EmitDiagList,
 ) {

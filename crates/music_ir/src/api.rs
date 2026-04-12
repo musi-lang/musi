@@ -438,10 +438,17 @@ pub struct IrCallable {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrDataVariantDef {
+    pub name: Box<str>,
+    pub field_tys: Box<[Box<str>]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataDef {
     pub key: DefinitionKey,
     pub variant_count: u32,
     pub field_count: u32,
+    pub variants: Box<[IrDataVariantDef]>,
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,

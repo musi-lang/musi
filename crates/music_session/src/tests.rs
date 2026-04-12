@@ -10,7 +10,7 @@ use music_seam::descriptor::ConstantValue;
 use music_sema::{SemaDiagKind, TargetInfo, sema_diag_kind};
 use music_syntax::{ParseErrorKind, TokenKind};
 
-use crate::{Session, SessionError, SessionOptions};
+use crate::{CompiledOutput, Session, SessionError, SessionOptions, SessionSyntaxErrors};
 
 fn meta_records(artifact: &Artifact) -> Vec<(String, String, Vec<String>)> {
     artifact
@@ -66,31 +66,126 @@ fn session_with_target(target: TargetInfo) -> Session {
     Session::new(options)
 }
 
-#[test]
-fn compiles_module_to_artifact_bytes_and_text() {
+fn main_key() -> ModuleKey {
+    ModuleKey::new("main")
+}
+
+fn set_main_text(session: &mut Session, text: &str) {
+    session.set_module_text(&main_key(), text).unwrap();
+}
+
+fn compile_main_module(session: &mut Session) -> CompiledOutput {
+    session.compile_module(&main_key()).unwrap()
+}
+
+fn compile_main_entry(session: &mut Session) -> CompiledOutput {
+    session.compile_entry(&main_key()).unwrap()
+}
+
+fn compile_main_module_with_source(source: &str) -> CompiledOutput {
+    let mut session = session();
+    set_main_text(&mut session, source);
+    compile_main_module(&mut session)
+}
+
+fn assert_output_contains(output: &CompiledOutput, needles: &[&str]) {
+    for needle in needles {
+        assert!(
+            output.text.contains(needle),
+            "missing `{needle}` in:\n{}",
+            output.text
+        );
+    }
+}
+
+fn assert_main_module_compiles_with(source: &str, needles: &[&str]) -> CompiledOutput {
+    let output = compile_main_module_with_source(source);
+    assert!(output.artifact.validate().is_ok());
+    assert_output_contains(&output, needles);
+    output
+}
+
+fn compile_main_entry_with_dep(dep_source: &str, main_source: &str) -> CompiledOutput {
     let mut session = session();
     session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
+        .set_module_text(&ModuleKey::new("dep"), dep_source)
         .unwrap();
-
-    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
-
+    set_main_text(&mut session, main_source);
+    let output = compile_main_entry(&mut session);
     assert!(output.artifact.validate().is_ok());
+    output
+}
+
+fn parse_failure_syntax(err: SessionError) -> SessionSyntaxErrors {
+    let SessionError::ModuleParseFailed { syntax, .. } = err else {
+        panic!("parse error expected");
+    };
+    syntax
+}
+
+fn assert_parse_failure_via_compile<F>(run: F)
+where
+    F: FnOnce(&mut Session, &ModuleKey) -> Result<CompiledOutput, SessionError>,
+{
+    let mut session = session();
+    set_main_text(&mut session, "let x := 1");
+    let syntax = parse_failure_syntax(run(&mut session, &main_key()).unwrap_err());
+    assert!(syntax.lex_errors().is_empty());
+    assert_eq!(syntax.parse_errors().len(), 1);
+    assert_eq!(syntax.diags().len(), 1);
+}
+
+macro_rules! assert_main_entry_compiles_with {
+    ($source:expr, $needles:expr $(,)?) => {{
+        let mut session = session();
+        set_main_text(&mut session, $source);
+        let output = compile_main_entry(&mut session);
+        assert!(output.artifact.validate().is_ok());
+        assert_output_contains(&output, $needles);
+        output
+    }};
+}
+
+macro_rules! assert_emit_failure_with_unknown_type_value {
+    ($run:expr $(,)?) => {{
+        let mut session = session();
+        set_main_text(&mut session, "export let answer : Int := 42;");
+        session.inject_emit_failure_for_tests(
+            vec![
+                Diag::error(EmitDiagKind::UnknownTypeValue.message())
+                    .with_code(EmitDiagKind::UnknownTypeValue.code()),
+            ]
+            .into_boxed_slice(),
+        );
+
+        let err = $run(&mut session, &main_key()).unwrap_err();
+        let SessionError::ModuleEmissionFailed { diags, .. } = err else {
+            panic!("emit error expected");
+        };
+
+        assert_eq!(diags.len(), 1);
+        assert_eq!(
+            emit_diag_kind(&diags[0]),
+            Some(EmitDiagKind::UnknownTypeValue)
+        );
+    }};
+}
+
+#[test]
+fn compiles_module_to_artifact_bytes_and_text() {
+    let output = assert_main_module_compiles_with(
+        "export let answer : Int := 42;",
+        &[".global $main::answer export"],
+    );
     assert!(!output.bytes.is_empty());
-    assert!(output.text.contains(".global $main::answer export"));
 }
 
 #[test]
 fn parse_failures_expose_typed_syntax_errors_and_diags() {
     let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "let x := 1")
-        .unwrap();
+    set_main_text(&mut session, "let x := 1");
 
-    let err = session.parse_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::ModuleParseFailed { syntax, .. } = err else {
-        panic!("parse error expected");
-    };
+    let syntax = parse_failure_syntax(session.parse_module(&main_key()).unwrap_err());
 
     assert!(syntax.lex_errors().is_empty());
     assert_eq!(syntax.parse_errors().len(), 1);
@@ -107,56 +202,24 @@ fn parse_failures_expose_typed_syntax_errors_and_diags() {
 
 #[test]
 fn compile_module_propagates_parse_failures() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "let x := 1")
-        .unwrap();
-
-    let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::ModuleParseFailed { syntax, .. } = err else {
-        panic!("parse error expected");
-    };
-
-    assert!(syntax.lex_errors().is_empty());
-    assert_eq!(syntax.parse_errors().len(), 1);
-    assert_eq!(syntax.diags().len(), 1);
+    assert_parse_failure_via_compile(Session::compile_module);
 }
 
 #[test]
 fn compile_entry_propagates_parse_failures() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "let x := 1")
-        .unwrap();
-
-    let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::ModuleParseFailed { syntax, .. } = err else {
-        panic!("parse error expected");
-    };
-
-    assert!(syntax.lex_errors().is_empty());
-    assert_eq!(syntax.parse_errors().len(), 1);
-    assert_eq!(syntax.diags().len(), 1);
+    assert_parse_failure_via_compile(Session::compile_entry);
 }
 
 #[test]
 fn compiles_reachable_entry_graph() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
-        .unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            "import \"dep\"; export let answer : Int := 42;",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains(".global $dep::base export"));
-    assert!(output.text.contains(".global $main::answer export"));
+    let output = compile_main_entry_with_dep(
+        "export let base : Int := 41;",
+        "import \"dep\"; export let answer : Int := 42;",
+    );
+    assert_output_contains(
+        &output,
+        &[".global $dep::base export", ".global $main::answer export"],
+    );
 }
 
 #[test]
@@ -165,22 +228,20 @@ fn reuses_caches_and_invalidates_dependents_on_edit() {
     session
         .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
         .unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            "import \"dep\"; export let answer : Int := 42;",
-        )
-        .unwrap();
+    set_main_text(
+        &mut session,
+        "import \"dep\"; export let answer : Int := 42;",
+    );
 
-    let _ = session.compile_entry(&ModuleKey::new("main")).unwrap();
+    let _ = compile_main_entry(&mut session);
     let first_stats = session.stats().clone();
-    let _ = session.compile_entry(&ModuleKey::new("main")).unwrap();
+    let _ = compile_main_entry(&mut session);
     assert_eq!(session.stats(), &first_stats);
 
     session
         .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 99;")
         .unwrap();
-    let _ = session.compile_entry(&ModuleKey::new("main")).unwrap();
+    let _ = compile_main_entry(&mut session);
     assert!(session.stats().resolve_runs > first_stats.resolve_runs);
     assert!(session.stats().emit_runs > first_stats.emit_runs);
 }
@@ -188,13 +249,11 @@ fn reuses_caches_and_invalidates_dependents_on_edit() {
 #[test]
 fn resolve_reuses_cached_parse_product() {
     let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
-        .unwrap();
+    set_main_text(&mut session, "export let answer : Int := 42;");
 
-    let _ = session.parse_module(&ModuleKey::new("main")).unwrap();
+    let _ = session.parse_module(&main_key()).unwrap();
     let after_parse = session.stats().clone();
-    let _ = session.resolve_module(&ModuleKey::new("main")).unwrap();
+    let _ = session.resolve_module(&main_key()).unwrap();
 
     assert_eq!(session.stats().parse_runs, after_parse.parse_runs);
     assert!(session.stats().resolve_runs > after_parse.resolve_runs);
@@ -202,37 +261,21 @@ fn resolve_reuses_cached_parse_product() {
 
 #[test]
 fn compiles_imported_generic_callable_calls() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("dep"), "export let id[T] (x : T) : T := x;")
-        .unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    let output = compile_main_entry_with_dep(
+        "export let id[T] (x : T) : T := x;",
+        r#"
             let dep := import "dep";
             export let answer () : Int := dep.id[Int](42);
         "#,
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("$dep::id"));
-    assert!(output.text.contains("$main::answer"));
+    );
+    assert_output_contains(&output, &["$dep::id", "$main::answer"]);
 }
 
 #[test]
 fn compiles_imported_globals_and_local_assignment() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("dep"), "export let base : Int := 41;")
-        .unwrap();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    let output = compile_main_entry_with_dep(
+        "export let base : Int := 41;",
+        r#"
             let dep := import "dep";
             export let answer () : Int := (
               let local := mut dep.base;
@@ -240,23 +283,14 @@ fn compiles_imported_globals_and_local_assignment() {
               local
             );
         "#,
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("ld.glob $dep::base"));
-    assert!(output.text.contains("$main::answer"));
+    );
+    assert_output_contains(&output, &["ld.glob $dep::base", "$main::answer"]);
 }
 
 #[test]
 fn compiles_dynamic_import_multi_index_and_quote() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let output = assert_main_entry_compiles_with!(
+        r"
             export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
               let loaded := import name;
               grid.[0, 1] := 7;
@@ -264,16 +298,13 @@ fn compiles_dynamic_import_multi_index_and_quote() {
             );
             export let quoted : Syntax := quote (#(1 + 2));
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("mod.load"));
-    assert!(output.text.contains("seq.getn"));
-    assert!(output.text.contains("seq.setn"));
-    assert!(output.text.contains("syntax expr \"#(1 + 2)\""));
+        &[
+            "mod.load",
+            "seq.getn",
+            "seq.setn",
+            "syntax expr \"#(1 + 2)\""
+        ],
+    );
     assert!(output.artifact.constants.iter().any(|(_, constant)| {
         matches!(
             constant.value,
@@ -285,11 +316,8 @@ fn compiles_dynamic_import_multi_index_and_quote() {
 
 #[test]
 fn compiles_closures_and_higher_order_calls() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             let apply (f : Int -> Int, x : Int) : Int := f(x);
             export let answer (x : Int) : Int := (
               let base : Int := 41;
@@ -297,14 +325,8 @@ fn compiles_closures_and_higher_order_calls() {
               apply(add_base, x)
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("call.cls"));
-    assert!(output.text.contains("cls.new"));
+        &["call.cls", "cls.new"],
+    );
 }
 
 #[test]
@@ -357,9 +379,7 @@ fn sema_failures_surface_session_sema_error() {
 #[test]
 fn lower_module_propagates_ir_failure_with_typed_kind() {
     let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
-        .unwrap();
+    set_main_text(&mut session, "export let answer : Int := 42;");
     session.inject_ir_failure_for_tests(
         vec![
             Diag::error(IrDiagKind::LoweringRequiresSemaCleanModule.message())
@@ -368,7 +388,7 @@ fn lower_module_propagates_ir_failure_with_typed_kind() {
         .into_boxed_slice(),
     );
 
-    let err = session.lower_module(&ModuleKey::new("main")).unwrap_err();
+    let err = session.lower_module(&main_key()).unwrap_err();
     let SessionError::ModuleLoweringFailed { diags, .. } = err else {
         panic!("ir error expected");
     };
@@ -382,84 +402,35 @@ fn lower_module_propagates_ir_failure_with_typed_kind() {
 
 #[test]
 fn compile_module_propagates_emit_failure_with_typed_kind() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
-        .unwrap();
-    session.inject_emit_failure_for_tests(
-        vec![
-            Diag::error(EmitDiagKind::UnknownTypeValue.message())
-                .with_code(EmitDiagKind::UnknownTypeValue.code()),
-        ]
-        .into_boxed_slice(),
-    );
-
-    let err = session.compile_module(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::ModuleEmissionFailed { diags, .. } = err else {
-        panic!("emit error expected");
-    };
-
-    assert_eq!(diags.len(), 1);
-    assert_eq!(
-        emit_diag_kind(&diags[0]),
-        Some(EmitDiagKind::UnknownTypeValue)
+    assert_emit_failure_with_unknown_type_value!(
+        |session: &mut Session, key: &ModuleKey| session.compile_module(key)
     );
 }
 
 #[test]
 fn compile_entry_propagates_emit_failure_with_typed_kind() {
-    let mut session = session();
-    session
-        .set_module_text(&ModuleKey::new("main"), "export let answer : Int := 42;")
-        .unwrap();
-    session.inject_emit_failure_for_tests(
-        vec![
-            Diag::error(EmitDiagKind::UnknownTypeValue.message())
-                .with_code(EmitDiagKind::UnknownTypeValue.code()),
-        ]
-        .into_boxed_slice(),
-    );
-
-    let err = session.compile_entry(&ModuleKey::new("main")).unwrap_err();
-    let SessionError::ModuleEmissionFailed { diags, .. } = err else {
-        panic!("emit error expected");
-    };
-
-    assert_eq!(diags.len(), 1);
-    assert_eq!(
-        emit_diag_kind(&diags[0]),
-        Some(EmitDiagKind::UnknownTypeValue)
+    assert_emit_failure_with_unknown_type_value!(
+        |session: &mut Session, key: &ModuleKey| session.compile_entry(key)
     );
 }
 
 #[test]
 fn compiles_local_recursive_callable_let() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer (n : Int) : Int := (
               let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
               loop(n)
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("loop"));
+        &["loop"],
+    );
 }
 
 #[test]
 fn compiles_case_tuple_and_array_patterns() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer () : Int := (
               let pair := (1, 2);
               let items := [3, 4];
@@ -468,23 +439,14 @@ fn compiles_case_tuple_and_array_patterns() {
               p + q
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("seq.get"));
-    assert!(output.text.contains("br.false"));
+        &["seq.get", "br.false"],
+    );
 }
 
 #[test]
 fn compiles_records_with_projection_and_update() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer () : Int := (
               let r := { y := 2, x := 1 };
               let a : Int := r.x;
@@ -492,68 +454,43 @@ fn compiles_records_with_projection_and_update() {
               a + s.x
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("data.get"));
-    assert!(output.text.contains("data.new"));
-    assert!(output.text.contains(".type $\"{ x: Int; y: Int }\""));
+        &["data.get", "data.new", ".type $\"{ x: Int; y: Int }\""],
+    );
 }
 
 #[test]
 fn compiles_record_field_assignment() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let output = assert_main_entry_compiles_with!(
+        r"
             export let answer () : Int := (
               let r := mut { x := 1, y := 2 };
               r.x := 3;
               r.x
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
+        &["data.set"],
+    );
     assert!(output.text.contains("data.set"), "{}", output.text);
 }
 
 #[test]
 fn compiles_record_destructuring_let_patterns() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer () : Int := (
               let r := { y := 2, x := 1 };
               let {x, y} := r;
               x + y
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("data.get"));
+        &["data.get"],
+    );
 }
 
 #[test]
 fn compiles_tuple_and_array_destructuring_let_patterns() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer () : Int := (
               let pair := (1, 2);
               let items := [3, 4];
@@ -562,22 +499,14 @@ fn compiles_tuple_and_array_destructuring_let_patterns() {
               a + b + c + d
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("seq.get"));
+        &["seq.get"],
+    );
 }
 
 #[test]
 fn compiles_capturing_recursion_record_patterns_and_type_values() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             export let answer (n : Int) : Int := (
               let base := 1;
               let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
@@ -586,23 +515,14 @@ fn compiles_capturing_recursion_record_patterns_and_type_values() {
               picked + loop(n)
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("data.get"));
-    assert!(output.text.contains("call.cls"));
+        &["data.get", "call.cls"],
+    );
 }
 
 #[test]
 fn compiles_variants_with_case_patterns() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             let Maybe := data { | Some : Int | None };
             export let answer () : Int := (
               let x : Maybe := .Some(1);
@@ -612,26 +532,20 @@ fn compiles_variants_with_case_patterns() {
               )
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("data.tag"));
-    assert!(output.text.contains("br.tbl"));
-    assert!(output.text.contains("data.get"));
-    assert!(output.text.contains("data.new"));
-    assert!(output.text.contains(".type $main::Maybe"));
+        &[
+            "data.tag",
+            "br.tbl",
+            "data.get",
+            "data.new",
+            ".type $main::Maybe"
+        ],
+    );
 }
 
 #[test]
 fn compiles_variants_without_type_context_when_tag_unique() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r"
+    let _ = assert_main_entry_compiles_with!(
+        r"
             let Maybe := data { | Some : Int | None };
             export let answer () : Int := (
               let x := .Some(1);
@@ -641,25 +555,14 @@ fn compiles_variants_without_type_context_when_tag_unique() {
               )
             );
         ",
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("data.tag"));
-    assert!(output.text.contains("br.tbl"));
-    assert!(output.text.contains("data.get"));
-    assert!(output.text.contains("data.new"));
+        &["data.tag", "br.tbl", "data.get", "data.new"],
+    );
 }
 
 #[test]
 fn compiles_effects_with_perform_handle_resume() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    let _ = assert_main_entry_compiles_with!(
+        r#"
             let Console := effect { let readln () : String; };
             export let answer () : String :=
               handle perform Console.readln() with Console of (
@@ -667,39 +570,21 @@ fn compiles_effects_with_perform_handle_resume() {
               | readln(k) => resume "ok"
               );
         "#,
-        )
-        .unwrap();
-
-    let output = session.compile_entry(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains("hdl.push"));
-    assert!(output.text.contains("hdl.pop"));
-    assert!(output.text.contains("eff.invk"));
-    assert!(output.text.contains("eff.resume"));
+        &["hdl.push", "hdl.pop", "eff.invk", "eff.resume"],
+    );
 }
 
 #[test]
 fn compiles_exported_foreign_declarations_into_artifact() {
-    let mut session = session();
-    session
-        .set_module_text(
-            &ModuleKey::new("main"),
-            r#"
+    let _ = assert_main_module_compiles_with(
+        r#"
             export foreign "c" (
               let puts (msg : CString) : Int;
             );
             export let answer : Int := 1;
         "#,
-        )
-        .unwrap();
-
-    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
-
-    assert!(output.artifact.validate().is_ok());
-    assert!(output.text.contains(
-        ".foreign $main::puts param $CString result $Int abi \"c\" symbol \"puts\" export"
-    ));
+        &[".foreign $main::puts param $CString result $Int abi \"c\" symbol \"puts\" export"],
+    );
 }
 
 #[test]
@@ -818,6 +703,125 @@ fn emits_meta_records_for_laws_and_attrs() {
         }),
         "{meta:?}"
     );
+}
+
+#[test]
+fn synthesizes_law_suite_modules_for_law_bearing_exports() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            foreign let musi_true () : Bool;
+
+            export let Eq[T] := class {
+              let (=) (a : T, b : T) : Bool;
+              law reflexive (x : T) := musi_true();
+            };
+
+            export let Console := effect {
+              let readln () : String;
+              law total () := musi_true();
+            };
+        ",
+        )
+        .unwrap();
+
+    let suites = session.law_suite_modules().unwrap();
+    assert_eq!(suites.len(), 1);
+
+    let suite = &suites[0];
+    assert_eq!(suite.source_module_key, ModuleKey::new("main"));
+    assert_eq!(suite.suite_module_key, ModuleKey::new("main::__laws"));
+    assert_eq!(suite.export_name.as_ref(), "__laws_test");
+    assert_eq!(suite.law_count, 1);
+    let suite_source = session
+        .module_text(&suite.suite_module_key)
+        .expect("suite source should be materialized in session");
+    assert!(
+        suite_source.contains("foreign let musi_true () : Bool;"),
+        "{suite_source}"
+    );
+    assert!(
+        suite_source.contains("suiteStart(\"main laws\")"),
+        "{suite_source}"
+    );
+    assert!(
+        suite_source.contains("__musi_law_test.testCase(\"Console.total\""),
+        "{suite_source}"
+    );
+    assert!(suite_source.contains("musi_true()"), "{suite_source}");
+    assert!(!suite_source.contains(".True)"), "{suite_source}");
+}
+
+#[test]
+fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            foreign let musi_true () : Bool;
+
+            export let IntEq := class {
+              let eq (a : Int, b : Int) : Bool;
+              law reflexive (x : Int) := eq(x, x);
+            };
+
+            let eqInt := instance IntEq {
+              let eq (a : Int, b : Int) : Bool := musi_true();
+            };
+        ",
+        )
+        .unwrap();
+
+    let suites = session.law_suite_modules().unwrap();
+    assert_eq!(suites.len(), 1);
+
+    let suite = &suites[0];
+    assert_eq!(suite.export_name.as_ref(), "__laws_test");
+    assert_eq!(suite.law_count, 5);
+
+    let suite_source = session
+        .module_text(&suite.suite_module_key)
+        .expect("suite source should be materialized in session");
+    assert!(
+        suite_source.contains("__musi_law_test.testCase(\"IntEq.reflexive[-2]\""),
+        "{suite_source}"
+    );
+    assert!(
+        suite_source.contains("let eq (a : Int, b : Int) : Bool := musi_true();"),
+        "{suite_source}"
+    );
+    assert!(suite_source.contains("eq(x, x)"), "{suite_source}");
+}
+
+#[test]
+fn rejects_polymorphic_instances_for_class_law_suites() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            foreign let musi_true () : Bool;
+
+            export let Eq[T] := class {
+              let eq (a : T, b : T) : Bool;
+              law reflexive (x : T) := eq(x, x);
+            };
+
+            instance[T] Eq[T] {
+              let eq (a : T, b : T) : Bool := musi_true();
+            };
+        ",
+        )
+        .unwrap();
+
+    let err = session.law_suite_modules().unwrap_err();
+    let SessionError::LawSuiteSynthesisFailed { reason, .. } = err else {
+        panic!("expected law suite synthesis failure");
+    };
+    assert!(reason.contains("remains polymorphic"), "{reason}");
 }
 
 #[test]

@@ -2,6 +2,15 @@ use std::path::Path;
 
 use super::{Source, SourceId, SourceMap};
 
+fn assert_line_text(text: &str, cases: &[(usize, Option<&str>)]) {
+    let mut map = SourceMap::default();
+    let id = map.add("test.ms", text).expect("add succeeds");
+    let src = map.get(id).expect("source exists");
+    for (line, expected) in cases {
+        assert_eq!(src.line_text(*line), *expected);
+    }
+}
+
 #[test]
 fn single_line_line_col() {
     let mut map = SourceMap::default();
@@ -34,23 +43,15 @@ fn line_col_at_newline_boundary() {
 
 #[test]
 fn line_text_returns_correct_lines() {
-    let mut map = SourceMap::default();
-    let id = map
-        .add("test.ms", "first\nsecond\nthird")
-        .expect("add succeeds");
-    let src = map.get(id).expect("source exists");
-    assert_eq!(src.line_text(1), Some("first"));
-    assert_eq!(src.line_text(2), Some("second"));
-    assert_eq!(src.line_text(3), Some("third"));
+    assert_line_text(
+        "first\nsecond\nthird",
+        &[(1, Some("first")), (2, Some("second")), (3, Some("third"))],
+    );
 }
 
 #[test]
 fn line_text_out_of_range() {
-    let mut map = SourceMap::default();
-    let id = map.add("test.ms", "hello").expect("add succeeds");
-    let src = map.get(id).expect("source exists");
-    assert_eq!(src.line_text(0), None);
-    assert_eq!(src.line_text(2), None);
+    assert_line_text("hello", &[(0, None), (2, None)]);
 }
 
 #[test]

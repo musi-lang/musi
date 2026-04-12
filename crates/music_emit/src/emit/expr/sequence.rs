@@ -4,7 +4,7 @@ use crate::EmitDiagKind;
 use super::support::push_expr_diag;
 
 pub(super) fn compile_sequence(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     exprs: &[IrExpr],
     diags: &mut EmitDiagList,
 ) {
@@ -15,7 +15,7 @@ pub(super) fn compile_sequence(
 }
 
 pub(super) fn compile_sequence_literal(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     ty_name: &str,
     items: &[IrExpr],
     diags: &mut EmitDiagList,
@@ -51,7 +51,7 @@ pub(super) fn compile_sequence_literal(
 }
 
 pub(super) fn compile_array_cat(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     ty_name: &str,
     parts: &[IrSeqPart],
     diags: &mut EmitDiagList,
@@ -94,7 +94,7 @@ pub(super) fn compile_array_cat(
 }
 
 pub(super) fn compile_seq_parts_any(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     parts: &[IrSeqPart],
     diags: &mut EmitDiagList,
 ) {
@@ -124,7 +124,7 @@ pub(super) fn compile_seq_parts_any(
 }
 
 fn compile_seq_parts_any_append(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     ty: TypeId,
     parts: &[IrSeqPart],
     diags: &mut EmitDiagList,
@@ -154,7 +154,7 @@ fn compile_seq_parts_any_append(
 }
 
 pub(super) fn compile_index(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: ExprEmitterMut<'_, '_, '_>,
     base: &IrExpr,
     indices: &[IrExpr],
     diags: &mut EmitDiagList,

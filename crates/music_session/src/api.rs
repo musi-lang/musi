@@ -83,6 +83,14 @@ pub struct CompiledOutput {
     pub text: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawSuiteModule {
+    pub source_module_key: ModuleKey,
+    pub suite_module_key: ModuleKey,
+    pub export_name: Box<str>,
+    pub law_count: usize,
+}
+
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("module `{key}` not registered")]
@@ -114,6 +122,8 @@ pub enum SessionError {
         module: ModuleKey,
         diags: SessionDiagList,
     },
+    #[error("module `{module}` law-suite synthesis failed")]
+    LawSuiteSynthesisFailed { module: ModuleKey, reason: Box<str> },
     #[error("artifact transport failed")]
     ArtifactTransportFailed(#[from] AssemblyError),
 }

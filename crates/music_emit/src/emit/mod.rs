@@ -1,5 +1,6 @@
+use std::any::Any;
 use std::collections::{BTreeSet, HashMap};
-use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
@@ -40,6 +41,9 @@ type UniqueMethodTable = HashMap<Box<str>, MethodId>;
 type UniqueForeignTable = HashMap<Box<str>, ForeignId>;
 type UniqueGlobalTable = HashMap<Box<str>, GlobalId>;
 type EffectTable = HashMap<DefinitionKey, EffectId>;
+type ExprEmitter<'artifact, 'module> = MethodEmitter<'artifact, 'module>;
+type ExprEmitterMut<'emitter, 'artifact, 'module> = &'emitter mut ExprEmitter<'artifact, 'module>;
+type ExprEmitterRef<'emitter, 'artifact, 'module> = &'emitter ExprEmitter<'artifact, 'module>;
 
 #[derive(Debug, Default)]
 struct UniqueTables {
@@ -121,19 +125,7 @@ pub fn lower_ir_module(
     module: &IrModule,
     options: EmitOptions,
 ) -> Result<EmittedModule, EmitDiagList> {
-    match catch_unwind(AssertUnwindSafe(|| lower_ir_module_impl(module, options))) {
-        Ok(result) => result,
-        Err(payload) => {
-            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
-                resume_unwind(payload);
-            };
-            Err(vec![
-                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
-                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
-                    .with_note(format!("detail `{}`", invariant.description)),
-            ])
-        }
-    }
+    with_emit_invariant_guard(|| lower_ir_module_impl(module, options))
 }
 
 fn lower_ir_module_impl(
@@ -170,21 +162,40 @@ pub fn lower_ir_program(
     entry_module: &ModuleKey,
     options: EmitOptions,
 ) -> Result<EmittedProgram, EmitDiagList> {
-    match catch_unwind(AssertUnwindSafe(|| {
-        lower_ir_program_impl(modules, entry_module, options)
-    })) {
+    with_emit_invariant_guard(|| lower_ir_program_impl(modules, entry_module, options))
+}
+
+fn with_emit_invariant_guard<T>(
+    emit: impl FnOnce() -> Result<T, EmitDiagList>,
+) -> Result<T, EmitDiagList> {
+    match catch_unwind(AssertUnwindSafe(emit)) {
         Ok(result) => result,
         Err(payload) => {
-            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
-                resume_unwind(payload);
-            };
-            Err(vec![
-                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
-                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
-                    .with_note(format!("detail `{}`", invariant.description)),
-            ])
+            let detail = payload.downcast_ref::<EmitInvariant>().map_or_else(
+                || panic_payload_text(payload.as_ref()),
+                |invariant| invariant.description.clone(),
+            );
+            Err(invariant_violation_diag(&detail))
         }
     }
+}
+
+fn invariant_violation_diag(detail: &str) -> EmitDiagList {
+    vec![
+        Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+            .with_code(EmitDiagKind::EmitInvariantViolated.code())
+            .with_note(format!("detail `{detail}`")),
+    ]
+}
+
+fn panic_payload_text(payload: &(dyn Any + Send)) -> Box<str> {
+    if let Some(text) = payload.downcast_ref::<String>() {
+        return text.clone().into_boxed_str();
+    }
+    if let Some(text) = payload.downcast_ref::<&'static str>() {
+        return (*text).into();
+    }
+    "<non-string panic payload>".into()
 }
 
 fn lower_ir_program_impl(
@@ -216,12 +227,6 @@ fn lower_ir_program_impl(
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     })
-}
-
-fn invalid_emit_path(description: impl AsRef<str>) -> ! {
-    let description = description.as_ref().to_owned().into_boxed_str();
-    debug_assert!(false, "invalid emit path: {description}");
-    resume_unwind(Box::new(EmitInvariant { description }));
 }
 
 fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &[ModuleLayout]) {

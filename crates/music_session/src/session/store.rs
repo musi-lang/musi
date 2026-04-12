@@ -43,6 +43,14 @@ impl SessionStore {
 }
 
 impl Session {
+    #[must_use]
+    pub fn module_text(&self, key: &ModuleKey) -> Option<&str> {
+        self.store
+            .modules
+            .get(key)
+            .map(|record| record.text.as_str())
+    }
+
     /// Registers or replaces the source text for a module and invalidates cached downstream phases.
     ///
     /// # Errors

@@ -638,9 +638,19 @@ name = "musi_native"
 version = "0.1.0-alpha.1"
 dependencies = [
  "musi_foundation",
+ "musi_native_ffi",
  "musi_vm",
  "music_module",
+ "music_seam",
  "music_session",
+]
+
+[[package]]
+name = "musi_native_ffi"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "musi_vm",
+ "music_seam",
 ]
 
 [[package]]
@@ -826,6 +836,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "music_base",
  "music_emit",
+ "music_hir",
  "music_ir",
  "music_module",
  "music_names",

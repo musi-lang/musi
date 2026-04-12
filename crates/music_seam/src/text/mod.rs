@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, MethodDescriptor, TypeDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
+    EffectDescriptor, EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
+    GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use crate::{
     Artifact, ClassId, CodeEntry, ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId,
@@ -61,6 +61,14 @@ fn format_data(out: &mut String, artifact: &Artifact) {
         out.push_str(&descriptor.variant_count.to_string());
         out.push_str(" fields ");
         out.push_str(&descriptor.field_count.to_string());
+        for variant in &descriptor.variants {
+            out.push_str(" variant ");
+            push_symbol_ref(out, artifact.string_text(variant.name));
+            for ty in &variant.field_tys {
+                out.push_str(" field ");
+                push_symbol_ref(out, artifact.type_name(*ty));
+            }
+        }
         if let Some(repr) = descriptor.repr_kind {
             out.push_str(" repr ");
             push_quoted(out, artifact.string_text(repr));
@@ -437,13 +445,13 @@ impl TextBuilder {
     }
 
     fn parse_type(&mut self, parts: &[String]) -> AssemblyResult {
-        if parts.len() != 4 || parts[2] != "term" {
+        if parts.len() != 4 || parts.get(2).map(String::as_str) != Some("term") {
             return Err(AssemblyError::TextParseFailed(
                 "expected `.type $Name term \"...\"`".into(),
             ));
         }
-        let name = parse_symbol(&parts[1])?;
-        let term = parse_quoted(&parts[3])?;
+        let name = parse_symbol(must_get(parts.get(1), "type name")?)?;
+        let term = parse_quoted(must_get(parts.get(3), "type term")?)?;
         let _ = self.ensure_type_symbol(&name, &term);
         Ok(())
     }
@@ -489,17 +497,36 @@ impl TextBuilder {
             .parse()
             .map_err(|_| AssemblyError::TextParseFailed("invalid field count".into()))?;
 
+        let mut variants = Vec::<DataVariantDescriptor>::new();
         let mut repr_kind: Option<StringId> = None;
         let mut layout_align: Option<u32> = None;
         let mut layout_pack: Option<u32> = None;
         let mut idx = 6usize;
         while let Some(key) = parts.get(idx).map(String::as_str) {
-            let value = must_get(parts.get(idx + 1), "data metadata value")?;
             match key {
+                "variant" => {
+                    let value = must_get(parts.get(idx + 1), "variant name")?;
+                    let variant_name = self.intern_string(&parse_symbol(value)?);
+                    idx = idx.saturating_add(2);
+                    let mut field_tys = Vec::new();
+                    while parts.get(idx).map(String::as_str) == Some("field") {
+                        let field_value = must_get(parts.get(idx + 1), "field type")?;
+                        let field_name = parse_symbol(field_value)?;
+                        field_tys.push(self.ensure_type_symbol(&field_name, &field_name));
+                        idx = idx.saturating_add(2);
+                    }
+                    variants.push(DataVariantDescriptor {
+                        name: variant_name,
+                        field_tys: field_tys.into_boxed_slice(),
+                    });
+                    continue;
+                }
                 "repr" => {
+                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
                     repr_kind = Some(self.intern_string(&parse_quoted(value)?));
                 }
                 "align" => {
+                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
                     layout_align = Some(
                         value
                             .parse()
@@ -507,6 +534,7 @@ impl TextBuilder {
                     );
                 }
                 "pack" => {
+                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
                     layout_pack = Some(
                         value
                             .parse()
@@ -527,6 +555,7 @@ impl TextBuilder {
             name: name_id,
             variant_count,
             field_count,
+            variants: variants.into_boxed_slice(),
             repr_kind,
             layout_align,
             layout_pack,

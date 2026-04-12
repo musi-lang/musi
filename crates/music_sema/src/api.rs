@@ -193,6 +193,7 @@ pub struct ExportedValue {
 pub struct DataVariantSurface {
     pub name: Box<str>,
     pub payload: Option<SurfaceTyId>,
+    pub field_tys: Box<[SurfaceTyId]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -234,11 +235,23 @@ pub struct ClassMemberSurface {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawParamSurface {
+    pub name: Box<str>,
+    pub ty: SurfaceTyId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawSurface {
+    pub name: Box<str>,
+    pub params: Box<[LawParamSurface]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassSurface {
     pub key: DefinitionKey,
     pub constraints: Box<[ConstraintSurface]>,
     pub members: Box<[ClassMemberSurface]>,
-    pub laws: Box<[Box<str>]>,
+    pub laws: Box<[LawSurface]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
 }
@@ -254,7 +267,7 @@ pub struct EffectOpSurface {
 pub struct EffectSurface {
     pub key: DefinitionKey,
     pub ops: Box<[EffectOpSurface]>,
-    pub laws: Box<[Box<str>]>,
+    pub laws: Box<[LawSurface]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
 }
@@ -396,12 +409,13 @@ pub struct SemaEffectOpDef {
 pub struct SemaEffectDef {
     key: DefinitionKey,
     ops: BTreeMap<Box<str>, SemaEffectOpDef>,
-    laws: Box<[Symbol]>,
+    laws: Box<[LawFacts]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
     payload: Option<HirTyId>,
+    field_tys: Box<[HirTyId]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -438,7 +452,7 @@ impl SemaEffectDef {
     pub(crate) fn new(
         key: DefinitionKey,
         ops: impl Into<BTreeMap<Box<str>, SemaEffectOpDef>>,
-        laws: impl Into<Box<[Symbol]>>,
+        laws: impl Into<Box<[LawFacts]>>,
     ) -> Self {
         Self {
             key,
@@ -475,20 +489,28 @@ impl SemaEffectDef {
     }
 
     #[must_use]
-    pub fn laws(&self) -> &[Symbol] {
+    pub fn laws(&self) -> &[LawFacts] {
         &self.laws
     }
 }
 
 impl SemaDataVariantDef {
     #[must_use]
-    pub(crate) const fn new(payload: Option<HirTyId>) -> Self {
-        Self { payload }
+    pub(crate) fn new(payload: Option<HirTyId>, field_tys: impl Into<Box<[HirTyId]>>) -> Self {
+        Self {
+            payload,
+            field_tys: field_tys.into(),
+        }
     }
 
     #[must_use]
     pub const fn payload(&self) -> Option<HirTyId> {
         self.payload
+    }
+
+    #[must_use]
+    pub fn field_tys(&self) -> &[HirTyId] {
+        &self.field_tys
     }
 }
 
@@ -580,12 +602,24 @@ pub struct ClassMemberFacts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawParamFacts {
+    pub name: Symbol,
+    pub ty: HirTyId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawFacts {
+    pub name: Symbol,
+    pub params: Box<[LawParamFacts]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassFacts {
     pub key: DefinitionKey,
     pub name: Symbol,
     pub constraints: Box<[ConstraintFacts]>,
     pub members: Box<[ClassMemberFacts]>,
-    pub laws: Box<[Symbol]>,
+    pub laws: Box<[LawFacts]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

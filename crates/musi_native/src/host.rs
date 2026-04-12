@@ -7,6 +7,8 @@ use crate::platform::PlatformHost;
 use crate::registered::RegisteredHost;
 use crate::testing::{NativeTestReport, TestHost};
 
+type HandlerName = Box<str>;
+
 struct NativeHostState {
     fallback: Option<Box<dyn VmHost>>,
     registered: RegisteredHost,
@@ -55,23 +57,28 @@ impl NativeHost {
         }
     }
 
-    pub fn register_foreign_handler(
+    pub fn register_foreign_handler<Name>(
         &mut self,
-        name: impl Into<Box<str>>,
+        name: Name,
         handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
+    ) where
+        Name: Into<HandlerName>,
+    {
         self.state
             .borrow_mut()
             .registered
             .register_foreign_handler(name, handler);
     }
 
-    pub fn register_effect_handler(
+    pub fn register_effect_handler<Effect, Op>(
         &mut self,
-        effect: impl Into<Box<str>>,
-        op: impl Into<Box<str>>,
+        effect: Effect,
+        op: Op,
         handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
-    ) {
+    ) where
+        Effect: Into<HandlerName>,
+        Op: Into<HandlerName>,
+    {
         self.state
             .borrow_mut()
             .registered

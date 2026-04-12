@@ -189,6 +189,7 @@ impl Vm {
             Value::Float(value) => ValueView::Float(*value),
             Value::Bool(value) => ValueView::Bool(*value),
             Value::String(text) => ValueView::String(StringView { text }),
+            Value::CPtr(address) => ValueView::CPtr(*address),
             Value::Syntax(term) => ValueView::Syntax(SyntaxView {
                 inner: term.as_ref(),
             }),

@@ -156,7 +156,7 @@ pub enum ProjectError {
         source: serde_json::Error,
     },
     #[error("{0}")]
-    ManifestSourceDiagnostic(ProjectSourceDiagnostic),
+    ManifestSourceDiagnostic(Box<ProjectSourceDiagnostic>),
     #[error("project I/O failed at `{path}`")]
     ProjectIoFailed {
         path: PathBuf,
@@ -201,7 +201,7 @@ pub enum ProjectError {
 
 impl ProjectError {
     #[must_use]
-    pub fn source_diag(&self) -> Option<&ProjectSourceDiagnostic> {
+    pub const fn source_diag(&self) -> Option<&ProjectSourceDiagnostic> {
         match self {
             Self::ManifestSourceDiagnostic(diag) => Some(diag),
             _ => None,
