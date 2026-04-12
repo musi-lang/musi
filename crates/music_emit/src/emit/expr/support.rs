@@ -42,7 +42,7 @@ pub(super) fn push_expr_diag(
     diags: &mut EmitDiagList,
     module_key: &ModuleKey,
     origin: &IrOrigin,
-    kind: &EmitDiagKind,
+    kind: EmitDiagKind,
     label: impl Into<String>,
 ) {
     push_span_diag(
@@ -60,7 +60,7 @@ pub(super) fn push_span_diag(
     _module_key: &ModuleKey,
     source_id: SourceId,
     span: Span,
-    kind: &EmitDiagKind,
+    kind: EmitDiagKind,
     label: impl Into<String>,
 ) {
     diags.push(

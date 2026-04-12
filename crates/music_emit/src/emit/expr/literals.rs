@@ -37,7 +37,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 origin,
-                &EmitDiagKind::InvalidSyntaxLiteral,
+                EmitDiagKind::InvalidSyntaxLiteral,
                 format!("invalid syntax literal `{raw}`"),
             );
             emit_zero(self);
@@ -67,7 +67,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 origin,
-                &EmitDiagKind::InvalidIntegerLiteral,
+                EmitDiagKind::InvalidIntegerLiteral,
                 format!("invalid integer literal `{raw}`"),
             );
             emit_zero(self);
@@ -85,7 +85,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 origin,
-                &EmitDiagKind::InvalidFloatLiteral,
+                EmitDiagKind::InvalidFloatLiteral,
                 format!("invalid float literal `{raw}`"),
             );
             emit_zero(self);

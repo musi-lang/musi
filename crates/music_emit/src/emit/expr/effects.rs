@@ -24,7 +24,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &origin,
-                &EmitDiagKind::UnknownEffect,
+                EmitDiagKind::UnknownEffect,
                 "unknown emitted effect",
             );
             emit_zero(self);
@@ -58,7 +58,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &body.origin,
-                &EmitDiagKind::UnknownHandlerType,
+                EmitDiagKind::UnknownHandlerType,
                 format!("unknown emitted handler type `{handler_ty_name}`"),
             );
             emit_zero(self);
@@ -79,7 +79,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &body.origin,
-                &EmitDiagKind::UnknownEffect,
+                EmitDiagKind::UnknownEffect,
                 "unknown emitted effect",
             );
             emit_zero(self);
@@ -126,7 +126,7 @@ impl MethodEmitter<'_, '_> {
                     source_id: SourceId::from_raw(0),
                     span: Span::new(0, 0),
                 },
-                &EmitDiagKind::UnknownEffect,
+                EmitDiagKind::UnknownEffect,
                 "unknown emitted effect",
             );
             emit_zero(self);

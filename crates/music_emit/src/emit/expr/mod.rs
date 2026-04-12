@@ -38,7 +38,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &expr.origin,
-                &EmitDiagKind::EmitInvariantViolated,
+                EmitDiagKind::EmitInvariantViolated,
                 format!("expr `{:?}` has no emitted form", expr.kind),
             );
             return;
@@ -172,7 +172,7 @@ impl MethodEmitter<'_, '_> {
                         diags,
                         self.module_key,
                         &expr.origin,
-                        &EmitDiagKind::UnknownTypeValue,
+                        EmitDiagKind::UnknownTypeValue,
                         format!("unknown emitted type value `{ty_name}`"),
                     );
                     emit_zero(self);
@@ -328,7 +328,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 origin,
-                &EmitDiagKind::UnknownTypeNameForOp,
+                EmitDiagKind::UnknownTypeNameForOp,
                 format!("unknown type name `{ty_name}` for `{op_text}`"),
             );
             emit_zero(self);

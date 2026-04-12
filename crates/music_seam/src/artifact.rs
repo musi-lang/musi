@@ -158,20 +158,8 @@ pub enum ArtifactError {
 
 impl Artifact {
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            strings: Table::new(),
-            types: Table::new(),
-            constants: Table::new(),
-            globals: Table::new(),
-            methods: Table::new(),
-            effects: Table::new(),
-            classes: Table::new(),
-            foreigns: Table::new(),
-            exports: Table::new(),
-            data: Table::new(),
-            meta: Table::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn intern_string(&mut self, text: &str) -> StringId {

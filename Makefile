@@ -4,11 +4,15 @@ check:
 	cargo check --workspace && cargo check --workspace --tests
 
 rscheck:
-	@command -v rscheck >/dev/null 2>&1 || { \
+	@RSCHECK_BIN="$$(command -v rscheck 2>/dev/null || true)"; \
+	if [ -z "$$RSCHECK_BIN" ] && [ -x "$$HOME/.cargo/bin/rscheck" ]; then \
+		RSCHECK_BIN="$$HOME/.cargo/bin/rscheck"; \
+	fi; \
+	if [ -z "$$RSCHECK_BIN" ] || [ ! -x "$$RSCHECK_BIN" ]; then \
 		echo "rscheck not installed; run: cargo install --git https://github.com/xsyetopz/rscheck --locked rscheck-cli"; \
 		exit 1; \
-	}
-	@PATH="$$HOME/.cargo/bin:$$PATH" rscheck check; code=$$?; test $$code -le 1
+	fi; \
+	"$$RSCHECK_BIN" check; code=$$?; test $$code -le 1
 
 lint:
 	$(MAKE) rscheck

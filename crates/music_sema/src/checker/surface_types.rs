@@ -44,41 +44,21 @@ pub fn surface_key(module_key: &ModuleKey, interner: &Interner, name: Symbol) ->
 }
 
 pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
-    match &surface
+    let kind = &surface
         .try_ty(ty)
         .expect("surface type missing while formatting")
-        .kind
-    {
-        SurfaceTyKind::Error => "<error>".into(),
-        SurfaceTyKind::Unknown => "Unknown".into(),
-        SurfaceTyKind::Type => "Type".into(),
-        SurfaceTyKind::Syntax => "Syntax".into(),
-        SurfaceTyKind::Any => "Any".into(),
-        SurfaceTyKind::Empty => "Empty".into(),
-        SurfaceTyKind::Unit => "Unit".into(),
-        SurfaceTyKind::Bool => "Bool".into(),
-        SurfaceTyKind::Nat => "Nat".into(),
-        SurfaceTyKind::Int => "Int".into(),
-        SurfaceTyKind::Float => "Float".into(),
-        SurfaceTyKind::String => "String".into(),
-        SurfaceTyKind::CString => "CString".into(),
-        SurfaceTyKind::CPtr => "CPtr".into(),
-        SurfaceTyKind::Module => "Module".into(),
-        SurfaceTyKind::NatLit(value) => value.to_string(),
+        .kind;
+    if let Some(rendered) = canonical_simple_surface_ty(kind) {
+        return rendered;
+    }
+    match kind {
         SurfaceTyKind::Named { name, args } => canonical_surface_named(surface, name, args),
         SurfaceTyKind::Pi {
             binder,
             binder_ty,
             body,
             is_effectful,
-        } => {
-            let arrow = if *is_effectful { " ~> " } else { " -> " };
-            format!(
-                "forall ({binder} : {}){arrow}{}",
-                canonical_surface_ty(surface, *binder_ty),
-                canonical_surface_ty(surface, *body)
-            )
-        }
+        } => canonical_surface_pi(surface, binder, *binder_ty, *body, *is_effectful),
         SurfaceTyKind::Arrow {
             params,
             ret,
@@ -97,7 +77,47 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
             format!("mut {}", canonical_surface_ty(surface, *inner))
         }
         SurfaceTyKind::Record { fields } => canonical_surface_record(surface, fields),
+        SurfaceTyKind::Error
+        | SurfaceTyKind::Unknown
+        | SurfaceTyKind::Type
+        | SurfaceTyKind::Syntax
+        | SurfaceTyKind::Any
+        | SurfaceTyKind::Empty
+        | SurfaceTyKind::Unit
+        | SurfaceTyKind::Bool
+        | SurfaceTyKind::Nat
+        | SurfaceTyKind::Int
+        | SurfaceTyKind::Float
+        | SurfaceTyKind::String
+        | SurfaceTyKind::CString
+        | SurfaceTyKind::CPtr
+        | SurfaceTyKind::Module
+        | SurfaceTyKind::NatLit(_) => {
+            canonical_simple_surface_ty(kind).expect("simple surface type should render")
+        }
     }
+}
+
+fn canonical_simple_surface_ty(kind: &SurfaceTyKind) -> Option<String> {
+    let simple = SimpleTyKind::from_surface(kind)?;
+    Some(match simple {
+        SimpleTyKind::NatLit(value) => value.to_string(),
+        SimpleTyKind::Error => "<error>".to_owned(),
+        SimpleTyKind::Unknown => "Unknown".to_owned(),
+        SimpleTyKind::Type => "Type".to_owned(),
+        SimpleTyKind::Syntax => "Syntax".to_owned(),
+        SimpleTyKind::Any => "Any".to_owned(),
+        SimpleTyKind::Empty => "Empty".to_owned(),
+        SimpleTyKind::Unit => "Unit".to_owned(),
+        SimpleTyKind::Bool => "Bool".to_owned(),
+        SimpleTyKind::Nat => "Nat".to_owned(),
+        SimpleTyKind::Int => "Int".to_owned(),
+        SimpleTyKind::Float => "Float".to_owned(),
+        SimpleTyKind::String => "String".to_owned(),
+        SimpleTyKind::CString => "CString".to_owned(),
+        SimpleTyKind::CPtr => "CPtr".to_owned(),
+        SimpleTyKind::Module => "Module".to_owned(),
+    })
 }
 
 fn canonical_surface_named(surface: &ModuleSurface, name: &str, args: &[SurfaceTyId]) -> String {
@@ -133,6 +153,21 @@ fn canonical_surface_arrow(
     };
     let arrow = if is_effectful { " ~> " } else { " -> " };
     format!("{left}{arrow}{}", canonical_surface_ty(surface, ret))
+}
+
+fn canonical_surface_pi(
+    surface: &ModuleSurface,
+    binder: &str,
+    binder_ty: SurfaceTyId,
+    body: SurfaceTyId,
+    is_effectful: bool,
+) -> String {
+    let arrow = if is_effectful { " ~> " } else { " -> " };
+    format!(
+        "forall ({binder} : {}){arrow}{}",
+        canonical_surface_ty(surface, binder_ty),
+        canonical_surface_ty(surface, body)
+    )
 }
 
 fn canonical_surface_tuple(surface: &ModuleSurface, items: &[SurfaceTyId]) -> String {
@@ -302,31 +337,9 @@ impl<'a> SurfaceTyBuilder<'a> {
 }
 
 const fn simple_surface_ty_kind(kind: &HirTyKind) -> Option<SurfaceTyKind> {
-    match kind {
-        HirTyKind::Error => Some(SurfaceTyKind::Error),
-        HirTyKind::Unknown => Some(SurfaceTyKind::Unknown),
-        HirTyKind::Type => Some(SurfaceTyKind::Type),
-        HirTyKind::Syntax => Some(SurfaceTyKind::Syntax),
-        HirTyKind::Any => Some(SurfaceTyKind::Any),
-        HirTyKind::Empty => Some(SurfaceTyKind::Empty),
-        HirTyKind::Unit => Some(SurfaceTyKind::Unit),
-        HirTyKind::Bool => Some(SurfaceTyKind::Bool),
-        HirTyKind::Nat => Some(SurfaceTyKind::Nat),
-        HirTyKind::Int => Some(SurfaceTyKind::Int),
-        HirTyKind::Float => Some(SurfaceTyKind::Float),
-        HirTyKind::String => Some(SurfaceTyKind::String),
-        HirTyKind::CString => Some(SurfaceTyKind::CString),
-        HirTyKind::CPtr => Some(SurfaceTyKind::CPtr),
-        HirTyKind::Module => Some(SurfaceTyKind::Module),
-        HirTyKind::NatLit(value) => Some(SurfaceTyKind::NatLit(*value)),
-        HirTyKind::Named { .. }
-        | HirTyKind::Pi { .. }
-        | HirTyKind::Arrow { .. }
-        | HirTyKind::Sum { .. }
-        | HirTyKind::Tuple { .. }
-        | HirTyKind::Array { .. }
-        | HirTyKind::Mut { .. }
-        | HirTyKind::Record { .. } => None,
+    match SimpleTyKind::from_hir(kind) {
+        Some(kind) => Some(kind.into_surface()),
+        None => None,
     }
 }
 
@@ -447,30 +460,146 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
 }
 
 const fn simple_hir_ty_kind(kind: &SurfaceTyKind) -> Option<HirTyKind> {
-    match kind {
-        SurfaceTyKind::Error => Some(HirTyKind::Error),
-        SurfaceTyKind::Unknown => Some(HirTyKind::Unknown),
-        SurfaceTyKind::Type => Some(HirTyKind::Type),
-        SurfaceTyKind::Syntax => Some(HirTyKind::Syntax),
-        SurfaceTyKind::Any => Some(HirTyKind::Any),
-        SurfaceTyKind::Empty => Some(HirTyKind::Empty),
-        SurfaceTyKind::Unit => Some(HirTyKind::Unit),
-        SurfaceTyKind::Bool => Some(HirTyKind::Bool),
-        SurfaceTyKind::Nat => Some(HirTyKind::Nat),
-        SurfaceTyKind::Int => Some(HirTyKind::Int),
-        SurfaceTyKind::Float => Some(HirTyKind::Float),
-        SurfaceTyKind::String => Some(HirTyKind::String),
-        SurfaceTyKind::CString => Some(HirTyKind::CString),
-        SurfaceTyKind::CPtr => Some(HirTyKind::CPtr),
-        SurfaceTyKind::Module => Some(HirTyKind::Module),
-        SurfaceTyKind::NatLit(value) => Some(HirTyKind::NatLit(*value)),
-        SurfaceTyKind::Named { .. }
-        | SurfaceTyKind::Pi { .. }
-        | SurfaceTyKind::Arrow { .. }
-        | SurfaceTyKind::Sum { .. }
-        | SurfaceTyKind::Tuple { .. }
-        | SurfaceTyKind::Array { .. }
-        | SurfaceTyKind::Mut { .. }
-        | SurfaceTyKind::Record { .. } => None,
+    match SimpleTyKind::from_surface(kind) {
+        Some(kind) => Some(kind.into_hir()),
+        None => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SimpleTyKind {
+    Error,
+    Unknown,
+    Type,
+    Syntax,
+    Any,
+    Empty,
+    Unit,
+    Bool,
+    Nat,
+    Int,
+    Float,
+    String,
+    CString,
+    CPtr,
+    Module,
+    NatLit(u64),
+}
+
+impl SimpleTyKind {
+    const fn from_hir(kind: &HirTyKind) -> Option<Self> {
+        match kind {
+            HirTyKind::Error => Some(Self::Error),
+            HirTyKind::Unknown => Some(Self::Unknown),
+            HirTyKind::Type => Some(Self::Type),
+            HirTyKind::Syntax => Some(Self::Syntax),
+            HirTyKind::Any => Some(Self::Any),
+            HirTyKind::Empty => Some(Self::Empty),
+            HirTyKind::Unit => Some(Self::Unit),
+            HirTyKind::Bool => Some(Self::Bool),
+            HirTyKind::Nat => Some(Self::Nat),
+            HirTyKind::Int => Some(Self::Int),
+            HirTyKind::Float => Some(Self::Float),
+            HirTyKind::String => Some(Self::String),
+            HirTyKind::CString => Some(Self::CString),
+            HirTyKind::CPtr => Some(Self::CPtr),
+            HirTyKind::Module => Some(Self::Module),
+            HirTyKind::NatLit(value) => Some(Self::NatLit(*value)),
+            HirTyKind::Named { .. }
+            | HirTyKind::Pi { .. }
+            | HirTyKind::Arrow { .. }
+            | HirTyKind::Sum { .. }
+            | HirTyKind::Tuple { .. }
+            | HirTyKind::Array { .. }
+            | HirTyKind::Mut { .. }
+            | HirTyKind::Record { .. } => None,
+        }
+    }
+
+    const fn from_surface(kind: &SurfaceTyKind) -> Option<Self> {
+        if matches!(
+            kind,
+            SurfaceTyKind::Named { .. }
+                | SurfaceTyKind::Pi { .. }
+                | SurfaceTyKind::Arrow { .. }
+                | SurfaceTyKind::Sum { .. }
+                | SurfaceTyKind::Tuple { .. }
+                | SurfaceTyKind::Array { .. }
+                | SurfaceTyKind::Mut { .. }
+                | SurfaceTyKind::Record { .. }
+        ) {
+            return None;
+        }
+        match kind {
+            SurfaceTyKind::Error => Some(Self::Error),
+            SurfaceTyKind::Unknown => Some(Self::Unknown),
+            SurfaceTyKind::Type => Some(Self::Type),
+            SurfaceTyKind::Syntax => Some(Self::Syntax),
+            SurfaceTyKind::Any => Some(Self::Any),
+            SurfaceTyKind::Empty => Some(Self::Empty),
+            SurfaceTyKind::Unit => Some(Self::Unit),
+            SurfaceTyKind::Bool => Some(Self::Bool),
+            SurfaceTyKind::Nat => Some(Self::Nat),
+            SurfaceTyKind::Int => Some(Self::Int),
+            SurfaceTyKind::Float => Some(Self::Float),
+            SurfaceTyKind::String => Some(Self::String),
+            SurfaceTyKind::CString => Some(Self::CString),
+            SurfaceTyKind::CPtr => Some(Self::CPtr),
+            SurfaceTyKind::Module => Some(Self::Module),
+            SurfaceTyKind::NatLit(value) => Some(Self::NatLit(*value)),
+            SurfaceTyKind::Named { .. }
+            | SurfaceTyKind::Pi { .. }
+            | SurfaceTyKind::Arrow { .. }
+            | SurfaceTyKind::Sum { .. }
+            | SurfaceTyKind::Tuple { .. }
+            | SurfaceTyKind::Array { .. }
+            | SurfaceTyKind::Mut { .. }
+            | SurfaceTyKind::Record { .. } => None,
+        }
+    }
+
+    const fn into_hir(self) -> HirTyKind {
+        match self {
+            Self::Error => HirTyKind::Error,
+            Self::Unknown => HirTyKind::Unknown,
+            Self::Type => HirTyKind::Type,
+            Self::Syntax => HirTyKind::Syntax,
+            Self::Any => HirTyKind::Any,
+            Self::Empty => HirTyKind::Empty,
+            Self::Unit => HirTyKind::Unit,
+            Self::Bool => HirTyKind::Bool,
+            Self::Nat => HirTyKind::Nat,
+            Self::Int => HirTyKind::Int,
+            Self::Float => HirTyKind::Float,
+            Self::String => HirTyKind::String,
+            Self::CString => HirTyKind::CString,
+            Self::CPtr => HirTyKind::CPtr,
+            Self::Module => HirTyKind::Module,
+            Self::NatLit(value) => HirTyKind::NatLit(value),
+        }
+    }
+
+    const fn into_surface(self) -> SurfaceTyKind {
+        if let Self::NatLit(value) = self {
+            return SurfaceTyKind::NatLit(value);
+        }
+        match self {
+            Self::Error => SurfaceTyKind::Error,
+            Self::Unknown => SurfaceTyKind::Unknown,
+            Self::Type => SurfaceTyKind::Type,
+            Self::Syntax => SurfaceTyKind::Syntax,
+            Self::Any => SurfaceTyKind::Any,
+            Self::Empty => SurfaceTyKind::Empty,
+            Self::Unit => SurfaceTyKind::Unit,
+            Self::Bool => SurfaceTyKind::Bool,
+            Self::Nat => SurfaceTyKind::Nat,
+            Self::Int => SurfaceTyKind::Int,
+            Self::Float => SurfaceTyKind::Float,
+            Self::String => SurfaceTyKind::String,
+            Self::CString => SurfaceTyKind::CString,
+            Self::CPtr => SurfaceTyKind::CPtr,
+            Self::Module => SurfaceTyKind::Module,
+            Self::NatLit(value) => SurfaceTyKind::NatLit(value),
+        }
     }
 }

@@ -34,6 +34,24 @@ fn lower(src: &str) -> IrModule {
     lower_module(&sema, &interner).expect("ir lowering should succeed")
 }
 
+fn assert_global_tail_matches(
+    src: &str,
+    global_name: &str,
+    predicate: impl FnOnce(&IrExprKind) -> bool,
+) {
+    let ir = lower(src);
+    let global = ir
+        .globals()
+        .iter()
+        .find(|item| item.name.as_ref() == global_name)
+        .expect("global");
+    let kind = match &global.body.kind {
+        IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
+        kind => kind,
+    };
+    assert!(predicate(kind), "unexpected global tail kind");
+}
+
 #[test]
 fn lowers_exports_and_semantic_metadata() {
     let ir = lower(
@@ -95,75 +113,45 @@ fn lowers_data_and_foreign_facts() {
 
 #[test]
 fn lowers_array_cat_for_runtime_spread() {
-    let ir = lower(
+    assert_global_tail_matches(
         r"
         let xs := [1, 2];
         export let ys := [0, ...xs, 3];
     ",
+        "ys",
+        |kind| matches!(kind, IrExprKind::ArrayCat { .. }),
     );
-    let ys = ir
-        .globals()
-        .iter()
-        .find(|global| global.name.as_ref() == "ys")
-        .expect("ys global");
-    let IrExprKind::Sequence { exprs } = &ys.body.kind else {
-        panic!("expected sequence");
-    };
-    let Some(last) = exprs.last() else {
-        panic!("expected sequence tail");
-    };
-    assert!(matches!(last.kind, IrExprKind::ArrayCat { .. }));
 }
 
 #[test]
 fn lowers_call_seq_for_runtime_any_spread() {
-    let ir = lower(
+    assert_global_tail_matches(
         r#"
         let g (a : Any, b : Any) : Any := a;
         let xs : Array[Any] := [1, "x"];
         export let y := g(...xs);
     "#,
+        "y",
+        |kind| matches!(kind, IrExprKind::CallSeq { .. }),
     );
-    let y = ir
-        .globals()
-        .iter()
-        .find(|global| global.name.as_ref() == "y")
-        .expect("y global");
-    let ok = match &y.body.kind {
-        IrExprKind::Sequence { exprs } => exprs
-            .last()
-            .is_some_and(|expr| matches!(expr.kind, IrExprKind::CallSeq { .. })),
-        kind => matches!(kind, IrExprKind::CallSeq { .. }),
-    };
-    assert!(ok, "expected call seq");
 }
 
 #[test]
 fn lowers_call_with_compile_time_tuple_spread() {
-    let ir = lower(
+    assert_global_tail_matches(
         r#"
         let f (a : Int, b : String) : Int := a;
         let t := (1, "x");
         export let y := f(...t);
     "#,
+        "y",
+        |kind| matches!(kind, IrExprKind::Call { .. }),
     );
-    let y = ir
-        .globals()
-        .iter()
-        .find(|global| global.name.as_ref() == "y")
-        .expect("y global");
-    let IrExprKind::Sequence { exprs } = &y.body.kind else {
-        panic!("expected sequence");
-    };
-    let Some(last) = exprs.last() else {
-        panic!("expected sequence tail");
-    };
-    assert!(matches!(last.kind, IrExprKind::Call { .. }));
 }
 
 #[test]
 fn lowers_perform_seq_for_runtime_any_spread() {
-    let ir = lower(
+    assert_global_tail_matches(
         r#"
         let E := effect {
           let op (a : Any, b : Any) : Unit;
@@ -171,19 +159,9 @@ fn lowers_perform_seq_for_runtime_any_spread() {
         let xs : Array[Any] := [1, "x"];
         export let y := perform E.op(...xs);
     "#,
+        "y",
+        |kind| matches!(kind, IrExprKind::PerformSeq { .. }),
     );
-    let y = ir
-        .globals()
-        .iter()
-        .find(|global| global.name.as_ref() == "y")
-        .expect("y global");
-    let ok = match &y.body.kind {
-        IrExprKind::Sequence { exprs } => exprs
-            .last()
-            .is_some_and(|expr| matches!(expr.kind, IrExprKind::PerformSeq { .. })),
-        kind => matches!(kind, IrExprKind::PerformSeq { .. }),
-    };
-    assert!(ok, "expected perform seq");
 }
 
 #[test]

@@ -10,58 +10,37 @@ enum InfixClass {
 
 impl Parser<'_> {
     pub(super) fn parse_expr(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
-        let mut left = self.parse_prefix_expr()?;
-        loop {
-            if let Some(next_left) = self.try_postfix(left)? {
-                left = next_left;
-                continue;
-            }
-            let Some((left_bp, right_bp, class)) = infix_binding_power(self.peek_kind()) else {
-                break;
-            };
-            if left_bp < min_bp {
-                break;
-            }
-            let op = self.advance_element();
-            let right = self.parse_expr(right_bp)?;
-            if class == InfixClass::Comparison && self.is_comparison_expr(left) {
-                self.error(ParseError::new(
-                    ParseErrorKind::NonAssociativeChain,
-                    self.span(),
-                ));
-            }
-            left = self.builder.push_node_from_children(
-                SyntaxNodeKind::BinaryExpr,
-                vec![
-                    SyntaxElementId::Node(left),
-                    op,
-                    SyntaxElementId::Node(right),
-                ],
-            );
-            if class == InfixClass::Comparison {
-                self.comparison_exprs.push(left);
-            }
-        }
-        Ok(left)
+        self.parse_binary_expr_with(min_bp, Self::parse_expr, infix_binding_power)
     }
 
     pub(super) fn parse_expr_without_colon_eq(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
+        self.parse_binary_expr_with(
+            min_bp,
+            Self::parse_expr_without_colon_eq,
+            infix_binding_power_without_colon_eq,
+        )
+    }
+
+    fn parse_binary_expr_with(
+        &mut self,
+        min_bp: u8,
+        parse_right: fn(&mut Self, u8) -> SyntaxNodeParseResult,
+        binding_power: fn(TokenKind) -> Option<(u8, u8, InfixClass)>,
+    ) -> SyntaxNodeParseResult {
         let mut left = self.parse_prefix_expr()?;
         loop {
             if let Some(next_left) = self.try_postfix(left)? {
                 left = next_left;
                 continue;
             }
-            let Some((left_bp, right_bp, class)) =
-                infix_binding_power_without_colon_eq(self.peek_kind())
-            else {
+            let Some((left_bp, right_bp, class)) = binding_power(self.peek_kind()) else {
                 break;
             };
             if left_bp < min_bp {
                 break;
             }
             let op = self.advance_element();
-            let right = self.parse_expr_without_colon_eq(right_bp)?;
+            let right = parse_right(self, right_bp)?;
             if class == InfixClass::Comparison && self.is_comparison_expr(left) {
                 self.error(ParseError::new(
                     ParseErrorKind::NonAssociativeChain,
@@ -121,17 +100,13 @@ impl Parser<'_> {
     }
 
     fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> SyntaxNodeParseResult {
-        let open = self.expect_token(TokenKind::LParen)?;
-        let mut children = vec![SyntaxElementId::Node(callee), open];
-        children.extend(self.parse_separated_nodes(
-            TokenKind::Comma,
+        self.parse_postfix_list_expr(
+            callee,
+            SyntaxNodeKind::CallExpr,
+            TokenKind::LParen,
             TokenKind::RParen,
             Parser::parse_arg,
-        )?);
-        children.push(self.expect_token(TokenKind::RParen)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::CallExpr, children))
+        )
     }
 
     fn parse_arg(&mut self) -> SyntaxNodeParseResult {
@@ -146,31 +121,38 @@ impl Parser<'_> {
     }
 
     fn parse_apply_expr(&mut self, callee: SyntaxNodeId) -> SyntaxNodeParseResult {
-        let open = self.expect_token(TokenKind::LBracket)?;
-        let mut children = vec![SyntaxElementId::Node(callee), open];
-        children.extend(self.parse_separated_nodes(
-            TokenKind::Comma,
+        self.parse_postfix_list_expr(
+            callee,
+            SyntaxNodeKind::ApplyExpr,
+            TokenKind::LBracket,
             TokenKind::RBracket,
             Parser::parse_expr_node,
-        )?);
-        children.push(self.expect_token(TokenKind::RBracket)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::ApplyExpr, children))
+        )
     }
 
     fn parse_index_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
-        let open = self.expect_token(TokenKind::DotLBracket)?;
-        let mut children = vec![SyntaxElementId::Node(base), open];
-        children.extend(self.parse_separated_nodes(
-            TokenKind::Comma,
+        self.parse_postfix_list_expr(
+            base,
+            SyntaxNodeKind::IndexExpr,
+            TokenKind::DotLBracket,
             TokenKind::RBracket,
             Parser::parse_expr_node,
-        )?);
-        children.push(self.expect_token(TokenKind::RBracket)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::IndexExpr, children))
+        )
+    }
+
+    fn parse_postfix_list_expr(
+        &mut self,
+        base: SyntaxNodeId,
+        kind: SyntaxNodeKind,
+        open_kind: TokenKind,
+        close_kind: TokenKind,
+        parse_item: fn(&mut Self) -> SyntaxNodeParseResult,
+    ) -> SyntaxNodeParseResult {
+        let open = self.expect_token(open_kind)?;
+        let mut children = vec![SyntaxElementId::Node(base), open];
+        children.extend(self.parse_separated_nodes(TokenKind::Comma, close_kind, parse_item)?);
+        children.push(self.expect_token(close_kind)?);
+        Ok(self.builder.push_node_from_children(kind, children))
     }
 
     fn parse_record_update_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {

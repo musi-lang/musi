@@ -28,7 +28,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &origin,
-                &EmitDiagKind::UnknownDataType,
+                EmitDiagKind::UnknownDataType,
                 format!("unknown emitted data type `{ty_name}`"),
             );
             emit_zero(self);
@@ -56,7 +56,7 @@ impl MethodEmitter<'_, '_> {
                     diags,
                     self.module_key,
                     &arg.expr.origin,
-                    &EmitDiagKind::SpreadCallArgsNotEmitted,
+                    EmitDiagKind::SpreadCallArgsNotEmitted,
                     "spread call args have no emitted form",
                 );
             }
@@ -180,7 +180,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &origin,
-                &EmitDiagKind::UnknownClosureTarget,
+                EmitDiagKind::UnknownClosureTarget,
                 format!("unknown emitted closure target `{}`", callee.name),
             );
             emit_zero(self);

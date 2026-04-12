@@ -32,7 +32,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &missing_origin,
-                &EmitDiagKind::UnknownSequenceType,
+                EmitDiagKind::UnknownSequenceType,
                 format!("unknown emitted sequence type `{ty_name}`"),
             );
             emit_zero(self);
@@ -61,7 +61,7 @@ impl MethodEmitter<'_, '_> {
                     source_id: SourceId::from_raw(0),
                     span: Span::new(0, 0),
                 },
-                &EmitDiagKind::UnknownSequenceType,
+                EmitDiagKind::UnknownSequenceType,
                 format!("unknown emitted sequence type `{ty_name}`"),
             );
             emit_zero(self);
@@ -102,7 +102,7 @@ impl MethodEmitter<'_, '_> {
                     source_id: SourceId::from_raw(0),
                     span: Span::new(0, 0),
                 },
-                &EmitDiagKind::UnknownSequenceType,
+                EmitDiagKind::UnknownSequenceType,
                 format!("unknown emitted sequence type `{ty_name}`"),
             );
             emit_zero(self);

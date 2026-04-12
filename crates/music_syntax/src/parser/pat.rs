@@ -64,22 +64,7 @@ impl Parser<'_> {
     }
 
     fn parse_variant_pattern(&mut self) -> SyntaxNodeParseResult {
-        let dot = self.expect_token(TokenKind::Dot)?;
-        let ident = self.expect_ident_element()?;
-        let mut children = vec![dot, ident];
-        if self.at(TokenKind::LParen) {
-            let open = self.advance_element();
-            children.push(open);
-            children.extend(self.parse_separated_nodes(
-                TokenKind::Comma,
-                TokenKind::RParen,
-                Parser::parse_pattern,
-            )?);
-            children.push(self.expect_token(TokenKind::RParen)?);
-        }
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::VariantPat, children))
+        self.parse_variant_like(SyntaxNodeKind::VariantPat, Parser::parse_pattern)
     }
 
     fn parse_record_pattern(&mut self) -> SyntaxNodeParseResult {

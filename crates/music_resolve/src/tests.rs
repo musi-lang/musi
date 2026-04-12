@@ -62,10 +62,13 @@ fn find_nth_name_site(
     None
 }
 
-#[test]
-fn resolves_let_name_use() {
-    let src = "let x := 1; x;";
-    let source_id = SourceId::from_raw(1);
+fn assert_name_binding(
+    src: &str,
+    source_id: SourceId,
+    spelling: &str,
+    nth: usize,
+    expected_kind: NameBindingKind,
+) {
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
     assert!(parsed.errors().is_empty());
@@ -78,34 +81,33 @@ fn resolves_let_name_use() {
         &mut interner,
         ResolveOptions::default(),
     );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("use site");
+    let site = find_nth_name_site(source_id, parsed.tree(), spelling, nth).expect("use site");
     let binding_id = resolved.names.refs.get(&site).copied().expect("binding");
     let binding = resolved.names.bindings.get(binding_id);
-    assert_eq!(binding.kind, NameBindingKind::Let);
-    assert_eq!(interner.resolve(binding.name), "x");
+    assert_eq!(binding.kind, expected_kind);
+    assert_eq!(interner.resolve(binding.name), spelling);
+}
+
+#[test]
+fn resolves_let_name_use() {
+    assert_name_binding(
+        "let x := 1; x;",
+        SourceId::from_raw(1),
+        "x",
+        0,
+        NameBindingKind::Let,
+    );
 }
 
 #[test]
 fn resolves_rec_name_use_in_rhs() {
-    let src = "let rec f := f;";
-    let source_id = SourceId::from_raw(2);
-    let module_key = ModuleKey::new("main");
-    let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
-
-    let mut interner = Interner::new();
-    let resolved = resolve_module(
-        source_id,
-        &module_key,
-        parsed.tree(),
-        &mut interner,
-        ResolveOptions::default(),
+    assert_name_binding(
+        "let rec f := f;",
+        SourceId::from_raw(2),
+        "f",
+        0,
+        NameBindingKind::Let,
     );
-    let site = find_nth_name_site(source_id, parsed.tree(), "f", 0).expect("use site");
-    let binding_id = resolved.names.refs.get(&site).copied().expect("binding");
-    let binding = resolved.names.bindings.get(binding_id);
-    assert_eq!(binding.kind, NameBindingKind::Let);
-    assert_eq!(interner.resolve(binding.name), "f");
 }
 
 #[test]
@@ -151,49 +153,23 @@ fn resolves_case_pat_binder_in_arm() {
 
 #[test]
 fn resolves_lambda_param_in_body() {
-    let src = "(x: Int) => x;";
-    let source_id = SourceId::from_raw(4);
-    let module_key = ModuleKey::new("main");
-    let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
-
-    let mut interner = Interner::new();
-    let resolved = resolve_module(
-        source_id,
-        &module_key,
-        parsed.tree(),
-        &mut interner,
-        ResolveOptions::default(),
-    );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
-    let binding = resolved.names.refs.get(&site).copied().expect("binding");
-    assert_eq!(
-        resolved.names.bindings.get(binding).kind,
-        NameBindingKind::Param
+    assert_name_binding(
+        "(x: Int) => x;",
+        SourceId::from_raw(4),
+        "x",
+        0,
+        NameBindingKind::Param,
     );
 }
 
 #[test]
 fn resolves_pi_binder_in_ret() {
-    let src = "(x: Type) -> x;";
-    let source_id = SourceId::from_raw(5);
-    let module_key = ModuleKey::new("main");
-    let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
-
-    let mut interner = Interner::new();
-    let resolved = resolve_module(
-        source_id,
-        &module_key,
-        parsed.tree(),
-        &mut interner,
-        ResolveOptions::default(),
-    );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
-    let binding = resolved.names.refs.get(&site).copied().expect("binding");
-    assert_eq!(
-        resolved.names.bindings.get(binding).kind,
-        NameBindingKind::PiBinder
+    assert_name_binding(
+        "(x: Type) -> x;",
+        SourceId::from_raw(5),
+        "x",
+        0,
+        NameBindingKind::PiBinder,
     );
 }
 

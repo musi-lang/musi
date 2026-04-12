@@ -468,48 +468,13 @@ impl Display for VmErrorKind {
 
 impl Display for OperandShape {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let text = match self {
-            Self::None => "none",
-            Self::Local => "local",
-            Self::Global => "global",
-            Self::Constant => "constant",
-            Self::I16 => "i16",
-            Self::String => "string",
-            Self::Label => "label",
-            Self::BranchTable => "branch-table",
-            Self::Method => "method",
-            Self::WideMethodCaptures => "method-captures",
-            Self::TypeLen => "type-len",
-            Self::Type => "type",
-            Self::EffectId => "effect-id",
-            Self::Effect => "effect",
-            Self::Foreign => "foreign",
-        };
-        f.write_str(text)
+        write_kebab_debug_name(f, &format!("{self:?}"))
     }
 }
 
 impl Display for VmValueKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let text = match self {
-            Self::Unit => "Unit",
-            Self::Int => "Int",
-            Self::Float => "Float",
-            Self::Bool => "Bool",
-            Self::String => "String",
-            Self::CPtr => "CPtr",
-            Self::Syntax => "Syntax",
-            Self::Seq => "Seq",
-            Self::Data => "Data",
-            Self::Closure => "Closure",
-            Self::Continuation => "Continuation",
-            Self::Type => "Type",
-            Self::Module => "Module",
-            Self::Foreign => "Foreign",
-            Self::Effect => "Effect",
-            Self::Class => "Class",
-        };
-        f.write_str(text)
+        write!(f, "{self:?}")
     }
 }
 
@@ -533,4 +498,17 @@ impl From<&Operand> for OperandShape {
             Operand::Foreign(_) => Self::Foreign,
         }
     }
+}
+
+fn write_kebab_debug_name(f: &mut Formatter<'_>, text: &str) -> fmt::Result {
+    for (index, ch) in text.chars().enumerate() {
+        if ch.is_ascii_uppercase() && index > 0 {
+            f.write_str("-")?;
+        }
+        let mut buf = [0; 4];
+        for lower in ch.to_lowercase() {
+            f.write_str(lower.encode_utf8(&mut buf))?;
+        }
+    }
+    Ok(())
 }

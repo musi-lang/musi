@@ -219,6 +219,29 @@ pub enum ValueView<'a> {
     Class(ClassId),
 }
 
+#[must_use]
+pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
+    match view {
+        ValueView::Unit => None,
+        ValueView::Int(value) => Some(value.to_string()),
+        ValueView::Float(value) => Some(value.to_string()),
+        ValueView::Bool(value) => Some(value.to_string()),
+        ValueView::String(text) => Some(text.as_str().to_owned()),
+        ValueView::Syntax(term) => Some(term.term().text().to_owned()),
+        ValueView::Seq(seq) => Some(format!("<seq:{}>", seq.len())),
+        ValueView::Record(record) => Some(format!("<record:{}>", record.len())),
+        ValueView::Data(record) => Some(format!("<data:{}:{}>", record.tag(), record.len())),
+        ValueView::Closure => Some("<closure>".to_owned()),
+        ValueView::Continuation => Some("<continuation>".to_owned()),
+        ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
+        ValueView::Module(spec) => Some(format!("<module:{spec}>")),
+        ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
+        ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
+        ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
+        ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
+    }
+}
+
 #[derive(Debug)]
 pub struct StringView<'a> {
     pub(crate) text: &'a str,

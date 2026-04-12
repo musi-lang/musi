@@ -10,7 +10,7 @@ use musi_tooling::{
     render_session_error, render_tooling_error, session_error_report, tooling_error_report,
     write_artifact_bytes,
 };
-use musi_vm::{Program, Value, ValueView, Vm, VmError, VmOptions};
+use musi_vm::{Program, Value, Vm, VmError, VmOptions, render_value_view};
 use music_seam::descriptor::ExportTarget;
 use music_seam::{AssemblyError, BINARY_VERSION, decode_binary, format_text};
 use music_session::{Session, SessionError, SessionOptions};
@@ -171,25 +171,7 @@ fn disasm(path: &Path) -> MusicResult {
 }
 
 fn print_vm_value(vm: &Vm, value: &Value) {
-    let rendered = match vm.inspect(value) {
-        ValueView::Unit => None,
-        ValueView::Int(value) => Some(value.to_string()),
-        ValueView::Float(value) => Some(value.to_string()),
-        ValueView::Bool(value) => Some(value.to_string()),
-        ValueView::String(text) => Some(text.as_str().to_owned()),
-        ValueView::Syntax(term) => Some(term.term().text().to_owned()),
-        ValueView::Seq(seq) => Some(format!("<seq:{}>", seq.len())),
-        ValueView::Record(record) => Some(format!("<record:{}>", record.len())),
-        ValueView::Data(record) => Some(format!("<data:{}:{}>", record.tag(), record.len())),
-        ValueView::Closure => Some("<closure>".to_owned()),
-        ValueView::Continuation => Some("<continuation>".to_owned()),
-        ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
-        ValueView::Module(spec) => Some(format!("<module:{spec}>")),
-        ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
-        ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
-        ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
-        ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
-    };
+    let rendered = render_value_view(vm.inspect(value));
     if let Some(rendered) = rendered {
         println!("{rendered}");
     }

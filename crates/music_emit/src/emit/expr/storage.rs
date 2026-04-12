@@ -84,7 +84,7 @@ impl MethodEmitter<'_, '_> {
                     diags,
                     self.module_key,
                     &value.origin,
-                    &EmitDiagKind::UnsupportedAssignTarget,
+                    EmitDiagKind::UnsupportedAssignTarget,
                     format!("assignment target `{name}` has no emitted form"),
                 );
                 emit_zero(self);

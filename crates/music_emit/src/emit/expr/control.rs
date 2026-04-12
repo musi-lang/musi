@@ -34,7 +34,7 @@ impl MethodEmitter<'_, '_> {
                     diags,
                     self.module_key,
                     &left.origin,
-                    &EmitDiagKind::UnsupportedBinaryOperator,
+                    EmitDiagKind::UnsupportedBinaryOperator,
                     format!("binary operator `{name}` has no emitted form"),
                 );
                 Opcode::CmpEq
@@ -174,7 +174,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &origin,
-                &EmitDiagKind::CaseVariantDispatchRequiresSingleDataType,
+                EmitDiagKind::CaseVariantDispatchRequiresSingleDataType,
                 "case variant dispatch requires single data type",
             );
             emit_zero(self);
@@ -621,7 +621,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 origin,
-                &EmitDiagKind::UnknownDataType,
+                EmitDiagKind::UnknownDataType,
                 format!("unknown emitted data type `{data_ty_name}`"),
             );
             return None;

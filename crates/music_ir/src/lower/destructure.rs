@@ -8,7 +8,7 @@ struct IrrefutablePatInput<'a> {
     module_target: Option<&'a ModuleKey>,
 }
 
-impl<'a> IrrefutablePatInput<'a> {
+impl IrrefutablePatInput<'_> {
     fn lower_bindings(
         self,
         ctx: &mut LowerCtx<'_>,

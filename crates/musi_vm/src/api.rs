@@ -5,5 +5,7 @@ pub use super::program::{
     ProgramTypeAbiKind,
 };
 #[allow(unused_imports)]
-pub use super::value::{RecordView, SeqView, StringView, SyntaxView, Value, ValueView};
+pub use super::value::{
+    RecordView, SeqView, StringView, SyntaxView, Value, ValueView, render_value_view,
+};
 pub use super::vm::{Vm, VmOptions};

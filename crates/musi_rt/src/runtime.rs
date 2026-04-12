@@ -496,18 +496,27 @@ fn vm_runtime_error(err: &RuntimeError) -> VmError {
 
 fn session_error_detail(err: &SessionError) -> Box<str> {
     match err {
-        SessionError::ModuleParseFailed { syntax, .. } => syntax
-            .diags()
-            .first()
-            .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
+        SessionError::ModuleParseFailed { syntax, .. } => {
+            first_diag_message_or_error(syntax.diags(), err, |diag| -> &str { diag.message() })
+        }
         SessionError::ModuleResolveFailed { diags, .. }
         | SessionError::ModuleSemanticCheckFailed { diags, .. }
         | SessionError::ModuleLoweringFailed { diags, .. }
-        | SessionError::ModuleEmissionFailed { diags, .. } => diags
-            .first()
-            .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
+        | SessionError::ModuleEmissionFailed { diags, .. } => {
+            first_diag_message_or_error(diags, err, |diag| -> &str { diag.message() })
+        }
         _ => err.to_string().into(),
     }
+}
+
+fn first_diag_message_or_error<T>(
+    diags: &[T],
+    err: &SessionError,
+    message: impl Fn(&T) -> &str,
+) -> Box<str> {
+    diags
+        .first()
+        .map_or_else(|| err.to_string().into(), |diag| message(diag).into())
 }
 
 fn vm_session_error(err: &SessionError) -> VmError {

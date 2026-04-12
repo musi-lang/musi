@@ -17,7 +17,7 @@ use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, project_error_report,
     render_project_error, render_session_error, session_error_report, write_artifact_bytes,
 };
-use musi_vm::{Value, ValueView};
+use musi_vm::{Value, render_value_view};
 use music_sema::TargetInfo;
 use music_session::{Session, SessionError};
 use thiserror::Error;
@@ -414,28 +414,11 @@ fn target_info(target_name: &str) -> TargetInfo {
 }
 
 fn print_runtime_value(runtime: &Runtime, value: &Value) {
-    let rendered = match runtime
-        .inspect(value)
-        .expect("runtime should inspect loaded value")
-    {
-        ValueView::Unit => None,
-        ValueView::Int(value) => Some(value.to_string()),
-        ValueView::Float(value) => Some(value.to_string()),
-        ValueView::Bool(value) => Some(value.to_string()),
-        ValueView::String(text) => Some(text.as_str().to_owned()),
-        ValueView::Syntax(term) => Some(term.term().text().to_owned()),
-        ValueView::Seq(seq) => Some(format!("<seq:{}>", seq.len())),
-        ValueView::Record(record) => Some(format!("<record:{}>", record.len())),
-        ValueView::Data(record) => Some(format!("<data:{}:{}>", record.tag(), record.len())),
-        ValueView::Closure => Some("<closure>".to_owned()),
-        ValueView::Continuation => Some("<continuation>".to_owned()),
-        ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
-        ValueView::Module(spec) => Some(format!("<module:{spec}>")),
-        ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
-        ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
-        ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
-        ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
-    };
+    let rendered = render_value_view(
+        runtime
+            .inspect(value)
+            .expect("runtime should inspect loaded value"),
+    );
     if let Some(rendered) = rendered {
         println!("{rendered}");
     }

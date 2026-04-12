@@ -1,11 +1,30 @@
-use crate::{LexErrorKind, Lexer, TokenKind, TriviaKind};
+use crate::{LexErrorKind, LexedSource, Lexer, TokenKind, TriviaKind};
+
+fn lex(input: &str) -> LexedSource {
+    Lexer::new(input).lex()
+}
+
+fn assert_token_kinds(input: &str, expected: &[TokenKind]) {
+    let lexed = lex(input);
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, expected);
+}
+
+fn lex_with_token_kinds(input: &str, expected: &[TokenKind]) -> LexedSource {
+    let lexed = lex(input);
+    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, expected);
+    lexed
+}
+
+fn assert_no_errors(input: &str, expected: &[TokenKind]) {
+    assert!(lex_with_token_kinds(input, expected).errors().is_empty());
+}
 
 #[test]
 fn lex_keywords_idents_and_literals() {
-    let lexed = Lexer::new("let x := 1\n").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
+    let lexed = lex_with_token_kinds(
+        "let x := 1\n",
         [
             TokenKind::KwLet,
             TokenKind::Ident,
@@ -13,6 +32,7 @@ fn lex_keywords_idents_and_literals() {
             TokenKind::Int,
             TokenKind::Eof,
         ]
+        .as_slice(),
     );
 
     assert!(lexed.token_trivia(0).is_empty());
@@ -21,14 +41,14 @@ fn lex_keywords_idents_and_literals() {
     assert_eq!(lexed.token_trivia(4).len(), 1);
     assert_eq!(lexed.token_trivia(4)[0].kind, TriviaKind::Newline);
 
-    let rec_kw = Lexer::new("rec").lex();
+    let rec_kw = lex("rec");
     assert_eq!(rec_kw.tokens()[0].kind, TokenKind::KwRec);
     assert_eq!(rec_kw.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]
 fn lex_line_doc_comment_trivia() {
-    let lexed = Lexer::new("/// hi\nlet").lex();
+    let lexed = lex("/// hi\nlet");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::KwLet);
     assert_eq!(
         lexed.token_trivia(0)[0].kind,
@@ -38,10 +58,8 @@ fn lex_line_doc_comment_trivia() {
 
 #[test]
 fn lex_compound_tokens_and_symbolic_ops() {
-    let lexed = Lexer::new("a:?>b a ++ b").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
+    assert_token_kinds(
+        "a:?>b a ++ b",
         [
             TokenKind::Ident,
             TokenKind::ColonQuestionGt,
@@ -49,51 +67,23 @@ fn lex_compound_tokens_and_symbolic_ops() {
             TokenKind::Ident,
             TokenKind::SymbolicOp,
             TokenKind::Ident,
-            TokenKind::Eof
-        ]
-    );
-}
-
-#[test]
-fn lex_compound_tokens_longest_first() {
-    let lexed = Lexer::new(":?> := = :? ... .{ .[ -> ~> => /= <= >= <: |>").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
-        [
-            TokenKind::ColonQuestionGt,
-            TokenKind::ColonEq,
-            TokenKind::Eq,
-            TokenKind::ColonQuestion,
-            TokenKind::DotDotDot,
-            TokenKind::DotLBrace,
-            TokenKind::DotLBracket,
-            TokenKind::MinusGt,
-            TokenKind::TildeGt,
-            TokenKind::EqGt,
-            TokenKind::SlashEq,
-            TokenKind::LtEq,
-            TokenKind::GtEq,
-            TokenKind::LtColon,
-            TokenKind::PipeGt,
             TokenKind::Eof,
         ]
+        .as_slice(),
     );
 }
 
 #[test]
 fn underscore_is_a_token() {
-    let lexed = Lexer::new("_").lex();
+    let lexed = lex("_");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::Underscore);
     assert_eq!(lexed.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]
 fn type_names_lex_as_identifiers() {
-    let lexed = Lexer::new("Type Type0 Type123 TypeX").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
+    assert_token_kinds(
+        "Type Type0 Type123 TypeX",
         [
             TokenKind::Ident,
             TokenKind::Ident,
@@ -101,46 +91,40 @@ fn type_names_lex_as_identifiers() {
             TokenKind::Ident,
             TokenKind::Eof,
         ]
+        .as_slice(),
     );
 }
 
 #[test]
 fn lex_op_ident() {
-    let lexed = Lexer::new("(+)").lex();
+    let lexed = lex("(+)");
     assert_eq!(lexed.tokens()[0].kind, TokenKind::OpIdent);
     assert_eq!(lexed.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]
 fn lex_template_literal_no_substitutions() {
-    let lexed = Lexer::new("`hi`").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(kinds, [TokenKind::TemplateNoSubst, TokenKind::Eof]);
-    assert!(lexed.errors().is_empty());
+    assert_no_errors("`hi`", &[TokenKind::TemplateNoSubst, TokenKind::Eof]);
 }
 
 #[test]
 fn lex_template_literal_with_substitution() {
-    let lexed = Lexer::new("`hi ${x} ok`").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
+    assert_no_errors(
+        "`hi ${x} ok`",
         [
             TokenKind::TemplateHead,
             TokenKind::Ident,
             TokenKind::TemplateTail,
-            TokenKind::Eof
+            TokenKind::Eof,
         ]
+        .as_slice(),
     );
-    assert!(lexed.errors().is_empty());
 }
 
 #[test]
 fn lex_template_literal_does_not_end_interpolation_on_inner_rbrace() {
-    let lexed = Lexer::new("`a ${{x := 1}} b`").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
+    assert_no_errors(
+        "`a ${{x := 1}} b`",
         [
             TokenKind::TemplateHead,
             TokenKind::LBrace,
@@ -149,67 +133,85 @@ fn lex_template_literal_does_not_end_interpolation_on_inner_rbrace() {
             TokenKind::Int,
             TokenKind::RBrace,
             TokenKind::TemplateTail,
-            TokenKind::Eof
+            TokenKind::Eof,
         ]
+        .as_slice(),
     );
-    assert!(lexed.errors().is_empty());
 }
 
 #[test]
 fn lex_template_literal_allows_escaped_dollar() {
-    let lexed = Lexer::new("`\\${x}`").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(kinds, [TokenKind::TemplateNoSubst, TokenKind::Eof]);
-    assert!(lexed.errors().is_empty());
+    assert_no_errors("`\\${x}`", &[TokenKind::TemplateNoSubst, TokenKind::Eof]);
 }
 
 #[test]
 fn dot_start_float_is_float() {
-    let lexed = Lexer::new(".5").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(kinds, [TokenKind::Float, TokenKind::Eof]);
+    assert_token_kinds(".5", &[TokenKind::Float, TokenKind::Eof]);
 }
 
 #[test]
-fn reserved_compounds_do_not_lex_as_op_ident() {
-    let lexed = Lexer::new("(->) (:=) (=>) (|>)").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(
-        kinds,
-        [
-            TokenKind::LParen,
-            TokenKind::MinusGt,
-            TokenKind::RParen,
-            TokenKind::LParen,
-            TokenKind::ColonEq,
-            TokenKind::RParen,
-            TokenKind::LParen,
-            TokenKind::EqGt,
-            TokenKind::RParen,
-            TokenKind::LParen,
-            TokenKind::PipeGt,
-            TokenKind::RParen,
-            TokenKind::Eof,
-        ]
-    );
+fn lex_reserved_compound_tokens() {
+    let cases = [
+        (
+            ":?> := = :? ... .{ .[ -> ~> => /= <= >= <: |>",
+            vec![
+                TokenKind::ColonQuestionGt,
+                TokenKind::ColonEq,
+                TokenKind::Eq,
+                TokenKind::ColonQuestion,
+                TokenKind::DotDotDot,
+                TokenKind::DotLBrace,
+                TokenKind::DotLBracket,
+                TokenKind::MinusGt,
+                TokenKind::TildeGt,
+                TokenKind::EqGt,
+                TokenKind::SlashEq,
+                TokenKind::LtEq,
+                TokenKind::GtEq,
+                TokenKind::LtColon,
+                TokenKind::PipeGt,
+                TokenKind::Eof,
+            ],
+        ),
+        (
+            "(->) (:=) (=>) (|>)",
+            vec![
+                TokenKind::LParen,
+                TokenKind::MinusGt,
+                TokenKind::RParen,
+                TokenKind::LParen,
+                TokenKind::ColonEq,
+                TokenKind::RParen,
+                TokenKind::LParen,
+                TokenKind::EqGt,
+                TokenKind::RParen,
+                TokenKind::LParen,
+                TokenKind::PipeGt,
+                TokenKind::RParen,
+                TokenKind::Eof,
+            ],
+        ),
+    ];
+
+    for (input, expected) in cases {
+        assert_token_kinds(input, &expected);
+    }
 }
 
 #[test]
 fn lt_minus_is_a_user_symbolic_op() {
-    let lexed = Lexer::new("<-").lex();
-    let kinds: Vec<TokenKind> = lexed.tokens().iter().map(|t| t.kind).collect();
-    assert_eq!(kinds, [TokenKind::SymbolicOp, TokenKind::Eof]);
+    assert_token_kinds("<-", &[TokenKind::SymbolicOp, TokenKind::Eof]);
 }
 
 #[test]
 fn c_operators_are_not_part_of_symbolic_op_alphabet() {
-    let lexed = Lexer::new("& && ^ ^^ ~ ~~ (&) (^ ) (~)").lex();
+    let lexed = lex("& && ^ ^^ ~ ~~ (&) (^ ) (~)");
     assert!(!lexed.errors().is_empty());
 }
 
 #[test]
 fn invalid_char_includes_character() {
-    let lexed = Lexer::new("€").lex();
+    let lexed = lex("€");
     assert_eq!(lexed.errors().len(), 1);
     assert_eq!(
         lexed.errors()[0].kind,
@@ -219,21 +221,21 @@ fn invalid_char_includes_character() {
 
 #[test]
 fn question_and_bang_are_only_valid_in_compounds() {
-    let q = Lexer::new("?").lex();
+    let q = lex("?");
     assert!(
         q.errors()
             .iter()
             .any(|e| e.kind == LexErrorKind::InvalidChar { ch: '?' })
     );
 
-    let b = Lexer::new("!").lex();
+    let b = lex("!");
     assert!(
         b.errors()
             .iter()
             .any(|e| e.kind == LexErrorKind::InvalidChar { ch: '!' })
     );
 
-    let compounds = Lexer::new("a?.b a!.b").lex();
+    let compounds = lex("a?.b a!.b");
     assert!(!compounds.errors().is_empty());
 }
 

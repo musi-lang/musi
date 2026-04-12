@@ -38,7 +38,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &missing_origin,
-                &EmitDiagKind::UnknownRecordType,
+                EmitDiagKind::UnknownRecordType,
                 format!("unknown emitted record type `{ty_name}`"),
             );
             emit_zero(self);
@@ -51,7 +51,7 @@ impl MethodEmitter<'_, '_> {
                     diags,
                     self.module_key,
                     &missing_origin,
-                    &EmitDiagKind::RecordLiteralMissingFieldValue,
+                    EmitDiagKind::RecordLiteralMissingFieldValue,
                     "record literal missing field value",
                 );
                 emit_zero(self);
@@ -97,7 +97,7 @@ impl MethodEmitter<'_, '_> {
                 diags,
                 self.module_key,
                 &input.base.origin,
-                &EmitDiagKind::UnknownRecordType,
+                EmitDiagKind::UnknownRecordType,
                 format!("unknown emitted record type `{}`", input.ty_name),
             );
             emit_zero(self);
@@ -146,7 +146,7 @@ impl MethodEmitter<'_, '_> {
                     diags,
                     self.module_key,
                     &input.base.origin,
-                    &EmitDiagKind::RecordUpdateMissingFieldValue,
+                    EmitDiagKind::RecordUpdateMissingFieldValue,
                     "record update missing field value",
                 );
                 emit_zero(self);

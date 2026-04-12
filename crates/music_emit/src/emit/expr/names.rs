@@ -40,7 +40,7 @@ impl MethodEmitter<'_, '_> {
             diags,
             self.module_key,
             &expr.origin,
-            &EmitDiagKind::UnsupportedNameRef,
+            EmitDiagKind::UnsupportedNameRef,
             format!("name ref `{name}` has no emitted form"),
         );
         emit_zero(self);
