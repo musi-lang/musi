@@ -45,13 +45,17 @@ struct TopLevelItems {
 struct LetItemInput {
     expr_id: HirExprId,
     pat: HirPatId,
-    params: SliceRange<HirParam>,
+    params: HirParamRange,
     value: HirExprId,
     is_callable: bool,
     exported: bool,
 }
 
 type RecordLayout = (BTreeMap<Symbol, u16>, Box<[IrRecordLayoutField]>, u16);
+type HirParamRange = SliceRange<HirParam>;
+type HirRecordItemRange = SliceRange<HirRecordItem>;
+type BoundNameSet = HashSet<NameBindingId>;
+type LoweredCaseArmList = Box<[IrLoweredCaseArm]>;
 
 struct LoweredParams {
     params: Vec<IrParam>,
@@ -74,7 +78,7 @@ struct LowerCtx<'a> {
     sema: &'a SemaModule,
     interner: &'a Interner,
     module_key: ModuleKey,
-    module_level_bindings: HashSet<NameBindingId>,
+    module_level_bindings: BoundNameSet,
     next_lambda_id: u32,
     next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
@@ -86,6 +90,381 @@ struct RecursiveBindingInput<'a, 'b> {
     binding: NameBindingId,
     callable_name: &'a str,
     captures: &'a [NameBindingId],
+}
+
+impl RecursiveBindingInput<'_, '_> {
+    fn rewrite_refs(&self, expr: IrExpr) -> IrExpr {
+        let origin_expr = expr.origin;
+        let kind = self.rewrite_kind(expr.kind);
+        IrExpr::new(origin_expr, kind)
+    }
+
+    fn rewrite_kind(&self, kind: IrExprKind) -> IrExprKind {
+        match kind {
+            IrExprKind::Name {
+                binding: Some(found),
+                module_target,
+                ..
+            } if found == self.binding && module_target.is_none() => IrExprKind::ClosureNew {
+                callee: IrNameRef::new(self.callable_name)
+                    .with_binding(self.binding)
+                    .with_module_target(self.ctx.module_key.clone()),
+                captures: lower_capture_exprs(self.ctx, self.origin, self.captures),
+            },
+            IrExprKind::Sequence { exprs } => rewrite_sequence_kind(
+                self.ctx,
+                self.origin,
+                exprs,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Tuple { ty_name, items } => rewrite_tuple_kind(
+                self.ctx,
+                self.origin,
+                ty_name,
+                items,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Array { ty_name, items } => rewrite_array_kind(
+                self.ctx,
+                self.origin,
+                ty_name,
+                items,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::ArrayCat { ty_name, parts } => rewrite_array_cat_kind(
+                self.ctx,
+                self.origin,
+                ty_name,
+                parts,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Record {
+                ty_name,
+                field_count,
+                fields,
+            } => self.rewrite_record_kind(ty_name, field_count, fields),
+            IrExprKind::RecordGet { base, index } => rewrite_record_get_kind(
+                self.ctx,
+                self.origin,
+                *base,
+                index,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::RecordUpdate {
+                ty_name,
+                field_count,
+                base,
+                base_fields,
+                result_fields,
+                updates,
+            } => self.rewrite_record_update_kind(RecordUpdateRewriteInput {
+                ty_name,
+                field_count,
+                base: *base,
+                base_fields,
+                result_fields,
+                updates,
+            }),
+            other => self.rewrite_storage_kind(other),
+        }
+    }
+
+    fn rewrite_storage_kind(&self, kind: IrExprKind) -> IrExprKind {
+        match kind {
+            IrExprKind::Let {
+                binding: local_binding,
+                name,
+                value,
+            } => self.rewrite_let_kind(local_binding, name, *value),
+            IrExprKind::TempLet { temp, value } => rewrite_temp_let_kind(
+                self.ctx,
+                self.origin,
+                temp,
+                *value,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Assign { target, value } => rewrite_assign_kind(
+                self.ctx,
+                self.origin,
+                *target,
+                *value,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Index { base, indices } => rewrite_index_kind(
+                self.ctx,
+                self.origin,
+                *base,
+                indices,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::DynamicImport { spec } => rewrite_dynamic_import_kind(
+                self.ctx,
+                self.origin,
+                *spec,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::ModuleGet { base, name } => rewrite_module_get_kind(
+                self.ctx,
+                self.origin,
+                *base,
+                name,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            other => self.rewrite_compute_kind(other),
+        }
+    }
+
+    fn rewrite_compute_kind(&self, kind: IrExprKind) -> IrExprKind {
+        match kind {
+            IrExprKind::Binary { op, left, right } => self.rewrite_binary_kind(op, *left, *right),
+            IrExprKind::Not { expr } => rewrite_not_kind(
+                self.ctx,
+                self.origin,
+                *expr,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::TyTest { base, ty_name } => rewrite_ty_test_kind(
+                self.ctx,
+                self.origin,
+                *base,
+                ty_name,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::TyCast { base, ty_name } => rewrite_ty_cast_kind(
+                self.ctx,
+                self.origin,
+                *base,
+                ty_name,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::Case { scrutinee, arms } => rewrite_case_kind(
+                self.ctx,
+                self.origin,
+                *scrutinee,
+                arms,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::VariantNew {
+                data_key,
+                tag_index,
+                field_count,
+                args,
+            } => self.rewrite_variant_kind(data_key, tag_index, field_count, args),
+            IrExprKind::Call { callee, args } => rewrite_call_kind(
+                self.ctx,
+                self.origin,
+                *callee,
+                args,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            IrExprKind::CallSeq { callee, args } => rewrite_call_seq_kind(
+                self.ctx,
+                self.origin,
+                *callee,
+                args,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            other => self.rewrite_effect_kind(other),
+        }
+    }
+
+    fn rewrite_effect_kind(&self, kind: IrExprKind) -> IrExprKind {
+        match kind {
+            IrExprKind::Perform {
+                effect_key,
+                op_index,
+                args,
+            } => self.rewrite_perform_kind(effect_key, op_index, args),
+            IrExprKind::PerformSeq {
+                effect_key,
+                op_index,
+                args,
+            } => self.rewrite_perform_seq_kind(effect_key, op_index, args),
+            IrExprKind::Handle {
+                effect_key,
+                value,
+                ops,
+                body,
+            } => self.rewrite_handle_kind(effect_key, *value, ops, *body),
+            IrExprKind::Resume { expr } => rewrite_resume_kind(
+                self.ctx,
+                self.origin,
+                expr.map(|expr| *expr),
+                self.binding,
+                self.callable_name,
+                self.captures,
+            ),
+            other => other,
+        }
+    }
+
+    fn rewrite_record_kind(
+        &self,
+        ty_name: Box<str>,
+        field_count: u16,
+        fields: Box<[IrRecordField]>,
+    ) -> IrExprKind {
+        rewrite_record_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            ty_name,
+            field_count,
+            fields,
+        )
+    }
+
+    fn rewrite_record_update_kind(&self, update: RecordUpdateRewriteInput) -> IrExprKind {
+        rewrite_record_update_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            update,
+        )
+    }
+
+    fn rewrite_let_kind(
+        &self,
+        local_binding: Option<NameBindingId>,
+        name: Box<str>,
+        value: IrExpr,
+    ) -> IrExprKind {
+        rewrite_let_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            local_binding,
+            name,
+            value,
+        )
+    }
+
+    fn rewrite_binary_kind(&self, op: IrBinaryOp, left: IrExpr, right: IrExpr) -> IrExprKind {
+        rewrite_binary_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            op,
+            left,
+            right,
+        )
+    }
+
+    fn rewrite_variant_kind(
+        &self,
+        data_key: DefinitionKey,
+        tag_index: u16,
+        field_count: u16,
+        args: Box<[IrExpr]>,
+    ) -> IrExprKind {
+        rewrite_variant_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            data_key,
+            tag_index,
+            field_count,
+            args,
+        )
+    }
+
+    fn rewrite_perform_kind(
+        &self,
+        effect_key: DefinitionKey,
+        op_index: u16,
+        args: Box<[IrExpr]>,
+    ) -> IrExprKind {
+        rewrite_perform_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            effect_key,
+            op_index,
+            args,
+        )
+    }
+
+    fn rewrite_perform_seq_kind(
+        &self,
+        effect_key: DefinitionKey,
+        op_index: u16,
+        args: Box<[IrSeqPart]>,
+    ) -> IrExprKind {
+        rewrite_perform_seq_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            effect_key,
+            op_index,
+            args,
+        )
+    }
+
+    fn rewrite_handle_kind(
+        &self,
+        effect_key: DefinitionKey,
+        value: IrExpr,
+        ops: Box<[IrHandleOp]>,
+        body: IrExpr,
+    ) -> IrExprKind {
+        rewrite_handle_kind(
+            self.ctx,
+            self.origin,
+            self.binding,
+            self.callable_name,
+            self.captures,
+            effect_key,
+            value,
+            ops,
+            body,
+        )
+    }
 }
 
 struct RecordUpdateRewriteInput {
@@ -633,7 +1012,7 @@ fn record_layout_for_ty(
 fn lower_record_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
-    items: SliceRange<HirRecordItem>,
+    items: HirRecordItemRange,
 ) -> LoweringResult {
     record::lower_record_expr(ctx, expr_id, items)
 }
@@ -796,7 +1175,7 @@ fn lower_let_expr(
     mods: HirLetMods,
     pat: HirPatId,
     has_param_clause: bool,
-    params: &SliceRange<HirParam>,
+    params: &HirParamRange,
     value: HirExprId,
 ) -> IrExprKind {
     let sema = ctx.sema;
@@ -834,7 +1213,7 @@ fn lower_local_callable_let(
     ctx: &mut LowerCtx<'_>,
     mods: HirLetMods,
     pat: HirPatId,
-    params: &SliceRange<HirParam>,
+    params: &HirParamRange,
     value: HirExprId,
 ) -> IrExprKind {
     let sema = ctx.sema;
@@ -881,7 +1260,7 @@ fn lower_local_callable_let(
 fn lower_lambda_expr(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
-    params: &SliceRange<HirParam>,
+    params: &HirParamRange,
     body: HirExprId,
 ) -> IrExprKind {
     let lowered_body = lower_expr(ctx, body);
@@ -902,7 +1281,7 @@ fn lower_lambda_expr(
     .kind
 }
 
-fn lower_user_params(ctx: &LowerCtx<'_>, params: &SliceRange<HirParam>) -> LoweredParams {
+fn lower_user_params(ctx: &LowerCtx<'_>, params: &HirParamRange) -> LoweredParams {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let mut lowered = Vec::new();
@@ -1008,255 +1387,7 @@ fn rewrite_recursive_binding_refs(
         callable_name,
         captures,
     };
-    let origin_expr = expr.origin;
-    let kind = rewrite_recursive_binding_kind(&input, expr.kind);
-    IrExpr::new(origin_expr, kind)
-}
-
-fn rewrite_recursive_binding_kind(
-    input: &RecursiveBindingInput<'_, '_>,
-    kind: IrExprKind,
-) -> IrExprKind {
-    match kind {
-        IrExprKind::Name {
-            binding: Some(found),
-            module_target,
-            ..
-        } if found == input.binding && module_target.is_none() => IrExprKind::ClosureNew {
-            callee: IrNameRef::new(input.callable_name)
-                .with_binding(input.binding)
-                .with_module_target(input.ctx.module_key.clone()),
-            captures: lower_capture_exprs(input.ctx, input.origin, input.captures),
-        },
-        IrExprKind::Sequence { exprs } => rewrite_sequence_kind(
-            input.ctx,
-            input.origin,
-            exprs,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Tuple { ty_name, items } => rewrite_tuple_kind(
-            input.ctx,
-            input.origin,
-            ty_name,
-            items,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Array { ty_name, items } => rewrite_array_kind(
-            input.ctx,
-            input.origin,
-            ty_name,
-            items,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::ArrayCat { ty_name, parts } => rewrite_array_cat_kind(
-            input.ctx,
-            input.origin,
-            ty_name,
-            parts,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Record {
-            ty_name,
-            field_count,
-            fields,
-        } => rewrite_record_kind(input, ty_name, field_count, fields),
-        IrExprKind::RecordGet { base, index } => rewrite_record_get_kind(
-            input.ctx,
-            input.origin,
-            *base,
-            index,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::RecordUpdate {
-            ty_name,
-            field_count,
-            base,
-            base_fields,
-            result_fields,
-            updates,
-        } => rewrite_record_update_kind(
-            input,
-            RecordUpdateRewriteInput {
-                ty_name,
-                field_count,
-                base: *base,
-                base_fields,
-                result_fields,
-                updates,
-            },
-        ),
-        other => rewrite_recursive_binding_storage_kind(input, other),
-    }
-}
-
-fn rewrite_recursive_binding_storage_kind(
-    input: &RecursiveBindingInput<'_, '_>,
-    kind: IrExprKind,
-) -> IrExprKind {
-    match kind {
-        IrExprKind::Let {
-            binding: local_binding,
-            name,
-            value,
-        } => rewrite_let_kind(input, local_binding, name, *value),
-        IrExprKind::TempLet { temp, value } => rewrite_temp_let_kind(
-            input.ctx,
-            input.origin,
-            temp,
-            *value,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Assign { target, value } => rewrite_assign_kind(
-            input.ctx,
-            input.origin,
-            *target,
-            *value,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Index { base, indices } => rewrite_index_kind(
-            input.ctx,
-            input.origin,
-            *base,
-            indices,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::DynamicImport { spec } => rewrite_dynamic_import_kind(
-            input.ctx,
-            input.origin,
-            *spec,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::ModuleGet { base, name } => rewrite_module_get_kind(
-            input.ctx,
-            input.origin,
-            *base,
-            name,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        other => rewrite_recursive_binding_compute_kind(input, other),
-    }
-}
-
-fn rewrite_recursive_binding_compute_kind(
-    input: &RecursiveBindingInput<'_, '_>,
-    kind: IrExprKind,
-) -> IrExprKind {
-    match kind {
-        IrExprKind::Binary { op, left, right } => rewrite_binary_kind(input, op, *left, *right),
-        IrExprKind::Not { expr } => rewrite_not_kind(
-            input.ctx,
-            input.origin,
-            *expr,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::TyTest { base, ty_name } => rewrite_ty_test_kind(
-            input.ctx,
-            input.origin,
-            *base,
-            ty_name,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::TyCast { base, ty_name } => rewrite_ty_cast_kind(
-            input.ctx,
-            input.origin,
-            *base,
-            ty_name,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::Case { scrutinee, arms } => rewrite_case_kind(
-            input.ctx,
-            input.origin,
-            *scrutinee,
-            arms,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::VariantNew {
-            data_key,
-            tag_index,
-            field_count,
-            args,
-        } => rewrite_variant_kind(input, data_key, tag_index, field_count, args),
-        IrExprKind::Call { callee, args } => rewrite_call_kind(
-            input.ctx,
-            input.origin,
-            *callee,
-            args,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        IrExprKind::CallSeq { callee, args } => rewrite_call_seq_kind(
-            input.ctx,
-            input.origin,
-            *callee,
-            args,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        other => rewrite_recursive_binding_effect_kind(input, other),
-    }
-}
-
-fn rewrite_recursive_binding_effect_kind(
-    input: &RecursiveBindingInput<'_, '_>,
-    kind: IrExprKind,
-) -> IrExprKind {
-    match kind {
-        IrExprKind::Perform {
-            effect_key,
-            op_index,
-            args,
-        } => rewrite_perform_kind(input, effect_key, op_index, args),
-        IrExprKind::PerformSeq {
-            effect_key,
-            op_index,
-            args,
-        } => rewrite_perform_seq_kind(input, effect_key, op_index, args),
-        IrExprKind::Handle {
-            effect_key,
-            value,
-            ops,
-            body,
-        } => rewrite_handle_kind(input, effect_key, *value, ops, *body),
-        IrExprKind::Resume { expr } => rewrite_resume_kind(
-            input.ctx,
-            input.origin,
-            expr.map(|expr| *expr),
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
-        other => other,
-    }
+    input.rewrite_refs(expr)
 }
 
 fn rewrite_seq_parts(
@@ -1358,7 +1489,11 @@ fn rewrite_array_cat_kind(
 }
 
 fn rewrite_record_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     ty_name: Box<str>,
     field_count: u16,
     fields: Box<[IrRecordField]>,
@@ -1366,14 +1501,7 @@ fn rewrite_record_kind(
     IrExprKind::Record {
         ty_name,
         field_count,
-        fields: rewrite_record_fields(
-            input.ctx,
-            input.origin,
-            fields,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
+        fields: rewrite_record_fields(ctx, origin, fields, binding, callable_name, captures),
     }
 }
 
@@ -1400,35 +1528,43 @@ fn rewrite_record_get_kind(
 }
 
 fn rewrite_record_update_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     update: RecordUpdateRewriteInput,
 ) -> IrExprKind {
     IrExprKind::RecordUpdate {
         ty_name: update.ty_name,
         field_count: update.field_count,
         base: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             update.base,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
         base_fields: update.base_fields,
         result_fields: update.result_fields,
         updates: rewrite_record_fields(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             update.updates,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         ),
     }
 }
 
 fn rewrite_let_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     local_binding: Option<NameBindingId>,
     name: Box<str>,
     value: IrExpr,
@@ -1437,12 +1573,12 @@ fn rewrite_let_kind(
         binding: local_binding,
         name,
         value: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             value,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
     }
 }
@@ -1563,7 +1699,11 @@ fn rewrite_module_get_kind(
 }
 
 fn rewrite_binary_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     op: IrBinaryOp,
     left: IrExpr,
     right: IrExpr,
@@ -1571,20 +1711,20 @@ fn rewrite_binary_kind(
     IrExprKind::Binary {
         op,
         left: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             left,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
         right: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             right,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
     }
 }
@@ -1657,7 +1797,7 @@ fn rewrite_case_kind(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
     scrutinee: IrExpr,
-    arms: Box<[IrLoweredCaseArm]>,
+    arms: LoweredCaseArmList,
     binding: NameBindingId,
     callable_name: &str,
     captures: &[NameBindingId],
@@ -1676,7 +1816,11 @@ fn rewrite_case_kind(
 }
 
 fn rewrite_variant_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     data_key: DefinitionKey,
     tag_index: u16,
     field_count: u16,
@@ -1686,14 +1830,7 @@ fn rewrite_variant_kind(
         data_key,
         tag_index,
         field_count,
-        args: rewrite_expr_slice(
-            input.ctx,
-            input.origin,
-            args,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
+        args: rewrite_expr_slice(ctx, origin, args, binding, callable_name, captures),
     }
 }
 
@@ -1742,7 +1879,11 @@ fn rewrite_call_seq_kind(
 }
 
 fn rewrite_perform_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     effect_key: DefinitionKey,
     op_index: u16,
     args: Box<[IrExpr]>,
@@ -1750,19 +1891,16 @@ fn rewrite_perform_kind(
     IrExprKind::Perform {
         effect_key,
         op_index,
-        args: rewrite_expr_slice(
-            input.ctx,
-            input.origin,
-            args,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
+        args: rewrite_expr_slice(ctx, origin, args, binding, callable_name, captures),
     }
 }
 
 fn rewrite_perform_seq_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     effect_key: DefinitionKey,
     op_index: u16,
     args: Box<[IrSeqPart]>,
@@ -1770,19 +1908,16 @@ fn rewrite_perform_seq_kind(
     IrExprKind::PerformSeq {
         effect_key,
         op_index,
-        args: rewrite_seq_parts(
-            input.ctx,
-            input.origin,
-            args,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
+        args: rewrite_seq_parts(ctx, origin, args, binding, callable_name, captures),
     }
 }
 
 fn rewrite_handle_kind(
-    input: &RecursiveBindingInput<'_, '_>,
+    ctx: &LowerCtx<'_>,
+    origin: IrOrigin,
+    binding: NameBindingId,
+    callable_name: &str,
+    captures: &[NameBindingId],
     effect_key: DefinitionKey,
     value: IrExpr,
     ops: Box<[IrHandleOp]>,
@@ -1791,28 +1926,21 @@ fn rewrite_handle_kind(
     IrExprKind::Handle {
         effect_key,
         value: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             value,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
-        ops: rewrite_handle_ops(
-            input.ctx,
-            input.origin,
-            ops,
-            input.binding,
-            input.callable_name,
-            input.captures,
-        ),
+        ops: rewrite_handle_ops(ctx, origin, ops, binding, callable_name, captures),
         body: Box::new(rewrite_recursive_binding_refs(
-            input.ctx,
-            input.origin,
+            ctx,
+            origin,
             body,
-            input.binding,
-            input.callable_name,
-            input.captures,
+            binding,
+            callable_name,
+            captures,
         )),
     }
 }
@@ -1898,11 +2026,11 @@ fn rewrite_call_args(
 fn rewrite_case_arms(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
-    arms: Box<[IrLoweredCaseArm]>,
+    arms: LoweredCaseArmList,
     binding: NameBindingId,
     callable_name: &str,
     captures: &[NameBindingId],
-) -> Box<[IrLoweredCaseArm]> {
+) -> LoweredCaseArmList {
     arms.into_vec()
         .into_iter()
         .map(|arm| IrLoweredCaseArm {
@@ -2036,15 +2164,15 @@ fn compute_capture_bindings(
     captures
 }
 
-fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
+fn collect_used_bindings(expr: &IrExpr, out: &mut BoundNameSet) {
     collect::collect_used_bindings(expr, out);
 }
 
-fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
+fn collect_local_decl_bindings(expr: &IrExpr, out: &mut BoundNameSet) {
     collect::collect_local_decl_bindings(expr, out);
 }
 
-fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut HashSet<NameBindingId>) {
+fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut BoundNameSet) {
     match pattern {
         IrCasePattern::Wildcard | IrCasePattern::Lit(_) => {}
         IrCasePattern::Bind { binding, .. } => {
@@ -2366,7 +2494,7 @@ fn lower_record_update_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     base: HirExprId,
-    items: SliceRange<HirRecordItem>,
+    items: HirRecordItemRange,
 ) -> LoweringResult {
     record::lower_record_update_expr(ctx, expr_id, base, items)
 }
@@ -2723,7 +2851,7 @@ fn lower_foreign_let(
     interner: &Interner,
     expr_id: HirExprId,
     name: Ident,
-    params: SliceRange<HirParam>,
+    params: HirParamRange,
     exported: bool,
 ) -> IrForeignDef {
     let expr = sema.module().store.exprs.get(expr_id);
@@ -2761,7 +2889,7 @@ fn foreign_signature_tys(
     interner: &Interner,
     binding: Option<NameBindingId>,
     expr_id: HirExprId,
-    _params: SliceRange<HirParam>,
+    _params: HirParamRange,
 ) -> (Box<[Box<str>]>, Box<str>) {
     if let Some(binding) = binding
         && let Some(ty) = sema.binding_type(binding)

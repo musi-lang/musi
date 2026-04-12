@@ -6,7 +6,6 @@ use music_hir::{
     HirTyKind,
 };
 
-use super::normalize::lower_type_expr;
 use super::{CheckPass, DiagKind, PassBase};
 
 pub(super) fn extract_data_layout_hints(
@@ -14,301 +13,314 @@ pub(super) fn extract_data_layout_hints(
     origin: HirOrigin,
     attr_ranges: &[SliceRange<HirAttr>],
 ) -> (Option<Box<str>>, Option<u32>, Option<u32>) {
-    let mut repr_kind: Option<Box<str>> = None;
-    let mut align: Option<u32> = None;
-    let mut pack: Option<u32> = None;
-    for range in attr_ranges {
-        for attr in ctx.attrs(range.clone()) {
-            let path = attr_path_base(ctx, &attr);
-            match path.as_slice() {
-                ["repr"] => {
-                    if repr_kind.is_some() {
-                        ctx.diag(origin.span, DiagKind::AttrDuplicateRepr, "");
-                        continue;
-                    }
-                    repr_kind = parse_named_string_arg(ctx, &attr, "kind");
-                    if repr_kind.is_none() {
-                        ctx.diag(origin.span, DiagKind::AttrReprRequiresKindString, "");
-                    }
-                }
-                ["layout"] => {
-                    for arg in ctx.attr_args(attr.args.clone()) {
-                        let Some(name) = arg.name else {
-                            ctx.diag(origin.span, DiagKind::AttrLayoutArgRequiresName, "");
+    ctx.extract_data_layout_hints(origin, attr_ranges)
+}
+
+impl PassBase<'_, '_, '_> {
+    fn extract_data_layout_hints(
+        &mut self,
+        origin: HirOrigin,
+        attr_ranges: &[SliceRange<HirAttr>],
+    ) -> (Option<Box<str>>, Option<u32>, Option<u32>) {
+        let mut repr_kind: Option<Box<str>> = None;
+        let mut align: Option<u32> = None;
+        let mut pack: Option<u32> = None;
+        for range in attr_ranges {
+            for attr in self.attrs(range.clone()) {
+                let path = self.attr_path_base(&attr);
+                match path.as_slice() {
+                    ["repr"] => {
+                        if repr_kind.is_some() {
+                            self.diag(origin.span, DiagKind::AttrDuplicateRepr, "");
                             continue;
-                        };
-                        let key = ctx.resolve_symbol(name.name);
-                        match key {
-                            "align" => {
-                                if align.is_some() {
-                                    ctx.diag(origin.span, DiagKind::AttrDuplicateLayoutAlign, "");
-                                    continue;
-                                }
-                                align = parse_u32_value(ctx, arg.value);
-                                if align.is_none() {
-                                    ctx.diag(origin.span, DiagKind::AttrLayoutAlignRequiresU32, "");
-                                }
-                            }
-                            "pack" => {
-                                if pack.is_some() {
-                                    ctx.diag(origin.span, DiagKind::AttrDuplicateLayoutPack, "");
-                                    continue;
-                                }
-                                pack = parse_u32_value(ctx, arg.value);
-                                if pack.is_none() {
-                                    ctx.diag(origin.span, DiagKind::AttrLayoutPackRequiresU32, "");
-                                }
-                            }
-                            _ => ctx.diag(origin.span, DiagKind::AttrUnknownArg, ""),
+                        }
+                        repr_kind = self.parse_named_string_arg(&attr, "kind");
+                        if repr_kind.is_none() {
+                            self.diag(origin.span, DiagKind::AttrReprRequiresKindString, "");
                         }
                     }
+                    ["layout"] => {
+                        for arg in self.attr_args(attr.args.clone()) {
+                            let Some(name) = arg.name else {
+                                self.diag(origin.span, DiagKind::AttrLayoutArgRequiresName, "");
+                                continue;
+                            };
+                            let key = self.resolve_symbol(name.name);
+                            match key {
+                                "align" => {
+                                    if align.is_some() {
+                                        self.diag(
+                                            origin.span,
+                                            DiagKind::AttrDuplicateLayoutAlign,
+                                            "",
+                                        );
+                                        continue;
+                                    }
+                                    align = self.parse_u32_value(arg.value);
+                                    if align.is_none() {
+                                        self.diag(
+                                            origin.span,
+                                            DiagKind::AttrLayoutAlignRequiresU32,
+                                            "",
+                                        );
+                                    }
+                                }
+                                "pack" => {
+                                    if pack.is_some() {
+                                        self.diag(
+                                            origin.span,
+                                            DiagKind::AttrDuplicateLayoutPack,
+                                            "",
+                                        );
+                                        continue;
+                                    }
+                                    pack = self.parse_u32_value(arg.value);
+                                    if pack.is_none() {
+                                        self.diag(
+                                            origin.span,
+                                            DiagKind::AttrLayoutPackRequiresU32,
+                                            "",
+                                        );
+                                    }
+                                }
+                                _ => self.diag(origin.span, DiagKind::AttrUnknownArg, ""),
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        (repr_kind, align, pack)
+    }
+}
+
+impl CheckPass<'_, '_, '_> {
+    fn validate_musi_lang_attr(&mut self, attr: &HirAttr, origin: HirOrigin, inner: HirExprId) {
+        if !self.in_module_stmt() {
+            self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+            return;
+        }
+        if let HirExprKind::Let {
+            pat,
+            has_param_clause,
+            ..
+        } = self.expr(inner).kind
+        {
+            if has_param_clause {
+                self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+                return;
+            }
+            if !matches!(self.pat(pat).kind, HirPatKind::Bind { .. }) {
+                self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+                return;
+            }
+        } else {
+            self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+            return;
+        }
+        let name = self.parse_named_string_arg(attr, "name");
+        if name.is_none() {
+            self.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, "");
+        }
+    }
+
+    fn validate_musi_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        let opcode = self.parse_named_string_arg(attr, "opcode");
+        if opcode.is_none() {
+            self.diag(
+                origin.span,
+                DiagKind::AttrMusiIntrinsicRequiresOpcodeString,
+                "",
+            );
+        }
+    }
+
+    pub fn validate_expr_attrs(
+        &mut self,
+        origin: HirOrigin,
+        attrs: SliceRange<HirAttr>,
+        inner: HirExprId,
+    ) {
+        let inner_expr = self.expr(inner);
+        let inner_kind = inner_expr.kind;
+        let inner_is_foreign = inner_expr.mods.foreign.is_some();
+        for attr in self.attrs(attrs) {
+            let path = self.attr_path(&attr);
+            match path.as_slice() {
+                ["link" | "when"] => {
+                    if !inner_is_foreign {
+                        self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
+                    }
+                }
+                ["repr" | "layout"] => {
+                    let ok = match &inner_kind {
+                        HirExprKind::Data { .. } => true,
+                        HirExprKind::Let { value, .. } => {
+                            matches!(self.expr(*value).kind, HirExprKind::Data { .. })
+                        }
+                        _ => false,
+                    };
+                    if !ok {
+                        self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
+                    }
+                }
+                ["musi", "lang"] => self.validate_musi_lang_attr(&attr, origin, inner),
+                _ => {}
+            }
+        }
+    }
+
+    pub fn validate_foreign_let(&mut self, expr: HirExprId, abi: &str) {
+        let _ = abi;
+        let origin = self.expr(expr).origin;
+        let HirExprKind::Let { params, sig, .. } = self.expr(expr).kind else {
+            self.diag(origin.span, DiagKind::AttrForeignRequiresForeignLet, "");
+            return;
+        };
+        for param in self.params(params) {
+            if let Some(expr) = param.ty {
+                let origin = self.expr(expr).origin;
+                let ty = self.lower_type_expr(expr, origin);
+                self.validate_ffi_type(expr, ty);
+            }
+        }
+        if let Some(sig) = sig {
+            let origin = self.expr(sig).origin;
+            let ty = self.lower_type_expr(sig, origin);
+            self.validate_ffi_type(sig, ty);
+        } else {
+            let span = self.expr(expr).origin.span;
+            self.diag(span, DiagKind::ForeignSignatureRequired, "");
+        }
+        for attr in self.attrs(self.expr(expr).mods.attrs) {
+            let path = self.attr_path(&attr);
+            match path.as_slice() {
+                ["link"] => self.validate_link_attr(&attr, self.expr(expr).origin),
+                ["when"] => self.validate_when_attr(&attr, self.expr(expr).origin),
+                ["musi", "intrinsic"] => {
+                    self.validate_musi_intrinsic_attr(&attr, self.expr(expr).origin);
                 }
                 _ => {}
             }
         }
     }
-    (repr_kind, align, pack)
-}
 
-fn validate_musi_lang_attr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    attr: &HirAttr,
-    origin: HirOrigin,
-    inner: HirExprId,
-) {
-    if !ctx.in_module_stmt() {
-        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-        return;
-    }
-    if let HirExprKind::Let {
-        pat,
-        has_param_clause,
-        ..
-    } = ctx.expr(inner).kind
-    {
-        if has_param_clause {
-            ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-            return;
+    fn validate_ffi_type(&mut self, expr: HirExprId, ty: HirTyId) {
+        let valid = match self.ty(ty).kind {
+            HirTyKind::Int
+            | HirTyKind::Float
+            | HirTyKind::Bool
+            | HirTyKind::Unit
+            | HirTyKind::CString
+            | HirTyKind::CPtr
+            | HirTyKind::Unknown
+            | HirTyKind::Error => true,
+            HirTyKind::Named { name, .. } => self.data_def(self.resolve_symbol(name)).is_some(),
+            _ => false,
+        };
+        if !valid {
+            let span = self.expr(expr).origin.span;
+            self.diag(span, DiagKind::InvalidFfiType, "");
         }
-        if !matches!(ctx.pat(pat).kind, HirPatKind::Bind { .. }) {
-            ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-            return;
-        }
-    } else {
-        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-        return;
     }
-    let name = parse_named_string_arg(ctx, attr, "name");
-    if name.is_none() {
-        ctx.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, "");
-    }
-}
 
-fn validate_musi_intrinsic_attr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    attr: &HirAttr,
-    origin: HirOrigin,
-) {
-    let opcode = parse_named_string_arg(ctx, attr, "opcode");
-    if opcode.is_none() {
-        ctx.diag(
-            origin.span,
-            DiagKind::AttrMusiIntrinsicRequiresOpcodeString,
-            "",
-        );
-    }
-}
-
-pub fn validate_expr_attrs(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    origin: HirOrigin,
-    attrs: SliceRange<HirAttr>,
-    inner: HirExprId,
-) {
-    let inner_expr = ctx.expr(inner);
-    let inner_kind = inner_expr.kind;
-    let inner_is_foreign = inner_expr.mods.foreign.is_some();
-    for attr in ctx.attrs(attrs) {
-        let path = attr_path(ctx, &attr);
-        match path.as_slice() {
-            ["link" | "when"] => {
-                if !inner_is_foreign {
-                    ctx.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
+    pub(super) fn validate_link_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        let known = self.known();
+        for arg in self.attr_args(attr.args.clone()) {
+            if let Some(name) = arg.name.map(|ident| ident.name) {
+                if name != known.name_key && name != self.intern("symbol") {
+                    self.diag(origin.span, DiagKind::AttrUnknownArg, "");
                 }
             }
-            ["repr" | "layout"] => {
-                let ok = match &inner_kind {
-                    HirExprKind::Data { .. } => true,
-                    HirExprKind::Let { value, .. } => {
-                        matches!(ctx.expr(*value).kind, HirExprKind::Data { .. })
-                    }
-                    _ => false,
-                };
-                if !ok {
-                    ctx.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
+            if !self.attr_value_is_string(&arg) {
+                self.diag(origin.span, DiagKind::AttrLinkRequiresStringValue, "");
+            }
+        }
+    }
+
+    pub(super) fn validate_when_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
+            .into_iter()
+            .map(|name| self.intern(name))
+            .collect::<BTreeSet<_>>();
+        for arg in self.attr_args(attr.args.clone()) {
+            if let Some(name) = arg.name.map(|ident| ident.name) {
+                if !allowed.contains(&name) {
+                    self.diag(origin.span, DiagKind::AttrUnknownArg, "");
                 }
             }
-            ["musi", "lang"] => validate_musi_lang_attr(ctx, &attr, origin, inner),
-            _ => {}
-        }
-    }
-}
-
-pub fn validate_foreign_let(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, abi: &str) {
-    let _ = abi;
-    let origin = ctx.expr(expr).origin;
-    let HirExprKind::Let { params, sig, .. } = ctx.expr(expr).kind else {
-        ctx.diag(origin.span, DiagKind::AttrForeignRequiresForeignLet, "");
-        return;
-    };
-    for param in ctx.params(params) {
-        if let Some(expr) = param.ty {
-            let origin = ctx.expr(expr).origin;
-            let ty = lower_type_expr(ctx, expr, origin);
-            validate_ffi_type(ctx, expr, ty);
-        }
-    }
-    if let Some(sig) = sig {
-        let origin = ctx.expr(sig).origin;
-        let ty = lower_type_expr(ctx, sig, origin);
-        validate_ffi_type(ctx, sig, ty);
-    } else {
-        let span = ctx.expr(expr).origin.span;
-        ctx.diag(span, DiagKind::ForeignSignatureRequired, "");
-    }
-    for attr in ctx.attrs(ctx.expr(expr).mods.attrs) {
-        let path = attr_path(ctx, &attr);
-        match path.as_slice() {
-            ["link"] => validate_link_attr(ctx, &attr, ctx.expr(expr).origin),
-            ["when"] => validate_when_attr(ctx, &attr, ctx.expr(expr).origin),
-            ["musi", "intrinsic"] => {
-                validate_musi_intrinsic_attr(ctx, &attr, ctx.expr(expr).origin);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn validate_ffi_type(ctx: &mut CheckPass<'_, '_, '_>, expr: HirExprId, ty: HirTyId) {
-    let valid = match ctx.ty(ty).kind {
-        HirTyKind::Int
-        | HirTyKind::Float
-        | HirTyKind::Bool
-        | HirTyKind::Unit
-        | HirTyKind::CString
-        | HirTyKind::CPtr
-        | HirTyKind::Unknown
-        | HirTyKind::Error => true,
-        HirTyKind::Named { name, .. } => ctx.data_def(ctx.resolve_symbol(name)).is_some(),
-        _ => false,
-    };
-    if !valid {
-        let span = ctx.expr(expr).origin.span;
-        ctx.diag(span, DiagKind::InvalidFfiType, "");
-    }
-}
-
-pub(super) fn validate_link_attr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    attr: &HirAttr,
-    origin: HirOrigin,
-) {
-    let known = ctx.known();
-    for arg in ctx.attr_args(attr.args.clone()) {
-        if let Some(name) = arg.name.map(|ident| ident.name) {
-            if name != known.name_key && name != ctx.intern("symbol") {
-                ctx.diag(origin.span, DiagKind::AttrUnknownArg, "");
+            if !self.attr_value_is_string(&arg) && !self.attr_value_is_string_array(&arg) {
+                let kind =
+                    if arg.name.map(|ident| self.resolve_symbol(ident.name)) == Some("feature") {
+                        DiagKind::AttrWhenRequiresStringList
+                    } else {
+                        DiagKind::AttrWhenRequiresStringValue
+                    };
+                self.diag(origin.span, kind, "");
             }
         }
-        if !attr_value_is_string(ctx, &arg) {
-            ctx.diag(origin.span, DiagKind::AttrLinkRequiresStringValue, "");
-        }
+        let _ = self.target();
     }
-}
-
-pub(super) fn validate_when_attr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    attr: &HirAttr,
-    origin: HirOrigin,
-) {
-    let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
-        .into_iter()
-        .map(|name| ctx.intern(name))
-        .collect::<BTreeSet<_>>();
-    for arg in ctx.attr_args(attr.args.clone()) {
-        if let Some(name) = arg.name.map(|ident| ident.name) {
-            if !allowed.contains(&name) {
-                ctx.diag(origin.span, DiagKind::AttrUnknownArg, "");
-            }
-        }
-        if !attr_value_is_string(ctx, &arg) && !attr_value_is_string_array(ctx, &arg) {
-            let kind = if arg.name.map(|ident| ctx.resolve_symbol(ident.name)) == Some("feature") {
-                DiagKind::AttrWhenRequiresStringList
-            } else {
-                DiagKind::AttrWhenRequiresStringValue
-            };
-            ctx.diag(origin.span, kind, "");
-        }
+    fn attr_value_is_string(&self, arg: &HirAttrArg) -> bool {
+        matches!(self.expr(arg.value).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit))
     }
-    let _ = ctx.target();
-}
 
-fn attr_value_is_string(ctx: &CheckPass<'_, '_, '_>, arg: &HirAttrArg) -> bool {
-    matches!(ctx.expr(arg.value).kind, HirExprKind::Lit { lit } if ctx.lit_is_string(lit))
-}
+    fn attr_value_is_string_array(&self, arg: &HirAttrArg) -> bool {
+        let HirExprKind::Array { items } = self.expr(arg.value).kind else {
+            return false;
+        };
+        self.array_items(items)
+            .iter()
+            .all(|item| matches!(self.expr(item.expr).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit)))
+    }
 
-fn attr_value_is_string_array(ctx: &CheckPass<'_, '_, '_>, arg: &HirAttrArg) -> bool {
-    let HirExprKind::Array { items } = ctx.expr(arg.value).kind else {
-        return false;
-    };
-    ctx.array_items(items)
-        .iter()
-        .all(|item| matches!(ctx.expr(item.expr).kind, HirExprKind::Lit { lit } if ctx.lit_is_string(lit)))
+    pub(super) fn attr_path<'a>(&'a self, attr: &HirAttr) -> Vec<&'a str> {
+        self.idents(attr.path)
+            .into_iter()
+            .map(|ident| self.resolve_symbol(ident.name))
+            .collect()
+    }
 }
 
 pub(super) fn attr_path<'a>(ctx: &'a CheckPass<'_, '_, '_>, attr: &HirAttr) -> Vec<&'a str> {
-    ctx.idents(attr.path)
-        .into_iter()
-        .map(|ident| ctx.resolve_symbol(ident.name))
-        .collect()
+    ctx.attr_path(attr)
 }
 
-fn attr_path_base<'a>(ctx: &'a PassBase<'_, '_, '_>, attr: &HirAttr) -> Vec<&'a str> {
-    ctx.idents(attr.path)
-        .into_iter()
-        .map(|ident| ctx.resolve_symbol(ident.name))
-        .collect()
-}
+impl PassBase<'_, '_, '_> {
+    fn attr_path_base<'a>(&'a self, attr: &HirAttr) -> Vec<&'a str> {
+        self.idents(attr.path)
+            .into_iter()
+            .map(|ident| self.resolve_symbol(ident.name))
+            .collect()
+    }
 
-fn parse_named_string_arg(
-    ctx: &PassBase<'_, '_, '_>,
-    attr: &HirAttr,
-    key: &str,
-) -> Option<Box<str>> {
-    for arg in ctx.attr_args(attr.args.clone()) {
-        let Some(name) = arg.name else {
-            continue;
-        };
-        if ctx.resolve_symbol(name.name) != key {
-            continue;
-        }
-        if let HirExprKind::Lit { lit } = ctx.expr(arg.value).kind {
-            if let Some(value) = ctx.lit_string_value(lit) {
+    fn parse_named_string_arg(&self, attr: &HirAttr, key: &str) -> Option<Box<str>> {
+        for arg in self.attr_args(attr.args.clone()) {
+            let Some(name) = arg.name else {
+                continue;
+            };
+            if self.resolve_symbol(name.name) != key {
+                continue;
+            }
+            if let HirExprKind::Lit { lit } = self.expr(arg.value).kind
+                && let Some(value) = self.lit_string_value(lit)
+            {
                 return Some(value.into_boxed_str());
             }
         }
+        None
     }
-    None
-}
 
-fn parse_u32_value(ctx: &PassBase<'_, '_, '_>, expr: HirExprId) -> Option<u32> {
-    let HirExprKind::Lit { lit } = ctx.expr(expr).kind else {
-        return None;
-    };
-    match ctx.lit_kind(lit) {
-        HirLitKind::Int { raw } => parse_int_lit(&raw),
-        HirLitKind::Rune { value } => Some(value),
-        _ => None,
+    fn parse_u32_value(&self, expr: HirExprId) -> Option<u32> {
+        let HirExprKind::Lit { lit } = self.expr(expr).kind else {
+            return None;
+        };
+        match self.lit_kind(lit) {
+            HirLitKind::Int { raw } => parse_int_lit(&raw),
+            HirLitKind::Rune { value } => Some(value),
+            _ => None,
+        }
     }
 }
 

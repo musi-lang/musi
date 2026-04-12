@@ -6,13 +6,15 @@ use music_base::diag::DiagCode;
 
 use crate::errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
 
+type ManifestSpanMap = BTreeMap<String, Span>;
+
 #[derive(Debug, Clone)]
 pub struct ManifestSource {
     path: PathBuf,
     text: String,
     root_span: Span,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 impl ManifestSource {
@@ -108,16 +110,16 @@ impl ManifestSource {
 #[derive(Debug)]
 struct ManifestSpanIndex {
     root_span: Span,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 struct JsonSpanIndexer<'a> {
     text: &'a str,
     bytes: &'a [u8],
     pos: usize,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 impl<'a> JsonSpanIndexer<'a> {

@@ -1,5 +1,7 @@
 use super::*;
 
+type RecordItemRange = SliceRange<HirRecordItem>;
+
 struct RecordUpdateLayout<'a> {
     result_ty: HirTyId,
     result_indices: &'a BTreeMap<Symbol, u16>,
@@ -11,7 +13,7 @@ struct RecordUpdateLayout<'a> {
 pub(super) fn lower_record_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
-    items: SliceRange<HirRecordItem>,
+    items: RecordItemRange,
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
@@ -43,7 +45,7 @@ pub(super) fn lower_record_update_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     base: HirExprId,
-    items: SliceRange<HirRecordItem>,
+    items: RecordItemRange,
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
@@ -88,7 +90,7 @@ type RecordSourceResult = Result<(Vec<IrExpr>, RecordSourceMap), Box<str>>;
 fn collect_record_sources(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
-    items: SliceRange<HirRecordItem>,
+    items: RecordItemRange,
     indices: &BTreeMap<Symbol, u16>,
 ) -> RecordSourceResult {
     let sema = ctx.sema;

@@ -12,6 +12,8 @@ use crate::{
 use crate::{AssemblyError, AssemblyResult};
 use music_term::SyntaxShape;
 
+type LabelIdMap = HashMap<String, u16>;
+
 fn symbol_needs_quote(text: &str) -> bool {
     text.chars().any(char::is_whitespace) || text.contains('"') || text.contains('\\')
 }
@@ -918,7 +920,7 @@ impl TextBuilder {
         &mut self,
         line: &str,
         labels: &mut Vec<StringId>,
-        label_ids: &mut HashMap<String, u16>,
+        label_ids: &mut LabelIdMap,
     ) -> AssemblyResult<Instruction> {
         let parts = tokenize(line)?;
         let Some(opcode_text) = parts.first() else {
@@ -938,7 +940,7 @@ impl TextBuilder {
         shape: OperandShape,
         parts: &[String],
         labels: &mut Vec<StringId>,
-        label_ids: &mut HashMap<String, u16>,
+        label_ids: &mut LabelIdMap,
     ) -> AssemblyResult<Operand> {
         match shape {
             OperandShape::None => Ok(Operand::None),
@@ -1075,7 +1077,7 @@ impl TextBuilder {
         &mut self,
         parts: &[String],
         labels: &mut Vec<StringId>,
-        label_ids: &mut HashMap<String, u16>,
+        label_ids: &mut LabelIdMap,
     ) -> AssemblyResult<Operand> {
         let label_name = must_get(parts.get(1), "label")?.to_owned();
         Ok(Operand::Label(ensure_label(
@@ -1102,7 +1104,7 @@ impl TextBuilder {
         &mut self,
         parts: &[String],
         labels: &mut Vec<StringId>,
-        label_ids: &mut HashMap<String, u16>,
+        label_ids: &mut LabelIdMap,
     ) -> AssemblyResult<Operand> {
         let joined = parts.iter().skip(1).cloned().collect::<Vec<_>>().join(" ");
         let labels = joined
@@ -1127,7 +1129,7 @@ impl TextBuilder {
 fn ensure_label(
     artifact: &mut Artifact,
     labels: &mut Vec<StringId>,
-    label_ids: &mut HashMap<String, u16>,
+    label_ids: &mut LabelIdMap,
     name: String,
 ) -> AssemblyResult<u16> {
     if let Some(id) = label_ids.get(&name).copied() {

@@ -1,101 +1,104 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-pub(super) fn compile_name(
-    emitter: ExprEmitterMut<'_, '_, '_>,
-    binding: Option<NameBindingId>,
-    name: &str,
-    module_target: Option<&ModuleKey>,
-    expr: &IrExpr,
-    diags: &mut EmitDiagList,
-) {
-    if let Some(binding) = binding
-        && let Some(slot) = emitter.locals.get(&binding).copied()
-    {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdLoc,
-            Operand::Local(slot),
-        )));
-        return;
-    }
-    if let Some(global) = resolve_global(emitter, binding, name, module_target) {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdGlob,
-            Operand::Global(global),
-        )));
-        return;
-    }
-    if let Some(method) = resolve_method(emitter, binding, name, module_target) {
-        emitter.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::ClsNew,
-            Operand::WideMethodCaptures {
-                method,
-                captures: 0,
-            },
-        )));
-        return;
-    }
-    super::support::push_expr_diag(
-        diags,
-        emitter.module_key,
-        &expr.origin,
-        &EmitDiagKind::UnsupportedNameRef,
-        format!("name ref `{name}` has no emitted form"),
-    );
-    emit_zero(emitter);
-}
-
-pub(super) fn resolve_method(
-    emitter: ExprEmitterRef<'_, '_, '_>,
-    binding: Option<NameBindingId>,
-    name: &str,
-    module_target: Option<&ModuleKey>,
-) -> Option<MethodId> {
-    if module_target.is_none() || module_target.is_some_and(|target| target == emitter.module_key) {
-        if let Some(method) = emitter.layout.callables_by_name.get(name).copied() {
-            return Some(method);
+impl MethodEmitter<'_, '_> {
+    pub(super) fn compile_name(
+        &mut self,
+        binding: Option<NameBindingId>,
+        name: &str,
+        module_target: Option<&ModuleKey>,
+        expr: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        if let Some(binding) = binding
+            && let Some(slot) = self.locals.get(&binding).copied()
+        {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdLoc,
+                Operand::Local(slot),
+            )));
+            return;
         }
+        if let Some(global) = self.resolve_global(binding, name, module_target) {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdGlob,
+                Operand::Global(global),
+            )));
+            return;
+        }
+        if let Some(method) = self.resolve_method(binding, name, module_target) {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::ClsNew,
+                Operand::WideMethodCaptures {
+                    method,
+                    captures: 0,
+                },
+            )));
+            return;
+        }
+        super::support::push_expr_diag(
+            diags,
+            self.module_key,
+            &expr.origin,
+            &EmitDiagKind::UnsupportedNameRef,
+            format!("name ref `{name}` has no emitted form"),
+        );
+        emit_zero(self);
     }
-    resolve_named_binding(
-        binding,
-        name,
-        module_target,
-        &emitter.layout.callables,
-        &emitter.tables.qualified.methods,
-        &emitter.tables.unique.methods,
-    )
-}
 
-pub(super) fn resolve_foreign(
-    emitter: ExprEmitterRef<'_, '_, '_>,
-    binding: Option<NameBindingId>,
-    name: &str,
-    module_target: Option<&ModuleKey>,
-) -> Option<ForeignId> {
-    resolve_named_binding(
-        binding,
-        name,
-        module_target,
-        &emitter.layout.foreigns,
-        &emitter.tables.qualified.foreigns,
-        &emitter.tables.unique.foreigns,
-    )
-}
+    pub(super) fn resolve_method(
+        &self,
+        binding: Option<NameBindingId>,
+        name: &str,
+        module_target: Option<&ModuleKey>,
+    ) -> Option<MethodId> {
+        if module_target.is_none() || module_target.is_some_and(|target| target == self.module_key)
+        {
+            if let Some(method) = self.layout.callables_by_name.get(name).copied() {
+                return Some(method);
+            }
+        }
+        resolve_named_binding(
+            binding,
+            name,
+            module_target,
+            &self.layout.callables,
+            &self.tables.qualified.methods,
+            &self.tables.unique.methods,
+        )
+    }
 
-pub(super) fn resolve_global(
-    emitter: ExprEmitterRef<'_, '_, '_>,
-    binding: Option<NameBindingId>,
-    name: &str,
-    module_target: Option<&ModuleKey>,
-) -> Option<GlobalId> {
-    resolve_named_binding(
-        binding,
-        name,
-        module_target,
-        &emitter.layout.globals,
-        &emitter.tables.qualified.globals,
-        &emitter.tables.unique.globals,
-    )
+    pub(super) fn resolve_foreign(
+        &self,
+        binding: Option<NameBindingId>,
+        name: &str,
+        module_target: Option<&ModuleKey>,
+    ) -> Option<ForeignId> {
+        resolve_named_binding(
+            binding,
+            name,
+            module_target,
+            &self.layout.foreigns,
+            &self.tables.qualified.foreigns,
+            &self.tables.unique.foreigns,
+        )
+    }
+
+    pub(super) fn resolve_global(
+        &self,
+        binding: Option<NameBindingId>,
+        name: &str,
+        module_target: Option<&ModuleKey>,
+    ) -> Option<GlobalId> {
+        resolve_named_binding(
+            binding,
+            name,
+            module_target,
+            &self.layout.globals,
+            &self.tables.qualified.globals,
+            &self.tables.unique.globals,
+        )
+    }
 }
 
 fn resolve_named_binding<T: Copy>(

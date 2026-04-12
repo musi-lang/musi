@@ -284,7 +284,10 @@ impl Value {
     }
 
     #[must_use]
-    pub fn sequence(ty: TypeId, items: impl IntoIterator<Item = Self>) -> Self {
+    pub fn sequence<Items>(ty: TypeId, items: Items) -> Self
+    where
+        Items: IntoIterator<Item = Self>,
+    {
         Self::Seq(Rc::new(RefCell::new(SequenceValue::new(
             ty,
             items.into_iter().collect(),
@@ -292,7 +295,10 @@ impl Value {
     }
 
     #[must_use]
-    pub fn data(ty: TypeId, tag: i64, fields: impl IntoIterator<Item = Self>) -> Self {
+    pub fn data<Fields>(ty: TypeId, tag: i64, fields: Fields) -> Self
+    where
+        Fields: IntoIterator<Item = Self>,
+    {
         Self::Data(Rc::new(RefCell::new(DataValue::new(
             ty,
             tag,
@@ -301,11 +307,10 @@ impl Value {
     }
 
     #[must_use]
-    pub fn closure(
-        module_slot: usize,
-        method: MethodId,
-        captures: impl IntoIterator<Item = Self>,
-    ) -> Self {
+    pub fn closure<Captures>(module_slot: usize, method: MethodId, captures: Captures) -> Self
+    where
+        Captures: IntoIterator<Item = Self>,
+    {
         Self::Closure(Rc::new(RefCell::new(ClosureValue::new(
             module_slot,
             method,

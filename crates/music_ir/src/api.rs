@@ -10,6 +10,7 @@ use music_term::{TypeDim, TypeField, TypeModuleRef, TypeTerm, TypeTermKind};
 use crate::IrDiagKind;
 
 pub type IrDiagList = Vec<Diag>;
+pub type IrNameList = Box<[Box<str>]>;
 
 #[must_use]
 pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
@@ -167,7 +168,10 @@ pub struct IrParam {
 
 impl IrParam {
     #[must_use]
-    pub fn new(binding: NameBindingId, name: impl Into<Box<str>>) -> Self {
+    pub fn new<Name>(binding: NameBindingId, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             binding,
             name: name.into(),
@@ -246,7 +250,10 @@ pub struct IrRecordField {
 
 impl IrRecordField {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, index: u16, expr: IrExpr) -> Self {
+    pub fn new<Name>(name: Name, index: u16, expr: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             index,
@@ -263,7 +270,10 @@ pub struct IrRecordLayoutField {
 
 impl IrRecordLayoutField {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, index: u16) -> Self {
+    pub fn new<Name>(name: Name, index: u16) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             index,
@@ -280,7 +290,10 @@ pub struct IrNameRef {
 
 impl IrNameRef {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>) -> Self {
+    pub fn new<Name>(name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             binding: None,
             name: name.into(),
@@ -542,7 +555,10 @@ pub struct IrHandleOp {
 
 impl IrHandleOp {
     #[must_use]
-    pub fn new(op_index: u16, name: impl Into<Box<str>>, closure: IrExpr) -> Self {
+    pub fn new<Name>(op_index: u16, name: Name, closure: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             op_index,
             name: name.into(),
@@ -564,7 +580,10 @@ pub struct IrCallable {
 
 impl IrCallable {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, params: Box<[IrParam]>, body: IrExpr) -> Self {
+    pub fn new<Name>(name: Name, params: Box<[IrParam]>, body: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             binding: None,
             name: name.into(),
@@ -616,12 +635,15 @@ impl IrCallable {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataVariantDef {
     pub name: Box<str>,
-    pub field_tys: Box<[Box<str>]>,
+    pub field_tys: IrNameList,
 }
 
 impl IrDataVariantDef {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, field_tys: Box<[Box<str>]>) -> Self {
+    pub fn new<Name>(name: Name, field_tys: IrNameList) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             field_tys,
@@ -665,7 +687,10 @@ impl IrDataDef {
     }
 
     #[must_use]
-    pub fn with_repr_kind(mut self, repr_kind: impl Into<Box<str>>) -> Self {
+    pub fn with_repr_kind<ReprKind>(mut self, repr_kind: ReprKind) -> Self
+    where
+        ReprKind: Into<Box<str>>,
+    {
         self.repr_kind = Some(repr_kind.into());
         self
     }
@@ -690,20 +715,26 @@ pub struct IrForeignDef {
     pub abi: Box<str>,
     pub symbol: Box<str>,
     pub link: Option<Box<str>>,
-    pub param_tys: Box<[Box<str>]>,
+    pub param_tys: IrNameList,
     pub result_ty: Box<str>,
     pub exported: bool,
 }
 
 impl IrForeignDef {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
-        abi: impl Into<Box<str>>,
-        symbol: impl Into<Box<str>>,
-        param_tys: Box<[Box<str>]>,
-        result_ty: impl Into<Box<str>>,
-    ) -> Self {
+    pub fn new<Name, Abi, SymbolName, ResultTy>(
+        name: Name,
+        abi: Abi,
+        symbol: SymbolName,
+        param_tys: IrNameList,
+        result_ty: ResultTy,
+    ) -> Self
+    where
+        Name: Into<Box<str>>,
+        Abi: Into<Box<str>>,
+        SymbolName: Into<Box<str>>,
+        ResultTy: Into<Box<str>>,
+    {
         Self {
             binding: None,
             name: name.into(),
@@ -729,7 +760,10 @@ impl IrForeignDef {
     }
 
     #[must_use]
-    pub fn with_link(mut self, link: impl Into<Box<str>>) -> Self {
+    pub fn with_link<Link>(mut self, link: Link) -> Self
+    where
+        Link: Into<Box<str>>,
+    {
         self.link = Some(link.into());
         self
     }
@@ -759,7 +793,10 @@ pub struct IrGlobal {
 
 impl IrGlobal {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, body: IrExpr) -> Self {
+    pub fn new<Name>(name: Name, body: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             binding: None,
             name: name.into(),
@@ -823,17 +860,17 @@ impl IrEffectDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectOpDef {
     pub name: Box<str>,
-    pub param_tys: Box<[Box<str>]>,
+    pub param_tys: IrNameList,
     pub result_ty: Box<str>,
 }
 
 impl IrEffectOpDef {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
-        param_tys: Box<[Box<str>]>,
-        result_ty: impl Into<Box<str>>,
-    ) -> Self {
+    pub fn new<Name, ResultTy>(name: Name, param_tys: IrNameList, result_ty: ResultTy) -> Self
+    where
+        Name: Into<Box<str>>,
+        ResultTy: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             param_tys,
@@ -845,12 +882,12 @@ impl IrEffectOpDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrClassDef {
     pub key: DefinitionKey,
-    pub member_names: Box<[Box<str>]>,
+    pub member_names: IrNameList,
 }
 
 impl IrClassDef {
     #[must_use]
-    pub const fn new(key: DefinitionKey, member_names: Box<[Box<str>]>) -> Self {
+    pub const fn new(key: DefinitionKey, member_names: IrNameList) -> Self {
         Self { key, member_names }
     }
 }
@@ -858,12 +895,12 @@ impl IrClassDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrInstanceDef {
     pub class_key: DefinitionKey,
-    pub member_names: Box<[Box<str>]>,
+    pub member_names: IrNameList,
 }
 
 impl IrInstanceDef {
     #[must_use]
-    pub const fn new(class_key: DefinitionKey, member_names: Box<[Box<str>]>) -> Self {
+    pub const fn new(class_key: DefinitionKey, member_names: IrNameList) -> Self {
         Self {
             class_key,
             member_names,
@@ -875,16 +912,16 @@ impl IrInstanceDef {
 pub struct IrMetaRecord {
     pub target: Box<str>,
     pub key: Box<str>,
-    pub values: Box<[Box<str>]>,
+    pub values: IrNameList,
 }
 
 impl IrMetaRecord {
     #[must_use]
-    pub fn new(
-        target: impl Into<Box<str>>,
-        key: impl Into<Box<str>>,
-        values: Box<[Box<str>]>,
-    ) -> Self {
+    pub fn new<Target, Key>(target: Target, key: Key, values: IrNameList) -> Self
+    where
+        Target: Into<Box<str>>,
+        Key: Into<Box<str>>,
+    {
         Self {
             target: target.into(),
             key: key.into(),

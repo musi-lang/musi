@@ -65,6 +65,24 @@ level = "warn"
 
 [rules."design.repeated_type_aliases"]
 level = "warn"
+min_occurrences = 3
+exclude_outer = [
+  "Option",
+  "Result",
+  "VmResult",
+  "ToolingResult",
+  "SyntaxTermResult",
+  "ProjectResult",
+  "TypeTermResult",
+  "RuntimeResult",
+  "ParseResult",
+  "StringLitResult",
+  "AssemblyResult",
+  "MusiResult",
+  "MusicResult",
+  "ImportResolveResult",
+  "SyntaxNode",
+]
 
 [rules."shape.responsibility_split"]
 level = "warn"

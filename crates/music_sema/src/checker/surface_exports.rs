@@ -13,7 +13,7 @@ use super::{DeclState, ModuleState, TypingState};
 use crate::api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
     ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
-    ExportedValue, InstanceSurface, LawParamSurface, LawSurface, SurfaceEffectRow,
+    ExportedValue, InstanceSurface, LawParamSurface, LawSurface, SurfaceEffectRow, SurfaceTy,
 };
 
 #[derive(Debug, Clone)]
@@ -34,6 +34,30 @@ pub(super) struct ExportInstance {
 pub(super) struct ModuleExports {
     pub(super) bindings: Vec<ExportBinding>,
     pub(super) instances: Vec<ExportInstance>,
+}
+
+pub(super) struct ExportSurfaceCollector<'a, 'store> {
+    module: &'a ModuleState,
+    exports: &'a ModuleExports,
+    tys: SurfaceTyBuilder<'store>,
+}
+
+impl<'a, 'store> ExportSurfaceCollector<'a, 'store> {
+    pub(super) const fn new(
+        module: &'a ModuleState,
+        exports: &'a ModuleExports,
+        tys: SurfaceTyBuilder<'store>,
+    ) -> Self {
+        Self {
+            module,
+            exports,
+            tys,
+        }
+    }
+
+    pub(super) fn finish(self) -> Box<[SurfaceTy]> {
+        self.tys.finish()
+    }
 }
 
 fn attr_is_musi(path: &[Box<str>]) -> bool {
@@ -175,82 +199,70 @@ fn lower_type_params(symbols: &[Symbol], interner: &Interner) -> Box<[Box<str>]>
         .into_boxed_slice()
 }
 
-fn lower_constraints(
-    constraints: &[ConstraintFacts],
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[ConstraintSurface]> {
-    constraints
-        .iter()
-        .map(|constraint| {
-            let lowered = ConstraintSurface::new(
-                tys.interner.resolve(constraint.name),
-                constraint.kind,
-                tys.lower(constraint.value),
-            );
-            if let Some(class_key) = constraint.class_key.clone() {
-                lowered.with_class_key(class_key)
-            } else {
-                lowered
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-}
+impl ExportSurfaceCollector<'_, '_> {
+    fn lower_constraints(&mut self, constraints: &[ConstraintFacts]) -> Box<[ConstraintSurface]> {
+        constraints
+            .iter()
+            .map(|constraint| {
+                let lowered = ConstraintSurface::new(
+                    self.tys.interner.resolve(constraint.name),
+                    constraint.kind,
+                    self.tys.lower(constraint.value),
+                );
+                if let Some(class_key) = constraint.class_key.clone() {
+                    lowered.with_class_key(class_key)
+                } else {
+                    lowered
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
 
-fn collect_binding_exports<T, F>(
-    module: &ModuleState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-    mut lower: F,
-) -> Box<[T]>
-where
-    F: FnMut(&ExportBinding, Box<[Attr]>, Box<[Attr]>, &mut SurfaceTyBuilder<'_>) -> Option<T>,
-{
-    exports
-        .bindings
-        .iter()
-        .filter_map(|export| {
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
-            lower(export, inert_attrs, musi_attrs, tys)
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-}
+    fn collect_binding_exports<T, F>(&mut self, mut lower: F) -> Box<[T]>
+    where
+        F: FnMut(&mut Self, &ExportBinding, Box<[Attr]>, Box<[Attr]>) -> Option<T>,
+    {
+        self.exports
+            .bindings
+            .iter()
+            .filter_map(|export| {
+                let (inert_attrs, musi_attrs) =
+                    split_export_attrs(self.module, self.tys.interner, &export.attrs);
+                lower(self, export, inert_attrs, musi_attrs)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
 
-pub(super) fn collect_exported_values(
-    module: &ModuleState,
-    typing: &TypingState,
-    decls: &DeclState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[ExportedValue]> {
-    collect_binding_exports(
-        module,
-        exports,
-        tys,
-        |export, inert_attrs, musi_attrs, tys| {
+    pub(super) fn collect_exported_values(
+        &mut self,
+        typing: &TypingState,
+        decls: &DeclState,
+    ) -> Box<[ExportedValue]> {
+        self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
             if typing.is_gated_binding(export.binding) {
                 return None;
             }
             let ty = typing.binding_types().get(&export.binding).copied()?;
-            let symbol = module.resolved.names.bindings.get(export.binding).name;
+            let symbol = this.module.resolved.names.bindings.get(export.binding).name;
             let scheme = typing.binding_schemes().get(&export.binding);
-            let mut value = ExportedValue::new(export.name.clone(), tys.lower(ty))
+            let mut value = ExportedValue::new(export.name.clone(), this.tys.lower(ty))
                 .with_type_params(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
-                    lower_type_params(&scheme.type_params, tys.interner)
+                    lower_type_params(&scheme.type_params, this.tys.interner)
                 }))
                 .with_constraints(
                     scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
-                        lower_constraints(&scheme.constraints, tys)
+                        this.lower_constraints(&scheme.constraints)
                     }),
                 )
                 .with_effects(scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
-                    lower_surface_effect_row(tys, &scheme.effects)
+                    lower_surface_effect_row(&mut this.tys, &scheme.effects)
                 }))
                 .with_opaque(export.opaque)
                 .with_inert_attrs(inert_attrs)
                 .with_musi_attrs(musi_attrs);
-            if let Some(module_target) = export_module_target(module, typing, export.binding) {
+            if let Some(module_target) = export_module_target(this.module, typing, export.binding) {
                 value = value.with_module_target(module_target);
             }
             if let Some(class_key) = decls
@@ -273,8 +285,8 @@ pub(super) fn collect_exported_values(
                 value = value.with_data_key(data_key);
             }
             Some(value)
-        },
-    )
+        })
+    }
 }
 
 fn export_module_target(
@@ -389,17 +401,9 @@ fn expr_module_target(
     }
 }
 
-pub(super) fn collect_exported_data(
-    module: &ModuleState,
-    decls: &DeclState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[DataSurface]> {
-    collect_binding_exports(
-        module,
-        exports,
-        tys,
-        |export, inert_attrs, musi_attrs, tys| {
+impl ExportSurfaceCollector<'_, '_> {
+    pub(super) fn collect_exported_data(&mut self, decls: &DeclState) -> Box<[DataSurface]> {
+        self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
             let data = decls.data_def(export.name.as_ref())?;
             let variants = export
                 .opaque
@@ -413,12 +417,12 @@ pub(super) fn collect_exported_data(
                                     .field_tys()
                                     .iter()
                                     .copied()
-                                    .map(|ty| tys.lower(ty))
+                                    .map(|ty| this.tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
                             );
                             if let Some(payload) = variant.payload() {
-                                lowered.with_payload(tys.lower(payload))
+                                lowered.with_payload(this.tys.lower(payload))
                             } else {
                                 lowered
                             }
@@ -439,37 +443,27 @@ pub(super) fn collect_exported_data(
                 surface = surface.with_layout_pack(layout_pack);
             }
             Some(surface)
-        },
-    )
-}
+        })
+    }
 
-pub(super) fn collect_exported_classes(
-    module: &ModuleState,
-    decls: &DeclState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[ClassSurface]> {
-    collect_binding_exports(
-        module,
-        exports,
-        tys,
-        |export, inert_attrs, musi_attrs, tys| {
-            let symbol = module.resolved.names.bindings.get(export.binding).name;
+    pub(super) fn collect_exported_classes(&mut self, decls: &DeclState) -> Box<[ClassSurface]> {
+        self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
+            let symbol = this.module.resolved.names.bindings.get(export.binding).name;
             let facts = decls.class_facts_by_name().get(&symbol)?;
             let members = facts
                 .members
                 .iter()
                 .map(|member| {
                     ClassMemberSurface::new(
-                        tys.interner.resolve(member.name),
+                        this.tys.interner.resolve(member.name),
                         member
                             .params
                             .iter()
                             .copied()
-                            .map(|ty| tys.lower(ty))
+                            .map(|ty| this.tys.lower(ty))
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
-                        tys.lower(member.result),
+                        this.tys.lower(member.result),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -479,13 +473,13 @@ pub(super) fn collect_exported_classes(
                 .iter()
                 .map(|law| {
                     LawSurface::new(
-                        tys.interner.resolve(law.name),
+                        this.tys.interner.resolve(law.name),
                         law.params
                             .iter()
                             .map(|param| {
                                 LawParamSurface::new(
-                                    tys.interner.resolve(param.name),
-                                    tys.lower(param.ty),
+                                    this.tys.interner.resolve(param.name),
+                                    this.tys.lower(param.ty),
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -496,25 +490,15 @@ pub(super) fn collect_exported_classes(
                 .into_boxed_slice();
             Some(
                 ClassSurface::new(facts.key.clone(), members, laws)
-                    .with_constraints(lower_constraints(&facts.constraints, tys))
+                    .with_constraints(this.lower_constraints(&facts.constraints))
                     .with_inert_attrs(inert_attrs)
                     .with_musi_attrs(musi_attrs),
             )
-        },
-    )
-}
+        })
+    }
 
-pub(super) fn collect_exported_effects(
-    module: &ModuleState,
-    decls: &DeclState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[EffectSurface]> {
-    collect_binding_exports(
-        module,
-        exports,
-        tys,
-        |export, inert_attrs, musi_attrs, tys| {
+    pub(super) fn collect_exported_effects(&mut self, decls: &DeclState) -> Box<[EffectSurface]> {
+        self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
             let effect = decls.effect_def(export.name.as_ref())?;
             let ops = export
                 .opaque
@@ -528,10 +512,10 @@ pub(super) fn collect_exported_effects(
                                 op.params()
                                     .iter()
                                     .copied()
-                                    .map(|ty| tys.lower(ty))
+                                    .map(|ty| this.tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
-                                tys.lower(op.result()),
+                                this.tys.lower(op.result()),
                             )
                         })
                         .collect::<Vec<_>>()
@@ -546,13 +530,13 @@ pub(super) fn collect_exported_effects(
                         .iter()
                         .map(|law| {
                             LawSurface::new(
-                                tys.interner.resolve(law.name),
+                                this.tys.interner.resolve(law.name),
                                 law.params
                                     .iter()
                                     .map(|param| {
                                         LawParamSurface::new(
-                                            tys.interner.resolve(param.name),
-                                            tys.lower(param.ty),
+                                            this.tys.interner.resolve(param.name),
+                                            this.tys.lower(param.ty),
                                         )
                                     })
                                     .collect::<Vec<_>>()
@@ -567,45 +551,45 @@ pub(super) fn collect_exported_effects(
                     .with_inert_attrs(inert_attrs)
                     .with_musi_attrs(musi_attrs),
             )
-        },
-    )
-}
-
-pub(super) fn collect_exported_instances(
-    module: &ModuleState,
-    decls: &DeclState,
-    exports: &ModuleExports,
-    tys: &mut SurfaceTyBuilder<'_>,
-) -> Box<[InstanceSurface]> {
-    decls
-        .instance_facts()
-        .values()
-        .filter_map(|facts| {
-            let export = exports
-                .instances
-                .iter()
-                .find(|export| export.span == facts.origin.span)?;
-            let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
-            Some(
-                InstanceSurface::new(
-                    facts.class_key.clone(),
-                    facts
-                        .class_args
-                        .iter()
-                        .copied()
-                        .map(|ty| tys.lower(ty))
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
-                    lower_type_params(&facts.member_names, tys.interner),
-                )
-                .with_type_params(lower_type_params(&facts.type_params, tys.interner))
-                .with_constraints(lower_constraints(&facts.constraints, tys))
-                .with_inert_attrs(inert_attrs)
-                .with_musi_attrs(musi_attrs),
-            )
         })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+    }
+
+    pub(super) fn collect_exported_instances(
+        &mut self,
+        decls: &DeclState,
+    ) -> Box<[InstanceSurface]> {
+        decls
+            .instance_facts()
+            .values()
+            .filter_map(|facts| {
+                let export = self
+                    .exports
+                    .instances
+                    .iter()
+                    .find(|export| export.span == facts.origin.span)?;
+                let (inert_attrs, musi_attrs) =
+                    split_export_attrs(self.module, self.tys.interner, &export.attrs);
+                Some(
+                    InstanceSurface::new(
+                        facts.class_key.clone(),
+                        facts
+                            .class_args
+                            .iter()
+                            .copied()
+                            .map(|ty| self.tys.lower(ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                        lower_type_params(&facts.member_names, self.tys.interner),
+                    )
+                    .with_type_params(lower_type_params(&facts.type_params, self.tys.interner))
+                    .with_constraints(self.lower_constraints(&facts.constraints))
+                    .with_inert_attrs(inert_attrs)
+                    .with_musi_attrs(musi_attrs),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
 }
 
 pub(super) fn collect_module_exports(module: &ModuleState, interner: &Interner) -> ModuleExports {

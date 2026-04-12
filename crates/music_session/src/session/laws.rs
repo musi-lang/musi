@@ -23,7 +23,7 @@ struct SampleCase {
 #[derive(Debug, Clone)]
 struct ExecutableLawCase {
     name: String,
-    bindings: Vec<String>,
+    bindings: BindingList,
     body: String,
 }
 
@@ -48,8 +48,11 @@ struct InstanceDecl {
 }
 
 type TopLevelLetBinding = (HirExprId, String, Box<[Symbol]>, HirExprId);
+type BindingList = Vec<String>;
 type TopLevelLetBindingList = Vec<TopLevelLetBinding>;
 type ExecutableLawCaseList = Vec<ExecutableLawCase>;
+type TopLevelExprIdList = Vec<HirExprId>;
+type ExecutableLawCaseListMut<'a> = &'a mut ExecutableLawCaseList;
 
 struct SampleCaseBuild<'a> {
     prefix: &'a str,
@@ -165,7 +168,7 @@ fn executable_law_cases(
 }
 
 fn extend_effect_law_cases(
-    cases: &mut ExecutableLawCaseList,
+    cases: ExecutableLawCaseListMut<'_>,
     module_key: &ModuleKey,
     sema: &SemaModule,
     source: &str,
@@ -207,7 +210,7 @@ fn extend_effect_law_cases(
 }
 
 fn extend_class_law_cases(
-    cases: &mut ExecutableLawCaseList,
+    cases: ExecutableLawCaseListMut<'_>,
     module_key: &ModuleKey,
     sema: &SemaModule,
     source: &str,
@@ -412,7 +415,7 @@ fn top_level_let_bindings(
         .collect()
 }
 
-fn top_level_expr_ids(sema: &SemaModule) -> Vec<HirExprId> {
+fn top_level_expr_ids(sema: &SemaModule) -> TopLevelExprIdList {
     let root = sema.module().root;
     match &sema.module().store.exprs.get(root).kind {
         HirExprKind::Sequence { exprs } => sema.module().store.expr_ids.get(*exprs).to_vec(),

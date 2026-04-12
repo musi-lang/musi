@@ -19,8 +19,8 @@ mod surface_types;
 
 use state::{
     CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, EffectDef, EffectOpDef, FactState,
-    ModuleState, PassBase, ResumeCtx, ResumeState, RuntimeEnv, TypingState, finish_module,
-    prepare_module,
+    ModuleState, PassBase, PassParts, ResumeCtx, ResumeState, RuntimeEnv, TypingState,
+    finish_module, prepare_module,
 };
 
 use crate::diag::SemaDiagKind as DiagKind;
@@ -74,7 +74,14 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             ..
         } = self;
-        let mut collect = CollectPass::new(module, runtime, typing, decls, facts);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let mut collect = CollectPass::new(base);
         collect::collect_module(&mut collect);
     }
 
@@ -87,7 +94,15 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             resume,
         } = self;
-        let mut check = CheckPass::new(module, runtime, typing, decls, facts, resume);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
         let root = check.root_expr_id();
         let _root_facts = exprs::check_module_root(&mut check, root);
     }
@@ -101,8 +116,16 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             resume,
         } = self;
-        let mut check = CheckPass::new(module, runtime, typing, decls, facts, resume);
-        decls::check_instance_coherence(&mut check);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
+        check.check_instance_coherence();
     }
 
     fn finish(self) -> SemaModule {

@@ -50,6 +50,8 @@ impl ParsedSource {
 }
 
 type SyntaxElementList = Vec<SyntaxElementId>;
+type SyntaxNodeParseResult = ParseResult<SyntaxNodeId>;
+type SyntaxElementParseResult = ParseResult<SyntaxElementId>;
 
 #[must_use]
 pub fn parse(lexed: LexedSource) -> ParsedSource {
@@ -191,7 +193,7 @@ impl<'a> Parser<'a> {
         children
     }
 
-    fn parse_fixity_directive(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_fixity_directive(&mut self) -> SyntaxNodeParseResult {
         let kw = self.advance_element();
         let prec = self.expect_token(TokenKind::Int)?;
         let op = self.expect_token(TokenKind::OpIdent)?;
@@ -201,7 +203,7 @@ impl<'a> Parser<'a> {
             .push_node_from_children(SyntaxNodeKind::FixityDirective, vec![kw, prec, op, semi]))
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_stmt(&mut self) -> SyntaxNodeParseResult {
         let expr = self.parse_expr(0)?;
         let semi = self.expect_token(TokenKind::Semicolon)?;
         Ok(self.node2(
@@ -367,7 +369,7 @@ impl<'a> Parser<'a> {
         self.at(expected).then(|| self.advance_element())
     }
 
-    fn expect_token(&mut self, expected: TokenKind) -> ParseResult<SyntaxElementId> {
+    fn expect_token(&mut self, expected: TokenKind) -> SyntaxElementParseResult {
         if self.at(expected) {
             return Ok(self.advance_element());
         }
@@ -384,7 +386,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn expect_ident_element(&mut self) -> ParseResult<SyntaxElementId> {
+    fn expect_ident_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
             TokenKind::Ident => Ok(self.advance_element()),
             _ => Err(ParseError::new(
@@ -396,7 +398,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_name_element(&mut self) -> ParseResult<SyntaxElementId> {
+    fn expect_name_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
             TokenKind::Ident | TokenKind::OpIdent => Ok(self.advance_element()),
             _ => Err(ParseError::new(

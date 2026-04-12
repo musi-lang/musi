@@ -27,25 +27,21 @@ pub struct EmittedBinding {
 
 impl EmittedBinding {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
-        method: Option<MethodId>,
-        global: Option<GlobalId>,
-    ) -> Self {
+    pub const fn new(name: Box<str>, method: Option<MethodId>, global: Option<GlobalId>) -> Self {
         Self {
-            name: name.into(),
+            name,
             method,
             global,
         }
     }
 
     #[must_use]
-    pub fn method(name: impl Into<Box<str>>, method: MethodId) -> Self {
+    pub const fn method(name: Box<str>, method: MethodId) -> Self {
         Self::new(name, Some(method), None)
     }
 
     #[must_use]
-    pub fn global(name: impl Into<Box<str>>, global: GlobalId) -> Self {
+    pub const fn global(name: Box<str>, global: GlobalId) -> Self {
         Self::new(name, None, Some(global))
     }
 }

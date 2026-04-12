@@ -7,16 +7,18 @@ use music_hir::{
 };
 use music_names::{Ident, NameBindingId};
 
-use super::super::attrs::validate_foreign_let;
-use super::super::attrs::{validate_link_attr, validate_when_attr};
 use super::super::exprs::check_expr;
-use super::super::normalize::{lower_constraints, lower_params, lower_type_expr, type_mismatch};
 use super::super::surface::surface_key;
 use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
 };
 use crate::effects::EffectRow;
+
+type VariantDefRange = SliceRange<HirVariantDef>;
+type FieldDefRange = SliceRange<HirFieldDef>;
+type ConstraintRange = SliceRange<HirConstraint>;
+type MemberDefRange = SliceRange<HirMemberDef>;
 
 pub(in super::super) fn member_signature(
     ctx: &mut PassBase<'_, '_, '_>,
@@ -30,14 +32,14 @@ pub(in super::super) fn member_signature(
         .map(|param| {
             param.ty.map_or(builtins.unknown, |expr| {
                 let origin = ctx.expr(expr).origin;
-                lower_type_expr(ctx, expr, origin)
+                ctx.lower_type_expr(expr, origin)
             })
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let result = member.sig.map_or(builtins.unknown, |expr| {
         let origin = ctx.expr(expr).origin;
-        lower_type_expr(ctx, expr, origin)
+        ctx.lower_type_expr(expr, origin)
     });
     if bind_name {
         let params_list = ctx.alloc_ty_list(params.iter().copied());
@@ -66,7 +68,7 @@ pub(in super::super) fn member_law_facts(
                 param.name.name,
                 param.ty.map_or(builtins.unknown, |expr| {
                     let origin = ctx.expr(expr).origin;
-                    lower_type_expr(ctx, expr, origin)
+                    ctx.lower_type_expr(expr, origin)
                 }),
             )
         })
@@ -75,309 +77,394 @@ pub(in super::super) fn member_law_facts(
     LawFacts::new(member.name.name, params)
 }
 
-pub(in super::super) fn check_data_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    variants: SliceRange<HirVariantDef>,
-    fields: SliceRange<HirFieldDef>,
-) -> ExprFacts {
-    let builtins = ctx.builtins();
-    for variant in ctx.variants(variants) {
-        if let Some(arg) = variant.arg {
-            let origin = ctx.expr(arg).origin;
-            let _ = lower_type_expr(ctx, arg, origin);
-        }
-        if let Some(value) = variant.value {
-            let _ = check_expr(ctx, value);
-        }
-    }
-    for field in ctx.fields(fields) {
-        let origin = ctx.expr(field.ty).origin;
-        let _ = lower_type_expr(ctx, field.ty, origin);
-        if let Some(value) = field.value {
-            let _ = check_expr(ctx, value);
-        }
-    }
-    ExprFacts::new(builtins.type_, EffectRow::empty())
-}
-
-pub(in super::super) fn check_class_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    constraints: SliceRange<HirConstraint>,
-    members: SliceRange<HirMemberDef>,
-    _bound_name: Option<Ident>,
-) -> ExprFacts {
-    let builtins = ctx.builtins();
-    if let Some(facts) = ctx.class_facts(expr_id).cloned() {
-        for member in ctx.members(members) {
-            if member.kind == HirMemberKind::Law
-                && let Some(value) = member.value
-            {
-                let law_facts = check_expr(ctx, value);
-                let origin = ctx.expr(value).origin;
-                type_mismatch(ctx, origin, builtins.bool_, law_facts.ty);
-                if !law_facts.effects.is_pure() {
-                    ctx.diag(origin.span, DiagKind::LawMustBePure, "");
-                }
-            } else {
-                let _ = member_signature(ctx, &member, true);
-            }
-        }
-        let _ = lower_constraints(ctx, constraints);
-        ctx.insert_class_facts(expr_id, facts);
-    } else {
-        for member in ctx.members(members) {
-            let _ = member_signature(ctx, &member, true);
-        }
-    }
-    ExprFacts::new(builtins.type_, EffectRow::empty())
-}
-
 pub(in super::super) fn check_foreign_let(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
 ) -> Option<HirTyId> {
-    let builtins = ctx.builtins();
-    let abi: Box<str> = ctx
-        .expr(expr_id)
-        .mods
-        .foreign
-        .as_ref()
-        .and_then(|m| m.abi)
-        .map_or_else(|| "c".into(), |sym| ctx.resolve_symbol(sym).into());
-    let attrs = ctx.attrs(ctx.expr(expr_id).mods.attrs);
-    for attr in &attrs {
-        let path = super::super::attrs::attr_path(ctx, attr);
-        match path.as_slice() {
-            ["link"] => validate_link_attr(ctx, attr, ctx.expr(expr_id).origin),
-            ["when"] => validate_when_attr(ctx, attr, ctx.expr(expr_id).origin),
-            _ => {}
-        }
-    }
-    if !when_attrs_match(ctx, &attrs) {
-        if let Some((binding, _)) = foreign_binding_from_let(ctx, expr_id) {
-            ctx.mark_gated_binding(binding);
-        }
-        return None;
-    }
-    if let Some((binding, _name)) = foreign_binding_from_let(ctx, expr_id) {
-        let link = link_info_from_attrs(ctx, &attrs);
-        if link.name.is_some() || link.symbol.is_some() {
-            ctx.set_foreign_link(binding, link);
-        }
-    }
-    let origin = ctx.expr(expr_id).origin;
-    let HirExprKind::Let { params, sig, .. } = ctx.expr(expr_id).kind else {
-        ctx.diag(origin.span, DiagKind::ForeignSignatureRequired, "");
-        return None;
-    };
-    let params = lower_params(ctx, params);
-    let result = sig.map_or(builtins.unknown, |sig| {
-        let origin = ctx.expr(sig).origin;
-        lower_type_expr(ctx, sig, origin)
-    });
-    let params = ctx.alloc_ty_list(params.iter().copied());
-    let ty = ctx.alloc_ty(HirTyKind::Arrow {
-        params,
-        ret: result,
-        is_effectful: false,
-    });
-    if let Some((binding, _)) = foreign_binding_from_let(ctx, expr_id) {
-        ctx.insert_binding_type(binding, ty);
-    }
-    validate_foreign_let(ctx, expr_id, abi.as_ref());
-    Some(ty)
+    ctx.check_foreign_let(expr_id)
 }
 
-fn foreign_binding_from_let(
-    ctx: &CheckPass<'_, '_, '_>,
-    expr: HirExprId,
-) -> Option<(NameBindingId, Ident)> {
-    let HirExprKind::Let { pat, .. } = ctx.expr(expr).kind else {
-        return None;
-    };
-    let HirPatKind::Bind { name } = ctx.pat(pat).kind else {
-        return None;
-    };
-    let binding = ctx.binding_id_for_decl(name)?;
-    Some((binding, name))
-}
-
-fn when_attrs_match(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> bool {
-    let target = ctx.target();
-    for attr in attrs {
-        let path = super::super::attrs::attr_path(ctx, attr);
-        if path.as_slice() != ["when"] {
-            continue;
+impl CheckPass<'_, '_, '_> {
+    fn check_data_expr(&mut self, variants: VariantDefRange, fields: FieldDefRange) -> ExprFacts {
+        let builtins = self.builtins();
+        for variant in self.variants(variants) {
+            if let Some(arg) = variant.arg {
+                let origin = self.expr(arg).origin;
+                let _ = self.lower_type_expr(arg, origin);
+            }
+            if let Some(value) = variant.value {
+                let _ = check_expr(self, value);
+            }
         }
-        if !when_attr_matches(ctx, target, attr) {
-            return false;
+        for field in self.fields(fields) {
+            let origin = self.expr(field.ty).origin;
+            let _ = self.lower_type_expr(field.ty, origin);
+            if let Some(value) = field.value {
+                let _ = check_expr(self, value);
+            }
         }
+        ExprFacts::new(builtins.type_, EffectRow::empty())
     }
-    true
-}
 
-fn when_attr_matches(
-    ctx: &CheckPass<'_, '_, '_>,
-    target: Option<&TargetInfo>,
-    attr: &HirAttr,
-) -> bool {
-    let Some(target) = target else {
-        return false;
-    };
-
-    for arg in ctx.attr_args(attr.args.clone()) {
-        let Some(name) = arg.name.map(|ident| ctx.resolve_symbol(ident.name)) else {
-            continue;
-        };
-        let values = when_values(ctx, arg.value);
-        let Some(values) = values else {
-            continue;
-        };
-
-        let matched = match name {
-            "os" => target
-                .os
-                .as_deref()
-                .is_some_and(|t| values.iter().any(|v| v == t)),
-            "arch" => target
-                .arch
-                .as_deref()
-                .is_some_and(|t| values.iter().any(|v| v == t)),
-            "env" => target
-                .env
-                .as_deref()
-                .is_some_and(|t| values.iter().any(|v| v == t)),
-            "abi" => target
-                .abi
-                .as_deref()
-                .is_some_and(|t| values.iter().any(|v| v == t)),
-            "vendor" => target
-                .vendor
-                .as_deref()
-                .is_some_and(|t| values.iter().any(|v| v == t)),
-            "feature" => values.iter().any(|v| target.features.contains(v.as_str())),
-            _ => true,
-        };
-        if !matched {
-            return false;
-        }
-    }
-    true
-}
-
-fn when_values(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<Vec<String>> {
-    match ctx.expr(expr).kind {
-        HirExprKind::Lit { lit } => ctx.lit_string_value(lit).map(|s| vec![s]),
-        HirExprKind::Array { items } => {
-            let mut out = Vec::<String>::new();
-            for item in ctx.array_items(items) {
-                if let HirExprKind::Lit { lit } = ctx.expr(item.expr).kind {
-                    if let Some(value) = ctx.lit_string_value(lit) {
-                        out.push(value);
+    fn check_class_expr(
+        &mut self,
+        expr_id: HirExprId,
+        constraints: ConstraintRange,
+        members: MemberDefRange,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        if let Some(facts) = self.class_facts(expr_id).cloned() {
+            for member in self.members(members) {
+                if member.kind == HirMemberKind::Law
+                    && let Some(value) = member.value
+                {
+                    let law_facts = check_expr(self, value);
+                    let origin = self.expr(value).origin;
+                    self.type_mismatch(origin, builtins.bool_, law_facts.ty);
+                    if !law_facts.effects.is_pure() {
+                        self.diag(origin.span, DiagKind::LawMustBePure, "");
                     }
+                } else {
+                    let _ = member_signature(self, &member, true);
                 }
             }
-            Some(out)
+            let _ = self.lower_constraints(constraints);
+            self.insert_class_facts(expr_id, facts);
+        } else {
+            for member in self.members(members) {
+                let _ = member_signature(self, &member, true);
+            }
         }
-        _ => None,
+        ExprFacts::new(self.builtins().type_, EffectRow::empty())
     }
-}
 
-fn link_info_from_attrs(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> ForeignLinkInfo {
-    let mut out = ForeignLinkInfo::new();
-    for attr in attrs {
-        let path = super::super::attrs::attr_path(ctx, attr);
-        if path.as_slice() != ["link"] {
-            continue;
+    fn check_foreign_let(&mut self, expr_id: HirExprId) -> Option<HirTyId> {
+        let builtins = self.builtins();
+        let abi: Box<str> = self
+            .expr(expr_id)
+            .mods
+            .foreign
+            .as_ref()
+            .and_then(|m| m.abi)
+            .map_or_else(|| "c".into(), |sym| self.resolve_symbol(sym).into());
+        let attrs = self.attrs(self.expr(expr_id).mods.attrs);
+        for attr in &attrs {
+            let path = super::super::attrs::attr_path(self, attr);
+            match path.as_slice() {
+                ["link"] => self.validate_link_attr(attr, self.expr(expr_id).origin),
+                ["when"] => self.validate_when_attr(attr, self.expr(expr_id).origin),
+                _ => {}
+            }
         }
-        let mut positional = Vec::<String>::new();
-        for arg in ctx.attr_args(attr.args.clone()) {
-            let Some(value) = string_lit_value(ctx, arg.value) else {
+        if !self.when_attrs_match(&attrs) {
+            if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+                self.mark_gated_binding(binding);
+            }
+            return None;
+        }
+        if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+            let link = self.link_info_from_attrs(&attrs);
+            if link.name.is_some() || link.symbol.is_some() {
+                self.set_foreign_link(binding, link);
+            }
+        }
+        let origin = self.expr(expr_id).origin;
+        let HirExprKind::Let { params, sig, .. } = self.expr(expr_id).kind else {
+            self.diag(origin.span, DiagKind::ForeignSignatureRequired, "");
+            return None;
+        };
+        let params = self.lower_params(params);
+        let result = sig.map_or(builtins.unknown, |sig| {
+            let origin = self.expr(sig).origin;
+            self.lower_type_expr(sig, origin)
+        });
+        let params = self.alloc_ty_list(params.iter().copied());
+        let ty = self.alloc_ty(HirTyKind::Arrow {
+            params,
+            ret: result,
+            is_effectful: false,
+        });
+        if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+            self.insert_binding_type(binding, ty);
+        }
+        self.validate_foreign_let(expr_id, abi.as_ref());
+        Some(ty)
+    }
+
+    fn foreign_binding_from_let(&self, expr: HirExprId) -> Option<(NameBindingId, Ident)> {
+        let HirExprKind::Let { pat, .. } = self.expr(expr).kind else {
+            return None;
+        };
+        let HirPatKind::Bind { name } = self.pat(pat).kind else {
+            return None;
+        };
+        let binding = self.binding_id_for_decl(name)?;
+        Some((binding, name))
+    }
+
+    fn when_attrs_match(&self, attrs: &[HirAttr]) -> bool {
+        let target = self.target();
+        for attr in attrs {
+            let path = super::super::attrs::attr_path(self, attr);
+            if path.as_slice() != ["when"] {
+                continue;
+            }
+            if !self.when_attr_matches(target, attr) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn when_attr_matches(&self, target: Option<&TargetInfo>, attr: &HirAttr) -> bool {
+        let Some(target) = target else {
+            return false;
+        };
+
+        for arg in self.attr_args(attr.args.clone()) {
+            let Some(name) = arg.name.map(|ident| self.resolve_symbol(ident.name)) else {
                 continue;
             };
-            if let Some(name) = arg.name.map(|ident| ctx.resolve_symbol(ident.name)) {
-                match name {
-                    "name" => out = out.with_name(value),
-                    "symbol" => out = out.with_symbol(value),
-                    _ => {}
-                }
-            } else {
-                positional.push(value);
+            let Some(values) = self.when_values(arg.value) else {
+                continue;
+            };
+
+            let matched = match name {
+                "os" => target
+                    .os
+                    .as_deref()
+                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "arch" => target
+                    .arch
+                    .as_deref()
+                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "env" => target
+                    .env
+                    .as_deref()
+                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "abi" => target
+                    .abi
+                    .as_deref()
+                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "vendor" => target
+                    .vendor
+                    .as_deref()
+                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "feature" => values.iter().any(|v| target.features.contains(v.as_str())),
+                _ => true,
+            };
+            if !matched {
+                return false;
             }
         }
-        if out.name.is_none() {
-            if let Some(value) = positional.first().cloned() {
+        true
+    }
+
+    fn when_values(&self, expr: HirExprId) -> Option<Vec<String>> {
+        match self.expr(expr).kind {
+            HirExprKind::Lit { lit } => self.lit_string_value(lit).map(|s| vec![s]),
+            HirExprKind::Array { items } => {
+                let mut out = Vec::<String>::new();
+                for item in self.array_items(items) {
+                    if let HirExprKind::Lit { lit } = self.expr(item.expr).kind {
+                        if let Some(value) = self.lit_string_value(lit) {
+                            out.push(value);
+                        }
+                    }
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }
+
+    fn link_info_from_attrs(&self, attrs: &[HirAttr]) -> ForeignLinkInfo {
+        let mut out = ForeignLinkInfo::new();
+        for attr in attrs {
+            let path = super::super::attrs::attr_path(self, attr);
+            if path.as_slice() != ["link"] {
+                continue;
+            }
+            let mut positional = Vec::<String>::new();
+            for arg in self.attr_args(attr.args.clone()) {
+                let Some(value) = self.string_lit_value(arg.value) else {
+                    continue;
+                };
+                if let Some(name) = arg.name.map(|ident| self.resolve_symbol(ident.name)) {
+                    match name {
+                        "name" => out = out.with_name(value),
+                        "symbol" => out = out.with_symbol(value),
+                        _ => {}
+                    }
+                } else {
+                    positional.push(value);
+                }
+            }
+            if out.name.is_none()
+                && let Some(value) = positional.first().cloned()
+            {
                 out.name = Some(value.into_boxed_str());
             }
-        }
-        if out.symbol.is_none() {
-            if let Some(value) = positional.get(1).cloned() {
+            if out.symbol.is_none()
+                && let Some(value) = positional.get(1).cloned()
+            {
                 out.symbol = Some(value.into_boxed_str());
             }
         }
+        out
     }
-    out
-}
 
-fn string_lit_value(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<String> {
-    match ctx.expr(expr).kind {
-        HirExprKind::Lit { lit } => ctx.lit_string_value(lit),
-        _ => None,
-    }
-}
-
-pub(super) fn check_bound_data(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    name: Ident,
-    variants: SliceRange<HirVariantDef>,
-    fields: SliceRange<HirFieldDef>,
-) -> ExprFacts {
-    let data_name: Box<str> = ctx.resolve_symbol(name.name).into();
-    if ctx.data_def(&data_name).is_none() {
-        let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
-        for variant in ctx.variants(variants.clone()) {
-            let tag: Box<str> = ctx.resolve_symbol(variant.name.name).into();
-            let payload = variant.arg.map(|expr| {
-                let origin = ctx.expr(expr).origin;
-                lower_type_expr(ctx, expr, origin)
-            });
-            let field_tys =
-                payload.map_or_else(Box::<[_]>::default, |ty| flatten_data_field_tys(ctx, ty));
-            let prev =
-                variant_map.insert(tag, super::super::DataVariantDef::new(payload, field_tys));
-            if prev.is_some() {
-                ctx.diag(
-                    variant.origin.span,
-                    DiagKind::CollectDuplicateDataVariant,
-                    "",
-                );
-            }
+    fn string_lit_value(&self, expr: HirExprId) -> Option<String> {
+        match self.expr(expr).kind {
+            HirExprKind::Lit { lit } => self.lit_string_value(lit),
+            _ => None,
         }
-        if variant_map.is_empty() {
-            let field_tys = ctx
-                .fields(fields.clone())
-                .into_iter()
-                .map(|field| {
-                    let origin = ctx.expr(field.ty).origin;
-                    lower_type_expr(ctx, field.ty, origin)
+    }
+}
+
+impl CheckPass<'_, '_, '_> {
+    pub(in super::super) fn check_bound_data(
+        &mut self,
+        name: Ident,
+        variants: VariantDefRange,
+        fields: FieldDefRange,
+    ) -> ExprFacts {
+        let data_name: Box<str> = self.resolve_symbol(name.name).into();
+        if self.data_def(&data_name).is_none() {
+            let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
+            for variant in self.variants(variants.clone()) {
+                let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+                let payload = variant.arg.map(|expr| {
+                    let origin = self.expr(expr).origin;
+                    self.lower_type_expr(expr, origin)
+                });
+                let field_tys =
+                    payload.map_or_else(Box::<[_]>::default, |ty| flatten_data_field_tys(self, ty));
+                let prev =
+                    variant_map.insert(tag, super::super::DataVariantDef::new(payload, field_tys));
+                if prev.is_some() {
+                    self.diag(
+                        variant.origin.span,
+                        DiagKind::CollectDuplicateDataVariant,
+                        "",
+                    );
+                }
+            }
+            if variant_map.is_empty() {
+                let field_tys = self
+                    .fields(fields.clone())
+                    .into_iter()
+                    .map(|field| {
+                        let origin = self.expr(field.ty).origin;
+                        self.lower_type_expr(field.ty, origin)
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                if !field_tys.is_empty() {
+                    let _ = variant_map.insert(
+                        data_name.clone(),
+                        super::super::DataVariantDef::new(None, field_tys),
+                    );
+                }
+            }
+            let key = surface_key(self.module_key(), self.interner(), name.name);
+            self.insert_data_def(
+                data_name,
+                super::super::DataDef::new(key, variant_map, None, None, None),
+            );
+        }
+        self.check_data_expr(variants, fields)
+    }
+
+    pub(in super::super) fn check_bound_effect(
+        &mut self,
+        expr_id: HirExprId,
+        name: Ident,
+        members: MemberDefRange,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let effect_name: Box<str> = self.resolve_symbol(name.name).into();
+        if self.effect_def(&effect_name).is_none() {
+            let members_vec = self.members(members.clone());
+            let ops = members_vec
+                .iter()
+                .filter(|member| member.kind == HirMemberKind::Let)
+                .map(|member| {
+                    let facts = member_signature(self, member, false);
+                    (
+                        Box::<str>::from(self.resolve_symbol(member.name.name)),
+                        EffectOpDef::new(facts.params.clone(), facts.result),
+                    )
                 })
+                .collect::<BTreeMap<_, _>>();
+            let laws = members_vec
+                .iter()
+                .filter(|member| member.kind == HirMemberKind::Law)
+                .map(|member| member_law_facts(self, member))
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            if !field_tys.is_empty() {
-                let _ = variant_map.insert(
-                    data_name.clone(),
-                    super::super::DataVariantDef::new(None, field_tys),
-                );
+            let key = surface_key(self.module_key(), self.interner(), name.name);
+            self.insert_effect_def(effect_name, EffectDef::new(key, ops, laws));
+        }
+        let _ = expr_id;
+        for member in self.members(members) {
+            match member.kind {
+                HirMemberKind::Let => {
+                    let _ = member_signature(self, &member, true);
+                    if let Some(value) = member.value {
+                        let _ = check_expr(self, value);
+                    }
+                }
+                HirMemberKind::Law => {
+                    if let Some(value) = member.value {
+                        let law_facts = check_expr(self, value);
+                        let origin = self.expr(value).origin;
+                        self.type_mismatch(origin, builtins.bool_, law_facts.ty);
+                        if !law_facts.effects.is_pure() {
+                            self.diag(origin.span, DiagKind::LawMustBePure, "");
+                        }
+                    }
+                }
             }
         }
-        let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-        ctx.insert_data_def(
-            data_name,
-            super::super::DataDef::new(key, variant_map, None, None, None),
-        );
+        ExprFacts::new(builtins.type_, EffectRow::empty())
     }
-    check_data_expr(ctx, variants, fields)
+
+    pub(in super::super) fn check_bound_class(
+        &mut self,
+        expr_id: HirExprId,
+        name: Ident,
+        constraints: ConstraintRange,
+        members: MemberDefRange,
+    ) -> ExprFacts {
+        if self.class_id(name.name).is_none() {
+            self.insert_class_id(name.name, expr_id);
+            let members_vec = self.members(members.clone());
+            let class_members = members_vec
+                .iter()
+                .filter(|member| member.kind == HirMemberKind::Let)
+                .map(|member| member_signature(self, member, false))
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let laws = members_vec
+                .iter()
+                .filter(|member| member.kind == HirMemberKind::Law)
+                .map(|member| member_law_facts(self, member))
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let constraints_facts = self.lower_constraints(constraints.clone());
+            let facts = ClassFacts::new(
+                surface_key(self.module_key(), self.interner(), name.name),
+                name.name,
+                class_members,
+                laws,
+            )
+            .with_constraints(constraints_facts);
+            self.insert_class_facts(expr_id, facts.clone());
+            self.insert_class_facts_by_name(name.name, facts);
+        }
+        self.check_class_expr(expr_id, constraints, members)
+    }
 }
 
 fn flatten_data_field_tys(ctx: &CheckPass<'_, '_, '_>, ty: HirTyId) -> Box<[HirTyId]> {
@@ -385,96 +472,6 @@ fn flatten_data_field_tys(ctx: &CheckPass<'_, '_, '_>, ty: HirTyId) -> Box<[HirT
         HirTyKind::Tuple { items } => ctx.ty_ids(*items).into_boxed_slice(),
         _ => vec![ty].into_boxed_slice(),
     }
-}
-
-pub(super) fn check_bound_effect(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    name: Ident,
-    members: SliceRange<HirMemberDef>,
-) -> ExprFacts {
-    let builtins = ctx.builtins();
-    let effect_name: Box<str> = ctx.resolve_symbol(name.name).into();
-    if ctx.effect_def(&effect_name).is_none() {
-        let members_vec = ctx.members(members.clone());
-        let ops = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Let)
-            .map(|member| {
-                let facts = member_signature(ctx, member, false);
-                (
-                    Box::<str>::from(ctx.resolve_symbol(member.name.name)),
-                    EffectOpDef::new(facts.params.clone(), facts.result),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let laws = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Law)
-            .map(|member| member_law_facts(ctx, member))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let key = surface_key(ctx.module_key(), ctx.interner(), name.name);
-        ctx.insert_effect_def(effect_name, EffectDef::new(key, ops, laws));
-    }
-    let _ = expr_id;
-    for member in ctx.members(members) {
-        match member.kind {
-            HirMemberKind::Let => {
-                let _ = member_signature(ctx, &member, true);
-                if let Some(value) = member.value {
-                    let _ = check_expr(ctx, value);
-                }
-            }
-            HirMemberKind::Law => {
-                if let Some(value) = member.value {
-                    let law_facts = check_expr(ctx, value);
-                    let origin = ctx.expr(value).origin;
-                    type_mismatch(ctx, origin, builtins.bool_, law_facts.ty);
-                    if !law_facts.effects.is_pure() {
-                        ctx.diag(origin.span, DiagKind::LawMustBePure, "");
-                    }
-                }
-            }
-        }
-    }
-    ExprFacts::new(builtins.type_, EffectRow::empty())
-}
-
-pub(super) fn check_bound_class(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    name: Ident,
-    constraints: SliceRange<HirConstraint>,
-    members: SliceRange<HirMemberDef>,
-) -> ExprFacts {
-    if ctx.class_id(name.name).is_none() {
-        ctx.insert_class_id(name.name, expr_id);
-        let members_vec = ctx.members(members.clone());
-        let class_members = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Let)
-            .map(|member| member_signature(ctx, member, false))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let laws = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Law)
-            .map(|member| member_law_facts(ctx, member))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let constraints_facts = lower_constraints(ctx, constraints.clone());
-        let facts = ClassFacts::new(
-            surface_key(ctx.module_key(), ctx.interner(), name.name),
-            name.name,
-            class_members,
-            laws,
-        )
-        .with_constraints(constraints_facts);
-        ctx.insert_class_facts(expr_id, facts.clone());
-        ctx.insert_class_facts_by_name(name.name, facts);
-    }
-    check_class_expr(ctx, expr_id, constraints, members, Some(name))
 }
 
 // Attribute and export wrappers live in `HirExpr.mods`, not `HirExprKind`.

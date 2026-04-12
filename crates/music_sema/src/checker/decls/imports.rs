@@ -5,7 +5,6 @@ use music_module::ModuleKey;
 use music_names::Ident;
 
 use super::super::patterns::{bind_pat, bound_name_from_pat};
-use super::super::schemes::{instantiate_monomorphic_scheme, scheme_from_export};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
@@ -14,19 +13,21 @@ use crate::api::{
 };
 use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
 
-pub(in super::super) fn check_import_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    arg: HirExprId,
-) -> ExprFacts {
-    let builtins = ctx.builtins();
-    let arg_facts = super::super::exprs::check_expr(ctx, arg);
-    let origin = ctx.expr(arg).origin;
-    super::super::normalize::type_mismatch(ctx, origin, builtins.string_, arg_facts.ty);
-    if let Some(target) = ctx.static_import_target(ctx.expr(expr_id).origin.span) {
-        ctx.set_expr_module_target(expr_id, target);
+impl CheckPass<'_, '_, '_> {
+    pub(in super::super) fn check_import_expr(
+        &mut self,
+        expr_id: HirExprId,
+        arg: HirExprId,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let arg_facts = super::super::exprs::check_expr(self, arg);
+        let origin = self.expr(arg).origin;
+        self.type_mismatch(origin, builtins.string_, arg_facts.ty);
+        if let Some(target) = self.static_import_target(self.expr(expr_id).origin.span) {
+            self.set_expr_module_target(expr_id, target);
+        }
+        ExprFacts::new(builtins.module, arg_facts.effects)
     }
-    ExprFacts::new(builtins.module, arg_facts.effects)
 }
 
 pub(in super::super) fn module_target_for_expr(
@@ -71,267 +72,275 @@ pub(super) fn bind_module_pattern(
     pat: HirPatId,
     value: HirExprId,
 ) -> bool {
-    let Some(target) = module_target_for_expr(ctx, value) else {
-        return false;
-    };
-    let Some(env) = ctx.sema_env() else {
-        return false;
-    };
-    let Some(surface) = env.module_surface(&target) else {
-        return false;
-    };
-    let HirPatKind::Record { fields } = ctx.pat(pat).kind else {
-        return false;
-    };
-    let module_ty = ctx.builtins().module;
-
-    ctx.set_pat_facts(pat, PatFacts::new(module_ty));
-
-    for field in ctx.record_pat_fields(fields) {
-        let Some(export) = surface
-            .exported_value(ctx.resolve_symbol(field.name.name))
-            .cloned()
-        else {
-            ctx.diag(field.name.span, DiagKind::UnknownExport, "");
-            continue;
-        };
-        let field_ty = import_surface_ty(ctx, &surface, export.ty);
-        if let Some(value) = field.value {
-            bind_pat(ctx, value, field_ty);
-            if let Some(alias) = bound_name_from_pat(ctx, value) {
-                bind_imported_module_member(ctx, alias, &surface, &export);
-            }
-        } else if let Some(binding) = ctx.binding_id_for_decl(field.name) {
-            ctx.insert_binding_type(binding, field_ty);
-            bind_imported_module_member(ctx, field.name, &surface, &export);
-        }
-    }
-    true
+    ctx.bind_module_pattern_impl(pat, value)
 }
 
 pub(super) fn bind_imported_alias(ctx: &mut CheckPass<'_, '_, '_>, name: Ident, value: HirExprId) {
-    let HirExprKind::Field {
-        base, name: field, ..
-    } = ctx.expr(value).kind
-    else {
-        return;
-    };
-    let Some((surface, export)) = module_export_for_expr(ctx, base, field) else {
-        return;
-    };
-    bind_imported_module_member(ctx, name, &surface, &export);
+    ctx.bind_imported_alias_impl(name, value);
 }
 
-fn bind_imported_module_member(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    alias: Ident,
-    surface: &ModuleSurface,
-    export: &ExportedValue,
-) {
-    import_exported_value_binding(ctx, alias, surface, export);
-    if let Some(binding) = ctx.binding_id_for_decl(alias)
-        && let Some(target) = export.module_target.clone()
-    {
-        ctx.insert_binding_module_target(binding, target);
-    }
-    if let Some(class_key) = export.class_key.as_ref()
-        && let Some(class) = surface.exported_class(class_key)
-    {
-        import_class_alias(ctx, alias, surface, class, export.opaque);
-    }
-    if let Some(effect_key) = export.effect_key.as_ref()
-        && let Some(effect) = surface.exported_effect(effect_key)
-    {
-        import_effect_alias(ctx, alias, surface, effect);
-    }
-    if let Some(data_key) = export.data_key.as_ref()
-        && let Some(data) = surface.exported_data(data_key)
-    {
-        import_data_alias(ctx, alias, surface, data);
-    }
-}
-
-fn import_class_alias(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    alias: Ident,
-    module_surface: &ModuleSurface,
-    surface: &ClassSurface,
-    is_opaque: bool,
-) {
-    if is_opaque {
-        ctx.mark_sealed_class(surface.key.clone());
-    }
-    let members = surface
-        .members
-        .iter()
-        .map(|member| {
-            ClassMemberFacts::new(
-                ctx.intern(&member.name),
-                member
-                    .params
-                    .iter()
-                    .copied()
-                    .map(|ty| import_surface_ty(ctx, module_surface, ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                import_surface_ty(ctx, module_surface, member.result),
-            )
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let laws = surface
-        .laws
-        .iter()
-        .map(|law| {
-            LawFacts::new(
-                ctx.intern(&law.name),
-                law.params
-                    .iter()
-                    .map(|param| {
-                        LawParamFacts::new(
-                            ctx.intern(&param.name),
-                            import_surface_ty(ctx, module_surface, param.ty),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let constraints = surface
-        .constraints
-        .iter()
-        .map(|constraint| {
-            let lowered = ConstraintFacts::new(
-                ctx.intern(&constraint.name),
-                constraint.kind,
-                import_surface_ty(ctx, module_surface, constraint.value),
-            );
-            if let Some(class_key) = constraint.class_key.clone() {
-                lowered.with_class_key(class_key)
-            } else {
-                lowered
+impl CheckPass<'_, '_, '_> {
+    fn bind_module_pattern_impl(&mut self, pat: HirPatId, value: HirExprId) -> bool {
+        let Some(target) = module_target_for_expr(self, value) else {
+            return false;
+        };
+        let Some(env) = self.sema_env() else {
+            return false;
+        };
+        let Some(surface) = env.module_surface(&target) else {
+            return false;
+        };
+        let HirPatKind::Record { fields } = self.pat(pat).kind else {
+            return false;
+        };
+        let module_ty = self.builtins().module;
+        self.set_pat_facts(pat, PatFacts::new(module_ty));
+        for field in self.record_pat_fields(fields) {
+            let Some(export) = surface
+                .exported_value(self.resolve_symbol(field.name.name))
+                .cloned()
+            else {
+                self.diag(field.name.span, DiagKind::UnknownExport, "");
+                continue;
+            };
+            let field_ty = import_surface_ty(self, &surface, export.ty);
+            if let Some(value) = field.value {
+                bind_pat(self, value, field_ty);
+                if let Some(alias) = bound_name_from_pat(self, value) {
+                    self.bind_imported_module_member(alias, &surface, &export);
+                }
+            } else if let Some(binding) = self.binding_id_for_decl(field.name) {
+                self.insert_binding_type(binding, field_ty);
+                self.bind_imported_module_member(field.name, &surface, &export);
             }
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let facts = ClassFacts::new(surface.key.clone(), alias.name, members, laws)
-        .with_constraints(constraints);
-    ctx.insert_class_facts_by_name(alias.name, facts);
-}
+        }
+        true
+    }
 
-fn import_effect_alias(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    alias: Ident,
-    module_surface: &ModuleSurface,
-    surface: &EffectSurface,
-) {
-    let ops = surface
-        .ops
-        .iter()
-        .map(|op| {
-            (
-                op.name.clone(),
-                EffectOpDef::new(
-                    op.params
+    fn bind_imported_alias_impl(&mut self, name: Ident, value: HirExprId) {
+        let HirExprKind::Field {
+            base, name: field, ..
+        } = self.expr(value).kind
+        else {
+            return;
+        };
+        let Some((surface, export)) = module_export_for_expr(self, base, field) else {
+            return;
+        };
+        self.bind_imported_module_member(name, &surface, &export);
+    }
+
+    fn bind_imported_module_member(
+        &mut self,
+        alias: Ident,
+        surface: &ModuleSurface,
+        export: &ExportedValue,
+    ) {
+        self.import_exported_value_binding(alias, surface, export);
+        if let Some(binding) = self.binding_id_for_decl(alias)
+            && let Some(target) = export.module_target.clone()
+        {
+            self.insert_binding_module_target(binding, target);
+        }
+        if let Some(class_key) = export.class_key.as_ref()
+            && let Some(class) = surface.exported_class(class_key)
+        {
+            self.import_class_alias(alias, surface, class, export.opaque);
+        }
+        if let Some(effect_key) = export.effect_key.as_ref()
+            && let Some(effect) = surface.exported_effect(effect_key)
+        {
+            self.import_effect_alias(alias, surface, effect);
+        }
+        if let Some(data_key) = export.data_key.as_ref()
+            && let Some(data) = surface.exported_data(data_key)
+        {
+            self.import_data_alias(alias, surface, data);
+        }
+    }
+
+    fn import_class_alias(
+        &mut self,
+        alias: Ident,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+        is_opaque: bool,
+    ) {
+        if is_opaque {
+            self.mark_sealed_class(surface.key.clone());
+        }
+        let members = surface
+            .members
+            .iter()
+            .map(|member| {
+                ClassMemberFacts::new(
+                    self.intern(&member.name),
+                    member
+                        .params
                         .iter()
                         .copied()
-                        .map(|ty| import_surface_ty(ctx, module_surface, ty))
+                        .map(|ty| import_surface_ty(self, module_surface, ty))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                    import_surface_ty(ctx, module_surface, op.result),
-                ),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    let laws = surface
-        .laws
-        .iter()
-        .map(|law| {
-            LawFacts::new(
-                ctx.intern(&law.name),
-                law.params
-                    .iter()
-                    .map(|param| {
-                        LawParamFacts::new(
-                            ctx.intern(&param.name),
-                            import_surface_ty(ctx, module_surface, param.ty),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
-    ctx.insert_effect_def(alias_name, EffectDef::new(surface.key.clone(), ops, laws));
-}
-
-fn import_data_alias(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    alias: Ident,
-    module_surface: &ModuleSurface,
-    surface: &DataSurface,
-) {
-    let variants = surface
-        .variants
-        .iter()
-        .map(|variant| {
-            (
-                variant.name.clone(),
-                DataVariantDef::new(
-                    variant
-                        .payload
-                        .map(|ty| import_surface_ty(ctx, module_surface, ty)),
-                    variant
-                        .field_tys
+                    import_surface_ty(self, module_surface, member.result),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let laws = surface
+            .laws
+            .iter()
+            .map(|law| {
+                LawFacts::new(
+                    self.intern(&law.name),
+                    law.params
                         .iter()
-                        .copied()
-                        .map(|ty| import_surface_ty(ctx, module_surface, ty))
+                        .map(|param| {
+                            LawParamFacts::new(
+                                self.intern(&param.name),
+                                import_surface_ty(self, module_surface, param.ty),
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                ),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    let alias_name: Box<str> = ctx.resolve_symbol(alias.name).into();
-    ctx.insert_data_def(
-        alias_name,
-        DataDef::new(
-            surface.key.clone(),
-            variants,
-            surface.repr_kind.clone(),
-            surface.layout_align,
-            surface.layout_pack,
-        ),
-    );
-}
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let constraints = surface
+            .constraints
+            .iter()
+            .map(|constraint| {
+                let lowered = ConstraintFacts::new(
+                    self.intern(&constraint.name),
+                    constraint.kind,
+                    import_surface_ty(self, module_surface, constraint.value),
+                );
+                if let Some(class_key) = constraint.class_key.clone() {
+                    lowered.with_class_key(class_key)
+                } else {
+                    lowered
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let facts = ClassFacts::new(surface.key.clone(), alias.name, members, laws)
+            .with_constraints(constraints);
+        self.insert_class_facts_by_name(alias.name, facts);
+    }
 
-fn import_exported_value_binding(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    alias: Ident,
-    surface: &ModuleSurface,
-    export: &ExportedValue,
-) {
-    let Some(binding) = ctx.binding_id_for_decl(alias) else {
-        return;
-    };
-    let scheme = scheme_from_export(ctx, surface, export);
-    let instantiated = if scheme.type_params.is_empty() {
-        Some(instantiate_monomorphic_scheme(ctx, &scheme))
-    } else {
-        None
-    };
-    let imported_ty = import_surface_ty(ctx, surface, export.ty);
-    ctx.insert_binding_type(binding, imported_ty);
-    ctx.insert_binding_effects(
-        binding,
-        instantiated.map_or_else(
-            || scheme.effects.clone(),
-            |instantiated| instantiated.effects,
-        ),
-    );
-    ctx.insert_binding_scheme(binding, scheme);
+    fn import_effect_alias(
+        &mut self,
+        alias: Ident,
+        module_surface: &ModuleSurface,
+        surface: &EffectSurface,
+    ) {
+        let ops = surface
+            .ops
+            .iter()
+            .map(|op| {
+                (
+                    op.name.clone(),
+                    EffectOpDef::new(
+                        op.params
+                            .iter()
+                            .copied()
+                            .map(|ty| import_surface_ty(self, module_surface, ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                        import_surface_ty(self, module_surface, op.result),
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let laws = surface
+            .laws
+            .iter()
+            .map(|law| {
+                LawFacts::new(
+                    self.intern(&law.name),
+                    law.params
+                        .iter()
+                        .map(|param| {
+                            LawParamFacts::new(
+                                self.intern(&param.name),
+                                import_surface_ty(self, module_surface, param.ty),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let alias_name: Box<str> = self.resolve_symbol(alias.name).into();
+        self.insert_effect_def(alias_name, EffectDef::new(surface.key.clone(), ops, laws));
+    }
+
+    fn import_data_alias(
+        &mut self,
+        alias: Ident,
+        module_surface: &ModuleSurface,
+        surface: &DataSurface,
+    ) {
+        let variants = surface
+            .variants
+            .iter()
+            .map(|variant| {
+                (
+                    variant.name.clone(),
+                    DataVariantDef::new(
+                        variant
+                            .payload
+                            .map(|ty| import_surface_ty(self, module_surface, ty)),
+                        variant
+                            .field_tys
+                            .iter()
+                            .copied()
+                            .map(|ty| import_surface_ty(self, module_surface, ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let alias_name: Box<str> = self.resolve_symbol(alias.name).into();
+        self.insert_data_def(
+            alias_name,
+            DataDef::new(
+                surface.key.clone(),
+                variants,
+                surface.repr_kind.clone(),
+                surface.layout_align,
+                surface.layout_pack,
+            ),
+        );
+    }
+
+    fn import_exported_value_binding(
+        &mut self,
+        alias: Ident,
+        surface: &ModuleSurface,
+        export: &ExportedValue,
+    ) {
+        let Some(binding) = self.binding_id_for_decl(alias) else {
+            return;
+        };
+        let scheme = self.scheme_from_export(surface, export);
+        let instantiated = if scheme.type_params.is_empty() {
+            Some(self.instantiate_monomorphic_scheme(&scheme))
+        } else {
+            None
+        };
+        let imported_ty = import_surface_ty(self, surface, export.ty);
+        self.insert_binding_type(binding, imported_ty);
+        self.insert_binding_effects(
+            binding,
+            instantiated.map_or_else(
+                || scheme.effects.clone(),
+                |instantiated| instantiated.effects,
+            ),
+        );
+        self.insert_binding_scheme(binding, scheme);
+    }
 }

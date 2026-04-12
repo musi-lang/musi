@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
+type BoundNameSetMut<'a> = &'a mut HashSet<NameBindingId>;
+type BindingCollector = fn(&IrExpr, BoundNameSetMut<'_>);
+
+pub(super) fn collect_used_bindings(expr: &IrExpr, out: BoundNameSetMut<'_>) {
     match &expr.kind {
         IrExprKind::Name {
             binding: Some(binding),
@@ -88,7 +91,7 @@ pub(super) fn collect_used_bindings(expr: &IrExpr, out: &mut HashSet<NameBinding
     }
 }
 
-pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameBindingId>) {
+pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: BoundNameSetMut<'_>) {
     match &expr.kind {
         IrExprKind::Let {
             binding: Some(binding),
@@ -190,7 +193,7 @@ pub(super) fn collect_local_decl_bindings(expr: &IrExpr, out: &mut HashSet<NameB
 fn collect_used_in_assign_target(
     value: &IrExpr,
     target: &IrAssignTarget,
-    out: &mut HashSet<NameBindingId>,
+    out: BoundNameSetMut<'_>,
 ) {
     collect_used_bindings(value, out);
     match target {
@@ -203,11 +206,7 @@ fn collect_used_in_assign_target(
     }
 }
 
-fn collect_expr_slice(
-    exprs: &[IrExpr],
-    out: &mut HashSet<NameBindingId>,
-    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
-) {
+fn collect_expr_slice(exprs: &[IrExpr], out: BoundNameSetMut<'_>, collect: BindingCollector) {
     for expr in exprs {
         collect(expr, out);
     }
@@ -223,33 +222,29 @@ fn for_each_seq_part_expr(parts: &[IrSeqPart], mut f: impl FnMut(&IrExpr)) {
 
 fn collect_seq_part_exprs(
     parts: &[IrSeqPart],
-    out: &mut HashSet<NameBindingId>,
-    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+    out: BoundNameSetMut<'_>,
+    collect: BindingCollector,
 ) {
     for_each_seq_part_expr(parts, |expr| collect(expr, out));
 }
 
 fn collect_record_field_exprs(
     fields: &[IrRecordField],
-    out: &mut HashSet<NameBindingId>,
-    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
+    out: BoundNameSetMut<'_>,
+    collect: BindingCollector,
 ) {
     for field in fields {
         collect(&field.expr, out);
     }
 }
 
-fn collect_call_arg_exprs(
-    args: &[IrArg],
-    out: &mut HashSet<NameBindingId>,
-    collect: fn(&IrExpr, &mut HashSet<NameBindingId>),
-) {
+fn collect_call_arg_exprs(args: &[IrArg], out: BoundNameSetMut<'_>, collect: BindingCollector) {
     for arg in args {
         collect(&arg.expr, out);
     }
 }
 
-fn collect_used_in_case_arms(arms: &[IrLoweredCaseArm], out: &mut HashSet<NameBindingId>) {
+fn collect_used_in_case_arms(arms: &[IrLoweredCaseArm], out: BoundNameSetMut<'_>) {
     for arm in arms {
         if let Some(guard) = &arm.guard {
             collect_used_bindings(guard, out);

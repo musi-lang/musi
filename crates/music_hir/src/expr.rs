@@ -5,6 +5,9 @@ use crate::module::{HirExprId, HirLitId, HirPatId};
 use crate::origin::HirOrigin;
 use crate::ty::HirDim;
 
+type ConstraintRange = SliceRange<HirConstraint>;
+type MemberDefRange = SliceRange<HirMemberDef>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirExportMod {
     pub opaque: bool,
@@ -209,7 +212,7 @@ pub enum HirExprKind {
         type_params: SliceRange<HirBinder>,
         has_param_clause: bool,
         params: SliceRange<HirParam>,
-        constraints: SliceRange<HirConstraint>,
+        constraints: ConstraintRange,
         effects: Option<HirEffectSet>,
         sig: Option<HirExprId>,
         value: HirExprId,
@@ -227,17 +230,17 @@ pub enum HirExprKind {
         fields: SliceRange<HirFieldDef>,
     },
     Effect {
-        members: SliceRange<HirMemberDef>,
+        members: MemberDefRange,
     },
     Class {
-        constraints: SliceRange<HirConstraint>,
-        members: SliceRange<HirMemberDef>,
+        constraints: ConstraintRange,
+        members: MemberDefRange,
     },
     Instance {
         type_params: SliceRange<HirBinder>,
-        constraints: SliceRange<HirConstraint>,
+        constraints: ConstraintRange,
         class: HirExprId,
-        members: SliceRange<HirMemberDef>,
+        members: MemberDefRange,
     },
     Perform {
         expr: HirExprId,

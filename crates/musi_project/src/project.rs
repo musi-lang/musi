@@ -20,6 +20,14 @@ use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::manifest_source::ManifestSource;
 use crate::registry::{RegistryPackage, resolve_registry_package};
 
+type ExportModuleMap = BTreeMap<String, ModuleKey>;
+type DependencyPackageMap = BTreeMap<String, PackageId>;
+type VisitedPackageNames = BTreeSet<String>;
+type TaskNameSet = BTreeSet<String>;
+type PackageRecordMapRef<'a> = &'a BTreeMap<PackageId, PackageRecord>;
+type ModuleKeyMapRef<'a> = &'a BTreeMap<String, ModuleKey>;
+type CompiledOutputResult = ProjectResult<CompiledOutput>;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PackageId {
     pub name: String,
@@ -101,12 +109,12 @@ pub struct ResolvedPackage {
     pub source: PackageSource,
     pub manifest: PackageManifest,
     pub entry: ProjectEntry,
-    pub exports: BTreeMap<String, ModuleKey>,
+    pub exports: ExportModuleMap,
     pub module_keys: BTreeMap<ModuleKey, PathBuf>,
-    pub dependencies: BTreeMap<String, PackageId>,
-    pub dev_dependencies: BTreeMap<String, PackageId>,
-    pub peer_dependencies: BTreeMap<String, PackageId>,
-    pub optional_dependencies: BTreeMap<String, PackageId>,
+    pub dependencies: DependencyPackageMap,
+    pub dev_dependencies: DependencyPackageMap,
+    pub peer_dependencies: DependencyPackageMap,
+    pub optional_dependencies: DependencyPackageMap,
 }
 
 impl ResolvedPackage {
@@ -136,7 +144,7 @@ impl ResolvedPackage {
     }
 
     #[must_use]
-    pub fn with_exports(mut self, exports: BTreeMap<String, ModuleKey>) -> Self {
+    pub fn with_exports(mut self, exports: ExportModuleMap) -> Self {
         self.exports = exports;
         self
     }
@@ -148,22 +156,19 @@ impl ResolvedPackage {
     }
 
     #[must_use]
-    pub fn with_dependencies(mut self, dependencies: BTreeMap<String, PackageId>) -> Self {
+    pub fn with_dependencies(mut self, dependencies: DependencyPackageMap) -> Self {
         self.dependencies = dependencies;
         self
     }
 
     #[must_use]
-    pub fn with_dev_dependencies(mut self, dev_dependencies: BTreeMap<String, PackageId>) -> Self {
+    pub fn with_dev_dependencies(mut self, dev_dependencies: DependencyPackageMap) -> Self {
         self.dev_dependencies = dev_dependencies;
         self
     }
 
     #[must_use]
-    pub fn with_peer_dependencies(
-        mut self,
-        peer_dependencies: BTreeMap<String, PackageId>,
-    ) -> Self {
+    pub fn with_peer_dependencies(mut self, peer_dependencies: DependencyPackageMap) -> Self {
         self.peer_dependencies = peer_dependencies;
         self
     }
@@ -171,7 +176,7 @@ impl ResolvedPackage {
     #[must_use]
     pub fn with_optional_dependencies(
         mut self,
-        optional_dependencies: BTreeMap<String, PackageId>,
+        optional_dependencies: DependencyPackageMap,
     ) -> Self {
         self.optional_dependencies = optional_dependencies;
         self
@@ -279,7 +284,7 @@ struct LoadedModule {
 struct PackageRecord {
     package: ResolvedPackage,
     modules: BTreeMap<ModuleKey, LoadedModule>,
-    relative_modules: BTreeMap<String, ModuleKey>,
+    relative_modules: ExportModuleMap,
 }
 
 #[derive(Debug, Clone)]
@@ -298,12 +303,12 @@ struct LoadedManifest {
 
 struct WorkspaceSeed {
     package_records: BTreeMap<PackageId, PackageRecord>,
-    package_name_index: BTreeMap<String, PackageId>,
+    package_name_index: DependencyPackageMap,
 }
 
 struct ResolvedWorkspaceState {
     workspace: WorkspaceGraph,
-    package_name_index: BTreeMap<String, PackageId>,
+    package_name_index: DependencyPackageMap,
     import_map: ImportMap,
     module_texts: BTreeMap<ModuleKey, String>,
     resolved_lockfile: Lockfile,
@@ -548,8 +553,8 @@ impl Project {
     /// dependency cycle.
     pub fn task_plan(&self, name: &str) -> ProjectResult<Vec<TaskSpec>> {
         let mut order = Vec::new();
-        let mut seen = BTreeSet::new();
-        let mut active = BTreeSet::new();
+        let mut seen = VisitedPackageNames::new();
+        let mut active = VisitedPackageNames::new();
         self.collect_task_plan(name, &mut seen, &mut active, &mut order)?;
         Ok(order)
     }
@@ -557,8 +562,8 @@ impl Project {
     fn collect_task_plan(
         &self,
         name: &str,
-        seen: &mut BTreeSet<String>,
-        active: &mut BTreeSet<String>,
+        seen: &mut VisitedPackageNames,
+        active: &mut VisitedPackageNames,
         out: &mut Vec<TaskSpec>,
     ) -> ProjectResult {
         if !seen.insert(name.into()) {
@@ -626,7 +631,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled through
     /// [`Session`].
-    pub fn compile_root_entry(&self) -> ProjectResult<CompiledOutput> {
+    pub fn compile_root_entry(&self) -> CompiledOutputResult {
         self.compile_root_entry_with(Session::compile_entry)
     }
 
@@ -854,8 +859,8 @@ fn validate_task_node(
     name: &str,
     manifest: &PackageManifest,
     source: &ManifestSource,
-    seen: &mut BTreeSet<String>,
-    active: &mut BTreeSet<String>,
+    seen: &mut TaskNameSet,
+    active: &mut TaskNameSet,
 ) -> ProjectResult {
     if !seen.insert(name.into()) {
         return Ok(());
@@ -1384,8 +1389,8 @@ fn discover_modules_recursive(
 }
 
 fn build_import_map(
-    package_records: &BTreeMap<PackageId, PackageRecord>,
-    package_name_index: &BTreeMap<String, PackageId>,
+    package_records: PackageRecordMapRef<'_>,
+    package_name_index: &DependencyPackageMap,
 ) -> ProjectResult<ImportMap> {
     let mut import_map = ImportMap::default();
     for record in package_records.values() {
@@ -1461,7 +1466,7 @@ fn resolve_import_spec(
 
 fn resolve_compiler_path(
     root_dir: &Path,
-    relative_modules: &BTreeMap<String, ModuleKey>,
+    relative_modules: ModuleKeyMapRef<'_>,
     compiler_options: Option<&CompilerOptions>,
     spec: &str,
 ) -> Option<ModuleKey> {

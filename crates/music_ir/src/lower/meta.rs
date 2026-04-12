@@ -6,6 +6,8 @@ use music_sema::{
 
 use crate::api::IrMetaRecord;
 
+type MetaRecordList = Vec<IrMetaRecord>;
+
 fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
     format!("{}::{name}", module.as_str()).into_boxed_str()
 }
@@ -197,17 +199,12 @@ fn format_effect_row(surface: &ModuleSurface, row: &SurfaceEffectRow) -> String 
     format!("with {{ {} }}", items.join(", "))
 }
 
-fn push_meta(
-    out: &mut Vec<IrMetaRecord>,
-    target: &str,
-    key: &'static str,
-    values: Box<[Box<str>]>,
-) {
+fn push_meta(out: &mut MetaRecordList, target: &str, key: &'static str, values: Box<[Box<str>]>) {
     out.push(IrMetaRecord::new(target, key, values));
 }
 
 fn push_inert_and_musi_attrs(
-    out: &mut Vec<IrMetaRecord>,
+    out: &mut MetaRecordList,
     target: &str,
     inert: &[Attr],
     musi: &[Attr],
@@ -231,7 +228,7 @@ fn push_inert_and_musi_attrs(
 }
 
 fn push_export_sig_meta(
-    out: &mut Vec<IrMetaRecord>,
+    out: &mut MetaRecordList,
     surface: &ModuleSurface,
     target: &str,
     export: &ExportedValue,

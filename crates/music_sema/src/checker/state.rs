@@ -26,6 +26,52 @@ use crate::effects::EffectRow;
 
 const SYNTH_SUM_PREFIX: &str = "__sum__";
 
+type BindingIdMap = HashMap<NameSite, NameBindingId>;
+type ImportTargetMap = HashMap<Span, ModuleKey>;
+type BindingTypeMap = HashMap<NameBindingId, HirTyId>;
+type BindingEffectsMap = HashMap<NameBindingId, EffectRow>;
+type BindingSchemeMap = HashMap<NameBindingId, BindingScheme>;
+type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
+type SealedClassSet = HashSet<DefinitionKey>;
+type GatedBindingSet = HashSet<NameBindingId>;
+type ForeignLinkMap = HashMap<NameBindingId, ForeignLinkInfo>;
+type EffectDefMap = HashMap<Box<str>, EffectDef>;
+type DataDefMap = HashMap<Box<str>, DataDef>;
+type ClassIndexMap = HashMap<Symbol, HirExprId>;
+type ClassFactsByNameMap = HashMap<Symbol, ClassFacts>;
+type ClassFactsMap = HashMap<HirExprId, ClassFacts>;
+type InstanceFactsMap = HashMap<HirExprId, InstanceFacts>;
+type ExprFactsList = Vec<ExprFacts>;
+type PatFactsList = Vec<PatFacts>;
+type ExprCallableEffectsMap = HashMap<HirExprId, EffectRow>;
+type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
+type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
+type ResumeCtxList = Vec<ResumeCtx>;
+type ExpectedTyList = Vec<HirTyId>;
+type StaticImportList = Vec<ModuleKey>;
+type ExprIdList = Vec<HirExprId>;
+type ArgList = Vec<HirArg>;
+type DimList = Vec<HirDim>;
+type TyIdList = Vec<HirTyId>;
+type TyFieldList = Vec<HirTyField>;
+type ArrayItemList = Vec<HirArrayItem>;
+type RecordItemList = Vec<HirRecordItem>;
+type ParamList = Vec<HirParam>;
+type AttrList = Vec<HirAttr>;
+type AttrArgList = Vec<HirAttrArg>;
+type MemberDefList = Vec<HirMemberDef>;
+type HandleClauseList = Vec<HirHandleClause>;
+type CaseArmList = Vec<HirCaseArm>;
+type ConstraintList = Vec<HirConstraint>;
+type VariantDefList = Vec<HirVariantDef>;
+type FieldDefList = Vec<HirFieldDef>;
+type EffectItemList = Vec<HirEffectItem>;
+type PatIdList = Vec<HirPatId>;
+type RecordPatFieldList = Vec<HirRecordPatField>;
+type IdentList = Vec<Ident>;
+type BinderList = Vec<HirBinder>;
+type TemplatePartList = Vec<HirTemplatePart>;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
     pub error: HirTyId,
@@ -87,15 +133,15 @@ impl ResumeCtx {
 
 pub struct ModuleState {
     pub(crate) resolved: ResolvedModule,
-    binding_ids: HashMap<NameSite, NameBindingId>,
-    import_targets: HashMap<Span, ModuleKey>,
+    binding_ids: BindingIdMap,
+    import_targets: ImportTargetMap,
 }
 
 impl ModuleState {
     const fn new(
         resolved: ResolvedModule,
-        binding_ids: HashMap<NameSite, NameBindingId>,
-        import_targets: HashMap<Span, ModuleKey>,
+        binding_ids: BindingIdMap,
+        import_targets: ImportTargetMap,
     ) -> Self {
         Self {
             resolved,
@@ -137,13 +183,13 @@ impl<'interner, 'env> RuntimeEnv<'interner, 'env> {
 
 #[derive(Default)]
 pub struct TypingState {
-    binding_types: HashMap<NameBindingId, HirTyId>,
-    binding_effects: HashMap<NameBindingId, EffectRow>,
-    binding_schemes: HashMap<NameBindingId, BindingScheme>,
-    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
-    sealed_classes: HashSet<DefinitionKey>,
-    gated_bindings: HashSet<NameBindingId>,
-    foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+    binding_types: BindingTypeMap,
+    binding_effects: BindingEffectsMap,
+    binding_schemes: BindingSchemeMap,
+    binding_module_targets: BindingModuleTargetMap,
+    sealed_classes: SealedClassSet,
+    gated_bindings: GatedBindingSet,
+    foreign_links: ForeignLinkMap,
     next_open_row_id: u32,
 }
 
@@ -156,12 +202,12 @@ impl TypingState {
 
 #[derive(Default)]
 pub struct DeclState {
-    effect_defs: HashMap<Box<str>, EffectDef>,
-    data_defs: HashMap<Box<str>, DataDef>,
-    class_index: HashMap<Symbol, HirExprId>,
-    class_facts_by_name: HashMap<Symbol, ClassFacts>,
-    class_facts: HashMap<HirExprId, ClassFacts>,
-    instance_facts: HashMap<HirExprId, InstanceFacts>,
+    effect_defs: EffectDefMap,
+    data_defs: DataDefMap,
+    class_index: ClassIndexMap,
+    class_facts_by_name: ClassFactsByNameMap,
+    class_facts: ClassFactsMap,
+    instance_facts: InstanceFactsMap,
 }
 
 impl DeclState {
@@ -173,16 +219,16 @@ impl DeclState {
 
 pub struct FactState {
     diags: SemaDiagList,
-    expr_facts: Vec<ExprFacts>,
-    pat_facts: Vec<PatFacts>,
-    expr_callable_effects: HashMap<HirExprId, EffectRow>,
-    expr_module_targets: HashMap<HirExprId, ModuleKey>,
-    type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_facts: ExprFactsList,
+    pat_facts: PatFactsList,
+    expr_callable_effects: ExprCallableEffectsMap,
+    expr_module_targets: ExprModuleTargetMap,
+    type_test_targets: TypeTestTargetMap,
 }
 
 impl FactState {
     #[must_use]
-    fn new(expr_facts: Vec<ExprFacts>, pat_facts: Vec<PatFacts>) -> Self {
+    fn new(expr_facts: ExprFactsList, pat_facts: PatFactsList) -> Self {
         Self {
             diags: Vec::new(),
             expr_facts,
@@ -196,7 +242,7 @@ impl FactState {
 
 #[derive(Default)]
 pub struct ResumeState {
-    stack: Vec<ResumeCtx>,
+    stack: ResumeCtxList,
 }
 
 impl ResumeState {
@@ -214,14 +260,22 @@ pub struct PassBase<'ctx, 'interner, 'env> {
     facts: &'ctx mut FactState,
 }
 
+pub struct PassParts<'ctx, 'interner, 'env> {
+    pub module: &'ctx mut ModuleState,
+    pub runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+    pub typing: &'ctx mut TypingState,
+    pub decls: &'ctx mut DeclState,
+    pub facts: &'ctx mut FactState,
+}
+
 pub struct CollectPass<'ctx, 'interner, 'env> {
     base: PassBase<'ctx, 'interner, 'env>,
 }
 
 pub struct CheckPass<'ctx, 'interner, 'env> {
-    base: PassBase<'ctx, 'interner, 'env>,
+    collect: CollectPass<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
-    expected: Vec<HirTyId>,
+    expected: ExpectedTyList,
     module_stmt_depth: u32,
 }
 
@@ -318,13 +372,14 @@ impl ModuleState {
 }
 
 impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
-    const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
-    ) -> Self {
+    pub(super) const fn new(parts: PassParts<'ctx, 'interner, 'env>) -> Self {
+        let PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        } = parts;
         Self {
             module,
             runtime,
@@ -350,7 +405,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.module.import_targets.get(&span).cloned()
     }
 
-    pub fn static_imports(&self) -> Vec<ModuleKey> {
+    pub fn static_imports(&self) -> StaticImportList {
         self.module
             .resolved
             .imports
@@ -403,7 +458,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.runtime.interner.resolve(symbol)
     }
 
-    pub fn expr_ids(&self, range: SliceRange<HirExprId>) -> Vec<HirExprId> {
+    pub fn expr_ids(&self, range: SliceRange<HirExprId>) -> ExprIdList {
         self.module
             .resolved
             .module
@@ -413,19 +468,19 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn args(&self, range: SliceRange<HirArg>) -> Vec<HirArg> {
+    pub fn args(&self, range: SliceRange<HirArg>) -> ArgList {
         self.module.resolved.module.store.args.get(range).to_vec()
     }
 
-    pub fn dims(&self, range: SliceRange<HirDim>) -> Vec<HirDim> {
+    pub fn dims(&self, range: SliceRange<HirDim>) -> DimList {
         self.module.resolved.module.store.dims.get(range).to_vec()
     }
 
-    pub fn ty_ids(&self, range: SliceRange<HirTyId>) -> Vec<HirTyId> {
+    pub fn ty_ids(&self, range: SliceRange<HirTyId>) -> TyIdList {
         self.module.resolved.module.store.ty_ids.get(range).to_vec()
     }
 
-    pub fn ty_fields(&self, range: SliceRange<HirTyField>) -> Vec<HirTyField> {
+    pub fn ty_fields(&self, range: SliceRange<HirTyField>) -> TyFieldList {
         self.module
             .resolved
             .module
@@ -435,7 +490,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn array_items(&self, range: SliceRange<HirArrayItem>) -> Vec<HirArrayItem> {
+    pub fn array_items(&self, range: SliceRange<HirArrayItem>) -> ArrayItemList {
         self.module
             .resolved
             .module
@@ -445,7 +500,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn record_items(&self, range: SliceRange<HirRecordItem>) -> Vec<HirRecordItem> {
+    pub fn record_items(&self, range: SliceRange<HirRecordItem>) -> RecordItemList {
         self.module
             .resolved
             .module
@@ -455,15 +510,15 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn params(&self, range: SliceRange<HirParam>) -> Vec<HirParam> {
+    pub fn params(&self, range: SliceRange<HirParam>) -> ParamList {
         self.module.resolved.module.store.params.get(range).to_vec()
     }
 
-    pub fn attrs(&self, range: SliceRange<HirAttr>) -> Vec<HirAttr> {
+    pub fn attrs(&self, range: SliceRange<HirAttr>) -> AttrList {
         self.module.resolved.module.store.attrs.get(range).to_vec()
     }
 
-    pub fn attr_args(&self, range: SliceRange<HirAttrArg>) -> Vec<HirAttrArg> {
+    pub fn attr_args(&self, range: SliceRange<HirAttrArg>) -> AttrArgList {
         self.module
             .resolved
             .module
@@ -473,7 +528,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn members(&self, range: SliceRange<HirMemberDef>) -> Vec<HirMemberDef> {
+    pub fn members(&self, range: SliceRange<HirMemberDef>) -> MemberDefList {
         self.module
             .resolved
             .module
@@ -483,7 +538,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn handle_clauses(&self, range: SliceRange<HirHandleClause>) -> Vec<HirHandleClause> {
+    pub fn handle_clauses(&self, range: SliceRange<HirHandleClause>) -> HandleClauseList {
         self.module
             .resolved
             .module
@@ -493,7 +548,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn case_arms(&self, range: SliceRange<HirCaseArm>) -> Vec<HirCaseArm> {
+    pub fn case_arms(&self, range: SliceRange<HirCaseArm>) -> CaseArmList {
         self.module
             .resolved
             .module
@@ -503,7 +558,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn constraints(&self, range: SliceRange<HirConstraint>) -> Vec<HirConstraint> {
+    pub fn constraints(&self, range: SliceRange<HirConstraint>) -> ConstraintList {
         self.module
             .resolved
             .module
@@ -513,7 +568,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn variants(&self, range: SliceRange<HirVariantDef>) -> Vec<HirVariantDef> {
+    pub fn variants(&self, range: SliceRange<HirVariantDef>) -> VariantDefList {
         self.module
             .resolved
             .module
@@ -523,11 +578,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn fields(&self, range: SliceRange<HirFieldDef>) -> Vec<HirFieldDef> {
+    pub fn fields(&self, range: SliceRange<HirFieldDef>) -> FieldDefList {
         self.module.resolved.module.store.fields.get(range).to_vec()
     }
 
-    pub fn effect_items(&self, set: &HirEffectSet) -> Vec<HirEffectItem> {
+    pub fn effect_items(&self, set: &HirEffectSet) -> EffectItemList {
         self.module
             .resolved
             .module
@@ -537,7 +592,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> Vec<HirPatId> {
+    pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> PatIdList {
         self.module
             .resolved
             .module
@@ -547,10 +602,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn record_pat_fields(
-        &self,
-        range: SliceRange<HirRecordPatField>,
-    ) -> Vec<HirRecordPatField> {
+    pub fn record_pat_fields(&self, range: SliceRange<HirRecordPatField>) -> RecordPatFieldList {
         self.module
             .resolved
             .module
@@ -560,11 +612,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn idents(&self, range: SliceRange<Ident>) -> Vec<Ident> {
+    pub fn idents(&self, range: SliceRange<Ident>) -> IdentList {
         self.module.resolved.module.store.idents.get(range).to_vec()
     }
 
-    pub fn binders(&self, range: SliceRange<HirBinder>) -> Vec<HirBinder> {
+    pub fn binders(&self, range: SliceRange<HirBinder>) -> BinderList {
         self.module
             .resolved
             .module
@@ -574,7 +626,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> Vec<HirTemplatePart> {
+    pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> TemplatePartList {
         self.module
             .resolved
             .module
@@ -899,16 +951,8 @@ impl DeclState {
 }
 
 impl<'ctx, 'interner, 'env> CollectPass<'ctx, 'interner, 'env> {
-    pub const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
-    ) -> Self {
-        Self {
-            base: PassBase::new(module, runtime, typing, decls, facts),
-        }
+    pub const fn new(base: PassBase<'ctx, 'interner, 'env>) -> Self {
+        Self { base }
     }
 }
 
@@ -928,15 +972,11 @@ impl DerefMut for CollectPass<'_, '_, '_> {
 
 impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
     pub const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
+        collect: CollectPass<'ctx, 'interner, 'env>,
         resume: &'ctx mut ResumeState,
     ) -> Self {
         Self {
-            base: PassBase::new(module, runtime, typing, decls, facts),
+            collect,
             resume,
             expected: Vec::new(),
             module_stmt_depth: 0,
@@ -981,16 +1021,16 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 }
 
 impl<'ctx, 'interner, 'env> Deref for CheckPass<'ctx, 'interner, 'env> {
-    type Target = PassBase<'ctx, 'interner, 'env>;
+    type Target = CollectPass<'ctx, 'interner, 'env>;
 
     fn deref(&self) -> &Self::Target {
-        &self.base
+        &self.collect
     }
 }
 
 impl DerefMut for CheckPass<'_, '_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
+        &mut self.collect
     }
 }
 

@@ -12,6 +12,11 @@ use crate::diag::SemaDiagKind;
 use crate::effects::EffectRow;
 
 pub type SemaDiagList = Vec<Diag>;
+pub type NameList = Box<[Box<str>]>;
+pub type AttrList = Box<[Attr]>;
+pub type ConstraintSurfaceList = Box<[ConstraintSurface]>;
+pub type HirTyIdList = Box<[HirTyId]>;
+pub type SurfaceTyIdList = Box<[SurfaceTyId]>;
 
 #[must_use]
 pub fn sema_diag_kind(diag: &Diag) -> Option<SemaDiagKind> {
@@ -34,13 +39,19 @@ impl ForeignLinkInfo {
     }
 
     #[must_use]
-    pub fn with_name(mut self, name: impl Into<Box<str>>) -> Self {
+    pub fn with_name<Name>(mut self, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         self.name = Some(name.into());
         self
     }
 
     #[must_use]
-    pub fn with_symbol(mut self, symbol: impl Into<Box<str>>) -> Self {
+    pub fn with_symbol<SymbolName>(mut self, symbol: SymbolName) -> Self
+    where
+        SymbolName: Into<Box<str>>,
+    {
         self.symbol = Some(symbol.into());
         self
     }
@@ -70,31 +81,46 @@ impl TargetInfo {
     }
 
     #[must_use]
-    pub fn with_os(mut self, os: impl Into<Box<str>>) -> Self {
+    pub fn with_os<Os>(mut self, os: Os) -> Self
+    where
+        Os: Into<Box<str>>,
+    {
         self.os = Some(os.into());
         self
     }
 
     #[must_use]
-    pub fn with_arch(mut self, arch: impl Into<Box<str>>) -> Self {
+    pub fn with_arch<Arch>(mut self, arch: Arch) -> Self
+    where
+        Arch: Into<Box<str>>,
+    {
         self.arch = Some(arch.into());
         self
     }
 
     #[must_use]
-    pub fn with_env(mut self, env: impl Into<Box<str>>) -> Self {
+    pub fn with_env<Env>(mut self, env: Env) -> Self
+    where
+        Env: Into<Box<str>>,
+    {
         self.env = Some(env.into());
         self
     }
 
     #[must_use]
-    pub fn with_abi(mut self, abi: impl Into<Box<str>>) -> Self {
+    pub fn with_abi<Abi>(mut self, abi: Abi) -> Self
+    where
+        Abi: Into<Box<str>>,
+    {
         self.abi = Some(abi.into());
         self
     }
 
     #[must_use]
-    pub fn with_vendor(mut self, vendor: impl Into<Box<str>>) -> Self {
+    pub fn with_vendor<Vendor>(mut self, vendor: Vendor) -> Self
+    where
+        Vendor: Into<Box<str>>,
+    {
         self.vendor = Some(vendor.into());
         self
     }
@@ -152,7 +178,10 @@ pub struct DefinitionKey {
 
 impl DefinitionKey {
     #[must_use]
-    pub fn new(module: ModuleKey, name: impl Into<Box<str>>) -> Self {
+    pub fn new<Name>(module: ModuleKey, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             module,
             name: name.into(),
@@ -254,7 +283,10 @@ pub struct SurfaceTyField {
 
 impl SurfaceTyField {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, ty: SurfaceTyId) -> Self {
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             ty,
@@ -266,21 +298,24 @@ impl SurfaceTyField {
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
-    pub type_params: Box<[Box<str>]>,
-    pub constraints: Box<[ConstraintSurface]>,
+    pub type_params: NameList,
+    pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
     pub opaque: bool,
     pub module_target: Option<ModuleKey>,
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
-    pub inert_attrs: Box<[Attr]>,
-    pub musi_attrs: Box<[Attr]>,
+    pub inert_attrs: AttrList,
+    pub musi_attrs: AttrList,
 }
 
 impl ExportedValue {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, ty: SurfaceTyId) -> Self {
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             ty,
@@ -298,13 +333,13 @@ impl ExportedValue {
     }
 
     #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<Box<[Box<str>]>>) -> Self {
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
         self
     }
 
     #[must_use]
-    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintSurface]>>) -> Self {
+    pub fn with_constraints(mut self, constraints: impl Into<ConstraintSurfaceList>) -> Self {
         self.constraints = constraints.into();
         self
     }
@@ -346,13 +381,13 @@ impl ExportedValue {
     }
 
     #[must_use]
-    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
     }
 
     #[must_use]
-    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
         self.musi_attrs = musi_attrs.into();
         self
     }
@@ -362,12 +397,16 @@ impl ExportedValue {
 pub struct DataVariantSurface {
     pub name: Box<str>,
     pub payload: Option<SurfaceTyId>,
-    pub field_tys: Box<[SurfaceTyId]>,
+    pub field_tys: SurfaceTyIdList,
 }
 
 impl DataVariantSurface {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, field_tys: impl Into<Box<[SurfaceTyId]>>) -> Self {
+    pub fn new<Name, FieldTys>(name: Name, field_tys: FieldTys) -> Self
+    where
+        Name: Into<Box<str>>,
+        FieldTys: Into<SurfaceTyIdList>,
+    {
         Self {
             name: name.into(),
             payload: None,
@@ -408,7 +447,10 @@ impl DataSurface {
     }
 
     #[must_use]
-    pub fn with_repr_kind(mut self, repr_kind: impl Into<Box<str>>) -> Self {
+    pub fn with_repr_kind<ReprKind>(mut self, repr_kind: ReprKind) -> Self
+    where
+        ReprKind: Into<Box<str>>,
+    {
         self.repr_kind = Some(repr_kind.into());
         self
     }
@@ -426,13 +468,13 @@ impl DataSurface {
     }
 
     #[must_use]
-    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
     }
 
     #[must_use]
-    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
         self.musi_attrs = musi_attrs.into();
         self
     }
@@ -448,7 +490,10 @@ pub struct ConstraintSurface {
 
 impl ConstraintSurface {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, kind: ConstraintKind, value: SurfaceTyId) -> Self {
+    pub fn new<Name>(name: Name, kind: ConstraintKind, value: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             kind,
@@ -472,7 +517,10 @@ pub struct SurfaceEffectItem {
 
 impl SurfaceEffectItem {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, arg: Option<SurfaceTyId>) -> Self {
+    pub fn new<Name>(name: Name, arg: Option<SurfaceTyId>) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             arg,
@@ -496,7 +544,10 @@ impl SurfaceEffectRow {
     }
 
     #[must_use]
-    pub fn with_open(mut self, open: impl Into<Box<str>>) -> Self {
+    pub fn with_open<Open>(mut self, open: Open) -> Self
+    where
+        Open: Into<Box<str>>,
+    {
         self.open = Some(open.into());
         self
     }
@@ -511,11 +562,11 @@ pub struct ClassMemberSurface {
 
 impl ClassMemberSurface {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
-        params: impl Into<Box<[SurfaceTyId]>>,
-        result: SurfaceTyId,
-    ) -> Self {
+    pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<SurfaceTyIdList>,
+    {
         Self {
             name: name.into(),
             params: params.into(),
@@ -532,7 +583,10 @@ pub struct LawParamSurface {
 
 impl LawParamSurface {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, ty: SurfaceTyId) -> Self {
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             name: name.into(),
             ty,
@@ -548,7 +602,11 @@ pub struct LawSurface {
 
 impl LawSurface {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, params: impl Into<Box<[LawParamSurface]>>) -> Self {
+    pub fn new<Name, Params>(name: Name, params: Params) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<Box<[LawParamSurface]>>,
+    {
         Self {
             name: name.into(),
             params: params.into(),
@@ -590,13 +648,13 @@ impl ClassSurface {
     }
 
     #[must_use]
-    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
     }
 
     #[must_use]
-    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
         self.musi_attrs = musi_attrs.into();
         self
     }
@@ -611,11 +669,11 @@ pub struct EffectOpSurface {
 
 impl EffectOpSurface {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
-        params: impl Into<Box<[SurfaceTyId]>>,
-        result: SurfaceTyId,
-    ) -> Self {
+    pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<SurfaceTyIdList>,
+    {
         Self {
             name: name.into(),
             params: params.into(),
@@ -650,13 +708,13 @@ impl EffectSurface {
     }
 
     #[must_use]
-    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
     }
 
     #[must_use]
-    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
         self.musi_attrs = musi_attrs.into();
         self
     }
@@ -675,11 +733,14 @@ pub struct InstanceSurface {
 
 impl InstanceSurface {
     #[must_use]
-    pub fn new(
+    pub fn new<ClassArgs>(
         class_key: DefinitionKey,
-        class_args: impl Into<Box<[SurfaceTyId]>>,
+        class_args: ClassArgs,
         member_names: impl Into<Box<[Box<str>]>>,
-    ) -> Self {
+    ) -> Self
+    where
+        ClassArgs: Into<SurfaceTyIdList>,
+    {
         Self {
             type_params: Box::default(),
             class_key,
@@ -704,13 +765,13 @@ impl InstanceSurface {
     }
 
     #[must_use]
-    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
     }
 
     #[must_use]
-    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<Box<[Attr]>>) -> Self {
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
         self.musi_attrs = musi_attrs.into();
         self
     }
@@ -841,7 +902,7 @@ impl ExprFacts {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
-    params: Box<[HirTyId]>,
+    params: HirTyIdList,
     result: HirTyId,
 }
 
@@ -855,7 +916,7 @@ pub struct SemaEffectDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
     payload: Option<HirTyId>,
-    field_tys: Box<[HirTyId]>,
+    field_tys: HirTyIdList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -869,7 +930,10 @@ pub struct SemaDataDef {
 
 impl SemaEffectOpDef {
     #[must_use]
-    pub(crate) fn new(params: impl Into<Box<[HirTyId]>>, result: HirTyId) -> Self {
+    pub(crate) fn new<Params>(params: Params, result: HirTyId) -> Self
+    where
+        Params: Into<HirTyIdList>,
+    {
         Self {
             params: params.into(),
             result,
@@ -936,7 +1000,10 @@ impl SemaEffectDef {
 
 impl SemaDataVariantDef {
     #[must_use]
-    pub(crate) fn new(payload: Option<HirTyId>, field_tys: impl Into<Box<[HirTyId]>>) -> Self {
+    pub(crate) fn new<FieldTys>(payload: Option<HirTyId>, field_tys: FieldTys) -> Self
+    where
+        FieldTys: Into<HirTyIdList>,
+    {
         Self {
             payload,
             field_tys: field_tys.into(),
@@ -1062,13 +1129,16 @@ impl ConstraintFacts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassMemberFacts {
     pub name: Symbol,
-    pub params: Box<[HirTyId]>,
+    pub params: HirTyIdList,
     pub result: HirTyId,
 }
 
 impl ClassMemberFacts {
     #[must_use]
-    pub fn new(name: Symbol, params: impl Into<Box<[HirTyId]>>, result: HirTyId) -> Self {
+    pub fn new<Params>(name: Symbol, params: Params, result: HirTyId) -> Self
+    where
+        Params: Into<HirTyIdList>,
+    {
         Self {
             name,
             params: params.into(),
@@ -1145,20 +1215,23 @@ pub struct InstanceFacts {
     pub type_params: Box<[Symbol]>,
     pub class_key: DefinitionKey,
     pub class_name: Symbol,
-    pub class_args: Box<[HirTyId]>,
+    pub class_args: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
     pub member_names: Box<[Symbol]>,
 }
 
 impl InstanceFacts {
     #[must_use]
-    pub fn new(
+    pub fn new<ClassArgs>(
         origin: HirOrigin,
         class_key: DefinitionKey,
         class_name: Symbol,
-        class_args: impl Into<Box<[HirTyId]>>,
+        class_args: ClassArgs,
         member_names: impl Into<Box<[Symbol]>>,
-    ) -> Self {
+    ) -> Self
+    where
+        ClassArgs: Into<HirTyIdList>,
+    {
         Self {
             origin,
             type_params: Box::default(),

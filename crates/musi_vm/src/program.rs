@@ -35,12 +35,8 @@ pub struct ProgramExport {
 
 impl ProgramExport {
     #[must_use]
-    pub fn new(name: impl Into<Box<str>>, opaque: bool, kind: ProgramExportKind) -> Self {
-        Self {
-            name: name.into(),
-            opaque,
-            kind,
-        }
+    pub const fn new(name: Box<str>, opaque: bool, kind: ProgramExportKind) -> Self {
+        Self { name, opaque, kind }
     }
 }
 
@@ -53,13 +49,13 @@ pub struct ProgramDataVariantLayout {
 
 impl ProgramDataVariantLayout {
     #[must_use]
-    pub fn new(
-        name: impl Into<Box<str>>,
+    pub const fn new(
+        name: Box<str>,
         field_tys: Box<[TypeId]>,
         field_ty_names: Box<[Box<str>]>,
     ) -> Self {
         Self {
-            name: name.into(),
+            name,
             field_tys,
             field_ty_names,
         }
@@ -87,7 +83,7 @@ impl ProgramDataLayout {
     pub fn new(
         data: DataId,
         ty: TypeId,
-        name: impl Into<Box<str>>,
+        name: Box<str>,
         variants: Box<[ProgramDataVariantLayout]>,
     ) -> Self {
         let variant_count =
@@ -101,7 +97,7 @@ impl ProgramDataLayout {
         Self {
             data,
             ty,
-            name: name.into(),
+            name,
             variant_count,
             field_count,
             variants,
@@ -421,7 +417,7 @@ fn build_exports(artifact: &Artifact) -> (ExportMap, Box<[ProgramExport]>) {
         .iter()
         .map(|(_, export)| {
             ProgramExport::new(
-                source_export_name(artifact.string_text(export.name)),
+                source_export_name(artifact.string_text(export.name)).into(),
                 export.opaque,
                 export_kind(export.target),
             )
@@ -454,7 +450,7 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
             .iter()
             .map(|variant| {
                 ProgramDataVariantLayout::new(
-                    artifact.string_text(variant.name),
+                    artifact.string_text(variant.name).into(),
                     variant.field_tys.clone(),
                     variant
                         .field_tys
@@ -466,7 +462,7 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let mut layout = ProgramDataLayout::new(data_id, ty, name, variants);
+        let mut layout = ProgramDataLayout::new(data_id, ty, name.into(), variants);
         debug_assert_eq!(layout.variant_count, descriptor.variant_count);
         debug_assert_eq!(layout.field_count, descriptor.field_count);
         if let Some(repr_kind) = descriptor.repr_kind.map(|id| artifact.string_text(id)) {

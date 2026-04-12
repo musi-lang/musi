@@ -1,5 +1,7 @@
 use super::*;
 
+type SyntaxNodeParseResult = ParseResult<SyntaxNodeId>;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum InfixClass {
     Comparison,
@@ -7,7 +9,7 @@ enum InfixClass {
 }
 
 impl Parser<'_> {
-    pub(super) fn parse_expr(&mut self, min_bp: u8) -> ParseResult<SyntaxNodeId> {
+    pub(super) fn parse_expr(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
         let mut left = self.parse_prefix_expr()?;
         loop {
             if let Some(next_left) = self.try_postfix(left)? {
@@ -43,7 +45,7 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    pub(super) fn parse_expr_without_colon_eq(&mut self, min_bp: u8) -> ParseResult<SyntaxNodeId> {
+    pub(super) fn parse_expr_without_colon_eq(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
         let mut left = self.parse_prefix_expr()?;
         loop {
             if let Some(next_left) = self.try_postfix(left)? {
@@ -81,7 +83,7 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    fn parse_prefix_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_prefix_expr(&mut self) -> SyntaxNodeParseResult {
         if self.at_any(&[TokenKind::Minus, TokenKind::KwNot, TokenKind::KwMut]) {
             let op = self.advance_element();
             let operand = self.parse_expr(PREFIX_BP)?;
@@ -118,7 +120,7 @@ impl Parser<'_> {
         Ok(None)
     }
 
-    fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> SyntaxNodeParseResult {
         let open = self.expect_token(TokenKind::LParen)?;
         let mut children = vec![SyntaxElementId::Node(callee), open];
         children.extend(self.parse_separated_nodes(
@@ -132,7 +134,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::CallExpr, children))
     }
 
-    fn parse_arg(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_arg(&mut self) -> SyntaxNodeParseResult {
         let mut children = Vec::new();
         if let Some(spread) = self.eat(TokenKind::DotDotDot) {
             children.push(spread);
@@ -143,7 +145,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::Arg, children))
     }
 
-    fn parse_apply_expr(&mut self, callee: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_apply_expr(&mut self, callee: SyntaxNodeId) -> SyntaxNodeParseResult {
         let open = self.expect_token(TokenKind::LBracket)?;
         let mut children = vec![SyntaxElementId::Node(callee), open];
         children.extend(self.parse_separated_nodes(
@@ -157,7 +159,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::ApplyExpr, children))
     }
 
-    fn parse_index_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_index_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let open = self.expect_token(TokenKind::DotLBracket)?;
         let mut children = vec![SyntaxElementId::Node(base), open];
         children.extend(self.parse_separated_nodes(
@@ -171,7 +173,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::IndexExpr, children))
     }
 
-    fn parse_record_update_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_record_update_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let open = self.expect_token(TokenKind::DotLBrace)?;
         let mut children = vec![SyntaxElementId::Node(base), open];
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
@@ -187,7 +189,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::RecordUpdateExpr, children))
     }
 
-    fn parse_field_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_field_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let access = self.advance_element();
         let target = match self.peek_kind() {
             TokenKind::Ident | TokenKind::Int => self.advance_element(),
@@ -199,7 +201,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_type_test_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_type_test_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let op = self.expect_token(TokenKind::ColonQuestion)?;
         let ty = self.parse_expr(ARROW_BP)?;
         let mut children = vec![SyntaxElementId::Node(base), op, SyntaxElementId::Node(ty)];
@@ -212,7 +214,7 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::TypeTestExpr, children))
     }
 
-    fn parse_type_cast_expr(&mut self, base: SyntaxNodeId) -> ParseResult<SyntaxNodeId> {
+    fn parse_type_cast_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let op = self.expect_token(TokenKind::ColonQuestionGt)?;
         let ty = self.parse_expr(ARROW_BP)?;
         Ok(self.builder.push_node_from_children(
