@@ -58,84 +58,88 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
-#[test]
-fn json_check_success_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(
-        temp.path(),
-        "musi.json",
-        "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
-    );
-    write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+    #[test]
+    fn json_check_success_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
 
-    assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "ok");
-    assert_eq!(payload["tool"], "musi");
-}
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
 
-#[test]
-fn json_check_manifest_failure_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(temp.path(), "musi.json", "{ invalid json\n");
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["tool"], "musi");
+    }
 
-    let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+    #[test]
+    fn json_check_manifest_failure_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", "{ invalid json\n");
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "error");
-    assert_eq!(payload["diagnostics"][0]["phase"], "project");
-    assert_eq!(payload["diagnostics"][0]["code"], "ms3604");
-    assert!(payload["diagnostics"][0]["range"].is_object());
-}
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
 
-#[test]
-fn json_check_parse_failure_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(
-        temp.path(),
-        "musi.json",
-        "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
-    );
-    write_file(temp.path(), "index.ms", "let x := 1");
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "error");
+        assert_eq!(payload["diagnostics"][0]["phase"], "project");
+        assert_eq!(payload["diagnostics"][0]["code"], "MS3604");
+        assert!(payload["diagnostics"][0]["range"].is_object());
+    }
 
-    let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+    #[test]
+    fn json_check_parse_failure_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let x := 1");
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "error");
-    assert_eq!(payload["diagnostics"][0]["phase"], "parse");
-    assert!(payload["diagnostics"][0]["code"].as_str().is_some());
-}
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
 
-#[test]
-fn json_check_root_package_missing_uses_direct_message_and_range() {
-    let temp = TempDir::new();
-    write_file(temp.path(), "musi.json", "{\n  \"version\": \"0.1.0\"\n}\n");
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "error");
+        assert_eq!(payload["diagnostics"][0]["phase"], "parse");
+        assert!(payload["diagnostics"][0]["code"].as_str().is_some());
+    }
 
-    let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+    #[test]
+    fn json_check_root_package_missing_uses_direct_message_and_range() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", "{\n  \"version\": \"0.1.0\"\n}\n");
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "error");
-    assert_eq!(payload["diagnostics"][0]["phase"], "project");
-    assert_eq!(payload["diagnostics"][0]["code"], "ms3610");
-    assert_eq!(
-        payload["diagnostics"][0]["message"],
-        "root package entry missing"
-    );
-    assert!(
-        payload["diagnostics"][0]["message"]
-            .as_str()
-            .expect("project message should be string")
-            .find("manifest validation failed")
-            .is_none()
-    );
-    assert!(payload["diagnostics"][0]["range"].is_object());
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "error");
+        assert_eq!(payload["diagnostics"][0]["phase"], "project");
+        assert_eq!(payload["diagnostics"][0]["code"], "MS3610");
+        assert_eq!(
+            payload["diagnostics"][0]["message"],
+            "root package entry missing"
+        );
+        assert!(
+            !payload["diagnostics"][0]["message"]
+                .as_str()
+                .expect("project message should be string")
+                .contains("manifest validation failed")
+        );
+        assert!(payload["diagnostics"][0]["range"].is_object());
+    }
 }

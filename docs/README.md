@@ -1,11 +1,12 @@
 # Docs
 
-Musi docs use **WWHW**:
+Musi docs use **WWWH**:
 
 - **What** explains language and runtime concepts
+- **When** explains usage timing and trigger conditions
 - **Why** explains design rules and tradeoffs
-- **How** explains operational flow and tooling use
 - **Where** explains repo layout, crate ownership, and phase boundaries
+- **How** explains operational flow and tooling use
 
 Reference and status docs live separately.
 

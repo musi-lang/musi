@@ -5,16 +5,17 @@ use std::path::Path;
 use std::pin::Pin;
 
 use async_lsp::lsp_types::{
-    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Hover, HoverContents,
-    HoverParams, HoverProviderCapability, InitializeParams, InitializeResult, Location,
-    MarkedString, NumberOrString, Position, PublishDiagnosticsParams, Range, ServerCapabilities,
-    ServerInfo, TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
-    notification::PublishDiagnostics,
+    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, LanguageString,
+    Location, MarkedString, NumberOrString, Position, PublishDiagnosticsParams, Range,
+    ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentItem,
+    TextDocumentSyncCapability, TextDocumentSyncKind, Url, notification::PublishDiagnostics,
 };
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use musi_tooling::{
-    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, collect_project_diagnostics_with_overlay,
-    hover_for_project_file_with_overlay,
+    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange,
+    collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
 };
 
 type ServerFuture<T> = Pin<Box<dyn Future<Output = Result<T, ResponseError>> + Send + 'static>>;
@@ -61,11 +62,7 @@ impl MusiLanguageServer {
         }
     }
 
-    fn did_change_document(
-        &mut self,
-        uri: &Url,
-        changes: &[async_lsp::lsp_types::TextDocumentContentChangeEvent],
-    ) {
+    fn did_change_document(&mut self, uri: &Url, changes: &[TextDocumentContentChangeEvent]) {
         let Some(change) = changes.last() else {
             return;
         };
@@ -77,13 +74,14 @@ impl MusiLanguageServer {
 
     fn did_close_document(&mut self, uri: &Url) {
         let _ = self.open_documents.remove(uri);
-        let _ = self
-            .client
-            .notify::<PublishDiagnostics>(PublishDiagnosticsParams {
-                uri: uri.clone(),
-                diagnostics: Vec::new(),
-                version: None,
-            });
+        drop(
+            self.client
+                .notify::<PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri: uri.clone(),
+                    diagnostics: Vec::new(),
+                    version: None,
+                }),
+        );
     }
 
     fn hover_at(&self, params: HoverParams) -> Option<Hover> {
@@ -104,12 +102,10 @@ impl MusiLanguageServer {
             usize::try_from(position.character).ok()?.saturating_add(1),
         )?;
         Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::LanguageString(
-                async_lsp::lsp_types::LanguageString {
-                    language: "musi".to_owned(),
-                    value: hover.contents,
-                },
-            )),
+            contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
+                language: "musi".to_owned(),
+                value: hover.contents,
+            })),
             range: None,
         })
     }
@@ -124,13 +120,14 @@ impl MusiLanguageServer {
             .filter(|diag| diagnostic_matches_path(path, diag))
             .map(to_lsp_diagnostic)
             .collect();
-        let _ = self
-            .client
-            .notify::<PublishDiagnostics>(PublishDiagnosticsParams {
-                uri: uri.clone(),
-                diagnostics,
-                version: None,
-            });
+        drop(
+            self.client
+                .notify::<PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri: uri.clone(),
+                    diagnostics,
+                    version: None,
+                }),
+        );
     }
 }
 
@@ -142,34 +139,25 @@ impl LanguageServer for MusiLanguageServer {
         Box::pin(async { Ok(Self::initialize_result()) })
     }
 
-    fn initialized(&mut self, _: async_lsp::lsp_types::InitializedParams) -> NotifyResult {
+    fn initialized(&mut self, _: InitializedParams) -> NotifyResult {
         ControlFlow::Continue(())
     }
 
-    fn shutdown(&mut self, _: ()) -> ServerFuture<()> {
+    fn shutdown(&mut self, (): ()) -> ServerFuture<()> {
         Box::pin(async { Ok(()) })
     }
 
-    fn did_open(
-        &mut self,
-        params: async_lsp::lsp_types::DidOpenTextDocumentParams,
-    ) -> NotifyResult {
+    fn did_open(&mut self, params: DidOpenTextDocumentParams) -> NotifyResult {
         self.did_open_document(params.text_document);
         ControlFlow::Continue(())
     }
 
-    fn did_change(
-        &mut self,
-        params: async_lsp::lsp_types::DidChangeTextDocumentParams,
-    ) -> NotifyResult {
+    fn did_change(&mut self, params: DidChangeTextDocumentParams) -> NotifyResult {
         self.did_change_document(&params.text_document.uri, &params.content_changes);
         ControlFlow::Continue(())
     }
 
-    fn did_close(
-        &mut self,
-        params: async_lsp::lsp_types::DidCloseTextDocumentParams,
-    ) -> NotifyResult {
+    fn did_close(&mut self, params: DidCloseTextDocumentParams) -> NotifyResult {
         self.did_close_document(&params.text_document.uri);
         ControlFlow::Continue(())
     }
@@ -191,8 +179,8 @@ fn to_lsp_diagnostic(diagnostic: CliDiagnostic) -> Diagnostic {
     Diagnostic {
         range: diagnostic
             .range
-            .map(to_cli_range)
-            .unwrap_or_else(default_range),
+            .as_ref()
+            .map_or_else(default_range, to_cli_range),
         severity: Some(to_severity(diagnostic.severity)),
         code: diagnostic.code.map(NumberOrString::String),
         code_description: None,
@@ -212,16 +200,15 @@ fn related_information(labels: &[CliDiagnosticLabel]) -> Option<Vec<DiagnosticRe
             let uri = Url::from_file_path(file).ok()?;
             let range = label
                 .range
-                .clone()
-                .map(to_cli_range)
-                .unwrap_or_else(default_range);
+                .as_ref()
+                .map_or_else(default_range, to_cli_range);
             Some(DiagnosticRelatedInformation {
                 location: Location { uri, range },
                 message: label.message.clone(),
             })
         })
         .collect::<Vec<_>>();
-    if items.is_empty() { None } else { Some(items) }
+    (!items.is_empty()).then_some(items)
 }
 
 fn to_severity(value: &str) -> DiagnosticSeverity {
@@ -233,7 +220,7 @@ fn to_severity(value: &str) -> DiagnosticSeverity {
     }
 }
 
-fn to_cli_range(range: CliDiagnosticRange) -> Range {
+fn to_cli_range(range: &CliDiagnosticRange) -> Range {
     Range {
         start: Position {
             line: usize_to_u32(range.start_line.saturating_sub(1)),

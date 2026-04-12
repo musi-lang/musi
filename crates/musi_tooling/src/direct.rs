@@ -31,7 +31,7 @@ struct DirectModule {
 
 impl DirectGraph {
     #[must_use]
-    pub fn entry_key(&self) -> &ModuleKey {
+    pub const fn entry_key(&self) -> &ModuleKey {
         &self.entry_key
     }
 
@@ -39,6 +39,10 @@ impl DirectGraph {
         self.texts.iter().map(|(key, text)| (key, text.as_str()))
     }
 
+    /// # Errors
+    ///
+    /// Returns [`ToolingError`] when foundation or direct graph modules cannot be loaded into the
+    /// session.
     pub fn build_session(&self, options: SessionOptions) -> ToolingResult<Session> {
         let mut import_map = self.import_map.clone();
         extend_import_map(&mut import_map);
@@ -57,6 +61,9 @@ impl DirectGraph {
     }
 }
 
+/// # Errors
+///
+/// Returns [`ToolingError`] when `entry_path` or any reachable direct import cannot be read.
 pub fn load_direct_graph(entry_path: &Path) -> ToolingResult<DirectGraph> {
     let entry_path = canonical_source_path(entry_path)?;
     let mut seen = BTreeSet::new();

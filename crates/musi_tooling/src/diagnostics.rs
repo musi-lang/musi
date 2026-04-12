@@ -113,6 +113,9 @@ pub fn tooling_error_report(
     }
 }
 
+/// # Errors
+///
+/// Returns [`ToolingError`] when emitting a structured session diagnostic report fails.
 pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingResult<String> {
     let mut output = Vec::new();
     let diags = session_error_diags(error);
@@ -131,6 +134,7 @@ pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingR
     Ok(String::from_utf8_lossy(&output).into_owned())
 }
 
+#[must_use]
 pub fn render_project_error(error: &ProjectError) -> String {
     if let Some(diag) = error.source_diag() {
         return render_project_source_error(diag);
@@ -144,6 +148,7 @@ pub fn render_project_error(error: &ProjectError) -> String {
     )
 }
 
+#[must_use]
 pub fn render_tooling_error(error: &ToolingError) -> String {
     render_simple_error_line(
         error.diag_code().map(|code| code.to_string()),
@@ -162,12 +167,13 @@ fn session_error_diags(error: &SessionError) -> &[Diag] {
         | SessionError::ModuleLoweringFailed { diags, .. }
         | SessionError::ModuleEmissionFailed { diags, .. } => diags,
         SessionError::ModuleNotRegistered { .. }
+        | SessionError::LawSuiteSynthesisFailed { .. }
         | SessionError::SourceMapUpdateFailed { .. }
         | SessionError::ArtifactTransportFailed(_) => &[],
     }
 }
 
-fn session_phase(error: &SessionError) -> &'static str {
+const fn session_phase(error: &SessionError) -> &'static str {
     match error {
         SessionError::ModuleParseFailed { .. } => "parse",
         SessionError::ModuleResolveFailed { .. } => "resolve",
@@ -175,6 +181,7 @@ fn session_phase(error: &SessionError) -> &'static str {
         SessionError::ModuleLoweringFailed { .. } => "ir",
         SessionError::ModuleEmissionFailed { .. } => "emit",
         SessionError::ModuleNotRegistered { .. } => "session",
+        SessionError::LawSuiteSynthesisFailed { .. } => "laws",
         SessionError::SourceMapUpdateFailed { .. } => "source",
         SessionError::ArtifactTransportFailed(_) => "assembly",
     }
@@ -195,7 +202,7 @@ fn cli_diag(sources: &SourceMap, phase: &'static str, diag: &Diag) -> CliDiagnos
         code: diag.code().map(|code| code.to_string()),
         message: diag.message().to_owned(),
         file: primary.as_ref().map(|(file, _)| file.clone()),
-        range: primary.and_then(|(_, range)| range),
+        range: primary.map(|(_, range)| range),
         labels: diag
             .labels()
             .iter()
@@ -208,7 +215,7 @@ fn cli_diag(sources: &SourceMap, phase: &'static str, diag: &Diag) -> CliDiagnos
                 });
                 CliDiagnosticLabel {
                     file: located.as_ref().map(|(file, _)| file.clone()),
-                    range: located.and_then(|(_, range)| range),
+                    range: located.map(|(_, range)| range),
                     message: label.message().to_owned(),
                 }
             })
@@ -218,17 +225,17 @@ fn cli_diag(sources: &SourceMap, phase: &'static str, diag: &Diag) -> CliDiagnos
     }
 }
 
-fn range_for_label(source: &Source, label: &DiagLabel) -> Option<CliDiagnosticRange> {
+fn range_for_label(source: &Source, label: &DiagLabel) -> CliDiagnosticRange {
     let span = label.span();
     let (start_line, start_col) = source.line_col(span.start);
-    let end_offset = span.end.saturating_sub(u32::from(span.len() > 0));
+    let end_offset = span.end.saturating_sub(u32::from(!span.is_empty()));
     let (end_line, end_col) = source.line_col(end_offset);
-    Some(CliDiagnosticRange {
+    CliDiagnosticRange {
         start_line,
         start_col,
         end_line,
         end_col,
-    })
+    }
 }
 
 fn tooling_diag(error: &ToolingError) -> CliDiagnostic {
@@ -324,10 +331,10 @@ fn path_string(path: &Path) -> String {
 }
 
 fn render_simple_error_line(code: Option<String>, message: &str) -> String {
-    match code {
-        Some(code) => format!("error[{code}]: {message}\n"),
-        None => format!("error: {message}\n"),
-    }
+    code.map_or_else(
+        || format!("error: {message}\n"),
+        |code| format!("error[{code}]: {message}\n"),
+    )
 }
 
 fn render_project_source_error(error: &ProjectSourceDiagnostic) -> String {

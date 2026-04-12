@@ -25,6 +25,10 @@ pub enum SyntaxTermError {
 }
 
 impl SyntaxTerm {
+    /// # Errors
+    ///
+    /// Returns [`SyntaxTermError`] when the fragment is empty or does not parse as the requested
+    /// syntax shape.
     pub fn parse(shape: SyntaxShape, text: &str) -> SyntaxTermResult<Self> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -40,26 +44,28 @@ impl SyntaxTerm {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns [`SyntaxTermError`] when `raw` is not a `quote(...)` or `quote { ... }` form.
     pub fn from_quote_source(raw: &str) -> SyntaxTermResult<Self> {
         let trimmed = raw.trim();
         let Some(rest) = trimmed.strip_prefix("quote") else {
             return Err(SyntaxTermError::FragmentParseFailed);
         };
         let rest = rest.trim_start();
-        if rest.len() < 2 {
-            return Err(SyntaxTermError::FragmentParseFailed);
-        }
-        match (rest.chars().next(), rest.chars().last()) {
-            (Some('('), Some(')')) => Ok(Self {
+        if let Some(inner) = strip_wrapped_fragment(rest, '(', ')') {
+            return Ok(Self {
                 shape: SyntaxShape::Expr,
-                text: rest[1..rest.len() - 1].trim().into(),
-            }),
-            (Some('{'), Some('}')) => Ok(Self {
-                shape: SyntaxShape::Module,
-                text: rest[1..rest.len() - 1].trim().into(),
-            }),
-            _ => Err(SyntaxTermError::FragmentParseFailed),
+                text: inner.trim().into(),
+            });
         }
+        if let Some(inner) = strip_wrapped_fragment(rest, '{', '}') {
+            return Ok(Self {
+                shape: SyntaxShape::Module,
+                text: inner.trim().into(),
+            });
+        }
+        Err(SyntaxTermError::FragmentParseFailed)
     }
 
     #[must_use]
@@ -90,4 +96,9 @@ fn validate_module_fragment(text: &str) -> SyntaxTermResult {
     } else {
         Err(SyntaxTermError::FragmentParseFailed)
     }
+}
+
+fn strip_wrapped_fragment(text: &str, open: char, close: char) -> Option<&str> {
+    let inner = text.strip_prefix(open)?;
+    inner.strip_suffix(close)
 }

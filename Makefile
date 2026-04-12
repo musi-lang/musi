@@ -8,7 +8,7 @@ rscheck:
 		echo "rscheck not installed; run: cargo install --git https://github.com/xsyetopz/rscheck --locked rscheck-cli"; \
 		exit 1; \
 	}
-	@rscheck check --with-clippy=false; code=$$?; test $$code -le 1
+	@PATH="$$HOME/.cargo/bin:$$PATH" rscheck check; code=$$?; test $$code -le 1
 
 lint:
 	$(MAKE) rscheck

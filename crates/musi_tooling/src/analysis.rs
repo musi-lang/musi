@@ -16,10 +16,12 @@ pub struct ToolHover {
     pub contents: String,
 }
 
+#[must_use]
 pub fn collect_project_diagnostics(path: &Path) -> Vec<CliDiagnostic> {
     collect_project_diagnostics_with_overlay(path, None)
 }
 
+#[must_use]
 pub fn collect_project_diagnostics_with_overlay(
     path: &Path,
     overlay_text: Option<&str>,
@@ -48,10 +50,12 @@ pub fn collect_project_diagnostics_with_overlay(
     }
 }
 
+#[must_use]
 pub fn hover_for_project_file(path: &Path, line: usize, character: usize) -> Option<ToolHover> {
     hover_for_project_file_with_overlay(path, None, line, character)
 }
 
+#[must_use]
 pub fn hover_for_project_file_with_overlay(
     path: &Path,
     overlay_text: Option<&str>,
@@ -61,7 +65,7 @@ pub fn hover_for_project_file_with_overlay(
     let project = load_project_ancestor(path, ProjectOptions::default()).ok()?;
     let module_key = project.module_key_for_path(path)?;
     let mut session = build_overlay_session(&project, &module_key, overlay_text).ok()?;
-    let _ = session.check_module(&module_key);
+    drop(session.check_module(&module_key));
     let parsed = session.parsed_module_cached(&module_key).ok().flatten()?;
     let source = session.source(parsed.source_id)?;
     let offset = source.offset(line, character)?;
@@ -126,7 +130,7 @@ fn hover_contents(
     lines.join("\n")
 }
 
-fn binding_kind_label(kind: NameBindingKind) -> &'static str {
+const fn binding_kind_label(kind: NameBindingKind) -> &'static str {
     match kind {
         NameBindingKind::Prelude => "prelude",
         NameBindingKind::Let => "let",
@@ -139,6 +143,7 @@ fn binding_kind_label(kind: NameBindingKind) -> &'static str {
     }
 }
 
+#[must_use]
 fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
     match &sema.ty(ty).kind {
         HirTyKind::Error => "<error>".into(),
@@ -157,21 +162,11 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
         HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Module => "Module".into(),
         HirTyKind::NatLit(value) => value.to_string(),
-        HirTyKind::Named { name, args } => {
-            let mut rendered = session.resolve_symbol(*name).to_owned();
-            let args = sema.module().store.ty_ids.get(*args);
-            if !args.is_empty() {
-                let contents = args
-                    .iter()
-                    .map(|item| render_hir_ty(sema, session, *item))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                rendered.push('[');
-                rendered.push_str(&contents);
-                rendered.push(']');
-            }
-            rendered
-        }
+        HirTyKind::Named { name, args } => render_named_hir_ty(
+            session.resolve_symbol(*name),
+            sema.module().store.ty_ids.get(*args),
+            |ty| render_hir_ty(sema, session, ty),
+        ),
         HirTyKind::Pi {
             binder,
             binder_ty,
@@ -190,23 +185,12 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
             params,
             ret,
             is_effectful,
-        } => {
-            let left_items = sema
-                .module()
-                .store
-                .ty_ids
-                .get(*params)
-                .iter()
-                .map(|item| render_hir_ty(sema, session, *item))
-                .collect::<Vec<_>>();
-            let left = if left_items.len() == 1 {
-                left_items[0].clone()
-            } else {
-                format!("({})", left_items.join(", "))
-            };
-            let arrow = if *is_effectful { " ~> " } else { " -> " };
-            format!("{left}{arrow}{}", render_hir_ty(sema, session, *ret))
-        }
+        } => render_arrow_hir_ty(
+            sema.module().store.ty_ids.get(*params),
+            *ret,
+            *is_effectful,
+            |ty| render_hir_ty(sema, session, ty),
+        ),
         HirTyKind::Sum { left, right } => {
             format!(
                 "{} + {}",
@@ -249,6 +233,42 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
     }
 }
 
+fn render_named_hir_ty(
+    name: &str,
+    args: &[HirTyId],
+    mut render: impl FnMut(HirTyId) -> String,
+) -> String {
+    let mut rendered = name.to_owned();
+    if !args.is_empty() {
+        let contents = args
+            .iter()
+            .map(|item| render(*item))
+            .collect::<Vec<_>>()
+            .join(", ");
+        rendered.push('[');
+        rendered.push_str(&contents);
+        rendered.push(']');
+    }
+    rendered
+}
+
+fn render_arrow_hir_ty(
+    params: &[HirTyId],
+    ret: HirTyId,
+    is_effectful: bool,
+    mut render: impl FnMut(HirTyId) -> String,
+) -> String {
+    let left_items = params.iter().map(|item| render(*item)).collect::<Vec<_>>();
+    let left = if left_items.len() == 1 {
+        left_items[0].clone()
+    } else {
+        format!("({})", left_items.join(", "))
+    };
+    let arrow = if is_effectful { " ~> " } else { " -> " };
+    format!("{left}{arrow}{}", render(ret))
+}
+
+#[must_use]
 fn render_dim(session: &Session, dim: &HirDim) -> String {
     match dim {
         HirDim::Unknown => "_".into(),
@@ -257,6 +277,7 @@ fn render_dim(session: &Session, dim: &HirDim) -> String {
     }
 }
 
+#[must_use]
 fn render_ty_field(sema: &SemaModule, session: &Session, field: &HirTyField) -> String {
     format!(
         "{} : {}",

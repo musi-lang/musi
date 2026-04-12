@@ -21,19 +21,43 @@ type MusicResult<T = ()> = Result<T, MusicError>;
 #[derive(Debug, Error)]
 enum MusicError {
     #[error(transparent)]
-    DirectToolingFailed(#[from] ToolingError),
+    DirectToolingFailed(#[from] Box<ToolingError>),
     #[error(transparent)]
-    SessionCompilationFailed(#[from] SessionError),
+    SessionCompilationFailed(#[from] Box<SessionError>),
     #[error(transparent)]
-    ArtifactTransportFailed(#[from] AssemblyError),
+    ArtifactTransportFailed(#[from] Box<AssemblyError>),
     #[error(transparent)]
-    VmExecutionFailed(#[from] VmError),
+    VmExecutionFailed(#[from] Box<VmError>),
     #[error(transparent)]
     JsonSerializationFailed(#[from] serde_json::Error),
     #[error("run arguments unsupported")]
     RunArgsUnsupported,
     #[error("check command failed")]
     CheckCommandFailed,
+}
+
+impl From<ToolingError> for MusicError {
+    fn from(value: ToolingError) -> Self {
+        Self::DirectToolingFailed(Box::new(value))
+    }
+}
+
+impl From<SessionError> for MusicError {
+    fn from(value: SessionError) -> Self {
+        Self::SessionCompilationFailed(Box::new(value))
+    }
+}
+
+impl From<AssemblyError> for MusicError {
+    fn from(value: AssemblyError) -> Self {
+        Self::ArtifactTransportFailed(Box::new(value))
+    }
+}
+
+impl From<VmError> for MusicError {
+    fn from(value: VmError) -> Self {
+        Self::VmExecutionFailed(Box::new(value))
+    }
 }
 
 fn main() -> ExitCode {
@@ -83,9 +107,7 @@ fn build(path: &Path, out: Option<&Path>) -> MusicResult {
     let graph = load_direct_graph(path)?;
     let mut session = graph.build_session(SessionOptions::default())?;
     let output = session.compile_entry(graph.entry_key())?;
-    let out_path = out
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| default_seam_path(path));
+    let out_path = out.map_or_else(|| default_seam_path(path), Path::to_path_buf);
     write_artifact_bytes(&out_path, &output.bytes)?;
     println!("{}", out_path.display());
     Ok(())
@@ -108,7 +130,7 @@ fn run_target(path: &Path, args: &[String]) -> MusicResult {
 }
 
 fn run_program(program: Program) -> MusicResult {
-    let mut vm = Vm::with_rejecting_host(program, VmOptions::default());
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize()?;
     let value = vm.call_export("main", &[])?;
     print_vm_value(&vm, &value);
@@ -119,7 +141,7 @@ fn inspect(path: &Path) -> MusicResult {
     let bytes = read_artifact_bytes(path)?;
     let artifact = decode_binary(&bytes)?;
 
-    println!("binaryVersion: {}", BINARY_VERSION);
+    println!("binaryVersion: {BINARY_VERSION}");
     println!("strings: {}", artifact.strings.len());
     println!("types: {}", artifact.types.len());
     println!("globals: {}", artifact.globals.len());
@@ -166,6 +188,7 @@ fn print_vm_value(vm: &Vm, value: &Value) {
         ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
         ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
         ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
+        ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
     };
     if let Some(rendered) = rendered {
         println!("{rendered}");
@@ -176,7 +199,7 @@ fn default_seam_path(path: &Path) -> PathBuf {
     path.with_extension("seam")
 }
 
-fn export_kind_name(target: ExportTarget) -> &'static str {
+const fn export_kind_name(target: ExportTarget) -> &'static str {
     match target {
         ExportTarget::Method(_) => "method",
         ExportTarget::Global(_) => "global",
@@ -237,22 +260,28 @@ fn emit_session_check_error(
 }
 
 enum CheckCommandFailure {
-    DirectToolingFailure(ToolingError),
+    DirectToolingFailure(Box<ToolingError>),
     SessionCompilationFailure {
-        session: Session,
-        error: SessionError,
+        session: Box<Session>,
+        error: Box<SessionError>,
     },
 }
 
 fn check_session(path: &Path) -> Result<(), CheckCommandFailure> {
-    let graph = load_direct_graph(path).map_err(CheckCommandFailure::DirectToolingFailure)?;
+    let graph = load_direct_graph(path)
+        .map_err(Box::new)
+        .map_err(CheckCommandFailure::DirectToolingFailure)?;
     let mut session = graph
         .build_session(SessionOptions::default())
+        .map_err(Box::new)
         .map_err(CheckCommandFailure::DirectToolingFailure)?;
     session
         .check_module(graph.entry_key())
         .map(|_| ())
-        .map_err(|error| CheckCommandFailure::SessionCompilationFailure { session, error })
+        .map_err(|error| CheckCommandFailure::SessionCompilationFailure {
+            session: Box::new(session),
+            error: Box::new(error),
+        })
 }
 
 impl From<DiagnosticsFormatArg> for DiagnosticsFormat {
