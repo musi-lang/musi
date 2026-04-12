@@ -564,12 +564,9 @@ fn lower_record_type_expr(
         .record_items(items)
         .into_iter()
         .filter_map(|item| {
-            item.name.map(|name| HirTyField {
-                name: name.name,
-                ty: {
-                    let origin = ctx.expr(item.value).origin;
-                    lower_type_expr(ctx, item.value, origin)
-                },
+            item.name.map(|name| {
+                let origin = ctx.expr(item.value).origin;
+                HirTyField::new(name.name, lower_type_expr(ctx, item.value, origin))
             })
         })
         .collect::<Vec<_>>();
@@ -610,11 +607,13 @@ pub fn lower_constraints(
                 let origin = ctx.expr(constraint.value).origin;
                 lower_type_expr(ctx, constraint.value, origin)
             };
-            ConstraintFacts {
-                name: constraint.name.name,
-                kind,
-                value,
-                class_key: constraint_class_key(ctx, kind, value),
+            {
+                let lowered = ConstraintFacts::new(constraint.name.name, kind, value);
+                if let Some(class_key) = constraint_class_key(ctx, kind, value) {
+                    lowered.with_class_key(class_key)
+                } else {
+                    lowered
+                }
             }
         })
         .collect::<Vec<_>>()

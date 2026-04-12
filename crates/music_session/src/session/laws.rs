@@ -138,12 +138,12 @@ impl Session {
         let suite_module_key = ModuleKey::new(format!("{}::__laws", module_key.as_str()));
         let suite_source = render_law_suite_module_source(&source, module_key, &cases);
         self.set_module_text(&suite_module_key, suite_source)?;
-        Ok(Some(LawSuiteModule {
-            source_module_key: module_key.clone(),
+        Ok(Some(LawSuiteModule::new(
+            module_key.clone(),
             suite_module_key,
-            export_name: LAW_TEST_EXPORT_NAME.into(),
-            law_count: cases.len(),
-        }))
+            LAW_TEST_EXPORT_NAME,
+            cases.len(),
+        )))
     }
 }
 

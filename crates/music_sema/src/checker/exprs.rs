@@ -46,10 +46,7 @@ fn check_expr_kind(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts 
     let expr = ctx.expr(id);
     let kind = expr.kind.clone();
     match kind {
-        HirExprKind::Error => ExprFacts {
-            ty: builtins.error,
-            effects: EffectRow::empty(),
-        },
+        HirExprKind::Error => ExprFacts::new(builtins.error, EffectRow::empty()),
         HirExprKind::Name { name } => check_name_expr(ctx, id, name),
         HirExprKind::Lit { lit } => check_lit_expr(ctx, lit),
         HirExprKind::Template { parts } => check_template_expr(ctx, parts),
@@ -126,10 +123,7 @@ fn check_decl_expr(
 ) -> ExprFacts {
     let builtins = ctx.builtins();
     match kind {
-        HirExprKind::Error => ExprFacts {
-            ty: builtins.error,
-            effects: EffectRow::empty(),
-        },
+        HirExprKind::Error => ExprFacts::new(builtins.error, EffectRow::empty()),
         HirExprKind::Name { name } => check_name_expr(ctx, id, name),
         HirExprKind::Lit { lit } => check_lit_expr(ctx, lit),
         HirExprKind::Template { parts } => check_template_expr(ctx, parts),
@@ -199,10 +193,7 @@ fn check_decl_expr(
         | HirExprKind::Class { .. }
         | HirExprKind::Instance { .. } => {
             ctx.diag(origin.span, DiagKind::DeclarationUsedAsValue, "");
-            ExprFacts {
-                ty: builtins.unknown,
-                effects: EffectRow::empty(),
-            }
+            ExprFacts::new(builtins.unknown, EffectRow::empty())
         }
         HirExprKind::Perform { expr: inner } => check_perform_expr(ctx, origin, inner),
         HirExprKind::Handle {
@@ -229,7 +220,7 @@ fn check_module_stmt(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFact
                 ty = facts.ty;
                 effects.union_with(&facts.effects);
             }
-            ExprFacts { ty, effects }
+            ExprFacts::new(ty, effects)
         }
         HirExprKind::Instance {
             type_params,
@@ -238,10 +229,7 @@ fn check_module_stmt(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFact
             members,
         } => {
             let _ = check_instance_kind(ctx, id, origin, type_params, constraints, class, &members);
-            ExprFacts {
-                ty: ctx.builtins().unit,
-                effects: EffectRow::empty(),
-            }
+            ExprFacts::new(ctx.builtins().unit, EffectRow::empty())
         }
         _ => check_expr(ctx, id),
     };
@@ -280,10 +268,7 @@ fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Id
         && ctx.is_gated_binding(binding)
     {
         ctx.diag(name.span, DiagKind::TargetGateRejected, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects: EffectRow::empty(),
-        };
+        return ExprFacts::new(builtins.unknown, EffectRow::empty());
     }
     if let Some(binding) = ctx.binding_id_for_use(name)
         && let Some(target) = ctx.binding_module_target(binding).cloned()
@@ -296,19 +281,13 @@ fn check_name_expr(ctx: &mut CheckPass<'_, '_, '_>, expr_id: HirExprId, name: Id
     {
         let instantiated = instantiate_monomorphic_scheme(ctx, &scheme);
         solve_obligations(ctx, ctx.expr(expr_id).origin, &instantiated.obligations);
-        return ExprFacts {
-            ty: instantiated.ty,
-            effects: EffectRow::empty(),
-        };
+        return ExprFacts::new(instantiated.ty, EffectRow::empty());
     }
     let ty = ctx
         .binding_id_for_use(name)
         .and_then(|binding| ctx.binding_type(binding))
         .unwrap_or_else(|| symbol_value_type(ctx, name.name));
-    ExprFacts {
-        ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ty, EffectRow::empty())
 }
 
 fn check_lit_expr(ctx: &CheckPass<'_, '_, '_>, lit: HirLitId) -> ExprFacts {
@@ -318,10 +297,7 @@ fn check_lit_expr(ctx: &CheckPass<'_, '_, '_>, lit: HirLitId) -> ExprFacts {
         HirLitKind::Float { .. } => builtins.float_,
         HirLitKind::String { .. } => builtins.string_,
     };
-    ExprFacts {
-        ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ty, EffectRow::empty())
 }
 
 fn check_template_expr(
@@ -338,10 +314,7 @@ fn check_template_expr(
             effects.union_with(&facts.effects);
         }
     }
-    ExprFacts {
-        ty: builtins.string_,
-        effects,
-    }
+    ExprFacts::new(builtins.string_, effects)
 }
 
 fn check_sequence_expr(ctx: &mut CheckPass<'_, '_, '_>, exprs: SliceRange<HirExprId>) -> ExprFacts {
@@ -361,7 +334,7 @@ fn check_sequence_expr(ctx: &mut CheckPass<'_, '_, '_>, exprs: SliceRange<HirExp
         effects.union_with(&facts.effects);
         ty = facts.ty;
     }
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_tuple_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirExprId>) -> ExprFacts {
@@ -377,7 +350,7 @@ fn check_tuple_expr(ctx: &mut CheckPass<'_, '_, '_>, items: SliceRange<HirExprId
         .collect::<Vec<_>>();
     let items = ctx.alloc_ty_list(item_types);
     let ty = ctx.alloc_ty(HirTyKind::Tuple { items });
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_pi_expr(
@@ -400,10 +373,7 @@ fn check_pi_expr(
         ret: ret_ty,
         is_effectful,
     });
-    ExprFacts {
-        ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ty, EffectRow::empty())
 }
 
 fn check_lambda_expr(
@@ -435,10 +405,7 @@ fn check_lambda_expr(
         ret: result_ty,
         is_effectful: !body_facts.effects.is_pure(),
     });
-    ExprFacts {
-        ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ty, EffectRow::empty())
 }
 
 fn check_index_expr(
@@ -461,7 +428,7 @@ fn check_index_expr(
         ctx.diag(origin.span, DiagKind::InvalidIndexTarget, "");
         builtins.unknown
     };
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_index_args(
@@ -507,7 +474,7 @@ fn check_field_expr(
                     ret: op.result(),
                     is_effectful: true,
                 });
-                return ExprFacts { ty, effects };
+                return ExprFacts::new(ty, effects);
             }
         }
     }
@@ -545,7 +512,7 @@ fn check_field_expr(
             builtins.unknown
         }
     };
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_record_update_expr(
@@ -597,9 +564,13 @@ fn check_record_update_expr(
             let _prev = fields.insert(name.name, facts.ty);
         }
     }
-    let fields = ctx.alloc_ty_fields(fields.into_iter().map(|(name, ty)| HirTyField { name, ty }));
+    let fields = ctx.alloc_ty_fields(
+        fields
+            .into_iter()
+            .map(|(name, ty)| HirTyField::new(name, ty)),
+    );
     let ty = ctx.alloc_ty(HirTyKind::Record { fields });
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_type_test_expr(
@@ -620,10 +591,7 @@ fn check_type_test_expr(
     if let Some(binding) = as_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
         ctx.insert_binding_type(binding, base_facts.ty);
     }
-    ExprFacts {
-        ty: builtins.bool_,
-        effects: base_facts.effects,
-    }
+    ExprFacts::new(builtins.bool_, base_facts.effects)
 }
 
 fn check_type_cast_expr(
@@ -637,10 +605,7 @@ fn check_type_cast_expr(
     if contains_mut_ty(ctx, ty) {
         ctx.diag(origin.span, DiagKind::MutForbiddenInTypeCastTarget, "");
     }
-    ExprFacts {
-        ty,
-        effects: base_facts.effects,
-    }
+    ExprFacts::new(ty, base_facts.effects)
 }
 
 fn check_prefix_expr(
@@ -661,10 +626,7 @@ fn check_prefix_expr(
             inner: inner_facts.ty,
         }),
     };
-    ExprFacts {
-        ty,
-        effects: inner_facts.effects,
-    }
+    ExprFacts::new(ty, inner_facts.effects)
 }
 
 fn check_binary_expr(
@@ -698,10 +660,7 @@ fn check_binary_expr(
             DiagKind::BinaryOperatorHasNoExecutableLowering,
             "",
         );
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects,
-        };
+        return ExprFacts::new(builtins.unknown, effects);
     }
     let ty = match op {
         HirBinaryOp::Assign => builtins.unit,
@@ -758,7 +717,7 @@ fn check_binary_expr(
         | HirBinaryOp::Shr
         | HirBinaryOp::UserOp(_) => builtins.unknown,
     };
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 fn check_assign_expr(
@@ -845,10 +804,7 @@ fn check_assign_expr(
     effects.union_with(&rhs_facts.effects);
     type_mismatch(ctx, origin, expected_rhs, rhs_facts.ty);
 
-    ExprFacts {
-        ty: builtins.unit,
-        effects,
-    }
+    ExprFacts::new(builtins.unit, effects)
 }
 
 fn check_case_expr(
@@ -877,24 +833,15 @@ fn check_case_expr(
             type_mismatch(ctx, origin, result_ty, arm_facts.ty);
         }
     }
-    ExprFacts {
-        ty: result_ty,
-        effects,
-    }
+    ExprFacts::new(result_ty, effects)
 }
 
 fn check_quote_expr(ctx: &CheckPass<'_, '_, '_>, _kind: HirQuoteKind) -> ExprFacts {
-    ExprFacts {
-        ty: ctx.builtins().syntax,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ctx.builtins().syntax, EffectRow::empty())
 }
 
 fn check_splice_expr(ctx: &CheckPass<'_, '_, '_>, _kind: HirSpliceKind) -> ExprFacts {
-    ExprFacts {
-        ty: ctx.builtins().syntax,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ctx.builtins().syntax, EffectRow::empty())
 }
 
 pub(super) fn peel_mut_ty(ctx: &CheckPass<'_, '_, '_>, mut ty: HirTyId) -> HirTyId {

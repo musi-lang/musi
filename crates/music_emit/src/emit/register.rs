@@ -31,10 +31,10 @@ fn register_types(state: &mut ProgramState, module: &IrModule) {
             let name_id = state.artifact.intern_string(&name);
             let term_json = term.to_json();
             let term_id = state.artifact.intern_string(&term_json);
-            let _ = state.artifact.types.alloc(TypeDescriptor {
-                name: name_id,
-                term: term_id,
-            });
+            let _ = state
+                .artifact
+                .types
+                .alloc(TypeDescriptor::new(name_id, term_id));
         }
     }
 }
@@ -51,26 +51,30 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
         let variants = data
             .variants
             .iter()
-            .map(|variant| DataVariantDescriptor {
-                name: state.artifact.intern_string(variant.name.as_ref()),
-                field_tys: variant
-                    .field_tys
-                    .iter()
-                    .map(|ty| ensure_type(state, layout, ty.as_ref()))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+            .map(|variant| {
+                DataVariantDescriptor::new(
+                    state.artifact.intern_string(variant.name.as_ref()),
+                    variant
+                        .field_tys
+                        .iter()
+                        .map(|ty| ensure_type(state, layout, ty.as_ref()))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let _ = state.artifact.data.alloc(DataDescriptor {
-            name: name_id,
-            variant_count: data.variant_count,
-            field_count: data.field_count,
-            variants,
-            repr_kind,
-            layout_align: data.layout_align,
-            layout_pack: data.layout_pack,
-        });
+        let mut descriptor = DataDescriptor::new(name_id, variants);
+        if let Some(repr_kind) = repr_kind {
+            descriptor = descriptor.with_repr_kind(repr_kind);
+        }
+        if let Some(layout_align) = data.layout_align {
+            descriptor = descriptor.with_layout_align(layout_align);
+        }
+        if let Some(layout_pack) = data.layout_pack {
+            descriptor = descriptor.with_layout_pack(layout_pack);
+        }
+        let _ = state.artifact.data.alloc(descriptor);
     }
 }
 
@@ -85,10 +89,7 @@ fn register_classes(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     for class in module.classes() {
         let name = qualified_name(&class.key.module, &class.key.name);
         let name_id = state.artifact.intern_string(name.as_ref());
-        let id = state
-            .artifact
-            .classes
-            .alloc(ClassDescriptor { name: name_id });
+        let id = state.artifact.classes.alloc(ClassDescriptor::new(name_id));
         let _ = layout.classes.insert(class.key.clone(), id);
     }
 }
@@ -116,11 +117,10 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
             continue;
         };
 
-        let _ = state.artifact.exports.alloc(ExportDescriptor {
-            name: name_id,
-            opaque: export.opaque,
-            target,
-        });
+        let _ = state
+            .artifact
+            .exports
+            .alloc(ExportDescriptor::new(name_id, export.opaque, target));
     }
 }
 
@@ -195,11 +195,10 @@ fn register_meta(state: &mut ProgramState, module: &IrModule) {
             .map(|value| state.artifact.intern_string(value.as_ref()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let _ = state.artifact.meta.alloc(MetaDescriptor {
-            target,
-            key,
-            values,
-        });
+        let _ = state
+            .artifact
+            .meta
+            .alloc(MetaDescriptor::new(target, key, values));
     }
 }
 
@@ -220,15 +219,13 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let result_ty = ensure_type(state, layout, foreign.result_ty.as_ref());
-        let foreign_id = state.artifact.foreigns.alloc(ForeignDescriptor {
-            name: name_id,
-            param_tys,
-            result_ty,
-            abi: abi_id,
-            symbol: symbol_id,
-            link: link_id,
-            export: foreign.exported,
-        });
+        let mut descriptor =
+            ForeignDescriptor::new(name_id, param_tys, result_ty, abi_id, symbol_id)
+                .with_export(foreign.exported);
+        if let Some(link_id) = link_id {
+            descriptor = descriptor.with_link(link_id);
+        }
+        let foreign_id = state.artifact.foreigns.alloc(descriptor);
         if let Some(binding) = foreign.binding {
             let _ = layout.foreigns.insert(binding, foreign_id);
         }
@@ -260,11 +257,11 @@ fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
         let init_name = format!("{name}::init");
         let init_method = alloc_method(&mut state.artifact, &init_name, false, 0);
         let name_id = state.artifact.intern_string(name.as_ref());
-        let global_id = state.artifact.globals.alloc(GlobalDescriptor {
-            name: name_id,
-            export: global.exported,
-            initializer: Some(init_method),
-        });
+        let global_id = state.artifact.globals.alloc(
+            GlobalDescriptor::new(name_id)
+                .with_export(global.exported)
+                .with_initializer(init_method),
+        );
         layout.init_methods.push(init_method);
         if let Some(binding) = global.binding {
             let _ = layout.globals.insert(binding, global_id);
@@ -554,10 +551,10 @@ fn ensure_type(state: &mut ProgramState, layout: &mut ModuleLayout, ty_name: &st
     let term = parse_type_term(ty_name).unwrap_or_else(|_| lower_named_term(ty_name, Box::new([])));
     let term_json = term.to_json();
     let term_id = state.artifact.intern_string(&term_json);
-    let type_id = state.artifact.types.alloc(TypeDescriptor {
-        name: name_id,
-        term: term_id,
-    });
+    let type_id = state
+        .artifact
+        .types
+        .alloc(TypeDescriptor::new(name_id, term_id));
     let _ = state.types_by_name.insert(ty_name.into(), type_id);
     let _ = layout.types.insert(ty_name.into(), type_id);
     type_id
@@ -576,22 +573,23 @@ fn ensure_effect(
     let ops = effect
         .ops
         .iter()
-        .map(|op| EffectOpDescriptor {
-            name: state.artifact.intern_string(op.name.as_ref()),
-            param_tys: op
-                .param_tys
-                .iter()
-                .map(|ty| ensure_type(state, layout, ty.as_ref()))
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            result_ty: ensure_type(state, layout, op.result_ty.as_ref()),
+        .map(|op| {
+            EffectOpDescriptor::new(
+                state.artifact.intern_string(op.name.as_ref()),
+                op.param_tys
+                    .iter()
+                    .map(|ty| ensure_type(state, layout, ty.as_ref()))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                ensure_type(state, layout, op.result_ty.as_ref()),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let id = state
         .artifact
         .effects
-        .alloc(EffectDescriptor { name: name_id, ops });
+        .alloc(EffectDescriptor::new(name_id, ops));
     let _ = state.effects_by_key.insert(effect.key.clone(), id);
     id
 }

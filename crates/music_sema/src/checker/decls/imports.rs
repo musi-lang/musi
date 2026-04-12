@@ -26,10 +26,7 @@ pub(in super::super) fn check_import_expr(
     if let Some(target) = ctx.static_import_target(ctx.expr(expr_id).origin.span) {
         ctx.set_expr_module_target(expr_id, target);
     }
-    ExprFacts {
-        ty: builtins.module,
-        effects: arg_facts.effects,
-    }
+    ExprFacts::new(builtins.module, arg_facts.effects)
 }
 
 pub(in super::super) fn module_target_for_expr(
@@ -88,7 +85,7 @@ pub(super) fn bind_module_pattern(
     };
     let module_ty = ctx.builtins().module;
 
-    ctx.set_pat_facts(pat, PatFacts { ty: module_ty });
+    ctx.set_pat_facts(pat, PatFacts::new(module_ty));
 
     for field in ctx.record_pat_fields(fields) {
         let Some(export) = surface
@@ -164,54 +161,63 @@ fn import_class_alias(
     if is_opaque {
         ctx.mark_sealed_class(surface.key.clone());
     }
-    let facts = ClassFacts {
-        key: surface.key.clone(),
-        name: alias.name,
-        constraints: surface
-            .constraints
-            .iter()
-            .map(|constraint| ConstraintFacts {
-                name: ctx.intern(&constraint.name),
-                kind: constraint.kind,
-                value: import_surface_ty(ctx, module_surface, constraint.value),
-                class_key: constraint.class_key.clone(),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        members: surface
-            .members
-            .iter()
-            .map(|member| ClassMemberFacts {
-                name: ctx.intern(&member.name),
-                params: member
+    let members = surface
+        .members
+        .iter()
+        .map(|member| {
+            ClassMemberFacts::new(
+                ctx.intern(&member.name),
+                member
                     .params
                     .iter()
                     .copied()
                     .map(|ty| import_surface_ty(ctx, module_surface, ty))
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
-                result: import_surface_ty(ctx, module_surface, member.result),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        laws: surface
-            .laws
-            .iter()
-            .map(|law| LawFacts {
-                name: ctx.intern(&law.name),
-                params: law
-                    .params
+                import_surface_ty(ctx, module_surface, member.result),
+            )
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let laws = surface
+        .laws
+        .iter()
+        .map(|law| {
+            LawFacts::new(
+                ctx.intern(&law.name),
+                law.params
                     .iter()
-                    .map(|param| LawParamFacts {
-                        name: ctx.intern(&param.name),
-                        ty: import_surface_ty(ctx, module_surface, param.ty),
+                    .map(|param| {
+                        LawParamFacts::new(
+                            ctx.intern(&param.name),
+                            import_surface_ty(ctx, module_surface, param.ty),
+                        )
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-    };
+            )
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let constraints = surface
+        .constraints
+        .iter()
+        .map(|constraint| {
+            let lowered = ConstraintFacts::new(
+                ctx.intern(&constraint.name),
+                constraint.kind,
+                import_surface_ty(ctx, module_surface, constraint.value),
+            );
+            if let Some(class_key) = constraint.class_key.clone() {
+                lowered.with_class_key(class_key)
+            } else {
+                lowered
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let facts = ClassFacts::new(surface.key.clone(), alias.name, members, laws)
+        .with_constraints(constraints);
     ctx.insert_class_facts_by_name(alias.name, facts);
 }
 
@@ -242,17 +248,20 @@ fn import_effect_alias(
     let laws = surface
         .laws
         .iter()
-        .map(|law| LawFacts {
-            name: ctx.intern(&law.name),
-            params: law
-                .params
-                .iter()
-                .map(|param| LawParamFacts {
-                    name: ctx.intern(&param.name),
-                    ty: import_surface_ty(ctx, module_surface, param.ty),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+        .map(|law| {
+            LawFacts::new(
+                ctx.intern(&law.name),
+                law.params
+                    .iter()
+                    .map(|param| {
+                        LawParamFacts::new(
+                            ctx.intern(&param.name),
+                            import_surface_ty(ctx, module_surface, param.ty),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();

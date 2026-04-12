@@ -203,11 +203,7 @@ fn push_meta(
     key: &'static str,
     values: Box<[Box<str>]>,
 ) {
-    out.push(IrMetaRecord {
-        target: target.to_owned().into_boxed_str(),
-        key: key.into(),
-        values,
-    });
+    out.push(IrMetaRecord::new(target, key, values));
 }
 
 fn push_inert_and_musi_attrs(

@@ -118,9 +118,9 @@ where
             ),
             _ => return None,
         };
-        Some(self.store.alloc_lit(HirLit {
-            origin: self.origin_token(tok),
-            kind,
-        }))
+        Some(
+            self.store
+                .alloc_lit(HirLit::new(self.origin_token(tok), kind)),
+        )
     }
 }

@@ -90,12 +90,7 @@ impl SyntaxTreeBuilder {
     ) -> SyntaxNodeId {
         let span = self.children_span(&children);
         let range = self.children.alloc_from_iter(children.iter().copied());
-        let node = self.nodes.alloc(SyntaxNodeData {
-            kind,
-            span,
-            parent: None,
-            children: range,
-        });
+        let node = self.nodes.alloc(SyntaxNodeData::new(kind, span, range));
         for child in children {
             match child {
                 SyntaxElementId::Node(id) => self.nodes.get_mut(id).parent = Some(node),
@@ -380,36 +375,36 @@ impl<'a> Parser<'a> {
     }
 
     fn expected_token(&self, expected: TokenKind) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedToken {
+        ParseError::new(
+            ParseErrorKind::ExpectedToken {
                 expected,
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expect_ident_element(&mut self) -> ParseResult<SyntaxElementId> {
         match self.peek_kind() {
             TokenKind::Ident => Ok(self.advance_element()),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedIdentifier {
+            _ => Err(ParseError::new(
+                ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),
                 },
-                span: self.span(),
-            }),
+                self.span(),
+            )),
         }
     }
 
     fn expect_name_element(&mut self) -> ParseResult<SyntaxElementId> {
         match self.peek_kind() {
             TokenKind::Ident | TokenKind::OpIdent => Ok(self.advance_element()),
-            _ => Err(ParseError {
-                kind: ParseErrorKind::ExpectedIdentifier {
+            _ => Err(ParseError::new(
+                ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),
                 },
-                span: self.span(),
-            }),
+                self.span(),
+            )),
         }
     }
 
@@ -426,75 +421,75 @@ impl<'a> Parser<'a> {
     }
 
     fn expected_expression(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedExpression {
+        ParseError::new(
+            ParseErrorKind::ExpectedExpression {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_pattern(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedPattern {
+        ParseError::new(
+            ParseErrorKind::ExpectedPattern {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_member(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedMember {
+        ParseError::new(
+            ParseErrorKind::ExpectedMember {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_splice_target(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedSpliceTarget {
+        ParseError::new(
+            ParseErrorKind::ExpectedSpliceTarget {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_operator_member_name(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedOperatorMemberName {
+        ParseError::new(
+            ParseErrorKind::ExpectedOperatorMemberName {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_field_target(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedFieldTarget {
+        ParseError::new(
+            ParseErrorKind::ExpectedFieldTarget {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_constraint_operator(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedConstraintOperator {
+        ParseError::new(
+            ParseErrorKind::ExpectedConstraintOperator {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 
     fn expected_attr_value(&self) -> ParseError {
-        ParseError {
-            kind: ParseErrorKind::ExpectedAttrValue {
+        ParseError::new(
+            ParseErrorKind::ExpectedAttrValue {
                 found: self.found_token(),
             },
-            span: self.span(),
-        }
+            self.span(),
+        )
     }
 }
 

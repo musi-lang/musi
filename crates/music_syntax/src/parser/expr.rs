@@ -23,10 +23,10 @@ impl Parser<'_> {
             let op = self.advance_element();
             let right = self.parse_expr(right_bp)?;
             if class == InfixClass::Comparison && self.is_comparison_expr(left) {
-                self.error(ParseError {
-                    kind: ParseErrorKind::NonAssociativeChain,
-                    span: self.span(),
-                });
+                self.error(ParseError::new(
+                    ParseErrorKind::NonAssociativeChain,
+                    self.span(),
+                ));
             }
             left = self.builder.push_node_from_children(
                 SyntaxNodeKind::BinaryExpr,
@@ -61,10 +61,10 @@ impl Parser<'_> {
             let op = self.advance_element();
             let right = self.parse_expr_without_colon_eq(right_bp)?;
             if class == InfixClass::Comparison && self.is_comparison_expr(left) {
-                self.error(ParseError {
-                    kind: ParseErrorKind::NonAssociativeChain,
-                    span: self.span(),
-                });
+                self.error(ParseError::new(
+                    ParseErrorKind::NonAssociativeChain,
+                    self.span(),
+                ));
             }
             left = self.builder.push_node_from_children(
                 SyntaxNodeKind::BinaryExpr,

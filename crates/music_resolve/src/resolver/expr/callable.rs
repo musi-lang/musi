@@ -68,7 +68,7 @@ where
                 .child_tokens()
                 .any(|t| t.kind() == TokenKind::DotDotDot);
             let expr = self.lower_opt_expr(origin, arg_node.child_nodes().next());
-            args.push(HirArg { spread, expr });
+            args.push(HirArg::new(spread, expr));
         }
         let args = self.store.args.alloc_from_iter(args);
         self.alloc_expr(origin, HirExprKind::Call { callee, args })

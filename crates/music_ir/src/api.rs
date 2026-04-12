@@ -137,6 +137,13 @@ pub struct IrOrigin {
     pub span: Span,
 }
 
+impl IrOrigin {
+    #[must_use]
+    pub const fn new(source_id: SourceId, span: Span) -> Self {
+        Self { source_id, span }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrTempId(u32);
 
@@ -158,10 +165,27 @@ pub struct IrParam {
     pub name: Box<str>,
 }
 
+impl IrParam {
+    #[must_use]
+    pub fn new(binding: NameBindingId, name: impl Into<Box<str>>) -> Self {
+        Self {
+            binding,
+            name: name.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrArg {
     pub spread: bool,
     pub expr: IrExpr,
+}
+
+impl IrArg {
+    #[must_use]
+    pub const fn new(spread: bool, expr: IrExpr) -> Self {
+        Self { spread, expr }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,11 +230,29 @@ pub struct IrExpr {
     pub kind: IrExprKind,
 }
 
+impl IrExpr {
+    #[must_use]
+    pub const fn new(origin: IrOrigin, kind: IrExprKind) -> Self {
+        Self { origin, kind }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrRecordField {
     pub name: Box<str>,
     pub index: u16,
     pub expr: IrExpr,
+}
+
+impl IrRecordField {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, index: u16, expr: IrExpr) -> Self {
+        Self {
+            name: name.into(),
+            index,
+            expr,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,11 +261,56 @@ pub struct IrRecordLayoutField {
     pub index: u16,
 }
 
+impl IrRecordLayoutField {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, index: u16) -> Self {
+        Self {
+            name: name.into(),
+            index,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrNameRef {
     pub binding: Option<NameBindingId>,
     pub name: Box<str>,
     pub module_target: Option<ModuleKey>,
+}
+
+impl IrNameRef {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>) -> Self {
+        Self {
+            binding: None,
+            name: name.into(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,10 +367,37 @@ pub struct IrCaseArm {
     pub expr: IrExpr,
 }
 
+impl IrCaseArm {
+    #[must_use]
+    pub const fn new(pattern: IrCasePattern, expr: IrExpr) -> Self {
+        Self {
+            pattern,
+            guard: None,
+            expr,
+        }
+    }
+
+    #[must_use]
+    pub fn with_guard(mut self, guard: IrExpr) -> Self {
+        self.guard = Some(guard);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCaseRecordField {
     pub index: u16,
     pub pat: Box<IrCasePattern>,
+}
+
+impl IrCaseRecordField {
+    #[must_use]
+    pub fn new(index: u16, pat: IrCasePattern) -> Self {
+        Self {
+            index,
+            pat: Box::new(pat),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -426,6 +540,17 @@ pub struct IrHandleOp {
     pub closure: IrExpr,
 }
 
+impl IrHandleOp {
+    #[must_use]
+    pub fn new(op_index: u16, name: impl Into<Box<str>>, closure: IrExpr) -> Self {
+        Self {
+            op_index,
+            name: name.into(),
+            closure,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCallable {
     pub binding: Option<NameBindingId>,
@@ -437,10 +562,71 @@ pub struct IrCallable {
     pub module_target: Option<ModuleKey>,
 }
 
+impl IrCallable {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, params: Box<[IrParam]>, body: IrExpr) -> Self {
+        Self {
+            binding: None,
+            name: name.into(),
+            params,
+            body,
+            exported: false,
+            effects: EffectRow::default(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub fn with_effects(mut self, effects: EffectRow) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataVariantDef {
     pub name: Box<str>,
     pub field_tys: Box<[Box<str>]>,
+}
+
+impl IrDataVariantDef {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, field_tys: Box<[Box<str>]>) -> Self {
+        Self {
+            name: name.into(),
+            field_tys,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -452,6 +638,49 @@ pub struct IrDataDef {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+}
+
+impl IrDataDef {
+    /// # Panics
+    ///
+    /// Panics if the variant count or max field count does not fit in `u32`.
+    #[must_use]
+    pub fn new(key: DefinitionKey, variants: Box<[IrDataVariantDef]>) -> Self {
+        let variant_count =
+            u32::try_from(variants.len()).expect("IR data variant count should fit in u32");
+        let field_count = variants
+            .iter()
+            .map(|variant| u32::try_from(variant.field_tys.len()).unwrap_or(u32::MAX))
+            .max()
+            .unwrap_or(0);
+        Self {
+            key,
+            variant_count,
+            field_count,
+            variants,
+            repr_kind: None,
+            layout_align: None,
+            layout_pack: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_repr_kind(mut self, repr_kind: impl Into<Box<str>>) -> Self {
+        self.repr_kind = Some(repr_kind.into());
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_align(mut self, layout_align: u32) -> Self {
+        self.layout_align = Some(layout_align);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
+        self.layout_pack = Some(layout_pack);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -466,6 +695,58 @@ pub struct IrForeignDef {
     pub exported: bool,
 }
 
+impl IrForeignDef {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Box<str>>,
+        abi: impl Into<Box<str>>,
+        symbol: impl Into<Box<str>>,
+        param_tys: Box<[Box<str>]>,
+        result_ty: impl Into<Box<str>>,
+    ) -> Self {
+        Self {
+            binding: None,
+            name: name.into(),
+            abi: abi.into(),
+            symbol: symbol.into(),
+            link: None,
+            param_tys,
+            result_ty: result_ty.into(),
+            exported: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub fn with_link(mut self, link: impl Into<Box<str>>) -> Self {
+        self.link = Some(link.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_link_opt(mut self, link: Option<Box<str>>) -> Self {
+        self.link = link;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrGlobal {
     pub binding: Option<NameBindingId>,
@@ -476,10 +757,67 @@ pub struct IrGlobal {
     pub module_target: Option<ModuleKey>,
 }
 
+impl IrGlobal {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, body: IrExpr) -> Self {
+        Self {
+            binding: None,
+            name: name.into(),
+            body,
+            exported: false,
+            effects: EffectRow::default(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub fn with_effects(mut self, effects: EffectRow) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectDef {
     pub key: DefinitionKey,
     pub ops: Box<[IrEffectOpDef]>,
+}
+
+impl IrEffectDef {
+    #[must_use]
+    pub const fn new(key: DefinitionKey, ops: Box<[IrEffectOpDef]>) -> Self {
+        Self { key, ops }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -489,10 +827,32 @@ pub struct IrEffectOpDef {
     pub result_ty: Box<str>,
 }
 
+impl IrEffectOpDef {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Box<str>>,
+        param_tys: Box<[Box<str>]>,
+        result_ty: impl Into<Box<str>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            param_tys,
+            result_ty: result_ty.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrClassDef {
     pub key: DefinitionKey,
     pub member_names: Box<[Box<str>]>,
+}
+
+impl IrClassDef {
+    #[must_use]
+    pub const fn new(key: DefinitionKey, member_names: Box<[Box<str>]>) -> Self {
+        Self { key, member_names }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -501,11 +861,36 @@ pub struct IrInstanceDef {
     pub member_names: Box<[Box<str>]>,
 }
 
+impl IrInstanceDef {
+    #[must_use]
+    pub const fn new(class_key: DefinitionKey, member_names: Box<[Box<str>]>) -> Self {
+        Self {
+            class_key,
+            member_names,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrMetaRecord {
     pub target: Box<str>,
     pub key: Box<str>,
     pub values: Box<[Box<str>]>,
+}
+
+impl IrMetaRecord {
+    #[must_use]
+    pub fn new(
+        target: impl Into<Box<str>>,
+        key: impl Into<Box<str>>,
+        values: Box<[Box<str>]>,
+    ) -> Self {
+        Self {
+            target: target.into(),
+            key: key.into(),
+            values,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -640,23 +1025,20 @@ impl IrModule {
 
 impl From<&ClassSurface> for IrClassDef {
     fn from(value: &ClassSurface) -> Self {
-        Self {
-            key: value.key.clone(),
-            member_names: value
+        Self::new(
+            value.key.clone(),
+            value
                 .members
                 .iter()
                 .map(|member| member.name.clone())
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
-        }
+        )
     }
 }
 
 impl From<&InstanceSurface> for IrInstanceDef {
     fn from(value: &InstanceSurface) -> Self {
-        Self {
-            class_key: value.class_key.clone(),
-            member_names: value.member_names.clone(),
-        }
+        Self::new(value.class_key.clone(), value.member_names.clone())
     }
 }

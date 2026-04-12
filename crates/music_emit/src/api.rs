@@ -25,6 +25,31 @@ pub struct EmittedBinding {
     pub global: Option<GlobalId>,
 }
 
+impl EmittedBinding {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Box<str>>,
+        method: Option<MethodId>,
+        global: Option<GlobalId>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            method,
+            global,
+        }
+    }
+
+    #[must_use]
+    pub fn method(name: impl Into<Box<str>>, method: MethodId) -> Self {
+        Self::new(name, Some(method), None)
+    }
+
+    #[must_use]
+    pub fn global(name: impl Into<Box<str>>, global: GlobalId) -> Self {
+        Self::new(name, None, Some(global))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmittedModule {
     pub module_key: ModuleKey,
@@ -34,10 +59,46 @@ pub struct EmittedModule {
     pub static_imports: Box<[ModuleKey]>,
 }
 
+impl EmittedModule {
+    #[must_use]
+    pub const fn new(
+        module_key: ModuleKey,
+        artifact: Artifact,
+        entry_method: Option<MethodId>,
+        exports: Box<[EmittedBinding]>,
+        static_imports: Box<[ModuleKey]>,
+    ) -> Self {
+        Self {
+            module_key,
+            artifact,
+            entry_method,
+            exports,
+            static_imports,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmittedProgram {
     pub entry_module: ModuleKey,
     pub artifact: Artifact,
     pub entry_method: MethodId,
     pub modules: Box<[ModuleKey]>,
+}
+
+impl EmittedProgram {
+    #[must_use]
+    pub const fn new(
+        entry_module: ModuleKey,
+        artifact: Artifact,
+        entry_method: MethodId,
+        modules: Box<[ModuleKey]>,
+    ) -> Self {
+        Self {
+            entry_module,
+            artifact,
+            entry_method,
+            modules,
+        }
+    }
 }

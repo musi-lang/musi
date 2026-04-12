@@ -148,11 +148,7 @@ where
     }
 
     fn alloc_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> HirExprId {
-        self.store.alloc_expr(HirExpr {
-            origin,
-            mods: HirMods::EMPTY,
-            kind,
-        })
+        self.store.alloc_expr(HirExpr::new(origin, kind))
     }
 
     fn error_expr(&mut self, origin: HirOrigin) -> HirExprId {
@@ -184,11 +180,7 @@ where
         let attrs = self.merge_attrs(current.attrs, mods.attrs);
         let export = current.export.or(mods.export);
         let foreign = current.foreign.or(mods.foreign);
-        self.store.exprs.get_mut(expr).mods = HirMods {
-            attrs,
-            export,
-            foreign,
-        };
+        self.store.exprs.get_mut(expr).mods = HirMods::new(attrs, export, foreign);
     }
 
     fn lower_opt_expr(

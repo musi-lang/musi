@@ -10,6 +10,13 @@ pub struct HirTy {
     pub kind: HirTyKind,
 }
 
+impl HirTy {
+    #[must_use]
+    pub const fn new(origin: HirOrigin, kind: HirTyKind) -> Self {
+        Self { origin, kind }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirTyKind {
     Error,
@@ -73,4 +80,11 @@ pub enum HirDim {
 pub struct HirTyField {
     pub name: Symbol,
     pub ty: HirTyId,
+}
+
+impl HirTyField {
+    #[must_use]
+    pub const fn new(name: Symbol, ty: HirTyId) -> Self {
+        Self { name, ty }
+    }
 }

@@ -39,6 +39,28 @@ pub struct SyntaxNodeData {
     pub children: SliceRange<SyntaxElementId>,
 }
 
+impl SyntaxNodeData {
+    #[must_use]
+    pub const fn new(
+        kind: SyntaxNodeKind,
+        span: Span,
+        children: SliceRange<SyntaxElementId>,
+    ) -> Self {
+        Self {
+            kind,
+            span,
+            parent: None,
+            children,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_parent(mut self, parent: SyntaxNodeId) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SyntaxTree {
     lexed: LexedSource,

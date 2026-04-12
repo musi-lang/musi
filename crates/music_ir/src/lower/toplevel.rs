@@ -180,7 +180,7 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
         },
         |data| data.key().clone(),
     );
-    let repr_kind = def.and_then(|data| data.repr_kind().map(Into::into));
+    let repr_kind: Option<Box<str>> = def.and_then(|data| data.repr_kind().map(Into::into));
     let layout_align = def.and_then(SemaDataDef::layout_align);
     let layout_pack = def.and_then(SemaDataDef::layout_pack);
     let variants = def.map_or_else(
@@ -193,44 +193,53 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
                 .iter()
                 .map(|_| Box::<str>::from("Unknown"))
                 .collect::<Vec<_>>();
-            vec![IrDataVariantDef {
-                name: name_text.clone(),
-                field_tys: field_tys.into_boxed_slice(),
-            }]
+            vec![IrDataVariantDef::new(
+                name_text.clone(),
+                field_tys.into_boxed_slice(),
+            )]
             .into_boxed_slice()
         },
         |data| {
             data.variants()
-                .map(|(variant_name, variant)| IrDataVariantDef {
-                    name: variant_name.into(),
-                    field_tys: variant
-                        .field_tys()
-                        .iter()
-                        .copied()
-                        .map(|ty| render_hir_ty_name(sema, ty, interner))
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
+                .map(|(variant_name, variant)| {
+                    IrDataVariantDef::new(
+                        variant_name,
+                        variant
+                            .field_tys()
+                            .iter()
+                            .copied()
+                            .map(|ty| render_hir_ty_name(sema, ty, interner))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    )
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice()
         },
     );
-    let field_count = variants
-        .iter()
-        .map(|variant| variant.field_tys.len())
-        .max()
-        .unwrap_or_else(|| sema.module().store.fields.get(fields.clone()).len());
-    Some(IrDataDef {
-        key,
-        variant_count: u32::try_from(variants.len())
-            .unwrap_or_else(|_| super::invalid_lowering_path("variant count overflow")),
-        field_count: u32::try_from(field_count)
-            .unwrap_or_else(|_| super::invalid_lowering_path("field count overflow")),
-        variants,
-        repr_kind,
-        layout_align,
-        layout_pack,
-    })
+    let mut data_def = IrDataDef::new(key, variants);
+    debug_assert_eq!(
+        data_def.field_count,
+        u32::try_from(
+            data_def
+                .variants
+                .iter()
+                .map(|variant| variant.field_tys.len())
+                .max()
+                .unwrap_or_else(|| sema.module().store.fields.get(fields.clone()).len())
+        )
+        .unwrap_or_else(|_| super::invalid_lowering_path("field count overflow"))
+    );
+    if let Some(repr_kind) = repr_kind {
+        data_def = data_def.with_repr_kind(repr_kind);
+    }
+    if let Some(layout_align) = layout_align {
+        data_def = data_def.with_layout_align(layout_align);
+    }
+    if let Some(layout_pack) = layout_pack {
+        data_def = data_def.with_layout_pack(layout_pack);
+    }
+    Some(data_def)
 }
 
 fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
@@ -288,15 +297,20 @@ struct CallableItemInput {
 
 fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCallable {
     let interner = ctx.interner;
-    IrCallable {
-        binding: input.binding,
-        name: interner.resolve(input.name.name).into(),
-        params: lower_params(ctx, input.params),
-        body: super::lower_expr(ctx, input.value),
-        exported: input.exported,
-        effects: input.effects,
-        module_target: input.module_target,
+    let mut callable = IrCallable::new(
+        interner.resolve(input.name.name),
+        lower_params(ctx, input.params),
+        super::lower_expr(ctx, input.value),
+    )
+    .with_exported(input.exported)
+    .with_effects(input.effects);
+    if let Some(binding) = input.binding {
+        callable = callable.with_binding(binding);
     }
+    if let Some(module_target) = input.module_target {
+        callable = callable.with_module_target(module_target);
+    }
+    callable
 }
 
 struct GlobalItemInput {
@@ -310,14 +324,19 @@ struct GlobalItemInput {
 
 fn lower_global_item(ctx: &mut LowerCtx<'_>, input: GlobalItemInput) -> IrGlobal {
     let interner = ctx.interner;
-    IrGlobal {
-        binding: input.binding,
-        name: interner.resolve(input.name.name).into(),
-        body: super::lower_expr(ctx, input.value),
-        exported: input.exported,
-        effects: input.effects,
-        module_target: input.module_target,
+    let mut global = IrGlobal::new(
+        interner.resolve(input.name.name),
+        super::lower_expr(ctx, input.value),
+    )
+    .with_exported(input.exported)
+    .with_effects(input.effects);
+    if let Some(binding) = input.binding {
+        global = global.with_binding(binding);
     }
+    if let Some(module_target) = input.module_target {
+        global = global.with_module_target(module_target);
+    }
+    global
 }
 
 struct ExportedImportGlobalInput<'a> {
@@ -342,19 +361,21 @@ fn lower_exported_import_global(
         return None;
     }
     let spec = super::lower_expr(ctx, *arg);
-    Some(IrGlobal {
-        binding: input.binding,
-        name: interner.resolve(input.name.name).into(),
-        body: IrExpr {
-            origin: spec.origin,
-            kind: IrExprKind::DynamicImport {
-                spec: Box::new(spec),
-            },
-        },
-        exported: true,
-        effects: input.effects.clone(),
-        module_target: input.module_target,
-    })
+    Some(
+        IrGlobal::new(
+            interner.resolve(input.name.name),
+            IrExpr::new(
+                spec.origin,
+                IrExprKind::DynamicImport {
+                    spec: Box::new(spec),
+                },
+            ),
+        )
+        .with_binding_opt(input.binding)
+        .with_exported(true)
+        .with_effects(input.effects.clone())
+        .with_module_target_opt(input.module_target),
+    )
 }
 
 fn skip_module_value(sema: &SemaModule, value: HirExprId) -> bool {
@@ -377,10 +398,12 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         .params
         .get(params)
         .iter()
-        .map(|param| IrParam {
-            binding: super::decl_binding_id(sema, param.name)
-                .unwrap_or_else(|| super::invalid_lowering_path("param binding missing")),
-            name: interner.resolve(param.name.name).into(),
+        .map(|param| {
+            IrParam::new(
+                super::decl_binding_id(sema, param.name)
+                    .unwrap_or_else(|| super::invalid_lowering_path("param binding missing")),
+                interner.resolve(param.name.name),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()

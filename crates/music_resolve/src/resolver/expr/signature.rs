@@ -21,7 +21,7 @@ where
                     .child_nodes()
                     .find(|child| child.kind().is_expr())
                     .map(|expr| self.lower_expr(expr));
-                Some(HirBinder { name, ty })
+                Some(HirBinder::new(name, ty))
             })
             .collect();
         for p in &params {
@@ -51,7 +51,7 @@ where
         let ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
 
-        HirParam { name, ty, default }
+        HirParam::new(name, ty, default)
     }
 
     pub(in crate::resolver) fn lower_constraint_list(
@@ -80,7 +80,7 @@ where
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
-        HirConstraint { name, kind, value }
+        HirConstraint::new(name, kind, value)
     }
 
     pub(super) fn lower_effect_set(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectSet {
@@ -107,7 +107,7 @@ where
             }
         }
         let items = self.store.effect_items.alloc_from_iter(items);
-        HirEffectSet { items, open }
+        HirEffectSet::new(items, open)
     }
 
     fn lower_effect_item(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectItem {
@@ -119,6 +119,6 @@ where
             .child_nodes()
             .find(|n| n.kind().is_expr())
             .map(|n| self.lower_expr(n));
-        HirEffectItem { name, arg }
+        HirEffectItem::new(name, arg)
     }
 }

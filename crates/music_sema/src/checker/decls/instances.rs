@@ -144,20 +144,11 @@ pub(in super::super) fn check_instance_expr(
     let constraints = lower_constraints(ctx, constraints);
     ctx.insert_instance_facts(
         expr_id,
-        InstanceFacts {
-            origin,
-            type_params,
-            class_key,
-            class_name,
-            class_args,
-            constraints,
-            member_names,
-        },
+        InstanceFacts::new(origin, class_key, class_name, class_args, member_names)
+            .with_type_params(type_params)
+            .with_constraints(constraints),
     );
-    ExprFacts {
-        ty: class_ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(class_ty, EffectRow::empty())
 }
 
 pub(in super::super) fn check_instance_coherence(ctx: &mut CheckPass<'_, '_, '_>) {

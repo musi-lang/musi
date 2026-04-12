@@ -40,3 +40,10 @@ pub struct ConstantDescriptor {
     pub name: StringId,
     pub value: ConstantValue,
 }
+
+impl ConstantDescriptor {
+    #[must_use]
+    pub const fn new(name: StringId, value: ConstantValue) -> Self {
+        Self { name, value }
+    }
+}

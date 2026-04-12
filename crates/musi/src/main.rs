@@ -9,7 +9,7 @@ use clap::Parser;
 use cli::{Cli, Command, DiagnosticsFormatArg};
 use musi_native::NativeHost;
 use musi_project::{
-    Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget, ProjectTestTargetKind,
+    Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
     ProjectTestTargetSource, TaskSpec, load_project_ancestor,
 };
 use musi_rt::{Runtime, RuntimeError, RuntimeOptions};
@@ -328,11 +328,11 @@ fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<Pr
     for package in project.workspace().packages.values() {
         for (module_key, path) in &package.module_keys {
             if path == &resolved {
-                return Ok(ProjectEntry {
-                    package: package.id.clone(),
-                    module_key: module_key.clone(),
-                    path: path.clone(),
-                });
+                return Ok(ProjectEntry::new(
+                    package.id.clone(),
+                    module_key.clone(),
+                    path.clone(),
+                ));
             }
         }
     }
@@ -348,28 +348,20 @@ fn resolve_test_targets(
     };
     if target.extension().is_some_and(|ext| ext == "ms") || target.components().count() > 1 {
         let entry = resolve_project_path_entry(project, target)?;
-        return Ok(vec![ProjectTestTarget {
-            package: entry.package,
-            module_key: entry.module_key.clone(),
-            source_module_key: entry.module_key,
-            export_name: "test".into(),
-            path: entry.path,
-            kind: ProjectTestTargetKind::Module,
-            source: ProjectTestTargetSource::ModulePath,
-        }]);
+        return Ok(vec![ProjectTestTarget::module(
+            entry.package,
+            entry.module_key,
+            entry.path,
+        )]);
     }
     let package_name = target.to_string_lossy();
     let Some(package) = project.package(package_name.as_ref()) else {
         let entry = resolve_project_path_entry(project, target)?;
-        return Ok(vec![ProjectTestTarget {
-            package: entry.package,
-            module_key: entry.module_key.clone(),
-            source_module_key: entry.module_key,
-            export_name: "test".into(),
-            path: entry.path,
-            kind: ProjectTestTargetKind::Module,
-            source: ProjectTestTargetSource::ModulePath,
-        }]);
+        return Ok(vec![ProjectTestTarget::module(
+            entry.package,
+            entry.module_key,
+            entry.path,
+        )]);
     };
     Ok(project
         .test_targets()?
@@ -418,10 +410,7 @@ fn manifest_output_path(project: &Project, entry: &ProjectEntry) -> Option<PathB
 }
 
 fn target_info(target_name: &str) -> TargetInfo {
-    TargetInfo {
-        os: Some(target_name.into()),
-        ..TargetInfo::default()
-    }
+    TargetInfo::new().with_os(target_name)
 }
 
 fn print_runtime_value(runtime: &Runtime, value: &Value) {
@@ -458,15 +447,7 @@ fn ok_report(
     package_root: Option<&Path>,
     manifest: Option<&Path>,
 ) -> CliDiagnosticsReport {
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "ok",
-        package_root: package_root.map(|path| path.display().to_string()),
-        manifest: manifest.map(|path| path.display().to_string()),
-        diagnostics: Vec::new(),
-    }
+    CliDiagnosticsReport::ok(tool, command, package_root, manifest)
 }
 
 enum CheckProjectFailure {

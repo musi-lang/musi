@@ -130,6 +130,43 @@ pub struct TaskConfig {
     pub dependencies: Vec<String>,
 }
 
+impl TaskConfig {
+    #[must_use]
+    pub const fn new(
+        description: Option<String>,
+        command: String,
+        dependencies: Vec<String>,
+    ) -> Self {
+        Self {
+            description,
+            command,
+            dependencies,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_command(command: String) -> Self {
+        Self::new(None, command, Vec::new())
+    }
+
+    #[must_use]
+    pub fn from_object(object: &TaskDefinitionObject) -> Self {
+        Self::new(
+            object.description.clone(),
+            object.command.clone(),
+            object.dependencies.clone(),
+        )
+    }
+
+    #[must_use]
+    pub fn from_definition(definition: &TaskDefinition) -> Self {
+        match definition {
+            TaskDefinition::Command(command) => Self::from_command(command.clone()),
+            TaskDefinition::Object(object) => Self::from_object(object),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct FmtConfig {
@@ -225,6 +262,11 @@ pub struct WorkspaceMembersObject {
 
 impl PackageManifest {
     #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
     pub fn main_entry(&self) -> &str {
         self.main.as_deref().unwrap_or("index.ms")
     }
@@ -292,18 +334,6 @@ impl PackageManifest {
 
     #[must_use]
     pub fn task_config(&self, name: &str) -> Option<TaskConfig> {
-        match self.tasks.get(name) {
-            Some(TaskDefinition::Command(command)) => Some(TaskConfig {
-                description: None,
-                command: command.clone(),
-                dependencies: Vec::new(),
-            }),
-            Some(TaskDefinition::Object(object)) => Some(TaskConfig {
-                description: object.description.clone(),
-                command: object.command.clone(),
-                dependencies: object.dependencies.clone(),
-            }),
-            None => None,
-        }
+        self.tasks.get(name).map(TaskConfig::from_definition)
     }
 }

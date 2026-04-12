@@ -128,12 +128,22 @@ pub enum ParseErrorKind {
 
 impl LexError {
     #[must_use]
+    pub const fn new(kind: LexErrorKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+
+    #[must_use]
     pub fn to_diag(self, source_id: SourceId, source_text: &str) -> Diag {
         self.kind.to_diag(self.span, source_id, source_text)
     }
 }
 
 impl ParseError {
+    #[must_use]
+    pub const fn new(kind: ParseErrorKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+
     #[must_use]
     pub fn to_diag(self, source_id: SourceId, source_text: &str) -> Diag {
         self.kind.to_diag(self.span, source_id, source_text)
@@ -364,11 +374,8 @@ mod tests {
     #[test]
     fn lex_diag_points_at_invalid_character() {
         let text = "€";
-        let diag = LexError {
-            kind: LexErrorKind::InvalidChar { ch: '€' },
-            span: Span::new(0, 3),
-        }
-        .to_diag(source_id(text), text);
+        let diag = LexError::new(LexErrorKind::InvalidChar { ch: '€' }, Span::new(0, 3))
+            .to_diag(source_id(text), text);
 
         assert_eq!(diag.message(), "invalid character");
         assert_eq!(diag.labels()[0].message(), "found `€`");
@@ -377,13 +384,13 @@ mod tests {
     #[test]
     fn parse_diag_uses_end_of_input() {
         let text = "let x := 1";
-        let diag = ParseError {
-            kind: ParseErrorKind::ExpectedToken {
+        let diag = ParseError::new(
+            ParseErrorKind::ExpectedToken {
                 expected: TokenKind::Semicolon,
                 found: TokenKind::Eof,
             },
-            span: Span::new(10, 10),
-        }
+            Span::new(10, 10),
+        )
         .to_diag(source_id(text), text);
 
         assert_eq!(diag.message(), "expected `;`");
@@ -393,11 +400,8 @@ mod tests {
     #[test]
     fn parse_diag_uses_fixit_hint_only_for_grouping_error() {
         let text = "a < b < c";
-        let diag = ParseError {
-            kind: ParseErrorKind::NonAssociativeChain,
-            span: Span::new(6, 7),
-        }
-        .to_diag(source_id(text), text);
+        let diag = ParseError::new(ParseErrorKind::NonAssociativeChain, Span::new(6, 7))
+            .to_diag(source_id(text), text);
 
         assert_eq!(diag.message(), "comparison chain requires grouping");
         assert_eq!(diag.hint(), Some("parenthesize comparison"));

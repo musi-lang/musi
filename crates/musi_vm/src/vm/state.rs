@@ -35,6 +35,30 @@ pub struct CallFrame {
     pub(crate) stack: ValueList,
 }
 
+impl CallFrame {
+    #[must_use]
+    pub const fn new(
+        module_slot: usize,
+        method: MethodId,
+        locals: ValueList,
+        stack: ValueList,
+    ) -> Self {
+        Self {
+            module_slot,
+            method,
+            ip: 0,
+            locals,
+            stack,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_ip(mut self, ip: usize) -> Self {
+        self.ip = ip;
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EffectHandler {
     pub(crate) handler_id: u64,
@@ -43,6 +67,33 @@ pub struct EffectHandler {
     pub(crate) frame_depth: usize,
     pub(crate) stack_depth: usize,
     pub(crate) pop_ip: usize,
+}
+
+impl EffectHandler {
+    #[must_use]
+    pub const fn new(handler_id: u64, effect: EffectId, handler: Value) -> Self {
+        Self {
+            handler_id,
+            effect,
+            handler,
+            frame_depth: 0,
+            stack_depth: 0,
+            pop_ip: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_stack_state(
+        mut self,
+        frame_depth: usize,
+        stack_depth: usize,
+        pop_ip: usize,
+    ) -> Self {
+        self.frame_depth = frame_depth;
+        self.stack_depth = stack_depth;
+        self.pop_ip = pop_ip;
+        self
+    }
 }
 
 pub enum StepOutcome {

@@ -17,17 +17,16 @@ pub(super) fn lower_surface_effect_row(
     tys: &mut SurfaceTyBuilder<'_>,
     row: &EffectRow,
 ) -> SurfaceEffectRow {
-    SurfaceEffectRow {
-        items: row
-            .items
-            .iter()
-            .map(|item| SurfaceEffectItem {
-                name: item.name.clone(),
-                arg: item.arg.map(|ty| tys.lower(ty)),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        open: row.open.clone(),
+    let items = row
+        .items
+        .iter()
+        .map(|item| SurfaceEffectItem::new(item.name.clone(), item.arg.map(|ty| tys.lower(ty))))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    if let Some(open) = row.open.clone() {
+        SurfaceEffectRow::new(items).with_open(open)
+    } else {
+        SurfaceEffectRow::new(items)
     }
 }
 
@@ -203,7 +202,7 @@ impl<'a> SurfaceTyBuilder<'a> {
         }
         let kind = self.lower_kind(id);
         let next = SurfaceTyId::new(u32::try_from(self.tys.len()).unwrap_or(u32::MAX));
-        self.tys.push(SurfaceTy { kind });
+        self.tys.push(SurfaceTy::new(kind));
         let _ = self.cache.insert(id, next);
         next
     }
@@ -290,9 +289,8 @@ impl<'a> SurfaceTyBuilder<'a> {
             .ty_fields
             .get(fields)
             .iter()
-            .map(|field| SurfaceTyField {
-                name: self.interner.resolve(field.name).into(),
-                ty: self.lower(field.ty),
+            .map(|field| {
+                SurfaceTyField::new(self.interner.resolve(field.name), self.lower(field.ty))
             })
             .collect::<Vec<_>>()
             .into_boxed_slice()
@@ -442,10 +440,7 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
     fn import_fields(&mut self, fields: &[SurfaceTyField]) -> SliceRange<HirTyField> {
         let fields = fields
             .iter()
-            .map(|field| HirTyField {
-                name: self.ctx.intern(&field.name),
-                ty: self.import(field.ty),
-            })
+            .map(|field| HirTyField::new(self.ctx.intern(&field.name), self.import(field.ty)))
             .collect::<Vec<_>>();
         self.ctx.alloc_ty_fields(fields)
     }

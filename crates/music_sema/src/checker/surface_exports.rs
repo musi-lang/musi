@@ -181,11 +181,17 @@ fn lower_constraints(
 ) -> Box<[ConstraintSurface]> {
     constraints
         .iter()
-        .map(|constraint| ConstraintSurface {
-            name: tys.interner.resolve(constraint.name).into(),
-            kind: constraint.kind,
-            value: tys.lower(constraint.value),
-            class_key: constraint.class_key.clone(),
+        .map(|constraint| {
+            let lowered = ConstraintSurface::new(
+                tys.interner.resolve(constraint.name),
+                constraint.kind,
+                tys.lower(constraint.value),
+            );
+            if let Some(class_key) = constraint.class_key.clone() {
+                lowered.with_class_key(class_key)
+            } else {
+                lowered
+            }
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
@@ -229,33 +235,44 @@ pub(super) fn collect_exported_values(
             let ty = typing.binding_types().get(&export.binding).copied()?;
             let symbol = module.resolved.names.bindings.get(export.binding).name;
             let scheme = typing.binding_schemes().get(&export.binding);
-            Some(ExportedValue {
-                name: export.name.clone(),
-                ty: tys.lower(ty),
-                type_params: scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
+            let mut value = ExportedValue::new(export.name.clone(), tys.lower(ty))
+                .with_type_params(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
                     lower_type_params(&scheme.type_params, tys.interner)
-                }),
-                constraints: scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
-                    lower_constraints(&scheme.constraints, tys)
-                }),
-                effects: scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
+                }))
+                .with_constraints(
+                    scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
+                        lower_constraints(&scheme.constraints, tys)
+                    }),
+                )
+                .with_effects(scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
                     lower_surface_effect_row(tys, &scheme.effects)
-                }),
-                opaque: export.opaque,
-                module_target: export_module_target(module, typing, export.binding),
-                class_key: decls
-                    .class_facts_by_name()
-                    .get(&symbol)
-                    .map(|facts| facts.key.clone()),
-                effect_key: decls
-                    .effect_def(export.name.as_ref())
-                    .map(|effect| effect.key().clone()),
-                data_key: decls
-                    .data_def(export.name.as_ref())
-                    .map(|data| data.key().clone()),
-                inert_attrs,
-                musi_attrs,
-            })
+                }))
+                .with_opaque(export.opaque)
+                .with_inert_attrs(inert_attrs)
+                .with_musi_attrs(musi_attrs);
+            if let Some(module_target) = export_module_target(module, typing, export.binding) {
+                value = value.with_module_target(module_target);
+            }
+            if let Some(class_key) = decls
+                .class_facts_by_name()
+                .get(&symbol)
+                .map(|facts| facts.key.clone())
+            {
+                value = value.with_class_key(class_key);
+            }
+            if let Some(effect_key) = decls
+                .effect_def(export.name.as_ref())
+                .map(|effect| effect.key().clone())
+            {
+                value = value.with_effect_key(effect_key);
+            }
+            if let Some(data_key) = decls
+                .data_def(export.name.as_ref())
+                .map(|data| data.key().clone())
+            {
+                value = value.with_data_key(data_key);
+            }
+            Some(value)
         },
     )
 }
@@ -384,33 +401,44 @@ pub(super) fn collect_exported_data(
         tys,
         |export, inert_attrs, musi_attrs, tys| {
             let data = decls.data_def(export.name.as_ref())?;
-            Some(DataSurface {
-                key: data.key().clone(),
-                variants: export
-                    .opaque
-                    .then(Box::<[DataVariantSurface]>::default)
-                    .unwrap_or_else(|| {
-                        data.variants()
-                            .map(|(name, variant)| DataVariantSurface {
-                                name: name.into(),
-                                payload: variant.payload().map(|ty| tys.lower(ty)),
-                                field_tys: variant
+            let variants = export
+                .opaque
+                .then(Box::<[DataVariantSurface]>::default)
+                .unwrap_or_else(|| {
+                    data.variants()
+                        .map(|(name, variant)| {
+                            let lowered = DataVariantSurface::new(
+                                name,
+                                variant
                                     .field_tys()
                                     .iter()
                                     .copied()
                                     .map(|ty| tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    }),
-                repr_kind: data.repr_kind().map(Into::into),
-                layout_align: data.layout_align(),
-                layout_pack: data.layout_pack(),
-                inert_attrs,
-                musi_attrs,
-            })
+                            );
+                            if let Some(payload) = variant.payload() {
+                                lowered.with_payload(tys.lower(payload))
+                            } else {
+                                lowered
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice()
+                });
+            let mut surface = DataSurface::new(data.key().clone(), variants)
+                .with_inert_attrs(inert_attrs)
+                .with_musi_attrs(musi_attrs);
+            if let Some(repr_kind) = data.repr_kind() {
+                surface = surface.with_repr_kind(repr_kind);
+            }
+            if let Some(layout_align) = data.layout_align() {
+                surface = surface.with_layout_align(layout_align);
+            }
+            if let Some(layout_pack) = data.layout_pack() {
+                surface = surface.with_layout_pack(layout_pack);
+            }
+            Some(surface)
         },
     )
 }
@@ -428,45 +456,50 @@ pub(super) fn collect_exported_classes(
         |export, inert_attrs, musi_attrs, tys| {
             let symbol = module.resolved.names.bindings.get(export.binding).name;
             let facts = decls.class_facts_by_name().get(&symbol)?;
-            Some(ClassSurface {
-                key: facts.key.clone(),
-                constraints: lower_constraints(&facts.constraints, tys),
-                members: facts
-                    .members
-                    .iter()
-                    .map(|member| ClassMemberSurface {
-                        name: tys.interner.resolve(member.name).into(),
-                        params: member
+            let members = facts
+                .members
+                .iter()
+                .map(|member| {
+                    ClassMemberSurface::new(
+                        tys.interner.resolve(member.name),
+                        member
                             .params
                             .iter()
                             .copied()
                             .map(|ty| tys.lower(ty))
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
-                        result: tys.lower(member.result),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                laws: facts
-                    .laws
-                    .iter()
-                    .map(|law| LawSurface {
-                        name: tys.interner.resolve(law.name).into(),
-                        params: law
-                            .params
+                        tys.lower(member.result),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let laws = facts
+                .laws
+                .iter()
+                .map(|law| {
+                    LawSurface::new(
+                        tys.interner.resolve(law.name),
+                        law.params
                             .iter()
-                            .map(|param| LawParamSurface {
-                                name: tys.interner.resolve(param.name).into(),
-                                ty: tys.lower(param.ty),
+                            .map(|param| {
+                                LawParamSurface::new(
+                                    tys.interner.resolve(param.name),
+                                    tys.lower(param.ty),
+                                )
                             })
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                inert_attrs,
-                musi_attrs,
-            })
+                    )
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            Some(
+                ClassSurface::new(facts.key.clone(), members, laws)
+                    .with_constraints(lower_constraints(&facts.constraints, tys))
+                    .with_inert_attrs(inert_attrs)
+                    .with_musi_attrs(musi_attrs),
+            )
         },
     )
 }
@@ -483,53 +516,57 @@ pub(super) fn collect_exported_effects(
         tys,
         |export, inert_attrs, musi_attrs, tys| {
             let effect = decls.effect_def(export.name.as_ref())?;
-            Some(EffectSurface {
-                key: effect.key().clone(),
-                ops: export
-                    .opaque
-                    .then(Box::<[EffectOpSurface]>::default)
-                    .unwrap_or_else(|| {
-                        effect
-                            .ops()
-                            .map(|(name, op)| EffectOpSurface {
-                                name: name.into(),
-                                params: op
-                                    .params()
+            let ops = export
+                .opaque
+                .then(Box::<[EffectOpSurface]>::default)
+                .unwrap_or_else(|| {
+                    effect
+                        .ops()
+                        .map(|(name, op)| {
+                            EffectOpSurface::new(
+                                name,
+                                op.params()
                                     .iter()
                                     .copied()
                                     .map(|ty| tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
-                                result: tys.lower(op.result()),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    }),
-                laws: export
-                    .opaque
-                    .then(Box::<[LawSurface]>::default)
-                    .unwrap_or_else(|| {
-                        effect
-                            .laws()
-                            .iter()
-                            .map(|law| LawSurface {
-                                name: tys.interner.resolve(law.name).into(),
-                                params: law
-                                    .params
+                                tys.lower(op.result()),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice()
+                });
+            let laws = export
+                .opaque
+                .then(Box::<[LawSurface]>::default)
+                .unwrap_or_else(|| {
+                    effect
+                        .laws()
+                        .iter()
+                        .map(|law| {
+                            LawSurface::new(
+                                tys.interner.resolve(law.name),
+                                law.params
                                     .iter()
-                                    .map(|param| LawParamSurface {
-                                        name: tys.interner.resolve(param.name).into(),
-                                        ty: tys.lower(param.ty),
+                                    .map(|param| {
+                                        LawParamSurface::new(
+                                            tys.interner.resolve(param.name),
+                                            tys.lower(param.ty),
+                                        )
                                     })
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    }),
-                inert_attrs,
-                musi_attrs,
-            })
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice()
+                });
+            Some(
+                EffectSurface::new(effect.key().clone(), ops, laws)
+                    .with_inert_attrs(inert_attrs)
+                    .with_musi_attrs(musi_attrs),
+            )
         },
     )
 }
@@ -549,21 +586,23 @@ pub(super) fn collect_exported_instances(
                 .iter()
                 .find(|export| export.span == facts.origin.span)?;
             let (inert_attrs, musi_attrs) = split_export_attrs(module, tys.interner, &export.attrs);
-            Some(InstanceSurface {
-                type_params: lower_type_params(&facts.type_params, tys.interner),
-                class_key: facts.class_key.clone(),
-                class_args: facts
-                    .class_args
-                    .iter()
-                    .copied()
-                    .map(|ty| tys.lower(ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                constraints: lower_constraints(&facts.constraints, tys),
-                member_names: lower_type_params(&facts.member_names, tys.interner),
-                inert_attrs,
-                musi_attrs,
-            })
+            Some(
+                InstanceSurface::new(
+                    facts.class_key.clone(),
+                    facts
+                        .class_args
+                        .iter()
+                        .copied()
+                        .map(|ty| tys.lower(ty))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    lower_type_params(&facts.member_names, tys.interner),
+                )
+                .with_type_params(lower_type_params(&facts.type_params, tys.interner))
+                .with_constraints(lower_constraints(&facts.constraints, tys))
+                .with_inert_attrs(inert_attrs)
+                .with_musi_attrs(musi_attrs),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()

@@ -16,6 +16,16 @@ pub struct ToolHover {
     pub contents: String,
 }
 
+impl ToolHover {
+    #[must_use]
+    pub fn new(span: Span, contents: impl Into<String>) -> Self {
+        Self {
+            span,
+            contents: contents.into(),
+        }
+    }
+}
+
 #[must_use]
 pub fn collect_project_diagnostics(path: &Path) -> Vec<CliDiagnostic> {
     collect_project_diagnostics_with_overlay(path, None)
@@ -90,10 +100,10 @@ pub fn hover_for_project_file_with_overlay(
             .map(|(binding_id, binding)| (binding.site, binding_id))?,
     };
     let binding = resolved.names.bindings.get(binding_id);
-    Some(ToolHover {
-        span: site.span,
-        contents: hover_contents(&session, binding_id, binding, sema),
-    })
+    Some(ToolHover::new(
+        site.span,
+        hover_contents(&session, binding_id, binding, sema),
+    ))
 }
 
 fn build_overlay_session(

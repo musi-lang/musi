@@ -98,7 +98,7 @@ pub(super) fn check_array_expr(
         dims,
         item: item_ty,
     });
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 pub(super) fn check_array_ty_expr(
@@ -112,10 +112,7 @@ pub(super) fn check_array_ty_expr(
         dims,
         item: item_ty,
     });
-    ExprFacts {
-        ty,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(ty, EffectRow::empty())
 }
 
 pub(super) fn check_record_expr(
@@ -177,17 +174,11 @@ pub(super) fn check_record_expr(
             let span = ctx.expr(record_item.value).origin.span;
             ctx.diag(span, DiagKind::DuplicateRecordField, "");
         }
-        let _prev = fields.insert(
-            key,
-            HirTyField {
-                name: name.name,
-                ty: facts.ty,
-            },
-        );
+        let _prev = fields.insert(key, HirTyField::new(name.name, facts.ty));
     }
     let fields = ctx.alloc_ty_fields(fields.into_values());
     let ty = ctx.alloc_ty(HirTyKind::Record { fields });
-    ExprFacts { ty, effects }
+    ExprFacts::new(ty, effects)
 }
 
 pub(super) fn check_variant_expr(
@@ -205,30 +196,21 @@ pub(super) fn check_variant_expr(
     let expected_ty = expected_ty.or_else(|| infer_variant_context_ty(ctx, tag));
     let Some(expected_ty) = expected_ty else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects,
-        };
+        return ExprFacts::new(builtins.unknown, effects);
     };
 
     let data_def = expected_data_def(ctx, expected_ty);
     let Some(data_def) = data_def else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         ctx.diag(tag.span, DiagKind::VariantMissingDataContext, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects,
-        };
+        return ExprFacts::new(builtins.unknown, effects);
     };
 
     let tag_name = ctx.resolve_symbol(tag.name);
     let Some(variant) = data_def.variant(tag_name) else {
         check_exprs_collect_effects(ctx, ctx.expr_ids(args), &mut effects);
         ctx.diag(tag.span, DiagKind::UnknownDataVariant, "");
-        return ExprFacts {
-            ty: expected_ty,
-            effects,
-        };
+        return ExprFacts::new(expected_ty, effects);
     };
 
     let expected_payload = variant.payload();
@@ -248,10 +230,7 @@ pub(super) fn check_variant_expr(
         DiagKind::VariantConstructorArityMismatch,
     );
 
-    ExprFacts {
-        ty: expected_ty,
-        effects,
-    }
+    ExprFacts::new(expected_ty, effects)
 }
 
 fn expected_array_contract(
@@ -327,10 +306,7 @@ fn check_sum_constructor_variant(
         matches!(ctx.ty(inner).kind, HirTyKind::Sum { .. }).then_some(inner)
     })?;
     let HirTyKind::Sum { left, right } = ctx.ty(expected_sum_ty).kind else {
-        return Some(ExprFacts {
-            ty: builtins.unknown,
-            effects,
-        });
+        return Some(ExprFacts::new(builtins.unknown, effects));
     };
     let tag_name = ctx.resolve_symbol(tag.name);
     let chosen = match tag_name {
@@ -353,10 +329,7 @@ fn check_sum_constructor_variant(
         &mut effects,
         DiagKind::SumConstructorArityMismatch,
     );
-    Some(ExprFacts {
-        ty: expected_sum_ty,
-        effects,
-    })
+    Some(ExprFacts::new(expected_sum_ty, effects))
 }
 
 fn typecheck_positional_args(

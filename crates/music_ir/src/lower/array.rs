@@ -39,10 +39,10 @@ pub(super) fn lower_array_expr(
             append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts)?;
     }
 
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: array_tail_kind(sema, interner, expr_id, has_runtime_spread, parts)?,
-    });
+        array_tail_kind(sema, interner, expr_id, has_runtime_spread, parts)?,
+    ));
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
     })
@@ -50,10 +50,7 @@ pub(super) fn lower_array_expr(
 
 fn expr_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
     let origin = sema.module().store.exprs.get(expr_id).origin;
-    IrOrigin {
-        source_id: origin.source_id,
-        span: origin.span,
-    }
+    IrOrigin::new(origin.source_id, origin.span)
 }
 
 fn lower_item_temp(
@@ -63,17 +60,14 @@ fn lower_item_temp(
     prelude: &mut Vec<IrExpr>,
 ) -> IrExpr {
     let temp = fresh_temp(ctx);
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: IrExprKind::TempLet {
+        IrExprKind::TempLet {
             temp,
             value: Box::new(lower_expr(ctx, expr_id)),
         },
-    });
-    IrExpr {
-        origin,
-        kind: IrExprKind::Temp { temp },
-    }
+    ));
+    IrExpr::new(origin, IrExprKind::Temp { temp })
 }
 
 fn append_array_spread_parts(
@@ -141,19 +135,19 @@ fn append_array_dim_spread_parts(
 }
 
 fn project_index(origin: IrOrigin, base: IrExpr, index_u32: u32) -> IrExpr {
-    IrExpr {
+    IrExpr::new(
         origin,
-        kind: IrExprKind::Index {
+        IrExprKind::Index {
             base: Box::new(base),
-            indices: vec![IrExpr {
+            indices: vec![IrExpr::new(
                 origin,
-                kind: IrExprKind::Lit(IrLit::Int {
+                IrExprKind::Lit(IrLit::Int {
                     raw: index_u32.to_string().into(),
                 }),
-            }]
+            )]
             .into_boxed_slice(),
         },
-    }
+    )
 }
 
 fn array_tail_kind(

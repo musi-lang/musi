@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use music_base::diag::Diag;
 use music_emit::{EmitDiagKind, emit_diag_kind};
 use music_ir::{IrDiagKind, ir_diag_kind};
@@ -51,19 +49,17 @@ fn meta_has_exact(
 fn session() -> Session {
     let mut import_map = ImportMap::default();
     let _ = import_map.imports.insert("dep".into(), "dep".into());
-    Session::new(SessionOptions {
-        import_map,
-        ..SessionOptions::default()
-    })
+    Session::new(SessionOptions::new().with_import_map(import_map))
 }
 
 fn session_with_target(target: TargetInfo) -> Session {
-    let mut options = SessionOptions::default();
     let mut import_map = ImportMap::default();
     let _ = import_map.imports.insert("dep".into(), "dep".into());
-    options.import_map = import_map;
-    options.target = Some(target);
-    Session::new(options)
+    Session::new(
+        SessionOptions::new()
+            .with_import_map(import_map)
+            .with_target(target),
+    )
 }
 
 fn main_key() -> ModuleKey {
@@ -615,14 +611,7 @@ fn lowers_link_attrs_into_foreign_descriptors() {
 
 #[test]
 fn skips_gated_foreign_declarations_for_target() {
-    let mut session = session_with_target(TargetInfo {
-        os: Some("linux".into()),
-        arch: Some("x86_64".into()),
-        env: None,
-        abi: None,
-        vendor: None,
-        features: BTreeSet::default(),
-    });
+    let mut session = session_with_target(TargetInfo::new().with_os("linux").with_arch("x86_64"));
     session
         .set_module_text(
             &ModuleKey::new("main"),

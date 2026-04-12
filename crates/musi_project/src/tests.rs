@@ -156,11 +156,9 @@ fn resolves_registry_dependency_and_caches_it_locally() {
 
     let project = Project::load(
         temp.path(),
-        ProjectOptions {
-            registry_root: Some(registry_root),
-            cache_root: Some(cache_root.clone()),
-            ..ProjectOptions::default()
-        },
+        ProjectOptions::new()
+            .with_registry_root(registry_root)
+            .with_cache_root(cache_root.clone()),
     )
     .expect("project loads");
     let output = project.compile_root_entry().expect("project compiles");

@@ -71,31 +71,35 @@ pub fn instance_facts_from_surface(
         instance.class_args.as_ref(),
         &instance.class_key,
     );
-    InstanceFacts {
-        origin: HirOrigin::dummy(),
-        type_params: instance
-            .type_params
-            .iter()
-            .map(|name| ctx.intern(name))
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        class_key: instance.class_key.clone(),
+    InstanceFacts::new(
+        HirOrigin::dummy(),
+        instance.class_key.clone(),
         class_name,
-        class_args: instance
+        instance
             .class_args
             .iter()
             .copied()
             .map(|ty| import_surface_ty(ctx, surface, ty))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
-        constraints: instance
+        Vec::<Symbol>::new().into_boxed_slice(),
+    )
+    .with_type_params(
+        instance
+            .type_params
+            .iter()
+            .map(|name| ctx.intern(name))
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    )
+    .with_constraints(
+        instance
             .constraints
             .iter()
             .map(|constraint| import_constraint_surface(ctx, surface, constraint))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
-        member_names: Box::new([]),
-    }
+    )
 }
 
 pub fn instantiate_binding_scheme(
@@ -254,10 +258,7 @@ pub fn substitute_ty(
             let fields = ctx
                 .ty_fields(fields)
                 .into_iter()
-                .map(|field| HirTyField {
-                    name: field.name,
-                    ty: substitute_ty(ctx, field.ty, subst),
-                })
+                .map(|field| HirTyField::new(field.name, substitute_ty(ctx, field.ty, subst)))
                 .collect::<Vec<_>>();
             let fields = ctx.alloc_ty_fields(fields);
             ctx.alloc_ty(HirTyKind::Record { fields })
@@ -304,11 +305,15 @@ fn import_constraint_surface(
     surface: &ModuleSurface,
     constraint: &ConstraintSurface,
 ) -> ConstraintFacts {
-    ConstraintFacts {
-        name: ctx.intern(&constraint.name),
-        kind: constraint.kind,
-        value: import_surface_ty(ctx, surface, constraint.value),
-        class_key: constraint.class_key.clone(),
+    let lowered = ConstraintFacts::new(
+        ctx.intern(&constraint.name),
+        constraint.kind,
+        import_surface_ty(ctx, surface, constraint.value),
+    );
+    if let Some(class_key) = constraint.class_key.clone() {
+        lowered.with_class_key(class_key)
+    } else {
+        lowered
     }
 }
 

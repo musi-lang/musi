@@ -462,10 +462,10 @@ impl TextBuilder {
         }
         let name_id = self.intern_string(name);
         let term_id = self.intern_string(term);
-        let ty = self.artifact.types.alloc(TypeDescriptor {
-            name: name_id,
-            term: term_id,
-        });
+        let ty = self
+            .artifact
+            .types
+            .alloc(TypeDescriptor::new(name_id, term_id));
         let _ = self.types.insert(name.into(), ty);
         ty
     }
@@ -515,10 +515,10 @@ impl TextBuilder {
                         field_tys.push(self.ensure_type_symbol(&field_name, &field_name));
                         idx = idx.saturating_add(2);
                     }
-                    variants.push(DataVariantDescriptor {
-                        name: variant_name,
-                        field_tys: field_tys.into_boxed_slice(),
-                    });
+                    variants.push(DataVariantDescriptor::new(
+                        variant_name,
+                        field_tys.into_boxed_slice(),
+                    ));
                     continue;
                 }
                 "repr" => {
@@ -551,15 +551,22 @@ impl TextBuilder {
         }
 
         let name_id = self.intern_string(&name);
-        let id = self.artifact.data.alloc(DataDescriptor {
-            name: name_id,
-            variant_count,
-            field_count,
-            variants: variants.into_boxed_slice(),
-            repr_kind,
-            layout_align,
-            layout_pack,
-        });
+        let mut descriptor = DataDescriptor::new(name_id, variants.into_boxed_slice());
+        if descriptor.variant_count != variant_count || descriptor.field_count != field_count {
+            return Err(AssemblyError::TextParseFailed(
+                "data counts disagree with variants".into(),
+            ));
+        }
+        if let Some(repr_kind) = repr_kind {
+            descriptor = descriptor.with_repr_kind(repr_kind);
+        }
+        if let Some(layout_align) = layout_align {
+            descriptor = descriptor.with_layout_align(layout_align);
+        }
+        if let Some(layout_pack) = layout_pack {
+            descriptor = descriptor.with_layout_pack(layout_pack);
+        }
+        let id = self.artifact.data.alloc(descriptor);
         let _ = self.data.insert(name, id);
         Ok(())
     }
@@ -614,10 +621,10 @@ impl TextBuilder {
                     ));
                 }
             };
-        let id = self.artifact.constants.alloc(ConstantDescriptor {
-            name: name_id,
-            value,
-        });
+        let id = self
+            .artifact
+            .constants
+            .alloc(ConstantDescriptor::new(name_id, value));
         let _ = self.constants.insert(name, id);
         Ok(())
     }
@@ -672,16 +679,16 @@ impl TextBuilder {
             }
             let result_ty = parse_symbol(must_get(parts.get(idx + 1), "effect op result type")?)?;
             idx += 2;
-            ops.push(EffectOpDescriptor {
-                name: self.intern_string(&op_name),
-                param_tys: param_tys.into_boxed_slice(),
-                result_ty: self.ensure_type_symbol(&result_ty, &result_ty),
-            });
+            ops.push(EffectOpDescriptor::new(
+                self.intern_string(&op_name),
+                param_tys.into_boxed_slice(),
+                self.ensure_type_symbol(&result_ty, &result_ty),
+            ));
         }
-        let id = self.artifact.effects.alloc(EffectDescriptor {
-            name: name_id,
-            ops: ops.into_boxed_slice(),
-        });
+        let id = self
+            .artifact
+            .effects
+            .alloc(EffectDescriptor::new(name_id, ops.into_boxed_slice()));
         let _ = self.effects.insert(name, id);
         Ok(())
     }
@@ -694,10 +701,7 @@ impl TextBuilder {
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
-        let id = self
-            .artifact
-            .classes
-            .alloc(ClassDescriptor { name: name_id });
+        let id = self.artifact.classes.alloc(ClassDescriptor::new(name_id));
         let _ = self.classes.insert(name, id);
         Ok(())
     }
@@ -725,11 +729,11 @@ impl TextBuilder {
             let value = Self::parse_meta_value(token)?;
             values.push(self.intern_string(&value));
         }
-        let _ = self.artifact.meta.alloc(MetaDescriptor {
-            target: target_id,
-            key: key_id,
-            values: values.into_boxed_slice(),
-        });
+        let _ = self.artifact.meta.alloc(MetaDescriptor::new(
+            target_id,
+            key_id,
+            values.into_boxed_slice(),
+        ));
         Ok(())
     }
 
@@ -779,15 +783,17 @@ impl TextBuilder {
             }
         }
         let name = parse_symbol(must_get(parts.get(1), "foreign name")?)?;
-        let descriptor = ForeignDescriptor {
-            name: self.intern_string(&name),
-            param_tys: param_tys.into_boxed_slice(),
-            result_ty: self.ensure_type_symbol(&result_ty, &result_ty),
-            abi: self.intern_string(&abi),
-            symbol: self.intern_string(&symbol),
-            link: link.as_deref().map(|text| self.intern_string(text)),
-            export,
-        };
+        let mut descriptor = ForeignDescriptor::new(
+            self.intern_string(&name),
+            param_tys.into_boxed_slice(),
+            self.ensure_type_symbol(&result_ty, &result_ty),
+            self.intern_string(&abi),
+            self.intern_string(&symbol),
+        )
+        .with_export(export);
+        if let Some(link) = link.as_deref().map(|text| self.intern_string(text)) {
+            descriptor = descriptor.with_link(link);
+        }
         let id = self.artifact.foreigns.alloc(descriptor);
         let _ = self.foreigns.insert(name, id);
         Ok(())
@@ -840,11 +846,10 @@ impl TextBuilder {
                         .into(),
                 )),
             };
-        let id = self.artifact.exports.alloc(ExportDescriptor {
-            name: name_id,
-            opaque,
-            target,
-        });
+        let id = self
+            .artifact
+            .exports
+            .alloc(ExportDescriptor::new(name_id, opaque, target));
         let _ = self.exports.insert(name, id);
         Ok(())
     }
@@ -896,14 +901,14 @@ impl TextBuilder {
             code.push(CodeEntry::Instruction(entry));
         }
 
-        let method = MethodDescriptor {
-            name: self.intern_string(&name),
+        let method = MethodDescriptor::new(
+            self.intern_string(&name),
             params,
             locals,
-            export,
-            labels: labels.into_boxed_slice(),
-            code: code.into_boxed_slice(),
-        };
+            code.into_boxed_slice(),
+        )
+        .with_export(export)
+        .with_labels(labels.into_boxed_slice());
         let id = self.ensure_method_symbol(&name);
         *self.artifact.methods.get_mut(id) = method;
         Ok(())
@@ -996,11 +1001,7 @@ impl TextBuilder {
             return id;
         }
         let name_id = self.intern_string(name);
-        let id = self.artifact.globals.alloc(GlobalDescriptor {
-            name: name_id,
-            export: false,
-            initializer: None,
-        });
+        let id = self.artifact.globals.alloc(GlobalDescriptor::new(name_id));
         let _ = self.globals.insert(name.into(), id);
         id
     }
@@ -1010,14 +1011,10 @@ impl TextBuilder {
             return id;
         }
         let name_id = self.intern_string(name);
-        let id = self.artifact.methods.alloc(MethodDescriptor {
-            name: name_id,
-            params: 0,
-            locals: 0,
-            export: false,
-            labels: Box::new([]),
-            code: Box::new([]),
-        });
+        let id = self
+            .artifact
+            .methods
+            .alloc(MethodDescriptor::new(name_id, 0, 0, Box::new([])));
         let _ = self.methods.insert(name.into(), id);
         id
     }

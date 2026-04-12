@@ -46,11 +46,13 @@ impl DirectGraph {
     pub fn build_session(&self, options: SessionOptions) -> ToolingResult<Session> {
         let mut import_map = self.import_map.clone();
         extend_import_map(&mut import_map);
-        let mut session = Session::new(SessionOptions {
-            emit: options.emit,
-            import_map,
-            target: options.target,
-        });
+        let mut session_options = SessionOptions::new()
+            .with_emit(options.emit)
+            .with_import_map(import_map);
+        if let Some(target) = options.target {
+            session_options = session_options.with_target(target);
+        }
+        let mut session = Session::new(session_options);
         register_modules(&mut session).map_err(ToolingError::from)?;
         for (key, text) in &self.texts {
             session

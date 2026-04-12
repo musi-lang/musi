@@ -28,6 +28,34 @@ pub struct ProjectTestTarget {
     pub source: ProjectTestTargetSource,
 }
 
+impl ProjectTestTarget {
+    #[must_use]
+    pub fn module(package: PackageId, module_key: ModuleKey, path: PathBuf) -> Self {
+        Self {
+            package,
+            source_module_key: module_key.clone(),
+            module_key,
+            export_name: "test".into(),
+            path,
+            kind: ProjectTestTargetKind::Module,
+            source: ProjectTestTargetSource::ModulePath,
+        }
+    }
+
+    #[must_use]
+    pub fn synthetic_law_suite(package: PackageId, suite: &LawSuiteModule, path: PathBuf) -> Self {
+        Self {
+            package,
+            module_key: suite.suite_module_key.clone(),
+            source_module_key: suite.source_module_key.clone(),
+            export_name: suite.export_name.clone(),
+            path,
+            kind: ProjectTestTargetKind::SyntheticLawSuite,
+            source: ProjectTestTargetSource::SyntheticModule,
+        }
+    }
+}
+
 impl Project {
     #[must_use]
     fn file_test_targets(&self) -> Vec<ProjectTestTarget> {
@@ -40,14 +68,12 @@ impl Project {
                     path.file_name()
                         .and_then(|name| name.to_str())
                         .filter(|name| name.ends_with(".test.ms"))
-                        .map(|_| ProjectTestTarget {
-                            package: package_id.clone(),
-                            module_key: module_key.clone(),
-                            source_module_key: module_key.clone(),
-                            export_name: "test".into(),
-                            path: path.clone(),
-                            kind: ProjectTestTargetKind::Module,
-                            source: ProjectTestTargetSource::ModulePath,
+                        .map(|_| {
+                            ProjectTestTarget::module(
+                                package_id.clone(),
+                                module_key.clone(),
+                                path.clone(),
+                            )
                         })
                 })
             })
@@ -84,15 +110,7 @@ impl Project {
             .package_id_for_module(&suite.source_module_key)?
             .clone();
         let path = self.module_path_for_key(&suite.source_module_key)?.clone();
-        Some(ProjectTestTarget {
-            package,
-            module_key: suite.suite_module_key.clone(),
-            source_module_key: suite.source_module_key.clone(),
-            export_name: suite.export_name.clone(),
-            path,
-            kind: ProjectTestTargetKind::SyntheticLawSuite,
-            source: ProjectTestTargetSource::SyntheticModule,
-        })
+        Some(ProjectTestTarget::synthetic_law_suite(package, suite, path))
     }
 
     fn package_id_for_module(&self, module_key: &ModuleKey) -> Option<&PackageId> {

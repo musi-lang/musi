@@ -17,23 +17,17 @@ pub(super) fn lower_destructure_let(
     let value_expr = lower_expr(ctx, value);
     let temp = fresh_temp(ctx);
     let mut exprs = Vec::<IrExpr>::new();
-    exprs.push(IrExpr {
+    exprs.push(IrExpr::new(
         origin,
-        kind: IrExprKind::TempLet {
+        IrExprKind::TempLet {
             temp,
             value: Box::new(value_expr),
         },
-    });
+    ));
 
-    let base = IrExpr {
-        origin,
-        kind: IrExprKind::Temp { temp },
-    };
+    let base = IrExpr::new(origin, IrExprKind::Temp { temp });
     lower_irrefutable_pat_bindings(ctx, origin, module_target, pat, base, &mut exprs)?;
-    exprs.push(IrExpr {
-        origin,
-        kind: IrExprKind::Unit,
-    });
+    exprs.push(IrExpr::new(origin, IrExprKind::Unit));
     Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
     })
@@ -78,14 +72,14 @@ fn lower_irrefutable_bind(
 ) {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    out.push(IrExpr {
-        origin: input.origin,
-        kind: IrExprKind::Let {
+    out.push(IrExpr::new(
+        input.origin,
+        IrExprKind::Let {
             binding: decl_binding_id(sema, name),
             name: interner.resolve(name.name).into(),
             value: Box::new(base),
         },
-    });
+    ));
 }
 
 fn lower_irrefutable_as(
@@ -99,14 +93,14 @@ fn lower_irrefutable_as(
     let sema = ctx.sema;
     let interner = ctx.interner;
     let stored = store_in_temp(ctx, input.origin, base, out);
-    out.push(IrExpr {
-        origin: input.origin,
-        kind: IrExprKind::Let {
+    out.push(IrExpr::new(
+        input.origin,
+        IrExprKind::Let {
             binding: decl_binding_id(sema, name),
             name: interner.resolve(name.name).into(),
             value: Box::new(stored.clone()),
         },
-    });
+    ));
     lower_irrefutable_pat_bindings(ctx, input.origin, input.module_target, inner, stored, out)?;
     Ok(())
 }
@@ -167,14 +161,14 @@ fn lower_irrefutable_module_record(
     };
     for field in sema.module().store.record_pat_fields.get(fields) {
         let name_text: Box<str> = interner.resolve(field.name.name).into();
-        let proj = IrExpr {
+        let proj = IrExpr::new(
             origin,
-            kind: IrExprKind::Name {
+            IrExprKind::Name {
                 binding: None,
                 name: name_text.clone(),
                 module_target: Some(module_target.clone()),
             },
-        };
+        );
         lower_irrefutable_record_field(
             ctx,
             IrrefutablePatInput {
@@ -209,13 +203,13 @@ fn lower_irrefutable_value_record(
         let Some(index) = indices.get(&field.name.name).copied() else {
             return Err("record destructuring missing field".into());
         };
-        let proj = IrExpr {
-            origin: input.origin,
-            kind: IrExprKind::RecordGet {
+        let proj = IrExpr::new(
+            input.origin,
+            IrExprKind::RecordGet {
                 base: Box::new(stored.clone()),
                 index,
             },
-        };
+        );
         let name_text: Box<str> = interner.resolve(field.name.name).into();
         lower_irrefutable_record_field(ctx, input, field, proj, name_text, out)?;
     }
@@ -241,14 +235,14 @@ fn lower_irrefutable_record_field(
         )?;
         return Ok(());
     }
-    out.push(IrExpr {
-        origin: input.origin,
-        kind: IrExprKind::Let {
+    out.push(IrExpr::new(
+        input.origin,
+        IrExprKind::Let {
             binding: decl_binding_id(ctx.sema, field.name),
             name,
             value: Box::new(proj),
         },
-    });
+    ));
     Ok(())
 }
 
@@ -256,19 +250,19 @@ fn project_index_expr(origin: IrOrigin, base: IrExpr, index: usize) -> Option<Ir
     let Ok(index_u32) = u32::try_from(index) else {
         return None;
     };
-    Some(IrExpr {
+    Some(IrExpr::new(
         origin,
-        kind: IrExprKind::Index {
+        IrExprKind::Index {
             base: Box::new(base),
-            indices: vec![IrExpr {
+            indices: vec![IrExpr::new(
                 origin,
-                kind: IrExprKind::Lit(IrLit::Int {
+                IrExprKind::Lit(IrLit::Int {
                     raw: index_u32.to_string().into(),
                 }),
-            }]
+            )]
             .into_boxed_slice(),
         },
-    })
+    ))
 }
 
 fn store_in_temp(
@@ -278,15 +272,12 @@ fn store_in_temp(
     out: &mut Vec<IrExpr>,
 ) -> IrExpr {
     let temp = fresh_temp(ctx);
-    out.push(IrExpr {
+    out.push(IrExpr::new(
         origin,
-        kind: IrExprKind::TempLet {
+        IrExprKind::TempLet {
             temp,
             value: Box::new(base),
         },
-    });
-    IrExpr {
-        origin,
-        kind: IrExprKind::Temp { temp },
-    }
+    ));
+    IrExpr::new(origin, IrExprKind::Temp { temp })
 }

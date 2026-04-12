@@ -286,13 +286,7 @@ fn runs_registered_test_module_and_collects_case_results() {
     let _ = import_map.imports.insert("@std/".into(), "@std/".into());
     let mut runtime = Runtime::new(
         NativeHost::new(),
-        RuntimeOptions {
-            session: SessionOptions {
-                import_map,
-                ..SessionOptions::default()
-            },
-            ..RuntimeOptions::default()
-        },
+        RuntimeOptions::default().with_session(SessionOptions::new().with_import_map(import_map)),
     );
     runtime
         .register_module_text(
@@ -316,22 +310,14 @@ export let test () :=
 
     assert_eq!(
         report,
-        NativeTestReport {
-            module: "suite".into(),
-            cases: vec![
-                NativeTestCaseResult {
-                    suite: "demo".into(),
-                    name: "first".into(),
-                    passed: true,
-                },
-                NativeTestCaseResult {
-                    suite: "demo".into(),
-                    name: "second".into(),
-                    passed: false,
-                },
+        NativeTestReport::new(
+            "suite",
+            vec![
+                NativeTestCaseResult::new("demo".into(), "first".into(), true),
+                NativeTestCaseResult::new("demo".into(), "second".into(), false),
             ]
             .into_boxed_slice(),
-        }
+        )
     );
 }
 
@@ -341,13 +327,7 @@ fn runs_root_hub_std_test_module() {
     let _ = import_map.imports.insert("@std/".into(), "@std/".into());
     let mut runtime = Runtime::new(
         NativeHost::new(),
-        RuntimeOptions {
-            session: SessionOptions {
-                import_map,
-                ..SessionOptions::default()
-            },
-            ..RuntimeOptions::default()
-        },
+        RuntimeOptions::default().with_session(SessionOptions::new().with_import_map(import_map)),
     );
     register_runtime_module(
         &mut runtime,

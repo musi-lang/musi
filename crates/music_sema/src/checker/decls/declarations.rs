@@ -50,11 +50,7 @@ pub(in super::super) fn member_signature(
             ctx.insert_binding_type(binding, ty);
         }
     }
-    ClassMemberFacts {
-        name: member.name.name,
-        params,
-        result,
-    }
+    ClassMemberFacts::new(member.name.name, params, result)
 }
 
 pub(in super::super) fn member_law_facts(
@@ -65,19 +61,18 @@ pub(in super::super) fn member_law_facts(
     let params = ctx
         .params(member.params.clone())
         .into_iter()
-        .map(|param| LawParamFacts {
-            name: param.name.name,
-            ty: param.ty.map_or(builtins.unknown, |expr| {
-                let origin = ctx.expr(expr).origin;
-                lower_type_expr(ctx, expr, origin)
-            }),
+        .map(|param| {
+            LawParamFacts::new(
+                param.name.name,
+                param.ty.map_or(builtins.unknown, |expr| {
+                    let origin = ctx.expr(expr).origin;
+                    lower_type_expr(ctx, expr, origin)
+                }),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    LawFacts {
-        name: member.name.name,
-        params,
-    }
+    LawFacts::new(member.name.name, params)
 }
 
 pub(in super::super) fn check_data_expr(
@@ -102,10 +97,7 @@ pub(in super::super) fn check_data_expr(
             let _ = check_expr(ctx, value);
         }
     }
-    ExprFacts {
-        ty: builtins.type_,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(builtins.type_, EffectRow::empty())
 }
 
 pub(in super::super) fn check_class_expr(
@@ -138,10 +130,7 @@ pub(in super::super) fn check_class_expr(
             let _ = member_signature(ctx, &member, true);
         }
     }
-    ExprFacts {
-        ty: builtins.type_,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(builtins.type_, EffectRow::empty())
 }
 
 pub(in super::super) fn check_foreign_let(
@@ -296,7 +285,7 @@ fn when_values(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> Option<Vec<Strin
 }
 
 fn link_info_from_attrs(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> ForeignLinkInfo {
-    let mut out = ForeignLinkInfo::default();
+    let mut out = ForeignLinkInfo::new();
     for attr in attrs {
         let path = super::super::attrs::attr_path(ctx, attr);
         if path.as_slice() != ["link"] {
@@ -309,8 +298,8 @@ fn link_info_from_attrs(ctx: &CheckPass<'_, '_, '_>, attrs: &[HirAttr]) -> Forei
             };
             if let Some(name) = arg.name.map(|ident| ctx.resolve_symbol(ident.name)) {
                 match name {
-                    "name" => out.name = Some(value.into_boxed_str()),
-                    "symbol" => out.symbol = Some(value.into_boxed_str()),
+                    "name" => out = out.with_name(value),
+                    "symbol" => out = out.with_symbol(value),
                     _ => {}
                 }
             } else {
@@ -449,10 +438,7 @@ pub(super) fn check_bound_effect(
             }
         }
     }
-    ExprFacts {
-        ty: builtins.type_,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(builtins.type_, EffectRow::empty())
 }
 
 pub(super) fn check_bound_class(
@@ -478,13 +464,13 @@ pub(super) fn check_bound_class(
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let constraints_facts = lower_constraints(ctx, constraints.clone());
-        let facts = ClassFacts {
-            key: surface_key(ctx.module_key(), ctx.interner(), name.name),
-            name: name.name,
-            constraints: constraints_facts,
-            members: class_members,
+        let facts = ClassFacts::new(
+            surface_key(ctx.module_key(), ctx.interner(), name.name),
+            name.name,
+            class_members,
             laws,
-        };
+        )
+        .with_constraints(constraints_facts);
         ctx.insert_class_facts(expr_id, facts.clone());
         ctx.insert_class_facts_by_name(name.name, facts);
     }

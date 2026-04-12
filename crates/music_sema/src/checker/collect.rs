@@ -337,13 +337,13 @@ fn collect_class_decl(
         .into_boxed_slice();
     ctx.insert_class_id(name.name, value);
     let constraints = lower_constraints(ctx, constraints);
-    let facts = ClassFacts {
-        key: surface_key(ctx.module_key(), ctx.interner(), name.name),
-        name: name.name,
-        constraints,
-        members: class_members,
+    let facts = ClassFacts::new(
+        surface_key(ctx.module_key(), ctx.interner(), name.name),
+        name.name,
+        class_members,
         laws,
-    };
+    )
+    .with_constraints(constraints);
     ctx.insert_class_facts(value, facts.clone());
     ctx.insert_class_facts_by_name(name.name, facts);
 }

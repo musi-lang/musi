@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use music_arena::{Idx, SliceRange};
@@ -45,6 +45,28 @@ pub struct Builtins {
     pub cptr: HirTyId,
 }
 
+impl Builtins {
+    fn from_resolved(resolved: &mut ResolvedModule) -> Self {
+        Self {
+            error: alloc_builtin(resolved, HirTyKind::Error),
+            unknown: alloc_builtin(resolved, HirTyKind::Unknown),
+            type_: alloc_builtin(resolved, HirTyKind::Type),
+            module: alloc_builtin(resolved, HirTyKind::Module),
+            syntax: alloc_builtin(resolved, HirTyKind::Syntax),
+            any: alloc_builtin(resolved, HirTyKind::Any),
+            empty: alloc_builtin(resolved, HirTyKind::Empty),
+            unit: alloc_builtin(resolved, HirTyKind::Unit),
+            bool_: alloc_builtin(resolved, HirTyKind::Bool),
+            nat: alloc_builtin(resolved, HirTyKind::Nat),
+            int_: alloc_builtin(resolved, HirTyKind::Int),
+            float_: alloc_builtin(resolved, HirTyKind::Float),
+            string_: alloc_builtin(resolved, HirTyKind::String),
+            cstring: alloc_builtin(resolved, HirTyKind::CString),
+            cptr: alloc_builtin(resolved, HirTyKind::CPtr),
+        }
+    }
+}
+
 pub type EffectOpDef = SemaEffectOpDef;
 pub type EffectDef = SemaEffectDef;
 pub type DataVariantDef = SemaDataVariantDef;
@@ -56,10 +78,31 @@ pub struct ResumeCtx {
     pub result: HirTyId,
 }
 
+impl ResumeCtx {
+    #[must_use]
+    pub const fn new(arg: HirTyId, result: HirTyId) -> Self {
+        Self { arg, result }
+    }
+}
+
 pub struct ModuleState {
     pub(crate) resolved: ResolvedModule,
     binding_ids: HashMap<NameSite, NameBindingId>,
     import_targets: HashMap<Span, ModuleKey>,
+}
+
+impl ModuleState {
+    const fn new(
+        resolved: ResolvedModule,
+        binding_ids: HashMap<NameSite, NameBindingId>,
+        import_targets: HashMap<Span, ModuleKey>,
+    ) -> Self {
+        Self {
+            resolved,
+            binding_ids,
+            import_targets,
+        }
+    }
 }
 
 pub struct RuntimeEnv<'interner, 'env> {
@@ -68,6 +111,28 @@ pub struct RuntimeEnv<'interner, 'env> {
     builtins: Builtins,
     target: Option<TargetInfo>,
     env: Option<&'env dyn SemaEnv>,
+}
+
+impl<'interner, 'env> RuntimeEnv<'interner, 'env> {
+    fn new(interner: &'interner mut Interner, known: KnownSymbols, builtins: Builtins) -> Self {
+        Self {
+            interner,
+            known,
+            builtins,
+            target: None,
+            env: None,
+        }
+    }
+
+    fn with_target(mut self, target: TargetInfo) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    const fn with_env(mut self, env: Option<&'env dyn SemaEnv>) -> Self {
+        self.env = env;
+        self
+    }
 }
 
 #[derive(Default)]
@@ -82,6 +147,13 @@ pub struct TypingState {
     next_open_row_id: u32,
 }
 
+impl TypingState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 #[derive(Default)]
 pub struct DeclState {
     effect_defs: HashMap<Box<str>, EffectDef>,
@@ -90,6 +162,13 @@ pub struct DeclState {
     class_facts_by_name: HashMap<Symbol, ClassFacts>,
     class_facts: HashMap<HirExprId, ClassFacts>,
     instance_facts: HashMap<HirExprId, InstanceFacts>,
+}
+
+impl DeclState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 pub struct FactState {
@@ -101,9 +180,30 @@ pub struct FactState {
     type_test_targets: HashMap<HirExprId, HirTyId>,
 }
 
+impl FactState {
+    #[must_use]
+    fn new(expr_facts: Vec<ExprFacts>, pat_facts: Vec<PatFacts>) -> Self {
+        Self {
+            diags: Vec::new(),
+            expr_facts,
+            pat_facts,
+            expr_callable_effects: HashMap::new(),
+            expr_module_targets: HashMap::new(),
+            type_test_targets: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ResumeState {
     stack: Vec<ResumeCtx>,
+}
+
+impl ResumeState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 pub struct PassBase<'ctx, 'interner, 'env> {
@@ -138,23 +238,7 @@ pub fn prepare_module<'interner, 'env>(
     ResumeState,
 ) {
     let known = KnownSymbols::new(interner);
-    let builtins = Builtins {
-        error: alloc_builtin(&mut resolved, HirTyKind::Error),
-        unknown: alloc_builtin(&mut resolved, HirTyKind::Unknown),
-        type_: alloc_builtin(&mut resolved, HirTyKind::Type),
-        module: alloc_builtin(&mut resolved, HirTyKind::Module),
-        syntax: alloc_builtin(&mut resolved, HirTyKind::Syntax),
-        any: alloc_builtin(&mut resolved, HirTyKind::Any),
-        empty: alloc_builtin(&mut resolved, HirTyKind::Empty),
-        unit: alloc_builtin(&mut resolved, HirTyKind::Unit),
-        bool_: alloc_builtin(&mut resolved, HirTyKind::Bool),
-        nat: alloc_builtin(&mut resolved, HirTyKind::Nat),
-        int_: alloc_builtin(&mut resolved, HirTyKind::Int),
-        float_: alloc_builtin(&mut resolved, HirTyKind::Float),
-        string_: alloc_builtin(&mut resolved, HirTyKind::String),
-        cstring: alloc_builtin(&mut resolved, HirTyKind::CString),
-        cptr: alloc_builtin(&mut resolved, HirTyKind::CPtr),
-    };
+    let builtins = Builtins::from_resolved(&mut resolved);
     let binding_ids = resolved
         .names
         .bindings
@@ -167,43 +251,20 @@ pub fn prepare_module<'interner, 'env>(
         .map(|import| (import.span, import.to.clone()))
         .collect::<HashMap<_, _>>();
     let expr_facts = vec![
-        ExprFacts {
-            ty: builtins.unknown,
-            effects: EffectRow::empty(),
-        };
+        ExprFacts::new(builtins.unknown, EffectRow::empty());
         resolved.module.store.exprs.len()
     ];
-    let pat_facts = vec![
-        PatFacts {
-            ty: builtins.unknown
-        };
-        resolved.module.store.pats.len()
-    ];
+    let pat_facts = vec![PatFacts::new(builtins.unknown); resolved.module.store.pats.len()];
 
     (
-        ModuleState {
-            resolved,
-            binding_ids,
-            import_targets,
-        },
-        RuntimeEnv {
-            interner,
-            known,
-            builtins,
-            target: options.target.or_else(|| Some(host_target_info())),
-            env: options.env,
-        },
-        TypingState::default(),
-        DeclState::default(),
-        FactState {
-            diags: Vec::new(),
-            expr_facts,
-            pat_facts,
-            expr_callable_effects: HashMap::new(),
-            expr_module_targets: HashMap::new(),
-            type_test_targets: HashMap::new(),
-        },
-        ResumeState::default(),
+        ModuleState::new(resolved, binding_ids, import_targets),
+        RuntimeEnv::new(interner, known, builtins)
+            .with_target(options.target.unwrap_or_else(host_target_info))
+            .with_env(options.env),
+        TypingState::new(),
+        DeclState::new(),
+        FactState::new(expr_facts, pat_facts),
+        ResumeState::new(),
     )
 }
 
@@ -214,14 +275,7 @@ fn host_target_info() -> TargetInfo {
         "macos" => "mac",
         other => other,
     };
-    TargetInfo {
-        os: Some(os.into()),
-        arch: Some(ARCH.into()),
-        env: None,
-        abi: None,
-        vendor: None,
-        features: BTreeSet::default(),
-    }
+    TargetInfo::new().with_os(os).with_arch(ARCH)
 }
 
 pub fn finish_module(
@@ -576,10 +630,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     }
 
     pub fn alloc_ty(&mut self, kind: HirTyKind) -> HirTyId {
-        self.module.resolved.module.store.alloc_ty(HirTy {
-            origin: HirOrigin::dummy(),
-            kind,
-        })
+        self.module
+            .resolved
+            .module
+            .store
+            .alloc_ty(HirTy::new(HirOrigin::dummy(), kind))
     }
 
     pub fn alloc_ty_list<I>(&mut self, tys: I) -> SliceRange<HirTyId>
@@ -940,10 +995,10 @@ impl DerefMut for CheckPass<'_, '_, '_> {
 }
 
 fn alloc_builtin(resolved: &mut ResolvedModule, kind: HirTyKind) -> HirTyId {
-    resolved.module.store.alloc_ty(HirTy {
-        origin: HirOrigin::dummy(),
-        kind,
-    })
+    resolved
+        .module
+        .store
+        .alloc_ty(HirTy::new(HirOrigin::dummy(), kind))
 }
 
 fn idx_to_usize<T>(idx: Idx<T>) -> usize {

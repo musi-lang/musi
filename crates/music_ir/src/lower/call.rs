@@ -12,10 +12,7 @@ pub(super) fn lower_call_expr(
             callee: Box::new(lower_expr(ctx, callee)),
             args: arg_nodes
                 .iter()
-                .map(|arg| IrArg {
-                    spread: false,
-                    expr: lower_expr(ctx, arg.expr),
-                })
+                .map(|arg| IrArg::new(false, lower_expr(ctx, arg.expr)))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         });
@@ -24,25 +21,22 @@ pub(super) fn lower_call_expr(
     let origin = lower_origin(sema, callee);
     let mut prelude = Vec::<IrExpr>::new();
     let callee_temp = fresh_temp(ctx);
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: IrExprKind::TempLet {
+        IrExprKind::TempLet {
             temp: callee_temp,
             value: Box::new(lower_expr(ctx, callee)),
         },
-    });
-    let callee_expr = IrExpr {
-        origin,
-        kind: IrExprKind::Temp { temp: callee_temp },
-    };
+    ));
+    let callee_expr = IrExpr::new(origin, IrExprKind::Temp { temp: callee_temp });
 
     let (arg_prelude, parts, has_runtime_spread) =
         lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call)?;
     prelude.extend(arg_prelude);
 
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: if has_runtime_spread {
+        if has_runtime_spread {
             IrExprKind::CallSeq {
                 callee: Box::new(callee_expr),
                 args: parts.into_boxed_slice(),
@@ -51,10 +45,7 @@ pub(super) fn lower_call_expr(
             let args = parts
                 .into_iter()
                 .map(|part| match part {
-                    IrSeqPart::Expr(expr) => Some(IrArg {
-                        spread: false,
-                        expr,
-                    }),
+                    IrSeqPart::Expr(expr) => Some(IrArg::new(false, expr)),
                     IrSeqPart::Spread(_) => None,
                 })
                 .collect::<Option<Vec<_>>>()
@@ -67,7 +58,7 @@ pub(super) fn lower_call_expr(
                 args,
             }
         },
-    });
+    ));
 
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
@@ -100,9 +91,9 @@ pub(super) fn lower_perform_expr(
     let (prelude, parts, has_runtime_spread) =
         lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform)?;
     let mut exprs = prelude;
-    exprs.push(IrExpr {
+    exprs.push(IrExpr::new(
         origin,
-        kind: if has_runtime_spread {
+        if has_runtime_spread {
             IrExprKind::PerformSeq {
                 effect_key,
                 op_index,
@@ -126,7 +117,7 @@ pub(super) fn lower_perform_expr(
                 args,
             }
         },
-    });
+    ));
     Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
     })
@@ -163,10 +154,7 @@ impl SpreadMode {
 
 fn lower_origin(sema: &SemaModule, expr: HirExprId) -> IrOrigin {
     let origin = sema.module().store.exprs.get(expr).origin;
-    IrOrigin {
-        source_id: origin.source_id,
-        span: origin.span,
-    }
+    IrOrigin::new(origin.source_id, origin.span)
 }
 
 fn resolve_perform_target(
@@ -207,17 +195,14 @@ fn lower_spread_args(
     let mut has_runtime_spread = false;
     for arg in args_nodes {
         let temp = fresh_temp(ctx);
-        prelude.push(IrExpr {
+        prelude.push(IrExpr::new(
             origin,
-            kind: IrExprKind::TempLet {
+            IrExprKind::TempLet {
                 temp,
                 value: Box::new(lower_expr(ctx, arg.expr)),
             },
-        });
-        let temp_expr = IrExpr {
-            origin,
-            kind: IrExprKind::Temp { temp },
-        };
+        ));
+        let temp_expr = IrExpr::new(origin, IrExprKind::Temp { temp });
         if !arg.spread {
             parts.push(IrSeqPart::Expr(temp_expr));
             continue;
@@ -300,17 +285,17 @@ fn lower_spread_array_arg(
 }
 
 fn index_expr(origin: IrOrigin, base: IrExpr, index_u32: u32) -> IrExpr {
-    IrExpr {
+    IrExpr::new(
         origin,
-        kind: IrExprKind::Index {
+        IrExprKind::Index {
             base: Box::new(base),
-            indices: vec![IrExpr {
+            indices: vec![IrExpr::new(
                 origin,
-                kind: IrExprKind::Lit(IrLit::Int {
+                IrExprKind::Lit(IrLit::Int {
                     raw: index_u32.to_string().into(),
                 }),
-            }]
+            )]
             .into_boxed_slice(),
         },
-    }
+    )
 }

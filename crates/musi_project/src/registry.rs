@@ -11,6 +11,17 @@ pub struct RegistryPackage {
     pub cache_dir: PathBuf,
 }
 
+impl RegistryPackage {
+    #[must_use]
+    pub const fn new(version: String, registry_dir: PathBuf, cache_dir: PathBuf) -> Self {
+        Self {
+            version,
+            registry_dir,
+            cache_dir,
+        }
+    }
+}
+
 pub fn resolve_registry_package(
     registry_root: &Path,
     cache_root: &Path,
@@ -61,11 +72,7 @@ pub fn resolve_registry_package(
         copy_dir_recursive(&registry_dir, &cache_dir)?;
     }
 
-    Ok(RegistryPackage {
-        version: version.raw,
-        registry_dir,
-        cache_dir,
-    })
+    Ok(RegistryPackage::new(version.raw, registry_dir, cache_dir))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -75,16 +82,17 @@ struct VersionKey {
 }
 
 impl VersionKey {
+    const fn new(raw: String, parts: Vec<u32>) -> Self {
+        Self { raw, parts }
+    }
+
     fn parse(raw: &str) -> Option<Self> {
         let parts = raw
             .split('.')
             .map(str::parse::<u32>)
             .collect::<Result<Vec<_>, _>>()
             .ok()?;
-        Some(Self {
-            raw: raw.into(),
-            parts,
-        })
+        Some(Self::new(raw.into(), parts))
     }
 }
 
@@ -95,7 +103,7 @@ fn version_matches(requirement: &str, version: &VersionKey) -> bool {
     }
 
     if let Some(exact) = requirement.strip_prefix('=') {
-        return VersionKey::parse(exact) == Some(version.clone());
+        return VersionKey::parse(exact).is_some_and(|required| version == &required);
     }
     if let Some(minimum) = requirement.strip_prefix(">=") {
         return VersionKey::parse(minimum).is_some_and(|required| version >= &required);
@@ -107,7 +115,7 @@ fn version_matches(requirement: &str, version: &VersionKey) -> bool {
         return version.parts.first() == required.parts.first() && version >= &required;
     }
 
-    VersionKey::parse(requirement) == Some(version.clone())
+    VersionKey::parse(requirement).is_some_and(|required| version == &required)
 }
 
 fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {

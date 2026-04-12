@@ -28,7 +28,7 @@ where
             .and_then(SyntaxToken::text)
             .and_then(|raw| decode_string_lit(raw).ok())
             .map(|abi| self.interner.intern(abi.as_str()));
-        let foreign_mod = HirForeignMod { abi };
+        let foreign_mod = HirForeignMod::new(abi);
 
         let inherited_attrs = outer_mods.attrs.clone();
         let merged_attrs = self.merge_attrs(inherited_attrs, outer_attrs);
@@ -84,10 +84,9 @@ where
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Let);
 
-        let pat = self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Bind { name },
-        });
+        let pat = self
+            .store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Bind { name }));
 
         self.push_scope();
         let type_params = self.lower_type_params_clause(node);
@@ -102,7 +101,7 @@ where
         let expr_id = self.alloc_expr(
             origin,
             HirExprKind::Let {
-                mods: HirLetMods { is_rec: false },
+                mods: HirLetMods::new(false),
                 pat,
                 type_params,
                 has_param_clause,
@@ -158,13 +157,7 @@ where
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let arg = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
-        HirVariantDef {
-            origin,
-            attrs,
-            name,
-            arg,
-            value,
-        }
+        HirVariantDef::new(origin, attrs, name, arg, value)
     }
 
     fn lower_field_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirFieldDef {
@@ -176,13 +169,7 @@ where
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
         let ty = self.lower_opt_expr(origin, exprs.next());
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
-        HirFieldDef {
-            origin,
-            attrs,
-            name,
-            ty,
-            value,
-        }
+        HirFieldDef::new(origin, attrs, name, ty, value)
     }
 
     pub(super) fn lower_effect_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -265,22 +252,14 @@ where
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         self.pop_scope();
 
-        HirMemberDef {
-            origin,
-            attrs,
-            kind,
-            name,
-            params,
-            sig,
-            value,
-        }
+        HirMemberDef::new(origin, attrs, kind, name, params, sig, value)
     }
 
     pub(super) fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
 
         let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
-        let mods = HirLetMods { is_rec };
+        let mods = HirLetMods::new(is_rec);
 
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
         let pat_node = pat_node.unwrap_or(node);
@@ -324,10 +303,7 @@ where
         let pat = if pat_node.kind().is_pat() {
             self.lower_pat(pat_node)
         } else {
-            self.store.alloc_pat(HirPat {
-                origin,
-                kind: HirPatKind::Error,
-            })
+            self.store.alloc_pat(HirPat::new(origin, HirPatKind::Error))
         };
         self.pop_scope();
 

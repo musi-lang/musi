@@ -6,7 +6,7 @@ This guide covers repo workflow and project rules.
 
 - Read `grammar/Musi.g4` before grammar changes.
 - Use `grammar/Musi.abnf` as the strict RFC 5234 ABNF reference.
-- Read `AGENTS.md` and `docs/where/workspace-map.md` before large changes.
+- Read `AGENTS.md`, and `docs/where/workspace-map.md` before large changes.
 - Check open issues to avoid duplicating work.
 
 ## Standard Workflow
@@ -21,33 +21,7 @@ This guide covers repo workflow and project rules.
 
 ## Coding Guidelines
 
-### Core Principles
-
-- **KISS** -- prefer the simplest solution that works today.
-- **YAGNI** -- do not build future features until they are needed.
-- **No over-engineering** -- three similar lines of code is better than a premature abstraction.
-
-### Naming
-
-- Types and enum variants use `PascalCase` (`Expr`, `TokenKind`, `VmError`).
-- Functions, methods, and local variables use `snake_case`.
-- Prefix intentionally unused bindings with `_`.
-
-### Rust Style
-
-- Follow Rust edition 2024 conventions.
-- Use `thiserror` for error types; avoid `anyhow`.
-- Prefer `match` exhaustiveness over `_` fallbacks where practical.
-- Keep functions short and focused; avoid nesting beyond three levels.
-- Remove dead or commented-out code before submitting.
-
-### Comments
-
-Comments are noise. Only add them where the logic is genuinely non-obvious. Section dividers use the form `// -- Name ---`.
-
-### Grammar Changes
-
-Every grammar change must satisfy both project constraints:
+Grammar changes still have two extra constraints:
 
 1. **Strict LL(1)** -- compute FIRST sets explicitly and verify disjointness.
 2. **Mathematical purity** -- syntax must reflect type-theoretic meaning.

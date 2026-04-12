@@ -22,6 +22,16 @@ pub enum LockedPackageSource {
 
 impl Lockfile {
     #[must_use]
+    pub const fn new(version: u32, packages: Vec<LockedPackage>) -> Self {
+        Self { version, packages }
+    }
+
+    #[must_use]
+    pub const fn empty(version: u32) -> Self {
+        Self::new(version, Vec::new())
+    }
+
+    #[must_use]
     pub fn normalized(mut self) -> Self {
         self.packages.sort_by(|left, right| {
             left.name
@@ -29,5 +39,28 @@ impl Lockfile {
                 .then_with(|| left.version.cmp(&right.version))
         });
         self
+    }
+}
+
+impl LockedPackage {
+    #[must_use]
+    pub const fn new(name: String, version: String, source: LockedPackageSource) -> Self {
+        Self {
+            name,
+            version,
+            source,
+        }
+    }
+}
+
+impl LockedPackageSource {
+    #[must_use]
+    pub const fn workspace() -> Self {
+        Self::Workspace
+    }
+
+    #[must_use]
+    pub const fn registry() -> Self {
+        Self::Registry
     }
 }

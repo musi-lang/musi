@@ -765,10 +765,10 @@ impl Parser<'_> {
 
     fn parse_splice_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         if self.quote_depth == 0 {
-            self.error(ParseError {
-                kind: ParseErrorKind::SpliceOutsideQuote,
-                span: self.span(),
-            });
+            self.error(ParseError::new(
+                ParseErrorKind::SpliceOutsideQuote,
+                self.span(),
+            ));
         }
         let hash = self.expect_token(TokenKind::Hash)?;
         match self.peek_kind() {
@@ -1111,12 +1111,12 @@ impl Parser<'_> {
             if self.peek_kind() == TokenKind::Ident {
                 children.push(self.advance_element());
             } else {
-                self.error(ParseError {
-                    kind: ParseErrorKind::ExpectedIdentifier {
+                self.error(ParseError::new(
+                    ParseErrorKind::ExpectedIdentifier {
                         found: self.found_token(),
                     },
-                    span: self.span(),
-                });
+                    self.span(),
+                ));
                 break;
             }
             let mut saw_separator = false;

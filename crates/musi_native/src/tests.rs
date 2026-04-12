@@ -387,22 +387,14 @@ fn collects_test_effect_reports() {
     let report = host.finish_test_session("main");
     assert_eq!(
         report,
-        NativeTestReport {
-            module: "main".into(),
-            cases: vec![
-                NativeTestCaseResult {
-                    suite: "demo".into(),
-                    name: "first".into(),
-                    passed: true,
-                },
-                NativeTestCaseResult {
-                    suite: "demo".into(),
-                    name: "second".into(),
-                    passed: false,
-                },
+        NativeTestReport::new(
+            "main",
+            vec![
+                NativeTestCaseResult::new("demo".into(), "first".into(), true),
+                NativeTestCaseResult::new("demo".into(), "second".into(), false),
             ]
             .into_boxed_slice(),
-        }
+        )
     );
 }
 

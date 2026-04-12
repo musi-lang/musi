@@ -211,15 +211,7 @@ const fn export_kind_name(target: ExportTarget) -> &'static str {
 }
 
 fn ok_report(tool: &str, command: &str) -> CliDiagnosticsReport {
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "ok",
-        package_root: None,
-        manifest: None,
-        diagnostics: Vec::new(),
-    }
+    CliDiagnosticsReport::ok(tool, command, None, None)
 }
 
 fn emit_tooling_check_error(

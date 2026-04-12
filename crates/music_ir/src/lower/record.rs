@@ -26,14 +26,14 @@ pub(super) fn lower_record_expr(
     let lowered_fields = lower_ordered_record_fields(interner, field_count, &indices, &sources)?;
 
     let mut exprs = prelude;
-    exprs.push(IrExpr {
+    exprs.push(IrExpr::new(
         origin,
-        kind: IrExprKind::Record {
+        IrExprKind::Record {
             ty_name: render_ty_name(sema, ty, interner),
             field_count,
             fields: lowered_fields.into_boxed_slice(),
         },
-    });
+    ));
     Ok(IrExprKind::Sequence {
         exprs: exprs.into_boxed_slice(),
     })
@@ -79,10 +79,7 @@ pub(super) fn lower_record_update_expr(
 
 fn to_ir_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
     let origin = sema.module().store.exprs.get(expr_id).origin;
-    IrOrigin {
-        source_id: origin.source_id,
-        span: origin.span,
-    }
+    IrOrigin::new(origin.source_id, origin.span)
 }
 
 type RecordSourceMap = BTreeMap<Symbol, IrExpr>;
@@ -115,13 +112,13 @@ fn collect_record_sources(
                 }
                 let _ = sources.insert(
                     symbol,
-                    IrExpr {
+                    IrExpr::new(
                         origin,
-                        kind: IrExprKind::RecordGet {
+                        IrExprKind::RecordGet {
                             base: Box::new(temp_expr.clone()),
                             index,
                         },
-                    },
+                    ),
                 );
             }
             continue;
@@ -144,17 +141,14 @@ fn lower_item_temp(
     prelude: &mut Vec<IrExpr>,
 ) -> IrExpr {
     let temp = fresh_temp(ctx);
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: IrExprKind::TempLet {
+        IrExprKind::TempLet {
             temp,
             value: Box::new(lower_expr(ctx, value_expr)),
         },
-    });
-    IrExpr {
-        origin,
-        kind: IrExprKind::Temp { temp },
-    }
+    ));
+    IrExpr::new(origin, IrExprKind::Temp { temp })
 }
 
 fn lower_ordered_record_fields(
@@ -179,11 +173,11 @@ fn lower_ordered_record_fields(
         let Some(expr) = sources.get(&symbol).cloned() else {
             return Err("record missing field value".into());
         };
-        lowered_fields.push(IrRecordField {
-            name: interner.resolve(symbol).into(),
-            index: u16::try_from(idx).unwrap_or(u16::MAX),
+        lowered_fields.push(IrRecordField::new(
+            interner.resolve(symbol),
+            u16::try_from(idx).unwrap_or(u16::MAX),
             expr,
-        });
+        ));
     }
     Ok(lowered_fields)
 }
@@ -211,11 +205,11 @@ fn lower_record_update_without_spread(
         let Some(index) = result_indices.get(&name.name).copied() else {
             return Err("record update field missing from record type".into());
         };
-        updates.push(IrRecordField {
-            name: interner.resolve(name.name).into(),
+        updates.push(IrRecordField::new(
+            interner.resolve(name.name),
             index,
-            expr: lower_expr(ctx, record_item.value),
-        });
+            lower_expr(ctx, record_item.value),
+        ));
     }
     Ok(IrExprKind::RecordUpdate {
         ty_name: render_ty_name(sema, result_ty, interner),
@@ -262,17 +256,17 @@ fn lower_record_update_with_spread(
                 let Some(result_index) = result_indices.get(&symbol).copied() else {
                     continue;
                 };
-                updates.push(IrRecordField {
-                    name: interner.resolve(symbol).into(),
-                    index: result_index,
-                    expr: IrExpr {
+                updates.push(IrRecordField::new(
+                    interner.resolve(symbol),
+                    result_index,
+                    IrExpr::new(
                         origin,
-                        kind: IrExprKind::RecordGet {
+                        IrExprKind::RecordGet {
                             base: Box::new(temp_expr.clone()),
                             index: spread_index,
                         },
-                    },
-                });
+                    ),
+                ));
             }
             continue;
         }
@@ -282,15 +276,15 @@ fn lower_record_update_with_spread(
         let Some(index) = result_indices.get(&name.name).copied() else {
             return Err("record update field missing from record type".into());
         };
-        updates.push(IrRecordField {
-            name: interner.resolve(name.name).into(),
+        updates.push(IrRecordField::new(
+            interner.resolve(name.name),
             index,
-            expr: temp_expr,
-        });
+            temp_expr,
+        ));
     }
-    prelude.push(IrExpr {
+    prelude.push(IrExpr::new(
         origin,
-        kind: IrExprKind::RecordUpdate {
+        IrExprKind::RecordUpdate {
             ty_name: render_ty_name(sema, result_ty, interner),
             field_count: result_count,
             base: Box::new(base_expr),
@@ -298,7 +292,7 @@ fn lower_record_update_with_spread(
             result_fields,
             updates: updates.into_boxed_slice(),
         },
-    });
+    ));
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
     })

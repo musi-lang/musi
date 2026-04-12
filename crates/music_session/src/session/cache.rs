@@ -277,13 +277,14 @@ impl Session {
             )
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        Ok(ParsedModule {
-            module_key: key.clone(),
-            source_id,
-            import_sites,
-            export_summary,
-            syntax: SessionSyntaxErrors::new(lex_errors, parse_errors, syntax_diags),
-        })
+        Ok(ParsedModule::new(key.clone(), source_id)
+            .with_import_sites(import_sites)
+            .with_export_summary(export_summary)
+            .with_syntax(SessionSyntaxErrors::new(
+                lex_errors,
+                parse_errors,
+                syntax_diags,
+            )))
     }
 
     fn build_resolved_module(&mut self, key: &ModuleKey) -> Result<ResolvedModule, SessionError> {

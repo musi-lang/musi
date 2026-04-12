@@ -20,19 +20,13 @@ pub(in super::super) fn check_perform_expr(
     let mut effects = inner.effects;
     let Some((effect_name, op_def)) = effect_op_call(ctx, expr) else {
         ctx.diag(origin.span, DiagKind::InvalidPerformTarget, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects,
-        };
+        return ExprFacts::new(builtins.unknown, effects);
     };
     effects.add(EffectKey {
         name: effect_name,
         arg: None,
     });
-    ExprFacts {
-        ty: op_def.result(),
-        effects,
-    }
+    ExprFacts::new(op_def.result(), effects)
 }
 
 pub(in super::super) fn check_handle_expr(
@@ -111,10 +105,7 @@ pub(in super::super) fn check_handle_expr(
             });
             ctx.insert_binding_type(binding, cont_ty);
         }
-        ctx.push_resume(ResumeCtx {
-            arg: op_def.result(),
-            result: result_ty,
-        });
+        ctx.push_resume(ResumeCtx::new(op_def.result(), result_ty));
         let body = check_expr(ctx, clause.body);
         let _ = ctx.pop_resume();
         let origin = ctx.expr(clause.body).origin;
@@ -134,10 +125,7 @@ pub(in super::super) fn check_handle_expr(
     let mut effects = handled_facts.effects;
     effects.remove_by_name(&handler_name);
     effects.union_with(&clause_effects);
-    ExprFacts {
-        ty: result_ty,
-        effects,
-    }
+    ExprFacts::new(result_ty, effects)
 }
 
 pub(in super::super) fn check_resume_expr(
@@ -148,10 +136,7 @@ pub(in super::super) fn check_resume_expr(
     let builtins = ctx.builtins();
     let Some(resume) = ctx.resume_top() else {
         ctx.diag(origin.span, DiagKind::ResumeOutsideHandlerClause, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects: EffectRow::empty(),
-        };
+        return ExprFacts::new(builtins.unknown, EffectRow::empty());
     };
     let mut effects = EffectRow::empty();
     if let Some(expr) = expr {
@@ -160,10 +145,7 @@ pub(in super::super) fn check_resume_expr(
         type_mismatch(ctx, origin, resume.arg, facts.ty);
         effects.union_with(&facts.effects);
     }
-    ExprFacts {
-        ty: resume.result,
-        effects,
-    }
+    ExprFacts::new(resume.result, effects)
 }
 
 pub(in super::super) fn call_effects_for_expr(

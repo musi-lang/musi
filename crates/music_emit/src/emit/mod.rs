@@ -142,13 +142,13 @@ fn lower_ir_module_impl(
     }
 
     let entry_method = build_module_entry(&mut state.artifact, module.module_key(), &layout);
-    Ok(EmittedModule {
-        module_key: module.module_key().clone(),
-        artifact: state.artifact,
+    Ok(EmittedModule::new(
+        module.module_key().clone(),
+        state.artifact,
         entry_method,
-        exports: collect_exports(module, &layout).into_boxed_slice(),
-        static_imports: module.static_imports().to_vec().into_boxed_slice(),
-    })
+        collect_exports(module, &layout).into_boxed_slice(),
+        module.static_imports().to_vec().into_boxed_slice(),
+    ))
 }
 
 /// Lowers a reachable IR module set into one merged SEAM artifact.
@@ -217,16 +217,16 @@ fn lower_ir_program_impl(
     if !state.diags.is_empty() {
         return Err(state.diags);
     }
-    Ok(EmittedProgram {
-        entry_module: entry_module.clone(),
-        artifact: state.artifact,
+    Ok(EmittedProgram::new(
+        entry_module.clone(),
+        state.artifact,
         entry_method,
-        modules: modules
+        modules
             .iter()
             .map(|module| module.module_key().clone())
             .collect::<Vec<_>>()
             .into_boxed_slice(),
-    })
+    ))
 }
 
 fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &[ModuleLayout]) {
@@ -424,14 +424,16 @@ fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBindi
     module
         .exports()
         .iter()
-        .map(|export| EmittedBinding {
-            name: export.name.clone(),
-            method: binding_export(module, export.name.as_ref(), |binding| {
-                layout.callables.get(&binding).copied()
-            }),
-            global: binding_export(module, export.name.as_ref(), |binding| {
-                layout.globals.get(&binding).copied()
-            }),
+        .map(|export| {
+            EmittedBinding::new(
+                export.name.clone(),
+                binding_export(module, export.name.as_ref(), |binding| {
+                    layout.callables.get(&binding).copied()
+                }),
+                binding_export(module, export.name.as_ref(), |binding| {
+                    layout.globals.get(&binding).copied()
+                }),
+            )
         })
         .collect()
 }
@@ -507,14 +509,9 @@ fn initial_labels(artifact: &mut Artifact) -> Vec<StringId> {
 
 fn alloc_method(artifact: &mut Artifact, name: &str, export: bool, params: u16) -> MethodId {
     let name_id = artifact.intern_string(name);
-    artifact.methods.alloc(MethodDescriptor {
-        name: name_id,
-        params,
-        locals: 0,
-        export,
-        labels: Box::new([]),
-        code: Box::new([]),
-    })
+    artifact
+        .methods
+        .alloc(MethodDescriptor::new(name_id, params, 0, Box::new([])).with_export(export))
 }
 
 fn finalize_method(

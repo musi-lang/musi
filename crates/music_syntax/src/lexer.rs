@@ -49,10 +49,13 @@ impl<'src> Lexer<'src> {
 
     #[must_use]
     pub fn lex(mut self) -> LexedSource {
-        let mut out = LexedSource {
-            text: self.cursor.text().into(),
-            ..LexedSource::default()
-        };
+        let mut out = LexedSource::new(
+            self.cursor.text(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         let mut trivia_start = 0;
 
         while !self.cursor.is_eof() {
@@ -94,10 +97,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn push_error(errors: &mut LexErrorList, kind: LexErrorKind, start: usize, end: usize) {
-        errors.push(LexError {
-            kind,
-            span: Self::span(start, end),
-        });
+        errors.push(LexError::new(kind, Self::span(start, end)));
     }
 
     fn lex_trivia(&mut self, trivia: &mut TriviaList, errors: &mut LexErrorList) -> bool {

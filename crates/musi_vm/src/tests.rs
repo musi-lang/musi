@@ -458,7 +458,7 @@ fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
         })
         .to_json(),
     );
-    artifact.types.alloc(TypeDescriptor { name, term })
+    artifact.types.alloc(TypeDescriptor::new(name, term))
 }
 
 fn alloc_named_data(
@@ -470,22 +470,18 @@ fn alloc_named_data(
     layout_pack: Option<u32>,
 ) -> TypeId {
     let ty = alloc_named_type(artifact, full_name);
-    let field_count = variants
-        .iter()
-        .map(|variant| variant.field_tys.len())
-        .sum::<usize>();
-    let variant_count = u32::try_from(variants.len()).expect("variant count fits u32");
-    let field_count = u32::try_from(field_count).expect("field count fits u32");
     let name = artifact.intern_string(full_name);
-    let _ = artifact.data.alloc(DataDescriptor {
-        name,
-        variant_count,
-        field_count,
-        variants,
-        repr_kind,
-        layout_align,
-        layout_pack,
-    });
+    let mut descriptor = DataDescriptor::new(name, variants);
+    if let Some(repr_kind) = repr_kind {
+        descriptor = descriptor.with_repr_kind(repr_kind);
+    }
+    if let Some(layout_align) = layout_align {
+        descriptor = descriptor.with_layout_align(layout_align);
+    }
+    if let Some(layout_pack) = layout_pack {
+        descriptor = descriptor.with_layout_pack(layout_pack);
+    }
+    let _ = artifact.data.alloc(descriptor);
     ty
 }
 
@@ -504,10 +500,10 @@ fn classifies_named_data_native_abi_kinds() {
     let point_ty = alloc_named_data(
         &mut artifact,
         "main::Point",
-        Box::new([DataVariantDescriptor {
-            name: point_variant_name,
-            field_tys: Box::new([point_field_ty; 2]),
-        }]),
+        Box::new([DataVariantDescriptor::new(
+            point_variant_name,
+            Box::new([point_field_ty; 2]),
+        )]),
         Some(repr_c),
         Some(8),
         Some(4),
@@ -515,10 +511,10 @@ fn classifies_named_data_native_abi_kinds() {
     let handle_ty = alloc_named_data(
         &mut artifact,
         "main::Handle",
-        Box::new([DataVariantDescriptor {
-            name: handle_variant_name,
-            field_tys: Box::new([handle_field_ty]),
-        }]),
+        Box::new([DataVariantDescriptor::new(
+            handle_variant_name,
+            Box::new([handle_field_ty]),
+        )]),
         Some(transparent),
         None,
         None,
@@ -527,14 +523,8 @@ fn classifies_named_data_native_abi_kinds() {
         &mut artifact,
         "main::Maybe",
         Box::new([
-            DataVariantDescriptor {
-                name: none_variant_name,
-                field_tys: Box::new([]),
-            },
-            DataVariantDescriptor {
-                name: some_variant_name,
-                field_tys: Box::new([maybe_self_ty]),
-            },
+            DataVariantDescriptor::new(none_variant_name, Box::new([])),
+            DataVariantDescriptor::new(some_variant_name, Box::new([maybe_self_ty])),
         ]),
         Some(repr_c),
         None,

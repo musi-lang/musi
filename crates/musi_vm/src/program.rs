@@ -33,11 +33,37 @@ pub struct ProgramExport {
     pub kind: ProgramExportKind,
 }
 
+impl ProgramExport {
+    #[must_use]
+    pub fn new(name: impl Into<Box<str>>, opaque: bool, kind: ProgramExportKind) -> Self {
+        Self {
+            name: name.into(),
+            opaque,
+            kind,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProgramDataVariantLayout {
     pub name: Box<str>,
     pub field_tys: Box<[TypeId]>,
     pub field_ty_names: Box<[Box<str>]>,
+}
+
+impl ProgramDataVariantLayout {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Box<str>>,
+        field_tys: Box<[TypeId]>,
+        field_ty_names: Box<[Box<str>]>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_tys,
+            field_ty_names,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +80,55 @@ pub struct ProgramDataLayout {
 }
 
 impl ProgramDataLayout {
+    /// # Panics
+    ///
+    /// Panics if the variant count or total field count does not fit in `u32`.
+    #[must_use]
+    pub fn new(
+        data: DataId,
+        ty: TypeId,
+        name: impl Into<Box<str>>,
+        variants: Box<[ProgramDataVariantLayout]>,
+    ) -> Self {
+        let variant_count =
+            u32::try_from(variants.len()).expect("program data variant count should fit in u32");
+        let field_count = variants
+            .iter()
+            .map(|variant| variant.field_tys.len())
+            .sum::<usize>();
+        let field_count =
+            u32::try_from(field_count).expect("program data field count should fit in u32");
+        Self {
+            data,
+            ty,
+            name: name.into(),
+            variant_count,
+            field_count,
+            variants,
+            repr_kind: None,
+            layout_align: None,
+            layout_pack: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_repr_kind(mut self, repr_kind: impl Into<Box<str>>) -> Self {
+        self.repr_kind = Some(repr_kind.into());
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_align(mut self, layout_align: u32) -> Self {
+        self.layout_align = Some(layout_align);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
+        self.layout_pack = Some(layout_pack);
+        self
+    }
+
     #[must_use]
     pub const fn is_single_variant_product(&self) -> bool {
         self.variant_count == 1
@@ -149,6 +224,30 @@ pub struct LoadedMethod {
     pub locals: u16,
     pub instructions: InstructionList,
     pub labels: LabelIndexMap,
+}
+
+impl LoadedMethod {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Box<str>>,
+        params: u16,
+        locals: u16,
+        instructions: InstructionList,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            params,
+            locals,
+            instructions,
+            labels: LabelIndexMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_labels(mut self, labels: LabelIndexMap) -> Self {
+        self.labels = labels;
+        self
+    }
 }
 
 impl Program {
@@ -304,13 +403,13 @@ fn build_methods(artifact: &Artifact) -> VmResult<Box<[LoadedMethod]>> {
                     }
                 }
             }
-            Ok(LoadedMethod {
-                name: method_name,
-                params: method.params,
-                locals: method.locals,
-                instructions: instructions.into_boxed_slice(),
-                labels,
-            })
+            Ok(LoadedMethod::new(
+                method_name,
+                method.params,
+                method.locals,
+                instructions.into_boxed_slice(),
+            )
+            .with_labels(labels))
         })
         .collect::<VmResult<Vec<_>>>()
         .map(Vec::into_boxed_slice)
@@ -320,10 +419,12 @@ fn build_exports(artifact: &Artifact) -> (ExportMap, Box<[ProgramExport]>) {
     let export_list = artifact
         .exports
         .iter()
-        .map(|(_, export)| ProgramExport {
-            name: source_export_name(artifact.string_text(export.name)).into(),
-            opaque: export.opaque,
-            kind: export_kind(export.target),
+        .map(|(_, export)| {
+            ProgramExport::new(
+                source_export_name(artifact.string_text(export.name)),
+                export.opaque,
+                export_kind(export.target),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
@@ -348,33 +449,35 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
             continue;
         };
         let name = artifact.string_text(descriptor.name);
-        let layout = ProgramDataLayout {
-            data: data_id,
-            ty,
-            name: name.into(),
-            variant_count: descriptor.variant_count,
-            field_count: descriptor.field_count,
-            variants: descriptor
-                .variants
-                .iter()
-                .map(|variant| ProgramDataVariantLayout {
-                    name: artifact.string_text(variant.name).into(),
-                    field_tys: variant.field_tys.clone(),
-                    field_ty_names: variant
+        let variants = descriptor
+            .variants
+            .iter()
+            .map(|variant| {
+                ProgramDataVariantLayout::new(
+                    artifact.string_text(variant.name),
+                    variant.field_tys.clone(),
+                    variant
                         .field_tys
                         .iter()
                         .map(|field_ty| artifact.type_name(*field_ty).into())
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            repr_kind: descriptor
-                .repr_kind
-                .map(|id| artifact.string_text(id).into()),
-            layout_align: descriptor.layout_align,
-            layout_pack: descriptor.layout_pack,
-        };
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let mut layout = ProgramDataLayout::new(data_id, ty, name, variants);
+        debug_assert_eq!(layout.variant_count, descriptor.variant_count);
+        debug_assert_eq!(layout.field_count, descriptor.field_count);
+        if let Some(repr_kind) = descriptor.repr_kind.map(|id| artifact.string_text(id)) {
+            layout = layout.with_repr_kind(repr_kind);
+        }
+        if let Some(layout_align) = descriptor.layout_align {
+            layout = layout.with_layout_align(layout_align);
+        }
+        if let Some(layout_pack) = descriptor.layout_pack {
+            layout = layout.with_layout_pack(layout_pack);
+        }
         let _ = layout_map.insert(ty, layout.clone());
         layout_list.push(layout);
     }

@@ -25,10 +25,7 @@ pub(super) fn check_call_expr(
         (ctx.ty_ids(params), ret)
     } else {
         ctx.diag(origin.span, DiagKind::InvalidCallTarget, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects: callee_facts.effects,
-        };
+        return ExprFacts::new(builtins.unknown, callee_facts.effects);
     };
 
     let args_vec = ctx.args(args);
@@ -56,7 +53,7 @@ pub(super) fn check_call_expr(
     }
 
     merge_call_effects(ctx, origin, callee, &mut effects);
-    ExprFacts { ty: ret, effects }
+    ExprFacts::new(ret, effects)
 }
 
 pub(super) fn check_apply_expr(
@@ -79,26 +76,17 @@ pub(super) fn check_apply_expr(
         .collect::<Vec<_>>();
     let Some(scheme) = callable_scheme_for_expr(ctx, callee) else {
         ctx.diag(origin.span, DiagKind::InvalidTypeApplication, "");
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects: effectful_eval,
-        };
+        return ExprFacts::new(builtins.unknown, effectful_eval);
     };
     let Some(instantiated) = instantiate_binding_scheme(ctx, origin, &scheme, &args) else {
-        return ExprFacts {
-            ty: builtins.unknown,
-            effects: effectful_eval,
-        };
+        return ExprFacts::new(builtins.unknown, effectful_eval);
     };
     if let Some(target) = module_target_for_expr(ctx, callee) {
         ctx.set_expr_module_target(expr_id, target);
     }
     solve_obligations(ctx, origin, &instantiated.obligations);
     ctx.set_expr_callable_effects(expr_id, instantiated.effects.clone());
-    ExprFacts {
-        ty: instantiated.ty,
-        effects: effectful_eval,
-    }
+    ExprFacts::new(instantiated.ty, effectful_eval)
 }
 
 fn check_call_arg(

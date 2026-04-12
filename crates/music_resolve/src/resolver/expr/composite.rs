@@ -32,7 +32,7 @@ where
                 .child_tokens()
                 .any(|t| t.kind() == TokenKind::DotDotDot);
             let expr = self.lower_opt_expr(origin, item.child_nodes().next());
-            items.push(HirArrayItem { spread, expr });
+            items.push(HirArrayItem::new(spread, expr));
         }
         let items = self.store.array_items.alloc_from_iter(items);
         self.alloc_expr(origin, HirExprKind::Array { items })
@@ -88,11 +88,7 @@ where
             .any(|t| t.kind() == TokenKind::DotDotDot)
         {
             let value = self.lower_opt_expr(origin, node.child_nodes().next());
-            return HirRecordItem {
-                spread: true,
-                name: None,
-                value,
-            };
+            return HirRecordItem::new(true, None, value);
         }
 
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
@@ -107,11 +103,7 @@ where
             self.alloc_expr(name_origin, HirExprKind::Name { name })
         };
 
-        HirRecordItem {
-            spread: false,
-            name: Some(name),
-            value,
-        }
+        HirRecordItem::new(false, Some(name), value)
     }
 
     pub(super) fn lower_variant_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

@@ -22,3 +22,14 @@ pub struct ExportDescriptor {
     pub opaque: bool,
     pub target: ExportTarget,
 }
+
+impl ExportDescriptor {
+    #[must_use]
+    pub const fn new(name: StringId, opaque: bool, target: ExportTarget) -> Self {
+        Self {
+            name,
+            opaque,
+            target,
+        }
+    }
+}

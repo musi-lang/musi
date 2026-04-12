@@ -22,10 +22,10 @@ pub(super) fn compile_string_constant(emitter: LiteralEmitter<'_, '_, '_>, value
     let string_id = emitter.artifact.intern_string(value);
     let const_name = format!("const:string:{}", emitter.artifact.constants.len());
     let name_id = emitter.artifact.intern_string(&const_name);
-    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
-        name: name_id,
-        value: ConstantValue::String(string_id),
-    });
+    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor::new(
+        name_id,
+        ConstantValue::String(string_id),
+    ));
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdConst,
         Operand::Constant(constant_id),
@@ -52,13 +52,13 @@ pub(super) fn compile_syntax_constant(
     let text_id = emitter.artifact.intern_string(term.text());
     let const_name = format!("const:syntax:{}", emitter.artifact.constants.len());
     let name_id = emitter.artifact.intern_string(&const_name);
-    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
-        name: name_id,
-        value: ConstantValue::Syntax {
+    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor::new(
+        name_id,
+        ConstantValue::Syntax {
             shape: term.shape(),
             text: text_id,
         },
-    });
+    ));
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdConst,
         Operand::Constant(constant_id),
@@ -109,10 +109,10 @@ fn compile_float_literal(
     };
     let const_name = format!("const:float:{}", emitter.artifact.constants.len());
     let name_id = emitter.artifact.intern_string(&const_name);
-    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
-        name: name_id,
-        value: ConstantValue::Float(value),
-    });
+    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor::new(
+        name_id,
+        ConstantValue::Float(value),
+    ));
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdConst,
         Operand::Constant(constant_id),
@@ -129,10 +129,10 @@ pub(super) fn compile_i64(emitter: LiteralEmitter<'_, '_, '_>, value: i64) {
     }
     let const_name = format!("const:int:{}", emitter.artifact.constants.len());
     let name_id = emitter.artifact.intern_string(&const_name);
-    let constant_id = emitter.artifact.constants.alloc(ConstantDescriptor {
-        name: name_id,
-        value: ConstantValue::Int(value),
-    });
+    let constant_id = emitter
+        .artifact
+        .constants
+        .alloc(ConstantDescriptor::new(name_id, ConstantValue::Int(value)));
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
         Opcode::LdConst,
         Operand::Constant(constant_id),

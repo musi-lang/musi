@@ -213,58 +213,62 @@ fn append_synthesized_sum_data_defs(
         }
         let variants = data
             .variants()
-            .map(|(name, variant)| IrDataVariantDef {
-                name: name.into(),
-                field_tys: variant
-                    .field_tys()
-                    .iter()
-                    .copied()
-                    .map(|ty| render_ty_name(sema, ty, interner))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+            .map(|(name, variant)| {
+                IrDataVariantDef::new(
+                    name,
+                    variant
+                        .field_tys()
+                        .iter()
+                        .copied()
+                        .map(|ty| render_ty_name(sema, ty, interner))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let max_field_count = variants
-            .iter()
-            .map(|variant| u32::try_from(variant.field_tys.len()).unwrap_or(u32::MAX))
-            .max()
-            .unwrap_or(0);
-        items.data_defs.push(IrDataDef {
-            key: data.key().clone(),
-            variant_count: u32::try_from(data.variant_count()).unwrap_or(u32::MAX),
-            field_count: max_field_count,
-            variants,
-            repr_kind: data.repr_kind().map(Into::into),
-            layout_align: data.layout_align(),
-            layout_pack: data.layout_pack(),
-        });
+        let mut data_def = IrDataDef::new(data.key().clone(), variants);
+        debug_assert_eq!(
+            data_def.variant_count,
+            u32::try_from(data.variant_count()).unwrap_or(u32::MAX)
+        );
+        if let Some(repr_kind) = data.repr_kind() {
+            data_def = data_def.with_repr_kind(repr_kind);
+        }
+        if let Some(layout_align) = data.layout_align() {
+            data_def = data_def.with_layout_align(layout_align);
+        }
+        if let Some(layout_pack) = data.layout_pack() {
+            data_def = data_def.with_layout_pack(layout_pack);
+        }
+        items.data_defs.push(data_def);
     }
 }
 
 fn build_effect_defs(sema: &SemaModule, interner: &Interner) -> Box<[IrEffectDef]> {
     let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
     for effect in sema.effect_defs() {
-        let _ = seen
-            .entry(effect.key().clone())
-            .or_insert_with(|| IrEffectDef {
-                key: effect.key().clone(),
-                ops: effect
+        let _ = seen.entry(effect.key().clone()).or_insert_with(|| {
+            IrEffectDef::new(
+                effect.key().clone(),
+                effect
                     .ops()
-                    .map(|(name, def)| IrEffectOpDef {
-                        name: name.into(),
-                        param_tys: def
-                            .params()
-                            .iter()
-                            .copied()
-                            .map(|ty| render_ty_name(sema, ty, interner))
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                        result_ty: render_ty_name(sema, def.result(), interner),
+                    .map(|(name, def)| {
+                        IrEffectOpDef::new(
+                            name,
+                            def.params()
+                                .iter()
+                                .copied()
+                                .map(|ty| render_ty_name(sema, ty, interner))
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                            render_ty_name(sema, def.result(), interner),
+                        )
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
-            });
+            )
+        });
     }
     seen.into_values().collect::<Vec<_>>().into_boxed_slice()
 }
@@ -273,17 +277,14 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let expr = sema.module().store.exprs.get(expr_id);
-    let origin = IrOrigin {
-        source_id: expr.origin.source_id,
-        span: expr.origin.span,
-    };
+    let origin = IrOrigin::new(expr.origin.source_id, expr.origin.span);
     if is_type_value_expr(sema, expr_id, interner) {
-        return IrExpr {
+        return IrExpr::new(
             origin,
-            kind: IrExprKind::TypeValue {
+            IrExprKind::TypeValue {
                 ty_name: render_type_value_expr_name(sema, expr_id, interner),
             },
-        };
+        );
     }
     let kind = match &expr.kind {
         HirExprKind::Name { name } => lower_name_expr(sema, expr_id, *name, interner),
@@ -361,7 +362,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Splice { kind } => lower_splice_expr(kind),
         other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
     };
-    IrExpr { origin, kind }
+    IrExpr::new(origin, kind)
 }
 
 fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner) -> bool {
@@ -453,17 +454,11 @@ fn lower_prefix_expr(
                 .unwrap_or_else(|| invalid_lowering_path("expr type missing for prefix op"));
             let (zero, op) = match &ctx.sema.ty(ty).kind {
                 HirTyKind::Float => (
-                    IrExpr {
-                        origin,
-                        kind: IrExprKind::Lit(IrLit::Float { raw: "0.0".into() }),
-                    },
+                    IrExpr::new(origin, IrExprKind::Lit(IrLit::Float { raw: "0.0".into() })),
                     IrBinaryOp::FSub,
                 ),
                 HirTyKind::Int | HirTyKind::Nat | HirTyKind::NatLit(_) => (
-                    IrExpr {
-                        origin,
-                        kind: IrExprKind::Lit(IrLit::Int { raw: "0".into() }),
-                    },
+                    IrExpr::new(origin, IrExprKind::Lit(IrLit::Int { raw: "0".into() })),
                     IrBinaryOp::ISub,
                 ),
                 other => invalid_lowering_path(format!("invalid neg operand type {other:?}")),
@@ -517,12 +512,12 @@ fn lower_template_expr(
     let mut rendered = Vec::<IrExpr>::new();
     for part in ctx.sema.module().store.template_parts.get(parts) {
         match part {
-            HirTemplatePart::Text { value } => rendered.push(IrExpr {
+            HirTemplatePart::Text { value } => rendered.push(IrExpr::new(
                 origin,
-                kind: IrExprKind::Lit(IrLit::String {
+                IrExprKind::Lit(IrLit::String {
                     value: value.clone(),
                 }),
-            }),
+            )),
             HirTemplatePart::Expr { expr } => rendered.push(lower_expr(ctx, *expr)),
         }
     }
@@ -531,14 +526,14 @@ fn lower_template_expr(
         return IrExprKind::Lit(IrLit::String { value: "".into() });
     };
     for expr in iter {
-        acc = IrExpr {
+        acc = IrExpr::new(
             origin,
-            kind: IrExprKind::Binary {
+            IrExprKind::Binary {
                 op: IrBinaryOp::StrCat,
                 left: Box::new(acc),
                 right: Box::new(expr),
             },
-        };
+        );
     }
     acc.kind
 }
@@ -628,7 +623,7 @@ fn record_layout_for_ty(
                 invalid_lowering_path("record field index exceeds u16 in lowering")
             });
             let _ = indices.insert(symbol, idx);
-            IrRecordLayoutField { name, index: idx }
+            IrRecordLayoutField::new(name, idx)
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
@@ -710,10 +705,7 @@ fn lower_handle_expr(
         invalid_lowering_path("handle with unknown effect");
     };
     let origin = sema.module().store.exprs.get(expr_id).origin;
-    let origin = IrOrigin {
-        source_id: origin.source_id,
-        span: origin.span,
-    };
+    let origin = IrOrigin::new(origin.source_id, origin.span);
 
     let clauses_vec = sema.module().store.handle_clauses.get(clauses).to_vec();
     let mut value_clause = None::<HirHandleClause>;
@@ -751,11 +743,11 @@ fn lower_handle_expr(
             sema.module().store.idents.get(clause.params),
             clause.body,
         );
-        ops_by_index[op_index] = Some(IrHandleOp {
-            op_index: u16::try_from(op_index).unwrap_or(u16::MAX),
-            name: op_name.into(),
+        ops_by_index[op_index] = Some(IrHandleOp::new(
+            u16::try_from(op_index).unwrap_or(u16::MAX),
+            op_name,
             closure,
-        });
+        ));
     }
 
     if ops_by_index.iter().any(Option::is_none) {
@@ -919,10 +911,7 @@ fn lower_user_params(ctx: &LowerCtx<'_>, params: &SliceRange<HirParam>) -> Lower
         let binding = decl_binding_id(sema, param.name)
             .unwrap_or_else(|| invalid_lowering_path("param binding missing"));
         bindings.push(binding);
-        lowered.push(IrParam {
-            binding,
-            name: interner.resolve(param.name.name).into(),
-        });
+        lowered.push(IrParam::new(binding, interner.resolve(param.name.name)));
     }
     LoweredParams {
         params: lowered,
@@ -939,10 +928,7 @@ fn lower_named_params(ctx: &LowerCtx<'_>, params: &[Ident]) -> LoweredParams {
         let binding = decl_binding_id(sema, *param)
             .unwrap_or_else(|| invalid_lowering_path("named param binding missing in lowering"));
         bindings.push(binding);
-        lowered.push(IrParam {
-            binding,
-            name: interner.resolve(param.name).into(),
-        });
+        lowered.push(IrParam::new(binding, interner.resolve(param.name)));
     }
     LoweredParams {
         params: lowered,
@@ -981,30 +967,30 @@ fn lower_closure_callable(ctx: &mut LowerCtx<'_>, input: ClosureCallableInput<'_
         .name
         .unwrap_or_else(|| fresh_lambda_name(ctx, input.prefix, input.origin));
 
-    ctx.extra_callables.push(IrCallable {
-        binding: input.binding,
-        name: callable_name.clone(),
-        params: callable_params.into_boxed_slice(),
-        body,
-        exported: false,
-        effects: sema
-            .try_expr_effects(input.body_id)
-            .unwrap_or_else(|| invalid_lowering_path("expr effects missing for closure body"))
-            .clone(),
-        module_target: input.callable_module_target,
-    });
+    ctx.extra_callables.push(
+        IrCallable::new(
+            callable_name.clone(),
+            callable_params.into_boxed_slice(),
+            body,
+        )
+        .with_binding_opt(input.binding)
+        .with_effects(
+            sema.try_expr_effects(input.body_id)
+                .unwrap_or_else(|| invalid_lowering_path("expr effects missing for closure body"))
+                .clone(),
+        )
+        .with_module_target_opt(input.callable_module_target),
+    );
 
-    IrExpr {
-        origin: input.origin,
-        kind: IrExprKind::ClosureNew {
-            callee: IrNameRef {
-                binding: input.binding,
-                name: callable_name,
-                module_target: Some(ctx.module_key.clone()),
-            },
+    IrExpr::new(
+        input.origin,
+        IrExprKind::ClosureNew {
+            callee: IrNameRef::new(callable_name)
+                .with_binding_opt(input.binding)
+                .with_module_target(ctx.module_key.clone()),
             captures: capture_exprs,
         },
-    }
+    )
 }
 
 fn rewrite_recursive_binding_refs(
@@ -1024,10 +1010,7 @@ fn rewrite_recursive_binding_refs(
     };
     let origin_expr = expr.origin;
     let kind = rewrite_recursive_binding_kind(&input, expr.kind);
-    IrExpr {
-        origin: origin_expr,
-        kind,
-    }
+    IrExpr::new(origin_expr, kind)
 }
 
 fn rewrite_recursive_binding_kind(
@@ -1040,11 +1023,9 @@ fn rewrite_recursive_binding_kind(
             module_target,
             ..
         } if found == input.binding && module_target.is_none() => IrExprKind::ClosureNew {
-            callee: IrNameRef {
-                binding: Some(input.binding),
-                name: input.callable_name.into(),
-                module_target: Some(input.ctx.module_key.clone()),
-            },
+            callee: IrNameRef::new(input.callable_name)
+                .with_binding(input.binding)
+                .with_module_target(input.ctx.module_key.clone()),
             captures: lower_capture_exprs(input.ctx, input.origin, input.captures),
         },
         IrExprKind::Sequence { exprs } => rewrite_sequence_kind(
@@ -1869,16 +1850,19 @@ fn rewrite_record_fields(
     fields
         .into_vec()
         .into_iter()
-        .map(|field| IrRecordField {
-            expr: rewrite_recursive_binding_refs(
-                ctx,
-                origin,
-                field.expr,
-                binding,
-                callable_name,
-                captures,
-            ),
-            ..field
+        .map(|field| {
+            IrRecordField::new(
+                field.name,
+                field.index,
+                rewrite_recursive_binding_refs(
+                    ctx,
+                    origin,
+                    field.expr,
+                    binding,
+                    callable_name,
+                    captures,
+                ),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
@@ -1894,16 +1878,18 @@ fn rewrite_call_args(
 ) -> Box<[IrArg]> {
     args.into_vec()
         .into_iter()
-        .map(|arg| IrArg {
-            expr: rewrite_recursive_binding_refs(
-                ctx,
-                origin,
-                arg.expr,
-                binding,
-                callable_name,
-                captures,
-            ),
-            ..arg
+        .map(|arg| {
+            IrArg::new(
+                arg.spread,
+                rewrite_recursive_binding_refs(
+                    ctx,
+                    origin,
+                    arg.expr,
+                    binding,
+                    callable_name,
+                    captures,
+                ),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
@@ -1947,16 +1933,19 @@ fn rewrite_handle_ops(
 ) -> Box<[IrHandleOp]> {
     ops.into_vec()
         .into_iter()
-        .map(|op| IrHandleOp {
-            closure: rewrite_recursive_binding_refs(
-                ctx,
-                origin,
-                op.closure,
-                binding,
-                callable_name,
-                captures,
-            ),
-            ..op
+        .map(|op| {
+            IrHandleOp::new(
+                op.op_index,
+                op.name,
+                rewrite_recursive_binding_refs(
+                    ctx,
+                    origin,
+                    op.closure,
+                    binding,
+                    callable_name,
+                    captures,
+                ),
+            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
@@ -2092,22 +2081,19 @@ fn lower_capture_params(ctx: &LowerCtx<'_>, captures: &[NameBindingId]) -> Vec<I
     captures
         .iter()
         .copied()
-        .map(|binding| IrParam {
-            binding,
-            name: binding_name(ctx, binding),
-        })
+        .map(|binding| IrParam::new(binding, binding_name(ctx, binding)))
         .collect()
 }
 
 fn name_expr(ctx: &LowerCtx<'_>, origin: IrOrigin, binding: NameBindingId) -> IrExpr {
-    IrExpr {
+    IrExpr::new(
         origin,
-        kind: IrExprKind::Name {
+        IrExprKind::Name {
             binding: Some(binding),
             name: binding_name(ctx, binding),
             module_target: None,
         },
-    }
+    )
 }
 
 fn lower_capture_exprs(
@@ -2510,10 +2496,7 @@ fn lower_record_case_patterns(
         for prefix in &acc {
             for pat in &nested {
                 let mut updated = prefix.clone();
-                updated.push(IrCaseRecordField {
-                    index,
-                    pat: Box::new(pat.clone()),
-                });
+                updated.push(IrCaseRecordField::new(index, pat.clone()));
                 next.push(updated);
             }
         }
@@ -2767,16 +2750,10 @@ fn lower_foreign_let(
         .and_then(|foreign| foreign.abi)
         .map_or("c", |sym| interner.resolve(sym));
     let (param_tys, result_ty) = foreign_signature_tys(sema, interner, binding, expr_id, params);
-    IrForeignDef {
-        binding,
-        symbol,
-        name: name_text,
-        abi: abi.into(),
-        param_tys,
-        result_ty,
-        link,
-        exported,
-    }
+    IrForeignDef::new(name_text, abi, symbol, param_tys, result_ty)
+        .with_binding_opt(binding)
+        .with_link_opt(link)
+        .with_exported(exported)
 }
 
 fn foreign_signature_tys(

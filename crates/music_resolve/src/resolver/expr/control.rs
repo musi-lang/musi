@@ -36,10 +36,8 @@ where
         let pat = if pat_node.kind().is_pat() {
             self.lower_pat(pat_node)
         } else {
-            self.store.alloc_pat(HirPat {
-                origin: self.origin_node(node),
-                kind: HirPatKind::Error,
-            })
+            self.store
+                .alloc_pat(HirPat::new(self.origin_node(node), HirPatKind::Error))
         };
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
@@ -50,11 +48,6 @@ where
         };
 
         self.pop_scope();
-        HirCaseArm {
-            attrs,
-            pat,
-            guard,
-            expr,
-        }
+        HirCaseArm::new(attrs, pat, guard, expr)
     }
 }

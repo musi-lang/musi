@@ -13,40 +13,38 @@ fn sample_artifact() -> Artifact {
     let answer = artifact.intern_string("answer");
     let int = artifact.intern_string("Int");
     let constant_name = artifact.intern_string("answer.const");
-    let int_ty = artifact.types.alloc(TypeDescriptor {
-        name: int,
-        term: int,
-    });
-    let constant = artifact.constants.alloc(ConstantDescriptor {
-        name: constant_name,
-        value: ConstantValue::Int(41),
-    });
-    let method = artifact.methods.alloc(MethodDescriptor {
-        name: entry,
-        params: 0,
-        locals: 1,
-        export: false,
-        labels: Box::new([label]),
-        code: Box::new([
-            CodeEntry::Label(Label { id: 0 }),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::LdConst,
-                Operand::Constant(constant),
-            )),
-            CodeEntry::Instruction(Instruction::new(Opcode::StLoc, Operand::Local(0))),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::SeqNew,
-                Operand::TypeLen { ty: int_ty, len: 2 },
-            )),
-            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
-        ]),
-    });
-    let _ = artifact.globals.alloc(GlobalDescriptor {
-        name: answer,
-        export: true,
-        initializer: Some(method),
-    });
+    let int_ty = artifact.types.alloc(TypeDescriptor::new(int, int));
+    let constant = artifact.constants.alloc(ConstantDescriptor::new(
+        constant_name,
+        ConstantValue::Int(41),
+    ));
+    let method = artifact.methods.alloc(
+        MethodDescriptor::new(
+            entry,
+            0,
+            1,
+            Box::new([
+                CodeEntry::Label(Label { id: 0 }),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::LdConst,
+                    Operand::Constant(constant),
+                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::StLoc, Operand::Local(0))),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqNew,
+                    Operand::TypeLen { ty: int_ty, len: 2 },
+                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+            ]),
+        )
+        .with_labels(Box::new([label])),
+    );
+    let _ = artifact.globals.alloc(
+        GlobalDescriptor::new(answer)
+            .with_export(true)
+            .with_initializer(method),
+    );
     artifact
 }
 
@@ -72,10 +70,9 @@ fn text_roundtrip_preserves_artifact_shape() {
 fn text_roundtrip_supports_quoted_symbolic_names() {
     let mut artifact = sample_artifact();
     let record_name = artifact.intern_string("{ x: Int; y: Int }");
-    let _ = artifact.types.alloc(TypeDescriptor {
-        name: record_name,
-        term: record_name,
-    });
+    let _ = artifact
+        .types
+        .alloc(TypeDescriptor::new(record_name, record_name));
 
     let text = format_text(&artifact);
     let decoded = parse_text(&text).unwrap();
@@ -87,14 +84,13 @@ fn float_constants_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let float_name = artifact.intern_string("Float");
     let constant_name = artifact.intern_string("pi.const");
-    let _ = artifact.types.alloc(TypeDescriptor {
-        name: float_name,
-        term: float_name,
-    });
-    let _ = artifact.constants.alloc(ConstantDescriptor {
-        name: constant_name,
-        value: ConstantValue::Float(3.5),
-    });
+    let _ = artifact
+        .types
+        .alloc(TypeDescriptor::new(float_name, float_name));
+    let _ = artifact.constants.alloc(ConstantDescriptor::new(
+        constant_name,
+        ConstantValue::Float(3.5),
+    ));
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
@@ -110,13 +106,13 @@ fn syntax_constants_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let syntax_name = artifact.intern_string("quoted.const");
     let syntax_text = artifact.intern_string("#(1 + 2)");
-    let _ = artifact.constants.alloc(ConstantDescriptor {
-        name: syntax_name,
-        value: ConstantValue::Syntax {
+    let _ = artifact.constants.alloc(ConstantDescriptor::new(
+        syntax_name,
+        ConstantValue::Syntax {
             shape: SyntaxShape::Expr,
             text: syntax_text,
         },
-    });
+    ));
 
     let text = format_text(&artifact);
     assert!(text.contains("syntax expr \"#(1 + 2)\""));
@@ -137,19 +133,14 @@ fn foreign_link_roundtrips_in_text_and_binary() {
     let symbol = artifact.intern_string("puts");
     let link = artifact.intern_string("c");
     let int_name = artifact.intern_string("Int");
-    let int_ty = artifact.types.alloc(TypeDescriptor {
-        name: int_name,
-        term: int_name,
-    });
-    let _ = artifact.foreigns.alloc(ForeignDescriptor {
-        name,
-        param_tys: Box::new([]),
-        result_ty: int_ty,
-        abi,
-        symbol,
-        link: Some(link),
-        export: true,
-    });
+    let int_ty = artifact
+        .types
+        .alloc(TypeDescriptor::new(int_name, int_name));
+    let _ = artifact.foreigns.alloc(
+        ForeignDescriptor::new(name, Box::new([]), int_ty, abi, symbol)
+            .with_link(link)
+            .with_export(true),
+    );
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
@@ -166,11 +157,9 @@ fn meta_roundtrips_in_text_and_binary() {
     let target = artifact.intern_string("main::answer");
     let key = artifact.intern_string("inert.attr");
     let value = artifact.intern_string("@foo.bar(baz = \"qux\")");
-    let _ = artifact.meta.alloc(MetaDescriptor {
-        target,
-        key,
-        values: Box::new([value]),
-    });
+    let _ = artifact
+        .meta
+        .alloc(MetaDescriptor::new(target, key, Box::new([value])));
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
@@ -188,37 +177,33 @@ fn global_and_sequence_operands_roundtrip_in_text_and_binary() {
     let label = artifact.intern_string("L0");
     let answer = artifact.intern_string("answer");
     let int = artifact.intern_string("Int");
-    let int_ty = artifact.types.alloc(TypeDescriptor {
-        name: int,
-        term: int,
-    });
-    let global = artifact.globals.alloc(GlobalDescriptor {
-        name: answer,
-        export: true,
-        initializer: None,
-    });
-    let _ = artifact.methods.alloc(MethodDescriptor {
-        name: entry,
-        params: 0,
-        locals: 1,
-        export: false,
-        labels: Box::new([label]),
-        code: Box::new([
-            CodeEntry::Label(Label { id: 0 }),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdGlob, Operand::Global(global))),
-            CodeEntry::Instruction(Instruction::new(Opcode::StGlob, Operand::Global(global))),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::SeqNew,
-                Operand::TypeLen { ty: int_ty, len: 2 },
-            )),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-            CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-            CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
-            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
-        ]),
-    });
+    let int_ty = artifact.types.alloc(TypeDescriptor::new(int, int));
+    let global = artifact
+        .globals
+        .alloc(GlobalDescriptor::new(answer).with_export(true));
+    let _ = artifact.methods.alloc(
+        MethodDescriptor::new(
+            entry,
+            0,
+            1,
+            Box::new([
+                CodeEntry::Label(Label { id: 0 }),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdGlob, Operand::Global(global))),
+                CodeEntry::Instruction(Instruction::new(Opcode::StGlob, Operand::Global(global))),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::SeqNew,
+                    Operand::TypeLen { ty: int_ty, len: 2 },
+                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+                CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+                CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+            ]),
+        )
+        .with_labels(Box::new([label])),
+    );
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
@@ -236,39 +221,38 @@ fn closures_roundtrip_in_text_and_binary() {
     let closure = artifact.intern_string("closure");
     let label = artifact.intern_string("L0");
 
-    let closure_method = artifact.methods.alloc(MethodDescriptor {
-        name: closure,
-        params: 0,
-        locals: 0,
-        export: false,
-        labels: Box::new([]),
-        code: Box::new([CodeEntry::Instruction(Instruction::new(
+    let closure_method = artifact.methods.alloc(MethodDescriptor::new(
+        closure,
+        0,
+        0,
+        Box::new([CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
             Operand::None,
         ))]),
-    });
+    ));
 
-    let _ = artifact.methods.alloc(MethodDescriptor {
-        name: entry,
-        params: 0,
-        locals: 0,
-        export: false,
-        labels: Box::new([label]),
-        code: Box::new([
-            CodeEntry::Label(Label { id: 0 }),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-            CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::ClsNew,
-                Operand::WideMethodCaptures {
-                    method: closure_method,
-                    captures: 2,
-                },
-            )),
-            CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
-            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
-        ]),
-    });
+    let _ = artifact.methods.alloc(
+        MethodDescriptor::new(
+            entry,
+            0,
+            0,
+            Box::new([
+                CodeEntry::Label(Label { id: 0 }),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::ClsNew,
+                    Operand::WideMethodCaptures {
+                        method: closure_method,
+                        captures: 2,
+                    },
+                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+            ]),
+        )
+        .with_labels(Box::new([label])),
+    );
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
@@ -283,23 +267,18 @@ fn closures_roundtrip_in_text_and_binary() {
 fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
     let mut artifact = Artifact::new();
     let int = artifact.intern_string("Int");
-    let _int_ty = artifact.types.alloc(TypeDescriptor {
-        name: int,
-        term: int,
-    });
+    let _int_ty = artifact.types.alloc(TypeDescriptor::new(int, int));
 
     let callee_name = artifact.intern_string("callee");
-    let callee = artifact.methods.alloc(MethodDescriptor {
-        name: callee_name,
-        params: 2,
-        locals: 0,
-        export: false,
-        labels: Box::new([]),
-        code: Box::new([CodeEntry::Instruction(Instruction::new(
+    let callee = artifact.methods.alloc(MethodDescriptor::new(
+        callee_name,
+        2,
+        0,
+        Box::new([CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
             Operand::None,
         ))]),
-    });
+    ));
 
     let effect_name = artifact.intern_string("Abort");
     let op_name = artifact.intern_string("abort");
@@ -309,52 +288,47 @@ fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
         .next()
         .map(|(id, _)| id)
         .expect("sample artifact type");
-    let effect = artifact.effects.alloc(EffectDescriptor {
-        name: effect_name,
-        ops: Box::new([EffectOpDescriptor {
-            name: op_name,
-            param_tys: Box::new([int_ty]),
-            result_ty: int_ty,
-        }]),
-    });
+    let effect = artifact.effects.alloc(EffectDescriptor::new(
+        effect_name,
+        Box::new([EffectOpDescriptor::new(op_name, Box::new([int_ty]), int_ty)]),
+    ));
 
     let foreign_name = artifact.intern_string("puts");
     let c_abi = artifact.intern_string("c");
     let symbol = artifact.intern_string("puts");
-    let foreign = artifact.foreigns.alloc(ForeignDescriptor {
-        name: foreign_name,
-        param_tys: Box::new([int_ty]),
-        result_ty: int_ty,
-        abi: c_abi,
+    let foreign = artifact.foreigns.alloc(ForeignDescriptor::new(
+        foreign_name,
+        Box::new([int_ty]),
+        int_ty,
+        c_abi,
         symbol,
-        link: None,
-        export: false,
-    });
+    ));
 
     let entry_name = artifact.intern_string("entry");
     let label = artifact.intern_string("L0");
-    let _ = artifact.methods.alloc(MethodDescriptor {
-        name: entry_name,
-        params: 0,
-        locals: 0,
-        export: false,
-        labels: Box::new([label]),
-        code: Box::new([
-            CodeEntry::Label(Label { id: 0 }),
-            CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
-            CodeEntry::Instruction(Instruction::new(Opcode::CallSeq, Operand::Method(callee))),
-            CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::FfiCallSeq,
-                Operand::Foreign(foreign),
-            )),
-            CodeEntry::Instruction(Instruction::new(
-                Opcode::EffInvkSeq,
-                Operand::Effect { effect, op: 0 },
-            )),
-            CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
-        ]),
-    });
+    let _ = artifact.methods.alloc(
+        MethodDescriptor::new(
+            entry_name,
+            0,
+            0,
+            Box::new([
+                CodeEntry::Label(Label { id: 0 }),
+                CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::CallSeq, Operand::Method(callee))),
+                CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::FfiCallSeq,
+                    Operand::Foreign(foreign),
+                )),
+                CodeEntry::Instruction(Instruction::new(
+                    Opcode::EffInvkSeq,
+                    Operand::Effect { effect, op: 0 },
+                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+            ]),
+        )
+        .with_labels(Box::new([label])),
+    );
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();

@@ -255,10 +255,7 @@ fn check_non_callable_let_value(
                 *class,
                 members,
             );
-            ExprFacts {
-                ty: builtins.unit,
-                effects: EffectRow::empty(),
-            }
+            ExprFacts::new(builtins.unit, EffectRow::empty())
         }
         _ => check_value_with_expected_ty(ctx, declared_ty, value),
     }
@@ -427,8 +424,5 @@ pub(in super::super) fn check_let_expr(
     if let Some(name) = bound_name {
         bind_imported_alias(ctx, name, value);
     }
-    ExprFacts {
-        ty: builtins.unit,
-        effects: EffectRow::empty(),
-    }
+    ExprFacts::new(builtins.unit, EffectRow::empty())
 }

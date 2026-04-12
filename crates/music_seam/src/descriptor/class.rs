@@ -4,3 +4,10 @@ use crate::artifact::StringId;
 pub struct ClassDescriptor {
     pub name: StringId,
 }
+
+impl ClassDescriptor {
+    #[must_use]
+    pub const fn new(name: StringId) -> Self {
+        Self { name }
+    }
+}

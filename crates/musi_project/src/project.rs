@@ -26,6 +26,16 @@ pub struct PackageId {
     pub version: String,
 }
 
+impl PackageId {
+    #[must_use]
+    pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            version: version.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageSource {
     Workspace,
@@ -42,11 +52,45 @@ pub struct ProjectEntry {
     pub path: PathBuf,
 }
 
+impl ProjectEntry {
+    #[must_use]
+    pub const fn new(package: PackageId, module_key: ModuleKey, path: PathBuf) -> Self {
+        Self {
+            package,
+            module_key,
+            path,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskSpec {
     pub description: Option<String>,
     pub command: String,
     pub dependencies: Vec<String>,
+}
+
+impl TaskSpec {
+    #[must_use]
+    pub fn new(command: impl Into<String>) -> Self {
+        Self {
+            description: None,
+            command: command.into(),
+            dependencies: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependencies(mut self, dependencies: Vec<String>) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,11 +109,100 @@ pub struct ResolvedPackage {
     pub optional_dependencies: BTreeMap<String, PackageId>,
 }
 
+impl ResolvedPackage {
+    #[must_use]
+    pub const fn new(
+        id: PackageId,
+        manifest_path: PathBuf,
+        root_dir: PathBuf,
+        source: PackageSource,
+        manifest: PackageManifest,
+        entry: ProjectEntry,
+    ) -> Self {
+        Self {
+            id,
+            manifest_path,
+            root_dir,
+            source,
+            manifest,
+            entry,
+            exports: BTreeMap::new(),
+            module_keys: BTreeMap::new(),
+            dependencies: BTreeMap::new(),
+            dev_dependencies: BTreeMap::new(),
+            peer_dependencies: BTreeMap::new(),
+            optional_dependencies: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_exports(mut self, exports: BTreeMap<String, ModuleKey>) -> Self {
+        self.exports = exports;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_keys(mut self, module_keys: BTreeMap<ModuleKey, PathBuf>) -> Self {
+        self.module_keys = module_keys;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependencies(mut self, dependencies: BTreeMap<String, PackageId>) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dev_dependencies(mut self, dev_dependencies: BTreeMap<String, PackageId>) -> Self {
+        self.dev_dependencies = dev_dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_peer_dependencies(
+        mut self,
+        peer_dependencies: BTreeMap<String, PackageId>,
+    ) -> Self {
+        self.peer_dependencies = peer_dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_optional_dependencies(
+        mut self,
+        optional_dependencies: BTreeMap<String, PackageId>,
+    ) -> Self {
+        self.optional_dependencies = optional_dependencies;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceGraph {
     pub root_package: Option<PackageId>,
     pub members: Vec<PackageId>,
     pub packages: BTreeMap<PackageId, ResolvedPackage>,
+}
+
+impl WorkspaceGraph {
+    #[must_use]
+    pub const fn new(
+        members: Vec<PackageId>,
+        packages: BTreeMap<PackageId, ResolvedPackage>,
+    ) -> Self {
+        Self {
+            root_package: None,
+            members,
+            packages,
+        }
+    }
+
+    #[must_use]
+    pub fn with_root_package(mut self, root_package: PackageId) -> Self {
+        self.root_package = Some(root_package);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -78,6 +211,42 @@ pub struct ProjectOptions {
     pub cache_root: Option<PathBuf>,
     pub emit: EmitOptions,
     pub target: Option<TargetInfo>,
+}
+
+impl ProjectOptions {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            registry_root: None,
+            cache_root: None,
+            emit: EmitOptions,
+            target: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_registry_root(mut self, registry_root: PathBuf) -> Self {
+        self.registry_root = Some(registry_root);
+        self
+    }
+
+    #[must_use]
+    pub fn with_cache_root(mut self, cache_root: PathBuf) -> Self {
+        self.cache_root = Some(cache_root);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_emit(mut self, emit: EmitOptions) -> Self {
+        self.emit = emit;
+        self
+    }
+
+    #[must_use]
+    pub fn with_target(mut self, target: TargetInfo) -> Self {
+        self.target = Some(target);
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -365,11 +534,12 @@ impl Project {
             command,
             dependencies,
         } = self.manifest.task_config(name)?;
-        Some(TaskSpec {
-            description,
-            command,
-            dependencies,
-        })
+        let task = if let Some(description) = description {
+            TaskSpec::new(command).with_description(description)
+        } else {
+            TaskSpec::new(command)
+        };
+        Some(task.with_dependencies(dependencies))
     }
 
     /// # Errors
@@ -415,11 +585,13 @@ impl Project {
     pub fn build_session(&self) -> ProjectResult<Session> {
         let mut import_map = self.import_map.clone();
         extend_import_map(&mut import_map);
-        let mut session = Session::new(SessionOptions {
-            emit: self.options.emit,
-            import_map,
-            target: self.options.target.clone(),
-        });
+        let mut session_options = SessionOptions::new()
+            .with_emit(self.options.emit)
+            .with_import_map(import_map);
+        if let Some(target) = self.options.target.clone() {
+            session_options = session_options.with_target(target);
+        }
+        let mut session = Session::new(session_options);
         register_modules(&mut session)?;
         for (key, text) in &self.module_texts {
             session.set_module_text(key, text.clone())?;
@@ -554,10 +726,10 @@ fn resolve_workspace_state(
         .into_iter()
         .map(|(id, record)| (id, record.package))
         .collect();
-    let workspace = WorkspaceGraph {
-        root_package,
-        members,
-        packages,
+    let workspace = if let Some(root_package) = root_package {
+        WorkspaceGraph::new(members, packages).with_root_package(root_package)
+    } else {
+        WorkspaceGraph::new(members, packages)
     };
 
     Ok(ResolvedWorkspaceState {
@@ -917,14 +1089,14 @@ fn resolve_dependency(
     } = ctx;
 
     if let Some(package) = local_packages.get(name) {
-        let package_id = PackageId {
-            name: name.into(),
-            version: package
+        let package_id = PackageId::new(
+            name,
+            package
                 .manifest
                 .version
                 .clone()
                 .ok_or_else(|| ProjectError::MissingPackageVersion { name: name.into() })?,
-        };
+        );
         if !package_records.contains_key(&package_id) {
             let record = load_package_record(
                 package.root_dir.clone(),
@@ -978,10 +1150,7 @@ fn resolve_dependency(
         .version
         .clone()
         .unwrap_or_else(|| registry_package.version.clone());
-    let package_id = PackageId {
-        name: name.into(),
-        version,
-    };
+    let package_id = PackageId::new(name, version);
     if !package_records.contains_key(&package_id) {
         let record = load_package_record(
             registry_package.cache_dir.clone(),
@@ -1035,8 +1204,8 @@ fn load_package_record(
     manifest: PackageManifest,
     source: PackageSource,
 ) -> ProjectResult<PackageRecord> {
-    let id = PackageId {
-        name: manifest.name.clone().ok_or_else(|| {
+    let id = PackageId::new(
+        manifest.name.clone().ok_or_else(|| {
             manifest_source.error_with_hint(
                 DiagCode::new(3606),
                 "package name missing",
@@ -1045,7 +1214,7 @@ fn load_package_record(
                 "add `name` to this package manifest",
             )
         })?,
-        version: manifest.version.clone().ok_or_else(|| {
+        manifest.version.clone().ok_or_else(|| {
             manifest_source.error_with_hint(
                 DiagCode::new(3606),
                 "package version missing",
@@ -1054,7 +1223,7 @@ fn load_package_record(
                 "add `version` to this package manifest",
             )
         })?,
-    };
+    );
 
     let modules = discover_modules(&id, &root_dir)?;
     let relative_modules = modules
@@ -1073,11 +1242,7 @@ fn load_package_record(
     let entry_path = module_keys.get(&entry_key).cloned().ok_or_else(|| {
         package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
     })?;
-    let entry = ProjectEntry {
-        package: id.clone(),
-        module_key: entry_key,
-        path: entry_path,
-    };
+    let entry = ProjectEntry::new(id.clone(), entry_key, entry_path);
 
     let mut exports = BTreeMap::new();
     for (name, target) in manifest.export_map() {
@@ -1086,20 +1251,9 @@ fn load_package_record(
         let _ = exports.insert(name, export_key);
     }
 
-    let package = ResolvedPackage {
-        id,
-        manifest_path,
-        root_dir,
-        source,
-        manifest,
-        entry,
-        exports,
-        module_keys,
-        dependencies: BTreeMap::new(),
-        dev_dependencies: BTreeMap::new(),
-        peer_dependencies: BTreeMap::new(),
-        optional_dependencies: BTreeMap::new(),
-    };
+    let package = ResolvedPackage::new(id, manifest_path, root_dir, source, manifest, entry)
+        .with_exports(exports)
+        .with_module_keys(module_keys);
 
     Ok(PackageRecord {
         package,
