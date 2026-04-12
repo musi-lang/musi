@@ -71,6 +71,38 @@ for (const operator of fixtures.requiredOperatorPatterns) {
 	);
 }
 
+for (const pattern of fixtures.requiredDocumentationPatterns ?? []) {
+	assert(
+		grammarText.includes(pattern),
+		`grammar missing documentation pattern \`${pattern}\``,
+	);
+}
+
+for (const sample of fixtures.documentationCommentSamples ?? []) {
+	assert(
+		sample.includes("///") || sample.includes("/**"),
+		`documentation sample missing doc comment opener: ${sample}`,
+	);
+	assert(
+		sample.includes("@"),
+		`documentation sample missing documentation tag: ${sample}`,
+	);
+	assert(
+		sample.includes(":=") ||
+			sample.includes("{@") ||
+			sample.includes("http://") ||
+			sample.includes("https://"),
+		`documentation sample missing Musi documentation content: ${sample}`,
+	);
+}
+
+for (const scope of fixtures.requiredScopePatterns ?? []) {
+	assert(
+		grammarJson.includes(scope),
+		`grammar missing semantic-ready scope \`${scope}\``,
+	);
+}
+
 assert(
 	grammarJson.includes(fixtures.requiredAccessorScope),
 	`grammar missing accessor scope \`${fixtures.requiredAccessorScope}\``,

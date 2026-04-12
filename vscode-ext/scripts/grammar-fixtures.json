@@ -29,6 +29,44 @@
 		"<:",
 		"\\.\\.\\."
 	],
+	"requiredScopePatterns": [
+		"comment.line.documentation.musi",
+		"comment.block.documentation.musi",
+		"punctuation.separator.definition.documentation.musi",
+		"meta.documentation.param.musi",
+		"meta.documentation.type.musi",
+		"meta.documentation.option.musi",
+		"meta.documentation.reference.musi",
+		"meta.documentation.formatting.musi",
+		"entity.name.function.musi",
+		"entity.name.function.call.musi",
+		"entity.name.type.musi",
+		"entity.name.constructor.musi",
+		"entity.name.method.musi",
+		"variable.parameter.documentation.musi",
+		"variable.parameter.optional.documentation.musi",
+		"storage.type.documentation.musi",
+		"markup.underline.link.documentation.musi",
+		"markup.inline.raw.documentation.musi",
+		"keyword.other.documentation.tag.musi"
+	],
+	"requiredDocumentationPatterns": [
+		"@(param(?:eter)?|arg(?:ument)?|property|var)",
+		"@(type|template)",
+		"@(default|optional)",
+		"@(see)",
+		"@(code|literal)",
+		"@(returns?|deprecated|example|remarks?|summary|since|version)",
+		"\\{@(?:link(?:plain)?|linkplain|see)\\b",
+		"\\{@(?:code|literal)\\b",
+		":="
+	],
+	"documentationCommentSamples": [
+		"/// @parameter value := input value",
+		"/// @arg [count := 10] optional count",
+		"/// @see {@linkplain Std.Option | Option} and https://example.com",
+		"/** @type T := result type @default [count := 10] @code let value := 1 */"
+	],
 	"requiredAccessorScope": "punctuation.accessor.musi",
 	"requiredSnippetPrefixes": [
 		"let",

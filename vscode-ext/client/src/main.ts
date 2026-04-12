@@ -11,11 +11,15 @@ let statusBar: StatusBar | undefined;
 let diagnostics: DiagnosticsController | undefined;
 let lsp: LspController | undefined;
 
+function reportBackgroundError(action: string, error: unknown) {
+	console.error(`[musi-vscode] ${action}:`, error);
+}
+
 async function refreshCliAndStatus() {
-	if (!statusBar || !diagnostics) {
+	if (!(statusBar && diagnostics)) {
 		return;
 	}
-	if (!lsp?.isRunning() && !findCliPath()) {
+	if (!(lsp?.isRunning() || findCliPath())) {
 		statusBar.update("CLI missing", "error");
 		return;
 	}
@@ -32,7 +36,9 @@ function registerEditorListeners(context: vscode.ExtensionContext) {
 			diagnostics?.scheduleDocumentCheck(document);
 		}),
 		vscode.window.onDidChangeActiveTextEditor(() => {
-			void refreshCliAndStatus();
+			refreshCliAndStatus().catch((error) => {
+				reportBackgroundError("refresh status", error);
+			});
 		}),
 	);
 }
@@ -41,12 +47,14 @@ function setupConfigChangeHandler(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		onConfigChange(() => {
 			clearCliCache();
-			void (async () => {
+			(async () => {
 				if (lsp) {
 					await lsp.restart(context);
 				}
 				await refreshCliAndStatus();
-			})();
+			})().catch((error) => {
+				reportBackgroundError("reload configuration", error);
+			});
 		}),
 	);
 }
@@ -62,7 +70,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		lsp,
 		vscode.languages.registerCodeLensProvider(
 			{ scheme: "file", pattern: "**/musi.json" },
-			new MsPackageCodeLensProvider(),
+			new MsPackageCodeLensProvider() as unknown as vscode.CodeLensProvider,
 		),
 	);
 

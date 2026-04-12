@@ -66,9 +66,14 @@ export class LspController implements vscode.Disposable {
 		} catch (error) {
 			this.#diagnostics.setMode("full");
 			this.#statusBar.update("LSP unavailable", "error");
-			void vscode.window.showErrorMessage(
-				`Failed to start Musi LSP: ${String(error)}`,
-			);
+			vscode.window
+				.showErrorMessage(`Failed to start Musi LSP: ${String(error)}`)
+				.then(undefined, (messageError: unknown) => {
+					console.error(
+						"[musi-vscode] failed to show LSP error message:",
+						messageError,
+					);
+				});
 			return false;
 		}
 	}
@@ -88,6 +93,8 @@ export class LspController implements vscode.Disposable {
 	}
 
 	dispose() {
-		void this.stop();
+		this.stop().catch((error) => {
+			console.error("[musi-vscode] failed to stop LSP client:", error);
+		});
 	}
 }

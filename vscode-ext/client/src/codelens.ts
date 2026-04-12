@@ -1,8 +1,11 @@
 import * as vscode from "vscode";
 import { taskNameLineMap } from "./manifest.ts";
 
-export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
-	provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+export class MsPackageCodeLensProvider {
+	provideCodeLenses(
+		document: vscode.TextDocument,
+		_token: vscode.CancellationToken,
+	): vscode.CodeLens[] {
 		const lines = taskNameLineMap(document);
 		const lenses: vscode.CodeLens[] = [];
 

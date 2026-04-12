@@ -1,0 +1,8 @@
+{
+    "name": "vscode-musi-client",
+    "private": true,
+    "dependencies": {
+        "vscode": "npm:@types/vscode@1.75.0",
+        "vscode-languageclient": "^9.0.1"
+    }
+}

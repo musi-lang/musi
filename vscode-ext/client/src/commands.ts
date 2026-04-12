@@ -16,6 +16,8 @@ import {
 
 type CommandHandler = (...args: unknown[]) => Promise<void> | void;
 
+const RUNTIME_ARGS_SPLIT_REGEX = /\s+/;
+
 interface Commands {
 	runPackageEntry: CommandHandler;
 	checkPackage: CommandHandler;
@@ -210,7 +212,7 @@ function createCommands(diagnostics: DiagnosticsController): Commands {
 			if (value === undefined) {
 				return;
 			}
-			const runtimeArgs = value.split(/\s+/).filter(Boolean);
+			const runtimeArgs = value.split(RUNTIME_ARGS_SPLIT_REGEX).filter(Boolean);
 			const request = buildPackageExecutionRequest(pkg, {
 				name: "Run with Arguments",
 				runtimeArgs,

@@ -163,14 +163,14 @@ export class DiagnosticsController {
 			this.#statusBar.update(`Ready: ${path.basename(pkg.rootDir)}`, "ready");
 		} catch (error) {
 			this.#statusBar.update("Invalid musi.json", "error");
-			void vscode.window.showErrorMessage(
+			vscode.window.showErrorMessage(
 				`Failed to read owning musi.json: ${String(error)}`,
 			);
 		}
 	}
 
 	scheduleDocumentCheck(document: vscode.TextDocument) {
-		if (!getConfig().checkOnSave || !this.#shouldCheckDocument(document)) {
+		if (!(getConfig().checkOnSave && this.#shouldCheckDocument(document))) {
 			return;
 		}
 
@@ -186,7 +186,7 @@ export class DiagnosticsController {
 		}
 
 		const timer = setTimeout(() => {
-			void this.checkManifestPath(manifestPath);
+			this.checkManifestPath(manifestPath);
 		}, CHECK_DEBOUNCE_MS);
 		this.#timers.set(manifestPath, timer);
 	}

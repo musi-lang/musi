@@ -49,9 +49,13 @@ function configuredBinary(
 	if (fs.existsSync(configuredPath)) {
 		return configuredPath;
 	}
-	void vscode.window.showWarningMessage(
-		`Configured ${displayName} path does not exist: ${configuredPath}`,
-	);
+	vscode.window
+		.showWarningMessage(
+			`Configured ${displayName} path does not exist: ${configuredPath}`,
+		)
+		.then(undefined, (error: unknown) => {
+			console.error("[musi-vscode] warning message failed:", error);
+		});
 	return undefined;
 }
 
