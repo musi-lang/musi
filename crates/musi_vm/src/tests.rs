@@ -5,6 +5,7 @@ use std::rc::Rc;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 use music_seam::descriptor::{DataDescriptor, DataVariantDescriptor, TypeDescriptor};
+use music_seam::{StringId, TypeId};
 use music_session::{Session, SessionOptions};
 use music_term::{TypeTerm, TypeTermKind};
 
@@ -444,99 +445,101 @@ fn exposes_data_layout_descriptors_for_named_types() {
     );
 }
 
+fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
+    let name = artifact.intern_string(full_name);
+    let term = artifact.intern_string(
+        &TypeTerm::new(TypeTermKind::Named {
+            module: None,
+            name: full_name
+                .rsplit_once("::")
+                .map_or_else(|| full_name.to_owned(), |(_, local)| local.to_owned())
+                .into(),
+            args: Box::new([]),
+        })
+        .to_json(),
+    );
+    artifact.types.alloc(TypeDescriptor { name, term })
+}
+
+fn alloc_named_data(
+    artifact: &mut Artifact,
+    full_name: &str,
+    variants: Box<[DataVariantDescriptor]>,
+    repr_kind: Option<StringId>,
+    layout_align: Option<u32>,
+    layout_pack: Option<u32>,
+) -> TypeId {
+    let ty = alloc_named_type(artifact, full_name);
+    let field_count = variants
+        .iter()
+        .map(|variant| variant.field_tys.len())
+        .sum::<usize>();
+    let variant_count = u32::try_from(variants.len()).expect("variant count fits u32");
+    let field_count = u32::try_from(field_count).expect("field count fits u32");
+    let name = artifact.intern_string(full_name);
+    let _ = artifact.data.alloc(DataDescriptor {
+        name,
+        variant_count,
+        field_count,
+        variants,
+        repr_kind,
+        layout_align,
+        layout_pack,
+    });
+    ty
+}
+
 #[test]
 fn classifies_named_data_native_abi_kinds() {
     let mut artifact = Artifact::new();
     let repr_c = artifact.intern_string("c");
     let transparent = artifact.intern_string("transparent");
-
-    let point_name = artifact.intern_string("main::Point");
-    let point_term = artifact.intern_string(
-        &TypeTerm::new(TypeTermKind::Named {
-            module: None,
-            name: "Point".into(),
-            args: Box::new([]),
-        })
-        .to_json(),
-    );
-    let point_ty = artifact.types.alloc(TypeDescriptor {
-        name: point_name,
-        term: point_term,
-    });
     let point_variant_name = artifact.intern_string("Point");
-    let _ = artifact.data.alloc(DataDescriptor {
-        name: point_name,
-        variant_count: 1,
-        field_count: 2,
-        variants: Box::new([DataVariantDescriptor {
-            name: point_variant_name,
-            field_tys: Box::new([point_ty, point_ty]),
-        }]),
-        repr_kind: Some(repr_c),
-        layout_align: Some(8),
-        layout_pack: Some(4),
-    });
-
-    let handle_name = artifact.intern_string("main::Handle");
-    let handle_term = artifact.intern_string(
-        &TypeTerm::new(TypeTermKind::Named {
-            module: None,
-            name: "Handle".into(),
-            args: Box::new([]),
-        })
-        .to_json(),
-    );
-    let handle_ty = artifact.types.alloc(TypeDescriptor {
-        name: handle_name,
-        term: handle_term,
-    });
+    let point_field_ty = alloc_named_type(&mut artifact, "main::Point");
     let handle_variant_name = artifact.intern_string("Handle");
-    let _ = artifact.data.alloc(DataDescriptor {
-        name: handle_name,
-        variant_count: 1,
-        field_count: 1,
-        variants: Box::new([DataVariantDescriptor {
-            name: handle_variant_name,
-            field_tys: Box::new([handle_ty]),
-        }]),
-        repr_kind: Some(transparent),
-        layout_align: None,
-        layout_pack: None,
-    });
-
-    let maybe_name = artifact.intern_string("main::Maybe");
-    let maybe_term = artifact.intern_string(
-        &TypeTerm::new(TypeTermKind::Named {
-            module: None,
-            name: "Maybe".into(),
-            args: Box::new([]),
-        })
-        .to_json(),
-    );
-    let maybe_ty = artifact.types.alloc(TypeDescriptor {
-        name: maybe_name,
-        term: maybe_term,
-    });
+    let handle_field_ty = alloc_named_type(&mut artifact, "main::Handle");
     let none_variant_name = artifact.intern_string("None");
     let some_variant_name = artifact.intern_string("Some");
-    let _ = artifact.data.alloc(DataDescriptor {
-        name: maybe_name,
-        variant_count: 2,
-        field_count: 1,
-        variants: Box::new([
+    let maybe_self_ty = alloc_named_type(&mut artifact, "main::Maybe");
+    let point_ty = alloc_named_data(
+        &mut artifact,
+        "main::Point",
+        Box::new([DataVariantDescriptor {
+            name: point_variant_name,
+            field_tys: Box::new([point_field_ty; 2]),
+        }]),
+        Some(repr_c),
+        Some(8),
+        Some(4),
+    );
+    let handle_ty = alloc_named_data(
+        &mut artifact,
+        "main::Handle",
+        Box::new([DataVariantDescriptor {
+            name: handle_variant_name,
+            field_tys: Box::new([handle_field_ty]),
+        }]),
+        Some(transparent),
+        None,
+        None,
+    );
+    let maybe_ty = alloc_named_data(
+        &mut artifact,
+        "main::Maybe",
+        Box::new([
             DataVariantDescriptor {
                 name: none_variant_name,
                 field_tys: Box::new([]),
             },
             DataVariantDescriptor {
                 name: some_variant_name,
-                field_tys: Box::new([maybe_ty]),
+                field_tys: Box::new([maybe_self_ty]),
             },
         ]),
-        repr_kind: Some(repr_c),
-        layout_align: None,
-        layout_pack: None,
-    });
+        Some(repr_c),
+        None,
+        None,
+    );
 
     let program = Program::from_artifact(artifact).expect("program load should succeed");
 
