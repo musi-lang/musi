@@ -51,9 +51,20 @@ pub enum TypeTermKind {
     Tuple {
         items: Box<[TypeTerm]>,
     },
+    Seq {
+        item: Box<TypeTerm>,
+    },
     Array {
         dims: Box<[TypeDim]>,
         item: Box<TypeTerm>,
+    },
+    Range {
+        item: Box<TypeTerm>,
+    },
+    Handler {
+        effect: Box<TypeTerm>,
+        input: Box<TypeTerm>,
+        output: Box<TypeTerm>,
     },
     Mut {
         inner: Box<TypeTerm>,
@@ -180,6 +191,7 @@ impl Display for TypeTerm {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            TypeTermKind::Seq { item } => write!(f, "[]{item}"),
             TypeTermKind::Array { dims, item } => write!(
                 f,
                 "[{}]{item}",
@@ -192,6 +204,12 @@ impl Display for TypeTerm {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            TypeTermKind::Range { item } => write!(f, "Range[{item}]"),
+            TypeTermKind::Handler {
+                effect,
+                input,
+                output,
+            } => write!(f, "using {effect} ({input} -> {output})"),
             TypeTermKind::Mut { inner } => write!(f, "mut {inner}"),
             TypeTermKind::Record { fields } => write!(
                 f,
@@ -277,6 +295,21 @@ impl<'a> Parser<'a> {
             let inner = self.parse_prefix()?;
             return Ok(TypeTerm::new(TypeTermKind::Mut {
                 inner: Box::new(inner),
+            }));
+        }
+        if self.consume("using") {
+            self.require_ws()?;
+            let effect = self.parse_sum()?;
+            self.expect("(")?;
+            let input = self.parse_sum()?;
+            self.skip_ws();
+            self.expect("->")?;
+            let output = self.parse_sum()?;
+            self.expect(")")?;
+            return Ok(TypeTerm::new(TypeTermKind::Handler {
+                effect: Box::new(effect),
+                input: Box::new(input),
+                output: Box::new(output),
             }));
         }
         if self.consume("forall") {
@@ -402,10 +435,16 @@ impl<'a> Parser<'a> {
             }
         }
         let item = self.parse_prefix()?;
-        Ok(TypeTerm::new(TypeTermKind::Array {
-            dims: dims.into_boxed_slice(),
-            item: Box::new(item),
-        }))
+        if dims.is_empty() {
+            Ok(TypeTerm::new(TypeTermKind::Seq {
+                item: Box::new(item),
+            }))
+        } else {
+            Ok(TypeTerm::new(TypeTermKind::Array {
+                dims: dims.into_boxed_slice(),
+                item: Box::new(item),
+            }))
+        }
     }
 
     fn parse_dim(&mut self) -> TypeTermResult<TypeDim> {

@@ -72,7 +72,19 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
             )
         }
         SurfaceTyKind::Tuple { items } => canonical_surface_tuple(surface, items),
+        SurfaceTyKind::Seq { item } => format!("[]{}", canonical_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
+        SurfaceTyKind::Range { item } => format!("Range[{}]", canonical_surface_ty(surface, *item)),
+        SurfaceTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => format!(
+            "using {} ({} -> {})",
+            canonical_surface_ty(surface, *effect),
+            canonical_surface_ty(surface, *input),
+            canonical_surface_ty(surface, *output)
+        ),
         SurfaceTyKind::Mut { inner } => {
             format!("mut {}", canonical_surface_ty(surface, *inner))
         }
@@ -279,9 +291,24 @@ impl<'a> SurfaceTyBuilder<'a> {
             HirTyKind::Tuple { items } => SurfaceTyKind::Tuple {
                 items: self.lower_ty_ids(*items),
             },
+            HirTyKind::Seq { item } => SurfaceTyKind::Seq {
+                item: self.lower(*item),
+            },
             HirTyKind::Array { dims, item } => SurfaceTyKind::Array {
                 dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
+            },
+            HirTyKind::Range { item } => SurfaceTyKind::Range {
+                item: self.lower(*item),
+            },
+            HirTyKind::Handler {
+                effect,
+                input,
+                output,
+            } => SurfaceTyKind::Handler {
+                effect: self.lower(*effect),
+                input: self.lower(*input),
+                output: self.lower(*output),
             },
             HirTyKind::Mut { inner } => SurfaceTyKind::Mut {
                 inner: self.lower(*inner),
@@ -412,9 +439,24 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             SurfaceTyKind::Tuple { items } => HirTyKind::Tuple {
                 items: self.import_ty_list(items),
             },
+            SurfaceTyKind::Seq { item } => HirTyKind::Seq {
+                item: self.import(*item),
+            },
             SurfaceTyKind::Array { dims, item } => HirTyKind::Array {
                 dims: self.import_dims(dims),
                 item: self.import(*item),
+            },
+            SurfaceTyKind::Range { item } => HirTyKind::Range {
+                item: self.import(*item),
+            },
+            SurfaceTyKind::Handler {
+                effect,
+                input,
+                output,
+            } => HirTyKind::Handler {
+                effect: self.import(*effect),
+                input: self.import(*input),
+                output: self.import(*output),
             },
             SurfaceTyKind::Mut { inner } => HirTyKind::Mut {
                 inner: self.import(*inner),
@@ -510,7 +552,10 @@ impl SimpleTyKind {
             | HirTyKind::Arrow { .. }
             | HirTyKind::Sum { .. }
             | HirTyKind::Tuple { .. }
+            | HirTyKind::Seq { .. }
             | HirTyKind::Array { .. }
+            | HirTyKind::Range { .. }
+            | HirTyKind::Handler { .. }
             | HirTyKind::Mut { .. }
             | HirTyKind::Record { .. } => None,
         }
@@ -524,7 +569,10 @@ impl SimpleTyKind {
                 | SurfaceTyKind::Arrow { .. }
                 | SurfaceTyKind::Sum { .. }
                 | SurfaceTyKind::Tuple { .. }
+                | SurfaceTyKind::Seq { .. }
                 | SurfaceTyKind::Array { .. }
+                | SurfaceTyKind::Range { .. }
+                | SurfaceTyKind::Handler { .. }
                 | SurfaceTyKind::Mut { .. }
                 | SurfaceTyKind::Record { .. }
         ) {
@@ -552,7 +600,10 @@ impl SimpleTyKind {
             | SurfaceTyKind::Arrow { .. }
             | SurfaceTyKind::Sum { .. }
             | SurfaceTyKind::Tuple { .. }
+            | SurfaceTyKind::Seq { .. }
             | SurfaceTyKind::Array { .. }
+            | SurfaceTyKind::Range { .. }
+            | SurfaceTyKind::Handler { .. }
             | SurfaceTyKind::Mut { .. }
             | SurfaceTyKind::Record { .. } => None,
         }

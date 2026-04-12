@@ -48,7 +48,7 @@ fn lower_assign_target(
                 else {
                     return Err("assignment field base type missing".into());
                 };
-                let Some(index) = indices.get(&name.name).copied() else {
+                let Some(index) = indices.get(interner.resolve(name.name)).copied() else {
                     return Err("unsupported assignment target".into());
                 };
                 return Ok(IrAssignTarget::RecordField {

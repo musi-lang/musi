@@ -1,6 +1,6 @@
 # Grammar (EBNF + Precedence)
 
-`grammar/Musi.g4` is the canonical, tool-supported grammar.
+`grammar/MusiLexer.g4` and `grammar/MusiParser.g4` are the canonical, tool-supported grammar.
 
 This document is the compact grammar reference for hand-written implementations in simple languages such as C or Go:
 
@@ -20,7 +20,7 @@ Use it when:
 
 Keywords:
 
-`and as case class data effect export foreign forall handle if import in infix infixl infixr instance law let mut rec not of opaque or perform quote resume shl shr where with xor`
+`and as case class data effect export foreign forall handle if import in infix infixl infixr instance law let mut rec not of opaque or perform quote resume shl shr using where xor`
 
 Fixed punctuation / operators (maximal munch):
 
@@ -173,22 +173,25 @@ let_expr =
   "let" let_modifier? pattern
     bracket_params?
     params?
-    where_clause?
-    with_clause?
     type_annot?
+    where_clause?
+    using_clause?
   ":=" expr ;
+
+instance_expr =
+  "instance" bracket_params? expr where_clause? instance_body ;
 ```
 
 ### Typed Positions
 
-There is no separate `type_expr` grammar. Any typed position reuses `expr`, and semantic phases decide which expressions are valid there.
+Typed positions use a dedicated `type_expr` parse path.
 
 That includes:
 
-- annotations `":" expr`
+- annotations `":" type_expr`
 - variant payloads and record field declarations
 - effect items and `where` constraints
-- built-in universe names like `Type` and `Type0`, which are ordinary identifiers in the lexer/parser
+- builtin forms such as `[]T` and `[N]T`
 
 ### Patterns
 
@@ -206,13 +209,25 @@ pattern_primary =
   ;
 ```
 
-### Preserved Type-Valued Surface Forms
+### Type-Valued Surface Forms
 
-The first-class cleanup preserves the existing spellings as ordinary expressions:
+Callable/type-valued forms still include:
 
 ```
-pi_expr = "forall" "(" ident ":" expr ")" ("->" | "~>") expr ;
-lambda_expr = "\\" params (":" expr)? "=>" expr ;
+pi_expr = "forall" "(" ident ":" type_expr ")" ("->" | "~>") type_expr ;
+lambda_expr = "\\" params (":" type_expr)? "=>" expr ;
+```
+
+Effect rows and handlers use `using`:
+
+```musi
+using_clause = "using" effect_set ;
+handler_expr = "using" ident "{" handle_clause* "}" ;
+handle_expr =
+  "handle" expr (
+    handler_expr
+  | "using" prefix_expr
+  ) ;
 ```
 
 Bracket application remains general:
@@ -252,4 +267,5 @@ Minimal node inventory (term layer):
 
 - `docs/what/language/syntax.md`
 - `docs/status/antlr-grammar-tracker.md`
-- `grammar/Musi.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/MusiParser.g4`

@@ -17,7 +17,7 @@ impl Vm {
                     return Err(Self::invalid_operand(instruction));
                 };
                 let cond = self.pop_value()?;
-                if matches!(cond, Value::Bool(false) | Value::Unit) {
+                if matches!(cond, Value::Unit) || self.bool_flag(&cond) == Some(false) {
                     self.jump_to(label)?;
                 }
                 Ok(StepOutcome::Continue)

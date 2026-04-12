@@ -1,5 +1,6 @@
-use super::closures::lower_capture_exprs;
+use super::closures::lower_binding_capture_exprs;
 use super::*;
+use crate::api::IrRangeEndBound;
 
 pub(super) struct RecursiveBindingInput<'a, 'b> {
     pub(super) ctx: &'a LowerCtx<'b>,
@@ -26,7 +27,7 @@ impl RecursiveBindingInput<'_, '_> {
                 callee: IrNameRef::new(self.callable_name)
                     .with_binding(self.binding)
                     .with_module_target(self.ctx.module_key.clone()),
-                captures: lower_capture_exprs(self.ctx, self.origin, self.captures),
+                captures: lower_binding_capture_exprs(self.ctx, self.origin, self.captures),
             },
             IrExprKind::Sequence { exprs } => rewrite_sequence_kind(
                 self.ctx,
@@ -154,6 +155,20 @@ impl RecursiveBindingInput<'_, '_> {
     fn rewrite_compute_kind(&self, kind: IrExprKind) -> IrExprKind {
         match kind {
             IrExprKind::Binary { op, left, right } => self.rewrite_binary_kind(op, *left, *right),
+            IrExprKind::Range {
+                ty_name,
+                start,
+                end,
+                end_bound,
+            } => self.rewrite_range_kind(ty_name, *start, *end, end_bound),
+            IrExprKind::RangeContains {
+                value,
+                range,
+                evidence,
+            } => self.rewrite_range_contains_kind(*value, *range, *evidence),
+            IrExprKind::RangeMaterialize { range, evidence } => {
+                self.rewrite_range_materialize_kind(*range, *evidence)
+            }
             IrExprKind::Not { expr } => rewrite_not_kind(
                 self.ctx,
                 self.origin,
@@ -229,12 +244,16 @@ impl RecursiveBindingInput<'_, '_> {
                 op_index,
                 args,
             } => self.rewrite_perform_seq_kind(effect_key, op_index, args),
-            IrExprKind::Handle {
+            IrExprKind::HandlerLit {
                 effect_key,
                 value,
                 ops,
+            } => self.rewrite_handler_lit_kind(effect_key, *value, ops),
+            IrExprKind::Handle {
+                effect_key,
+                handler,
                 body,
-            } => self.rewrite_handle_kind(effect_key, *value, ops, *body),
+            } => self.rewrite_handle_kind(effect_key, *handler, *body),
             IrExprKind::Resume { expr } => rewrite_resume_kind(
                 self.ctx,
                 self.origin,
@@ -334,6 +353,90 @@ impl RecursiveBindingInput<'_, '_> {
         }
     }
 
+    fn rewrite_range_kind(
+        &self,
+        ty_name: Box<str>,
+        start: IrExpr,
+        end: IrExpr,
+        end_bound: IrRangeEndBound,
+    ) -> IrExprKind {
+        IrExprKind::Range {
+            ty_name,
+            start: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                start,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            end: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                end,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            end_bound,
+        }
+    }
+
+    fn rewrite_range_contains_kind(
+        &self,
+        value: IrExpr,
+        range: IrExpr,
+        evidence: IrExpr,
+    ) -> IrExprKind {
+        IrExprKind::RangeContains {
+            value: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                value,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            range: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                range,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            evidence: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                evidence,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+        }
+    }
+
+    fn rewrite_range_materialize_kind(&self, range: IrExpr, evidence: IrExpr) -> IrExprKind {
+        IrExprKind::RangeMaterialize {
+            range: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                range,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            evidence: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                evidence,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+        }
+    }
+
     fn rewrite_variant_kind(
         &self,
         data_key: DefinitionKey,
@@ -396,14 +499,13 @@ impl RecursiveBindingInput<'_, '_> {
         }
     }
 
-    fn rewrite_handle_kind(
+    fn rewrite_handler_lit_kind(
         &self,
         effect_key: DefinitionKey,
         value: IrExpr,
         ops: Box<[IrHandleOp]>,
-        body: IrExpr,
     ) -> IrExprKind {
-        IrExprKind::Handle {
+        IrExprKind::HandlerLit {
             effect_key,
             value: Box::new(rewrite_recursive_binding_refs(
                 self.ctx,
@@ -421,6 +523,25 @@ impl RecursiveBindingInput<'_, '_> {
                 self.callable_name,
                 self.captures,
             ),
+        }
+    }
+
+    fn rewrite_handle_kind(
+        &self,
+        effect_key: DefinitionKey,
+        handler: IrExpr,
+        body: IrExpr,
+    ) -> IrExprKind {
+        IrExprKind::Handle {
+            effect_key,
+            handler: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                handler,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
             body: Box::new(rewrite_recursive_binding_refs(
                 self.ctx,
                 self.origin,

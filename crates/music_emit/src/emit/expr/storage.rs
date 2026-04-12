@@ -72,6 +72,14 @@ impl MethodEmitter<'_, '_> {
                     emit_zero(self);
                     return;
                 }
+                if let Some(slot) = self.synthetic_locals.get(name).copied() {
+                    self.code.push(CodeEntry::Instruction(Instruction::new(
+                        Opcode::StLoc,
+                        Operand::Local(slot),
+                    )));
+                    emit_zero(self);
+                    return;
+                }
                 if let Some(global) = self.resolve_global(*binding, name, module_target.as_ref()) {
                     self.code.push(CodeEntry::Instruction(Instruction::new(
                         Opcode::StGlob,

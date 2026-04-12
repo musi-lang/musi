@@ -122,6 +122,16 @@ pub enum VmErrorKind {
         len: usize,
     },
     EmptySequenceIndexList,
+    InvalidRangeBounds {
+        start: VmValueKind,
+        end: VmValueKind,
+    },
+    InvalidRangeEvidence {
+        found: VmValueKind,
+    },
+    InvalidRangeStep {
+        detail: Box<str>,
+    },
     InvalidDataIndex {
         index: i64,
         len: usize,
@@ -408,6 +418,18 @@ impl VmErrorKind {
                 write!(f, "sequence index `{index}` invalid for length `{len}`")
             }
             Self::EmptySequenceIndexList => f.write_str("empty sequence index list"),
+            Self::InvalidRangeBounds { start, end } => {
+                write!(
+                    f,
+                    "range bounds `{start}` and `{end}` must both be integer values"
+                )
+            }
+            Self::InvalidRangeEvidence { found } => {
+                write!(f, "range evidence invalid for value kind `{found}`")
+            }
+            Self::InvalidRangeStep { detail } => {
+                write!(f, "range stepping failed (`{detail}`)")
+            }
             Self::InvalidDataIndex { index, len } => {
                 write!(f, "data field index `{index}` invalid for length `{len}`")
             }

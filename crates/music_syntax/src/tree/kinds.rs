@@ -34,6 +34,7 @@ pub enum SyntaxNodeKind {
     CaseExpr,
     CaseArm,
     PerformExpr,
+    HandlerExpr,
     HandleExpr,
     ResumeExpr,
     QuoteExpr,
@@ -57,6 +58,7 @@ pub enum SyntaxNodeKind {
     PiTy,
     TupleTy,
     ArrayTy,
+    HandlerTy,
 
     Attr,
     AttrArg,
@@ -94,6 +96,6 @@ impl SyntaxNodeKind {
 
     #[must_use]
     pub fn is_ty(self) -> bool {
-        self >= Self::NamedTy && self <= Self::ArrayTy
+        self >= Self::NamedTy && self <= Self::HandlerTy
     }
 }

@@ -12,7 +12,6 @@ impl Vm {
             "Unit" => matches!(value, Value::Unit),
             "Int" => matches!(value, Value::Int(_)),
             "Float" => matches!(value, Value::Float(_)),
-            "Bool" => matches!(value, Value::Bool(_)),
             "String" | "CString" => matches!(value, Value::String(_)),
             "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
@@ -40,11 +39,10 @@ impl Vm {
                 };
                 let module_slot = self.current_module_slot()?;
                 let value = self.pop_value()?;
-                self.push_value(Value::Bool(self.value_matches_type(
+                self.push_value(self.bool_value(
                     module_slot,
-                    &value,
-                    ty,
-                )))?;
+                    self.value_matches_type(module_slot, &value, ty),
+                )?)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::TyCast => {

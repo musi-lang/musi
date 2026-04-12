@@ -1,9 +1,70 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_ir::IrRangeEndBound;
 
 use super::support::push_expr_diag;
 
 impl MethodEmitter<'_, '_> {
+    pub(super) fn compile_range(
+        &mut self,
+        ty_name: &str,
+        start: &IrExpr,
+        end: &IrExpr,
+        end_bound: IrRangeEndBound,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_expr(start, true, diags);
+        self.compile_expr(end, true, diags);
+        let Some(ty) = self.layout.types.get(ty_name).copied() else {
+            push_expr_diag(
+                diags,
+                self.module_key,
+                &start.origin,
+                EmitDiagKind::UnknownSequenceType,
+                format!("unknown emitted sequence type `{ty_name}`"),
+            );
+            emit_zero(self);
+            return;
+        };
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::RangeNew,
+            Operand::TypeLen {
+                ty,
+                len: range_end_bound_flag(end_bound),
+            },
+        )));
+    }
+
+    pub(super) fn compile_range_contains(
+        &mut self,
+        value: &IrExpr,
+        range: &IrExpr,
+        evidence: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_expr(evidence, true, diags);
+        self.compile_expr(range, true, diags);
+        self.compile_expr(value, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::RangeContains,
+            Operand::None,
+        )));
+    }
+
+    pub(super) fn compile_range_materialize(
+        &mut self,
+        range: &IrExpr,
+        evidence: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_expr(evidence, true, diags);
+        self.compile_expr(range, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::RangeMaterialize,
+            Operand::None,
+        )));
+    }
+
     pub(super) fn compile_sequence(&mut self, exprs: &[IrExpr], diags: &mut EmitDiagList) {
         for (index, expr) in exprs.iter().enumerate() {
             let keep_result = index + 1 == exprs.len();
@@ -164,5 +225,12 @@ impl MethodEmitter<'_, '_> {
             ),
         };
         self.code.push(CodeEntry::Instruction(instruction));
+    }
+}
+
+const fn range_end_bound_flag(end_bound: IrRangeEndBound) -> u16 {
+    match end_bound {
+        IrRangeEndBound::Inclusive => 0,
+        IrRangeEndBound::Exclusive => 1,
     }
 }

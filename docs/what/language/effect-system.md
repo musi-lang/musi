@@ -10,7 +10,7 @@ Core surface:
 - `perform`
 - `handle`
 - `resume`
-- open rows via `with { ... }`
+- open rows via `using { ... }`
 
 ## Effect Declarations
 

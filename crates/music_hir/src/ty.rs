@@ -57,9 +57,20 @@ pub enum HirTyKind {
     Tuple {
         items: SliceRange<HirTyId>,
     },
+    Seq {
+        item: HirTyId,
+    },
     Array {
         dims: SliceRange<HirDim>,
         item: HirTyId,
+    },
+    Range {
+        item: HirTyId,
+    },
+    Handler {
+        effect: HirTyId,
+        input: HirTyId,
+        output: HirTyId,
     },
     Mut {
         inner: HirTyId,

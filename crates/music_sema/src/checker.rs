@@ -11,7 +11,7 @@ mod expr_calls;
 mod exprs;
 mod normalize;
 mod patterns;
-mod schemes;
+pub mod schemes;
 mod state;
 mod surface;
 mod surface_exports;

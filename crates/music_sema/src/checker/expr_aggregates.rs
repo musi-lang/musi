@@ -7,7 +7,7 @@ use music_hir::{
 };
 use music_names::Ident;
 
-use crate::api::ExprFacts;
+use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
 use super::exprs::peel_mut_ty;
@@ -21,7 +21,7 @@ impl CheckPass<'_, '_, '_> {
     pub(super) fn check_array_expr(&mut self, items: SliceRange<HirArrayItem>) -> ExprFacts {
         let builtins = self.builtins();
         let mut effects = EffectRow::empty();
-        let (expected_dims, expected_item) = self.expected_array_contract();
+        let (expected_dims, expected_item, expected_seq) = self.expected_array_contract();
         let mut item_ty = expected_item.unwrap_or(builtins.unknown);
 
         let mut has_runtime_spread = false;
@@ -81,6 +81,13 @@ impl CheckPass<'_, '_, '_> {
                         }
                     }
                 }
+                HirTyKind::Seq { item } | HirTyKind::Range { item } => {
+                    has_runtime_spread = true;
+                    self.merge_array_item_ty(spread_origin, &mut item_ty, item);
+                    if matches!(self.ty(spread_ty).kind, HirTyKind::Range { .. }) {
+                        self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
+                    }
+                }
                 _ => self.diag(spread_origin.span, DiagKind::InvalidArraySpreadSource, ""),
             }
         }
@@ -92,24 +99,75 @@ impl CheckPass<'_, '_, '_> {
             known_len,
         );
 
-        let dims = expected_dims.unwrap_or_else(|| self.alloc_dims([HirDim::Unknown]));
-        let ty = self.alloc_ty(HirTyKind::Array {
-            dims,
-            item: item_ty,
-        });
+        let ty = if expected_seq || expected_dims.is_none() {
+            self.alloc_ty(HirTyKind::Seq { item: item_ty })
+        } else {
+            let dims = expected_dims.unwrap_or_else(|| self.alloc_dims([HirDim::Unknown]));
+            self.alloc_ty(HirTyKind::Array {
+                dims,
+                item: item_ty,
+            })
+        };
         ExprFacts::new(ty, effects)
+    }
+
+    fn resolve_rangeable_evidence(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        item_ty: HirTyId,
+    ) {
+        let rangeable_symbol = self.known().rangeable;
+        let rangeable = self.named_type_for_symbol(rangeable_symbol);
+        let obligation = super::schemes::ConstraintObligation {
+            kind: ConstraintKind::Implements,
+            subject: item_ty,
+            value: rangeable,
+            class_key: self
+                .class_facts_by_name(rangeable_symbol)
+                .map(|facts| facts.key.clone()),
+        };
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
     }
 
     pub(super) fn check_array_ty_expr(
         &mut self,
-        dims: SliceRange<HirDim>,
+        dims: &SliceRange<HirDim>,
         item: HirExprId,
     ) -> ExprFacts {
         let origin = self.expr(item).origin;
         let item_ty = self.lower_type_expr(item, origin);
-        let ty = self.alloc_ty(HirTyKind::Array {
-            dims,
-            item: item_ty,
+        let ty = if self.dims(dims.clone()).is_empty() {
+            self.alloc_ty(HirTyKind::Seq { item: item_ty })
+        } else {
+            self.alloc_ty(HirTyKind::Array {
+                dims: dims.clone(),
+                item: item_ty,
+            })
+        };
+        ExprFacts::new(ty, EffectRow::empty())
+    }
+
+    pub(super) fn check_handler_ty_expr(
+        &mut self,
+        effect: HirExprId,
+        input: HirExprId,
+        output: HirExprId,
+    ) -> ExprFacts {
+        let effect_origin = self.expr(effect).origin;
+        let effect = self.lower_type_expr(effect, effect_origin);
+        let input_origin = self.expr(input).origin;
+        let input = self.lower_type_expr(input, input_origin);
+        let output_origin = self.expr(output).origin;
+        let output = self.lower_type_expr(output, output_origin);
+        let ty = self.alloc_ty(HirTyKind::Handler {
+            effect,
+            input,
+            output,
         });
         ExprFacts::new(ty, EffectRow::empty())
     }
@@ -230,17 +288,19 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(expected_ty, effects)
     }
 
-    fn expected_array_contract(&self) -> (Option<SliceRange<HirDim>>, Option<HirTyId>) {
+    fn expected_array_contract(&self) -> (Option<SliceRange<HirDim>>, Option<HirTyId>, bool) {
         let expected_array = self.expected_ty().and_then(|expected| {
             let expected_inner = peel_mut_ty(self, expected);
             match self.ty(expected_inner).kind {
                 HirTyKind::Array { dims, item } => Some((dims, item)),
+                HirTyKind::Seq { item } => Some((SliceRange::EMPTY, item)),
                 _ => None,
             }
         });
         let expected_dims = expected_array.as_ref().map(|(dims, _)| dims.clone());
         let expected_item = expected_array.as_ref().map(|(_, item)| *item);
-        (expected_dims, expected_item)
+        let expected_seq = expected_dims.as_ref().is_some_and(SliceRange::is_empty);
+        (expected_dims, expected_item, expected_seq)
     }
 
     fn merge_array_item_ty(&mut self, origin: HirOrigin, item_ty: &mut HirTyId, found: HirTyId) {
@@ -360,6 +420,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn expected_data_def(&self, ty: HirTyId) -> Option<&DataDef> {
         match self.ty(ty).kind {
+            HirTyKind::Bool => self.data_def("Bool"),
             HirTyKind::Named { name, .. } => self.data_def(self.resolve_symbol(name)),
             _ => None,
         }

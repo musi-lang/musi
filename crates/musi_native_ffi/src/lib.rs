@@ -74,7 +74,7 @@ unsafe extern "C" {
 #[derive(Debug)]
 enum NativeAbiType {
     Unit,
-    Bool,
+    Bool { ty: TypeId },
     Int,
     Float,
     CString,
@@ -317,7 +317,7 @@ fn native_abi_type(
     }
     let abi_ty = match foreign.type_abi_kind(ty) {
         ProgramTypeAbiKind::Unit => NativeAbiType::Unit,
-        ProgramTypeAbiKind::Bool => NativeAbiType::Bool,
+        ProgramTypeAbiKind::Bool => NativeAbiType::Bool { ty },
         ProgramTypeAbiKind::Int => NativeAbiType::Int,
         ProgramTypeAbiKind::Float => NativeAbiType::Float,
         ProgramTypeAbiKind::CString => NativeAbiType::CString,
@@ -404,7 +404,7 @@ fn native_abi_type(
 fn build_ffi_type(ty: &NativeAbiType) -> VmResult<FfiTypeRef> {
     match ty {
         NativeAbiType::Unit => Ok(FfiTypeRef::Borrowed(ffi_type_void_ptr())),
-        NativeAbiType::Bool => Ok(FfiTypeRef::Borrowed(ffi_type_uint8_ptr())),
+        NativeAbiType::Bool { .. } => Ok(FfiTypeRef::Borrowed(ffi_type_uint8_ptr())),
         NativeAbiType::Int => Ok(FfiTypeRef::Borrowed(ffi_type_sint64_ptr())),
         NativeAbiType::Float => Ok(FfiTypeRef::Borrowed(ffi_type_double_ptr())),
         NativeAbiType::CString | NativeAbiType::CPtr => {
@@ -482,10 +482,10 @@ fn marshal_arg_value(
             bytes: Vec::new(),
             strings: Vec::new(),
         }),
-        NativeAbiType::Bool => match value {
-            Value::Bool(flag) => Ok(ArgValue::Bool(u8::from(*flag))),
-            other => invalid_arg_type(foreign, index, "Bool", other),
-        },
+        NativeAbiType::Bool { .. } => bool_flag(value).map_or_else(
+            || invalid_arg_type(foreign, index, "Bool", value),
+            |flag| Ok(ArgValue::Bool(u8::from(flag))),
+        ),
         NativeAbiType::Int => match value {
             Value::Int(number) => Ok(ArgValue::Int(*number)),
             other => invalid_arg_type(foreign, index, "Int", other),
@@ -521,6 +521,11 @@ fn marshal_arg_value(
             Ok(ArgValue::Struct { bytes, strings })
         }
     }
+}
+
+fn bool_flag(value: &Value) -> Option<bool> {
+    let record = value.as_record()?;
+    (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
 }
 
 fn marshal_record_bytes(
@@ -596,14 +601,16 @@ fn write_field_bytes(
 ) -> VmResult<()> {
     match ty {
         NativeAbiType::Unit => Ok(()),
-        NativeAbiType::Bool => match value {
-            Value::Bool(flag) => write_bytes(ctx.out, offset, &[u8::from(*flag)]),
-            other => Err(native_arg_invalid(
-                ctx.foreign,
-                ctx.arg_index,
-                format!("expected `Bool`, found `{:?}`", other.kind()),
-            )),
-        },
+        NativeAbiType::Bool { .. } => bool_flag(value).map_or_else(
+            || {
+                Err(native_arg_invalid(
+                    ctx.foreign,
+                    ctx.arg_index,
+                    format!("expected `Bool`, found `{:?}`", value.kind()),
+                ))
+            },
+            |flag| write_bytes(ctx.out, offset, &[u8::from(flag)]),
+        ),
         NativeAbiType::Int => match value {
             Value::Int(number) => write_bytes(ctx.out, offset, &number.to_ne_bytes()),
             other => Err(native_arg_invalid(
@@ -670,7 +677,7 @@ fn write_field_bytes(
 fn alloc_result_value(ty: &NativeAbiType, ffi: &FfiTypeRef) -> ResultValue {
     match ty {
         NativeAbiType::Unit => ResultValue::Unit,
-        NativeAbiType::Bool => ResultValue::Bool(0),
+        NativeAbiType::Bool { .. } => ResultValue::Bool(0),
         NativeAbiType::Int => ResultValue::Int(0),
         NativeAbiType::Float => ResultValue::Float(0.0),
         NativeAbiType::CString | NativeAbiType::CPtr => ResultValue::Pointer(null_mut()),
@@ -689,7 +696,9 @@ fn unmarshal_result_value(
 ) -> VmResult<Value> {
     match (ty, value) {
         (NativeAbiType::Unit, ResultValue::Unit) => Ok(Value::Unit),
-        (NativeAbiType::Bool, ResultValue::Bool(flag)) => Ok(Value::Bool(flag != 0)),
+        (NativeAbiType::Bool { ty }, ResultValue::Bool(flag)) => {
+            Ok(Value::data(*ty, i64::from(flag != 0), []))
+        }
         (NativeAbiType::Int, ResultValue::Int(number)) => Ok(Value::Int(number)),
         (NativeAbiType::Float, ResultValue::Float(number)) => Ok(Value::Float(number)),
         (NativeAbiType::CPtr, ResultValue::Pointer(pointer)) => Ok(Value::CPtr(pointer.addr())),
@@ -749,7 +758,11 @@ fn read_field_value(
 ) -> VmResult<Value> {
     match ty {
         NativeAbiType::Unit => Ok(Value::Unit),
-        NativeAbiType::Bool => Ok(Value::Bool(read_u8(bytes, offset)? != 0)),
+        NativeAbiType::Bool { ty } => Ok(Value::data(
+            *ty,
+            i64::from(read_u8(bytes, offset)? != 0),
+            [],
+        )),
         NativeAbiType::Int => Ok(Value::Int(i64::from_ne_bytes(read_array(bytes, offset)?))),
         NativeAbiType::Float => Ok(Value::Float(f64::from_ne_bytes(read_array(bytes, offset)?))),
         NativeAbiType::CString => {

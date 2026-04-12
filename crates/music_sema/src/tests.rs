@@ -117,10 +117,10 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
             r#"
         let IO := import "std/io";
         {binding}
-        handle perform Console.readln() with Console of (
-        | value => value
-        | readln(k) => resume "ok"
-        );
+        handle perform Console.readln() using Console {{
+          value => value;
+          readln(k) => resume "ok";
+        }};
     "#
         ),
         Some(&import_env),
@@ -177,7 +177,7 @@ fn assert_class_alias_instance(
         let Types := import "std/types";
         {binding}
         let eqInt := instance Eq[Int] {{
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         }};
     "#
         ),
@@ -423,7 +423,7 @@ fn class_and_instance_queries_return_facts() {
           law reflexive (x : T) := .True;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := .True;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
     ",
     );
@@ -517,11 +517,11 @@ fn duplicate_handler_clause_reports_diag() {
         let Console := effect {
           let readln () : String;
         };
-        handle perform Console.readln() with Console of (
-        | value => value
-        | readln(k) => resume "ok"
-        | readln(k) => resume "ok"
-        );
+        handle perform Console.readln() using Console {
+          value => value;
+          readln(k) => resume "ok";
+          readln(k) => resume "ok";
+        };
     "#,
     );
     assert!(
@@ -585,7 +585,7 @@ fn missing_instance_member_reports_diag() {
           let compare (a : T, b : T) : Int;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
     ",
     );
@@ -610,7 +610,7 @@ fn reachable_exported_instances_participate_in_coherence() {
           let (=) (a : T, b : T) : Bool;
         };
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
     ",
         Some(&import_env),
@@ -624,7 +624,7 @@ fn reachable_exported_instances_participate_in_coherence() {
         let A := import "a";
         export let Eq := A.Eq;
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
     "#,
         Some(&import_env),
@@ -665,7 +665,7 @@ fn non_exported_instances_do_not_participate_in_coherence() {
           let (=) (a : T, b : T) : Bool;
         };
         instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
     ",
         Some(&import_env),
@@ -679,7 +679,7 @@ fn non_exported_instances_do_not_participate_in_coherence() {
         let A := import "a";
         export let Eq := A.Eq;
         export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := .True;
         };
     "#,
         Some(&import_env),
@@ -717,7 +717,7 @@ fn imported_tuple_instances_match_local_coherence_keys() {
           let (=) (a : T, b : T) : Bool;
         };
         export instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := true;
+          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
         };
     ",
         Some(&import_env),
@@ -731,7 +731,7 @@ fn imported_tuple_instances_match_local_coherence_keys() {
         let A := import "a";
         let Eq := A.Eq;
         let eqPair := instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := true;
+          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
         };
     "#,
         Some(&import_env),
@@ -819,9 +819,9 @@ fn generic_constraints_succeed_when_matching_instance_exists() {
           let (=) (a : T, b : T) : Bool;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) : T where T : Eq := x;
         requireEq[Int](1);
     ",
     );
@@ -840,9 +840,9 @@ fn generic_constraints_report_unsatisfied_instances() {
           let (=) (a : T, b : T) : Bool;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) : T where T : Eq := x;
         requireEq[String]("ok");
     "#,
     );
@@ -861,17 +861,57 @@ fn generic_constraints_report_ambiguous_instances() {
           let (=) (a : T, b : T) : Bool;
         };
         instance[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := true;
+          let (=) (a : T, b : T) : Bool := 0 = 0;
         };
         let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := true;
+          let (=) (a : Int, b : Int) : Bool := 0 = 0;
         };
-        let requireEq[T] (x : T) where T : Eq : T := x;
+        let requireEq[T] (x : T) : T where T : Eq := x;
         requireEq[Int](1);
     ",
     );
     assert!(
         has_diag(&sema, SemaDiagKind::AmbiguousInstanceMatch),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn constrained_non_callable_let_reports_diag() {
+    let sema = check(
+        r"
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+        };
+        let eqInt := instance Eq[Int] {
+          let (=) (a : Int, b : Int) : Bool := .True;
+        };
+        let x : Int where Int : Eq := 1;
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::ConstrainedNonCallableBinding),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn exported_polymorphic_constrained_callable_reports_diag() {
+    let sema = check(
+        r"
+        let Eq[T] := class {
+          let (=) (a : T, b : T) : Bool;
+        };
+        export let requireEq[T] (x : T) : T where T : Eq := x;
+    ",
+    );
+    assert!(
+        has_diag(
+            &sema,
+            SemaDiagKind::ExportedCallableRequiresConcreteConstraints
+        ),
         "{:?}",
         sema.diags()
     );
@@ -947,26 +987,40 @@ fn write_through_requires_mut_type() {
 
 #[test]
 fn fixed_array_dims_validate_literal_length() {
-    let sema = check("let xs : Array[Int, 2] := [1, 2];");
+    let sema = check("let xs : [2]Int := [1, 2];");
     assert!(
         !has_diag(&sema, SemaDiagKind::ArrayLiteralLengthMismatch),
         "{:?}",
         sema.diags()
     );
 
-    let sema = check("let xs : Array[Int, 2] := [1, 2, 3];");
+    let sema = check("let xs : [2]Int := [1, 2, 3];");
     assert!(
         has_diag(&sema, SemaDiagKind::ArrayLiteralLengthMismatch),
+        "{:?}",
+        sema.diags()
+    );
+
+    let sema = check("let xs : [2]Int := [1, 2];");
+    assert!(
+        !has_diag(&sema, SemaDiagKind::TypeMismatch),
         "{:?}",
         sema.diags()
     );
 }
 
 #[test]
+fn slice_type_syntax_accepts_dynamic_arrays() {
+    let sema = check("let xs : []Any := [1, \"x\"];");
+    assert!(!has_diag(&sema, SemaDiagKind::ArrayLiteralLengthMismatch));
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
 fn multi_index_arrays_check_expected_arity() {
     let sema = check(
         r"
-        export let touch (grid : mut Array[Int, 2, 2]) : Int := (
+        export let touch (grid : mut [2][2]Int) : Int := (
           grid.[0, 1] := 7;
           grid.[0, 1]
         );
@@ -980,11 +1034,31 @@ fn multi_index_arrays_check_expected_arity() {
 
     let sema = check(
         r"
-        export let touch (grid : mut Array[Int, 2, 2]) : Int := grid.[0];
+        export let touch (grid : mut [2][2]Int) : Int := grid.[0];
     ",
     );
     assert!(
         has_diag(&sema, SemaDiagKind::InvalidIndexArity),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn ranges_typecheck_and_membership_is_bool() {
+    let sema = check(
+        r"
+        let xs : Range[Int] := 1 ..< 4;
+        let ok : Bool := 2 in xs;
+    ",
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::TypeMismatch),
         "{:?}",
         sema.diags()
     );
@@ -1018,7 +1092,7 @@ fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
 
     let sema = check(
         r"
-        let grid : Array[Int, 2, 2] := [[1, 2], [3, 4]];
+        let grid : [2][2]Int := [[1, 2], [3, 4]];
         let answer := grid.[];
     ",
     );
@@ -1046,7 +1120,7 @@ fn open_effect_rows_absorb_extra_effects() {
         let State := effect {
           let readln () : String;
         };
-        let readOpen (x : Int) with { Console, ...r } : String := perform State.readln();
+        let readOpen (x : Int) : String using { Console, ...r } := perform State.readln();
         readOpen(0);
     ",
     );
@@ -1079,7 +1153,7 @@ fn closed_effect_rows_reject_extra_effects() {
         let State := effect {
           let readln () : String;
         };
-        let readClosed (x : Int) with { Console } : String := perform State.readln();
+        let readClosed (x : Int) : String using { Console } := perform State.readln();
         readClosed(0);
     ",
     );
@@ -1098,6 +1172,23 @@ fn invalid_link_attr_target_reports_diag() {
         "{:?}",
         sema.diags()
     );
+}
+
+#[test]
+fn handler_type_annotations_typecheck() {
+    let sema = check(
+        r"
+        let Console := effect {
+          let readln () : Int;
+        };
+        let h : using Console (Int -> Int) := using Console {
+          value => value;
+          readln(k) => resume 41;
+        };
+        h;
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
 
 #[test]
@@ -1139,7 +1230,7 @@ fn call_spreads_typecheck_for_tuples_and_any_seq() {
         f(...t);
 
         let g (a : Any, b : Any) : Any := a;
-        let xs : Array[Any] := [1, "x"];
+        let xs : []Any := [1, "x"];
         g(...xs);
     "#,
     );

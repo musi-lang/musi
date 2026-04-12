@@ -341,6 +341,12 @@ impl CheckPass<'_, '_, '_> {
                 |instantiated| instantiated.effects,
             ),
         );
+        let evidence_keys = self
+            .evidence_scope_for_constraints(&scheme.constraints)
+            .into_keys()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
+        self.set_binding_evidence_keys(binding, evidence_keys);
     }
 }

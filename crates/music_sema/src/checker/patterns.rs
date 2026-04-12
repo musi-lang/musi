@@ -119,6 +119,11 @@ impl CheckPass<'_, '_, '_> {
                 .into_iter()
                 .map(|field| (field.name, field.ty))
                 .collect::<BTreeMap<_, _>>(),
+            HirTyKind::Range { item } => BTreeMap::from([
+                (self.intern("start"), item),
+                (self.intern("end"), item),
+                (self.intern("end_bound"), self.builtins().bound),
+            ]),
             _ => BTreeMap::new(),
         };
         for field in self.record_pat_fields(fields) {
@@ -159,6 +164,12 @@ impl CheckPass<'_, '_, '_> {
                 let data_name = self.resolve_symbol(name);
                 let tag_name = self.resolve_symbol(tag.name);
                 self.data_def(data_name)
+                    .and_then(|data| data.variant(tag_name))
+                    .and_then(SemaDataVariantDef::payload)
+            }
+            HirTyKind::Bool => {
+                let tag_name = self.resolve_symbol(tag.name);
+                self.data_def("Bool")
                     .and_then(|data| data.variant(tag_name))
                     .and_then(SemaDataVariantDef::payload)
             }

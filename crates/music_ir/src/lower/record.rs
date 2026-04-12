@@ -4,7 +4,7 @@ type RecordItemRange = SliceRange<HirRecordItem>;
 
 struct RecordUpdateLayout<'a> {
     result_ty: HirTyId,
-    result_indices: &'a BTreeMap<Symbol, u16>,
+    result_indices: &'a BTreeMap<Box<str>, u16>,
     result_count: u16,
     base_fields: Box<[IrRecordLayoutField]>,
     result_fields: Box<[IrRecordLayoutField]>,
@@ -84,19 +84,19 @@ fn to_ir_origin(sema: &SemaModule, expr_id: HirExprId) -> IrOrigin {
     IrOrigin::new(origin.source_id, origin.span)
 }
 
-type RecordSourceMap = BTreeMap<Symbol, IrExpr>;
+type RecordSourceMap = BTreeMap<Box<str>, IrExpr>;
 type RecordSourceResult = Result<(Vec<IrExpr>, RecordSourceMap), Box<str>>;
 
 fn collect_record_sources(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
     items: RecordItemRange,
-    indices: &BTreeMap<Symbol, u16>,
+    indices: &BTreeMap<Box<str>, u16>,
 ) -> RecordSourceResult {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let mut prelude = Vec::<IrExpr>::new();
-    let mut sources = BTreeMap::<Symbol, IrExpr>::new();
+    let mut sources = BTreeMap::<Box<str>, IrExpr>::new();
     for record_item in sema.module().store.record_items.get(items) {
         let temp_expr = lower_item_temp(ctx, origin, record_item.value, &mut prelude);
         if record_item.spread {
@@ -128,10 +128,10 @@ fn collect_record_sources(
         let Some(name) = record_item.name else {
             return Err("record item without name".into());
         };
-        if !indices.contains_key(&name.name) {
+        if !indices.contains_key(interner.resolve(name.name)) {
             return Err("record item name missing from record type".into());
         }
-        let _ = sources.insert(name.name, temp_expr);
+        let _ = sources.insert(interner.resolve(name.name).into(), temp_expr);
     }
     Ok((prelude, sources))
 }
@@ -154,29 +154,29 @@ fn lower_item_temp(
 }
 
 fn lower_ordered_record_fields(
-    interner: &Interner,
+    _interner: &Interner,
     field_count: u16,
-    indices: &BTreeMap<Symbol, u16>,
-    sources: &BTreeMap<Symbol, IrExpr>,
+    indices: &BTreeMap<Box<str>, u16>,
+    sources: &BTreeMap<Box<str>, IrExpr>,
 ) -> Result<Vec<IrRecordField>, Box<str>> {
-    let mut symbol_by_index = vec![None::<Symbol>; usize::from(field_count)];
-    for (symbol, index) in indices {
+    let mut name_by_index = vec![None::<Box<str>>; usize::from(field_count)];
+    for (name, index) in indices {
         let idx = usize::from(*index);
-        if idx >= symbol_by_index.len() {
+        if idx >= name_by_index.len() {
             continue;
         }
-        symbol_by_index[idx] = Some(*symbol);
+        name_by_index[idx] = Some(name.clone());
     }
     let mut lowered_fields = Vec::<IrRecordField>::new();
-    for (idx, symbol) in symbol_by_index.into_iter().enumerate() {
-        let Some(symbol) = symbol else {
+    for (idx, name) in name_by_index.into_iter().enumerate() {
+        let Some(name) = name else {
             return Err("record layout missing symbol".into());
         };
-        let Some(expr) = sources.get(&symbol).cloned() else {
+        let Some(expr) = sources.get(name.as_ref()).cloned() else {
             return Err("record missing field value".into());
         };
         lowered_fields.push(IrRecordField::new(
-            interner.resolve(symbol),
+            name,
             u16::try_from(idx).unwrap_or(u16::MAX),
             expr,
         ));
@@ -204,7 +204,7 @@ fn lower_record_update_without_spread(
         let Some(name) = record_item.name else {
             return Err("record update item without name".into());
         };
-        let Some(index) = result_indices.get(&name.name).copied() else {
+        let Some(index) = result_indices.get(interner.resolve(name.name)).copied() else {
             return Err("record update field missing from record type".into());
         };
         updates.push(IrRecordField::new(
@@ -255,11 +255,11 @@ fn lower_record_update_with_spread(
                 return Err("record update spread without record type".into());
             };
             for (symbol, spread_index) in spread_indices {
-                let Some(result_index) = result_indices.get(&symbol).copied() else {
+                let Some(result_index) = result_indices.get(symbol.as_ref()).copied() else {
                     continue;
                 };
                 updates.push(IrRecordField::new(
-                    interner.resolve(symbol),
+                    symbol,
                     result_index,
                     IrExpr::new(
                         origin,
@@ -275,7 +275,7 @@ fn lower_record_update_with_spread(
         let Some(name) = record_item.name else {
             return Err("record update item without name".into());
         };
-        let Some(index) = result_indices.get(&name.name).copied() else {
+        let Some(index) = result_indices.get(interner.resolve(name.name)).copied() else {
             return Err("record update field missing from record type".into());
         };
         updates.push(IrRecordField::new(

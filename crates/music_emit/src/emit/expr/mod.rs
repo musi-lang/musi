@@ -93,6 +93,15 @@ impl MethodEmitter<'_, '_> {
                 self.compile_array_cat(ty_name, parts, diags);
                 true
             }
+            IrExprKind::Range {
+                ty_name,
+                start,
+                end,
+                end_bound,
+            } => {
+                self.compile_range(ty_name, start, end, *end_bound, diags);
+                true
+            }
             IrExprKind::Record {
                 ty_name,
                 field_count,
@@ -135,8 +144,28 @@ impl MethodEmitter<'_, '_> {
                 self.compile_variant_new(data_key, *tag_index, *field_count, args, diags);
                 true
             }
+            IrExprKind::HandlerLit {
+                effect_key,
+                value,
+                ops,
+            } => {
+                self.compile_handler_lit(effect_key, value, ops, &expr.origin, diags);
+                true
+            }
             IrExprKind::Index { base, indices } => {
                 self.compile_index(base, indices, diags);
+                true
+            }
+            IrExprKind::RangeContains {
+                value,
+                range,
+                evidence,
+            } => {
+                self.compile_range_contains(value, range, evidence, diags);
+                true
+            }
+            IrExprKind::RangeMaterialize { range, evidence } => {
+                self.compile_range_materialize(range, evidence, diags);
                 true
             }
             _ => self.compile_expr_module_and_type_ops(expr, diags),
@@ -270,11 +299,10 @@ impl MethodEmitter<'_, '_> {
             }
             IrExprKind::Handle {
                 effect_key,
-                value,
-                ops,
+                handler,
                 body,
             } => {
-                self.compile_handle(effect_key, value, ops, body, diags);
+                self.compile_handle(effect_key, handler, body, diags);
                 true
             }
             IrExprKind::Resume { expr } => {

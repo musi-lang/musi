@@ -147,7 +147,7 @@ impl Parser<'_> {
         } else {
             return Err(self.expected_constraint_operator());
         };
-        let expr = self.parse_expr(0)?;
+        let expr = self.parse_type_expr(0)?;
         Ok(self.builder.push_node_from_children(
             SyntaxNodeKind::Constraint,
             vec![ident, op, SyntaxElementId::Node(expr)],
@@ -194,7 +194,7 @@ impl Parser<'_> {
         if self.at(TokenKind::LBracket) {
             let open = self.advance_element();
             children.push(open);
-            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+            children.push(SyntaxElementId::Node(self.parse_type_expr(0)?));
             children.push(self.expect_token(TokenKind::RBracket)?);
         }
         Ok(self
@@ -247,11 +247,6 @@ impl Parser<'_> {
 
     pub(crate) fn parse_type_param(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
-        let mut children = vec![ident];
-        if let Some(colon) = self.eat(TokenKind::Colon) {
-            children.push(colon);
-            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
-        }
-        Ok(self.node(SyntaxNodeKind::TypeParam, children))
+        Ok(self.node1(SyntaxNodeKind::TypeParam, ident))
     }
 }

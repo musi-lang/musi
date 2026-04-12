@@ -214,7 +214,7 @@ impl Parser<'_> {
         &mut self,
         children: &mut SyntaxElementList,
     ) -> ParseResult<()> {
-        if self.at(TokenKind::KwWith) {
+        if self.at(TokenKind::KwUsing) {
             children.push(self.advance_element());
             children.push(SyntaxElementId::Node(self.parse_effect_set()?));
         }
@@ -227,7 +227,7 @@ impl Parser<'_> {
     ) -> ParseResult<()> {
         if let Some(colon) = self.eat(TokenKind::Colon) {
             children.push(colon);
-            children.push(SyntaxElementId::Node(self.parse_expr_without_colon_eq(0)?));
+            children.push(SyntaxElementId::Node(self.parse_type_expr(0)?));
         }
         Ok(())
     }
@@ -237,7 +237,7 @@ impl Parser<'_> {
         children: &mut SyntaxElementList,
     ) -> ParseResult<()> {
         children.push(self.expect_token(TokenKind::Colon)?);
-        children.push(SyntaxElementId::Node(self.parse_expr_without_colon_eq(0)?));
+        children.push(SyntaxElementId::Node(self.parse_type_expr(0)?));
         Ok(())
     }
 

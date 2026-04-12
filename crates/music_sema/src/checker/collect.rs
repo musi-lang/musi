@@ -82,11 +82,14 @@ impl CollectPass<'_, '_, '_> {
                     self.visit_member(&member);
                 }
             }
-            HirExprKind::Handle { expr, clauses, .. } => {
-                self.visit_expr(expr);
+            HirExprKind::HandlerLit { clauses, .. } => {
                 for clause in self.handle_clauses(clauses) {
                     self.visit_expr(clause.body);
                 }
+            }
+            HirExprKind::Handle { expr, handler } => {
+                self.visit_expr(expr);
+                self.visit_expr(handler);
             }
             HirExprKind::Resume { expr } => {
                 if let Some(expr) = expr {
@@ -97,6 +100,7 @@ impl CollectPass<'_, '_, '_> {
             | HirExprKind::Name { .. }
             | HirExprKind::Lit { .. }
             | HirExprKind::ArrayTy { .. }
+            | HirExprKind::HandlerTy { .. }
             | HirExprKind::Variant { .. }
             | HirExprKind::Quote { .. }
             | HirExprKind::Splice { .. } => {}

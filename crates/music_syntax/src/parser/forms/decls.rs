@@ -12,9 +12,9 @@ impl Parser<'_> {
         attrs.push(SyntaxElementId::Node(self.parse_pattern()?));
         self.parse_optional_type_params_clause(&mut attrs)?;
         self.parse_optional_param_clause(&mut attrs)?;
+        self.parse_optional_typed_expr(&mut attrs)?;
         self.parse_optional_constraints_clause(&mut attrs)?;
         self.parse_optional_effects_clause(&mut attrs)?;
-        self.parse_optional_typed_expr(&mut attrs)?;
         attrs.push(self.expect_token(TokenKind::ColonEq)?);
         attrs.push(SyntaxElementId::Node(self.parse_expr(0)?));
         Ok(self
@@ -144,8 +144,8 @@ impl Parser<'_> {
     ) -> ParseResult<SyntaxNodeId> {
         attrs.push(self.expect_token(TokenKind::KwInstance)?);
         self.parse_optional_type_params_clause(&mut attrs)?;
-        self.parse_optional_constraints_clause(&mut attrs)?;
         attrs.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        self.parse_optional_constraints_clause(&mut attrs)?;
         self.parse_member_body(&mut attrs)?;
         Ok(self
             .builder
@@ -161,23 +161,36 @@ impl Parser<'_> {
         ))
     }
 
+    pub(crate) fn parse_handler_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let using = self.expect_token(TokenKind::KwUsing)?;
+        let effect = self.expect_ident_element()?;
+        let open = self.expect_token(TokenKind::LBrace)?;
+        let mut children = vec![using, effect, open];
+        while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
+            children.push(SyntaxElementId::Node(self.parse_handle_clause()?));
+            let _ = self.eat(TokenKind::Semicolon);
+        }
+        children.push(self.expect_token(TokenKind::RBrace)?);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::HandlerExpr, children))
+    }
+
     pub(crate) fn parse_handle_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let handle = self.expect_token(TokenKind::KwHandle)?;
         let expr = self.parse_expr(0)?;
-        let with_kw = self.expect_token(TokenKind::KwWith)?;
-        let binder = self.expect_ident_element()?;
-        let of_kw = self.expect_token(TokenKind::KwOf)?;
-        let open = self.expect_token(TokenKind::LParen)?;
-        let mut children = vec![
-            handle,
-            SyntaxElementId::Node(expr),
-            with_kw,
-            binder,
-            of_kw,
-            open,
-        ];
-        children.extend(self.parse_piped_nodes(TokenKind::RParen, Parser::parse_handle_clause)?);
-        children.push(self.expect_token(TokenKind::RParen)?);
+        let mut children = vec![handle, SyntaxElementId::Node(expr)];
+        if self.at(TokenKind::KwUsing)
+            && self.nth_kind(1) == TokenKind::Ident
+            && self.nth_kind(2) == TokenKind::LBrace
+        {
+            children.push(SyntaxElementId::Node(self.parse_handler_expr()?));
+        } else {
+            let using_kw = self.expect_token(TokenKind::KwUsing)?;
+            let handler = self.parse_expr(PREFIX_BP)?;
+            children.push(using_kw);
+            children.push(SyntaxElementId::Node(handler));
+        }
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::HandleExpr, children))
@@ -246,8 +259,9 @@ impl Parser<'_> {
         children.push(self.expect_ident_element()?);
         self.parse_optional_type_params_clause(&mut children)?;
         self.parse_optional_param_clause(&mut children)?;
-        self.parse_optional_constraints_clause(&mut children)?;
         self.parse_optional_typed_expr(&mut children)?;
+        self.parse_optional_constraints_clause(&mut children)?;
+        self.parse_optional_effects_clause(&mut children)?;
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::Member, children))
@@ -319,6 +333,8 @@ impl Parser<'_> {
                 children.extend(self.parse_op_or_ident_name()?);
                 self.parse_optional_param_clause(&mut children)?;
                 self.parse_optional_typed_expr(&mut children)?;
+                self.parse_optional_constraints_clause(&mut children)?;
+                self.parse_optional_effects_clause(&mut children)?;
                 self.parse_optional_bound_expr(&mut children)?;
             }
             TokenKind::KwLaw => {

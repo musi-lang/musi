@@ -42,6 +42,7 @@ pub enum ExprKind {
     Class,
     Instance,
     Perform,
+    Handler,
     Handle,
     Foreign,
     Quote,
@@ -56,6 +57,7 @@ pub enum Expr<'tree, 'src> {
     Call(CallExpr<'tree, 'src>),
     Case(CaseExpr<'tree, 'src>),
     Handle(HandleExpr<'tree, 'src>),
+    Handler(HandlerExpr<'tree, 'src>),
     Import(ImportExpr<'tree, 'src>),
     Instance(InstanceExpr<'tree, 'src>),
     Let(LetExpr<'tree, 'src>),
@@ -90,6 +92,11 @@ pub struct CaseExpr<'tree, 'src> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HandleExpr<'tree, 'src> {
+    syntax: SyntaxNode<'tree, 'src>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct HandlerExpr<'tree, 'src> {
     syntax: SyntaxNode<'tree, 'src>,
 }
 
@@ -149,6 +156,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::BinaryExpr => Some(Self::Binary(BinaryExpr { syntax: node })),
             SyntaxNodeKind::CallExpr => Some(Self::Call(CallExpr { syntax: node })),
             SyntaxNodeKind::CaseExpr => Some(Self::Case(CaseExpr { syntax: node })),
+            SyntaxNodeKind::HandlerExpr => Some(Self::Handler(HandlerExpr { syntax: node })),
             SyntaxNodeKind::HandleExpr => Some(Self::Handle(HandleExpr { syntax: node })),
             SyntaxNodeKind::ImportExpr => Some(Self::Import(ImportExpr { syntax: node })),
             SyntaxNodeKind::InstanceExpr => Some(Self::Instance(InstanceExpr { syntax: node })),
@@ -166,6 +174,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             Self::Binary(expr) => expr.syntax,
             Self::Call(expr) => expr.syntax,
             Self::Case(expr) => expr.syntax,
+            Self::Handler(expr) => expr.syntax,
             Self::Handle(expr) => expr.syntax,
             Self::Import(expr) => expr.syntax,
             Self::Instance(expr) => expr.syntax,
@@ -211,6 +220,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::ClassExpr => ExprKind::Class,
             SyntaxNodeKind::InstanceExpr => ExprKind::Instance,
             SyntaxNodeKind::PerformExpr => ExprKind::Perform,
+            SyntaxNodeKind::HandlerExpr => ExprKind::Handler,
             SyntaxNodeKind::HandleExpr => ExprKind::Handle,
             SyntaxNodeKind::ForeignBlockExpr => ExprKind::Foreign,
             SyntaxNodeKind::QuoteExpr => ExprKind::Quote,
@@ -256,6 +266,13 @@ impl<'tree, 'src> CaseExpr<'tree, 'src> {
 }
 
 impl<'tree, 'src> HandleExpr<'tree, 'src> {
+    #[must_use]
+    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
+        self.syntax
+    }
+}
+
+impl<'tree, 'src> HandlerExpr<'tree, 'src> {
     #[must_use]
     pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
         self.syntax

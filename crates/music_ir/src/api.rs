@@ -78,6 +78,9 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         }),
+        SurfaceTyKind::Seq { item } => TypeTerm::new(TypeTermKind::Seq {
+            item: Box::new(lower_surface_type_term_id(types, *item)),
+        }),
         SurfaceTyKind::Array { dims, item } => TypeTerm::new(TypeTermKind::Array {
             dims: dims
                 .iter()
@@ -89,6 +92,18 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             item: Box::new(lower_surface_type_term_id(types, *item)),
+        }),
+        SurfaceTyKind::Range { item } => TypeTerm::new(TypeTermKind::Range {
+            item: Box::new(lower_surface_type_term_id(types, *item)),
+        }),
+        SurfaceTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => TypeTerm::new(TypeTermKind::Handler {
+            effect: Box::new(lower_surface_type_term_id(types, *effect)),
+            input: Box::new(lower_surface_type_term_id(types, *input)),
+            output: Box::new(lower_surface_type_term_id(types, *output)),
         }),
         SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
             inner: Box::new(lower_surface_type_term_id(types, *inner)),
@@ -162,7 +177,7 @@ impl IrTempId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrParam {
-    pub binding: NameBindingId,
+    pub binding: Option<NameBindingId>,
     pub name: Box<str>,
 }
 
@@ -173,7 +188,18 @@ impl IrParam {
         Name: Into<Box<str>>,
     {
         Self {
-            binding,
+            binding: Some(binding),
+            name: name.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn synthetic<Name>(name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
             name: name.into(),
         }
     }
@@ -226,6 +252,12 @@ pub enum IrBinaryOp {
     Le,
     Ge,
     Other(Box<str>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IrRangeEndBound {
+    Inclusive,
+    Exclusive,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -496,6 +528,21 @@ pub enum IrExprKind {
         left: Box<IrExpr>,
         right: Box<IrExpr>,
     },
+    Range {
+        ty_name: Box<str>,
+        start: Box<IrExpr>,
+        end: Box<IrExpr>,
+        end_bound: IrRangeEndBound,
+    },
+    RangeContains {
+        value: Box<IrExpr>,
+        range: Box<IrExpr>,
+        evidence: Box<IrExpr>,
+    },
+    RangeMaterialize {
+        range: Box<IrExpr>,
+        evidence: Box<IrExpr>,
+    },
     Not {
         expr: Box<IrExpr>,
     },
@@ -535,10 +582,14 @@ pub enum IrExprKind {
         op_index: u16,
         args: Box<[IrSeqPart]>,
     },
-    Handle {
+    HandlerLit {
         effect_key: DefinitionKey,
         value: Box<IrExpr>,
         ops: Box<[IrHandleOp]>,
+    },
+    Handle {
+        effect_key: DefinitionKey,
+        handler: Box<IrExpr>,
         body: Box<IrExpr>,
     },
     Resume {

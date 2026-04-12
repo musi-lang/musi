@@ -14,6 +14,13 @@ pub struct KnownSymbols {
     pub int_: Symbol,
     pub float_: Symbol,
     pub string_: Symbol,
+    pub bound: Symbol,
+    pub range: Symbol,
+    pub handler: Symbol,
+    pub rangeable: Symbol,
+    pub compare: Symbol,
+    pub next: Symbol,
+    pub prev: Symbol,
     pub cstring: Symbol,
     pub cptr: Symbol,
     pub abort: Symbol,
@@ -42,6 +49,13 @@ impl KnownSymbols {
             int_: interner.intern("Int"),
             float_: interner.intern("Float"),
             string_: interner.intern("String"),
+            bound: interner.intern("Bound"),
+            range: interner.intern("Range"),
+            handler: interner.intern("Handler"),
+            rangeable: interner.intern("Rangeable"),
+            compare: interner.intern("compare"),
+            next: interner.intern("next"),
+            prev: interner.intern("prev"),
             cstring: interner.intern("CString"),
             cptr: interner.intern("CPtr"),
             abort: interner.intern("Abort"),
@@ -56,10 +70,9 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 15] {
+    pub const fn compiler_prelude(self) -> [Symbol; 17] {
         [
             self.type_,
-            self.array,
             self.any,
             self.unknown,
             self.syntax,
@@ -70,6 +83,9 @@ impl KnownSymbols {
             self.int_,
             self.float_,
             self.string_,
+            self.bound,
+            self.range,
+            self.rangeable,
             self.cstring,
             self.cptr,
             self.abort,

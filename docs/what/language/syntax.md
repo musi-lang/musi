@@ -33,6 +33,12 @@ Musi surface syntax includes:
 - `class` and `instance`
 - `handle`, `perform`, and `resume`
 
+Instance heads are target-first:
+
+- `instance Foo { ... }`
+- `instance Foo where Int : Mark { ... }`
+- `instance[T] Eq[T] where T : Show { ... }`
+
 These forms are language syntax, not tooling extensions.
 
 ## Control, Operators, And Literals
@@ -76,4 +82,5 @@ It does not define:
 - `docs/what/language/type-system.md`
 - `docs/what/language/effect-system.md`
 - `docs/reference/grammar-ebnf.md`
-- `grammar/Musi.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/MusiParser.g4`

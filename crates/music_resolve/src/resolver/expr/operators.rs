@@ -36,6 +36,8 @@ where
             Some(TokenKind::Gt) => HirBinaryOp::Gt,
             Some(TokenKind::LtEq) => HirBinaryOp::Le,
             Some(TokenKind::GtEq) => HirBinaryOp::Ge,
+            Some(TokenKind::DotDot) => HirBinaryOp::RangeInclusive,
+            Some(TokenKind::DotDotLt) => HirBinaryOp::RangeExcludeEnd,
             Some(TokenKind::KwIn) => HirBinaryOp::In,
             Some(TokenKind::KwShl) => HirBinaryOp::Shl,
             Some(TokenKind::KwShr) => HirBinaryOp::Shr,

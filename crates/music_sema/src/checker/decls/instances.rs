@@ -141,11 +141,17 @@ impl CheckPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let constraints = self.lower_constraints(constraints);
+        let evidence_keys = constraints
+            .iter()
+            .filter_map(|constraint| self.constraint_key_for_facts(constraint))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         self.insert_instance_facts(
             expr_id,
             InstanceFacts::new(origin, class_key, class_name, class_args, member_names)
                 .with_type_params(type_params)
-                .with_constraints(constraints),
+                .with_constraints(constraints)
+                .with_evidence_keys(evidence_keys),
         );
         ExprFacts::new(class_ty, EffectRow::empty())
     }

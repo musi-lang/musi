@@ -703,8 +703,12 @@ fn collect_exports_from_kind(
             collect_expr(module, interner, *class, exports, attr_stack);
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
-        HirExprKind::Handle { expr, clauses, .. } => {
-            collect_handle_exports(module, interner, *expr, clauses, exports, attr_stack);
+        HirExprKind::HandlerLit { clauses, .. } => {
+            collect_handle_clause_exports(module, interner, clauses, exports, attr_stack);
+        }
+        HirExprKind::Handle { expr, handler } => {
+            collect_expr(module, interner, *expr, exports, attr_stack);
+            collect_expr(module, interner, *handler, exports, attr_stack);
         }
         HirExprKind::Resume { expr } => {
             collect_optional_expr(module, interner, *expr, exports, attr_stack);
@@ -715,6 +719,7 @@ fn collect_exports_from_kind(
         | HirExprKind::Name { .. }
         | HirExprKind::Lit { .. }
         | HirExprKind::ArrayTy { .. }
+        | HirExprKind::HandlerTy { .. }
         | HirExprKind::Variant { .. } => {}
     }
 }
@@ -933,15 +938,13 @@ fn collect_member_exports(
     }
 }
 
-fn collect_handle_exports(
+fn collect_handle_clause_exports(
     module: &ModuleState,
     interner: &Interner,
-    expr: HirExprId,
     clauses: &SliceRange<HirHandleClause>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
-    collect_expr(module, interner, expr, exports, attr_stack);
     for clause in module
         .resolved
         .module

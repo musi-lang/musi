@@ -96,6 +96,8 @@ pub enum SemaDiagKind {
     OrPatternBindersMismatch,
     UnsatisfiedConstraint,
     AmbiguousInstanceMatch,
+    ConstrainedNonCallableBinding,
+    ExportedCallableRequiresConcreteConstraints,
 }
 
 impl SemaDiagKind {
@@ -480,7 +482,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::CallRuntimeSpreadRequiresArrayAny,
         code: 3065,
-        message: "call runtime spread requires `Array[Any]`",
+        message: "call runtime spread requires `[]Any`",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::CallSpreadRequiresTupleOrArray,
@@ -616,5 +618,15 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         kind: SemaDiagKind::AmbiguousInstanceMatch,
         code: 3092,
         message: "ambiguous instance match",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ConstrainedNonCallableBinding,
+        code: 3093,
+        message: "non-callable `let` cannot have `where` constraints",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ExportedCallableRequiresConcreteConstraints,
+        code: 3094,
+        message: "exported callable requires fully resolved constraints",
     },
 ];

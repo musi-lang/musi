@@ -11,7 +11,7 @@ use music_term::{TypeTerm, TypeTermKind};
 
 use super::{
     EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value, ValueView, Vm,
-    VmError, VmErrorKind, VmHost, VmLoader, VmOptions, VmResult,
+    VmError, VmErrorKind, VmHost, VmLoader, VmOptions, VmResult, render_value_view,
 };
 
 #[derive(Default)]
@@ -199,7 +199,7 @@ fn executes_multi_index_get_and_set() {
         &[(
             "main",
             r"
-            export let touch (grid : mut Array[Int, 2, 2]) : Int := (
+            export let touch (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[0, 1]
             );
@@ -336,10 +336,10 @@ fn handles_effect_value_clause_and_resume() {
             r"
             let Console := effect { let readln () : Int; };
             export let answer () : Int :=
-              handle perform Console.readln() with Console of (
-              | value => value + 1
-              | readln(k) => resume 41
-              );
+              handle perform Console.readln() using Console {
+                value => value + 1;
+                readln(k) => resume 41;
+              };
         ",
         )],
         "main",
@@ -352,6 +352,52 @@ fn handles_effect_value_clause_and_resume() {
         .expect("handled effect should succeed");
 
     assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn reuses_handler_value_and_executes_range_membership_and_spread() {
+    let program = compile_program(
+        &[(
+            "main",
+            r"
+            let Console := effect { let readln () : Int; };
+            let ConsoleHandler := using Console {
+              value => value + 1;
+              readln(k) => resume 41;
+            };
+            export let handled () : Int := handle perform Console.readln() using ConsoleHandler;
+            export let contains () : Bool := (
+              let span := 1 ..< 4;
+              2 in span
+            );
+            export let ranged () : Int := (
+              let span := 1 ..< 4;
+              let xs := [0, ...span, 4];
+              xs.[2]
+            );
+        ",
+        )],
+        "main",
+    );
+
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
+    vm.initialize().expect("vm init should succeed");
+    let handled = vm
+        .call_export("handled", &[])
+        .expect("handler value call should succeed");
+    let contains = vm
+        .call_export("contains", &[])
+        .expect("range membership call should succeed");
+    let ranged = vm
+        .call_export("ranged", &[])
+        .expect("range call should succeed");
+
+    assert_eq!(handled, Value::Int(42));
+    assert_eq!(
+        render_value_view(vm.inspect(&contains)).as_deref(),
+        Some(".True")
+    );
+    assert_eq!(ranged, Value::Int(2));
 }
 
 #[test]
@@ -408,6 +454,18 @@ fn inspects_cptr_values() {
     let value = Value::c_ptr(0xDEAD_BEEF);
 
     assert!(matches!(vm.inspect(&value), ValueView::CPtr(0xDEAD_BEEF)));
+}
+
+#[test]
+fn renders_bool_values_as_variants() {
+    assert_eq!(
+        render_value_view(ValueView::Bool(true)).as_deref(),
+        Some(".True")
+    );
+    assert_eq!(
+        render_value_view(ValueView::Bool(false)).as_deref(),
+        Some(".False")
+    );
 }
 
 #[test]

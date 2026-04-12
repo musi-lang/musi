@@ -1,4 +1,5 @@
 use super::*;
+use crate::resolver::util::is_expr_or_ty;
 use music_hir::HirBinder;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
@@ -17,11 +18,7 @@ where
                     .child_tokens()
                     .find(|t| t.kind() == TokenKind::Ident)
                     .and_then(|t| self.intern_ident_token(t))?;
-                let ty = n
-                    .child_nodes()
-                    .find(|child| child.kind().is_expr())
-                    .map(|expr| self.lower_expr(expr));
-                Some(HirBinder::new(name, ty))
+                Some(HirBinder::new(name, None))
             })
             .collect();
         for p in &params {
@@ -47,7 +44,9 @@ where
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Param);
 
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let default = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
 
@@ -76,7 +75,7 @@ where
         } else {
             HirConstraintKind::Implements
         };
-        let value = match node.child_nodes().find(|n| n.kind().is_expr()) {
+        let value = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
@@ -117,7 +116,7 @@ where
 
         let arg = node
             .child_nodes()
-            .find(|n| n.kind().is_expr())
+            .find(|n| is_expr_or_ty(n.kind()))
             .map(|n| self.lower_expr(n));
         HirEffectItem::new(name, arg)
     }

@@ -45,6 +45,7 @@ struct RecCallableSeed<'a> {
 
 struct CallableLetCheckInput<'a> {
     origin: HirOrigin,
+    exported: bool,
     mods: HirLetMods,
     pat: HirPatId,
     params: SliceRange<HirParam>,
@@ -58,6 +59,7 @@ struct CallableLetCheckInput<'a> {
 
 struct NonCallableLetCheckInput {
     origin: HirOrigin,
+    exported: bool,
     mods: HirLetMods,
     pat: HirPatId,
     value: HirExprId,
@@ -133,6 +135,11 @@ impl CheckPass<'_, '_, '_> {
     ) {
         self.insert_binding_type(binding, ty);
         self.insert_binding_effects(binding, effects.clone());
+        let evidence_keys = self
+            .evidence_scope_for_constraints(&constraints)
+            .into_keys()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         self.insert_binding_scheme(
             binding,
             BindingScheme {
@@ -142,18 +149,22 @@ impl CheckPass<'_, '_, '_> {
                 effects,
             },
         );
+        self.set_binding_evidence_keys(binding, evidence_keys);
     }
 
     fn check_callable_let_binding(
         &mut self,
         origin: HirOrigin,
         param_types: &[HirTyId],
+        constraints: &[ConstraintFacts],
         effects: Option<&HirEffectSet>,
         declared_ty: Option<HirTyId>,
         value: HirExprId,
     ) -> (HirTyId, EffectRow) {
         let mut callable_effects =
             effects.map_or(EffectRow::empty(), |set| self.lower_effect_row(set));
+        let evidence_scope = self.evidence_scope_for_constraints(constraints);
+        self.push_evidence_scope(evidence_scope);
         if let Some(expected) = declared_ty {
             self.push_expected_ty(expected);
         }
@@ -161,6 +172,7 @@ impl CheckPass<'_, '_, '_> {
         if declared_ty.is_some() {
             let _ = self.pop_expected_ty();
         }
+        let _ = self.pop_evidence_scope();
         if effects.is_none() {
             callable_effects = body_facts.effects.clone();
         } else {
@@ -267,6 +279,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_callable_let_expr(&mut self, input: CallableLetCheckInput<'_>) -> HirTyId {
         let CallableLetCheckInput {
             origin,
+            exported,
             mods,
             pat,
             params,
@@ -287,6 +300,13 @@ impl CheckPass<'_, '_, '_> {
                 "",
             );
         }
+        if exported && !type_params.is_empty() && !constraints.is_empty() {
+            self.diag(
+                origin.span,
+                DiagKind::ExportedCallableRequiresConcreteConstraints,
+                "",
+            );
+        }
         let param_types = self.lower_params(params);
         self.seed_recursive_callable_scheme(&RecCallableSeed {
             binding,
@@ -297,8 +317,14 @@ impl CheckPass<'_, '_, '_> {
             type_params: &type_params,
             constraints: &constraints,
         });
-        let (ty, callable_effects) =
-            self.check_callable_let_binding(origin, &param_types, effects, declared_ty, value);
+        let (ty, callable_effects) = self.check_callable_let_binding(
+            origin,
+            &param_types,
+            &constraints,
+            effects,
+            declared_ty,
+            value,
+        );
         if let Some(binding) = binding {
             self.insert_let_binding_scheme(binding, ty, callable_effects, type_params, constraints);
         }
@@ -308,6 +334,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_non_callable_let_expr(&mut self, input: NonCallableLetCheckInput) -> HirTyId {
         let NonCallableLetCheckInput {
             origin,
+            exported: _exported,
             mods,
             pat,
             value,
@@ -319,6 +346,9 @@ impl CheckPass<'_, '_, '_> {
             constraints,
         } = input;
         let builtins = self.builtins();
+        if !constraints.is_empty() {
+            self.diag(origin.span, DiagKind::ConstrainedNonCallableBinding, "");
+        }
         if mods.is_rec
             && let Some(binding) = binding
         {
@@ -377,6 +407,7 @@ impl CheckPass<'_, '_, '_> {
         } else if has_param_clause {
             self.check_callable_let_expr(CallableLetCheckInput {
                 origin,
+                exported: expr_mods.export.is_some(),
                 mods,
                 pat,
                 params,
@@ -390,6 +421,7 @@ impl CheckPass<'_, '_, '_> {
         } else {
             self.check_non_callable_let_expr(NonCallableLetCheckInput {
                 origin,
+                exported: expr_mods.export.is_some(),
                 mods,
                 pat,
                 value,

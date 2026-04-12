@@ -13,12 +13,8 @@ impl Parser<'_> {
         self.parse_binary_expr_with(min_bp, Self::parse_expr, infix_binding_power)
     }
 
-    pub(super) fn parse_expr_without_colon_eq(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
-        self.parse_binary_expr_with(
-            min_bp,
-            Self::parse_expr_without_colon_eq,
-            infix_binding_power_without_colon_eq,
-        )
+    pub(crate) fn parse_type_expr(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
+        self.parse_binary_type_expr_with(min_bp)
     }
 
     fn parse_binary_expr_with(
@@ -62,10 +58,66 @@ impl Parser<'_> {
         Ok(left)
     }
 
+    fn parse_binary_type_expr_with(&mut self, min_bp: u8) -> SyntaxNodeParseResult {
+        let mut left = self.parse_type_prefix_expr()?;
+        loop {
+            if let Some(next_left) = self.try_postfix(left)? {
+                left = next_left;
+                continue;
+            }
+            let Some((left_bp, right_bp, class)) =
+                infix_binding_power_without_colon_eq(self.peek_kind())
+            else {
+                break;
+            };
+            if left_bp < min_bp {
+                break;
+            }
+            let op = self.advance_element();
+            let right = self.parse_type_expr(right_bp)?;
+            if class == InfixClass::Comparison && self.is_comparison_expr(left) {
+                self.error(ParseError::new(
+                    ParseErrorKind::NonAssociativeChain,
+                    self.span(),
+                ));
+            }
+            left = self.builder.push_node_from_children(
+                SyntaxNodeKind::BinaryExpr,
+                vec![
+                    SyntaxElementId::Node(left),
+                    op,
+                    SyntaxElementId::Node(right),
+                ],
+            );
+            if class == InfixClass::Comparison {
+                self.comparison_exprs.push(left);
+            }
+        }
+        Ok(left)
+    }
+
     fn parse_prefix_expr(&mut self) -> SyntaxNodeParseResult {
         if self.at_any(&[TokenKind::Minus, TokenKind::KwNot, TokenKind::KwMut]) {
             let op = self.advance_element();
             let operand = self.parse_expr(PREFIX_BP)?;
+            return Ok(self.builder.push_node_from_children(
+                SyntaxNodeKind::PrefixExpr,
+                vec![op, SyntaxElementId::Node(operand)],
+            ));
+        }
+        self.parse_atom_expr()
+    }
+
+    fn parse_type_prefix_expr(&mut self) -> SyntaxNodeParseResult {
+        if self.at_array_type_prefix() {
+            return self.parse_array_type_expr();
+        }
+        if self.at(TokenKind::KwUsing) {
+            return self.parse_handler_type_expr();
+        }
+        if self.at(TokenKind::KwMut) {
+            let op = self.advance_element();
+            let operand = self.parse_type_expr(PREFIX_BP)?;
             return Ok(self.builder.push_node_from_children(
                 SyntaxNodeKind::PrefixExpr,
                 vec![op, SyntaxElementId::Node(operand)],
@@ -204,6 +256,114 @@ impl Parser<'_> {
             vec![SyntaxElementId::Node(base), op, SyntaxElementId::Node(ty)],
         ))
     }
+
+    fn at_array_type_prefix(&self) -> bool {
+        if !self.at(TokenKind::LBracket) {
+            return false;
+        }
+        let mut cursor = self.pos;
+        let token_count = self.tokens.len();
+        while cursor < token_count && same_kind(self.tokens[cursor].kind, TokenKind::LBracket) {
+            cursor += 1;
+            if cursor >= token_count {
+                return false;
+            }
+            if same_kind(self.tokens[cursor].kind, TokenKind::RBracket) {
+            } else {
+                let kind = self.tokens[cursor].kind;
+                if !matches!(
+                    kind,
+                    TokenKind::Int | TokenKind::Ident | TokenKind::Underscore
+                ) {
+                    return false;
+                }
+                cursor += 1;
+                if cursor >= token_count
+                    || !same_kind(self.tokens[cursor].kind, TokenKind::RBracket)
+                {
+                    return false;
+                }
+            }
+            cursor += 1;
+        }
+        cursor < token_count
+            && matches!(
+                self.tokens[cursor].kind,
+                TokenKind::Ident
+                    | TokenKind::OpIdent
+                    | TokenKind::LParen
+                    | TokenKind::LBrace
+                    | TokenKind::LBracket
+                    | TokenKind::KwMut
+            )
+    }
+
+    fn parse_array_type_expr(&mut self) -> SyntaxNodeParseResult {
+        let mut children = Vec::new();
+        loop {
+            if !self.at(TokenKind::LBracket) {
+                break;
+            }
+            children.push(self.expect_token(TokenKind::LBracket)?);
+            if !self.at(TokenKind::RBracket) {
+                match self.peek_kind() {
+                    TokenKind::Int | TokenKind::Ident | TokenKind::Underscore => {
+                        children.push(self.advance_element());
+                    }
+                    _ => return Err(self.expected_expression()),
+                }
+            }
+            children.push(self.expect_token(TokenKind::RBracket)?);
+            if !self.at(TokenKind::LBracket) {
+                break;
+            }
+        }
+        children.push(SyntaxElementId::Node(self.parse_type_expr(PREFIX_BP)?));
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::ArrayTy, children))
+    }
+
+    fn parse_handler_type_expr(&mut self) -> SyntaxNodeParseResult {
+        let using = self.expect_token(TokenKind::KwUsing)?;
+        let effect = self.parse_handler_effect_type_expr()?;
+        let open = self.expect_token(TokenKind::LParen)?;
+        let input = self.parse_type_expr(ARROW_BP + 1)?;
+        let arrow = self.expect_token(TokenKind::MinusGt)?;
+        let output = self.parse_type_expr(0)?;
+        let close = self.expect_token(TokenKind::RParen)?;
+        Ok(self.builder.push_node_from_children(
+            SyntaxNodeKind::HandlerTy,
+            vec![
+                using,
+                SyntaxElementId::Node(effect),
+                open,
+                SyntaxElementId::Node(input),
+                arrow,
+                SyntaxElementId::Node(output),
+                close,
+            ],
+        ))
+    }
+
+    fn parse_handler_effect_type_expr(&mut self) -> SyntaxNodeParseResult {
+        let mut effect = if self.at_array_type_prefix() {
+            self.parse_array_type_expr()?
+        } else if self.at(TokenKind::KwMut) {
+            let op = self.advance_element();
+            let operand = self.parse_type_expr(PREFIX_BP)?;
+            self.builder.push_node_from_children(
+                SyntaxNodeKind::PrefixExpr,
+                vec![op, SyntaxElementId::Node(operand)],
+            )
+        } else {
+            self.parse_atom_expr()?
+        };
+        while self.at(TokenKind::LBracket) {
+            effect = self.parse_apply_expr(effect)?;
+        }
+        Ok(effect)
+    }
 }
 
 const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
@@ -214,6 +374,9 @@ const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
         TokenKind::KwOr => Some((OR_BP, OR_BP + 1, InfixClass::Other)),
         TokenKind::KwXor => Some((XOR_BP, XOR_BP + 1, InfixClass::Other)),
         TokenKind::KwAnd => Some((AND_BP, AND_BP + 1, InfixClass::Other)),
+        TokenKind::DotDot | TokenKind::DotDotLt => {
+            Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison))
+        }
         TokenKind::Eq
         | TokenKind::SlashEq
         | TokenKind::Lt

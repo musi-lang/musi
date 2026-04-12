@@ -1,13 +1,13 @@
 # ANTLR Grammar Tracker
 
-Canonical, tool-supported grammar: `grammar/Musi.g4`.
+Canonical, tool-supported grammar: `grammar/MusiLexer.g4` and `grammar/MusiParser.g4`.
 
 This tracker is for the remaining semantic clarifications needed to make the grammar fully normative (not just parseable).
 
 ## Status
 
-- [x] Add initial ANTLR4 grammar file (`grammar/Musi.g4`)
-- [x] Make `grammar/Musi.abnf` a strict RFC 5234 ABNF specification (aligned with `grammar/Musi.g4`)
+- [x] Add canonical ANTLR4 grammar files (`grammar/MusiLexer.g4`, `grammar/MusiParser.g4`)
+- [x] Make `grammar/Musi.abnf` a strict RFC 5234 ABNF specification (aligned with the ANTLR grammar pair)
 - [x] Remove the separate `type_expr` grammar category in favor of one expression space
 - [x] Treat `Type`, `Type0`, `Type1`, ... as ordinary identifiers in the lexer/parser
 - [x] Promote `instance` to an ordinary expression form

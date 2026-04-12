@@ -36,7 +36,7 @@ pub(super) fn lower_array_expr(
             continue;
         }
         has_runtime_spread |=
-            append_array_spread_parts(sema, origin, array_item.expr, &temp_expr, &mut parts)?;
+            append_array_spread_parts(ctx, origin, array_item.expr, &temp_expr, &mut parts)?;
     }
 
     prelude.push(IrExpr::new(
@@ -71,12 +71,13 @@ fn lower_item_temp(
 }
 
 fn append_array_spread_parts(
-    sema: &SemaModule,
+    ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
     spread_expr: HirExprId,
     temp_expr: &IrExpr,
     parts: &mut Vec<IrSeqPart>,
 ) -> Result<bool, Box<str>> {
+    let sema = ctx.sema;
     let spread_ty = sema
         .try_expr_ty(spread_expr)
         .unwrap_or_else(|| invalid_lowering_path("expr type missing for array spread"));
@@ -96,6 +97,27 @@ fn append_array_spread_parts(
         }
         HirTyKind::Array { dims, .. } => {
             append_array_dim_spread_parts(sema, origin, dims, temp_expr, parts)
+        }
+        HirTyKind::Seq { .. } => {
+            parts.push(IrSeqPart::Spread(temp_expr.clone()));
+            Ok(true)
+        }
+        HirTyKind::Range { .. } => {
+            let evidence = sema
+                .expr_evidence(spread_expr)
+                .and_then(|items| items.first())
+                .map(|item| super::lower_evidence_expr(ctx, origin, item));
+            let Some(evidence) = evidence else {
+                return Err("range spread evidence missing".into());
+            };
+            parts.push(IrSeqPart::Spread(IrExpr::new(
+                origin,
+                IrExprKind::RangeMaterialize {
+                    range: Box::new(temp_expr.clone()),
+                    evidence: Box::new(evidence),
+                },
+            )));
+            Ok(true)
         }
         _ => Err("array spread source is not tuple/array".into()),
     }

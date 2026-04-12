@@ -202,7 +202,8 @@ Canonical reading order:
 
 Grammar and language reference:
 
-- `grammar/Musi.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/MusiParser.g4`
 - `grammar/Musi.abnf`
 - `docs/what/language/syntax.md`
 

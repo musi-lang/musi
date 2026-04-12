@@ -33,6 +33,7 @@ type ForeignTable = HashMap<NameBindingId, ForeignId>;
 type GlobalTable = HashMap<NameBindingId, GlobalId>;
 type TypeTable = HashMap<Box<str>, TypeId>;
 type LocalSlots = HashMap<NameBindingId, u16>;
+type SyntheticLocalSlots = HashMap<Box<str>, u16>;
 type CodeBuffer = Vec<CodeEntry>;
 type QualifiedMethodTable = HashMap<(ModuleKey, Box<str>), MethodId>;
 type QualifiedForeignTable = HashMap<(ModuleKey, Box<str>), ForeignId>;
@@ -88,6 +89,7 @@ struct MethodEmitter<'artifact, 'module> {
     layout: &'module ModuleLayout,
     tables: EmitterTables<'module>,
     locals: LocalSlots,
+    synthetic_locals: SyntheticLocalSlots,
     temps: HashMap<IrTempId, u16>,
     next_local: u16,
     labels: Vec<StringId>,
@@ -235,8 +237,10 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
     let mut global_candidates = HashMap::<Box<str>, Vec<GlobalId>>::new();
     for (module, layout) in modules.iter().zip(layouts) {
         for callable in module.callables() {
-            if let Some(binding) = callable.binding
-                && let Some(method) = layout.callables.get(&binding).copied()
+            if let Some(method) = layout
+                .callables_by_name
+                .get(callable.name.as_ref())
+                .copied()
             {
                 let _ = state
                     .qualified
@@ -263,9 +267,10 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
             }
         }
         for global in module.globals() {
-            if let Some(binding) = global.binding
-                && let Some(id) = layout.globals.get(&binding).copied()
-            {
+            let id = global
+                .binding
+                .and_then(|binding| layout.globals.get(&binding).copied());
+            if let Some(id) = id {
                 let _ = state
                     .qualified
                     .globals
@@ -320,8 +325,15 @@ fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &Modul
         else {
             continue;
         };
-        let locals = build_param_locals(&callable.params);
-        let mut emitter = method_emitter(artifact, module.module_key(), layout, tables, locals);
+        let (locals, synthetic_locals) = build_param_locals(&callable.params);
+        let mut emitter = method_emitter(
+            artifact,
+            module.module_key(),
+            layout,
+            tables,
+            locals,
+            synthetic_locals,
+        );
         expr::compile_expr(&mut emitter, &callable.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
@@ -355,6 +367,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             module.module_key(),
             layout,
             tables,
+            HashMap::new(),
             HashMap::new(),
         );
         expr::compile_expr(&mut emitter, &global.body, true, diags);
@@ -429,7 +442,8 @@ fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBindi
                 export.name.clone(),
                 binding_export(module, export.name.as_ref(), |binding| {
                     layout.callables.get(&binding).copied()
-                }),
+                })
+                .or_else(|| layout.callables_by_name.get(export.name.as_ref()).copied()),
                 binding_export(module, export.name.as_ref(), |binding| {
                     layout.globals.get(&binding).copied()
                 }),
@@ -451,8 +465,10 @@ fn method_emitter<'artifact, 'module>(
     layout: &'module ModuleLayout,
     tables: EmitterTables<'module>,
     locals: LocalSlots,
+    synthetic_locals: SyntheticLocalSlots,
 ) -> MethodEmitter<'artifact, 'module> {
-    let next_local = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+    let next_local =
+        u16::try_from(locals.len().saturating_add(synthetic_locals.len())).unwrap_or(u16::MAX);
     let labels = initial_labels(artifact);
     MethodEmitter {
         artifact,
@@ -460,6 +476,7 @@ fn method_emitter<'artifact, 'module>(
         layout,
         tables,
         locals,
+        synthetic_locals,
         temps: HashMap::new(),
         next_local,
         labels,
@@ -484,12 +501,20 @@ fn build_entry_method(artifact: &mut Artifact, name: &str, init_methods: &[Metho
     method_id
 }
 
-fn build_param_locals(params: &[IrParam]) -> LocalSlots {
-    params
-        .iter()
-        .enumerate()
-        .filter_map(|(index, param)| u16::try_from(index).ok().map(|slot| (param.binding, slot)))
-        .collect()
+fn build_param_locals(params: &[IrParam]) -> (LocalSlots, SyntheticLocalSlots) {
+    let mut locals = HashMap::new();
+    let mut synthetic = HashMap::new();
+    for (index, param) in params.iter().enumerate() {
+        let Ok(slot) = u16::try_from(index) else {
+            continue;
+        };
+        if let Some(binding) = param.binding {
+            let _ = locals.insert(binding, slot);
+        } else {
+            let _ = synthetic.insert(param.name.clone(), slot);
+        }
+    }
+    (locals, synthetic)
 }
 
 fn emit_zero(emitter: &mut MethodEmitter<'_, '_>) {

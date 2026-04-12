@@ -1,7 +1,7 @@
 use music_arena::SliceRange;
 use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
 
-use crate::api::ExprFacts;
+use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
 use super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
@@ -100,7 +100,12 @@ impl CheckPass<'_, '_, '_> {
         if let Some(target) = module_target_for_expr(self, callee) {
             self.set_expr_module_target(expr_id, target);
         }
-        self.solve_obligations(origin, &instantiated.obligations);
+        if let Some(evidence) =
+            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
         self.set_expr_callable_effects(expr_id, instantiated.effects.clone());
         ExprFacts::new(instantiated.ty, effectful_eval)
     }
@@ -135,6 +140,7 @@ impl CheckPass<'_, '_, '_> {
         let spread_ty = peel_mut_ty(self, facts.ty);
         self.check_call_spread_arg(
             spread_origin,
+            arg.expr,
             spread_ty,
             params,
             param_index,
@@ -145,6 +151,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_call_spread_arg(
         &mut self,
         origin: HirOrigin,
+        spread_expr: HirExprId,
         spread_ty: HirTyId,
         params: &[HirTyId],
         param_index: &mut usize,
@@ -172,6 +179,37 @@ impl CheckPass<'_, '_, '_> {
                     param_index,
                     has_runtime_spread,
                 );
+            }
+            HirTyKind::Seq { item: seq_item } => {
+                *has_runtime_spread = true;
+                let expected = params
+                    .get(*param_index)
+                    .copied()
+                    .unwrap_or(builtins.unknown);
+                self.type_mismatch(origin, expected, seq_item);
+            }
+            HirTyKind::Range { item: range_item } => {
+                *has_runtime_spread = true;
+                let expected = params
+                    .get(*param_index)
+                    .copied()
+                    .unwrap_or(builtins.unknown);
+                self.type_mismatch(origin, expected, range_item);
+                let rangeable_symbol = self.known().rangeable;
+                let rangeable = self.named_type_for_symbol(rangeable_symbol);
+                let obligation = super::schemes::ConstraintObligation {
+                    kind: ConstraintKind::Implements,
+                    subject: range_item,
+                    value: rangeable,
+                    class_key: self
+                        .class_facts_by_name(rangeable_symbol)
+                        .map(|facts| facts.key.clone()),
+                };
+                if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+                    && !evidence.is_empty()
+                {
+                    self.set_expr_evidence(spread_expr, evidence);
+                }
             }
             _ => self.diag(origin.span, DiagKind::InvalidCallSpreadSource, ""),
         }
@@ -235,7 +273,7 @@ impl CheckPass<'_, '_, '_> {
             return;
         }
         let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-        self.solve_obligations(origin, &instantiated.obligations);
+        let _ = self.resolve_obligations_to_evidence(origin, &instantiated.obligations);
         effects.union_with(&instantiated.effects);
     }
 

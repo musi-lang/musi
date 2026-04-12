@@ -148,7 +148,7 @@ impl IrrefutablePatInput<'_> {
             return Err("record destructuring without record layout".into());
         };
         for field in sema.module().store.record_pat_fields.get(fields) {
-            let Some(index) = indices.get(&field.name.name).copied() else {
+            let Some(index) = indices.get(interner.resolve(field.name.name)).copied() else {
                 return Err("record destructuring missing field".into());
             };
             let proj = IrExpr::new(

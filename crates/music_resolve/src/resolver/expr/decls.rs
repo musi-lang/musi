@@ -1,4 +1,5 @@
 use super::*;
+use crate::resolver::util::is_expr_or_ty;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -93,7 +94,9 @@ where
         let has_param_clause = child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
         let params = self.lower_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         self.pop_scope();
 
@@ -154,7 +157,9 @@ where
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let arg = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirVariantDef::new(origin, attrs, name, arg, value)
@@ -166,7 +171,9 @@ where
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let ty = self.lower_opt_expr(origin, exprs.next());
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         HirFieldDef::new(origin, attrs, name, ty, value)
@@ -201,7 +208,7 @@ where
 
         let type_params = self.lower_type_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let class = match node.child_nodes().find(|n| n.kind().is_expr()) {
+        let class = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
@@ -247,7 +254,9 @@ where
         let params = child_of_kind(node, SyntaxNodeKind::ParamList)
             .map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         self.pop_scope();
@@ -294,7 +303,9 @@ where
         let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
             .map(|effect_set| self.lower_effect_set(effect_set));
 
-        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let value = match exprs.last() {
             Some(expr) => self.lower_expr(expr),

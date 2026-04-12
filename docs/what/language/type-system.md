@@ -23,7 +23,8 @@ Important built-in roles include:
 - `Module`
 - `Syntax`
 - `Type`
-- `Array[...]`
+- `[]T`
+- `[N]T`
 - `mut T`
 
 Tuples, records, sums, and function types are ordinary parts of the surface, not special compiler-only encodings.
@@ -49,7 +50,7 @@ The language supports:
 - `where` constraints
 - class constraints
 - subtype-style constraint surface where supported by sema
-- open effect rows with `with { ... }`
+- open effect rows with `using { ... }`
 
 Rows are part of function meaning, not late metadata.
 

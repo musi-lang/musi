@@ -229,7 +229,7 @@ fn extend_class_law_cases(
             let instance_facts = sema
                 .instance_facts(instance.expr_id)
                 .expect("instance facts missing for class-law instance");
-            if !instance_facts.type_params.is_empty() || !instance_facts.constraints.is_empty() {
+            if !instance_facts.type_params.is_empty() {
                 return Err(law_suite_error(
                     module_key,
                     format!(

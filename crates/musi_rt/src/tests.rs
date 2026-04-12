@@ -343,7 +343,7 @@ export let Testing := import "@std/testing";
         &mut runtime,
         "@std/bytes",
         r"
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
     );
     register_runtime_module(

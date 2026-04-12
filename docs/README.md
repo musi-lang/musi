@@ -42,7 +42,7 @@ If you need inventories or status:
 
 ## Canon
 
-`grammar/Musi.g4` is the canonical tool-supported grammar.
+`grammar/MusiLexer.g4` and `grammar/MusiParser.g4` are the canonical tool-supported grammar.
 
 `grammar/Musi.abnf` is the strict RFC 5234 ABNF spec for the current surface syntax.
 

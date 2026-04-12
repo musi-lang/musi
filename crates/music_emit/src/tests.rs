@@ -157,7 +157,7 @@ fn emits_globals_locals_assignment_index_and_case() {
 fn emits_multi_index_get_set_and_dynamic_import() {
     assert_module_opcodes(
         r"
-        export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
+        export let touch (name : String, grid : mut [2][2]Int) : Int := (
           let loaded := import name;
           grid.[0, 1] := 7;
           grid.[0, 1]

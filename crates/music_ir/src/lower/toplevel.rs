@@ -1,12 +1,22 @@
+use std::collections::BTreeMap;
+use std::iter::repeat_n;
+
 use music_arena::SliceRange;
-use music_hir::{HirExprId, HirExprKind, HirParam, HirPatKind, HirTyId, HirTyKind};
+use music_hir::{
+    HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirParam, HirPatKind, HirTyId, HirTyKind,
+};
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId};
-use music_sema::{DefinitionKey, EffectRow, SemaDataDef, SemaModule};
+use music_sema::{
+    DefinitionKey, EffectRow, ExportedValue, InstanceFacts, SemaDataDef, SemaModule, SurfaceTyId,
+    SurfaceTyKind,
+};
 
+use super::closures::lower_user_params;
 use super::{LetItemInput, LowerCtx, TopLevelItems};
 use crate::api::{
-    IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrParam,
+    IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrOrigin,
+    IrParam, IrRecordField,
 };
 
 pub(super) fn collect_top_level_items(
@@ -46,8 +56,65 @@ pub(super) fn collect_top_level_items(
                 items,
             );
         }
+        HirExprKind::Instance { members, .. } => {
+            collect_instance_item(ctx, expr_id, members, exported, items);
+        }
         _ => {}
     }
+}
+
+pub(super) fn append_builtin_rangeable_items(ctx: &LowerCtx<'_>, items: &mut TopLevelItems) {
+    let provider_name = "__builtin_dict__Rangeable_Int";
+    if items
+        .callables
+        .iter()
+        .any(|callable| callable.name.as_ref() == provider_name)
+    {
+        return;
+    }
+    items.data_defs.push(IrDataDef::new(
+        DefinitionKey::new(ctx.module_key.clone(), "__builtin_dict__Rangeable_Int_Dict"),
+        vec![IrDataVariantDef::new(
+            "__builtin_dict__Rangeable_Int_Dict",
+            Box::default(),
+        )]
+        .into_boxed_slice(),
+    ));
+    items.callables.push(
+        IrCallable::new(
+            provider_name,
+            Box::default(),
+            IrExpr::new(
+                IrOrigin::new(
+                    ctx.sema
+                        .module()
+                        .store
+                        .exprs
+                        .get(ctx.sema.module().root)
+                        .origin
+                        .source_id,
+                    ctx.sema
+                        .module()
+                        .store
+                        .exprs
+                        .get(ctx.sema.module().root)
+                        .origin
+                        .span,
+                ),
+                IrExprKind::VariantNew {
+                    data_key: DefinitionKey::new(
+                        ctx.module_key.clone(),
+                        "__builtin_dict__Rangeable_Int_Dict",
+                    ),
+                    tag_index: 0,
+                    field_count: 0,
+                    args: Box::default(),
+                },
+            ),
+        )
+        .with_module_target_opt(Some(ctx.module_key.clone()))
+        .with_effects(EffectRow::empty()),
+    );
 }
 
 fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut TopLevelItems) {
@@ -109,8 +176,13 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
 
     if matches!(
         sema.module().store.exprs.get(value).kind,
-        HirExprKind::Effect { .. } | HirExprKind::Class { .. } | HirExprKind::Instance { .. }
+        HirExprKind::Effect { .. } | HirExprKind::Class { .. }
     ) {
+        return;
+    }
+
+    if let HirExprKind::Instance { members, .. } = &sema.module().store.exprs.get(value).kind {
+        collect_instance_item(ctx, value, members, exported, items);
         return;
     }
 
@@ -141,6 +213,198 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             module_target,
         },
     ));
+}
+
+fn collect_instance_item(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    members: &SliceRange<HirMemberDef>,
+    exported: bool,
+    items: &mut TopLevelItems,
+) {
+    let Some(instance) = ctx.sema.instance_facts(expr_id).cloned() else {
+        return;
+    };
+    let provider_name = instance_provider_name(ctx, &instance);
+    items.data_defs.push(lower_instance_provider_data_def(
+        ctx,
+        &provider_name,
+        &instance,
+    ));
+    items.callables.push(lower_instance_provider_callable(
+        ctx,
+        expr_id,
+        members,
+        &provider_name,
+        &instance,
+    ));
+    if exported {
+        items.exports.push(lower_instance_provider_export(
+            ctx.sema,
+            provider_name,
+            &instance,
+        ));
+    }
+}
+
+fn lower_instance_provider_callable(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    members: &SliceRange<HirMemberDef>,
+    provider_name: &str,
+    instance: &InstanceFacts,
+) -> IrCallable {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    let member_map = sema
+        .module()
+        .store
+        .members
+        .get(members.clone())
+        .iter()
+        .filter(|member| member.kind == HirMemberKind::Let)
+        .map(|member| (member.name.name, member))
+        .collect::<BTreeMap<_, _>>();
+    let class_members = sema
+        .class_facts_by_name(instance.class_name)
+        .map(|facts| facts.members.to_vec())
+        .unwrap_or_default();
+    let (params, evidence_bindings) =
+        super::hidden_evidence_params_for_keys(provider_name, &instance.evidence_keys);
+    super::push_evidence_bindings(ctx, evidence_bindings);
+    let fields = class_members
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, class_member)| {
+            let member = member_map.get(&class_member.name)?;
+            let value = lower_instance_member_value(ctx, provider_name, member, index);
+            Some(IrRecordField::new(
+                interner.resolve(class_member.name),
+                u16::try_from(index).unwrap_or(u16::MAX),
+                value,
+            ))
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    super::pop_evidence_bindings(ctx);
+    let field_count = u16::try_from(fields.len()).unwrap_or(u16::MAX);
+    let data_key = instance_provider_data_key(provider_name, instance);
+    IrCallable::new(
+        provider_name,
+        params.into_boxed_slice(),
+        IrExpr::new(
+            IrOrigin::new(
+                sema.module().store.exprs.get(expr_id).origin.source_id,
+                sema.module().store.exprs.get(expr_id).origin.span,
+            ),
+            IrExprKind::VariantNew {
+                data_key,
+                tag_index: 0,
+                field_count,
+                args: fields.into_iter().map(|field| field.expr).collect(),
+            },
+        ),
+    )
+    .with_module_target_opt(Some(ctx.module_key.clone()))
+}
+
+fn lower_instance_member_value(
+    ctx: &mut LowerCtx<'_>,
+    provider_name: &str,
+    member: &HirMemberDef,
+    index: usize,
+) -> IrExpr {
+    let sema = ctx.sema;
+    let body_id = member
+        .value
+        .unwrap_or_else(|| super::invalid_lowering_path("instance member value missing"));
+    let origin = IrOrigin::new(
+        sema.module().store.exprs.get(body_id).origin.source_id,
+        sema.module().store.exprs.get(body_id).origin.span,
+    );
+    let body = super::lower_expr(ctx, body_id);
+    super::lower_closure_callable(
+        ctx,
+        super::ClosureCallableInput {
+            origin,
+            prefix: "dictfn",
+            body_id,
+            body,
+            hidden_params: Vec::new(),
+            hidden_param_names: Vec::new(),
+            hidden_capture_exprs: Vec::new(),
+            params: lower_user_params(ctx, &member.params),
+            binding: None,
+            name: Some(format!("{provider_name}::{index}").into_boxed_str()),
+            callable_module_target: Some(ctx.module_key.clone()),
+            rewrite_recursive_self: false,
+        },
+    )
+}
+
+fn lower_instance_provider_data_def(
+    ctx: &LowerCtx<'_>,
+    provider_name: &str,
+    instance: &InstanceFacts,
+) -> IrDataDef {
+    let field_tys = ctx
+        .sema
+        .class_facts_by_name(instance.class_name)
+        .map(|facts| facts.members.len())
+        .unwrap_or_default();
+    IrDataDef::new(
+        instance_provider_data_key(provider_name, instance),
+        vec![IrDataVariantDef::new(
+            provider_name,
+            repeat_n(Box::<str>::from("Any"), field_tys)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        )]
+        .into_boxed_slice(),
+    )
+}
+
+fn lower_instance_provider_export(
+    sema: &SemaModule,
+    provider_name: Box<str>,
+    _instance: &InstanceFacts,
+) -> ExportedValue {
+    ExportedValue::new(provider_name, find_unit_surface_ty(sema))
+        .with_opaque(true)
+        .with_module_target(sema.resolved().module_key.clone())
+}
+
+fn find_unit_surface_ty(sema: &SemaModule) -> SurfaceTyId {
+    sema.surface()
+        .types()
+        .iter()
+        .enumerate()
+        .find_map(|(index, ty)| matches!(ty.kind, SurfaceTyKind::Unit).then_some(index))
+        .and_then(|index| u32::try_from(index).ok())
+        .map_or_else(|| SurfaceTyId::new(0), SurfaceTyId::new)
+}
+
+fn instance_provider_name(ctx: &LowerCtx<'_>, instance: &InstanceFacts) -> Box<str> {
+    let args = instance
+        .class_args
+        .iter()
+        .copied()
+        .map(|arg| render_hir_ty_name(ctx.sema, arg, ctx.interner))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "__dict__::{}::{}[{args}]",
+        instance.class_key.module.as_str(),
+        instance.class_key.name
+    )
+    .into_boxed_str()
+}
+
+fn instance_provider_data_key(provider_name: &str, instance: &InstanceFacts) -> DefinitionKey {
+    DefinitionKey::new(
+        instance.class_key.module.clone(),
+        format!("{provider_name}::__dict").into_boxed_str(),
+    )
 }
 
 fn lower_foreign_item(
@@ -276,7 +540,10 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
                 .join(", ")
         )
         .into_boxed_str(),
-        HirTyKind::Array { .. }
+        HirTyKind::Seq { .. }
+        | HirTyKind::Array { .. }
+        | HirTyKind::Range { .. }
+        | HirTyKind::Handler { .. }
         | HirTyKind::Pi { .. }
         | HirTyKind::Arrow { .. }
         | HirTyKind::Sum { .. }
@@ -297,10 +564,20 @@ struct CallableItemInput {
 
 fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCallable {
     let interner = ctx.interner;
+    let (hidden_params, evidence_bindings) = super::hidden_evidence_params_for_binding(
+        ctx.sema,
+        interner.resolve(input.name.name),
+        input.binding,
+    );
+    super::push_evidence_bindings(ctx, evidence_bindings);
+    let body = super::lower_expr(ctx, input.value);
+    super::pop_evidence_bindings(ctx);
+    let mut params = hidden_params;
+    params.extend(lower_params(ctx, input.params));
     let mut callable = IrCallable::new(
         interner.resolve(input.name.name),
-        lower_params(ctx, input.params),
-        super::lower_expr(ctx, input.value),
+        params.into_boxed_slice(),
+        body,
     )
     .with_exported(input.exported)
     .with_effects(input.effects);

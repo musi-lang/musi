@@ -97,13 +97,16 @@ fn handle_test_effect(
             let _ = collector.active_suites.pop();
         }
         test::TEST_CASE_OP => {
-            let [Value::String(name), Value::Bool(passed)] = args else {
+            let [Value::String(name), passed] = args else {
+                return Err(invalid_test_effect(effect));
+            };
+            let Some(passed) = bool_flag(passed) else {
                 return Err(invalid_test_effect(effect));
             };
             collector.cases.push(NativeTestCaseResult::new(
                 suite_name(&collector.active_suites),
                 name.as_ref().into(),
-                *passed,
+                passed,
             ));
         }
         _ => return Err(invalid_test_effect(effect)),
@@ -129,4 +132,9 @@ fn suite_name(path: &[Box<str>]) -> Box<str> {
         .collect::<Vec<_>>()
         .join(" / ")
         .into_boxed_str()
+}
+
+fn bool_flag(value: &Value) -> Option<bool> {
+    let record = value.as_record()?;
+    (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
 }

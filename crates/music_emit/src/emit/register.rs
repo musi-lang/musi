@@ -144,6 +144,9 @@ fn export_target(
             return Some(ExportTarget::Foreign(foreign));
         }
     }
+    if let Some(method) = layout.callables_by_name.get(export_name).copied() {
+        return Some(ExportTarget::Method(method));
+    }
 
     if let Some(key) = data_key {
         let ty_name = qualified_name(&key.module, key.name.as_ref());
@@ -320,6 +323,17 @@ fn collect_expr_types_aggregate(
             collect_expr_types_iter(state, layout, items);
             true
         }
+        IrExprKind::Range {
+            ty_name,
+            start,
+            end,
+            ..
+        } => {
+            let _ = ensure_type(state, layout, ty_name);
+            collect_expr_types(state, layout, start);
+            collect_expr_types(state, layout, end);
+            true
+        }
         IrExprKind::ArrayCat { ty_name, parts } => {
             let _ = ensure_type(state, layout, ty_name);
             collect_expr_types_seq_parts(state, layout, parts);
@@ -335,6 +349,21 @@ fn collect_expr_types_aggregate(
         IrExprKind::Index { base, indices } => {
             collect_expr_types(state, layout, base);
             collect_expr_types_iter(state, layout, indices.iter());
+            true
+        }
+        IrExprKind::RangeContains {
+            value,
+            range,
+            evidence,
+        } => {
+            collect_expr_types(state, layout, value);
+            collect_expr_types(state, layout, range);
+            collect_expr_types(state, layout, evidence);
+            true
+        }
+        IrExprKind::RangeMaterialize { range, evidence } => {
+            collect_expr_types(state, layout, range);
+            collect_expr_types(state, layout, evidence);
             true
         }
         IrExprKind::DynamicImport { spec } => {
@@ -430,14 +459,21 @@ fn collect_expr_types_call_and_effect(
             collect_expr_types_seq_parts(state, layout, args);
             true
         }
-        IrExprKind::Handle {
+        IrExprKind::HandlerLit {
             effect_key,
             value,
             ops,
+        } => {
+            collect_handler_literal_expr_types(state, layout, effect_key, value, ops);
+            true
+        }
+        IrExprKind::Handle {
+            effect_key,
+            handler,
             body,
             ..
         } => {
-            collect_handle_expr_types(state, layout, effect_key, value, ops, body);
+            collect_handle_expr_types(state, layout, effect_key, handler, body);
             true
         }
         IrExprKind::Resume { expr } => {
@@ -500,18 +536,29 @@ fn collect_call_seq_expr_types(
     collect_expr_types_seq_parts(state, layout, args);
 }
 
-fn collect_handle_expr_types(
+fn collect_handler_literal_expr_types(
     state: &mut ProgramState,
     layout: &mut ModuleLayout,
     effect_key: &DefinitionKey,
     value: &IrExpr,
     ops: &[IrHandleOp],
-    body: &IrExpr,
 ) {
     let handler_ty = handler_type_name(effect_key);
     let _ = ensure_type(state, layout, handler_ty.as_ref());
     collect_expr_types(state, layout, value);
     collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
+}
+
+fn collect_handle_expr_types(
+    state: &mut ProgramState,
+    layout: &mut ModuleLayout,
+    effect_key: &DefinitionKey,
+    handler: &IrExpr,
+    body: &IrExpr,
+) {
+    let handler_ty = handler_type_name(effect_key);
+    let _ = ensure_type(state, layout, handler_ty.as_ref());
+    collect_expr_types(state, layout, handler);
     collect_expr_types(state, layout, body);
 }
 

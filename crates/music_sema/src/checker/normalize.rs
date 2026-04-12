@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use music_arena::SliceRange;
 use music_hir::{
     HirBinaryOp, HirConstraint, HirConstraintKind, HirDim, HirEffectSet, HirExprId, HirExprKind,
-    HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::Symbol;
 
@@ -58,14 +58,27 @@ impl PassBase<'_, '_, '_> {
                 format!("{} + {}", self.render_ty(left), self.render_ty(right))
             }
             HirTyKind::Tuple { items } => self.render_tuple_ty(items),
+            HirTyKind::Seq { item } => format!("[]{}", self.render_ty(item)),
             HirTyKind::Array { dims, item } => self.render_array_ty(dims, item),
+            HirTyKind::Range { item } => format!("Range[{}]", self.render_ty(item)),
+            HirTyKind::Handler {
+                effect,
+                input,
+                output,
+            } => format!(
+                "using {} ({} -> {})",
+                self.render_ty(effect),
+                self.render_ty(input),
+                self.render_ty(output)
+            ),
             HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(inner)),
             HirTyKind::Record { fields } => self.render_record_ty(fields),
         }
     }
     fn render_named_ty(&self, name: Symbol, args: SliceRange<HirTyId>) -> String {
-        let mut out = String::from(self.resolve_symbol(name));
         let args = self.ty_ids(args);
+        let name_text = self.resolve_symbol(name);
+        let mut out = String::from(name_text);
         if args.is_empty() {
             return out;
         }
@@ -116,15 +129,18 @@ impl PassBase<'_, '_, '_> {
 
     fn render_array_ty(&self, dims: SliceRange<HirDim>, item: HirTyId) -> String {
         let dims = self.dims(dims);
-        let mut parts = vec![self.render_ty(item)];
+        let mut out = String::new();
         for dim in dims {
-            parts.push(match dim {
+            out.push('[');
+            out.push_str(&match dim {
                 HirDim::Unknown => "_".into(),
                 HirDim::Name(name) => self.resolve_symbol(name.name).into(),
                 HirDim::Int(value) => value.to_string(),
             });
+            out.push(']');
         }
-        format!("Array[{}]", parts.join(", "))
+        out.push_str(&self.render_ty(item));
+        out
     }
 
     fn render_record_ty(&self, fields: HirTyFieldRange) -> String {
@@ -170,6 +186,10 @@ impl PassBase<'_, '_, '_> {
         {
             return true;
         }
+        self.ty_matches_kinds(left, right)
+    }
+
+    fn ty_matches_kinds(&self, left: HirTyKind, right: HirTyKind) -> bool {
         match (left, right) {
             (HirTyKind::Type, HirTyKind::Type)
             | (HirTyKind::Syntax, HirTyKind::Syntax)
@@ -235,8 +255,32 @@ impl PassBase<'_, '_, '_> {
                 self.dims(left_dims) == self.dims(right_dims)
                     && self.ty_matches(left_item, right_item)
             }
-            (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right }) => {
+            (
+                HirTyKind::Seq { item: left_item },
+                HirTyKind::Array {
+                    item: right_item, ..
+                },
+            ) => self.ty_matches(left_item, right_item),
+            (HirTyKind::Seq { item: left }, HirTyKind::Seq { item: right })
+            | (HirTyKind::Range { item: left }, HirTyKind::Range { item: right })
+            | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right }) => {
                 self.ty_matches(left, right)
+            }
+            (
+                HirTyKind::Handler {
+                    effect: left_effect,
+                    input: left_input,
+                    output: left_output,
+                },
+                HirTyKind::Handler {
+                    effect: right_effect,
+                    input: right_input,
+                    output: right_output,
+                },
+            ) => {
+                self.ty_matches(left_effect, right_effect)
+                    && self.ty_matches(left_input, right_input)
+                    && self.ty_matches(left_output, right_output)
             }
             (HirTyKind::Record { fields: left }, HirTyKind::Record { fields: right }) => {
                 self.record_tys_match(left, right)
@@ -311,6 +355,8 @@ impl PassBase<'_, '_, '_> {
             builtins.unit
         } else if symbol == known.bool_ {
             builtins.bool_
+        } else if symbol == known.bound {
+            builtins.bound
         } else if symbol == known.nat {
             builtins.nat
         } else if symbol == known.int_ {
@@ -340,6 +386,7 @@ impl PassBase<'_, '_, '_> {
             known.empty,
             known.unit,
             known.bool_,
+            known.bound,
             known.nat,
             known.int_,
             known.float_,
@@ -364,7 +411,28 @@ impl PassBase<'_, '_, '_> {
             HirExprKind::ArrayTy { dims, item } => {
                 let item_origin = self.expr(item).origin;
                 let item = self.lower_type_expr(item, item_origin);
-                self.alloc_ty(HirTyKind::Array { dims, item })
+                if self.dims(dims.clone()).is_empty() {
+                    self.alloc_ty(HirTyKind::Seq { item })
+                } else {
+                    self.alloc_ty(HirTyKind::Array { dims, item })
+                }
+            }
+            HirExprKind::HandlerTy {
+                effect,
+                input,
+                output,
+            } => {
+                let effect_origin = self.expr(effect).origin;
+                let effect = self.lower_type_expr(effect, effect_origin);
+                let input_origin = self.expr(input).origin;
+                let input = self.lower_type_expr(input, input_origin);
+                let output_origin = self.expr(output).origin;
+                let output = self.lower_type_expr(output, output_origin);
+                self.alloc_ty(HirTyKind::Handler {
+                    effect,
+                    input,
+                    output,
+                })
             }
             HirExprKind::Pi {
                 binder: _,
@@ -428,46 +496,6 @@ impl PassBase<'_, '_, '_> {
             return self.builtins().error;
         };
 
-        if self.resolve_symbol(name.name) == "Array" {
-            let args = self.expr_ids(args);
-            let Some((item_expr, dims_exprs)) = args.split_first() else {
-                self.diag(origin.span, DiagKind::ArrayTypeRequiresItem, "");
-                return self.builtins().error;
-            };
-            let item_origin = self.expr(*item_expr).origin;
-            let item = self.lower_type_expr(*item_expr, item_origin);
-            let dims = dims_exprs
-                .iter()
-                .filter_map(|expr| match self.expr(*expr).kind {
-                    HirExprKind::Name { name } => Some(HirDim::Name(name)),
-                    HirExprKind::Lit { lit } => match self.lit(lit).kind {
-                        HirLitKind::Int { raw } => {
-                            let raw = raw.replace('_', "");
-                            let value = raw.strip_prefix("0x").map_or_else(
-                                || {
-                                    raw.strip_prefix("0o").map_or_else(
-                                        || {
-                                            raw.strip_prefix("0b").map_or_else(
-                                                || raw.parse::<u32>().ok(),
-                                                |bin| u32::from_str_radix(bin, 2).ok(),
-                                            )
-                                        },
-                                        |oct| u32::from_str_radix(oct, 8).ok(),
-                                    )
-                                },
-                                |hex| u32::from_str_radix(hex, 16).ok(),
-                            );
-                            value.map(HirDim::Int)
-                        }
-                        _ => None,
-                    },
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            let dims = self.alloc_dims(dims);
-            return self.alloc_ty(HirTyKind::Array { dims, item });
-        }
-
         let args = self
             .expr_ids(args)
             .into_iter()
@@ -476,11 +504,16 @@ impl PassBase<'_, '_, '_> {
                 self.lower_type_expr(arg, origin)
             })
             .collect::<Vec<_>>();
-        let args = self.alloc_ty_list(args);
-        self.alloc_ty(HirTyKind::Named {
-            name: name.name,
-            args,
-        })
+        match self.resolve_symbol(name.name) {
+            "Range" if args.len() == 1 => self.alloc_ty(HirTyKind::Range { item: args[0] }),
+            _ => {
+                let args = self.alloc_ty_list(args);
+                self.alloc_ty(HirTyKind::Named {
+                    name: name.name,
+                    args,
+                })
+            }
+        }
     }
 
     fn lower_binary_type_expr(

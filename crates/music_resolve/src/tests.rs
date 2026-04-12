@@ -412,7 +412,7 @@ fn dynamic_imports_do_not_populate_resolved_imports() {
 
 #[test]
 fn handle_clause_params_resolve_in_body() {
-    let src = "handle x with h of (| op(a, b) => a);";
+    let src = "handle x using h { op(a, b) => a; };";
     let source_id = SourceId::from_raw(13);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());

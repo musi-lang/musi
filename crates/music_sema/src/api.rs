@@ -256,9 +256,20 @@ pub enum SurfaceTyKind {
     Tuple {
         items: Box<[SurfaceTyId]>,
     },
+    Seq {
+        item: SurfaceTyId,
+    },
     Array {
         dims: Box<[SurfaceDim]>,
         item: SurfaceTyId,
+    },
+    Range {
+        item: SurfaceTyId,
+    },
+    Handler {
+        effect: SurfaceTyId,
+        input: SurfaceTyId,
+        output: SurfaceTyId,
     },
     Mut {
         inner: SurfaceTyId,
@@ -1094,7 +1105,7 @@ impl PatFacts {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConstraintKind {
     Subtype,
     Implements,
@@ -1124,6 +1135,43 @@ impl ConstraintFacts {
         self.class_key = Some(class_key);
         self
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConstraintKey {
+    pub kind: ConstraintKind,
+    pub subject: HirTyId,
+    pub value: HirTyId,
+    pub class_key: Option<DefinitionKey>,
+}
+
+impl ConstraintKey {
+    #[must_use]
+    pub const fn new(
+        kind: ConstraintKind,
+        subject: HirTyId,
+        value: HirTyId,
+        class_key: Option<DefinitionKey>,
+    ) -> Self {
+        Self {
+            kind,
+            subject,
+            value,
+            class_key,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintEvidence {
+    Param {
+        key: ConstraintKey,
+    },
+    Provider {
+        module: ModuleKey,
+        name: Box<str>,
+        args: Box<[Self]>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1217,6 +1265,7 @@ pub struct InstanceFacts {
     pub class_name: Symbol,
     pub class_args: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
+    pub evidence_keys: Box<[ConstraintKey]>,
     pub member_names: Box<[Symbol]>,
 }
 
@@ -1239,6 +1288,7 @@ impl InstanceFacts {
             class_name,
             class_args: class_args.into(),
             constraints: Box::default(),
+            evidence_keys: Box::default(),
             member_names: member_names.into(),
         }
     }
@@ -1254,6 +1304,12 @@ impl InstanceFacts {
         self.constraints = constraints.into();
         self
     }
+
+    #[must_use]
+    pub fn with_evidence_keys(mut self, evidence_keys: impl Into<Box<[ConstraintKey]>>) -> Self {
+        self.evidence_keys = evidence_keys.into();
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -1263,10 +1319,13 @@ pub struct SemaModule {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
+    binding_schemes: HashMap<NameBindingId, crate::BindingScheme>,
+    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -1280,6 +1339,8 @@ struct SemaContextTables {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
+    binding_schemes: HashMap<NameBindingId, crate::BindingScheme>,
+    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
 }
 
 struct SemaFactTables {
@@ -1287,6 +1348,7 @@ struct SemaFactTables {
     pat_facts: Vec<PatFacts>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
 }
 
 struct SemaDeclTables {
@@ -1303,12 +1365,15 @@ impl From<SemaModuleBuild> for SemaModule {
             gated_bindings: build.context.gated_bindings,
             foreign_links: build.context.foreign_links,
             binding_types: build.context.binding_types,
+            binding_schemes: build.context.binding_schemes,
+            binding_evidence_keys: build.context.binding_evidence_keys,
         };
         let facts = SemaFactTables {
             expr_facts: build.facts.expr_facts,
             pat_facts: build.facts.pat_facts,
             expr_module_targets: build.facts.expr_module_targets,
             type_test_targets: build.facts.type_test_targets,
+            expr_evidence: build.facts.expr_evidence,
         };
         let decls = SemaDeclTables {
             effect_defs: build.decls.effect_defs,
@@ -1371,6 +1436,11 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn expr_evidence(&self, id: HirExprId) -> Option<&[ConstraintEvidence]> {
+        self.expr_evidence.get(&id).map(Box::as_ref)
+    }
+
+    #[must_use]
     pub fn is_gated_binding(&self, binding: NameBindingId) -> bool {
         self.gated_bindings.contains(&binding)
     }
@@ -1386,6 +1456,16 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn binding_scheme(&self, binding: NameBindingId) -> Option<&crate::BindingScheme> {
+        self.binding_schemes.get(&binding)
+    }
+
+    #[must_use]
+    pub fn binding_evidence_keys(&self, binding: NameBindingId) -> Option<&[ConstraintKey]> {
+        self.binding_evidence_keys.get(&binding).map(Box::as_ref)
+    }
+
+    #[must_use]
     pub fn try_pat_ty(&self, id: HirPatId) -> Option<HirTyId> {
         self.pat_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
     }
@@ -1393,6 +1473,11 @@ impl SemaModule {
     #[must_use]
     pub fn class_facts(&self, id: HirExprId) -> Option<&ClassFacts> {
         self.class_facts.get(&id)
+    }
+
+    #[must_use]
+    pub fn class_facts_by_name(&self, name: Symbol) -> Option<&ClassFacts> {
+        self.class_facts.values().find(|facts| facts.name == name)
     }
 
     #[must_use]
@@ -1437,10 +1522,13 @@ impl SemaModule {
             gated_bindings: context.gated_bindings,
             foreign_links: context.foreign_links,
             binding_types: context.binding_types,
+            binding_schemes: context.binding_schemes,
+            binding_evidence_keys: context.binding_evidence_keys,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
+            expr_evidence: facts.expr_evidence,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             class_facts: decls.class_facts,

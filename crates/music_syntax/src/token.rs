@@ -54,8 +54,8 @@ pub enum TokenKind {
     KwResume,
     KwShl,
     KwShr,
+    KwUsing,
     KwWhere,
-    KwWith,
     KwXor,
 
     // Prefixes (grammar/Musi.abnf)
@@ -97,6 +97,8 @@ pub enum TokenKind {
     LtEq,            // <=
     GtEq,            // >=
     LtColon,         // <:
+    DotDot,          // ..
+    DotDotLt,        // ..<
     DotDotDot,       // ...
     DotLBrace,       // .{
     DotLBracket,     // .[
@@ -110,9 +112,11 @@ pub enum TokenKind {
 
 // Ordered by longest-to-shortest (maximal munch).
 pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
+    (b"..<", TokenKind::DotDotLt),
     (b":?>", TokenKind::ColonQuestionGt),
     (b":=", TokenKind::ColonEq),
     (b"...", TokenKind::DotDotDot),
+    (b"..", TokenKind::DotDot),
     (b".{", TokenKind::DotLBrace),
     (b".[", TokenKind::DotLBracket),
     (b"=>", TokenKind::EqGt),
@@ -180,12 +184,12 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 33] = [
     ("resume", TokenKind::KwResume, "`resume`"),
     ("shl", TokenKind::KwShl, "`shl`"),
     ("shr", TokenKind::KwShr, "`shr`"),
+    ("using", TokenKind::KwUsing, "`using`"),
     ("where", TokenKind::KwWhere, "`where`"),
-    ("with", TokenKind::KwWith, "`with`"),
     ("xor", TokenKind::KwXor, "`xor`"),
 ];
 
-const PUNCT_DISPLAY: [(TokenKind, &str); 37] = [
+const PUNCT_DISPLAY: [(TokenKind, &str); 39] = [
     (TokenKind::At, "`@`"),
     (TokenKind::Hash, "`#`"),
     (TokenKind::Backslash, "`\\\\`"),
@@ -217,6 +221,8 @@ const PUNCT_DISPLAY: [(TokenKind, &str); 37] = [
     (TokenKind::LtEq, "`<=`"),
     (TokenKind::GtEq, "`>=`"),
     (TokenKind::LtColon, "`<:`"),
+    (TokenKind::DotDot, "`..`"),
+    (TokenKind::DotDotLt, "`..<`"),
     (TokenKind::DotDotDot, "`...`"),
     (TokenKind::DotLBrace, "`.{`"),
     (TokenKind::DotLBracket, "`.[`"),

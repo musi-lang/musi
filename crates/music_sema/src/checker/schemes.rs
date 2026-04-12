@@ -1,12 +1,14 @@
 use std::collections::{BTreeSet, HashMap};
 
 use music_arena::SliceRange;
-use music_hir::{HirOrigin, HirTyField, HirTyId, HirTyKind};
+use music_hir::{HirDim, HirOrigin, HirTyField, HirTyId, HirTyKind};
+use music_module::ModuleKey;
 use music_names::Symbol;
 
 use crate::api::{
-    ConstraintFacts, ConstraintKind, ConstraintSurface, DefinitionKey, ExportedValue,
-    InstanceFacts, InstanceSurface, ModuleSurface, SurfaceEffectRow, SurfaceTyId,
+    ConstraintEvidence, ConstraintFacts, ConstraintKey, ConstraintKind, ConstraintSurface,
+    DefinitionKey, ExportedValue, InstanceFacts, InstanceSurface, ModuleSurface, SurfaceEffectRow,
+    SurfaceTyId,
 };
 use crate::effects::{EffectKey, EffectRow};
 
@@ -36,6 +38,13 @@ pub struct InstantiatedBinding {
     pub ty: HirTyId,
     pub effects: EffectRow,
     pub obligations: Box<[ConstraintObligation]>,
+}
+
+impl ConstraintObligation {
+    #[must_use]
+    pub fn key(&self) -> ConstraintKey {
+        ConstraintKey::new(self.kind, self.subject, self.value, self.class_key.clone())
+    }
 }
 
 impl PassBase<'_, '_, '_> {
@@ -131,12 +140,36 @@ impl CheckPass<'_, '_, '_> {
         self.instantiate_binding_with_subst(scheme, &TypeSubstMap::new())
     }
 
-    pub fn solve_obligations(&mut self, origin: HirOrigin, obligations: &[ConstraintObligation]) {
-        let ctx = self;
+    pub fn resolve_obligations_to_evidence(
+        &mut self,
+        origin: HirOrigin,
+        obligations: &[ConstraintObligation],
+    ) -> Option<Box<[ConstraintEvidence]>> {
         let mut stack = Vec::<String>::new();
+        let mut evidence = Vec::new();
         for obligation in obligations {
-            let _ = ctx.solve_obligation(origin, obligation, &mut stack);
+            if !matches!(obligation.kind, ConstraintKind::Implements) {
+                let _ = self.solve_obligation(origin, obligation, &mut stack);
+                continue;
+            }
+            evidence.push(self.resolve_obligation_evidence(origin, obligation, &mut stack)?);
         }
+        Some(evidence.into_boxed_slice())
+    }
+
+    pub fn evidence_scope_for_constraints(
+        &mut self,
+        constraints: &[ConstraintFacts],
+    ) -> HashMap<ConstraintKey, ConstraintEvidence> {
+        constraints
+            .iter()
+            .filter_map(|constraint| {
+                self.constraint_key_for_facts(constraint).map(|key| {
+                    let evidence = ConstraintEvidence::Param { key: key.clone() };
+                    (key, evidence)
+                })
+            })
+            .collect()
     }
 
     fn instantiate_binding_with_subst(
@@ -175,6 +208,20 @@ impl CheckPass<'_, '_, '_> {
             value: ctx.substitute_ty(constraint.value, subst),
             class_key: constraint.class_key.clone(),
         }
+    }
+
+    pub(super) fn constraint_key_for_facts(
+        &mut self,
+        constraint: &ConstraintFacts,
+    ) -> Option<ConstraintKey> {
+        matches!(constraint.kind, ConstraintKind::Implements).then(|| {
+            ConstraintKey::new(
+                constraint.kind,
+                self.named_type_for_symbol(constraint.name),
+                constraint.value,
+                constraint.class_key.clone(),
+            )
+        })
     }
 }
 
@@ -243,18 +290,20 @@ impl PassBase<'_, '_, '_> {
                 let right = ctx.substitute_ty(right, subst);
                 ctx.alloc_ty(HirTyKind::Sum { left, right })
             }
-            HirTyKind::Tuple { items } => {
-                let items = ctx.substitute_ty_list(items, subst);
-                ctx.alloc_ty(HirTyKind::Tuple { items })
+            HirTyKind::Tuple { items } => ctx.substitute_tuple_ty(items, subst),
+            HirTyKind::Seq { item } => {
+                ctx.substitute_item_ty(item, subst, |item| HirTyKind::Seq { item })
             }
-            HirTyKind::Array { dims, item } => {
-                let item = ctx.substitute_ty(item, subst);
-                ctx.alloc_ty(HirTyKind::Array { dims, item })
+            HirTyKind::Array { dims, item } => ctx.substitute_array_ty(dims, item, subst),
+            HirTyKind::Range { item } => {
+                ctx.substitute_item_ty(item, subst, |item| HirTyKind::Range { item })
             }
-            HirTyKind::Mut { inner } => {
-                let inner = ctx.substitute_ty(inner, subst);
-                ctx.alloc_ty(HirTyKind::Mut { inner })
-            }
+            HirTyKind::Handler {
+                effect,
+                input,
+                output,
+            } => ctx.substitute_handler_ty(effect, input, output, subst),
+            HirTyKind::Mut { inner } => ctx.substitute_mut_ty(inner, subst),
             HirTyKind::Record { fields } => {
                 let fields = ctx
                     .ty_fields(fields)
@@ -265,6 +314,53 @@ impl PassBase<'_, '_, '_> {
                 ctx.alloc_ty(HirTyKind::Record { fields })
             }
         }
+    }
+
+    fn substitute_tuple_ty(&mut self, items: SliceRange<HirTyId>, subst: &TypeSubstMap) -> HirTyId {
+        let items = self.substitute_ty_list(items, subst);
+        self.alloc_ty(HirTyKind::Tuple { items })
+    }
+
+    fn substitute_item_ty(
+        &mut self,
+        item: HirTyId,
+        subst: &TypeSubstMap,
+        ctor: impl FnOnce(HirTyId) -> HirTyKind,
+    ) -> HirTyId {
+        let item = self.substitute_ty(item, subst);
+        self.alloc_ty(ctor(item))
+    }
+
+    fn substitute_array_ty(
+        &mut self,
+        dims: SliceRange<HirDim>,
+        item: HirTyId,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let item = self.substitute_ty(item, subst);
+        self.alloc_ty(HirTyKind::Array { dims, item })
+    }
+
+    fn substitute_handler_ty(
+        &mut self,
+        effect: HirTyId,
+        input: HirTyId,
+        output: HirTyId,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let effect = self.substitute_ty(effect, subst);
+        let input = self.substitute_ty(input, subst);
+        let output = self.substitute_ty(output, subst);
+        self.alloc_ty(HirTyKind::Handler {
+            effect,
+            input,
+            output,
+        })
+    }
+
+    fn substitute_mut_ty(&mut self, inner: HirTyId, subst: &TypeSubstMap) -> HirTyId {
+        let inner = self.substitute_ty(inner, subst);
+        self.alloc_ty(HirTyKind::Mut { inner })
     }
 
     fn substitute_ty_list(
@@ -358,6 +454,24 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
+    fn resolve_obligation_evidence(
+        &mut self,
+        origin: HirOrigin,
+        obligation: &ConstraintObligation,
+        stack: &mut Vec<String>,
+    ) -> Option<ConstraintEvidence> {
+        match obligation.kind {
+            ConstraintKind::Subtype => self.solve_obligation(origin, obligation, stack).then_some(
+                ConstraintEvidence::Param {
+                    key: obligation.key(),
+                },
+            ),
+            ConstraintKind::Implements => {
+                self.resolve_implements_evidence(origin, obligation, stack)
+            }
+        }
+    }
+
     fn solve_implements(
         &mut self,
         origin: HirOrigin,
@@ -441,6 +555,116 @@ impl CheckPass<'_, '_, '_> {
         true
     }
 
+    fn resolve_implements_evidence(
+        &mut self,
+        origin: HirOrigin,
+        obligation: &ConstraintObligation,
+        stack: &mut Vec<String>,
+    ) -> Option<ConstraintEvidence> {
+        let key = obligation.key();
+        if let Some(evidence) = self.resolve_in_scope_evidence(&key) {
+            return Some(evidence);
+        }
+        let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
+            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+            return None;
+        };
+        let frame = format!(
+            "{}:{}",
+            class_key.name,
+            class_args
+                .iter()
+                .copied()
+                .map(|arg| self.render_ty(arg))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        if stack.contains(&frame) {
+            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+            return None;
+        }
+        stack.push(frame);
+
+        let mut matches = Vec::<ConstraintEvidence>::new();
+        if let Some(evidence) = self.builtin_rangeable_evidence(&class_key, &class_args) {
+            matches.push(evidence);
+        }
+        let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
+        for instance in &local_instances {
+            if instance.class_key != class_key {
+                continue;
+            }
+            if let Some(evidence) = self.instance_provider_evidence(
+                origin,
+                instance,
+                self.module_key().clone(),
+                &class_args,
+                stack,
+            ) {
+                matches.push(evidence);
+            }
+        }
+
+        if let Some(env) = self.sema_env() {
+            let mut visited = BTreeSet::new();
+            let mut pending = self.static_imports();
+            while let Some(module_key) = pending.pop() {
+                if !visited.insert(module_key.clone()) {
+                    continue;
+                }
+                let Some(surface) = env.module_surface(&module_key) else {
+                    continue;
+                };
+                pending.extend(surface.static_imports().iter().cloned());
+                for instance in surface.exported_instances() {
+                    if instance.class_key != class_key {
+                        continue;
+                    }
+                    let imported = self.instance_facts_from_surface(&surface, instance);
+                    if let Some(evidence) = self.instance_provider_evidence(
+                        origin,
+                        &imported,
+                        module_key.clone(),
+                        &class_args,
+                        stack,
+                    ) {
+                        matches.push(evidence);
+                    }
+                }
+            }
+        }
+
+        let _ = stack.pop();
+        match matches.len() {
+            0 => {
+                self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+                None
+            }
+            1 => matches.pop(),
+            _ => {
+                self.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
+                None
+            }
+        }
+    }
+
+    fn builtin_rangeable_evidence(
+        &self,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+    ) -> Option<ConstraintEvidence> {
+        if class_key.name.as_ref() != "Rangeable" || class_args.len() != 1 {
+            return None;
+        }
+        matches!(self.ty(class_args[0]).kind, HirTyKind::Int).then(|| {
+            ConstraintEvidence::Provider {
+                module: self.module_key().clone(),
+                name: "__builtin_dict__Rangeable_Int".into(),
+                args: Box::default(),
+            }
+        })
+    }
+
     fn obligation_class_target(
         &self,
         obligation: &ConstraintObligation,
@@ -484,6 +708,34 @@ impl CheckPass<'_, '_, '_> {
         obligations
             .iter()
             .all(|obligation| ctx.solve_obligation(origin, obligation, stack))
+    }
+
+    fn instance_provider_evidence(
+        &mut self,
+        origin: HirOrigin,
+        instance: &InstanceFacts,
+        module: ModuleKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+    ) -> Option<ConstraintEvidence> {
+        let subst =
+            self.unify_instance_args(&instance.type_params, &instance.class_args, class_args)?;
+        let obligations = instance
+            .constraints
+            .iter()
+            .map(|constraint| self.instantiate_obligation(constraint, &subst))
+            .collect::<Vec<_>>();
+        let args = obligations
+            .iter()
+            .filter(|obligation| matches!(obligation.kind, ConstraintKind::Implements))
+            .map(|obligation| self.resolve_obligation_evidence(origin, obligation, stack))
+            .collect::<Option<Vec<_>>>()?
+            .into_boxed_slice();
+        Some(ConstraintEvidence::Provider {
+            module,
+            name: self.instance_provider_name(instance),
+            args,
+        })
     }
 
     fn unify_instance_args(
@@ -698,5 +950,21 @@ impl PassBase<'_, '_, '_> {
         }
         let _ = class_args;
         ctx.intern(&class_key.name)
+    }
+
+    fn instance_provider_name(&self, instance: &InstanceFacts) -> Box<str> {
+        let args = instance
+            .class_args
+            .iter()
+            .copied()
+            .map(|arg| self.render_ty(arg))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "__dict__::{}::{}[{args}]",
+            instance.class_key.module.as_str(),
+            instance.class_key.name
+        )
+        .into_boxed_str()
     }
 }

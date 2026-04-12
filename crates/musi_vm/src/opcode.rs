@@ -53,7 +53,11 @@ pub const fn classify_opcode(opcode: Opcode) -> VmOpcodeFamily {
         | Opcode::SeqGetN
         | Opcode::SeqSet
         | Opcode::SeqSetN
-        | Opcode::SeqCat => VmOpcodeFamily::Sequence,
+        | Opcode::SeqCat
+        | Opcode::RangeNew
+        | Opcode::RangeContains
+        | Opcode::RangeMaterialize
+        | Opcode::SeqHas => VmOpcodeFamily::Sequence,
         Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
             VmOpcodeFamily::Data
         }

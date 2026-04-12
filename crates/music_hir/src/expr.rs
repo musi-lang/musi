@@ -145,6 +145,11 @@ pub enum HirExprKind {
         dims: SliceRange<HirDim>,
         item: HirExprId,
     },
+    HandlerTy {
+        effect: HirExprId,
+        input: HirExprId,
+        output: HirExprId,
+    },
     Record {
         items: SliceRange<HirRecordItem>,
     },
@@ -245,10 +250,13 @@ pub enum HirExprKind {
     Perform {
         expr: HirExprId,
     },
+    HandlerLit {
+        effect: Ident,
+        clauses: SliceRange<HirHandleClause>,
+    },
     Handle {
         expr: HirExprId,
-        handler: Ident,
-        clauses: SliceRange<HirHandleClause>,
+        handler: HirExprId,
     },
     Resume {
         expr: Option<HirExprId>,
@@ -291,6 +299,8 @@ pub enum HirBinaryOp {
     Gt,
     Le,
     Ge,
+    RangeInclusive,
+    RangeExcludeEnd,
     In,
     Shl,
     Shr,

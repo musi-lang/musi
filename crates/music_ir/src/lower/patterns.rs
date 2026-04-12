@@ -130,7 +130,7 @@ fn lower_record_case_patterns(
     };
     let mut acc = vec![Vec::<IrCaseRecordField>::new()];
     for field in sema.module().store.record_pat_fields.get(fields.clone()) {
-        let Some(index) = indices.get(&field.name.name).copied() else {
+        let Some(index) = indices.get(interner.resolve(field.name.name)).copied() else {
             return Vec::new();
         };
         let nested = field.value.map_or_else(

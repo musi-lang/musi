@@ -42,37 +42,11 @@ impl MethodEmitter<'_, '_> {
     pub(super) fn compile_handle(
         &mut self,
         effect_key: &DefinitionKey,
-        value: &IrExpr,
-        ops: &[IrHandleOp],
+        handler: &IrExpr,
         body: &IrExpr,
         diags: &mut EmitDiagList,
     ) {
-        self.compile_expr(value, true, diags);
-        for op in ops {
-            self.compile_expr(&op.closure, true, diags);
-        }
-
-        let handler_ty_name = handler_type_name(effect_key);
-        let Some(handler_ty) = self.layout.types.get(handler_ty_name.as_ref()).copied() else {
-            super::support::push_expr_diag(
-                diags,
-                self.module_key,
-                &body.origin,
-                EmitDiagKind::UnknownHandlerType,
-                format!("unknown emitted handler type `{handler_ty_name}`"),
-            );
-            emit_zero(self);
-            return;
-        };
-        let field_count = u16::try_from(ops.len().saturating_add(1)).unwrap_or(u16::MAX);
-        self.compile_i64(0);
-        self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataNew,
-            Operand::TypeLen {
-                ty: handler_ty,
-                len: field_count,
-            },
-        )));
+        self.compile_expr(handler, true, diags);
 
         let Some(effect) = self.layout.effects.get(effect_key).copied() else {
             super::support::push_expr_diag(
@@ -95,6 +69,42 @@ impl MethodEmitter<'_, '_> {
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::HdlPop,
             Operand::None,
+        )));
+    }
+
+    pub(super) fn compile_handler_lit(
+        &mut self,
+        effect_key: &DefinitionKey,
+        value: &IrExpr,
+        ops: &[IrHandleOp],
+        origin: &IrOrigin,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_expr(value, true, diags);
+        for op in ops {
+            self.compile_expr(&op.closure, true, diags);
+        }
+
+        let handler_ty_name = handler_type_name(effect_key);
+        let Some(handler_ty) = self.layout.types.get(handler_ty_name.as_ref()).copied() else {
+            super::support::push_expr_diag(
+                diags,
+                self.module_key,
+                origin,
+                EmitDiagKind::UnknownHandlerType,
+                format!("unknown emitted handler type `{handler_ty_name}`"),
+            );
+            emit_zero(self);
+            return;
+        };
+        let field_count = u16::try_from(ops.len().saturating_add(1)).unwrap_or(u16::MAX);
+        self.compile_i64(0);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::DataNew,
+            Operand::TypeLen {
+                ty: handler_ty,
+                len: field_count,
+            },
         )));
     }
 

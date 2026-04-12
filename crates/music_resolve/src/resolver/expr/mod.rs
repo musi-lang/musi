@@ -53,6 +53,8 @@ where
 
             SyntaxNodeKind::TupleExpr => self.lower_tuple_expr(node),
             SyntaxNodeKind::ArrayExpr => self.lower_array_expr_or_ty(node),
+            SyntaxNodeKind::ArrayTy => self.lower_array_ty_expr(node),
+            SyntaxNodeKind::HandlerTy => self.lower_handler_ty_expr(node),
             SyntaxNodeKind::RecordExpr => self.lower_record_expr(node),
             SyntaxNodeKind::VariantExpr => self.lower_variant_expr(node),
 
@@ -72,6 +74,7 @@ where
 
             SyntaxNodeKind::CaseExpr => self.lower_case_expr(node),
             SyntaxNodeKind::PerformExpr => self.lower_perform_expr(node),
+            SyntaxNodeKind::HandlerExpr => self.lower_handler_expr(node),
             SyntaxNodeKind::HandleExpr => self.lower_handle_expr(node),
             SyntaxNodeKind::ResumeExpr => self.lower_resume_expr(node),
             SyntaxNodeKind::QuoteExpr => self.lower_quote_expr(node),

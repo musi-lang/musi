@@ -5,7 +5,8 @@ This document tracks language and toolchain coverage across the canonical compil
 The canonical feature definitions live in:
 
 - `grammar/Musi.abnf`
-- `grammar/Musi.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/MusiParser.g4`
 - `docs/what/language/syntax.md`
 - `docs/what/language/type-system.md`
 - `docs/what/language/effect-system.md`
@@ -67,7 +68,7 @@ Notes are descriptive: they reflect current `crates` behavior (accepted vs diagn
 | Exports and opaque modules                         | ✅         | ✅           | ✅    | ✅   | ✅         | Export collection, opaque marking, SEAM metadata emission, and runtime export hiding exist                                                                                                                                                    |
 | Imported module member typing                      | ➖         | ✅           | ✅    | ✅   | ✅         | Imported globals and generic callables compile through semantic module surfaces                                                                                                                                                               |
 | Destructured module imports and aliases            | ✅         | ✅           | ✅    | ✅   | ✅         | Destructured imported value aliases and imported class/effect alias hydration are covered end-to-end for non-runtime compilation                                                                                                              |
-| Class and effect laws                              | ✅         | ✅           | ✅    | ✅   | ✅         | Laws are parsed/typechecked, carried as structured sema/export surfaces, and emitted as metadata; no runtime/property-check execution yet                                                                                                      |
+| Class and effect laws                              | ✅         | ✅           | ✅    | ✅   | ✅         | Laws are parsed/typechecked, carried as structured sema/export surfaces, and emitted as metadata; no runtime/property-check execution yet                                                                                                     |
 
 ### Law Suite Touchpoints (Next Slice)
 
@@ -83,12 +84,12 @@ Notes are descriptive: they reflect current `crates` behavior (accepted vs diagn
 | Functions (`->`, `~>`)               | ✅         | ✅           | ✅    | ✅   | ✅         | Function kinds exist; exported signature types and effect rows are emitted in exported signature metadata           |
 | Tuples and products                  | ✅         | ✅           | ✅    | ✅   | ✅         | Tuple types and tuple expressions compile end-to-end in the non-runtime backend                                     |
 | Anonymous sums (`+`)                 | ✅         | ✅           | ✅    | ✅   | ✅         | Sum types are represented semantically and emitted in exported signature metadata                                   |
-| Arrays (`Array[T, n]`)               | ✅         | ✅           | ✅    | ✅   | ✅         | Array literals and dimension-argument forms typecheck                                                               |
+| Arrays (`[]T`, `[N]T`)               | ✅         | ✅           | ✅    | ✅   | ✅         | Sequence and fixed-array builtin forms parse and typecheck                                                          |
 | Array spread (`...expr` in `[...]`)  | ✅         | ✅           | ✅    | ✅   | ✅         | Tuple and fixed-dimension array spreads expand into indexed reads; 1D spreads with unknown dims lower via `seq.cat` |
 | `mut T`                              | ✅         | ✅           | ✅    | ✅   | ✅         | Writable types are enforced for write-through assignment (`base.[i] :=`, `base.field :=`)                           |
 | Type test / cast (`:?`, `:?>`)       | ✅         | ✅           | ✅    | ✅   | ✅         | Lowers into `TyTest` / `TyCast` IR and emits `TyChk` / `TyCast` opcodes                                             |
 | `where` constraints (`T :`, `T <:`)  | ✅         | ✅           | ✅    | ✅   | ✅         | Constraint lowering and solving exist; constraints are emitted in exported signature metadata                       |
-| Open effect rows (`with { ... }`)    | ✅         | ✅           | ✅    | ✅   | ✅         | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata                  |
+| Open effect rows (`using { ... }`)   | ✅         | ✅           | ✅    | ✅   | ✅         | Open rows and declared-effect checks exist; effect rows are emitted in exported signature metadata                  |
 | Imported generic exports             | ➖         | ✅           | ✅    | ✅   | ✅         | Imported generic callable uses now compile through `music_session` end-to-end                                       |
 | Instance coherence across imports    | ➖         | ✅           | ✅    | ➖   | ➖         | Reachable exported instances participate in sema coherence                                                          |
 

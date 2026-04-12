@@ -18,7 +18,7 @@ impl Vm {
         Ok(match value {
             ConstantValue::Int(value) => Value::Int(*value),
             ConstantValue::Float(value) => Value::Float(*value),
-            ConstantValue::Bool(value) => Value::Bool(*value),
+            ConstantValue::Bool(value) => self.bool_value(module_slot, *value)?,
             ConstantValue::String(id) => Value::string(
                 self.module(module_slot)
                     .map_or("", |module| module.program.string_text(*id)),
@@ -133,6 +133,54 @@ impl Vm {
         VmError::new(VmErrorKind::InvalidValueKind {
             expected,
             found: value.kind(),
+        })
+    }
+
+    pub(crate) fn bool_value(&self, module_slot: usize, value: bool) -> VmResult<Value> {
+        let bool_ty = self.named_type_id(module_slot, "Bool").ok_or_else(|| {
+            VmError::new(VmErrorKind::InvalidValueKind {
+                expected: VmValueKind::Bool,
+                found: VmValueKind::Unit,
+            })
+        })?;
+        Ok(Value::data(bool_ty, i64::from(value), []))
+    }
+
+    pub(crate) fn bool_flag(&self, value: &Value) -> Option<bool> {
+        let Value::Data(data) = value else {
+            return None;
+        };
+        let data = data.borrow();
+        (data.fields.is_empty() && self.is_named_type(data.ty, "Bool")).then_some(data.tag != 0)
+    }
+
+    pub(crate) fn named_type_id(
+        &self,
+        module_slot: usize,
+        name: &str,
+    ) -> Option<music_seam::TypeId> {
+        let module = self.module(module_slot).ok()?;
+        module.program.artifact().types.iter().find_map(|(id, _)| {
+            let ty_name = module.program.type_name(id);
+            let tail = ty_name.rsplit_once("::").map_or(ty_name, |(_, tail)| tail);
+            (tail == name).then_some(id)
+        })
+    }
+
+    pub(crate) fn is_range_type(&self, ty: music_seam::TypeId) -> bool {
+        self.named_type_tail(ty)
+            .is_some_and(|tail| tail.starts_with("Range["))
+    }
+
+    pub(crate) fn is_named_type(&self, ty: music_seam::TypeId, expected: &str) -> bool {
+        self.named_type_tail(ty) == Some(expected)
+    }
+
+    fn named_type_tail(&self, ty: music_seam::TypeId) -> Option<&str> {
+        self.loaded_modules.iter().find_map(|module| {
+            let ty_name = module.program.type_name(ty);
+            let tail = ty_name.rsplit_once("::").map_or(ty_name, |(_, tail)| tail);
+            (!tail.is_empty()).then_some(tail)
         })
     }
 }

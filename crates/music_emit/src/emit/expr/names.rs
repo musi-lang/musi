@@ -19,6 +19,13 @@ impl MethodEmitter<'_, '_> {
             )));
             return;
         }
+        if let Some(slot) = self.synthetic_locals.get(name).copied() {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::LdLoc,
+                Operand::Local(slot),
+            )));
+            return;
+        }
         if let Some(global) = self.resolve_global(binding, name, module_target) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
                 Opcode::LdGlob,

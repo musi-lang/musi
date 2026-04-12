@@ -8,7 +8,7 @@ use music_hir::{
 };
 use music_names::Ident;
 
-use crate::api::ExprFacts;
+use crate::api::{ConstraintKind, ExprFacts};
 
 use super::decls::{LetExprInput, check_let_expr, module_export_for_expr};
 use super::expr_calls::{check_apply_expr, check_call_expr};
@@ -60,7 +60,12 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Sequence { exprs } => ctx.check_sequence_expr(exprs),
             HirExprKind::Tuple { items } => ctx.check_tuple_expr(items),
             HirExprKind::Array { items } => ctx.check_array_expr(items),
-            HirExprKind::ArrayTy { dims, item } => ctx.check_array_ty_expr(dims, item),
+            HirExprKind::ArrayTy { dims, item } => ctx.check_array_ty_expr(&dims, item),
+            HirExprKind::HandlerTy {
+                effect,
+                input,
+                output,
+            } => ctx.check_handler_ty_expr(effect, input, output),
             HirExprKind::Record { items } => ctx.check_record_expr(items),
             HirExprKind::Variant { tag, args } => ctx.check_variant_expr(tag, args),
             HirExprKind::Pi {
@@ -93,7 +98,7 @@ impl CheckPass<'_, '_, '_> {
                 ctx.check_prefix_expr(expr.origin, &op, inner)
             }
             HirExprKind::Binary { op, left, right } => {
-                ctx.check_binary_expr(expr.origin, &op, left, right)
+                ctx.check_binary_expr(id, expr.origin, &op, left, right)
             }
             HirExprKind::Let {
                 mods,
@@ -139,7 +144,12 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Sequence { exprs } => ctx.check_sequence_expr(exprs),
             HirExprKind::Tuple { items } => ctx.check_tuple_expr(items),
             HirExprKind::Array { items } => ctx.check_array_expr(items),
-            HirExprKind::ArrayTy { dims, item } => ctx.check_array_ty_expr(dims, item),
+            HirExprKind::ArrayTy { dims, item } => ctx.check_array_ty_expr(&dims, item),
+            HirExprKind::HandlerTy {
+                effect,
+                input,
+                output,
+            } => ctx.check_handler_ty_expr(effect, input, output),
             HirExprKind::Record { items } => ctx.check_record_expr(items),
             HirExprKind::Variant { tag, args } => ctx.check_variant_expr(tag, args),
             HirExprKind::Pi {
@@ -168,7 +178,7 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::TypeCast { base, ty } => ctx.check_type_cast_expr(base, ty),
             HirExprKind::Prefix { op, expr: inner } => ctx.check_prefix_expr(origin, &op, inner),
             HirExprKind::Binary { op, left, right } => {
-                ctx.check_binary_expr(origin, &op, left, right)
+                ctx.check_binary_expr(id, origin, &op, left, right)
             }
             HirExprKind::Let {
                 mods,
@@ -204,11 +214,13 @@ impl CheckPass<'_, '_, '_> {
                 ExprFacts::new(builtins.unknown, EffectRow::empty())
             }
             HirExprKind::Perform { expr: inner } => ctx.check_perform_expr(origin, inner),
+            HirExprKind::HandlerLit { effect, clauses } => {
+                ctx.check_handler_literal_expr(origin, effect, clauses, None)
+            }
             HirExprKind::Handle {
                 expr: inner,
                 handler,
-                clauses,
-            } => ctx.check_handle_expr(origin, inner, handler, clauses),
+            } => ctx.check_handle_expr(origin, inner, handler),
             HirExprKind::Resume { expr: inner } => ctx.check_resume_expr(origin, inner),
             HirExprKind::Quote { kind } => ctx.check_quote_expr(kind),
             HirExprKind::Splice { kind } => ctx.check_splice_expr(kind),
@@ -284,7 +296,13 @@ impl CheckPass<'_, '_, '_> {
             && scheme.type_params.is_empty()
         {
             let instantiated = ctx.instantiate_monomorphic_scheme(&scheme);
-            ctx.solve_obligations(ctx.expr(expr_id).origin, &instantiated.obligations);
+            if let Some(evidence) = ctx.resolve_obligations_to_evidence(
+                ctx.expr(expr_id).origin,
+                &instantiated.obligations,
+            ) && !evidence.is_empty()
+            {
+                ctx.set_expr_evidence(expr_id, evidence);
+            }
             return ExprFacts::new(instantiated.ty, EffectRow::empty());
         }
         let ty = ctx
@@ -433,6 +451,11 @@ impl CheckPass<'_, '_, '_> {
                     ctx.diag(origin.span, DiagKind::InvalidIndexArity, "");
                 }
                 item
+            } else if let HirTyKind::Seq { item } = ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
+                if arg_count != 1 {
+                    ctx.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                }
+                item
             } else {
                 ctx.diag(origin.span, DiagKind::InvalidIndexTarget, "");
                 builtins.unknown
@@ -490,39 +513,44 @@ impl CheckPass<'_, '_, '_> {
             }
         }
 
-        let ty = match ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
-            HirTyKind::Record { fields } => ctx
-                .ty_fields(fields)
-                .into_iter()
-                .find(|field| field.name == name.name)
-                .map_or_else(
-                    || {
-                        ctx.diag(origin.span, DiagKind::UnknownField, "");
-                        builtins.unknown
-                    },
-                    |field| field.ty,
-                ),
-            HirTyKind::Module => {
-                if let Some((surface, export)) = module_export_for_expr(ctx, base, name) {
-                    if let Some(target) = export.module_target.clone() {
-                        ctx.set_expr_module_target(expr_id, target);
+        let base_ty = peel_mut_ty(ctx, base_facts.ty);
+        let ty = ctx
+            .record_like_field_ty(base_ty, ctx.resolve_symbol(name.name))
+            .unwrap_or_else(|| match ctx.ty(base_ty).kind {
+                HirTyKind::Record { .. } | HirTyKind::Range { .. } => {
+                    ctx.diag(origin.span, DiagKind::UnknownField, "");
+                    builtins.unknown
+                }
+                HirTyKind::Module => {
+                    if let Some((surface, export)) = module_export_for_expr(ctx, base, name) {
+                        if let Some(target) = export.module_target.clone() {
+                            ctx.set_expr_module_target(expr_id, target);
+                        }
+                        let scheme = ctx.scheme_from_export(&surface, &export);
+                        if scheme.type_params.is_empty() {
+                            let instantiated = ctx.instantiate_monomorphic_scheme(&scheme);
+                            if let Some(evidence) = ctx
+                                .resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                                && !evidence.is_empty()
+                            {
+                                ctx.set_expr_evidence(expr_id, evidence);
+                            }
+                        }
+                        ctx.set_expr_callable_effects(expr_id, scheme.effects.clone());
+                        scheme.ty
+                    } else {
+                        builtins.any
                     }
-                    let scheme = ctx.scheme_from_export(&surface, &export);
-                    ctx.set_expr_callable_effects(expr_id, scheme.effects.clone());
-                    scheme.ty
-                } else {
-                    builtins.any
                 }
-            }
-            _ => {
-                if matches!(access, HirAccessKind::Direct) {
-                    ctx.diag(origin.span, DiagKind::InvalidFieldAccess, "");
-                } else {
-                    ctx.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+                _ => {
+                    if matches!(access, HirAccessKind::Direct) {
+                        ctx.diag(origin.span, DiagKind::InvalidFieldAccess, "");
+                    } else {
+                        ctx.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+                    }
+                    builtins.unknown
                 }
-                builtins.unknown
-            }
-        };
+            });
         ExprFacts::new(ty, effects)
     }
 
@@ -535,53 +563,59 @@ impl CheckPass<'_, '_, '_> {
         let ctx = self;
         let base_facts = check_expr(ctx, base);
         let mut effects = base_facts.effects.clone();
-        let mut fields =
-            if let HirTyKind::Record { fields } = ctx.ty(peel_mut_ty(ctx, base_facts.ty)).kind {
-                ctx.ty_fields(fields)
-                    .into_iter()
-                    .map(|field| (field.name, field.ty))
-                    .collect::<BTreeMap<_, _>>()
-            } else {
-                ctx.diag(origin.span, DiagKind::InvalidRecordUpdateTarget, "");
-                BTreeMap::new()
-            };
+        let base_ty = peel_mut_ty(ctx, base_facts.ty);
+        let mut fields = ctx.record_like_fields(base_ty).unwrap_or_else(|| {
+            ctx.diag(origin.span, DiagKind::InvalidRecordUpdateTarget, "");
+            BTreeMap::new()
+        });
         for record_item in ctx.record_items(items) {
             if record_item.spread {
                 let facts = check_expr(ctx, record_item.value);
                 effects.union_with(&facts.effects);
                 let spread_origin = ctx.expr(record_item.value).origin;
                 let spread_ty = peel_mut_ty(ctx, facts.ty);
-                let HirTyKind::Record {
-                    fields: spread_fields,
-                } = ctx.ty(spread_ty).kind
-                else {
+                let Some(spread_fields) = ctx.record_like_fields(spread_ty) else {
                     ctx.diag(spread_origin.span, DiagKind::InvalidRecordSpreadSource, "");
                     continue;
                 };
-                for spread_field in ctx.ty_fields(spread_fields) {
-                    let _prev = fields.insert(spread_field.name, spread_field.ty);
+                for (field_name, field_ty) in spread_fields {
+                    let _prev = fields.insert(field_name, field_ty);
                 }
                 continue;
             }
 
             let expected = record_item
                 .name
-                .and_then(|name| fields.get(&name.name).copied())
+                .and_then(|name| fields.get(ctx.resolve_symbol(name.name)).copied())
                 .unwrap_or_else(|| ctx.builtins().unknown);
             ctx.push_expected_ty(expected);
             let facts = check_expr(ctx, record_item.value);
             let _ = ctx.pop_expected_ty();
             effects.union_with(&facts.effects);
             if let Some(name) = record_item.name {
-                let _prev = fields.insert(name.name, facts.ty);
+                let _prev = fields.insert(ctx.resolve_symbol(name.name).into(), facts.ty);
             }
         }
-        let fields = ctx.alloc_ty_fields(
-            fields
+        let ty = if let HirTyKind::Range { item } = ctx.ty(base_ty).kind {
+            let bound_ty = ctx.builtins().bound;
+            if let Some(found) = fields.get("start").copied() {
+                ctx.type_mismatch(origin, item, found);
+            }
+            if let Some(found) = fields.get("end").copied() {
+                ctx.type_mismatch(origin, item, found);
+            }
+            if let Some(found) = fields.get("end_bound").copied() {
+                ctx.type_mismatch(origin, bound_ty, found);
+            }
+            ctx.alloc_ty(HirTyKind::Range { item })
+        } else {
+            let fields = fields
                 .into_iter()
-                .map(|(name, ty)| HirTyField::new(name, ty)),
-        );
-        let ty = ctx.alloc_ty(HirTyKind::Record { fields });
+                .map(|(name, ty)| HirTyField::new(ctx.intern(name.as_ref()), ty))
+                .collect::<Vec<_>>();
+            let fields = ctx.alloc_ty_fields(fields);
+            ctx.alloc_ty(HirTyKind::Record { fields })
+        };
         ExprFacts::new(ty, effects)
     }
 
@@ -642,6 +676,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn check_binary_expr(
         &mut self,
+        expr_id: HirExprId,
         origin: HirOrigin,
         op: &HirBinaryOp,
         left: HirExprId,
@@ -658,11 +693,25 @@ impl CheckPass<'_, '_, '_> {
         effects.union_with(&right_facts.effects);
         if matches!(
             op,
+            HirBinaryOp::RangeInclusive | HirBinaryOp::RangeExcludeEnd
+        ) {
+            return ctx.check_range_binary_expr(origin, op, left_facts.ty, right_facts.ty, effects);
+        }
+        if matches!(op, HirBinaryOp::In) {
+            return ctx.check_in_binary_expr(
+                expr_id,
+                origin,
+                left_facts.ty,
+                right_facts.ty,
+                effects,
+            );
+        }
+        if matches!(
+            op,
             HirBinaryOp::Pipe
                 | HirBinaryOp::Or
                 | HirBinaryOp::Xor
                 | HirBinaryOp::And
-                | HirBinaryOp::In
                 | HirBinaryOp::Shl
                 | HirBinaryOp::Shr
                 | HirBinaryOp::UserOp(_)
@@ -724,6 +773,8 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Or
             | HirBinaryOp::Xor
             | HirBinaryOp::And
+            | HirBinaryOp::RangeInclusive
+            | HirBinaryOp::RangeExcludeEnd
             | HirBinaryOp::In
             | HirBinaryOp::Shl
             | HirBinaryOp::Shr
@@ -770,6 +821,17 @@ impl CheckPass<'_, '_, '_> {
                     HirTyKind::Array { .. } => {
                         ctx.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
                         builtins.unknown
+                    }
+                    HirTyKind::Seq { item } => {
+                        if arg_count != 1 {
+                            ctx.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                        }
+                        if ctx.is_mut_ty(base_facts.ty) {
+                            item
+                        } else {
+                            ctx.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
+                            builtins.unknown
+                        }
                     }
                     _ => {
                         ctx.diag(origin.span, DiagKind::InvalidIndexTarget, "");
@@ -888,7 +950,18 @@ impl CheckPass<'_, '_, '_> {
                 .ty_ids(*items)
                 .into_iter()
                 .any(|ty| ctx.contains_mut_ty(ty)),
-            HirTyKind::Array { item, .. } => ctx.contains_mut_ty(*item),
+            HirTyKind::Seq { item } | HirTyKind::Range { item } | HirTyKind::Array { item, .. } => {
+                ctx.contains_mut_ty(*item)
+            }
+            HirTyKind::Handler {
+                effect,
+                input,
+                output,
+            } => {
+                ctx.contains_mut_ty(*effect)
+                    || ctx.contains_mut_ty(*input)
+                    || ctx.contains_mut_ty(*output)
+            }
             HirTyKind::Record { fields } => ctx
                 .ty_fields(fields.clone())
                 .into_iter()
@@ -915,6 +988,112 @@ impl CheckPass<'_, '_, '_> {
     fn is_mut_ty(&self, ty: HirTyId) -> bool {
         let ctx = self;
         matches!(ctx.ty(ty).kind, HirTyKind::Mut { .. })
+    }
+
+    fn check_range_binary_expr(
+        &mut self,
+        origin: HirOrigin,
+        _op: &HirBinaryOp,
+        left: HirTyId,
+        right: HirTyId,
+        effects: EffectRow,
+    ) -> ExprFacts {
+        let item_ty = self.range_item_ty(origin, left, right);
+        ExprFacts::new(self.make_range_ty(item_ty), effects)
+    }
+
+    fn check_in_binary_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        left: HirTyId,
+        right: HirTyId,
+        effects: EffectRow,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let Some(item_ty) = self.range_item_type(right) else {
+            let expected = self.make_range_ty(left);
+            self.type_mismatch(origin, expected, right);
+            return ExprFacts::new(builtins.bool_, effects);
+        };
+        self.type_mismatch(origin, item_ty, left);
+        let rangeable_symbol = self.known().rangeable;
+        let rangeable = self.named_type_for_symbol(rangeable_symbol);
+        let obligation = super::schemes::ConstraintObligation {
+            kind: ConstraintKind::Implements,
+            subject: item_ty,
+            value: rangeable,
+            class_key: self
+                .class_facts_by_name(rangeable_symbol)
+                .map(|facts| facts.key.clone()),
+        };
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
+        ExprFacts::new(builtins.bool_, effects)
+    }
+
+    fn make_range_ty(&mut self, item: HirTyId) -> HirTyId {
+        self.alloc_ty(HirTyKind::Range { item })
+    }
+
+    fn range_item_ty(&mut self, origin: HirOrigin, left: HirTyId, right: HirTyId) -> HirTyId {
+        let builtins = self.builtins();
+        let left = self.normalize_range_bound_ty(left);
+        let right = self.normalize_range_bound_ty(right);
+        if left == right {
+            return left;
+        }
+        if self.is_integer_like_range_ty(left) && self.is_integer_like_range_ty(right) {
+            self.type_mismatch(origin, left, right);
+            return left;
+        }
+        self.type_mismatch(origin, builtins.int_, left);
+        self.type_mismatch(origin, builtins.int_, right);
+        builtins.int_
+    }
+
+    fn normalize_range_bound_ty(&self, ty: HirTyId) -> HirTyId {
+        match self.ty(ty).kind {
+            HirTyKind::NatLit(_) => self.builtins().nat,
+            _ => ty,
+        }
+    }
+
+    fn is_integer_like_range_ty(&self, ty: HirTyId) -> bool {
+        let builtins = self.builtins();
+        ty == builtins.int_ || ty == builtins.nat
+    }
+
+    fn range_item_type(&self, ty: HirTyId) -> Option<HirTyId> {
+        match self.ty(peel_mut_ty(self, ty)).kind {
+            HirTyKind::Range { item } => Some(item),
+            _ => None,
+        }
+    }
+
+    fn record_like_fields(&self, ty: HirTyId) -> Option<BTreeMap<Box<str>, HirTyId>> {
+        match self.ty(ty).kind {
+            HirTyKind::Record { fields } => Some(
+                self.ty_fields(fields)
+                    .into_iter()
+                    .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
+                    .collect(),
+            ),
+            HirTyKind::Range { item } => Some(BTreeMap::from([
+                ("start".into(), item),
+                ("end".into(), item),
+                ("end_bound".into(), self.builtins().bound),
+            ])),
+            _ => None,
+        }
+    }
+
+    fn record_like_field_ty(&self, ty: HirTyId, field_name: &str) -> Option<HirTyId> {
+        self.record_like_fields(ty)
+            .and_then(|fields| fields.get(field_name).copied())
     }
 
     fn numeric_unary_type(&mut self, origin: HirOrigin, ty: HirTyId) -> HirTyId {

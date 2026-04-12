@@ -56,6 +56,10 @@ pub(super) fn child_of_kind<'tree, 'src>(
     node.child_nodes().find(|child| child.kind() == kind)
 }
 
+pub(super) fn is_expr_or_ty(kind: SyntaxNodeKind) -> bool {
+    kind.is_expr() || kind.is_ty()
+}
+
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,

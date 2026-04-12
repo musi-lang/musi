@@ -18,9 +18,9 @@ use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, DefinitionKey, ExprFacts, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef,
-    SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule,
-    SemaOptions, TargetInfo,
+    ClassFacts, ClassMemberFacts, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts,
+    ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList,
+    SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -31,6 +31,7 @@ type ImportTargetMap = HashMap<Span, ModuleKey>;
 type BindingTypeMap = HashMap<NameBindingId, HirTyId>;
 type BindingEffectsMap = HashMap<NameBindingId, EffectRow>;
 type BindingSchemeMap = HashMap<NameBindingId, BindingScheme>;
+type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
 type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
 type SealedClassSet = HashSet<DefinitionKey>;
 type GatedBindingSet = HashSet<NameBindingId>;
@@ -46,8 +47,11 @@ type PatFactsList = Vec<PatFacts>;
 type ExprCallableEffectsMap = HashMap<HirExprId, EffectRow>;
 type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
 type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
+type ExprEvidenceMap = HashMap<HirExprId, Box<[ConstraintEvidence]>>;
 type ResumeCtxList = Vec<ResumeCtx>;
 type ExpectedTyList = Vec<HirTyId>;
+type EvidenceScope = HashMap<ConstraintKey, ConstraintEvidence>;
+type EvidenceScopeList = Vec<EvidenceScope>;
 type StaticImportList = Vec<ModuleKey>;
 type ExprIdList = Vec<HirExprId>;
 type ArgList = Vec<HirArg>;
@@ -87,12 +91,13 @@ pub struct Builtins {
     pub int_: HirTyId,
     pub float_: HirTyId,
     pub string_: HirTyId,
+    pub bound: HirTyId,
     pub cstring: HirTyId,
     pub cptr: HirTyId,
 }
 
 impl Builtins {
-    fn from_resolved(resolved: &mut ResolvedModule) -> Self {
+    fn from_resolved(resolved: &mut ResolvedModule, known: KnownSymbols) -> Self {
         Self {
             error: alloc_builtin(resolved, HirTyKind::Error),
             unknown: alloc_builtin(resolved, HirTyKind::Unknown),
@@ -107,6 +112,7 @@ impl Builtins {
             int_: alloc_builtin(resolved, HirTyKind::Int),
             float_: alloc_builtin(resolved, HirTyKind::Float),
             string_: alloc_builtin(resolved, HirTyKind::String),
+            bound: alloc_named_builtin(resolved, known.bound),
             cstring: alloc_builtin(resolved, HirTyKind::CString),
             cptr: alloc_builtin(resolved, HirTyKind::CPtr),
         }
@@ -186,6 +192,7 @@ pub struct TypingState {
     binding_types: BindingTypeMap,
     binding_effects: BindingEffectsMap,
     binding_schemes: BindingSchemeMap,
+    binding_evidence_keys: BindingEvidenceKeyMap,
     binding_module_targets: BindingModuleTargetMap,
     sealed_classes: SealedClassSet,
     gated_bindings: GatedBindingSet,
@@ -224,6 +231,7 @@ pub struct FactState {
     expr_callable_effects: ExprCallableEffectsMap,
     expr_module_targets: ExprModuleTargetMap,
     type_test_targets: TypeTestTargetMap,
+    expr_evidence: ExprEvidenceMap,
 }
 
 impl FactState {
@@ -236,6 +244,7 @@ impl FactState {
             expr_callable_effects: HashMap::new(),
             expr_module_targets: HashMap::new(),
             type_test_targets: HashMap::new(),
+            expr_evidence: HashMap::new(),
         }
     }
 }
@@ -276,6 +285,7 @@ pub struct CheckPass<'ctx, 'interner, 'env> {
     collect: CollectPass<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
     expected: ExpectedTyList,
+    evidence_scopes: EvidenceScopeList,
     module_stmt_depth: u32,
 }
 
@@ -292,7 +302,7 @@ pub fn prepare_module<'interner, 'env>(
     ResumeState,
 ) {
     let known = KnownSymbols::new(interner);
-    let builtins = Builtins::from_resolved(&mut resolved);
+    let builtins = Builtins::from_resolved(&mut resolved, known);
     let binding_ids = resolved
         .names
         .bindings
@@ -310,16 +320,120 @@ pub fn prepare_module<'interner, 'env>(
     ];
     let pat_facts = vec![PatFacts::new(builtins.unknown); resolved.module.store.pats.len()];
 
+    let mut decls = DeclState::new();
+    let module_key = resolved.module_key.clone();
+    seed_builtin_data_defs(&mut decls, module_key.clone(), builtins);
+    seed_builtin_class_facts(
+        &mut resolved,
+        &mut decls,
+        interner,
+        known,
+        builtins,
+        module_key,
+    );
+
     (
         ModuleState::new(resolved, binding_ids, import_targets),
         RuntimeEnv::new(interner, known, builtins)
             .with_target(options.target.unwrap_or_else(host_target_info))
             .with_env(options.env),
         TypingState::new(),
-        DeclState::new(),
+        decls,
         FactState::new(expr_facts, pat_facts),
         ResumeState::new(),
     )
+}
+
+fn alloc_named_builtin(resolved: &mut ResolvedModule, name: Symbol) -> HirTyId {
+    resolved.module.store.alloc_ty(HirTy::new(
+        HirOrigin::dummy(),
+        HirTyKind::Named {
+            name,
+            args: SliceRange::EMPTY,
+        },
+    ))
+}
+
+fn seed_builtin_data_defs(decls: &mut DeclState, module: ModuleKey, _builtins: Builtins) {
+    let bool_variants = BTreeMap::from([
+        (
+            "False".into(),
+            SemaDataVariantDef::new(None, Box::default()),
+        ),
+        ("True".into(), SemaDataVariantDef::new(None, Box::default())),
+    ]);
+    let bound_variants = BTreeMap::from([
+        (
+            "Inclusive".into(),
+            SemaDataVariantDef::new(None, Box::default()),
+        ),
+        (
+            "Exclusive".into(),
+            SemaDataVariantDef::new(None, Box::default()),
+        ),
+    ]);
+    let _ = decls.data_defs.insert(
+        "Bool".into(),
+        SemaDataDef::new(
+            DefinitionKey::new(module.clone(), "Bool"),
+            bool_variants,
+            None,
+            None,
+            None,
+        ),
+    );
+    let _ = decls.data_defs.insert(
+        "Bound".into(),
+        SemaDataDef::new(
+            DefinitionKey::new(module, "Bound"),
+            bound_variants,
+            None,
+            None,
+            None,
+        ),
+    );
+}
+
+fn seed_builtin_class_facts(
+    resolved: &mut ResolvedModule,
+    decls: &mut DeclState,
+    interner: &mut Interner,
+    known: KnownSymbols,
+    builtins: Builtins,
+    module: ModuleKey,
+) {
+    let item_symbol = interner.intern("T");
+    let item_ty = resolved.module.store.alloc_ty(HirTy::new(
+        HirOrigin::dummy(),
+        HirTyKind::Named {
+            name: item_symbol,
+            args: SliceRange::EMPTY,
+        },
+    ));
+    let option_args = resolved.module.store.alloc_ty_list([item_ty]);
+    let option_item_ty = resolved.module.store.alloc_ty(HirTy::new(
+        HirOrigin::dummy(),
+        HirTyKind::Named {
+            name: known.lang_option,
+            args: option_args,
+        },
+    ));
+    let facts = ClassFacts::new(
+        DefinitionKey::new(module, "Rangeable"),
+        known.rangeable,
+        vec![
+            ClassMemberFacts::new(
+                known.compare,
+                vec![item_ty, item_ty].into_boxed_slice(),
+                builtins.int_,
+            ),
+            ClassMemberFacts::new(known.next, vec![item_ty].into_boxed_slice(), option_item_ty),
+            ClassMemberFacts::new(known.prev, vec![item_ty].into_boxed_slice(), option_item_ty),
+        ]
+        .into_boxed_slice(),
+        Box::default(),
+    );
+    let _ = decls.class_facts_by_name.insert(known.rangeable, facts);
 }
 
 fn host_target_info() -> TargetInfo {
@@ -347,12 +461,15 @@ pub fn finish_module(
             gated_bindings: typing.gated_bindings.clone(),
             foreign_links: typing.foreign_links.clone(),
             binding_types: typing.binding_types().clone(),
+            binding_schemes: typing.binding_schemes().clone(),
+            binding_evidence_keys: typing.binding_evidence_keys().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,
             pat_facts: facts.pat_facts,
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
+            expr_evidence: facts.expr_evidence,
         },
         decls: crate::SemaDeclsBuild {
             effect_defs: decls.effect_defs,
@@ -665,6 +782,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.facts.type_test_targets.insert(id, target);
     }
 
+    pub fn set_expr_evidence(
+        &mut self,
+        id: HirExprId,
+        evidence: impl Into<Box<[ConstraintEvidence]>>,
+    ) {
+        let _prev = self.facts.expr_evidence.insert(id, evidence.into());
+    }
+
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {
         let slot = self
             .facts
@@ -767,6 +892,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn insert_binding_scheme(&mut self, id: NameBindingId, scheme: BindingScheme) {
         let _prev = self.typing.binding_schemes.insert(id, scheme);
+    }
+
+    pub fn set_binding_evidence_keys(
+        &mut self,
+        id: NameBindingId,
+        keys: impl Into<Box<[ConstraintKey]>>,
+    ) {
+        let _prev = self.typing.binding_evidence_keys.insert(id, keys.into());
     }
 
     pub fn binding_module_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
@@ -923,6 +1056,10 @@ impl TypingState {
         &self.binding_schemes
     }
 
+    pub const fn binding_evidence_keys(&self) -> &HashMap<NameBindingId, Box<[ConstraintKey]>> {
+        &self.binding_evidence_keys
+    }
+
     pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
         &self.binding_module_targets
     }
@@ -979,6 +1116,7 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
             collect,
             resume,
             expected: Vec::new(),
+            evidence_scopes: Vec::new(),
             module_stmt_depth: 0,
         }
     }
@@ -993,6 +1131,21 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 
     pub const fn in_module_stmt(&self) -> bool {
         self.module_stmt_depth > 0
+    }
+
+    pub fn push_evidence_scope(&mut self, scope: EvidenceScope) {
+        self.evidence_scopes.push(scope);
+    }
+
+    pub fn pop_evidence_scope(&mut self) -> Option<EvidenceScope> {
+        self.evidence_scopes.pop()
+    }
+
+    pub fn resolve_in_scope_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
+        self.evidence_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(key).cloned())
     }
 
     pub fn push_resume(&mut self, ctx: ResumeCtx) {

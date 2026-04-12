@@ -1,4 +1,5 @@
 use super::*;
+use crate::resolver::util::is_expr_or_ty;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -37,9 +38,9 @@ where
         self.push_scope();
         let params = param_list.map_or(SliceRange::EMPTY, |list| self.lower_param_list(list));
 
-        let mut exprs = node
-            .child_nodes()
-            .filter(|child| child.kind() != SyntaxNodeKind::ParamList);
+        let mut exprs = node.child_nodes().filter(|child| {
+            child.kind() != SyntaxNodeKind::ParamList && is_expr_or_ty(child.kind())
+        });
         let ret_ty = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
         let body = match exprs.next() {
             Some(expr) => self.lower_expr(expr),

@@ -35,6 +35,7 @@ impl Parser<'_> {
             TokenKind::KwClass => self.parse_class_expr(),
             TokenKind::KwInstance => self.parse_instance_expr(Vec::new()),
             TokenKind::KwPerform => self.parse_perform_expr(),
+            TokenKind::KwUsing => self.parse_handler_expr(),
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),
             TokenKind::KwQuote => self.parse_quote_expr(),

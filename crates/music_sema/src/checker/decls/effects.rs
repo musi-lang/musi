@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
-use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyKind};
-use music_names::Ident;
+use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyId, HirTyKind};
+use music_names::{Ident, Symbol};
 
 use super::super::exprs::check_expr;
 use super::super::{CheckPass, DiagKind, ResumeCtx};
@@ -35,16 +35,100 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         expr: HirExprId,
-        handler: Ident,
-        clauses: SliceRange<HirHandleClause>,
+        handler: HirExprId,
     ) -> ExprFacts {
         let handled_facts = check_expr(self, expr);
-        let handler_name: Box<str> = self.resolve_symbol(handler.name).into();
-        let Some(effect) = self.effect_def(&handler_name).cloned() else {
-            self.diag(origin.span, DiagKind::UnknownEffect, "");
-            return handled_facts;
-        };
+        if let HirExprKind::HandlerLit { effect, clauses } = self.expr(handler).kind {
+            let literal_facts = self.check_handler_literal_expr(
+                self.expr(handler).origin,
+                effect,
+                clauses,
+                Some(handled_facts.ty),
+            );
+            let handler_effect_name: Box<str> = self.resolve_symbol(effect.name).into();
+            let mut effects = handled_facts.effects;
+            effects.remove_by_name(&handler_effect_name);
+            effects.union_with(&literal_facts.effects);
+            let result_ty = self.handler_output_ty(literal_facts.ty);
+            return ExprFacts::new(
+                result_ty.unwrap_or_else(|| self.builtins().unknown),
+                effects,
+            );
+        }
 
+        let expected_handler_ty =
+            self.make_handler_ty(None, handled_facts.ty, self.builtins().unknown);
+        self.push_expected_ty(expected_handler_ty);
+        let checked_handler = check_expr(self, handler);
+        let _ = self.pop_expected_ty();
+        let Some((effect_name, input_ty, result_ty)) = self.handler_contract(checked_handler.ty)
+        else {
+            self.diag(origin.span, DiagKind::InvalidCallTarget, "");
+            let mut effects = handled_facts.effects;
+            effects.union_with(&checked_handler.effects);
+            return ExprFacts::new(self.builtins().unknown, effects);
+        };
+        self.type_mismatch(origin, input_ty, handled_facts.ty);
+
+        let mut effects = handled_facts.effects;
+        effects.remove_by_name(&effect_name);
+        effects.union_with(&checked_handler.effects);
+        ExprFacts::new(result_ty, effects)
+    }
+
+    pub(in super::super) fn check_resume_expr(
+        &mut self,
+        origin: HirOrigin,
+        expr: Option<HirExprId>,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let Some(resume) = self.resume_top() else {
+            self.diag(origin.span, DiagKind::ResumeOutsideHandlerClause, "");
+            return ExprFacts::new(builtins.unknown, EffectRow::empty());
+        };
+        let mut effects = EffectRow::empty();
+        if let Some(expr) = expr {
+            let facts = check_expr(self, expr);
+            let origin = self.expr(expr).origin;
+            self.type_mismatch(origin, resume.arg, facts.ty);
+            effects.union_with(&facts.effects);
+        }
+        ExprFacts::new(resume.result, effects)
+    }
+
+    pub(in super::super) fn check_handler_literal_expr(
+        &mut self,
+        origin: HirOrigin,
+        effect: Ident,
+        clauses: SliceRange<HirHandleClause>,
+        input_hint: Option<HirTyId>,
+    ) -> ExprFacts {
+        let effect_name: Box<str> = self.resolve_symbol(effect.name).into();
+        let Some(effect_def) = self.effect_def(&effect_name).cloned() else {
+            self.diag(origin.span, DiagKind::UnknownEffect, "");
+            return ExprFacts::new(self.builtins().unknown, EffectRow::empty());
+        };
+        let input_ty = input_hint.unwrap_or_else(|| {
+            self.expected_ty()
+                .and_then(|ty| self.handler_contract(ty).map(|(_, input, _)| input))
+                .unwrap_or_else(|| self.builtins().unknown)
+        });
+        let (result_ty, clause_effects) =
+            self.check_handler_clauses(origin, &effect_name, &effect_def, clauses, input_ty);
+        ExprFacts::new(
+            self.make_handler_ty(Some(effect.name), input_ty, result_ty),
+            clause_effects,
+        )
+    }
+
+    fn check_handler_clauses(
+        &mut self,
+        origin: HirOrigin,
+        effect_name: &str,
+        effect: &super::super::EffectDef,
+        clauses: SliceRange<HirHandleClause>,
+        input_ty: HirTyId,
+    ) -> (HirTyId, EffectRow) {
         let value_name = "value";
         let mut result_ty = self.builtins().unknown;
         let mut clause_effects = EffectRow::empty();
@@ -57,7 +141,7 @@ impl CheckPass<'_, '_, '_> {
             if clause_name.as_ref() == value_name {
                 seen_value = seen_value.saturating_add(1);
                 if let Some(binding) = self.binding_id_for_decl(clause.op) {
-                    self.insert_binding_type(binding, handled_facts.ty);
+                    self.insert_binding_type(binding, input_ty);
                 }
                 let facts = check_expr(self, clause.body);
                 clause_effects.union_with(&facts.effects);
@@ -70,16 +154,13 @@ impl CheckPass<'_, '_, '_> {
             if clause_name.as_ref() == value_name {
                 continue;
             }
-
-            let did_insert = seen_ops.insert(clause_name.clone());
-            if !did_insert {
+            if !seen_ops.insert(clause_name.clone()) {
                 self.diag(origin.span, DiagKind::DuplicateHandlerClause, "");
             }
             let Some(op_def) = effect.op(clause_name.as_ref()).cloned() else {
                 self.diag(origin.span, DiagKind::UnknownEffectOp, "");
                 continue;
             };
-
             let params = self.idents(clause.params);
             if params.len() != op_def.params().len().saturating_add(1) {
                 self.diag(origin.span, DiagKind::HandlerClauseArityMismatch, "");
@@ -109,8 +190,8 @@ impl CheckPass<'_, '_, '_> {
             self.push_resume(ResumeCtx::new(op_def.result(), result_ty));
             let body = check_expr(self, clause.body);
             let _ = self.pop_resume();
-            let origin = self.expr(clause.body).origin;
-            self.type_mismatch(origin, result_ty, body.ty);
+            let body_origin = self.expr(clause.body).origin;
+            self.type_mismatch(body_origin, result_ty, body.ty);
             clause_effects.union_with(&body.effects);
         }
 
@@ -122,31 +203,53 @@ impl CheckPass<'_, '_, '_> {
                 self.diag(origin.span, DiagKind::HandlerMissingOperationClause, "");
             }
         }
-
-        let mut effects = handled_facts.effects;
-        effects.remove_by_name(&handler_name);
-        effects.union_with(&clause_effects);
-        ExprFacts::new(result_ty, effects)
+        let _ = effect_name;
+        (result_ty, clause_effects)
     }
 
-    pub(in super::super) fn check_resume_expr(
+    fn make_handler_ty(
         &mut self,
-        origin: HirOrigin,
-        expr: Option<HirExprId>,
-    ) -> ExprFacts {
-        let builtins = self.builtins();
-        let Some(resume) = self.resume_top() else {
-            self.diag(origin.span, DiagKind::ResumeOutsideHandlerClause, "");
-            return ExprFacts::new(builtins.unknown, EffectRow::empty());
+        effect: Option<Symbol>,
+        input: HirTyId,
+        output: HirTyId,
+    ) -> HirTyId {
+        let effect_name = effect.unwrap_or_else(|| self.intern("Unknown"));
+        let empty_args = self.alloc_ty_list([]);
+        let effect_ty = self.alloc_ty(HirTyKind::Named {
+            name: effect_name,
+            args: empty_args,
+        });
+        self.alloc_ty(HirTyKind::Handler {
+            effect: effect_ty,
+            input,
+            output,
+        })
+    }
+
+    fn handler_contract(&self, ty: HirTyId) -> Option<(Box<str>, HirTyId, HirTyId)> {
+        let HirTyKind::Handler {
+            effect,
+            input,
+            output,
+        } = self.ty(ty).kind
+        else {
+            return None;
         };
-        let mut effects = EffectRow::empty();
-        if let Some(expr) = expr {
-            let facts = check_expr(self, expr);
-            let origin = self.expr(expr).origin;
-            self.type_mismatch(origin, resume.arg, facts.ty);
-            effects.union_with(&facts.effects);
+        let HirTyKind::Named {
+            name: effect_name,
+            args: effect_args,
+        } = self.ty(effect).kind
+        else {
+            return None;
+        };
+        if !self.ty_ids(effect_args).is_empty() {
+            return None;
         }
-        ExprFacts::new(resume.result, effects)
+        Some((self.resolve_symbol(effect_name).into(), input, output))
+    }
+
+    fn handler_output_ty(&self, ty: HirTyId) -> Option<HirTyId> {
+        self.handler_contract(ty).map(|(_, _, output)| output)
     }
 }
 

@@ -287,7 +287,7 @@ fn compiles_imported_globals_and_local_assignment() {
 fn compiles_dynamic_import_multi_index_and_quote() {
     let output = assert_main_entry_compiles_with!(
         r"
-            export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
+            export let touch (name : String, grid : mut [2][2]Int) : Int := (
               let loaded := import name;
               grid.[0, 1] := 7;
               grid.[0, 1]
@@ -561,10 +561,10 @@ fn compiles_effects_with_perform_handle_resume() {
         r#"
             let Console := effect { let readln () : String; };
             export let answer () : String :=
-              handle perform Console.readln() with Console of (
-              | value => value
-              | readln(k) => resume "ok"
-              );
+              handle perform Console.readln() using Console {
+                value => value;
+                readln(k) => resume "ok";
+              };
         "#,
         &["hdl.push", "hdl.pop", "eff.invk", "eff.resume"],
     );
@@ -814,6 +814,39 @@ fn rejects_polymorphic_instances_for_class_law_suites() {
 }
 
 #[test]
+fn synthesizes_law_suites_for_concrete_constrained_instances() {
+    let mut session = session();
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let Mark[T] := class { };
+
+            let markInt := instance Mark[Int] { };
+
+            let requireMark (x : Int) : Int where Int : Mark := x;
+
+            export let Foo := class {
+              let useMark (x : Int) : Int;
+              law reflexive (x : Int) := useMark(x) = x;
+            };
+
+            let fooInt := instance Foo where Int : Mark {
+              let useMark (x : Int) : Int := (
+                let helper (y : Int) : Int := requireMark(y);
+                helper(x)
+              );
+            };
+        ",
+        )
+        .unwrap();
+
+    let suites = session.law_suite_modules().unwrap();
+    assert_eq!(suites.len(), 1);
+    assert_eq!(suites[0].law_count, 5);
+}
+
+#[test]
 fn emits_meta_records_for_exported_signatures() {
     let mut session = session();
     session
@@ -827,11 +860,11 @@ fn emits_meta_records_for_exported_signatures() {
 
             let Console := effect { let readln () : String; };
 
-            export let f[T] (x : T) where T : Eq with { Console } : T := x;
+            export let f (x : Int) : Int where Int : Eq using { Console } := x;
             export let sumId (x : Int + String) : Int + String := x;
             export let tupId (x : (Int, String)) : (Int, String) := x;
-            export let arrId (x : Array[Int, 2]) : Array[Int, 2] := x;
-            export let mutArrId (x : mut Array[Int, 2]) : mut Array[Int, 2] := x;
+            export let arrId (x : [2]Int) : [2]Int := x;
+            export let mutArrId (x : mut [2]Int) : mut [2]Int := x;
             export let noneInt () : Option[Int] := .None;
         ",
         )
@@ -843,15 +876,11 @@ fn emits_meta_records_for_exported_signatures() {
     let meta = meta_records(&output.artifact);
 
     assert!(
-        meta_has_exact(&meta, "main::f", "value.type_params", &["T"]),
+        meta_has_exact(&meta, "main::f", "value.constraints", &["Int : Eq"]),
         "{meta:?}"
     );
     assert!(
-        meta_has_exact(&meta, "main::f", "value.constraints", &["T : Eq"]),
-        "{meta:?}"
-    );
-    assert!(
-        meta_has_exact(&meta, "main::f", "value.effects", &["with { Console }"]),
+        meta_has_exact(&meta, "main::f", "value.effects", &["using { Console }"]),
         "{meta:?}"
     );
     assert!(
@@ -878,9 +907,7 @@ fn emits_meta_records_for_exported_signatures() {
         meta.iter().any(|(target, key, values)| {
             target == "main::arrId"
                 && key == "value.ty"
-                && values
-                    .first()
-                    .is_some_and(|value| value.contains("Array[Int, 2]"))
+                && values.first().is_some_and(|value| value.contains("[2]Int"))
         }),
         "{meta:?}"
     );
@@ -890,7 +917,7 @@ fn emits_meta_records_for_exported_signatures() {
                 && key == "value.ty"
                 && values
                     .first()
-                    .is_some_and(|value| value.contains("mut Array[Int, 2]"))
+                    .is_some_and(|value| value.contains("mut [2]Int"))
         }),
         "{meta:?}"
     );

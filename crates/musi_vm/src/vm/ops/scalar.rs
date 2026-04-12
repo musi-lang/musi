@@ -24,7 +24,8 @@ impl Vm {
     pub(crate) fn compare_values(&mut self, op: impl FnOnce(&Value, &Value) -> bool) -> VmResult {
         let right = self.pop_value()?;
         let left = self.pop_value()?;
-        self.push_value(Value::Bool(op(&left, &right)))
+        let module_slot = self.current_module_slot()?;
+        self.push_value(self.bool_value(module_slot, op(&left, &right))?)
     }
 
     pub(crate) fn compare_ord(&mut self, op: impl FnOnce(i64, i64) -> bool) -> VmResult {
@@ -32,7 +33,8 @@ impl Vm {
         let right = Self::expect_int(&right_value)?;
         let left_value = self.pop_value()?;
         let left = Self::expect_int(&left_value)?;
-        self.push_value(Value::Bool(op(left, right)))
+        let module_slot = self.current_module_slot()?;
+        self.push_value(self.bool_value(module_slot, op(left, right))?)
     }
 
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {

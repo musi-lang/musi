@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 use music_arena::SliceRange;
@@ -12,15 +12,15 @@ use music_hir::{
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
-use music_sema::{DefinitionKey, SemaModule};
+use music_sema::{ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, SemaModule};
 
 use crate::IrDiagKind;
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrCaseRecordField, IrClassDef, IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef,
     IrEffectOpDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit,
-    IrModule, IrNameRef, IrOrigin, IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart,
-    IrTempId,
+    IrModule, IrNameRef, IrOrigin, IrParam, IrRangeEndBound, IrRecordField, IrRecordLayoutField,
+    IrSeqPart, IrTempId,
 };
 
 mod array;
@@ -43,13 +43,14 @@ use closures::{
     ClosureCallableInput, lower_closure_callable, lower_lambda_expr, lower_local_callable_let,
     lower_named_params,
 };
-use effects::{lower_handle_expr, lower_perform_expr};
+use effects::{lower_handle_expr, lower_handler_literal_expr, lower_perform_expr};
 use foreign::lower_foreign_let;
 use patterns::{collect_pattern_bindings, lower_case_expr};
 use rewrite::rewrite_recursive_binding_refs;
 
 #[derive(Default)]
 struct TopLevelItems {
+    exports: Vec<ExportedValue>,
     callables: Vec<IrCallable>,
     globals: Vec<IrGlobal>,
     data_defs: Vec<IrDataDef>,
@@ -65,11 +66,13 @@ struct LetItemInput {
     exported: bool,
 }
 
-type RecordLayout = (BTreeMap<Symbol, u16>, Box<[IrRecordLayoutField]>, u16);
+type RecordLayout = (BTreeMap<Box<str>, u16>, Box<[IrRecordLayoutField]>, u16);
 type HirParamRange = SliceRange<HirParam>;
 type HirRecordItemRange = SliceRange<HirRecordItem>;
 type BoundNameSet = HashSet<NameBindingId>;
 type LoweredCaseArmList = Box<[IrLoweredCaseArm]>;
+type EvidenceBindingMap = HashMap<ConstraintKey, Box<str>>;
+type EvidenceBindingStack = Vec<EvidenceBindingMap>;
 
 struct LowerCtx<'a> {
     sema: &'a SemaModule,
@@ -79,6 +82,7 @@ struct LowerCtx<'a> {
     next_lambda_id: u32,
     next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
+    evidence_bindings: EvidenceBindingStack,
 }
 
 type LoweringResult<T = IrExprKind> = Result<T, Box<str>>;
@@ -145,10 +149,12 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
         next_lambda_id: 0,
         next_temp_id: 0,
         extra_callables: Vec::new(),
+        evidence_bindings: Vec::new(),
     };
 
     let mut items = TopLevelItems::default();
     toplevel::collect_top_level_items(&mut ctx, sema.module().root, false, &mut items);
+    toplevel::append_builtin_rangeable_items(&ctx, &mut items);
     items.callables.extend(ctx.extra_callables);
     append_synthesized_sum_data_defs(sema, interner, &mut items);
     let meta = meta::collect_meta(sema);
@@ -159,7 +165,13 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
         surface.static_imports().to_vec().into_boxed_slice(),
         surface.types().to_vec().into_boxed_slice(),
         (
-            surface.exported_values().to_vec().into_boxed_slice(),
+            surface
+                .exported_values()
+                .iter()
+                .cloned()
+                .chain(items.exports)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             items.callables.into_boxed_slice(),
             items.globals.into_boxed_slice(),
             items.data_defs.into_boxed_slice(),
@@ -192,7 +204,7 @@ fn append_synthesized_sum_data_defs(
         let _ = seen_data_keys.insert(data_def.key.clone());
     }
     for data in sema.data_defs() {
-        if !data.key().name.starts_with("__sum__") || seen_data_keys.contains(data.key()) {
+        if seen_data_keys.contains(data.key()) {
             continue;
         }
         let variants = data
@@ -288,10 +300,15 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             value,
             ..
         } => lower_let_expr(ctx, origin, *mods, *pat, *has_param_clause, params, *value),
-        HirExprKind::Binary { op, left, right } => lower_binary_expr(ctx, op, *left, *right),
+        HirExprKind::Binary { op, left, right } => {
+            lower_binary_expr(ctx, expr_id, op, *left, *right)
+        }
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
-        HirExprKind::Apply { callee, .. } => return lower_expr_with_origin(ctx, *callee, origin),
+        HirExprKind::Apply { callee, .. } => {
+            let lowered = lower_expr_with_origin(ctx, *callee, origin);
+            return bind_expr_evidence(ctx, expr_id, origin, lowered);
+        }
         HirExprKind::Prefix { op, expr } => lower_prefix_expr(ctx, expr_id, op, *expr, origin),
         HirExprKind::Index { base, args } => lower_index_expr(ctx, *base, *args),
         HirExprKind::Field { base, name, .. } => {
@@ -306,11 +323,10 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
         HirExprKind::Perform { expr } => lower_perform_expr(ctx, *expr)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
-        HirExprKind::Handle {
-            expr,
-            handler,
-            clauses,
-        } => lower_handle_expr(ctx, expr_id, *expr, *handler, clauses.clone()),
+        HirExprKind::HandlerLit { effect, clauses } => {
+            lower_handler_literal_expr(ctx, expr_id, *effect, clauses.clone())
+        }
+        HirExprKind::Handle { expr, handler } => lower_handle_expr(ctx, expr_id, *expr, *handler),
         HirExprKind::TypeTest { base, .. } => {
             let ty_name = sema.type_test_target(expr_id).map_or_else(
                 || Box::<str>::from("Unknown"),
@@ -346,7 +362,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Splice { kind } => lower_splice_expr(kind),
         other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
     };
-    IrExpr::new(origin, kind)
+    bind_expr_evidence(ctx, expr_id, origin, IrExpr::new(origin, kind))
 }
 
 fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner) -> bool {
@@ -583,30 +599,34 @@ fn record_layout_for_ty(
     ty: HirTyId,
     interner: &Interner,
 ) -> Option<RecordLayout> {
-    let HirTyKind::Record { fields } = &sema.ty(ty).kind else {
-        return None;
+    let items = match &sema.ty(ty).kind {
+        HirTyKind::Record { fields } => {
+            let mut items = sema
+                .module()
+                .store
+                .ty_fields
+                .get(fields.clone())
+                .iter()
+                .map(|field| Box::<str>::from(interner.resolve(field.name)))
+                .collect::<Vec<_>>();
+            items.sort();
+            items
+        }
+        HirTyKind::Range { .. } => vec!["start".into(), "end".into(), "end_bound".into()],
+        _ => return None,
     };
-    let mut items = sema
-        .module()
-        .store
-        .ty_fields
-        .get(fields.clone())
-        .iter()
-        .map(|field| (Box::<str>::from(interner.resolve(field.name)), field.name))
-        .collect::<Vec<_>>();
-    items.sort_by(|(left, _), (right, _)| left.cmp(right));
 
     let field_count = u16::try_from(items.len())
         .unwrap_or_else(|_| invalid_lowering_path("record field count exceeds u16 in lowering"));
-    let mut indices = BTreeMap::<Symbol, u16>::new();
+    let mut indices = BTreeMap::<Box<str>, u16>::new();
     let layout = items
         .into_iter()
         .enumerate()
-        .map(|(idx, (name, symbol))| {
+        .map(|(idx, name)| {
             let idx = u16::try_from(idx).unwrap_or_else(|_| {
                 invalid_lowering_path("record field index exceeds u16 in lowering")
             });
-            let _ = indices.insert(symbol, idx);
+            let _ = indices.insert(name.clone(), idx);
             IrRecordLayoutField::new(name, idx)
         })
         .collect::<Vec<_>>()
@@ -711,6 +731,165 @@ const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
     IrTempId::from_raw(raw)
 }
 
+fn hidden_evidence_name(owner: &str, index: usize) -> Box<str> {
+    format!("__ev::{owner}::{index}").into_boxed_str()
+}
+
+fn hidden_evidence_params_for_keys(
+    owner: &str,
+    keys: &[ConstraintKey],
+) -> (Vec<IrParam>, EvidenceBindingMap) {
+    let mut params = Vec::new();
+    let mut bindings = HashMap::new();
+    for (index, key) in keys.iter().cloned().enumerate() {
+        let name = hidden_evidence_name(owner, index);
+        let _ = bindings.insert(key, name.clone());
+        params.push(IrParam::synthetic(name));
+    }
+    (params, bindings)
+}
+
+fn hidden_evidence_params_for_binding(
+    sema: &SemaModule,
+    owner: &str,
+    binding: Option<NameBindingId>,
+) -> (Vec<IrParam>, EvidenceBindingMap) {
+    let keys = binding
+        .and_then(|binding| sema.binding_evidence_keys(binding))
+        .unwrap_or(&[]);
+    hidden_evidence_params_for_keys(owner, keys)
+}
+
+fn push_evidence_bindings(ctx: &mut LowerCtx<'_>, bindings: EvidenceBindingMap) {
+    ctx.evidence_bindings.push(bindings);
+}
+
+fn pop_evidence_bindings(ctx: &mut LowerCtx<'_>) {
+    let _ = ctx.evidence_bindings.pop();
+}
+
+fn lower_evidence_expr(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    evidence: &ConstraintEvidence,
+) -> IrExpr {
+    match evidence {
+        ConstraintEvidence::Param { key } => {
+            let Some(name) = resolve_evidence_binding_name(ctx, key) else {
+                invalid_lowering_path("missing evidence binding for constraint");
+            };
+            IrExpr::new(
+                origin,
+                IrExprKind::Name {
+                    binding: None,
+                    name,
+                    module_target: None,
+                },
+            )
+        }
+        ConstraintEvidence::Provider { module, name, args } => IrExpr::new(
+            origin,
+            IrExprKind::Call {
+                callee: Box::new(IrExpr::new(
+                    origin,
+                    IrExprKind::Name {
+                        binding: None,
+                        name: name.clone(),
+                        module_target: Some(module.clone()),
+                    },
+                )),
+                args: args
+                    .iter()
+                    .map(|arg| IrArg::new(false, lower_evidence_expr(ctx, origin, arg)))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            },
+        ),
+    }
+}
+
+fn resolve_evidence_binding_name(ctx: &LowerCtx<'_>, key: &ConstraintKey) -> Option<Box<str>> {
+    ctx.evidence_bindings.iter().rev().find_map(|bindings| {
+        bindings.get(key).cloned().or_else(|| {
+            bindings.iter().find_map(|(candidate, name)| {
+                evidence_keys_equiv(ctx, key, candidate).then(|| name.clone())
+            })
+        })
+    })
+}
+
+fn evidence_keys_equiv(ctx: &LowerCtx<'_>, left: &ConstraintKey, right: &ConstraintKey) -> bool {
+    left.kind == right.kind
+        && left.class_key == right.class_key
+        && render_ty_name(ctx.sema, left.subject, ctx.interner)
+            == render_ty_name(ctx.sema, right.subject, ctx.interner)
+        && render_ty_name(ctx.sema, left.value, ctx.interner)
+            == render_ty_name(ctx.sema, right.value, ctx.interner)
+}
+
+fn bind_expr_evidence(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    origin: IrOrigin,
+    lowered: IrExpr,
+) -> IrExpr {
+    let Some(evidence) = ctx.sema.expr_evidence(expr_id) else {
+        return lowered;
+    };
+    if evidence.is_empty() {
+        return lowered;
+    }
+    let IrExprKind::Name {
+        binding,
+        name,
+        module_target,
+    } = lowered.kind
+    else {
+        return lowered;
+    };
+    let is_callable = ctx
+        .sema
+        .try_expr_ty(expr_id)
+        .is_some_and(|ty| matches!(ctx.sema.ty(ty).kind, HirTyKind::Arrow { .. }));
+    if !is_callable {
+        return IrExpr::new(
+            origin,
+            IrExprKind::Name {
+                binding,
+                name,
+                module_target,
+            },
+        );
+    }
+    if module_target.is_none()
+        && binding.is_some_and(|binding| !ctx.module_level_bindings.contains(&binding))
+    {
+        return IrExpr::new(
+            origin,
+            IrExprKind::Name {
+                binding,
+                name,
+                module_target,
+            },
+        );
+    }
+    IrExpr::new(
+        origin,
+        IrExprKind::ClosureNew {
+            callee: IrNameRef {
+                binding,
+                name,
+                module_target,
+            },
+            captures: evidence
+                .iter()
+                .map(|item| lower_evidence_expr(ctx, origin, item))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        },
+    )
+}
+
 fn lower_call_expr(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
@@ -763,7 +942,7 @@ fn lower_field_expr(
         else {
             invalid_lowering_path("record field access without record layout");
         };
-        let Some(index) = indices.get(&symbol).copied() else {
+        let Some(index) = indices.get(interner.resolve(symbol)).copied() else {
             invalid_lowering_path("record field access missing field");
         };
         return IrExprKind::RecordGet {
@@ -933,23 +1112,8 @@ fn render_array_type_value_expr_name(
     interner: &Interner,
 ) -> Box<str> {
     let item = render_type_value_expr_name(sema, item, interner);
-    let dims = sema
-        .module()
-        .store
-        .dims
-        .get(dims)
-        .iter()
-        .map(|dim| match dim {
-            HirDim::Int(value) => value.to_string(),
-            HirDim::Unknown => "_".into(),
-            HirDim::Name(name) => interner.resolve(name.name).into(),
-        })
-        .collect::<Vec<_>>();
-    if dims.is_empty() {
-        format!("Array[{item}]").into()
-    } else {
-        format!("Array[{item}, {}]", dims.join(", ")).into()
-    }
+    let dims = render_dim_prefix(sema.module().store.dims.get(dims), interner);
+    format!("{dims}{item}").into()
 }
 
 fn lower_record_update_expr(
@@ -968,6 +1132,7 @@ fn lower_assign_expr(ctx: &mut LowerCtx<'_>, left: HirExprId, right: HirExprId) 
 
 fn lower_binary_expr(
     ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
     op: &HirBinaryOp,
     left: HirExprId,
     right: HirExprId,
@@ -976,10 +1141,69 @@ fn lower_binary_expr(
     if matches!(op, HirBinaryOp::Assign) {
         return lower_assign_expr(ctx, left, right);
     }
+    if matches!(
+        op,
+        HirBinaryOp::RangeInclusive | HirBinaryOp::RangeExcludeEnd
+    ) {
+        return lower_range_expr(ctx, expr_id, op, left, right);
+    }
+    if matches!(op, HirBinaryOp::In) {
+        return lower_in_expr(ctx, expr_id, left, right);
+    }
     IrExprKind::Binary {
         op: lower_binary_op(ctx, op, left, right, interner),
         left: lower_boxed_expr(ctx, left),
         right: lower_boxed_expr(ctx, right),
+    }
+}
+
+fn lower_range_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    op: &HirBinaryOp,
+    left: HirExprId,
+    right: HirExprId,
+) -> IrExprKind {
+    let ty = ctx
+        .sema
+        .try_expr_ty(expr_id)
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for range"));
+    let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
+    let end_bound = match op {
+        HirBinaryOp::RangeInclusive => IrRangeEndBound::Inclusive,
+        HirBinaryOp::RangeExcludeEnd => IrRangeEndBound::Exclusive,
+        _ => invalid_lowering_path("invalid range op"),
+    };
+    IrExprKind::Range {
+        ty_name,
+        start: lower_boxed_expr(ctx, left),
+        end: lower_boxed_expr(ctx, right),
+        end_bound,
+    }
+}
+
+fn lower_in_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    left: HirExprId,
+    right: HirExprId,
+) -> IrExprKind {
+    let origin = IrOrigin::new(
+        ctx.sema.module().store.exprs.get(expr_id).origin.source_id,
+        ctx.sema.module().store.exprs.get(expr_id).origin.span,
+    );
+    let evidence = ctx
+        .sema
+        .expr_evidence(expr_id)
+        .and_then(|items| items.first())
+        .map_or_else(
+            || invalid_lowering_path("range membership evidence missing"),
+            |item| lower_evidence_expr(ctx, origin, item),
+        );
+    IrExprKind::RangeContains {
+        value: lower_boxed_expr(ctx, left),
+        range: lower_boxed_expr(ctx, right),
+        evidence: Box::new(evidence),
     }
 }
 
@@ -1123,7 +1347,22 @@ fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<st
         )
         .into(),
         HirTyKind::Tuple { items } => render_tuple_ty_name(sema, *items, interner),
+        HirTyKind::Seq { item } => format!("[]{}", render_ty_name(sema, *item, interner)).into(),
         HirTyKind::Array { dims, item } => render_array_ty_name(sema, dims, *item, interner),
+        HirTyKind::Range { item } => {
+            format!("Range[{}]", render_ty_name(sema, *item, interner)).into()
+        }
+        HirTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => format!(
+            "using {} ({} -> {})",
+            render_ty_name(sema, *effect, interner),
+            render_ty_name(sema, *input, interner),
+            render_ty_name(sema, *output, interner)
+        )
+        .into(),
         HirTyKind::Mut { inner } => {
             format!("mut {}", render_ty_name(sema, *inner, interner)).into()
         }
@@ -1173,21 +1412,19 @@ fn render_array_ty_name(
     item: HirTyId,
     interner: &Interner,
 ) -> Box<str> {
-    let dims = sema
-        .module()
-        .store
-        .dims
-        .get(dims.clone())
-        .iter()
-        .map(|dim| render_dim(dim, interner))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let dims = render_dim_prefix(sema.module().store.dims.get(dims.clone()), interner);
     let item = render_ty_name(sema, item, interner);
-    if dims.is_empty() {
-        format!("[]{item}").into()
-    } else {
-        format!("[{dims}]{item}").into()
+    format!("{dims}{item}").into()
+}
+
+fn render_dim_prefix(dims: &[HirDim], interner: &Interner) -> String {
+    let mut rendered = String::new();
+    for dim in dims {
+        rendered.push('[');
+        rendered.push_str(&render_dim(dim, interner));
+        rendered.push(']');
     }
+    rendered
 }
 
 fn render_record_ty_name(

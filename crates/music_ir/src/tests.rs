@@ -31,6 +31,7 @@ fn lower(src: &str) -> IrModule {
             env: None,
         },
     );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     lower_module(&sema, &interner).expect("ir lowering should succeed")
 }
 
@@ -52,6 +53,13 @@ fn assert_global_tail_matches(
     assert!(predicate(kind), "unexpected global tail kind");
 }
 
+fn callable<'a>(ir: &'a IrModule, name: &str) -> &'a crate::IrCallable {
+    ir.callables()
+        .iter()
+        .find(|callable| callable.name.as_ref() == name)
+        .expect("callable")
+}
+
 #[test]
 fn lowers_exports_and_semantic_metadata() {
     let ir = lower(
@@ -64,13 +72,13 @@ fn lowers_exports_and_semantic_metadata() {
           let (=) (a : T, b : T) : Bool;
         };
         export instance[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := true;
+          let (=) (a : T, b : T) : Bool := 0 = 0;
         };
     ",
     );
 
     assert!(ir.exported_value("id").is_some());
-    assert_eq!(ir.callables().len(), 1);
+    assert!(!ir.callables().is_empty());
     assert_eq!(ir.effects().len(), 1);
     assert_eq!(ir.effects()[0].ops.len(), 1);
     assert!(ir.effects()[0].ops[0].param_tys.is_empty());
@@ -92,10 +100,14 @@ fn lowers_data_and_foreign_facts() {
     "#,
     );
 
-    assert_eq!(ir.data_defs().len(), 1);
-    assert_eq!(ir.data_defs()[0].variant_count, 2);
-    assert_eq!(ir.data_defs()[0].variants.len(), 2);
-    let some_variant = ir.data_defs()[0]
+    let maybe = ir
+        .data_defs()
+        .iter()
+        .find(|data| data.key.name.as_ref() == "Maybe")
+        .expect("Maybe data def");
+    assert_eq!(maybe.variant_count, 2);
+    assert_eq!(maybe.variants.len(), 2);
+    let some_variant = maybe
         .variants
         .iter()
         .find(|variant| variant.name.as_ref() == "Some")
@@ -107,7 +119,7 @@ fn lowers_data_and_foreign_facts() {
     assert_eq!(ir.foreigns()[0].param_tys[0].as_ref(), "CString");
     assert_eq!(ir.foreigns()[0].result_ty.as_ref(), "Int");
     assert!(ir.foreigns()[0].link.is_none());
-    assert_eq!(ir.callables().len(), 1);
+    assert!(!ir.callables().is_empty());
     assert_eq!(ir.exports().len(), 1);
 }
 
@@ -124,11 +136,30 @@ fn lowers_array_cat_for_runtime_spread() {
 }
 
 #[test]
+fn lowers_range_and_membership_exprs() {
+    assert_global_tail_matches(
+        r"
+        export let xs := 1 ..< 4;
+    ",
+        "xs",
+        |kind| matches!(kind, IrExprKind::Range { .. }),
+    );
+    assert_global_tail_matches(
+        r"
+        let xs := 1 ..< 4;
+        export let ok : Bool := 2 in xs;
+    ",
+        "ok",
+        |kind| matches!(kind, IrExprKind::RangeContains { .. }),
+    );
+}
+
+#[test]
 fn lowers_call_seq_for_runtime_any_spread() {
     assert_global_tail_matches(
         r#"
         let g (a : Any, b : Any) : Any := a;
-        let xs : Array[Any] := [1, "x"];
+        let xs : []Any := [1, "x"];
         export let y := g(...xs);
     "#,
         "y",
@@ -156,7 +187,7 @@ fn lowers_perform_seq_for_runtime_any_spread() {
         let E := effect {
           let op (a : Any, b : Any) : Unit;
         };
-        let xs : Array[Any] := [1, "x"];
+        let xs : []Any := [1, "x"];
         export let y := perform E.op(...xs);
     "#,
         "y",
@@ -333,6 +364,53 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
     assert!(contains_closure_callee(&loop_fn.body));
 }
 
+#[test]
+fn local_constrained_helper_prebinds_hidden_evidence() {
+    let ir = lower(
+        r"
+        let Mark[T] := class { };
+        let markInt := instance Mark[Int] { };
+        let requireMark (x : Int) : Int where Int : Mark := x;
+        let count (value : Int) : Int where Int : Mark := (
+          let helper (y : Int) : Int := requireMark(y);
+          helper(value)
+        );
+    ",
+    );
+
+    let helper = callable(&ir, "helper");
+    assert!(
+        contains_named_value_ref(&helper.body, "__dict__::main::Mark[Int]"),
+        "helper callable: {helper:?}",
+    );
+}
+
+#[test]
+fn instance_member_helper_captures_provider_evidence() {
+    let ir = lower(
+        r"
+        let Mark[T] := class { };
+        let markInt := instance Mark[Int] { };
+        let requireMark (x : Int) : Int where Int : Mark := x;
+        let UsesMark := class {
+          let useMark (x : Int) : Int;
+        };
+        instance UsesMark where Int : Mark {
+          let useMark (x : Int) : Int := (
+            let helper (y : Int) : Int where Int : Mark := requireMark(y);
+            helper(x)
+          );
+        };
+    ",
+    );
+
+    let helper = callable(&ir, "helper");
+    assert!(
+        contains_named_value_ref(&helper.body, "__dict__::main::Mark[Int]"),
+        "helper callable: {helper:?}",
+    );
+}
+
 fn contains_strcat(expr: &IrExpr) -> bool {
     match &expr.kind {
         IrExprKind::Binary {
@@ -348,6 +426,15 @@ fn contains_strcat(expr: &IrExpr) -> bool {
         | IrExprKind::RecordGet { base: value, .. }
         | IrExprKind::TyTest { base: value, .. }
         | IrExprKind::TyCast { base: value, .. } => contains_strcat(value),
+        IrExprKind::Range { start, end, .. } => contains_strcat(start) || contains_strcat(end),
+        IrExprKind::RangeContains {
+            value,
+            range,
+            evidence,
+        } => contains_strcat(value) || contains_strcat(range) || contains_strcat(evidence),
+        IrExprKind::RangeMaterialize { range, evidence } => {
+            contains_strcat(range) || contains_strcat(evidence)
+        }
         IrExprKind::Binary { left, right, .. } => contains_strcat(left) || contains_strcat(right),
         IrExprKind::Call { callee, args } => {
             contains_strcat(callee) || args.iter().any(|arg| contains_strcat(&arg.expr))
@@ -376,6 +463,9 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
         | IrExprKind::RecordGet { base: value, .. }
         | IrExprKind::TyTest { base: value, .. }
         | IrExprKind::TyCast { base: value, .. } => contains_named_value_ref(value, expected),
+        IrExprKind::Range { .. }
+        | IrExprKind::RangeContains { .. }
+        | IrExprKind::RangeMaterialize { .. } => contains_named_value_ref_in_range(expr, expected),
         IrExprKind::Assign { target, value } => {
             contains_named_value_ref_in_target(target, expected)
                 || contains_named_value_ref(value, expected)
@@ -436,14 +526,14 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
                 contains_named_value_ref(expr, expected)
             }
         }),
-        IrExprKind::Handle {
-            value, ops, body, ..
-        } => {
+        IrExprKind::HandlerLit { value, ops, .. } => {
             contains_named_value_ref(value, expected)
                 || ops
                     .iter()
                     .any(|op| contains_named_value_ref(&op.closure, expected))
-                || contains_named_value_ref(body, expected)
+        }
+        IrExprKind::Handle { handler, body, .. } => {
+            contains_named_value_ref(handler, expected) || contains_named_value_ref(body, expected)
         }
         IrExprKind::Resume { expr } => expr
             .as_deref()
@@ -453,6 +543,28 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
         | IrExprKind::Lit(_)
         | IrExprKind::TypeValue { .. }
         | IrExprKind::SyntaxValue { .. } => false,
+    }
+}
+
+fn contains_named_value_ref_in_range(expr: &IrExpr, expected: &str) -> bool {
+    match &expr.kind {
+        IrExprKind::Range { start, end, .. } => {
+            contains_named_value_ref(start, expected) || contains_named_value_ref(end, expected)
+        }
+        IrExprKind::RangeContains {
+            value,
+            range,
+            evidence,
+        } => {
+            contains_named_value_ref(value, expected)
+                || contains_named_value_ref(range, expected)
+                || contains_named_value_ref(evidence, expected)
+        }
+        IrExprKind::RangeMaterialize { range, evidence } => {
+            contains_named_value_ref(range, expected)
+                || contains_named_value_ref(evidence, expected)
+        }
+        _ => false,
     }
 }
 

@@ -82,6 +82,17 @@ impl MethodEmitter<'_, '_> {
                 )));
                 return;
             }
+            if let Some(slot) = self.synthetic_locals.get(name).copied() {
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::LdLoc,
+                    Operand::Local(slot),
+                )));
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::CallCls,
+                    Operand::None,
+                )));
+                return;
+            }
             if let Some(method) = self.resolve_method(*binding, name, module_target.as_ref()) {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::Call,
@@ -122,6 +133,17 @@ impl MethodEmitter<'_, '_> {
             if let Some(binding) = binding
                 && let Some(slot) = self.locals.get(binding).copied()
             {
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::LdLoc,
+                    Operand::Local(slot),
+                )));
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::CallClsSeq,
+                    Operand::None,
+                )));
+                return;
+            }
+            if let Some(slot) = self.synthetic_locals.get(name).copied() {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::LdLoc,
                     Operand::Local(slot),

@@ -1,10 +1,10 @@
 ; Musi Language - Surface Syntax (RFC 5234 ABNF)
 ;
 ; Canonical, tool-supported grammar:
-;   `grammar/Musi.g4` (ANTLR4)
+;   `grammar/MusiLexer.g4` and `grammar/MusiParser.g4` (ANTLR4)
 ;
 ; This file is a strict RFC 5234 ABNF specification of the Musi surface syntax.
-; It is kept aligned with `grammar/Musi.g4`, but does not attempt to model
+; It is kept aligned with the ANTLR grammar pair, but does not attempt to model
 ; lexer implementation details (priority / maximal munch) inside ABNF.
 ;
 ; Notes:
@@ -148,11 +148,11 @@ kw-shr      = %x73.68.72
 
 kw-where    = %x77.68.65.72.65
 
-kw-with     = %x77.69.74.68
+kw-using    = %x75.73.69.6E.67
 
 kw-xor      = %x78.6F.72
 ; --- Fixed multi-octet tokens ---
-colon-eq           = ":="
+colon-eq          = ":="
 
 colon-question-gt = ":?>"
 
@@ -164,7 +164,6 @@ dot-lbracket      = ".["
 
 eq-gt             = "=>"
 
-
 minus-gt          = "->"
 
 slash-eq          = "/="
@@ -174,7 +173,6 @@ lt-eq             = "<="
 lt-colon          = "<:"
 
 gt-eq             = ">="
-
 
 pipe-gt           = "|>"
 
@@ -358,77 +356,77 @@ stmt        = expr semicolon
 
 fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
 ; --- Expressions (semantic precedence; parse as flat infix chain) ---
-expr              = infix-expr
+expr             = infix-expr
 
-infix-op          = colon-eq
-                        / pipe-gt
-                        / minus-gt
-                        / tilde-gt
-                        / kw-or
-                        / kw-xor
-                    / kw-and
-                    / eq
-                    / slash-eq
-                    / lt
-                    / gt
-                    / lt-eq
-                    / gt-eq
-                    / kw-in
-                    / kw-shl
-                    / kw-shr
-                    / plus
-                    / minus
-                    / star
-                    / slash
-                    / percent
-                    / symbolic-op
+infix-op         = colon-eq
+                   / pipe-gt
+                   / minus-gt
+                   / tilde-gt
+                   / kw-or
+                   / kw-xor
+                   / kw-and
+                   / eq
+                   / slash-eq
+                   / lt
+                   / gt
+                   / lt-eq
+                   / gt-eq
+                   / kw-in
+                   / kw-shl
+                   / kw-shr
+                   / plus
+                   / minus
+                   / star
+                   / slash
+                   / percent
+                   / symbolic-op
 
-infix-expr        = prefix-expr *(infix-op prefix-expr)
+infix-expr       = prefix-expr *(infix-op prefix-expr)
 
-prefix-op         = minus
-                    / kw-not
-                    / kw-mut
+prefix-op        = minus
+                   / kw-not
+                   / kw-mut
 
-prefix-expr       = prefix-op prefix-expr
-                    / postfix-expr
+prefix-expr      = prefix-op prefix-expr
+                   / postfix-expr
 
-postfix-expr      = atom *(postfix-op)
+postfix-expr     = atom *(postfix-op)
 
-	postfix-op        = call-op
-	                    / bracket-apply-op
-	                    / index-op
-	                    / record-update-op
-	                    / field-access-op
-	                    / type-test-op
-	                    / type-cast-op
+postfix-op       = call-op
+                   / bracket-apply-op
+                   / index-op
+                   / record-update-op
+                   / field-access-op
+                   / type-test-op
+                   / type-cast-op
 
-call-op           = lparen [arg-list] rparen
+call-op          = lparen [arg-list] rparen
 
-bracket-apply-op  = lbracket [expr-list] rbracket
+bracket-apply-op = lbracket [expr-list] rbracket
 
-index-op          = dot-lbracket [expr-list] rbracket
+index-op         = dot-lbracket [expr-list] rbracket
 
-record-update-op  = dot-lbrace [record-fields] rbrace
+record-update-op = dot-lbrace [record-fields] rbrace
 
-field-access-op   = dot field-target
+field-access-op  = dot field-target
 
-	type-test-op      = colon-question expr [kw-as ident]
+type-test-op     = colon-question expr [kw-as ident]
 
-type-cast-op      = colon-question-gt expr
+type-cast-op     = colon-question-gt expr
 
-field-target      = ident
-                    / int-lit
+field-target     = ident
+                   / int-lit
 ; --- Atoms ---
-	atom                  = literal
-	                        / template-lit
-	                        / splice
-	                        / ident
-	                        / op-ident
-	                        / pi-expr
-	                        / lambda-expr
-	                        / paren-expr
-	                        / array-expr
-	                        / record-literal-expr
+atom                  = literal
+                        / template-lit
+                        / splice
+                        / ident
+                        / op-ident
+                        / pi-expr
+                        / lambda-expr
+                        / paren-expr
+                        / array-expr
+                        / record-literal-expr
                         / dot-prefix-expr
                         / case-expr
                         / let-expr
@@ -458,12 +456,12 @@ grouped-or-tuple-body = expr [comma [expr-list] [comma]]
 
 sequence-body         = expr *(semicolon expr) [semicolon]
 
-	case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
-	                        case-arm) [pipe] rparen
+case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
+                        case-arm) [pipe] rparen
 
-	case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
+case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
 
-	array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
+array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
 
 array-items           = array-item *(comma array-item)
 
@@ -488,11 +486,11 @@ import-expr           = kw-import expr
 let-modifier          = kw-rec
 
 let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
-                        [where-clause] [with-clause] [type-annot] colon-eq expr
+                        [type-annot] [where-clause] [using-clause] colon-eq expr
 
 bracket-params        = lbracket ident *(comma ident) [comma] rbracket
 
-with-clause           = kw-with effect-set
+using-clause          = kw-using effect-set
 
 data-expr             = kw-data lbrace data-body rbrace
 
@@ -520,13 +518,15 @@ class-expr            = kw-class [where-clause] lbrace *(class-member) rbrace
 
 class-member          = (fn-decl / law-decl) [semicolon]
 
-instance-expr         = kw-instance [bracket-params] [where-clause] expr
+instance-expr         = kw-instance [bracket-params] expr [where-clause]
                         instance-body
 
 perform-expr          = kw-perform expr
 
-handle-expr           = kw-handle expr kw-with ident kw-of lparen [pipe]
-                        handle-clause *(pipe handle-clause) [pipe] rparen
+handle-expr           = kw-handle expr (handler-expr / (kw-using prefix-expr))
+
+handler-expr          = kw-using ident lbrace *(handle-clause [semicolon])
+                        rbrace
 
 handle-clause         = ident eq-gt expr
                         / ident lparen [ident-list] rparen eq-gt expr
@@ -542,33 +542,34 @@ splice                = hash ident
 with-attrs-expr       = with-mods-expr
 ; `export` is a modifier that applies to an expression (like attributes), not an
 ; expression form itself.
-export-mod            = kw-export [kw-opaque]
+export-mod      = kw-export [kw-opaque]
 
-foreign-mod           = kw-foreign [string-lit]
+foreign-mod     = kw-foreign [string-lit]
 
-modifier              = attr
-                        / export-mod
-                        / foreign-mod
+modifier        = attr
+                  / export-mod
+                  / foreign-mod
 
-with-mods-expr        = attrs [export-mod] [foreign-mod] (expr / foreign-let-group / let-expr)
-                        / export-mod [foreign-mod] (expr / foreign-let-group / let-expr)
-                        / foreign-mod (foreign-let-group / let-expr)
+with-mods-expr  = attrs [export-mod] [foreign-mod] (expr / foreign-let-group /
+                  let-expr)
+                  / export-mod [foreign-mod] (expr / foreign-let-group /
+                    let-expr)
+                  / foreign-mod (foreign-let-group / let-expr)
 
-	let-rest              = [let-modifier] pattern [bracket-params] [params]
-	                        [where-clause] [with-clause] [type-annot]
-	                        [colon-eq expr]
+let-rest        = [let-modifier] pattern [bracket-params] [params] [type-annot]
+                  [where-clause] [using-clause] [colon-eq expr]
 
-instance-body         = lbrace *(class-member) rbrace
+instance-body   = lbrace *(class-member) rbrace
 
-foreign-binding       = [attrs] ident [bracket-params] [params] [where-clause]
-                        [colon expr]
+foreign-binding = [attrs] ident [bracket-params] [params] [where-clause] [colon
+                  expr]
 
-fn-decl               = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
+fn-decl         = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
 
-law-decl              = kw-law ident [params] colon-eq expr
+law-decl        = kw-law ident [params] colon-eq expr
 
-op-or-ident           = ident
-                        / op-ident
+op-or-ident     = ident
+                  / op-ident
 ; --- Unified annotation / constraint helpers ---
 type-annot     = colon expr
 
@@ -615,7 +616,7 @@ attr-path          = ident *(dot ident)
 attr-args          = attr-arg *(comma attr-arg)
 
 attr-arg           = ident colon-eq attr-value
-                        / attr-value
+                     / attr-value
 
 attr-value         = string-lit
                      / int-lit

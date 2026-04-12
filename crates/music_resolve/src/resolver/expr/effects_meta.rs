@@ -10,14 +10,11 @@ where
         self.alloc_expr(origin, HirExprKind::Perform { expr })
     }
 
-    pub(super) fn lower_handle_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_handler_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let mut nodes = node.child_nodes();
-        let expr = self.lower_opt_expr(origin, nodes.next());
-
-        let handler_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
-        let handler = self.intern_ident_token_or_placeholder(handler_tok, node.span());
-        self.record_use(handler);
+        let effect_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let effect = self.intern_ident_token_or_placeholder(effect_tok, node.span());
+        self.record_use(effect);
 
         let mut clauses = Vec::<HirHandleClause>::new();
         for clause in node
@@ -27,14 +24,15 @@ where
             clauses.push(self.lower_handle_clause(clause));
         }
         let clauses = self.store.handle_clauses.alloc_from_iter(clauses);
-        self.alloc_expr(
-            origin,
-            HirExprKind::Handle {
-                expr,
-                handler,
-                clauses,
-            },
-        )
+        self.alloc_expr(origin, HirExprKind::HandlerLit { effect, clauses })
+    }
+
+    pub(super) fn lower_handle_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let mut nodes = node.child_nodes();
+        let expr = self.lower_opt_expr(origin, nodes.next());
+        let handler = self.lower_opt_expr(origin, nodes.next());
+        self.alloc_expr(origin, HirExprKind::Handle { expr, handler })
     }
 
     pub(super) fn lower_handle_clause(&mut self, node: SyntaxNode<'tree, 'src>) -> HirHandleClause {

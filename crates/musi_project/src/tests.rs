@@ -465,7 +465,7 @@ export let Dep := import "dep";
         temp.path(),
         "packages/dep/index.ms",
         r"
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
     );
 
@@ -584,7 +584,7 @@ export let Bytes := import "@std/bytes";
         temp.path(),
         "packages/std/bytes/index.ms",
         r"
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
     );
 

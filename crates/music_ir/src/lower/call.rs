@@ -132,8 +132,8 @@ enum SpreadMode {
 impl SpreadMode {
     const fn runtime_any_message(self) -> &'static str {
         match self {
-            Self::Call => "call runtime spread requires Array[Any]",
-            Self::Perform => "perform runtime spread requires Array[Any]",
+            Self::Call => "call runtime spread requires []Any",
+            Self::Perform => "perform runtime spread requires []Any",
         }
     }
 
@@ -189,7 +189,6 @@ fn lower_spread_args(
     args_nodes: &[HirArg],
     mode: SpreadMode,
 ) -> Result<(Vec<IrExpr>, Vec<IrSeqPart>, bool), Box<str>> {
-    let sema = ctx.sema;
     let mut prelude = Vec::<IrExpr>::new();
     let mut parts = Vec::<IrSeqPart>::new();
     let mut has_runtime_spread = false;
@@ -208,19 +207,20 @@ fn lower_spread_args(
             continue;
         }
         has_runtime_spread |=
-            lower_spread_arg(sema, arg.expr, &temp_expr, origin, &mut parts, mode)?;
+            lower_spread_arg(ctx, arg.expr, &temp_expr, origin, &mut parts, mode)?;
     }
     Ok((prelude, parts, has_runtime_spread))
 }
 
 fn lower_spread_arg(
-    sema: &SemaModule,
+    ctx: &mut LowerCtx<'_>,
     spread_expr: HirExprId,
     temp_expr: &IrExpr,
     origin: IrOrigin,
     parts: &mut Vec<IrSeqPart>,
     mode: SpreadMode,
 ) -> Result<bool, Box<str>> {
+    let sema = ctx.sema;
     let spread_ty = sema
         .try_expr_ty(spread_expr)
         .unwrap_or_else(|| invalid_lowering_path("expr type missing for spread arg"));
@@ -240,6 +240,31 @@ fn lower_spread_arg(
         }
         HirTyKind::Array { dims, item } => {
             lower_spread_array_arg(sema, dims, *item, temp_expr, origin, parts, mode)
+        }
+        HirTyKind::Seq { item } => {
+            if matches!(sema.ty(*item).kind, HirTyKind::Any) {
+                parts.push(IrSeqPart::Spread(temp_expr.clone()));
+                Ok(true)
+            } else {
+                Err(mode.runtime_any_message().into())
+            }
+        }
+        HirTyKind::Range { .. } => {
+            let evidence = sema
+                .expr_evidence(spread_expr)
+                .and_then(|items| items.first())
+                .map(|item| super::lower_evidence_expr(ctx, origin, item));
+            let Some(evidence) = evidence else {
+                return Err("range spread evidence missing".into());
+            };
+            parts.push(IrSeqPart::Spread(IrExpr::new(
+                origin,
+                IrExprKind::RangeMaterialize {
+                    range: Box::new(temp_expr.clone()),
+                    evidence: Box::new(evidence),
+                },
+            )));
+            Ok(true)
         }
         _ => Err(mode.source_message().into()),
     }
