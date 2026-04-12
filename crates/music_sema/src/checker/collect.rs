@@ -171,7 +171,7 @@ fn collect_bound_decl(
     let attrs = outer_attrs.map_or_else(Vec::new, |(_, range)| vec![range.clone()]);
     match ctx.expr(value).kind {
         HirExprKind::Data { variants, fields } => {
-            collect_data_decl(ctx, origin, &attrs, name, variants, fields)
+            collect_data_decl(ctx, origin, &attrs, name, variants, fields);
         }
         HirExprKind::Effect { members } => collect_effect_decl(ctx, name, members),
         HirExprKind::Class {
