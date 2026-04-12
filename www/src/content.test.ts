@@ -1,20 +1,21 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { exampleGroups } from "./content/example-registry";
+import { exampleGroups } from "./content/examples/groups";
+import { comparisonLanguages } from "./content/examples/languages";
 import { contentSnippets } from "./content/snippet-registry";
 import { renderedDocs, renderedSnippets } from "./generated-content";
-import { nextScheme } from "./layout";
+import { nextScheme } from "./layout/site-layout";
 
 const BANNED_SNIPPET_PATTERNS = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
 const REQUIRED_DOC_HEADINGS = [
 	"## What",
-	"## Why",
-	"## How",
 	"## When",
-	"## Analogy",
-	"## Try it",
+	"## Why",
+	"## Where",
+	"## How",
 ];
+const DOC_SUFFIX_PATTERN = /\.md$/;
 
 const docsDirectory = join(import.meta.dirname, "content", "docs");
 
@@ -56,6 +57,16 @@ describe("content generation", () => {
 		}
 	});
 
+	it("renders every markdown doc file", () => {
+		const docFiles = readdirSync(docsDirectory)
+			.filter((entry) => entry.endsWith(".md"))
+			.map((entry) => entry.replace(DOC_SUFFIX_PATTERN, ""))
+			.sort();
+		const renderedSlugs = renderedDocs.map((doc) => doc.slug).sort();
+
+		expect(renderedSlugs).toEqual(docFiles);
+	});
+
 	it("fully resolves snippet and example placeholders during generation", () => {
 		const docsHtml = renderedDocs.map((doc) => doc.html).join("\n");
 		expect(docsHtml).not.toContain("{{snippet:");
@@ -69,15 +80,10 @@ describe("content generation", () => {
 		}
 	});
 
-	it("requires complete four-language compare groups", () => {
+	it("requires complete compare groups", () => {
 		for (const group of exampleGroups) {
 			expect(group.defaultLanguage).toBe("musi");
-			expect(Object.keys(group.variants)).toEqual([
-				"java",
-				"musi",
-				"rust",
-				"typescript",
-			]);
+			expect(Object.keys(group.variants)).toEqual([...comparisonLanguages]);
 		}
 	});
 
@@ -85,6 +91,9 @@ describe("content generation", () => {
 		const docsHtml = renderedDocs.map((doc) => doc.html).join("\n");
 		expect(renderedSnippets.homeSampleHtml).toContain('data-code-tabs="1"');
 		expect(docsHtml).toContain('role="tablist"');
+		expect(docsHtml).toContain("C++");
+		expect(docsHtml).toContain("C#");
+		expect(docsHtml).toContain("JavaScript");
 		expect(docsHtml).toContain("TypeScript");
 	});
 });

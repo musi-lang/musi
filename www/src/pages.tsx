@@ -4,12 +4,12 @@ import {
 	MantineProvider,
 } from "@mantine/core";
 import { docForPath } from "./docs";
-import { PageFooter, SiteLayout } from "./layout";
+import { PageFooter, SiteLayout } from "./layout/site-layout";
 import { useRouteState } from "./navigation";
-import { DocPage, DocsIndexPage } from "./pages/docs-page";
-import { HomePage } from "./pages/home-page";
-import { InstallPage } from "./pages/install-page";
-import { ReferencePage } from "./pages/reference-page";
+import { DocPage, DocsIndexPage } from "./pages/docs/page";
+import { HomePage } from "./pages/home/page";
+import { InstallPage } from "./pages/install/page";
+import { ReferencePage } from "./pages/reference/page";
 import type { AppRoute } from "./routes";
 import { theme } from "./theme";
 

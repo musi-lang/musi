@@ -2,6 +2,10 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { initCodeTabs, initCodeTabsWithin } from "./code-tabs";
+import {
+	comparisonLanguageLabels,
+	comparisonLanguages,
+} from "./content/examples/languages";
 
 interface TestTabsDataset extends DOMStringMap {
 	activeLanguage?: string;
@@ -9,18 +13,27 @@ interface TestTabsDataset extends DOMStringMap {
 }
 
 function makeTabsMarkup() {
+	const tabs = comparisonLanguages
+		.map((language) => {
+			const active = language === "musi";
+			const label = comparisonLanguageLabels[language];
+			return `<button type="button" role="tab" data-language="${language}" aria-selected="${active ? "true" : "false"}" tabindex="${active ? "0" : "-1"}">${label}</button>`;
+		})
+		.join("\n");
+
+	const panels = comparisonLanguages
+		.map((language) => {
+			const hidden = language === "musi" ? "" : ' hidden=""';
+			return `<section role="tabpanel" data-language="${language}"${hidden}></section>`;
+		})
+		.join("\n");
+
 	return `
 	<div data-code-tabs="1" data-example-id="demo" data-default="musi" data-active-language="musi">
 		<div role="tablist" aria-label="Demo">
-			<button type="button" role="tab" data-language="java" aria-selected="false" tabindex="-1">Java</button>
-			<button type="button" role="tab" data-language="musi" aria-selected="true" tabindex="0">Musi</button>
-			<button type="button" role="tab" data-language="rust" aria-selected="false" tabindex="-1">Rust</button>
-			<button type="button" role="tab" data-language="typescript" aria-selected="false" tabindex="-1">TypeScript</button>
+			${tabs}
 		</div>
-		<section role="tabpanel" data-language="java" hidden=""></section>
-		<section role="tabpanel" data-language="musi"></section>
-		<section role="tabpanel" data-language="rust" hidden=""></section>
-		<section role="tabpanel" data-language="typescript" hidden=""></section>
+		${panels}
 	</div>`;
 }
 
@@ -74,10 +87,10 @@ describe("code tabs", () => {
 	it("persists selected language", () => {
 		initCodeTabs();
 		const tab = document.querySelector<HTMLElement>(
-			'[role="tab"][data-language="rust"]',
+			'[role="tab"][data-language="csharp"]',
 		);
 		tab?.click();
-		expect(window.localStorage.getItem("musi-code-lang")).toBe("rust");
+		expect(window.localStorage.getItem("musi-code-lang")).toBe("csharp");
 	});
 
 	it("upgrades an existing block idempotently", () => {

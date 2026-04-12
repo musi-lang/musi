@@ -1,5 +1,8 @@
+import { comparisonLanguages } from "./content/examples/languages";
+
 const STORAGE_KEY = "musi-code-lang";
-const LANGUAGE_ORDER = ["java", "musi", "rust", "typescript"] as const;
+const DEFAULT_LANGUAGE = "musi";
+const LANGUAGE_ORDER = comparisonLanguages;
 
 type ComparisonLanguage = (typeof LANGUAGE_ORDER)[number];
 
@@ -21,7 +24,7 @@ function isComparisonLanguage(
 
 function preferredLanguage() {
 	const stored = window.localStorage.getItem(STORAGE_KEY);
-	return isComparisonLanguage(stored) ? stored : "musi";
+	return isComparisonLanguage(stored) ? stored : DEFAULT_LANGUAGE;
 }
 
 function panelSelector(language: ComparisonLanguage) {
@@ -82,7 +85,7 @@ function moveFocus(
 	const next =
 		LANGUAGE_ORDER[
 			(index + delta + LANGUAGE_ORDER.length) % LANGUAGE_ORDER.length
-		] ?? "musi";
+		] ?? DEFAULT_LANGUAGE;
 	const tab = root.querySelector<HTMLElement>(tabSelector(next));
 	if (tab) {
 		tab.focus();
@@ -147,15 +150,22 @@ function upgradeCodeTabs(root: HTMLElement) {
 				break;
 			case "Home":
 				event.preventDefault();
-				applyLanguage(root, "java");
-				window.localStorage.setItem(STORAGE_KEY, "java");
-				root.querySelector<HTMLElement>(tabSelector("java"))?.focus();
+				{
+					const firstLanguage = LANGUAGE_ORDER[0] ?? DEFAULT_LANGUAGE;
+					applyLanguage(root, firstLanguage);
+					window.localStorage.setItem(STORAGE_KEY, firstLanguage);
+					root.querySelector<HTMLElement>(tabSelector(firstLanguage))?.focus();
+				}
 				break;
 			case "End":
 				event.preventDefault();
-				applyLanguage(root, "typescript");
-				window.localStorage.setItem(STORAGE_KEY, "typescript");
-				root.querySelector<HTMLElement>(tabSelector("typescript"))?.focus();
+				{
+					const lastLanguage =
+						LANGUAGE_ORDER[LANGUAGE_ORDER.length - 1] ?? DEFAULT_LANGUAGE;
+					applyLanguage(root, lastLanguage);
+					window.localStorage.setItem(STORAGE_KEY, lastLanguage);
+					root.querySelector<HTMLElement>(tabSelector(lastLanguage))?.focus();
+				}
 				break;
 			default:
 				break;

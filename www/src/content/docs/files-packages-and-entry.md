@@ -15,11 +15,17 @@ You use this when your project grows past one file: dependencies, scripts, and s
 
 {{snippet:package-commands}}
 
+## When
+Use package mode for project workflows and `music` for experimentation, quick checks, or artifact tests.
+
 ## Why
 `musi` saves you from hand-managing file paths every time you run, test, or build.
 - entry resolution follows package config
 - commands stay stable across environments
 - team members use the same workflow
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Keep the generated package shape and use package commands from the root:
@@ -32,11 +38,8 @@ For direct one-off work, use a specific source file or artifact with `music`.
 
 {{snippet:music-direct}}
 
-## When
-Use package mode for project workflows and `music` for experimentation, quick checks, or artifact tests.
-
 ## Analogy
 Think `musi` as the CLI wrapper around your project folder and `music` as a direct file runner.
 
 ## Try it
-Create a package, confirm which entry file is used, then continue to [Expressions and bindings](/docs/expressions-and-bindings).
+Create a package, confirm which entry file is used, then continue to [Imports and packages](/docs/imports-and-packages).

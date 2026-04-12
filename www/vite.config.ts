@@ -43,6 +43,24 @@ function musiContentPlugin(): PluginOption {
 		name: "musi-content-watch",
 		configureServer(server) {
 			server.watcher.add([...watchedContentPaths]);
+
+			const onWatchedPathEvent = (file: string) => {
+				if (file === generatedContentPath || !isWatchedContentPath(file)) {
+					return;
+				}
+
+				regenerate(server, file).catch(() => undefined);
+			};
+
+			server.watcher.on("add", onWatchedPathEvent);
+			server.watcher.on("change", onWatchedPathEvent);
+			server.watcher.on("unlink", onWatchedPathEvent);
+
+			server.httpServer?.once("close", () => {
+				server.watcher.off("add", onWatchedPathEvent);
+				server.watcher.off("change", onWatchedPathEvent);
+				server.watcher.off("unlink", onWatchedPathEvent);
+			});
 		},
 		async handleHotUpdate(ctx) {
 			if (ctx.file === generatedContentPath) {
@@ -70,6 +88,30 @@ export default defineConfig({
 	build: {
 		outDir: "dist",
 		emptyOutDir: true,
+		rolldownOptions: {
+			output: {
+				codeSplitting: true,
+				manualChunks(id) {
+					if (id.includes("src/generated-content.ts")) {
+						return "content";
+					}
+
+					if (!id.includes("node_modules")) {
+						return;
+					}
+
+					if (id.includes("@mantine/")) {
+						return "vendor-mantine";
+					}
+
+					if (id.includes("react")) {
+						return "vendor-react";
+					}
+
+					return "vendor";
+				},
+			},
+		},
 	},
 	test: {
 		environment: "jsdom",

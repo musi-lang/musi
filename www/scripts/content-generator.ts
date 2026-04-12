@@ -1,14 +1,36 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { createHighlighter } from "shiki";
 import {
-	type ComparisonLanguage,
 	exampleGroupById,
 	exampleGroups,
-} from "../src/content/example-registry";
+} from "../src/content/examples/groups";
+import {
+	comparisonLanguageLabels,
+	comparisonLanguages,
+} from "../src/content/examples/languages";
 import { contentSnippets, snippetById } from "../src/content/snippet-registry";
+
+interface TextMateRule {
+	include?: string;
+	name?: string;
+	match?: string;
+	patterns?: TextMateRule[];
+	begin?: string;
+	end?: string;
+	beginCaptures?: Record<string, { name: string }>;
+	endCaptures?: Record<string, { name: string }>;
+	captures?: Record<string, { name: string }>;
+}
+
+interface TextMateGrammar {
+	name?: string;
+	scopeName?: string;
+	patterns?: TextMateRule[];
+	repository?: Record<string, TextMateRule>;
+}
 
 interface MarkdownDocumentAttributes {
 	title: string;
@@ -50,28 +72,15 @@ const bannedDocsPatterns = [
 ];
 const requiredSectionHeadings = [
 	"## What",
-	"## Why",
-	"## How",
 	"## When",
-	"## Analogy",
-	"## Try it",
+	"## Why",
+	"## Where",
+	"## How",
 ];
-const comparisonOrder: readonly ComparisonLanguage[] = [
-	"java",
-	"musi",
-	"rust",
-	"typescript",
-] as const;
-
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(scriptsDirectory, "..");
 const docsDirectory = join(appRoot, "src", "content", "docs");
-const exampleRegistryPath = join(
-	appRoot,
-	"src",
-	"content",
-	"example-registry.ts",
-);
+const examplesDirectory = join(appRoot, "src", "content", "examples");
 const snippetRegistryPath = join(
 	appRoot,
 	"src",
@@ -89,6 +98,80 @@ const grammarPath = join(
 	"musi.tmLanguage.json",
 );
 
+function createWebsiteMusiGrammar(
+	rawGrammar: TextMateGrammar,
+): TextMateGrammar {
+	const grammar = structuredClone(rawGrammar);
+	const repository = grammar.repository ?? {};
+	const rootPatterns = grammar.patterns ?? [];
+
+	repository["website-function-definition"] = {
+		match:
+			"\\b(let)\\s+(?:(rec)\\s+)?([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\n]*\\]\\s*)?\\()",
+		captures: {
+			"1": { name: "keyword.declaration.musi" },
+			"2": { name: "keyword.modifier.musi" },
+			"3": { name: "entity.name.function.definition.musi" },
+		},
+	};
+
+	repository["website-type-definition"] = {
+		match:
+			"\\b(let)\\s+(?:(rec)\\s+)?([A-Z][A-Za-z0-9_]*)\\b(?=\\s*:=\\s*(?:class|data|effect|instance)\\b)",
+		captures: {
+			"1": { name: "keyword.declaration.musi" },
+			"2": { name: "keyword.modifier.musi" },
+			"3": { name: "support.type.identifier.musi" },
+		},
+	};
+
+	repository["website-value-definition"] = {
+		match: "\\b(let)\\s+(?:(rec)\\s+)?([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?::|:=))",
+		captures: {
+			"1": { name: "keyword.declaration.musi" },
+			"2": { name: "keyword.modifier.musi" },
+			"3": { name: "variable.other.definition.musi" },
+		},
+	};
+
+	repository["website-function-call"] = {
+		name: "entity.name.function.call.musi",
+		match:
+			"(?<!\\.)\\b(?!and\\b|as\\b|case\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|mut\\b|not\\b|of\\b|opaque\\b|or\\b|perform\\b|quote\\b|rec\\b|resume\\b|shl\\b|shr\\b|where\\b|with\\b|xor\\b)[a-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
+	};
+
+	repository["website-type-identifier"] = {
+		name: "support.type.identifier.musi",
+		match: "\\b[A-Z][A-Za-z0-9_]*\\b",
+	};
+
+	repository["website-constructor-variant"] = {
+		name: "support.type.identifier.musi",
+		match: "\\.[A-Z][A-Za-z0-9_]*\\b",
+	};
+
+	const typeAnnotationRule = repository["type-annotation"];
+	if (typeAnnotationRule?.patterns) {
+		typeAnnotationRule.patterns = [
+			{ include: "#website-type-identifier" },
+			...typeAnnotationRule.patterns,
+		];
+	}
+
+	grammar.repository = repository;
+	grammar.patterns = [
+		{ include: "#website-type-definition" },
+		{ include: "#website-function-definition" },
+		{ include: "#website-value-definition" },
+		{ include: "#website-constructor-variant" },
+		{ include: "#website-function-call" },
+		{ include: "#website-type-identifier" },
+		...rootPatterns,
+	];
+
+	return grammar;
+}
+
 export const generatedContentPath = join(
 	appRoot,
 	"src",
@@ -97,7 +180,7 @@ export const generatedContentPath = join(
 
 export const watchedContentPaths = [
 	docsDirectory,
-	exampleRegistryPath,
+	examplesDirectory,
 	snippetRegistryPath,
 	generatorModulePath,
 	generatorEntrypointPath,
@@ -112,7 +195,7 @@ export function isWatchedContentPath(path: string) {
 	const normalized = normalize(path);
 	return (
 		normalized.startsWith(pathWithTrailingSeparator(docsDirectory)) ||
-		normalized === normalize(exampleRegistryPath) ||
+		normalized.startsWith(pathWithTrailingSeparator(examplesDirectory)) ||
 		normalized === normalize(snippetRegistryPath) ||
 		normalized === normalize(generatorModulePath) ||
 		normalized === normalize(generatorEntrypointPath) ||
@@ -124,17 +207,30 @@ const highlighter = await createHighlighter({
 	themes: ["github-light", "github-dark"],
 	langs: [
 		"bash",
+		"c",
+		"css",
+		"csharp",
+		"cpp",
+		"fsharp",
+		"go",
+		"html",
+		"javascript",
 		"json",
 		"java",
+		"kotlin",
+		"markdown",
 		"plaintext",
+		"python",
 		"rust",
+		"scala",
 		"toml",
 		"typescript",
+		"xml",
+		"yaml",
 		{
-			...(JSON.parse(await readFile(grammarPath, "utf8")) as Record<
-				string,
-				unknown
-			>),
+			...createWebsiteMusiGrammar(
+				JSON.parse(await readFile(grammarPath, "utf8")) as TextMateGrammar,
+			),
 			name: "musi",
 		} as never,
 	],
@@ -173,11 +269,55 @@ function normalizeLanguage(language: string) {
 		case "shell":
 		case "sh":
 			return "bash";
+		case "js":
+			return "javascript";
+		case "ts":
+			return "typescript";
+		case "md":
+			return "markdown";
+		case "markup":
+			return "html";
+		case "yml":
+			return "yaml";
 		case "text":
 			return "plaintext";
+		case "scala3":
+			return "scala";
 		default:
 			return language;
 	}
+}
+
+function renderHighlightedCode(sourceText: string, language: string) {
+	const normalizedLanguage = normalizeLanguage(language);
+	try {
+		return highlighter.codeToHtml(sourceText, {
+			lang: normalizedLanguage,
+			themes: {
+				light: "github-light",
+				dark: "github-dark",
+			},
+		});
+	} catch (error) {
+		if (normalizedLanguage === "musi") {
+			const cause = error instanceof Error ? error.message : String(error);
+			throw new Error(`musi highlighting failed: ${cause}`);
+		}
+		return highlighter.codeToHtml(sourceText, {
+			lang: "plaintext",
+			themes: {
+				light: "github-light",
+				dark: "github-dark",
+			},
+		});
+	}
+}
+
+export function renderHighlightedCodeForTest(
+	sourceText: string,
+	language: string,
+) {
+	return renderHighlightedCode(sourceText, language);
 }
 
 function slugifyHeading(text: string) {
@@ -230,6 +370,14 @@ function assertRequiredSections(source: string, path: string) {
 	}
 }
 
+async function discoverDocPaths() {
+	const entries = await readdir(docsDirectory, { withFileTypes: true });
+	return entries
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+		.map((entry) => join(docsDirectory, entry.name))
+		.sort((left, right) => left.localeCompare(right));
+}
+
 function renderSnippet(id: string) {
 	const snippet = snippetById(id);
 	if (!snippet) {
@@ -237,13 +385,7 @@ function renderSnippet(id: string) {
 	}
 
 	validateSnippetSyntax(snippet.id, snippet.sourceText, snippet.language);
-	return highlighter.codeToHtml(snippet.sourceText, {
-		lang: normalizeLanguage(snippet.language),
-		themes: {
-			light: "github-light",
-			dark: "github-dark",
-		},
-	});
+	return renderHighlightedCode(snippet.sourceText, snippet.language);
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -264,7 +406,7 @@ async function renderExample(id: string) {
 		throw new Error(`missing example group ${id}`);
 	}
 
-	for (const language of comparisonOrder) {
+	for (const language of comparisonLanguages) {
 		const variant = group.variants[language];
 		if (!variant) {
 			throw new Error(`example group ${id} is missing ${language}`);
@@ -276,23 +418,17 @@ async function renderExample(id: string) {
 		);
 	}
 
-	const tabButtons = comparisonOrder
+	const tabButtons = comparisonLanguages
 		.map((language) => {
 			const active = language === group.defaultLanguage;
-			return `<button type="button" role="tab" class="code-tab" data-language="${language}" aria-selected="${active ? "true" : "false"}" tabindex="${active ? "0" : "-1"}">${language === "typescript" ? "TypeScript" : language === "java" ? "Java" : language === "rust" ? "Rust" : "Musi"}</button>`;
+			return `<button type="button" role="tab" class="code-tab" data-language="${language}" aria-selected="${active ? "true" : "false"}" tabindex="${active ? "0" : "-1"}">${comparisonLanguageLabels[language]}</button>`;
 		})
 		.join("");
 
 	const panels = await Promise.all(
-		comparisonOrder.map((language) => {
+		comparisonLanguages.map((language) => {
 			const variant = group.variants[language];
-			const html = highlighter.codeToHtml(variant.sourceText, {
-				lang: normalizeLanguage(variant.language),
-				themes: {
-					light: "github-light",
-					dark: "github-dark",
-				},
-			});
+			const html = renderHighlightedCode(variant.sourceText, variant.language);
 			const hidden = language === group.defaultLanguage ? "" : ' hidden=""';
 			return `<section role="tabpanel" class="code-panel" data-language="${language}" data-active="${language === group.defaultLanguage ? "true" : "false"}"${hidden}>${html}</section>`;
 		}),
@@ -351,6 +487,12 @@ async function renderMarkdown(source: string) {
 		return `<h${depth} id="${id}"><a href="#${id}">${inner}</a></h${depth}>`;
 	};
 
+	renderer.code = ({ text, lang }) => {
+		const language =
+			typeof lang === "string" && lang.length > 0 ? lang : "plaintext";
+		return renderHighlightedCode(text, language);
+	};
+
 	const withSnippets = await replaceContentPlaceholders(parsed.body);
 	const html = marked.parse(withSnippets, {
 		gfm: true,
@@ -386,7 +528,7 @@ export async function generateContent() {
 		validateSnippetSyntax(snippet.id, snippet.sourceText, snippet.language);
 	}
 	for (const example of exampleGroups) {
-		for (const language of comparisonOrder) {
+		for (const language of comparisonLanguages) {
 			if (!example.variants[language]) {
 				throw new Error(`example group ${example.id} is missing ${language}`);
 			}
@@ -399,29 +541,16 @@ export async function generateContent() {
 		quickstartHtml: await renderSnippet("quickstart"),
 	};
 
-	const docPaths = [
-		"getting-started.md",
-		"first-program.md",
-		"files-packages-and-entry.md",
-		"expressions-and-bindings.md",
-		"functions-and-calls.md",
-		"imports-and-packages.md",
-		"data-and-pattern-matching.md",
-		"records-arrays-and-mutation.md",
-		"effects-and-handlers.md",
-		"types.md",
-		"classes-instances-and-laws.md",
-		"attributes-and-foreign.md",
-		"quote-and-syntax.md",
-		"foundation-and-standard-library.md",
-		"testing-and-running.md",
-	];
-
+	const docPaths = await discoverDocPaths();
 	const renderedDocs = await Promise.all(
-		docPaths.map((path) =>
-			renderMarkdownDocument(join(appRoot, "src", "content", "docs", path)),
-		),
+		docPaths.map((path) => renderMarkdownDocument(path)),
 	);
+	renderedDocs.sort((left, right) => {
+		if (left.order !== right.order) {
+			return left.order - right.order;
+		}
+		return left.slug.localeCompare(right.slug);
+	});
 
 	const generated = `export interface GeneratedHeading {
 \tdepth: number;

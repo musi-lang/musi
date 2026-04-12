@@ -3,7 +3,7 @@ title: "Data and pattern matching"
 description: "Define sums with <code>data</code>, construct variants, and read them with <code>case</code>."
 group: "Core language"
 section: "Core language"
-order: 7
+order: 8
 slug: "data-and-pattern-matching"
 summary: "Data definitions, constructors, and pattern matching."
 ---
@@ -12,9 +12,17 @@ summary: "Data definitions, constructors, and pattern matching."
 Use `data` to model bounded domains directly in code.
 The `case` form reads shape by shape and keeps branching explicit.
 
+## When
+Reach for this chapter when values have distinct outcomes (task states, command result states, protocol messages).
+
+{{snippet:data-port-case}}
+
 ## Why
 Named variants make domain rules obvious and easier to test.
 You avoid stringly-typed flags and boolean ambiguity.
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Define variants once, construct values from those constructors, then consume them with `case`.
@@ -23,10 +31,7 @@ Define variants once, construct values from those constructors, then consume the
 
 {{snippet:data-port-value}}
 
-## When
-Reach for this chapter when values have distinct outcomes (task states, command result states, protocol messages).
-
-{{snippet:data-port-case}}
+{{example:data-named-record}}
 
 ## Analogy
 Like a JavaScript union with explicit branches, but checked and navigated with one `case` expression.

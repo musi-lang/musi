@@ -13,10 +13,16 @@ This guide is for people who want to write Musi, run packages, and get useful be
 ## What
 You install the command-line tools once, then use Musi as your package and source language for small scripts, services, or experiments.
 
+## When
+Use this sequence when you have a new machine, a new clone, or you are onboarding from Python, JS, or TS and want the smallest working first step.
+
 ## Why
 Musi separates package workflows from direct file workflows.
 - `musi` handles package config, entry resolution, and project scripts.
 - `music` runs one source graph or artifact directly.
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Start at the [install page](/install), then follow this order:
@@ -24,9 +30,6 @@ Start at the [install page](/install), then follow this order:
 - create a package
 - add first expressions
 - run `musi check` and `musi run`
-
-## When
-Use this sequence when you have a new machine, a new clone, or you are onboarding from Python, JS, or TS and want the smallest working first step.
 
 ## Analogy
 Treat `musi` like `npm` or `cargo` for project lifecycle, and `music` like a direct `node`/`deno`-style file runner.

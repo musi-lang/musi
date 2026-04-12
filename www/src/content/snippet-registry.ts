@@ -110,7 +110,7 @@ let Result := Std.Result;`,
 		id: "types-basic",
 		language: "musi",
 		sourceText: `let port : Int := 8080;
-let identity[T] (input : T) : T := input;`,
+let identity_fn[T] (input : T) : T := input;`,
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 3,
@@ -119,7 +119,7 @@ let identity[T] (input : T) : T := input;`,
 	{
 		id: "types-apply",
 		language: "musi",
-		sourceText: "identity[Int](port);",
+		sourceText: "identity_fn[Int](port);",
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 8,
@@ -179,9 +179,23 @@ let extended := [0, ...values];`,
 		},
 	},
 	{
+		id: "operators-literals-basic",
+		language: "musi",
+		sourceText: `let port := 8080;
+let label := "ready";
+let next := port + 1;
+let same := next = port + 1;
+let capped := port <= 9000;
+let masked := 1 shl 3;`,
+		evidence: {
+			path: "grammar/Musi.g4",
+			line: 380,
+		},
+	},
+	{
 		id: "effect-console",
 		language: "musi",
-		sourceText: `let Console := effect {
+		sourceText: `let console := effect {
   let readln () : String;
 };`,
 		evidence: {
@@ -192,7 +206,7 @@ let extended := [0, ...values];`,
 	{
 		id: "perform-console",
 		language: "musi",
-		sourceText: "perform Console.readln();",
+		sourceText: "perform console.readln();",
 		evidence: {
 			path: "grammar/Musi.g4",
 			line: 205,
@@ -201,7 +215,7 @@ let extended := [0, ...values];`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle perform Console.readln() with Console of (
+		sourceText: `handle perform console.readln() with console of (
 | value => value
 | readln(k) => resume "ok"
 );`,
@@ -215,7 +229,7 @@ let extended := [0, ...values];`,
 		language: "musi",
 		sourceText: `let Eq[T] := class {
   let (=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := true;
+  law reflexive (x : T) := .True;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -225,8 +239,8 @@ let extended := [0, ...values];`,
 	{
 		id: "instance-eq-int",
 		language: "musi",
-		sourceText: `let eqInt := instance Eq[Int] {
-  let (=) (a : Int, b : Int) : Bool := true;
+		sourceText: `let eq_int := instance Eq[Int] {
+  let (=) (a : Int, b : Int) : Bool := .True;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -270,6 +284,27 @@ let extended := [0, ...values];`,
 		evidence: {
 			path: "crates/music_syntax/src/parser/tests.rs",
 			line: 77,
+		},
+	},
+	{
+		id: "quote-without-meta",
+		language: "musi",
+		sourceText: `let add_one (x : Int) : Int := x + 1;
+let add_two (x : Int) : Int := x + 2;`,
+		evidence: {
+			path: "docs/what/language/metaprogramming.md",
+			line: 1,
+		},
+	},
+	{
+		id: "quote-with-meta",
+		language: "musi",
+		sourceText: `let add_template := quote (x + #(delta));
+let add_one_syntax := quote (#(x) + 1);
+let add_two_syntax := quote (#(x) + 2);`,
+		evidence: {
+			path: "docs/what/language/metaprogramming.md",
+			line: 8,
 		},
 	},
 	{

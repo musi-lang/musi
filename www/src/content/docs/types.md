@@ -12,18 +12,23 @@ summary: "Type annotations, generic parameters, and direct type application."
 Types in Musi appear near values and functions.
 You can read types without switching to a separate declaration section.
 
+## When
+Use explicit typing when APIs are shared across modules or when signatures are not obvious.
+
 ## Why
 Type annotations make intent and errors clearer for mixed teams and longer files.
 
 {{snippet:types-basic}}
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Add annotations to values and functions, then apply generics where reusable behavior is needed.
 
 {{snippet:types-apply}}
 
-## When
-Use explicit typing when APIs are shared across modules or when signatures are not obvious.
+{{example:generic-constraint}}
 
 ## Analogy
 Similar to TypeScript annotations, but placed directly in the expression style used throughout Musi.

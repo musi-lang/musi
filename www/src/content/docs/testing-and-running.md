@@ -3,7 +3,7 @@ title: "Testing and running"
 description: "Run a package, run tests, and use the direct CLI when needed."
 group: "Tooling"
 section: "Tooling"
-order: 15
+order: 16
 slug: "testing-and-running"
 summary: "The main commands for package work and direct file work."
 ---
@@ -13,17 +13,6 @@ Testing and execution are split by scope:
 - package scope with `musi`
 - direct source/artifact scope with `music`
 
-## Why
-This split keeps quick one-off checks and team workflow checks both fast.
-
-## How
-Use package commands in normal development:
-
-{{snippet:package-commands}}
-
-## Compare
-{{example:testing-entry}}
-
 ## When
 Use tests for routine verification.
 - keep tests in `*.test.ms`
@@ -32,6 +21,20 @@ Use tests for routine verification.
 {{snippet:stdlib-testing-import}}
 
 {{snippet:music-direct}}
+
+## Why
+This split keeps quick one-off checks and team workflow checks both fast.
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
+
+## How
+Use package commands in normal development:
+
+{{snippet:package-commands}}
+
+## Compare
+{{example:testing-entry}}
 
 ## Analogy
 Like project commands in a framework plus one-off script execution when needed.

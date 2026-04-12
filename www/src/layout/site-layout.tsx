@@ -16,10 +16,10 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import type { ReactNode } from "react";
-import { docGroups } from "./docs";
-import { DesktopIcon, GithubIcon, MoonIcon, SunIcon } from "./icons";
-import type { AppRoute } from "./routes";
-import { primaryRoutes } from "./routes";
+import { docGroups } from "../docs";
+import { DesktopIcon, GithubIcon, MoonIcon, SunIcon } from "../icons";
+import type { AppRoute } from "../routes";
+import { primaryRoutes } from "../routes";
 
 type ColorScheme = "light" | "dark" | "auto";
 
@@ -108,9 +108,9 @@ function HeaderUtilities(props: { onNavigate?: () => void }) {
 
 function DocsSidebar(props: { route: AppRoute; onNavigate?: () => void }) {
 	return (
-		<Stack gap="xs">
+		<Stack gap="md">
 			{docGroups.map((group) => (
-				<Stack key={group.group} gap={4}>
+				<Stack key={group.group} gap={4} className="docs-nav-group">
 					<Text fw={700} size="sm" tt="uppercase" c="dimmed">
 						{group.group}
 					</Text>

@@ -15,9 +15,15 @@ This page teaches the smallest runnable surface: values, bindings, and simple ex
 
 {{snippet:first-file}}
 
+## When
+Use this pattern for notes, toy utilities, and onboarding examples before you add package config.
+
 ## Why
 Short files are the fastest way to learn language behavior without project scaffolding.
 You can spot how names and results flow before layering packages, effects, or classes.
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Use `let` for values and end each expression with `;`. After a value exists, the next expression can use it.
@@ -26,9 +32,6 @@ Use `let` for values and end each expression with `;`. After a value exists, the
 {{example:double-function}}
 
 The next snippet introduces a reusable function and direct call style.
-
-## When
-Use this pattern for notes, toy utilities, and onboarding examples before you add package config.
 
 ## Analogy
 Think like Python or JavaScript REPL cells: each statement creates a value, and later statements can use earlier results.

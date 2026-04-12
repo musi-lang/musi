@@ -3,7 +3,7 @@ title: "Foundation and standard library"
 description: "Know when to use <code>@std</code> and when you are looking at lower-level foundation names."
 group: "Tooling"
 section: "Tooling"
-order: 14
+order: 15
 slug: "foundation-and-standard-library"
 summary: "The standard library family and the lower-level foundation namespace."
 ---
@@ -12,10 +12,17 @@ summary: "The standard library family and the lower-level foundation namespace."
 Most user code starts in `@std`.
 `musi:*` is the lower-level family when you need foundation-level capabilities.
 
+## When
+Use `@std` for normal application logic.
+Use `musi:*` for boundary-focused tooling and low-level integration tasks.
+
 ## Why
 Keeping both namespaces explicit makes the dependency model visible:
 - `@std` for everyday work
 - `musi:*` for core-level operations
+
+## Where
+Apply this guidance in modules and packages where this construct appears.
 
 ## How
 Import from `@std` modules first, then layer `musi:*` only where the project surface needs it.
@@ -26,10 +33,6 @@ Import from `@std` modules first, then layer `musi:*` only where the project sur
 
 ## Compare
 {{example:import-stdlib}}
-
-## When
-Use `@std` for normal application logic.
-Use `musi:*` for boundary-focused tooling and low-level integration tasks.
 
 ## Analogy
 Like choosing a standard library versus runtime SDK in other ecosystems.
