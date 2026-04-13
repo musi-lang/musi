@@ -15,7 +15,7 @@
         "@vscode/vsce": "3.7.1",
         "typescript": "6.0.2",
         "vscode-oniguruma": "^2.0.1",
-        "vscode-textmate": "^9.2.1",
+        "vscode-textmate": "^9.3.2",
       },
       "optionalDependencies": {
         "vscode": "npm:@types/vscode@1.75.0",
