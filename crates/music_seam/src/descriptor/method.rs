@@ -7,6 +7,8 @@ pub struct MethodDescriptor {
     pub params: u16,
     pub locals: u16,
     pub export: bool,
+    pub hot: bool,
+    pub cold: bool,
     pub labels: Box<[StringId]>,
     pub code: Box<[CodeEntry]>,
 }
@@ -19,6 +21,8 @@ impl MethodDescriptor {
             params,
             locals,
             export: false,
+            hot: false,
+            cold: false,
             labels: Box::new([]),
             code,
         }
@@ -27,6 +31,18 @@ impl MethodDescriptor {
     #[must_use]
     pub const fn with_export(mut self, export: bool) -> Self {
         self.export = export;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
         self
     }
 

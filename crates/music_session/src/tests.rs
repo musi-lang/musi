@@ -685,7 +685,7 @@ fn emits_meta_records_for_laws_and_attrs() {
         "{meta:?}"
     );
     assert!(
-        meta.iter().any(|(target, key, values)| {
+        !meta.iter().any(|(target, key, values)| {
             target == "main::meaning"
                 && key == "musi.attr"
                 && values == &vec!["@musi.codegen(mode := \"test\")".to_owned()]

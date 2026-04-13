@@ -1,58 +1,58 @@
-@musi.lang(name := "Type")
+@known(name := "Type")
 export let Type := Type;
 
-@musi.lang(name := "Array")
+@known(name := "Array")
 export let Array := Array;
 
-@musi.lang(name := "Any")
+@known(name := "Any")
 export let Any := Any;
 
-@musi.lang(name := "Unknown")
+@known(name := "Unknown")
 export let Unknown := Unknown;
 
-@musi.lang(name := "Syntax")
+@known(name := "Syntax")
 export let Syntax := Syntax;
 
-@musi.lang(name := "Empty")
+@known(name := "Empty")
 export let Empty := Empty;
 
-@musi.lang(name := "Unit")
+@known(name := "Unit")
 export let Unit := Unit;
 
-@musi.lang(name := "Bool")
+@known(name := "Bool")
 export let Bool := Bool;
 
-@musi.lang(name := "Nat")
+@known(name := "Nat")
 export let Nat := Nat;
 
-@musi.lang(name := "Int")
+@known(name := "Int")
 export let Int := Int;
 
-@musi.lang(name := "Float")
+@known(name := "Float")
 export let Float := Float;
 
-@musi.lang(name := "String")
+@known(name := "String")
 export let String := String;
 
-@musi.lang(name := "Range")
+@known(name := "Range")
 export let Range := Range;
 
-@musi.lang(name := "ClosedRange")
+@known(name := "ClosedRange")
 export let ClosedRange := ClosedRange;
 
-@musi.lang(name := "PartialRangeFrom")
+@known(name := "PartialRangeFrom")
 export let PartialRangeFrom := PartialRangeFrom;
 
-@musi.lang(name := "PartialRangeUpTo")
+@known(name := "PartialRangeUpTo")
 export let PartialRangeUpTo := PartialRangeUpTo;
 
-@musi.lang(name := "PartialRangeThru")
+@known(name := "PartialRangeThru")
 export let PartialRangeThru := PartialRangeThru;
 
-@musi.lang(name := "CString")
+@known(name := "CString")
 export let CString := CString;
 
-@musi.lang(name := "CPtr")
+@known(name := "CPtr")
 export let CPtr := CPtr;
 
 export opaque let Option[T] := data {

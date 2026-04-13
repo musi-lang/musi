@@ -27,6 +27,8 @@ impl TextBuilder {
             .parse()
             .map_err(|_| AssemblyError::TextParseFailed("invalid locals count".into()))?;
         let export = parts.iter().skip(idx + 2).any(|part| part == "export");
+        let hot = parts.iter().skip(idx + 2).any(|part| part == "hot");
+        let cold = parts.iter().skip(idx + 2).any(|part| part == "cold");
 
         let mut labels = Vec::<StringId>::new();
         let mut label_ids = HashMap::<String, u16>::new();
@@ -56,6 +58,8 @@ impl TextBuilder {
             code.into_boxed_slice(),
         )
         .with_export(export)
+        .with_hot(hot)
+        .with_cold(cold)
         .with_labels(labels.into_boxed_slice());
         let id = self.ensure_method_symbol(&name);
         *self.artifact.methods.get_mut(id) = method;

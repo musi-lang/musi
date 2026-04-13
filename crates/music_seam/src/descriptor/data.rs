@@ -23,6 +23,7 @@ pub struct DataDescriptor {
     pub repr_kind: Option<StringId>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
 }
 
 impl DataDescriptor {
@@ -46,6 +47,7 @@ impl DataDescriptor {
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
+            frozen: false,
         }
     }
 
@@ -64,6 +66,12 @@ impl DataDescriptor {
     #[must_use]
     pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
         self.layout_pack = Some(layout_pack);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
         self
     }
 }

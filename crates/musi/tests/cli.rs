@@ -142,4 +142,33 @@ mod tests {
         );
         assert!(payload["diagnostics"][0]["range"].is_object());
     }
+
+    #[test]
+    fn json_check_unresolved_import_carries_file_and_range() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+        );
+
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["diagnostics"][0]["phase"], "project");
+        assert_eq!(payload["diagnostics"][0]["code"], "MS3615");
+        assert_eq!(
+            payload["diagnostics"][0]["message"],
+            "unresolved import `missing`"
+        );
+        assert!(payload["diagnostics"][0]["file"].as_str().is_some());
+        assert!(payload["diagnostics"][0]["range"].is_object());
+    }
 }

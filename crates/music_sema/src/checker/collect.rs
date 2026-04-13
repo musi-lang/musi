@@ -26,20 +26,54 @@ impl CollectPass<'_, '_, '_> {
     }
 
     fn visit_expr(&mut self, id: HirExprId) {
+        if self.visit_expr_trivial(id)
+            || self.visit_expr_aggregate(id)
+            || self.visit_expr_call_like(id)
+            || self.visit_expr_type_ops(id)
+            || self.visit_expr_decls(id)
+            || self.visit_expr_control(id)
+        {}
+    }
+
+    fn visit_expr_trivial(&self, id: HirExprId) -> bool {
+        matches!(
+            self.expr(id).kind,
+            HirExprKind::Error
+                | HirExprKind::Name { .. }
+                | HirExprKind::Lit { .. }
+                | HirExprKind::ArrayTy { .. }
+                | HirExprKind::HandlerTy { .. }
+                | HirExprKind::Variant { .. }
+                | HirExprKind::Quote { .. }
+                | HirExprKind::Splice { .. }
+        )
+    }
+
+    fn visit_expr_aggregate(&mut self, id: HirExprId) -> bool {
         match self.expr(id).kind {
             HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
                 self.visit_expr_ids(exprs);
             }
             HirExprKind::Array { items } => self.visit_array_items(items),
-            HirExprKind::Record { items } | HirExprKind::RecordUpdate { items, .. } => {
+            HirExprKind::Record { items } => {
                 for item in self.record_items(items) {
                     self.visit_expr(item.value);
                 }
-                if let HirExprKind::RecordUpdate { base, .. } = self.expr(id).kind {
-                    self.visit_expr(base);
+            }
+            HirExprKind::RecordUpdate { base, items } => {
+                for item in self.record_items(items) {
+                    self.visit_expr(item.value);
                 }
+                self.visit_expr(base);
             }
             HirExprKind::Template { parts } => self.visit_template_parts(parts),
+            _ => return false,
+        }
+        true
+    }
+
+    fn visit_expr_call_like(&mut self, id: HirExprId) -> bool {
+        match self.expr(id).kind {
             HirExprKind::Pi { binder_ty, ret, .. } => {
                 self.visit_expr(binder_ty);
                 self.visit_expr(ret);
@@ -53,6 +87,13 @@ impl CollectPass<'_, '_, '_> {
                 self.visit_expr_ids(args);
             }
             HirExprKind::Field { base, .. } => self.visit_expr(base),
+            _ => return false,
+        }
+        true
+    }
+
+    fn visit_expr_type_ops(&mut self, id: HirExprId) -> bool {
+        match self.expr(id).kind {
             HirExprKind::TypeTest { base, ty, .. } | HirExprKind::TypeCast { base, ty } => {
                 self.visit_expr(base);
                 self.visit_expr(ty);
@@ -64,6 +105,13 @@ impl CollectPass<'_, '_, '_> {
                 self.visit_expr(left);
                 self.visit_expr(right);
             }
+            _ => return false,
+        }
+        true
+    }
+
+    fn visit_expr_decls(&mut self, id: HirExprId) -> bool {
+        match self.expr(id).kind {
             HirExprKind::Let {
                 pat,
                 value,
@@ -77,7 +125,6 @@ impl CollectPass<'_, '_, '_> {
                 }
                 self.visit_expr(value);
             }
-            HirExprKind::Case { scrutinee, arms } => self.visit_case(scrutinee, arms),
             HirExprKind::Data { variants, fields } => self.visit_data(variants, fields),
             HirExprKind::Effect { members } | HirExprKind::Class { members, .. } => {
                 for member in self.members(members) {
@@ -90,6 +137,14 @@ impl CollectPass<'_, '_, '_> {
                     self.visit_member(&member);
                 }
             }
+            _ => return false,
+        }
+        true
+    }
+
+    fn visit_expr_control(&mut self, id: HirExprId) -> bool {
+        match self.expr(id).kind {
+            HirExprKind::Case { scrutinee, arms } => self.visit_case(scrutinee, arms),
             HirExprKind::HandlerLit { clauses, .. } => {
                 for clause in self.handle_clauses(clauses) {
                     self.visit_expr(clause.body);
@@ -104,15 +159,9 @@ impl CollectPass<'_, '_, '_> {
                     self.visit_expr(expr);
                 }
             }
-            HirExprKind::Error
-            | HirExprKind::Name { .. }
-            | HirExprKind::Lit { .. }
-            | HirExprKind::ArrayTy { .. }
-            | HirExprKind::HandlerTy { .. }
-            | HirExprKind::Variant { .. }
-            | HirExprKind::Quote { .. }
-            | HirExprKind::Splice { .. } => {}
+            _ => return false,
         }
+        true
     }
 
     fn visit_expr_ids(&mut self, exprs: SliceRange<HirExprId>) {
@@ -204,7 +253,8 @@ impl CollectPass<'_, '_, '_> {
             return;
         }
 
-        let (repr_kind, layout_align, layout_pack) = extract_data_layout_hints(self, origin, attrs);
+        let (repr_kind, layout_align, layout_pack, frozen) =
+            extract_data_layout_hints(self, origin, attrs);
         let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
         for variant in self.variants(variants) {
             let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
@@ -241,7 +291,14 @@ impl CollectPass<'_, '_, '_> {
         let key = surface_key(self.module_key(), self.interner(), name.name);
         self.insert_data_def(
             data_name,
-            DataDef::new(key, variant_map, repr_kind, layout_align, layout_pack),
+            DataDef::new(
+                key,
+                variant_map,
+                repr_kind,
+                layout_align,
+                layout_pack,
+                frozen,
+            ),
         );
     }
 

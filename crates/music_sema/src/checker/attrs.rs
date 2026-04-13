@@ -2,17 +2,17 @@ use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirLitKind, HirOrigin, HirPatKind, HirTyId,
-    HirTyKind,
+    HirAttr, HirAttrArg, HirExprId, HirExprKind, HirOrigin, HirPatKind, HirTyId, HirTyKind,
 };
 
+use super::decls::expr_has_structural_target;
 use super::{CheckPass, DiagKind, PassBase};
 
 pub(super) fn extract_data_layout_hints(
     ctx: &mut PassBase<'_, '_, '_>,
     origin: HirOrigin,
     attr_ranges: &[SliceRange<HirAttr>],
-) -> (Option<Box<str>>, Option<u32>, Option<u32>) {
+) -> (Option<Box<str>>, Option<u32>, Option<u32>, bool) {
     ctx.extract_data_layout_hints(origin, attr_ranges)
 }
 
@@ -21,10 +21,11 @@ impl PassBase<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         attr_ranges: &[SliceRange<HirAttr>],
-    ) -> (Option<Box<str>>, Option<u32>, Option<u32>) {
+    ) -> (Option<Box<str>>, Option<u32>, Option<u32>, bool) {
         let mut repr_kind: Option<Box<str>> = None;
         let mut align: Option<u32> = None;
         let mut pack: Option<u32> = None;
+        let mut frozen = false;
         for range in attr_ranges {
             for attr in self.attrs(range.clone()) {
                 let path = self.attr_path_base(&attr);
@@ -87,11 +88,12 @@ impl PassBase<'_, '_, '_> {
                             }
                         }
                     }
+                    ["frozen"] => frozen = true,
                     _ => {}
                 }
             }
         }
-        (repr_kind, align, pack)
+        (repr_kind, align, pack, frozen)
     }
 }
 
@@ -100,7 +102,11 @@ impl CheckPass<'_, '_, '_> {
         self.module_key().as_str().starts_with("musi:")
     }
 
-    fn is_known_lang_name(name: &str) -> bool {
+    fn in_intrinsics_module(&self) -> bool {
+        self.module_key().as_str() == "musi:intrinsics"
+    }
+
+    fn is_known_name(name: &str) -> bool {
         matches!(
             name,
             "Type"
@@ -125,64 +131,165 @@ impl CheckPass<'_, '_, '_> {
         )
     }
 
-    fn validate_musi_lang_attr(&mut self, attr: &HirAttr, origin: HirOrigin, inner: HirExprId) {
+    fn validate_known_attr(&mut self, attr: &HirAttr, origin: HirOrigin, inner: HirExprId) {
         if !self.in_foundation_module() {
-            self.diag(
-                origin.span,
-                DiagKind::AttrMusiLangRequiresFoundationModule,
-                "",
-            );
+            self.diag(origin.span, DiagKind::AttrKnownRequiresFoundationModule, "");
         }
         if !self.in_module_stmt() {
-            self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+            self.diag(origin.span, DiagKind::AttrKnownRequiresPlainBindLet, "");
             return;
         }
-        if let HirExprKind::Let {
+        let HirExprKind::Let {
             pat,
             has_param_clause,
             ..
         } = self.expr(inner).kind
-        {
-            if has_param_clause {
-                self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-                return;
-            }
-            if !matches!(self.pat(pat).kind, HirPatKind::Bind { .. }) {
-                self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
-                return;
-            }
-        } else {
-            self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
+        else {
+            self.diag(origin.span, DiagKind::AttrKnownRequiresPlainBindLet, "");
+            return;
+        };
+        if has_param_clause || !matches!(self.pat(pat).kind, HirPatKind::Bind { .. }) {
+            self.diag(origin.span, DiagKind::AttrKnownRequiresPlainBindLet, "");
             return;
         }
         if self.expr(inner).mods.export.is_none() {
-            self.diag(origin.span, DiagKind::AttrMusiLangRequiresExport, "");
+            self.diag(origin.span, DiagKind::AttrKnownRequiresExport, "");
         }
         let name = self.parse_named_string_arg(attr, "name");
         match name.as_deref() {
-            None => self.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, ""),
-            Some(name) if !Self::is_known_lang_name(name) => {
-                self.diag(origin.span, DiagKind::AttrMusiLangUnknownName, "");
+            None => self.diag(origin.span, DiagKind::AttrKnownRequiresNameString, ""),
+            Some(name) if !Self::is_known_name(name) => {
+                self.diag(origin.span, DiagKind::AttrKnownUnknownName, "");
             }
             Some(_) => {}
         }
     }
 
-    fn validate_musi_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
-        if !self.in_foundation_module() {
+    fn validate_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin, is_foreign: bool) {
+        if !self.in_intrinsics_module() {
             self.diag(
                 origin.span,
-                DiagKind::AttrMusiIntrinsicRequiresFoundationModule,
+                DiagKind::AttrIntrinsicRequiresIntrinsicsModule,
                 "",
             );
         }
-        let opcode = self.parse_named_string_arg(attr, "opcode");
-        if opcode.is_none() {
+        if !is_foreign {
+            self.diag(origin.span, DiagKind::AttrIntrinsicRequiresForeignLet, "");
+        }
+        if self.parse_named_string_arg(attr, "name").is_none() {
+            self.diag(origin.span, DiagKind::AttrIntrinsicRequiresNameString, "");
+        }
+    }
+
+    fn is_data_target(&self, inner: HirExprId) -> bool {
+        match self.expr(inner).kind {
+            HirExprKind::Data { .. } => true,
+            HirExprKind::Let { value, .. } => {
+                matches!(self.expr(value).kind, HirExprKind::Data { .. })
+            }
+            _ => false,
+        }
+    }
+
+    fn is_callable_target(&self, inner: HirExprId) -> bool {
+        let expr = self.expr(inner);
+        if expr.mods.foreign.is_some() {
+            return true;
+        }
+        match expr.kind {
+            HirExprKind::Let {
+                has_param_clause,
+                ref params,
+                ..
+            } => has_param_clause || !self.params(params.clone()).is_empty(),
+            _ => false,
+        }
+    }
+
+    fn is_structural_target(&self, inner: HirExprId) -> bool {
+        match self.expr(inner).kind {
+            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Class { .. } => {
+                true
+            }
+            HirExprKind::Let { value, .. } => expr_has_structural_target(self, value),
+            _ => false,
+        }
+    }
+
+    pub fn validate_export_mods(&mut self, origin: HirOrigin, inner: HirExprId) {
+        if self
+            .expr(inner)
+            .mods
+            .export
+            .as_ref()
+            .is_some_and(|export| export.opaque)
+            && !self.is_structural_target(inner)
+        {
             self.diag(
                 origin.span,
-                DiagKind::AttrMusiIntrinsicRequiresOpcodeString,
+                DiagKind::AttrOpaqueRequiresStructuralExport,
                 "",
             );
+        }
+    }
+
+    fn validate_hot_cold_attrs(&mut self, origin: HirOrigin, attrs: &[HirAttr], inner: HirExprId) {
+        let mut hot = false;
+        let mut cold = false;
+        for attr in attrs {
+            let path = self.attr_path(attr);
+            if path.as_slice() == ["hot"] {
+                hot = true;
+            } else if path.as_slice() == ["cold"] {
+                cold = true;
+            }
+        }
+        if !(hot || cold) {
+            return;
+        }
+        if !self.is_callable_target(inner) {
+            self.diag(origin.span, DiagKind::AttrHotColdRequiresCallable, "");
+        }
+        if hot && cold {
+            self.diag(origin.span, DiagKind::AttrHotColdConflict, "");
+        }
+    }
+
+    fn validate_deprecated_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        let known = self.known();
+        for arg in self.attr_args(attr.args.clone()) {
+            if let Some(name) = arg.name.map(|ident| ident.name)
+                && name != known.message_key
+                && name != known.replace_key
+                && name != known.version_key
+            {
+                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
+            }
+            if !self.attr_value_is_string(&arg) {
+                self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+            }
+        }
+    }
+
+    fn validate_since_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        let known = self.known();
+        let mut found = false;
+        for arg in self.attr_args(attr.args.clone()) {
+            if let Some(name) = arg.name.map(|ident| ident.name)
+                && name != known.version_key
+            {
+                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
+            }
+            if arg.name.map(|ident| ident.name) == Some(known.version_key)
+                && self.attr_value_is_string(&arg)
+            {
+                found = true;
+            } else {
+                self.diag(origin.span, DiagKind::AttrSinceRequiresVersionString, "");
+            }
+        }
+        if !found {
+            self.diag(origin.span, DiagKind::AttrSinceRequiresVersionString, "");
         }
     }
 
@@ -192,10 +299,13 @@ impl CheckPass<'_, '_, '_> {
         attrs: SliceRange<HirAttr>,
         inner: HirExprId,
     ) {
+        let attrs = self.attrs(attrs);
         let inner_expr = self.expr(inner);
-        let inner_kind = inner_expr.kind;
         let inner_is_foreign = inner_expr.mods.foreign.is_some();
-        for attr in self.attrs(attrs) {
+
+        self.validate_hot_cold_attrs(origin, &attrs, inner);
+
+        for attr in attrs {
             let path = self.attr_path(&attr);
             match path.as_slice() {
                 ["link" | "when"] => {
@@ -204,18 +314,27 @@ impl CheckPass<'_, '_, '_> {
                     }
                 }
                 ["repr" | "layout"] => {
-                    let ok = match &inner_kind {
-                        HirExprKind::Data { .. } => true,
-                        HirExprKind::Let { value, .. } => {
-                            matches!(self.expr(*value).kind, HirExprKind::Data { .. })
-                        }
-                        _ => false,
-                    };
-                    if !ok {
+                    if !self.is_data_target(inner) {
                         self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
                     }
                 }
-                ["musi", "lang"] => self.validate_musi_lang_attr(&attr, origin, inner),
+                ["frozen"] => {
+                    let export = inner_expr.mods.export.as_ref();
+                    let valid = self.is_data_target(inner)
+                        && export.is_some()
+                        && export.is_some_and(|mods| !mods.opaque);
+                    if !valid {
+                        self.diag(
+                            origin.span,
+                            DiagKind::AttrFrozenRequiresExportedNonOpaqueData,
+                            "",
+                        );
+                    }
+                }
+                ["known"] => self.validate_known_attr(&attr, origin, inner),
+                ["intrinsic"] => self.validate_intrinsic_attr(&attr, origin, inner_is_foreign),
+                ["deprecated"] => self.validate_deprecated_attr(&attr, origin),
+                ["since"] => self.validate_since_attr(&attr, origin),
                 _ => {}
             }
         }
@@ -248,8 +367,8 @@ impl CheckPass<'_, '_, '_> {
             match path.as_slice() {
                 ["link"] => self.validate_link_attr(&attr, self.expr(expr).origin),
                 ["when"] => self.validate_when_attr(&attr, self.expr(expr).origin),
-                ["musi", "intrinsic"] => {
-                    self.validate_musi_intrinsic_attr(&attr, self.expr(expr).origin);
+                ["intrinsic"] => {
+                    self.validate_intrinsic_attr(&attr, self.expr(expr).origin, true);
                 }
                 _ => {}
             }
@@ -278,10 +397,11 @@ impl CheckPass<'_, '_, '_> {
     pub(super) fn validate_link_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
         let known = self.known();
         for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name) {
-                if name != known.name_key && name != self.intern("symbol") {
-                    self.diag(origin.span, DiagKind::AttrUnknownArg, "");
-                }
+            if let Some(name) = arg.name.map(|ident| ident.name)
+                && name != known.name_key
+                && name != known.symbol_key
+            {
+                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
             }
             if !self.attr_value_is_string(&arg) {
                 self.diag(origin.span, DiagKind::AttrLinkRequiresStringValue, "");
@@ -295,10 +415,10 @@ impl CheckPass<'_, '_, '_> {
             .map(|name| self.intern(name))
             .collect::<BTreeSet<_>>();
         for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name) {
-                if !allowed.contains(&name) {
-                    self.diag(origin.span, DiagKind::AttrUnknownArg, "");
-                }
+            if let Some(name) = arg.name.map(|ident| ident.name)
+                && !allowed.contains(&name)
+            {
+                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
             }
             if !self.attr_value_is_string(&arg) && !self.attr_value_is_string_array(&arg) {
                 let kind =
@@ -312,6 +432,7 @@ impl CheckPass<'_, '_, '_> {
         }
         let _ = self.target();
     }
+
     fn attr_value_is_string(&self, arg: &HirAttrArg) -> bool {
         matches!(self.expr(arg.value).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit))
     }
@@ -320,9 +441,9 @@ impl CheckPass<'_, '_, '_> {
         let HirExprKind::Array { items } = self.expr(arg.value).kind else {
             return false;
         };
-        self.array_items(items)
-            .iter()
-            .all(|item| matches!(self.expr(item.expr).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit)))
+        self.array_items(items).iter().all(
+            |item| matches!(self.expr(item.expr).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit)),
+        )
     }
 
     pub(super) fn attr_path<'a>(&'a self, attr: &HirAttr) -> Vec<&'a str> {
@@ -346,43 +467,25 @@ impl PassBase<'_, '_, '_> {
     }
 
     fn parse_named_string_arg(&self, attr: &HirAttr, key: &str) -> Option<Box<str>> {
-        for arg in self.attr_args(attr.args.clone()) {
-            let Some(name) = arg.name else {
-                continue;
-            };
+        self.attr_args(attr.args.clone()).iter().find_map(|arg| {
+            let name = arg.name?;
             if self.resolve_symbol(name.name) != key {
-                continue;
+                return None;
             }
-            if let HirExprKind::Lit { lit } = self.expr(arg.value).kind
-                && let Some(value) = self.lit_string_value(lit)
-            {
-                return Some(value.into_boxed_str());
+            match self.expr(arg.value).kind {
+                HirExprKind::Lit { lit } => self.lit_string_value(lit).map(Into::into),
+                _ => None,
             }
-        }
-        None
+        })
     }
 
-    fn parse_u32_value(&self, expr: HirExprId) -> Option<u32> {
-        let HirExprKind::Lit { lit } = self.expr(expr).kind else {
-            return None;
-        };
-        match self.lit_kind(lit) {
-            HirLitKind::Int { raw } => parse_int_lit(&raw),
-            HirLitKind::Rune { value } => Some(value),
+    fn parse_u32_value(&self, expr_id: HirExprId) -> Option<u32> {
+        match self.expr(expr_id).kind {
+            HirExprKind::Lit { lit } => match self.lit_kind(lit) {
+                music_hir::HirLitKind::Int { raw } => raw.parse().ok(),
+                _ => None,
+            },
             _ => None,
         }
     }
 }
-
-fn parse_int_lit(raw: &str) -> Option<u32> {
-    let s: String = raw.chars().filter(|c| *c != '_').collect();
-    let (radix, digits) = s
-        .strip_prefix("0x")
-        .map(|rest| (16, rest))
-        .or_else(|| s.strip_prefix("0b").map(|rest| (2, rest)))
-        .or_else(|| s.strip_prefix("0o").map(|rest| (8, rest)))
-        .unwrap_or((10, s.as_str()));
-    u32::from_str_radix(digits, radix).ok()
-}
-
-// Wrapper forms (`export`, attrs, `foreign`) live in `HirExpr.mods`, not `HirExprKind`.

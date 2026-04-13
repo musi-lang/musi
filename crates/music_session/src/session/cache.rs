@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use music_base::Span;
 use music_emit::{EmittedModule, lower_ir_module};
@@ -16,6 +17,10 @@ use super::Session;
 use super::graph::{SessionImportEnv, SurfaceMap};
 
 impl Session {
+    fn is_std_prelude_module_key(key: &str) -> bool {
+        key.starts_with("@@std@") && Path::new(key).ends_with(Path::new("prelude").join("index.ms"))
+    }
+
     fn auto_prelude_target(&self, key: &ModuleKey) -> Option<ModuleKey> {
         if key.as_str().starts_with("musi:") || key.as_str().starts_with("@@std@") {
             return None;
@@ -29,8 +34,7 @@ impl Session {
             .or_else(|| {
                 self.store.modules.keys().find_map(|candidate| {
                     let key = candidate.as_str();
-                    (key.starts_with("@@std@") && key.ends_with("/prelude/index.ms"))
-                        .then_some(candidate.clone())
+                    Self::is_std_prelude_module_key(key).then_some(candidate.clone())
                 })
             })?;
         (target != *key).then_some(target)

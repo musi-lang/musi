@@ -1,6 +1,7 @@
 !.github/workflows
 .agents/
 .claude/
+tempdocs/
 
 .cursorignore
 .cursorindexingignore

@@ -13,6 +13,13 @@ use crate::api::{
 };
 use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
 
+type ModuleTargetCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
+type ModuleExportCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
+type StructuralTargetCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
+type ModulePatternCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
+type StructuralAliasCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
+type PreludeSeedCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
+
 impl CheckPass<'_, '_, '_> {
     pub(in super::super) fn check_import_expr(
         &mut self,
@@ -31,7 +38,7 @@ impl CheckPass<'_, '_, '_> {
 }
 
 pub(in super::super) fn module_target_for_expr(
-    ctx: &CheckPass<'_, '_, '_>,
+    ctx: ModuleTargetCtx<'_, '_, '_, '_>,
     expr: HirExprId,
 ) -> Option<ModuleKey> {
     if let Some(target) = ctx.expr_module_target(expr) {
@@ -54,7 +61,7 @@ pub(in super::super) fn module_target_for_expr(
 }
 
 pub(in super::super) fn module_export_for_expr(
-    ctx: &CheckPass<'_, '_, '_>,
+    ctx: ModuleExportCtx<'_, '_, '_, '_>,
     expr: HirExprId,
     name: Ident,
 ) -> Option<(ModuleSurface, ExportedValue)> {
@@ -67,26 +74,59 @@ pub(in super::super) fn module_export_for_expr(
     Some((surface, export))
 }
 
+pub(in super::super) fn expr_has_structural_target(
+    ctx: StructuralTargetCtx<'_, '_, '_, '_>,
+    expr: HirExprId,
+) -> bool {
+    ctx.expr_has_structural_target_impl(expr)
+}
+
 pub(super) fn bind_module_pattern(
-    ctx: &mut CheckPass<'_, '_, '_>,
+    ctx: ModulePatternCtx<'_, '_, '_, '_>,
     pat: HirPatId,
     value: HirExprId,
 ) -> bool {
     ctx.bind_module_pattern_impl(pat, value)
 }
 
-pub(super) fn bind_imported_alias(ctx: &mut CheckPass<'_, '_, '_>, name: Ident, value: HirExprId) {
-    ctx.bind_imported_alias_impl(name, value);
+pub(in super::super) fn bind_structural_alias(
+    ctx: StructuralAliasCtx<'_, '_, '_, '_>,
+    name: Ident,
+    value: HirExprId,
+) {
+    ctx.bind_structural_alias_impl(name, value);
 }
 
 pub(in super::super) fn seed_prelude_bindings(
-    ctx: &mut CheckPass<'_, '_, '_>,
+    ctx: PreludeSeedCtx<'_, '_, '_, '_>,
     surface: &ModuleSurface,
 ) {
     ctx.seed_prelude_bindings_impl(surface);
 }
 
 impl CheckPass<'_, '_, '_> {
+    fn expr_has_structural_target_impl(&self, expr: HirExprId) -> bool {
+        match self.expr(expr).kind {
+            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Class { .. } => {
+                true
+            }
+            HirExprKind::Let { value, .. } => self.expr_has_structural_target_impl(value),
+            HirExprKind::Name { name } => {
+                let text = self.resolve_symbol(name.name);
+                self.data_def(text).is_some()
+                    || self.effect_def(text).is_some()
+                    || self.class_facts_by_name(name.name).is_some()
+            }
+            HirExprKind::Field { base, name, .. } => module_export_for_expr(self, base, name)
+                .is_some_and(|(_, export)| {
+                    export.data_key.is_some()
+                        || export.effect_key.is_some()
+                        || export.class_key.is_some()
+                }),
+            _ => false,
+        }
+    }
+
     fn seed_prelude_bindings_impl(&mut self, surface: &ModuleSurface) {
         let prelude_bindings = self.prelude_bindings();
         for (binding, symbol) in prelude_bindings {
@@ -153,17 +193,31 @@ impl CheckPass<'_, '_, '_> {
         true
     }
 
-    fn bind_imported_alias_impl(&mut self, name: Ident, value: HirExprId) {
-        let HirExprKind::Field {
-            base, name: field, ..
-        } = self.expr(value).kind
-        else {
-            return;
-        };
-        let Some((surface, export)) = module_export_for_expr(self, base, field) else {
-            return;
-        };
-        self.bind_imported_module_member(name, &surface, &export);
+    fn bind_structural_alias_impl(&mut self, alias: Ident, value: HirExprId) {
+        match self.expr(value).kind {
+            HirExprKind::Field {
+                base, name: field, ..
+            } => {
+                let Some((surface, export)) = module_export_for_expr(self, base, field) else {
+                    return;
+                };
+                self.bind_imported_module_member(alias, &surface, &export);
+            }
+            HirExprKind::Name { name } => {
+                let alias_text: Box<str> = self.resolve_symbol(alias.name).into();
+                let source_text: Box<str> = self.resolve_symbol(name.name).into();
+                if let Some(data) = self.data_def(source_text.as_ref()).cloned() {
+                    self.insert_data_def(alias_text.clone(), data);
+                }
+                if let Some(effect) = self.effect_def(source_text.as_ref()).cloned() {
+                    self.insert_effect_def(alias_text, effect);
+                }
+                if let Some(facts) = self.class_facts_by_name(name.name).cloned() {
+                    self.insert_class_facts_by_name(alias.name, facts);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn bind_imported_module_member(
@@ -395,6 +449,7 @@ impl CheckPass<'_, '_, '_> {
                 surface.repr_kind.clone(),
                 surface.layout_align,
                 surface.layout_pack,
+                surface.frozen,
             ),
         );
     }

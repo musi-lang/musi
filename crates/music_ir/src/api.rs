@@ -18,9 +18,17 @@ pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
 }
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
 pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm {
-    match &ty.kind {
+    lower_surface_primitive_type_term(ty)
+        .or_else(|| lower_surface_named_callable_type_term(types, ty))
+        .or_else(|| lower_surface_collection_type_term(types, ty))
+        .or_else(|| lower_surface_range_type_term(types, ty))
+        .or_else(|| lower_surface_record_type_term(types, ty))
+        .unwrap_or_else(|| TypeTerm::new(TypeTermKind::Error))
+}
+
+const fn lower_surface_primitive_type_term(ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Error => TypeTerm::new(TypeTermKind::Error),
         SurfaceTyKind::Unknown => TypeTerm::new(TypeTermKind::Unknown),
         SurfaceTyKind::Type => TypeTerm::new(TypeTermKind::Type),
@@ -37,6 +45,12 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
         SurfaceTyKind::CPtr => TypeTerm::new(TypeTermKind::CPtr),
         SurfaceTyKind::Module => TypeTerm::new(TypeTermKind::Module),
         SurfaceTyKind::NatLit(value) => TypeTerm::new(TypeTermKind::NatLit(*value)),
+        _ => return None,
+    })
+}
+
+fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Named { name, args } => lower_named_term(
             name,
             args.iter()
@@ -72,6 +86,24 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
             left: Box::new(lower_surface_type_term_id(types, *left)),
             right: Box::new(lower_surface_type_term_id(types, *right)),
         }),
+        SurfaceTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => TypeTerm::new(TypeTermKind::Handler {
+            effect: Box::new(lower_surface_type_term_id(types, *effect)),
+            input: Box::new(lower_surface_type_term_id(types, *input)),
+            output: Box::new(lower_surface_type_term_id(types, *output)),
+        }),
+        SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
+            inner: Box::new(lower_surface_type_term_id(types, *inner)),
+        }),
+        _ => return None,
+    })
+}
+
+fn lower_surface_collection_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Tuple { items } => TypeTerm::new(TypeTermKind::Tuple {
             items: items
                 .iter()
@@ -94,6 +126,12 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 .into_boxed_slice(),
             item: Box::new(lower_surface_type_term_id(types, *item)),
         }),
+        _ => return None,
+    })
+}
+
+fn lower_surface_range_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Range { bound } => TypeTerm::new(TypeTermKind::Range {
             bound: Box::new(lower_surface_type_term_id(types, *bound)),
         }),
@@ -115,29 +153,24 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 bound: Box::new(lower_surface_type_term_id(types, *bound)),
             })
         }
-        SurfaceTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => TypeTerm::new(TypeTermKind::Handler {
-            effect: Box::new(lower_surface_type_term_id(types, *effect)),
-            input: Box::new(lower_surface_type_term_id(types, *input)),
-            output: Box::new(lower_surface_type_term_id(types, *output)),
-        }),
-        SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
-            inner: Box::new(lower_surface_type_term_id(types, *inner)),
-        }),
-        SurfaceTyKind::Record { fields } => TypeTerm::new(TypeTermKind::Record {
-            fields: fields
-                .iter()
-                .map(|field| TypeField {
-                    name: field.name.clone(),
-                    ty: lower_surface_type_term_id(types, field.ty),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-        }),
-    }
+        _ => return None,
+    })
+}
+
+fn lower_surface_record_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    let SurfaceTyKind::Record { fields } = &ty.kind else {
+        return None;
+    };
+    Some(TypeTerm::new(TypeTermKind::Record {
+        fields: fields
+            .iter()
+            .map(|field| TypeField {
+                name: field.name.clone(),
+                ty: lower_surface_type_term_id(types, field.ty),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    }))
 }
 
 fn lower_surface_type_term_id(types: &[SurfaceTy], ty: SurfaceTyId) -> TypeTerm {
@@ -648,6 +681,8 @@ pub struct IrCallable {
     pub params: Box<[IrParam]>,
     pub body: IrExpr,
     pub exported: bool,
+    pub hot: bool,
+    pub cold: bool,
     pub effects: EffectRow,
     pub module_target: Option<ModuleKey>,
 }
@@ -664,6 +699,8 @@ impl IrCallable {
             params,
             body,
             exported: false,
+            hot: false,
+            cold: false,
             effects: EffectRow::default(),
             module_target: None,
         }
@@ -684,6 +721,18 @@ impl IrCallable {
     #[must_use]
     pub const fn with_exported(mut self, exported: bool) -> Self {
         self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
         self
     }
 
@@ -734,6 +783,7 @@ pub struct IrDataDef {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
 }
 
 impl IrDataDef {
@@ -757,6 +807,7 @@ impl IrDataDef {
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
+            frozen: false,
         }
     }
 
@@ -780,6 +831,12 @@ impl IrDataDef {
         self.layout_pack = Some(layout_pack);
         self
     }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -792,6 +849,8 @@ pub struct IrForeignDef {
     pub param_tys: IrNameList,
     pub result_ty: Box<str>,
     pub exported: bool,
+    pub hot: bool,
+    pub cold: bool,
 }
 
 impl IrForeignDef {
@@ -818,6 +877,8 @@ impl IrForeignDef {
             param_tys,
             result_ty: result_ty.into(),
             exported: false,
+            hot: false,
+            cold: false,
         }
     }
 
@@ -851,6 +912,18 @@ impl IrForeignDef {
     #[must_use]
     pub const fn with_exported(mut self, exported: bool) -> Self {
         self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
         self
     }
 }

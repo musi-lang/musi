@@ -206,6 +206,66 @@ fn validation_error_carries_typed_diag_identity() {
 }
 
 #[test]
+fn unresolved_static_import_carries_source_diag() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+    );
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unresolved import `missing`")
+    );
+    let diag = error.source_diag().expect("source diagnostic expected");
+    assert!(diag.path().ends_with("index.ms"));
+    assert_eq!(
+        diag.primary_label().message(),
+        "import `missing` does not resolve"
+    );
+    assert_eq!(
+        diag.hint(),
+        Some("declare package/import map entry or fix import spec")
+    );
+}
+
+#[test]
+fn missing_package_entry_uses_unknown_package_code() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(temp.path(), "index.ms", "export let answer : Int := 42;\n");
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let error = project
+        .package_entry("missing")
+        .expect_err("package should be missing");
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3622)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unknown package `missing`")
+    );
+}
+
+#[test]
 fn task_plan_is_returned_in_dependency_order() {
     let temp = TempDir::new();
     write_file(

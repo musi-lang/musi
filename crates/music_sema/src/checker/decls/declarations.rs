@@ -370,7 +370,7 @@ impl CheckPass<'_, '_, '_> {
             let key = surface_key(self.module_key(), self.interner(), name.name);
             self.insert_data_def(
                 data_name,
-                super::super::DataDef::new(key, variant_map, None, None, None),
+                super::super::DataDef::new(key, variant_map, None, None, None, false),
             );
         }
         self.check_data_expr(variants, fields)

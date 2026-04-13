@@ -36,6 +36,18 @@ pub(super) fn lower_foreign_let(
         .with_binding_opt(binding)
         .with_link_opt(link)
         .with_exported(exported)
+        .with_hot(super::toplevel::attrs_have_name(
+            sema,
+            interner,
+            expr.mods.attrs.clone(),
+            "hot",
+        ))
+        .with_cold(super::toplevel::attrs_have_name(
+            sema,
+            interner,
+            expr.mods.attrs.clone(),
+            "cold",
+        ))
 }
 
 fn foreign_signature_tys(

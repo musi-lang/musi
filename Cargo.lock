@@ -689,6 +689,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "musi_foundation",
  "musi_project",
+ "music_arena",
  "music_base",
  "music_hir",
  "music_module",

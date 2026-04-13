@@ -15,6 +15,7 @@ publish.workspace = true
 [dependencies]
 musi_foundation = { path = "../musi_foundation" }
 musi_project = { path = "../musi_project" }
+music_arena = { path = "../music_arena" }
 music_base = { path = "../music_base" }
 music_hir = { path = "../music_hir" }
 music_names = { path = "../music_names" }

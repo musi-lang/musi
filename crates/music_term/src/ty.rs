@@ -133,90 +133,27 @@ impl TypeTerm {
 }
 
 impl Display for TypeTerm {
-    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Some(result) = fmt_atomic_type_term_kind(f, &self.kind) {
+            return result;
+        }
         match &self.kind {
-            TypeTermKind::Error => f.write_str("<error>"),
-            TypeTermKind::Unknown => f.write_str("Unknown"),
-            TypeTermKind::Type => f.write_str("Type"),
-            TypeTermKind::Syntax => f.write_str("Syntax"),
-            TypeTermKind::Any => f.write_str("Any"),
-            TypeTermKind::Empty => f.write_str("Empty"),
-            TypeTermKind::Unit => f.write_str("Unit"),
-            TypeTermKind::Bool => f.write_str("Bool"),
-            TypeTermKind::Nat => f.write_str("Nat"),
-            TypeTermKind::Int => f.write_str("Int"),
-            TypeTermKind::Float => f.write_str("Float"),
-            TypeTermKind::String => f.write_str("String"),
-            TypeTermKind::CString => f.write_str("CString"),
-            TypeTermKind::CPtr => f.write_str("CPtr"),
-            TypeTermKind::Module => f.write_str("Module"),
-            TypeTermKind::NatLit(value) => write!(f, "{value}"),
-            TypeTermKind::Named { name, args, .. } => {
-                if args.is_empty() {
-                    f.write_str(name)
-                } else {
-                    write!(
-                        f,
-                        "{}[{}]",
-                        name,
-                        args.iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                }
-            }
+            TypeTermKind::Named { name, args, .. } => fmt_named_type_term(f, name, args),
             TypeTermKind::Pi {
                 binder,
                 binder_ty,
                 body,
                 is_effectful,
-            } => write!(
-                f,
-                "forall ({binder} : {binder_ty}) {} {body}",
-                if *is_effectful { "~>" } else { "->" }
-            ),
+            } => fmt_pi_type_term(f, binder, binder_ty, body, *is_effectful),
             TypeTermKind::Arrow {
                 params,
                 ret,
                 is_effectful,
-            } => {
-                let params = params.iter().map(ToString::to_string).collect::<Vec<_>>();
-                let left = if params.len() == 1 {
-                    params[0].clone()
-                } else {
-                    format!("({})", params.join(", "))
-                };
-                write!(
-                    f,
-                    "{left} {} {ret}",
-                    if *is_effectful { "~>" } else { "->" }
-                )
-            }
+            } => fmt_arrow_type_term(f, params, ret, *is_effectful),
             TypeTermKind::Sum { left, right } => write!(f, "{left} + {right}"),
-            TypeTermKind::Tuple { items } => write!(
-                f,
-                "({})",
-                items
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            TypeTermKind::Tuple { items } => fmt_tuple_type_term(f, items),
             TypeTermKind::Seq { item } => write!(f, "[]{item}"),
-            TypeTermKind::Array { dims, item } => write!(
-                f,
-                "[{}]{item}",
-                dims.iter()
-                    .map(|dim| match dim {
-                        TypeDim::Unknown => "_".into(),
-                        TypeDim::Name(name) => name.to_string(),
-                        TypeDim::Int(value) => value.to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            TypeTermKind::Array { dims, item } => fmt_array_type_term(f, dims, item),
             TypeTermKind::Range { bound } => fmt_applied_name(f, "Range", bound),
             TypeTermKind::ClosedRange { bound } => fmt_applied_name(f, "ClosedRange", bound),
             TypeTermKind::PartialRangeFrom { bound } => {
@@ -234,17 +171,147 @@ impl Display for TypeTerm {
                 output,
             } => write!(f, "using {effect} ({input} -> {output})"),
             TypeTermKind::Mut { inner } => write!(f, "mut {inner}"),
-            TypeTermKind::Record { fields } => write!(
-                f,
-                "{{{}}}",
-                fields
-                    .iter()
-                    .map(|field| format!("{} = {}", field.name, field.ty))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            TypeTermKind::Record { fields } => fmt_record_type_term(f, fields),
+            TypeTermKind::Error
+            | TypeTermKind::Unknown
+            | TypeTermKind::Type
+            | TypeTermKind::Syntax
+            | TypeTermKind::Any
+            | TypeTermKind::Empty
+            | TypeTermKind::Unit
+            | TypeTermKind::Bool
+            | TypeTermKind::Nat
+            | TypeTermKind::Int
+            | TypeTermKind::Float
+            | TypeTermKind::String
+            | TypeTermKind::CString
+            | TypeTermKind::CPtr
+            | TypeTermKind::Module
+            | TypeTermKind::NatLit(_) => {
+                fmt_atomic_type_term_kind(f, &self.kind).unwrap_or(Err(fmt::Error))
+            }
         }
     }
+}
+
+fn fmt_atomic_type_term_kind(f: &mut Formatter<'_>, kind: &TypeTermKind) -> Option<fmt::Result> {
+    match kind {
+        TypeTermKind::Error => Some(f.write_str("<error>")),
+        TypeTermKind::Unknown => Some(f.write_str("Unknown")),
+        TypeTermKind::Type => Some(f.write_str("Type")),
+        TypeTermKind::Syntax => Some(f.write_str("Syntax")),
+        TypeTermKind::Any => Some(f.write_str("Any")),
+        TypeTermKind::Empty => Some(f.write_str("Empty")),
+        TypeTermKind::Unit => Some(f.write_str("Unit")),
+        TypeTermKind::Bool => Some(f.write_str("Bool")),
+        TypeTermKind::Nat => Some(f.write_str("Nat")),
+        TypeTermKind::Int => Some(f.write_str("Int")),
+        TypeTermKind::Float => Some(f.write_str("Float")),
+        TypeTermKind::String => Some(f.write_str("String")),
+        TypeTermKind::CString => Some(f.write_str("CString")),
+        TypeTermKind::CPtr => Some(f.write_str("CPtr")),
+        TypeTermKind::Module => Some(f.write_str("Module")),
+        TypeTermKind::NatLit(value) => Some(write!(f, "{value}")),
+        TypeTermKind::Named { .. }
+        | TypeTermKind::Pi { .. }
+        | TypeTermKind::Arrow { .. }
+        | TypeTermKind::Sum { .. }
+        | TypeTermKind::Tuple { .. }
+        | TypeTermKind::Seq { .. }
+        | TypeTermKind::Array { .. }
+        | TypeTermKind::Range { .. }
+        | TypeTermKind::ClosedRange { .. }
+        | TypeTermKind::PartialRangeFrom { .. }
+        | TypeTermKind::PartialRangeUpTo { .. }
+        | TypeTermKind::PartialRangeThru { .. }
+        | TypeTermKind::Handler { .. }
+        | TypeTermKind::Mut { .. }
+        | TypeTermKind::Record { .. } => None,
+    }
+}
+
+fn fmt_named_type_term(f: &mut Formatter<'_>, name: &str, args: &[TypeTerm]) -> fmt::Result {
+    if args.is_empty() {
+        f.write_str(name)
+    } else {
+        write!(
+            f,
+            "{}[{}]",
+            name,
+            args.iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+fn fmt_pi_type_term(
+    f: &mut Formatter<'_>,
+    binder: &str,
+    binder_ty: &TypeTerm,
+    body: &TypeTerm,
+    is_effectful: bool,
+) -> fmt::Result {
+    write!(
+        f,
+        "forall ({binder} : {binder_ty}) {} {body}",
+        if is_effectful { "~>" } else { "->" }
+    )
+}
+
+fn fmt_arrow_type_term(
+    f: &mut Formatter<'_>,
+    params: &[TypeTerm],
+    ret: &TypeTerm,
+    is_effectful: bool,
+) -> fmt::Result {
+    let params = params.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let left = if params.len() == 1 {
+        params[0].clone()
+    } else {
+        format!("({})", params.join(", "))
+    };
+    write!(f, "{left} {} {ret}", if is_effectful { "~>" } else { "->" })
+}
+
+fn fmt_tuple_type_term(f: &mut Formatter<'_>, items: &[TypeTerm]) -> fmt::Result {
+    write!(
+        f,
+        "({})",
+        items
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn fmt_array_type_term(f: &mut Formatter<'_>, dims: &[TypeDim], item: &TypeTerm) -> fmt::Result {
+    write!(
+        f,
+        "[{}]{item}",
+        dims.iter()
+            .map(|dim| match dim {
+                TypeDim::Unknown => "_".into(),
+                TypeDim::Name(name) => name.to_string(),
+                TypeDim::Int(value) => value.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn fmt_record_type_term(f: &mut Formatter<'_>, fields: &[TypeField]) -> fmt::Result {
+    write!(
+        f,
+        "{{{}}}",
+        fields
+            .iter()
+            .map(|field| format!("{} = {}", field.name, field.ty))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 fn fmt_applied_name(f: &mut Formatter<'_>, name: &str, bound: &TypeTerm) -> fmt::Result {
@@ -316,51 +383,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_prefix(&mut self) -> TypeTermResult<TypeTerm> {
-        self.skip_ws();
-        if self.consume("mut") {
-            self.require_ws()?;
-            let inner = self.parse_prefix()?;
-            return Ok(TypeTerm::new(TypeTermKind::Mut {
-                inner: Box::new(inner),
-            }));
+        if let Some(term) = self.parse_mut_prefix()? {
+            return Ok(term);
         }
-        if self.consume("using") {
-            self.require_ws()?;
-            let effect = self.parse_sum()?;
-            self.expect("(")?;
-            let input = self.parse_sum()?;
-            self.skip_ws();
-            self.expect("->")?;
-            let output = self.parse_sum()?;
-            self.expect(")")?;
-            return Ok(TypeTerm::new(TypeTermKind::Handler {
-                effect: Box::new(effect),
-                input: Box::new(input),
-                output: Box::new(output),
-            }));
+        if let Some(term) = self.parse_handler_prefix()? {
+            return Ok(term);
         }
-        if self.consume("forall") {
-            self.require_ws()?;
-            self.expect("(")?;
-            let binder = self.parse_ident()?;
-            self.skip_ws();
-            self.expect(":")?;
-            let binder_ty = self.parse_sum()?;
-            self.expect(")")?;
-            self.skip_ws();
-            let is_effectful = if self.consume("~>") {
-                true
-            } else {
-                self.expect("->")?;
-                false
-            };
-            let body = self.parse_sum()?;
-            return Ok(TypeTerm::new(TypeTermKind::Pi {
-                binder: binder.into(),
-                binder_ty: Box::new(binder_ty),
-                body: Box::new(body),
-                is_effectful,
-            }));
+        if let Some(term) = self.parse_pi_prefix()? {
+            return Ok(term);
         }
         self.parse_atom()
     }
@@ -379,6 +409,10 @@ impl<'a> Parser<'a> {
         if let Some(value) = self.parse_nat_lit() {
             return Ok(TypeTerm::new(TypeTermKind::NatLit(value)));
         }
+        self.parse_named_or_simple_type_atom()
+    }
+
+    fn parse_named_or_simple_type_atom(&mut self) -> TypeTermResult<TypeTerm> {
         let name = self.parse_ident()?;
         if let Some(kind) = simple_type_kind(&name) {
             return Ok(TypeTerm::new(kind));
@@ -403,6 +437,70 @@ impl<'a> Parser<'a> {
             name: name.into(),
             args: args.into_boxed_slice(),
         }))
+    }
+
+    fn parse_mut_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
+        self.skip_ws();
+        if !self.consume("mut") {
+            return Ok(None);
+        }
+        self.require_ws()?;
+        let inner = self.parse_prefix()?;
+        Ok(Some(TypeTerm::new(TypeTermKind::Mut {
+            inner: Box::new(inner),
+        })))
+    }
+
+    fn parse_handler_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
+        self.skip_ws();
+        if !self.consume("using") {
+            return Ok(None);
+        }
+        self.require_ws()?;
+        let effect = self.parse_sum()?;
+        self.expect("(")?;
+        let input = self.parse_sum()?;
+        self.skip_ws();
+        self.expect("->")?;
+        let output = self.parse_sum()?;
+        self.expect(")")?;
+        Ok(Some(TypeTerm::new(TypeTermKind::Handler {
+            effect: Box::new(effect),
+            input: Box::new(input),
+            output: Box::new(output),
+        })))
+    }
+
+    fn parse_pi_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
+        self.skip_ws();
+        if !self.consume("forall") {
+            return Ok(None);
+        }
+        self.require_ws()?;
+        self.expect("(")?;
+        let binder = self.parse_ident()?;
+        self.skip_ws();
+        self.expect(":")?;
+        let binder_ty = self.parse_sum()?;
+        self.expect(")")?;
+        let is_effectful = self.consume_effect_arrow()?;
+        let body = self.parse_sum()?;
+        Ok(Some(TypeTerm::new(TypeTermKind::Pi {
+            binder: binder.into(),
+            binder_ty: Box::new(binder_ty),
+            body: Box::new(body),
+            is_effectful,
+        })))
+    }
+
+    fn consume_effect_arrow(&mut self) -> TypeTermResult<bool> {
+        self.skip_ws();
+        if self.consume("~>") {
+            Ok(true)
+        } else {
+            self.expect("->")?;
+            Ok(false)
+        }
     }
 
     fn parse_tuple_atom(&mut self) -> TypeTermResult<TypeTerm> {

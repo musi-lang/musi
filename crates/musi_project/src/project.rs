@@ -4,8 +4,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules, resolve_spec};
-use music_base::SourceId;
 use music_base::diag::DiagCode;
+use music_base::{SourceId, Span};
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
 use music_seam::Artifact;
@@ -14,7 +14,7 @@ use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
-use crate::errors::ProjectError;
+use crate::errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::manifest_source::ManifestSource;
@@ -277,7 +277,13 @@ struct LoadedModule {
     package_relative: String,
     local_scope_key: ModuleKey,
     text: String,
-    imports: Vec<String>,
+    imports: Vec<LoadedImportSite>,
+}
+
+#[derive(Debug, Clone)]
+struct LoadedImportSite {
+    spec: String,
+    span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -405,7 +411,9 @@ impl Project {
         let manifest_path = manifest_ancestor_path_for(path.as_ref())?;
         Self::load(manifest_path, options)
     }
+}
 
+impl Project {
     #[must_use]
     pub const fn manifest(&self) -> &PackageManifest {
         &self.manifest
@@ -497,10 +505,12 @@ impl Project {
     pub fn package_entry(&self, name: &str) -> ProjectResult<&ProjectEntry> {
         let package = self
             .package(name)
-            .ok_or_else(|| ProjectError::UnresolvedDependency { name: name.into() })?;
+            .ok_or_else(|| ProjectError::UnknownPackage { name: name.into() })?;
         Ok(&package.entry)
     }
+}
 
+impl Project {
     #[must_use]
     pub const fn lockfile(&self) -> &Lockfile {
         &self.resolved_lockfile
@@ -582,7 +592,9 @@ impl Project {
         out.push(task);
         Ok(())
     }
+}
 
+impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the project modules cannot be registered into a configured
@@ -1027,7 +1039,7 @@ fn resolve_package_dependencies(
     let manifest = package_records
         .get(package_id)
         .map(|record| record.package.manifest.clone())
-        .ok_or_else(|| ProjectError::UnresolvedDependency {
+        .ok_or_else(|| ProjectError::PackageGraphEntryMissing {
             name: package_id.name.clone(),
         })?;
 
@@ -1052,7 +1064,7 @@ fn resolve_package_dependencies(
             }
         }
         let record = package_records.get_mut(package_id).ok_or_else(|| {
-            ProjectError::UnresolvedDependency {
+            ProjectError::PackageGraphEntryMissing {
                 name: package_id.name.clone(),
             }
         })?;
@@ -1371,7 +1383,10 @@ fn discover_modules_recursive(
         let imports = collect_import_sites(SourceId::from_raw(0), parsed.tree())
             .into_iter()
             .filter_map(|site| match site.kind {
-                ImportSiteKind::Static { spec } => Some(spec.as_str().to_owned()),
+                ImportSiteKind::Static { spec } => Some(LoadedImportSite {
+                    spec: spec.as_str().to_owned(),
+                    span: site.span,
+                }),
                 ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
             })
             .collect::<Vec<_>>();
@@ -1403,13 +1418,11 @@ fn build_import_map(
                 .scopes
                 .entry(module.key.as_str().to_owned())
                 .or_default();
-            for import_spec in &module.imports {
+            for import_site in &module.imports {
+                let import_spec = import_site.spec.as_str();
                 let remapped = manifest_map
-                    .resolve(
-                        &module.local_scope_key,
-                        &ModuleSpecifier::new(import_spec.as_str()),
-                    )
-                    .map_or_else(|| import_spec.clone(), |spec| spec.as_str().to_owned());
+                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec))
+                    .map_or_else(|| import_spec.to_owned(), |spec| spec.as_str().to_owned());
                 let target = resolve_import_spec(
                     record,
                     module,
@@ -1417,14 +1430,46 @@ fn build_import_map(
                     package_records,
                     package_name_index,
                 )
-                .ok_or_else(|| ProjectError::UnresolvedDependency {
-                    name: import_spec.clone(),
-                })?;
-                let _ = scope.insert(import_spec.clone(), target.as_str().to_owned());
+                .ok_or_else(|| unresolved_import(record, module, import_site, &remapped))?;
+                let _ = scope.insert(import_spec.to_owned(), target.as_str().to_owned());
             }
         }
     }
     Ok(import_map)
+}
+
+fn unresolved_import(
+    _package: &PackageRecord,
+    module: &LoadedModule,
+    import_site: &LoadedImportSite,
+    remapped: &str,
+) -> ProjectError {
+    let mut diag = ProjectSourceDiagnostic::new(
+        module.path.clone(),
+        module.text.clone(),
+        DiagCode::new(3615),
+        format!("unresolved import `{}`", import_site.spec),
+        ProjectSourceLabel::new(
+            import_site.span,
+            format!("import `{}` does not resolve", import_site.spec),
+        ),
+    );
+    if remapped != import_site.spec {
+        diag.push_note(format!(
+            "import map resolved `{}` to `{remapped}`",
+            import_site.spec
+        ));
+    }
+    let hint = if import_site.spec.starts_with("./")
+        || import_site.spec.starts_with("../")
+        || import_site.spec.starts_with('/')
+    {
+        "update import path or add target module"
+    } else {
+        "declare package/import map entry or fix import spec"
+    };
+    diag.set_hint(hint);
+    ProjectError::SourceDiagnostic(Box::new(diag))
 }
 
 fn resolve_import_spec(

@@ -262,7 +262,23 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
         )
         .with_repr_kind(repr_c)
         .with_layout_align(8)
-        .with_layout_pack(4),
+        .with_layout_pack(4)
+        .with_frozen(true),
+    );
+    let method_name = artifact.intern_string("main::work");
+    let _ = artifact.methods.alloc(
+        MethodDescriptor::new(method_name, 0, 0, Box::new([]))
+            .with_hot(true)
+            .with_export(true),
+    );
+    let foreign_name = artifact.intern_string("main::puts");
+    let int_ty = artifact.intern_string("Int");
+    let int_ty = artifact.types.alloc(TypeDescriptor::new(int_ty, int_ty));
+    let abi = artifact.intern_string("c");
+    let symbol = artifact.intern_string("puts");
+    let _ = artifact.foreigns.alloc(
+        ForeignDescriptor::new(foreign_name, Box::new([int_ty]), int_ty, abi, symbol)
+            .with_cold(true),
     );
 
     let binary = encode_binary(&artifact).expect("binary encode should succeed");
@@ -273,11 +289,26 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
     assert_eq!(binary_layout.repr_kind, Some(repr_c));
     assert_eq!(binary_layout.layout_align, Some(8));
     assert_eq!(binary_layout.layout_pack, Some(4));
+    assert!(binary_layout.frozen);
     assert_eq!(binary_layout.variants.len(), 1);
     assert_eq!(
         binary_layout.variants[0].field_tys.as_ref(),
         &[point_ty, point_ty]
     );
+    let (_, decoded_method) = decoded
+        .methods
+        .iter()
+        .next()
+        .expect("decoded method should exist");
+    assert!(decoded_method.hot);
+    assert!(!decoded_method.cold);
+    let (_, decoded_foreign) = decoded
+        .foreigns
+        .iter()
+        .next()
+        .expect("decoded foreign should exist");
+    assert!(!decoded_foreign.hot);
+    assert!(decoded_foreign.cold);
 
     let text = format_text(&artifact);
     let parsed = parse_text(&text).expect("text parse should succeed");
@@ -288,6 +319,11 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
     assert_eq!(text_layout.field_count, 2);
     assert_eq!(text_layout.layout_align, Some(8));
     assert_eq!(text_layout.layout_pack, Some(4));
+    assert!(text_layout.frozen);
     assert_eq!(text_layout.variants.len(), 1);
     assert_eq!(text_layout.variants[0].field_tys.len(), 2);
+    assert!(text.contains(".method $main::work params 0 locals 0 export hot"));
+    assert!(
+        text.contains(".foreign $main::puts param $Int result $Int abi \"c\" symbol \"puts\" cold")
+    );
 }

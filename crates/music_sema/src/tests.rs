@@ -98,6 +98,32 @@ fn has_diag(module: &SemaModule, kind: SemaDiagKind) -> bool {
         .any(|diag| sema_diag_kind(diag) == Some(kind))
 }
 
+fn check_with_imported_surface(
+    source_id_raw: u32,
+    source_a: &str,
+    source_b: &str,
+) -> (SemaModule, SemaModule) {
+    let import_env = TestImportEnv::default().with_module("a", "a");
+    let module_a = check_module_src(source_id_raw, "a", source_a, Some(&import_env), None);
+    let sema_env = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
+    let module_b = check_module_src(
+        source_id_raw + 1,
+        "b",
+        source_b,
+        Some(&import_env),
+        Some(&sema_env),
+    );
+    (module_a, module_b)
+}
+
+fn assert_missing_opaque_shape(module: &SemaModule) {
+    assert!(
+        has_diag(module, SemaDiagKind::UnknownDataVariant),
+        "{:?}",
+        module.diags()
+    );
+}
+
 fn assert_effect_alias_handle(binding: &str, source_id: u32) {
     let import_env = TestImportEnv::default().with_module("std/io", "std/io");
     let io = check_module_src(
@@ -150,23 +176,14 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
 
 #[test]
 fn opaque_imported_data_stays_abstract() {
-    let import_env = TestImportEnv::default().with_module("a", "a");
-    let module_a = check_module_src(
+    let (_module_a, module_b) = check_with_imported_surface(
         40,
-        "a",
         r"
         export opaque let Token := data {
           | Token : Int
         };
         export let makeToken (value : Int) : Token := .Token(value);
     ",
-        Some(&import_env),
-        None,
-    );
-    let sema_env = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
-    let module_b = check_module_src(
-        41,
-        "b",
         r#"
         let A := import "a";
         let Token := A.Token;
@@ -174,48 +191,165 @@ fn opaque_imported_data_stays_abstract() {
         let ok : Token := makeToken(1);
         let bad : Token := .Token(1);
     "#,
-        Some(&import_env),
-        Some(&sema_env),
     );
-    assert!(
-        has_diag(&module_b, SemaDiagKind::UnknownDataVariant),
-        "{:?}",
-        module_b.diags()
-    );
+    assert_missing_opaque_shape(&module_b);
 }
 
 #[test]
 fn opaque_imported_effect_hides_ops() {
-    let import_env = TestImportEnv::default().with_module("a", "a");
-    let module_a = check_module_src(
+    let (_module_a, module_b) = check_with_imported_surface(
         42,
-        "a",
         r"
         export opaque let Console := effect {
           let readln () : Int;
         };
         export let readln () : Int := perform Console.readln();
     ",
-        Some(&import_env),
-        None,
-    );
-    let sema_env = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
-    let module_b = check_module_src(
-        43,
-        "b",
         r#"
         let A := import "a";
         let Console := A.Console;
         let direct () : Int := perform Console.readln();
     "#,
-        Some(&import_env),
-        Some(&sema_env),
     );
     assert!(
         has_diag(&module_b, SemaDiagKind::InvalidPerformTarget),
         "{:?}",
         module_b.diags()
     );
+}
+
+#[test]
+fn known_attr_requires_foundation_module() {
+    let sema = check(
+        r#"
+        @known(name := "Type")
+        export let Type := Type;
+    "#,
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::AttrKnownRequiresFoundationModule),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn intrinsic_attr_requires_foreign_let_in_intrinsics_module() {
+    let sema = check_module_src(
+        44,
+        "musi:intrinsics",
+        r#"
+        @intrinsic(name := "ptr.load")
+        let ptrLoad := 1;
+    "#,
+        None,
+        None,
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::AttrIntrinsicRequiresForeignLet),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn frozen_attr_requires_exported_non_opaque_data() {
+    let sema = check(
+        r"
+        @frozen
+        let Token := data {
+          | Token : Int
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::AttrFrozenRequiresExportedNonOpaqueData),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn hot_and_cold_conflict_on_callable() {
+    let sema = check(
+        r"
+        @hot
+        @cold
+        let work () : Int := 1;
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::AttrHotColdConflict),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn opaque_export_requires_structural_target() {
+    let sema = check("export opaque let hidden : Int := 41;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn opaque_local_data_alias_stays_abstract() {
+    let (module_a, module_b) = check_with_imported_surface(
+        45,
+        r"
+        let TokenBase := data {
+          | Token : Int
+        };
+        let TokenAlias := TokenBase;
+        export opaque let Token := TokenAlias;
+        export let makeToken (value : Int) : Token := .Token(value);
+    ",
+        r#"
+        let A := import "a";
+        let Token := A.Token;
+        let makeToken := A.makeToken;
+        let ok : Token := makeToken(1);
+        let bad : Token := .Token(1);
+    "#,
+    );
+    assert!(
+        !has_diag(&module_a, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
+        "{:?}",
+        module_a.diags()
+    );
+    assert_missing_opaque_shape(&module_b);
+}
+
+#[test]
+fn opaque_chained_local_data_alias_stays_abstract() {
+    let (module_a, module_b) = check_with_imported_surface(
+        47,
+        r"
+        let TokenBase := data {
+          | Token : Int
+        };
+        let TokenMid := TokenBase;
+        let TokenTop := TokenMid;
+        export opaque let Token := TokenTop;
+        export let makeToken (value : Int) : Token := .Token(value);
+    ",
+        r#"
+        let A := import "a";
+        let Token := A.Token;
+        let makeToken := A.makeToken;
+        let ok : Token := makeToken(1);
+        let bad : Token := .Token(1);
+    "#,
+    );
+    assert!(
+        !has_diag(&module_a, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
+        "{:?}",
+        module_a.diags()
+    );
+    assert_missing_opaque_shape(&module_b);
 }
 
 fn assert_class_alias_instance(
@@ -780,10 +914,8 @@ fn non_exported_instances_do_not_participate_in_coherence() {
 
 #[test]
 fn imported_tuple_instances_match_local_coherence_keys() {
-    let import_env = TestImportEnv::default().with_module("a", "a");
-    let module_a = check_module_src(
+    let (_module_a, main) = check_with_imported_surface(
         32,
-        "a",
         r"
         export let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
@@ -792,13 +924,6 @@ fn imported_tuple_instances_match_local_coherence_keys() {
           let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
         };
     ",
-        Some(&import_env),
-        None,
-    );
-    let env_for_main = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
-    let main = check_module_src(
-        33,
-        "main",
         r#"
         let A := import "a";
         let Eq := A.Eq;
@@ -806,8 +931,6 @@ fn imported_tuple_instances_match_local_coherence_keys() {
           let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
         };
     "#,
-        Some(&import_env),
-        Some(&env_for_main),
     );
     assert!(
         has_diag(&main, SemaDiagKind::DuplicateInstance),

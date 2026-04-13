@@ -12,7 +12,7 @@ use super::super::exprs::check_expr;
 use super::super::patterns::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::effects::require_declared_effects;
-use super::imports::{bind_imported_alias, bind_module_pattern, module_target_for_expr};
+use super::imports::{bind_module_pattern, bind_structural_alias, module_target_for_expr};
 use crate::api::{ConstraintFacts, ExprFacts};
 use crate::effects::EffectRow;
 
@@ -451,7 +451,7 @@ impl CheckPass<'_, '_, '_> {
             self.insert_binding_module_target(binding, target);
         }
         if let Some(name) = bound_name {
-            bind_imported_alias(self, name, value);
+            bind_structural_alias(self, name, value);
         }
         ExprFacts::new(builtins.unit, EffectRow::empty())
     }

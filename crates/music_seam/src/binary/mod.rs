@@ -179,6 +179,8 @@ fn encode_methods(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u16(out, entry.params);
         push_u16(out, entry.locals);
         out.push(u8::from(entry.export));
+        out.push(u8::from(entry.hot));
+        out.push(u8::from(entry.cold));
         push_u16(
             out,
             u16::try_from(entry.labels.len()).expect("too many labels"),
@@ -265,6 +267,8 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
             out.push(0);
         }
         out.push(u8::from(entry.export));
+        out.push(u8::from(entry.hot));
+        out.push(u8::from(entry.cold));
     }
 }
 
@@ -351,6 +355,7 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
             }
             None => out.push(0),
         }
+        out.push(u8::from(entry.frozen));
     }
 }
 
@@ -529,6 +534,8 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let params = cursor.read_u16()?;
         let locals = cursor.read_u16()?;
         let export = cursor.read_u8()? != 0;
+        let hot = cursor.read_u8()? != 0;
+        let cold = cursor.read_u8()? != 0;
         let label_count = usize::from(cursor.read_u16()?);
         let mut labels = Vec::with_capacity(label_count);
         for _ in 0..label_count {
@@ -561,6 +568,8 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let _ = artifact.methods.alloc(
             MethodDescriptor::new(name, params, locals, code.into_boxed_slice())
                 .with_export(export)
+                .with_hot(hot)
+                .with_cold(cold)
                 .with_labels(labels.into_boxed_slice()),
         );
     }
@@ -626,7 +635,9 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
         };
         let mut descriptor =
             ForeignDescriptor::new(name, param_tys.into_boxed_slice(), result_ty, abi, symbol)
-                .with_export(cursor.read_u8()? != 0);
+                .with_export(cursor.read_u8()? != 0)
+                .with_hot(cursor.read_u8()? != 0)
+                .with_cold(cursor.read_u8()? != 0);
         if let Some(link) = link {
             descriptor = descriptor.with_link(link);
         }
@@ -696,6 +707,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         } else {
             None
         };
+        let frozen = cursor.read_u8()? != 0;
         let mut descriptor = DataDescriptor::new(name, variants.into_boxed_slice());
         debug_assert_eq!(descriptor.variant_count, variant_count);
         debug_assert_eq!(descriptor.field_count, field_count);
@@ -708,6 +720,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         if let Some(layout_pack) = layout_pack {
             descriptor = descriptor.with_layout_pack(layout_pack);
         }
+        descriptor = descriptor.with_frozen(frozen);
         let _ = artifact.data.alloc(descriptor);
     }
     Ok(())

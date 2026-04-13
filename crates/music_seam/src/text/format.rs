@@ -81,6 +81,9 @@ fn format_data(out: &mut String, artifact: &Artifact) {
             out.push_str(" pack ");
             out.push_str(&pack.to_string());
         }
+        if descriptor.frozen {
+            out.push_str(" frozen");
+        }
         out.push('\n');
     }
 }
@@ -170,6 +173,12 @@ fn format_methods(out: &mut String, artifact: &Artifact) {
         if method.export {
             out.push_str(" export");
         }
+        if method.hot {
+            out.push_str(" hot");
+        }
+        if method.cold {
+            out.push_str(" cold");
+        }
         out.push('\n');
         for entry in &method.code {
             match entry {
@@ -212,6 +221,12 @@ fn format_foreigns(out: &mut String, artifact: &Artifact) {
         }
         if descriptor.export {
             out.push_str(" export");
+        }
+        if descriptor.hot {
+            out.push_str(" hot");
+        }
+        if descriptor.cold {
+            out.push_str(" cold");
         }
         out.push('\n');
     }

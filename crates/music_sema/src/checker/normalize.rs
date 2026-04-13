@@ -17,73 +17,126 @@ type HirTyFieldRange = SliceRange<HirTyField>;
 
 impl PassBase<'_, '_, '_> {
     pub fn render_ty(&self, ty: HirTyId) -> String {
-        match self.ty(ty).kind {
-            HirTyKind::Error => "<error>".into(),
-            HirTyKind::Unknown => "Unknown".into(),
-            HirTyKind::Type => "Type".into(),
-            HirTyKind::Syntax => "Syntax".into(),
-            HirTyKind::Any => "Any".into(),
-            HirTyKind::Empty => "Empty".into(),
-            HirTyKind::Unit => "Unit".into(),
-            HirTyKind::Bool => "Bool".into(),
-            HirTyKind::Nat => "Nat".into(),
-            HirTyKind::Int => "Int".into(),
-            HirTyKind::Float => "Float".into(),
-            HirTyKind::String => "String".into(),
-            HirTyKind::CString => "CString".into(),
-            HirTyKind::CPtr => "CPtr".into(),
-            HirTyKind::Module => "Module".into(),
-            HirTyKind::NatLit(value) => value.to_string(),
-            HirTyKind::Named { name, args } => self.render_named_ty(name, args),
+        let kind = &self.ty(ty).kind;
+        Self::render_ty_builtin(kind)
+            .or_else(|| self.render_ty_named_or_callable(kind))
+            .or_else(|| self.render_ty_collection(kind))
+            .or_else(|| self.render_ty_range(kind))
+            .or_else(|| self.render_ty_special(kind))
+            .unwrap_or_else(|| "<error>".into())
+    }
+
+    fn render_ty_builtin(kind: &HirTyKind) -> Option<String> {
+        if let HirTyKind::NatLit(value) = kind {
+            return Some(value.to_string());
+        }
+        let text = if matches!(kind, HirTyKind::Error) {
+            "<error>"
+        } else if matches!(kind, HirTyKind::Unknown) {
+            "Unknown"
+        } else if matches!(kind, HirTyKind::Type) {
+            "Type"
+        } else if matches!(kind, HirTyKind::Syntax) {
+            "Syntax"
+        } else if matches!(kind, HirTyKind::Any) {
+            "Any"
+        } else if matches!(kind, HirTyKind::Empty) {
+            "Empty"
+        } else if matches!(kind, HirTyKind::Unit) {
+            "Unit"
+        } else if matches!(kind, HirTyKind::Bool) {
+            "Bool"
+        } else if matches!(kind, HirTyKind::Nat) {
+            "Nat"
+        } else if matches!(kind, HirTyKind::Int) {
+            "Int"
+        } else if matches!(kind, HirTyKind::Float) {
+            "Float"
+        } else if matches!(kind, HirTyKind::String) {
+            "String"
+        } else if matches!(kind, HirTyKind::CString) {
+            "CString"
+        } else if matches!(kind, HirTyKind::CPtr) {
+            "CPtr"
+        } else if matches!(kind, HirTyKind::Module) {
+            "Module"
+        } else {
+            return None;
+        };
+        Some(text.into())
+    }
+
+    fn render_ty_named_or_callable(&self, kind: &HirTyKind) -> Option<String> {
+        Some(match kind {
+            HirTyKind::Named { name, args } => self.render_named_ty(*name, *args),
             HirTyKind::Pi {
                 binder,
                 binder_ty,
                 body,
                 is_effectful,
             } => {
-                let binder = self.resolve_symbol(binder);
-                let arrow = if is_effectful { " ~> " } else { " -> " };
+                let binder = self.resolve_symbol(*binder);
+                let arrow = if *is_effectful { " ~> " } else { " -> " };
                 format!(
                     "forall ({binder} : {}){arrow}{}",
-                    self.render_ty(binder_ty),
-                    self.render_ty(body)
+                    self.render_ty(*binder_ty),
+                    self.render_ty(*body)
                 )
             }
             HirTyKind::Arrow {
                 params,
                 ret,
                 is_effectful,
-            } => self.render_arrow_ty(params, ret, is_effectful),
+            } => self.render_arrow_ty(*params, *ret, *is_effectful),
             HirTyKind::Sum { left, right } => {
-                format!("{} + {}", self.render_ty(left), self.render_ty(right))
+                format!("{} + {}", self.render_ty(*left), self.render_ty(*right))
             }
-            HirTyKind::Tuple { items } => self.render_tuple_ty(items),
-            HirTyKind::Seq { item } => format!("[]{}", self.render_ty(item)),
-            HirTyKind::Array { dims, item } => self.render_array_ty(dims, item),
-            HirTyKind::Range { bound } => format!("Range[{}]", self.render_ty(bound)),
-            HirTyKind::ClosedRange { bound } => format!("ClosedRange[{}]", self.render_ty(bound)),
+            _ => return None,
+        })
+    }
+
+    fn render_ty_collection(&self, kind: &HirTyKind) -> Option<String> {
+        Some(match kind {
+            HirTyKind::Tuple { items } => self.render_tuple_ty(*items),
+            HirTyKind::Seq { item } => format!("[]{}", self.render_ty(*item)),
+            HirTyKind::Array { dims, item } => self.render_array_ty(dims.clone(), *item),
+            _ => return None,
+        })
+    }
+
+    fn render_ty_range(&self, kind: &HirTyKind) -> Option<String> {
+        Some(match kind {
+            HirTyKind::Range { bound } => format!("Range[{}]", self.render_ty(*bound)),
+            HirTyKind::ClosedRange { bound } => format!("ClosedRange[{}]", self.render_ty(*bound)),
             HirTyKind::PartialRangeFrom { bound } => {
-                format!("PartialRangeFrom[{}]", self.render_ty(bound))
+                format!("PartialRangeFrom[{}]", self.render_ty(*bound))
             }
             HirTyKind::PartialRangeUpTo { bound } => {
-                format!("PartialRangeUpTo[{}]", self.render_ty(bound))
+                format!("PartialRangeUpTo[{}]", self.render_ty(*bound))
             }
             HirTyKind::PartialRangeThru { bound } => {
-                format!("PartialRangeThru[{}]", self.render_ty(bound))
+                format!("PartialRangeThru[{}]", self.render_ty(*bound))
             }
+            _ => return None,
+        })
+    }
+
+    fn render_ty_special(&self, kind: &HirTyKind) -> Option<String> {
+        Some(match kind {
             HirTyKind::Handler {
                 effect,
                 input,
                 output,
             } => format!(
                 "using {} ({} -> {})",
-                self.render_ty(effect),
-                self.render_ty(input),
-                self.render_ty(output)
+                self.render_ty(*effect),
+                self.render_ty(*input),
+                self.render_ty(*output)
             ),
-            HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(inner)),
-            HirTyKind::Record { fields } => self.render_record_ty(fields),
-        }
+            HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(*inner)),
+            HirTyKind::Record { fields } => self.render_record_ty(fields.clone()),
+            _ => return None,
+        })
     }
     fn render_named_ty(&self, name: Symbol, args: SliceRange<HirTyId>) -> String {
         let args = self.ty_ids(args);
@@ -196,24 +249,37 @@ impl PassBase<'_, '_, '_> {
         {
             return true;
         }
-        self.ty_matches_kinds(left, right)
+        self.ty_matches_kinds(&left, &right)
     }
 
-    #[allow(clippy::too_many_lines)]
-    fn ty_matches_kinds(&self, left: HirTyKind, right: HirTyKind) -> bool {
-        match (left, right) {
+    fn ty_matches_kinds(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
+        Self::ty_matches_primitives(left, right)
+            || self.ty_matches_named_or_arrow(left, right)
+            || self.ty_matches_sums_and_collections(left, right)
+            || self.ty_matches_ranges_and_mut(left, right)
+            || self.ty_matches_handler_or_record(left, right)
+    }
+
+    const fn ty_matches_primitives(left: &HirTyKind, right: &HirTyKind) -> bool {
+        matches!(
+            (left, right),
             (HirTyKind::Type, HirTyKind::Type)
-            | (HirTyKind::Syntax, HirTyKind::Syntax)
-            | (HirTyKind::Any, HirTyKind::Any)
-            | (HirTyKind::Empty, HirTyKind::Empty)
-            | (HirTyKind::Unit, HirTyKind::Unit)
-            | (HirTyKind::Bool, HirTyKind::Bool)
-            | (HirTyKind::Int, HirTyKind::Int)
-            | (HirTyKind::Float, HirTyKind::Float)
-            | (HirTyKind::String, HirTyKind::String)
-            | (HirTyKind::CString, HirTyKind::CString)
-            | (HirTyKind::CPtr, HirTyKind::CPtr)
-            | (HirTyKind::Module, HirTyKind::Module) => true,
+                | (HirTyKind::Syntax, HirTyKind::Syntax)
+                | (HirTyKind::Any, HirTyKind::Any)
+                | (HirTyKind::Empty, HirTyKind::Empty)
+                | (HirTyKind::Unit, HirTyKind::Unit)
+                | (HirTyKind::Bool, HirTyKind::Bool)
+                | (HirTyKind::Int, HirTyKind::Int)
+                | (HirTyKind::Float, HirTyKind::Float)
+                | (HirTyKind::String, HirTyKind::String)
+                | (HirTyKind::CString, HirTyKind::CString)
+                | (HirTyKind::CPtr, HirTyKind::CPtr)
+                | (HirTyKind::Module, HirTyKind::Module)
+        )
+    }
+
+    fn ty_matches_named_or_arrow(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
+        match (left, right) {
             (
                 HirTyKind::Named {
                     name: left_name,
@@ -223,7 +289,7 @@ impl PassBase<'_, '_, '_> {
                     name: right_name,
                     args: right_args,
                 },
-            ) => self.named_tys_match(left_name, left_args, right_name, right_args),
+            ) => self.named_tys_match(*left_name, *left_args, *right_name, *right_args),
             (
                 HirTyKind::Arrow {
                     params: left_params,
@@ -236,22 +302,28 @@ impl PassBase<'_, '_, '_> {
                     is_effectful: right_effectful,
                 },
             ) => self.arrow_tys_match(
-                left_params,
-                left_ret,
-                left_effectful,
-                right_params,
-                right_ret,
-                right_effectful,
+                *left_params,
+                *left_ret,
+                *left_effectful,
+                *right_params,
+                *right_ret,
+                *right_effectful,
             ),
+            _ => false,
+        }
+    }
+
+    fn ty_matches_sums_and_collections(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
+        match (left, right) {
             (
                 HirTyKind::Sum { left, right },
                 HirTyKind::Sum {
                     left: other_left,
                     right: other_right,
                 },
-            ) => self.ty_matches(left, other_left) && self.ty_matches(right, other_right),
+            ) => self.ty_matches(*left, *other_left) && self.ty_matches(*right, *other_right),
             (HirTyKind::Tuple { items: left }, HirTyKind::Tuple { items: right }) => {
-                self.list_tys_match(left, right)
+                self.list_tys_match(*left, *right)
             }
             (
                 HirTyKind::Array {
@@ -263,15 +335,21 @@ impl PassBase<'_, '_, '_> {
                     item: right_item,
                 },
             ) => {
-                self.dims(left_dims) == self.dims(right_dims)
-                    && self.ty_matches(left_item, right_item)
+                self.dims(left_dims.clone()) == self.dims(right_dims.clone())
+                    && self.ty_matches(*left_item, *right_item)
             }
             (
                 HirTyKind::Seq { item: left_item },
                 HirTyKind::Array {
                     item: right_item, ..
                 },
-            ) => self.ty_matches(left_item, right_item),
+            ) => self.ty_matches(*left_item, *right_item),
+            _ => false,
+        }
+    }
+
+    fn ty_matches_ranges_and_mut(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
+        match (left, right) {
             (HirTyKind::Seq { item: left }, HirTyKind::Seq { item: right })
             | (HirTyKind::Range { bound: left }, HirTyKind::Range { bound: right })
             | (HirTyKind::ClosedRange { bound: left }, HirTyKind::ClosedRange { bound: right })
@@ -288,8 +366,14 @@ impl PassBase<'_, '_, '_> {
                 HirTyKind::PartialRangeThru { bound: right },
             )
             | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right }) => {
-                self.ty_matches(left, right)
+                self.ty_matches(*left, *right)
             }
+            _ => false,
+        }
+    }
+
+    fn ty_matches_handler_or_record(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
+        match (left, right) {
             (
                 HirTyKind::Handler {
                     effect: left_effect,
@@ -302,12 +386,12 @@ impl PassBase<'_, '_, '_> {
                     output: right_output,
                 },
             ) => {
-                self.ty_matches(left_effect, right_effect)
-                    && self.ty_matches(left_input, right_input)
-                    && self.ty_matches(left_output, right_output)
+                self.ty_matches(*left_effect, *right_effect)
+                    && self.ty_matches(*left_input, *right_input)
+                    && self.ty_matches(*left_output, *right_output)
             }
             (HirTyKind::Record { fields: left }, HirTyKind::Record { fields: right }) => {
-                self.record_tys_match(left, right)
+                self.record_tys_match(left.clone(), right.clone())
             }
             _ => false,
         }
@@ -361,7 +445,9 @@ impl PassBase<'_, '_, '_> {
                     .is_some_and(|right_ty| self.ty_matches(field.ty, *right_ty))
             })
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn named_type_for_symbol(&mut self, symbol: Symbol) -> HirTyId {
         let known = self.known();
         let builtins = self.builtins();
@@ -431,9 +517,27 @@ impl PassBase<'_, '_, '_> {
 
     pub fn lower_type_expr(&mut self, expr: HirExprId, origin: HirOrigin) -> HirTyId {
         let builtins = self.builtins();
-        match self.expr(expr).kind {
-            HirExprKind::Error => builtins.error,
+        self.lower_type_atomic_expr(expr)
+            .or_else(|| self.lower_type_aggregate_expr(expr))
+            .or_else(|| self.lower_type_callable_expr(expr))
+            .or_else(|| self.lower_type_operator_expr(expr, origin))
+            .unwrap_or_else(|| {
+                self.diag(origin.span, DiagKind::InvalidTypeExpression, "");
+                builtins.error
+            })
+    }
+
+    fn lower_type_atomic_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
+        Some(match self.expr(expr).kind {
+            HirExprKind::Error => self.builtins().error,
             HirExprKind::Name { name } => self.named_type_for_symbol(name.name),
+            HirExprKind::Import { .. } => self.builtins().module,
+            _ => return None,
+        })
+    }
+
+    fn lower_type_aggregate_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
+        Some(match self.expr(expr).kind {
             HirExprKind::Tuple { items } => self.lower_tuple_type_expr(items),
             HirExprKind::ArrayTy { dims, item } => {
                 let item_origin = self.expr(item).origin;
@@ -444,6 +548,13 @@ impl PassBase<'_, '_, '_> {
                     self.alloc_ty(HirTyKind::Array { dims, item })
                 }
             }
+            HirExprKind::Record { items } => self.lower_record_type_expr(items),
+            _ => return None,
+        })
+    }
+
+    fn lower_type_callable_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
+        Some(match self.expr(expr).kind {
             HirExprKind::HandlerTy {
                 effect,
                 input,
@@ -478,6 +589,12 @@ impl PassBase<'_, '_, '_> {
                     is_effectful,
                 })
             }
+            _ => return None,
+        })
+    }
+
+    fn lower_type_operator_expr(&mut self, expr: HirExprId, origin: HirOrigin) -> Option<HirTyId> {
+        Some(match self.expr(expr).kind {
             HirExprKind::Apply { callee, args } => self.lower_apply_type_expr(origin, callee, args),
             HirExprKind::Binary { op, left, right } => {
                 self.lower_binary_type_expr(origin, &op, left, right)
@@ -490,13 +607,8 @@ impl PassBase<'_, '_, '_> {
                 let inner = self.lower_type_expr(expr, origin);
                 self.alloc_ty(HirTyKind::Mut { inner })
             }
-            HirExprKind::Import { .. } => builtins.module,
-            HirExprKind::Record { items } => self.lower_record_type_expr(items),
-            _ => {
-                self.diag(origin.span, DiagKind::InvalidTypeExpression, "");
-                builtins.error
-            }
-        }
+            _ => return None,
+        })
     }
 
     fn lower_tuple_type_expr(&mut self, items: SliceRange<HirExprId>) -> HirTyId {

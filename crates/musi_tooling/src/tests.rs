@@ -169,3 +169,31 @@ fn project_error_report_carries_manifest_source_range() {
     assert!(report.diagnostics[0].range.is_some());
     assert_eq!(report.diagnostics[0].message, "export key `bad` invalid");
 }
+
+#[test]
+fn project_error_report_carries_unresolved_import_range() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+    );
+
+    let error = load_project_error(temp.path());
+    let report = project_error_report("musi", "check", None, None, &error);
+
+    assert_eq!(report.diagnostics[0].phase, "project");
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3615"));
+    assert_eq!(report.diagnostics[0].message, "unresolved import `missing`");
+    assert!(report.diagnostics[0].file.is_some());
+    assert!(report.diagnostics[0].range.is_some());
+    assert_eq!(
+        report.diagnostics[0].labels[0].message,
+        "import `missing` does not resolve"
+    );
+}

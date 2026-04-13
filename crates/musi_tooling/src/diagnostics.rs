@@ -425,13 +425,15 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
         | ProjectError::UnknownTask { .. }
         | ProjectError::TaskDependencyCycle { .. }
         | ProjectError::PackageDependencyCycle { .. }
-        | ProjectError::UnresolvedDependency { .. }
+        | ProjectError::UnresolvedImport { .. }
         | ProjectError::MissingRegistryRoot { .. }
         | ProjectError::MissingCacheRoot { .. }
         | ProjectError::RegistryVersionNotFound { .. }
         | ProjectError::InvalidVersionRequirement { .. }
+        | ProjectError::UnknownPackage { .. }
+        | ProjectError::PackageGraphEntryMissing { .. }
         | ProjectError::SessionCompilationFailed(_)
-        | ProjectError::ManifestSourceDiagnostic(_) => None,
+        | ProjectError::SourceDiagnostic(_) => None,
     };
     CliDiagnostic::error_with_file(
         "project",

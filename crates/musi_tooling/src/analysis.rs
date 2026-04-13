@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use musi_project::{Project, ProjectOptions, ProjectResult, load_project_ancestor};
+use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{HirDim, HirTyField, HirTyId, HirTyKind};
 use music_module::ModuleKey;
@@ -154,25 +155,12 @@ const fn binding_kind_label(kind: NameBindingKind) -> &'static str {
 }
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
 fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
-    match &sema.ty(ty).kind {
-        HirTyKind::Error => "<error>".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::NatLit(value) => value.to_string(),
+    let kind = &sema.ty(ty).kind;
+    if let Some(atomic) = render_atomic_hir_ty(kind) {
+        return atomic;
+    }
+    match kind {
         HirTyKind::Named { name, args } => render_named_hir_ty(
             session.resolve_symbol(*name),
             sema.module().store.ty_ids.get(*args),
@@ -202,13 +190,7 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
             *is_effectful,
             |ty| render_hir_ty(sema, session, ty),
         ),
-        HirTyKind::Sum { left, right } => {
-            format!(
-                "{} + {}",
-                render_hir_ty(sema, session, *left),
-                render_hir_ty(sema, session, *right)
-            )
-        }
+        HirTyKind::Sum { left, right } => render_sum_hir_ty(sema, session, *left, *right),
         HirTyKind::Tuple { items } => {
             let values = sema
                 .module()
@@ -221,51 +203,148 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
                 .join(", ");
             format!("({values})")
         }
-        HirTyKind::Array { dims, item } => {
-            let mut parts = vec![render_hir_ty(sema, session, *item)];
-            for dim in sema.module().store.dims.get(dims.clone()) {
-                parts.push(render_dim(session, dim));
-            }
-            format!("[{}]", parts.join("; "))
-        }
+        HirTyKind::Array { dims, item } => render_array_hir_ty(sema, session, dims, *item),
         HirTyKind::Seq { item } => format!("[]{}", render_hir_ty(sema, session, *item)),
-        HirTyKind::Range { bound } => format!("Range[{}]", render_hir_ty(sema, session, *bound)),
+        HirTyKind::Range { bound } => render_applied_hir_ty("Range", sema, session, *bound),
         HirTyKind::ClosedRange { bound } => {
-            format!("ClosedRange[{}]", render_hir_ty(sema, session, *bound))
+            render_applied_hir_ty("ClosedRange", sema, session, *bound)
         }
         HirTyKind::PartialRangeFrom { bound } => {
-            format!("PartialRangeFrom[{}]", render_hir_ty(sema, session, *bound))
+            render_applied_hir_ty("PartialRangeFrom", sema, session, *bound)
         }
         HirTyKind::PartialRangeUpTo { bound } => {
-            format!("PartialRangeUpTo[{}]", render_hir_ty(sema, session, *bound))
+            render_applied_hir_ty("PartialRangeUpTo", sema, session, *bound)
         }
         HirTyKind::PartialRangeThru { bound } => {
-            format!("PartialRangeThru[{}]", render_hir_ty(sema, session, *bound))
+            render_applied_hir_ty("PartialRangeThru", sema, session, *bound)
         }
         HirTyKind::Handler {
             effect,
             input,
             output,
-        } => format!(
-            "using {} ({} -> {})",
-            render_hir_ty(sema, session, *effect),
-            render_hir_ty(sema, session, *input),
-            render_hir_ty(sema, session, *output)
-        ),
+        } => render_handler_hir_ty(sema, session, *effect, *input, *output),
         HirTyKind::Mut { inner } => format!("mut {}", render_hir_ty(sema, session, *inner)),
-        HirTyKind::Record { fields } => {
-            let rendered = sema
-                .module()
-                .store
-                .ty_fields
-                .get(fields.clone())
-                .iter()
-                .map(|field| render_ty_field(sema, session, field))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{{ {rendered} }}")
-        }
+        HirTyKind::Record { fields } => render_record_hir_ty(sema, session, fields),
+        HirTyKind::Error
+        | HirTyKind::Unknown
+        | HirTyKind::Type
+        | HirTyKind::Syntax
+        | HirTyKind::Any
+        | HirTyKind::Empty
+        | HirTyKind::Unit
+        | HirTyKind::Bool
+        | HirTyKind::Nat
+        | HirTyKind::Int
+        | HirTyKind::Float
+        | HirTyKind::String
+        | HirTyKind::CString
+        | HirTyKind::CPtr
+        | HirTyKind::Module
+        | HirTyKind::NatLit(_) => render_atomic_hir_ty(kind).unwrap_or_default(),
     }
+}
+
+fn render_atomic_hir_ty(kind: &HirTyKind) -> Option<String> {
+    match kind {
+        HirTyKind::Error => Some("<error>".into()),
+        HirTyKind::Unknown => Some("Unknown".into()),
+        HirTyKind::Type => Some("Type".into()),
+        HirTyKind::Syntax => Some("Syntax".into()),
+        HirTyKind::Any => Some("Any".into()),
+        HirTyKind::Empty => Some("Empty".into()),
+        HirTyKind::Unit => Some("Unit".into()),
+        HirTyKind::Bool => Some("Bool".into()),
+        HirTyKind::Nat => Some("Nat".into()),
+        HirTyKind::Int => Some("Int".into()),
+        HirTyKind::Float => Some("Float".into()),
+        HirTyKind::String => Some("String".into()),
+        HirTyKind::CString => Some("CString".into()),
+        HirTyKind::CPtr => Some("CPtr".into()),
+        HirTyKind::Module => Some("Module".into()),
+        HirTyKind::NatLit(value) => Some(value.to_string()),
+        HirTyKind::Named { .. }
+        | HirTyKind::Pi { .. }
+        | HirTyKind::Arrow { .. }
+        | HirTyKind::Sum { .. }
+        | HirTyKind::Tuple { .. }
+        | HirTyKind::Array { .. }
+        | HirTyKind::Seq { .. }
+        | HirTyKind::Range { .. }
+        | HirTyKind::ClosedRange { .. }
+        | HirTyKind::PartialRangeFrom { .. }
+        | HirTyKind::PartialRangeUpTo { .. }
+        | HirTyKind::PartialRangeThru { .. }
+        | HirTyKind::Handler { .. }
+        | HirTyKind::Mut { .. }
+        | HirTyKind::Record { .. } => None,
+    }
+}
+
+fn render_sum_hir_ty(
+    sema: &SemaModule,
+    session: &Session,
+    left: HirTyId,
+    right: HirTyId,
+) -> String {
+    format!(
+        "{} + {}",
+        render_hir_ty(sema, session, left),
+        render_hir_ty(sema, session, right)
+    )
+}
+
+fn render_array_hir_ty(
+    sema: &SemaModule,
+    session: &Session,
+    dims: &SliceRange<HirDim>,
+    item: HirTyId,
+) -> String {
+    let mut parts = vec![render_hir_ty(sema, session, item)];
+    for dim in sema.module().store.dims.get(dims.clone()) {
+        parts.push(render_dim(session, dim));
+    }
+    format!("[{}]", parts.join("; "))
+}
+
+fn render_applied_hir_ty(
+    name: &str,
+    sema: &SemaModule,
+    session: &Session,
+    bound: HirTyId,
+) -> String {
+    format!("{name}[{}]", render_hir_ty(sema, session, bound))
+}
+
+fn render_handler_hir_ty(
+    sema: &SemaModule,
+    session: &Session,
+    effect: HirTyId,
+    input: HirTyId,
+    output: HirTyId,
+) -> String {
+    format!(
+        "using {} ({} -> {})",
+        render_hir_ty(sema, session, effect),
+        render_hir_ty(sema, session, input),
+        render_hir_ty(sema, session, output)
+    )
+}
+
+fn render_record_hir_ty(
+    sema: &SemaModule,
+    session: &Session,
+    fields: &SliceRange<HirTyField>,
+) -> String {
+    let rendered = sema
+        .module()
+        .store
+        .ty_fields
+        .get(fields.clone())
+        .iter()
+        .map(|field| render_ty_field(sema, session, field))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{{ {rendered} }}")
 }
 
 fn render_named_hir_ty(

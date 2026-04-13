@@ -11,8 +11,8 @@ use music_sema::{ModuleSurface, SemaEnv, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::{
-    IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrExpr, IrExprKind, IrModule, IrSeqPart,
-    lower_module,
+    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm, IrCasePattern, IrExpr, IrExprKind,
+    IrModule, IrSeqPart, lower_module,
 };
 
 #[derive(Default)]
@@ -392,19 +392,10 @@ fn capitalized_local_name_stays_value_expr() {
 }
 
 #[test]
-fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
+fn lowers_template_literal_with_interpolation() {
     let ir = lower(
         r"
         export let msg (name : String) : String := `hello ${name}`;
-        export let neg (x : Int) : Int := -x;
-        export let inv (x : Bool) : Bool := not x;
-        export let answer (n : Int) : Int := (
-          let base := 1;
-          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
-          let point := { x := 1, y := 2 };
-          let picked : Int := case point of (| { x } => x | _ => 0);
-          picked + loop(n)
-        );
     ",
     );
 
@@ -414,6 +405,16 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
         .find(|callable| callable.name.as_ref() == "msg")
         .expect("msg callable");
     assert!(contains_strcat(&msg.body));
+}
+
+#[test]
+fn lowers_prefix_ops() {
+    let ir = lower(
+        r"
+        export let neg (x : Int) : Int := -x;
+        export let inv (x : Bool) : Bool := not x;
+    ",
+    );
 
     let neg = ir
         .callables()
@@ -442,6 +443,21 @@ fn lowers_template_prefix_ops_record_case_and_capturing_rec() {
         kind => kind,
     };
     assert!(matches!(inv_kind, IrExprKind::Not { .. }));
+}
+
+#[test]
+fn lowers_record_case_and_capturing_rec() {
+    let ir = lower(
+        r"
+        export let answer (n : Int) : Int := (
+          let base := 1;
+          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+          let point := { x := 1, y := 2 };
+          let picked : Int := case point of (| { x } => x | _ => 0);
+          picked + loop(n)
+        );
+    ",
+    );
 
     let answer = ir
         .callables()
@@ -544,7 +560,11 @@ fn contains_strcat(expr: &IrExpr) -> bool {
 }
 
 fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
-    match &expr.kind {
+    contains_named_value_ref_kind(&expr.kind, expected)
+}
+
+fn contains_named_value_ref_kind(kind: &IrExprKind, expected: &str) -> bool {
+    match kind {
         IrExprKind::Name { name, .. } => name.as_ref() == expected,
         IrExprKind::Sequence { exprs } => exprs
             .iter()
@@ -559,31 +579,26 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
         | IrExprKind::TyCast { base: value, .. } => contains_named_value_ref(value, expected),
         IrExprKind::Range { .. }
         | IrExprKind::RangeContains { .. }
-        | IrExprKind::RangeMaterialize { .. } => contains_named_value_ref_in_range(expr, expected),
+        | IrExprKind::RangeMaterialize { .. } => {
+            contains_named_value_ref_in_range_kind(kind, expected)
+        }
         IrExprKind::Assign { target, value } => {
             contains_named_value_ref_in_target(target, expected)
                 || contains_named_value_ref(value, expected)
         }
         IrExprKind::Index { base, indices } => {
-            contains_named_value_ref(base, expected)
-                || indices
-                    .iter()
-                    .any(|expr| contains_named_value_ref(expr, expected))
+            contains_named_value_ref_in_index(base, indices, expected)
         }
         IrExprKind::Tuple { items, .. }
         | IrExprKind::Array { items, .. }
         | IrExprKind::ClosureNew {
             captures: items, ..
         }
-        | IrExprKind::Perform { args: items, .. } => items
-            .iter()
-            .any(|expr| contains_named_value_ref(expr, expected)),
+        | IrExprKind::Perform { args: items, .. } => {
+            contains_named_value_ref_in_exprs(items, expected)
+        }
         IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallSeq { args: parts, .. } => {
-            parts.iter().any(|part| match part {
-                IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
-                    contains_named_value_ref(expr, expected)
-                }
-            })
+            contains_named_value_ref_in_seq_parts(parts, expected)
         }
         IrExprKind::Record { fields, .. } => fields
             .iter()
@@ -598,28 +613,17 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
             contains_named_value_ref(left, expected) || contains_named_value_ref(right, expected)
         }
         IrExprKind::Case { scrutinee, arms } => {
-            contains_named_value_ref(scrutinee, expected)
-                || arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|guard| contains_named_value_ref(guard, expected))
-                        || contains_named_value_ref(&arm.expr, expected)
-                })
+            contains_named_value_ref_in_case(scrutinee, arms, expected)
         }
         IrExprKind::Call { callee, args } => {
-            contains_named_value_ref(callee, expected)
-                || args
-                    .iter()
-                    .any(|arg| contains_named_value_ref(&arg.expr, expected))
+            contains_named_value_ref_in_call(callee, args, expected)
         }
         IrExprKind::VariantNew { args, .. } => args
             .iter()
             .any(|expr| contains_named_value_ref(expr, expected)),
-        IrExprKind::PerformSeq { args, .. } => args.iter().any(|part| match part {
-            IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => {
-                contains_named_value_ref(expr, expected)
-            }
-        }),
+        IrExprKind::PerformSeq { args, .. } => {
+            contains_named_value_ref_in_seq_parts(args, expected)
+        }
         IrExprKind::HandlerLit { value, ops, .. } => {
             contains_named_value_ref(value, expected)
                 || ops
@@ -640,8 +644,8 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
     }
 }
 
-fn contains_named_value_ref_in_range(expr: &IrExpr, expected: &str) -> bool {
-    match &expr.kind {
+fn contains_named_value_ref_in_range_kind(kind: &IrExprKind, expected: &str) -> bool {
+    match kind {
         IrExprKind::Range { lower, upper, .. } => {
             contains_named_value_ref(lower, expected) || contains_named_value_ref(upper, expected)
         }
@@ -660,6 +664,46 @@ fn contains_named_value_ref_in_range(expr: &IrExpr, expected: &str) -> bool {
         }
         _ => false,
     }
+}
+
+fn contains_named_value_ref_in_index(base: &IrExpr, indices: &[IrExpr], expected: &str) -> bool {
+    contains_named_value_ref(base, expected)
+        || indices
+            .iter()
+            .any(|expr| contains_named_value_ref(expr, expected))
+}
+
+fn contains_named_value_ref_in_exprs(exprs: &[IrExpr], expected: &str) -> bool {
+    exprs
+        .iter()
+        .any(|expr| contains_named_value_ref(expr, expected))
+}
+
+fn contains_named_value_ref_in_seq_parts(parts: &[IrSeqPart], expected: &str) -> bool {
+    parts.iter().any(|part| match part {
+        IrSeqPart::Expr(expr) | IrSeqPart::Spread(expr) => contains_named_value_ref(expr, expected),
+    })
+}
+
+fn contains_named_value_ref_in_case(
+    scrutinee: &IrExpr,
+    arms: &[IrCaseArm],
+    expected: &str,
+) -> bool {
+    contains_named_value_ref(scrutinee, expected)
+        || arms.iter().any(|arm| {
+            arm.guard
+                .as_ref()
+                .is_some_and(|guard| contains_named_value_ref(guard, expected))
+                || contains_named_value_ref(&arm.expr, expected)
+        })
+}
+
+fn contains_named_value_ref_in_call(callee: &IrExpr, args: &[IrArg], expected: &str) -> bool {
+    contains_named_value_ref(callee, expected)
+        || args
+            .iter()
+            .any(|arg| contains_named_value_ref(&arg.expr, expected))
 }
 
 fn contains_named_value_ref_in_target(target: &IrAssignTarget, expected: &str) -> bool {

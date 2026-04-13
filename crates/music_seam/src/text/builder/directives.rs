@@ -2,6 +2,73 @@ use super::symbols::{must_get, parse_meta_value, parse_quoted, parse_symbol};
 use super::*;
 
 impl TextBuilder {
+    fn parse_data_variant(
+        &mut self,
+        parts: &[String],
+        idx: &mut usize,
+    ) -> AssemblyResult<DataVariantDescriptor> {
+        let value = must_get(parts.get(*idx + 1), "variant name")?;
+        let variant_name = self.intern_string(&parse_symbol(value)?);
+        *idx = (*idx).saturating_add(2);
+        let mut field_tys = Vec::new();
+        while parts.get(*idx).map(String::as_str) == Some("field") {
+            let field_value = must_get(parts.get(*idx + 1), "field type")?;
+            let field_name = parse_symbol(field_value)?;
+            field_tys.push(self.ensure_type_symbol(&field_name, &field_name));
+            *idx = (*idx).saturating_add(2);
+        }
+        Ok(DataVariantDescriptor::new(
+            variant_name,
+            field_tys.into_boxed_slice(),
+        ))
+    }
+
+    fn parse_data_metadata(
+        &mut self,
+        parts: &[String],
+        idx: &mut usize,
+        repr_kind: &mut Option<StringId>,
+        layout_align: &mut Option<u32>,
+        layout_pack: &mut Option<u32>,
+        frozen: &mut bool,
+    ) -> AssemblyResult {
+        match must_get(parts.get(*idx), "data metadata key")? {
+            "repr" => {
+                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
+                *repr_kind = Some(self.intern_string(&parse_quoted(value)?));
+                *idx = (*idx).saturating_add(2);
+            }
+            "align" => {
+                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
+                *layout_align = Some(
+                    value
+                        .parse()
+                        .map_err(|_| AssemblyError::TextParseFailed("invalid align".into()))?,
+                );
+                *idx = (*idx).saturating_add(2);
+            }
+            "pack" => {
+                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
+                *layout_pack = Some(
+                    value
+                        .parse()
+                        .map_err(|_| AssemblyError::TextParseFailed("invalid pack".into()))?,
+                );
+                *idx = (*idx).saturating_add(2);
+            }
+            "frozen" => {
+                *frozen = true;
+                *idx = (*idx).saturating_add(1);
+            }
+            _ => {
+                return Err(AssemblyError::TextParseFailed(
+                    "unknown data metadata".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn parse_type(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 4 || parts.get(2).map(String::as_str) != Some("term") {
             return Err(AssemblyError::TextParseFailed(
@@ -45,53 +112,21 @@ impl TextBuilder {
         let mut repr_kind: Option<StringId> = None;
         let mut layout_align: Option<u32> = None;
         let mut layout_pack: Option<u32> = None;
+        let mut frozen = false;
         let mut idx = 6usize;
-        while let Some(key) = parts.get(idx).map(String::as_str) {
-            match key {
-                "variant" => {
-                    let value = must_get(parts.get(idx + 1), "variant name")?;
-                    let variant_name = self.intern_string(&parse_symbol(value)?);
-                    idx = idx.saturating_add(2);
-                    let mut field_tys = Vec::new();
-                    while parts.get(idx).map(String::as_str) == Some("field") {
-                        let field_value = must_get(parts.get(idx + 1), "field type")?;
-                        let field_name = parse_symbol(field_value)?;
-                        field_tys.push(self.ensure_type_symbol(&field_name, &field_name));
-                        idx = idx.saturating_add(2);
-                    }
-                    variants.push(DataVariantDescriptor::new(
-                        variant_name,
-                        field_tys.into_boxed_slice(),
-                    ));
-                    continue;
-                }
-                "repr" => {
-                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
-                    repr_kind = Some(self.intern_string(&parse_quoted(value)?));
-                }
-                "align" => {
-                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
-                    layout_align = Some(
-                        value
-                            .parse()
-                            .map_err(|_| AssemblyError::TextParseFailed("invalid align".into()))?,
-                    );
-                }
-                "pack" => {
-                    let value = must_get(parts.get(idx + 1), "data metadata value")?;
-                    layout_pack = Some(
-                        value
-                            .parse()
-                            .map_err(|_| AssemblyError::TextParseFailed("invalid pack".into()))?,
-                    );
-                }
-                _ => {
-                    return Err(AssemblyError::TextParseFailed(
-                        "unknown data metadata".into(),
-                    ));
-                }
+        while idx < parts.len() {
+            if parts[idx].as_str() == "variant" {
+                variants.push(self.parse_data_variant(parts, &mut idx)?);
+                continue;
             }
-            idx = idx.saturating_add(2);
+            self.parse_data_metadata(
+                parts,
+                &mut idx,
+                &mut repr_kind,
+                &mut layout_align,
+                &mut layout_pack,
+                &mut frozen,
+            )?;
         }
 
         let name_id = self.intern_string(&name);
@@ -109,6 +144,9 @@ impl TextBuilder {
         }
         if let Some(layout_pack) = layout_pack {
             descriptor = descriptor.with_layout_pack(layout_pack);
+        }
+        if frozen {
+            descriptor = descriptor.with_frozen(true);
         }
         let id = self.artifact.data.alloc(descriptor);
         let _ = self.data.insert(name, id);
@@ -299,11 +337,21 @@ impl TextBuilder {
         let result_ty = parse_symbol(must_get(parts.get(base + 1), "foreign result type")?)?;
         let abi = parse_quoted(must_get(parts.get(base + 3), "foreign abi")?)?;
         let symbol = parse_quoted(must_get(parts.get(base + 5), "foreign symbol")?)?;
+        let mut hot = false;
+        let mut cold = false;
         let mut idx = base + 6;
         while idx < parts.len() {
             match parts[idx].as_str() {
                 "export" => {
                     export = true;
+                    idx += 1;
+                }
+                "hot" => {
+                    hot = true;
+                    idx += 1;
+                }
+                "cold" => {
+                    cold = true;
                     idx += 1;
                 }
                 "link" => {
@@ -326,7 +374,9 @@ impl TextBuilder {
             self.intern_string(&abi),
             self.intern_string(&symbol),
         )
-        .with_export(export);
+        .with_export(export)
+        .with_hot(hot)
+        .with_cold(cold);
         if let Some(link) = link.as_deref().map(|text| self.intern_string(text)) {
             descriptor = descriptor.with_link(link);
         }

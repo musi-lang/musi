@@ -74,6 +74,9 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
         if let Some(layout_pack) = data.layout_pack {
             descriptor = descriptor.with_layout_pack(layout_pack);
         }
+        if data.frozen {
+            descriptor = descriptor.with_frozen(true);
+        }
         let _ = state.artifact.data.alloc(descriptor);
     }
 }
@@ -224,7 +227,9 @@ fn register_foreigns(state: &mut ProgramState, module: &IrModule, layout: &mut M
         let result_ty = ensure_type(state, layout, foreign.result_ty.as_ref());
         let mut descriptor =
             ForeignDescriptor::new(name_id, param_tys, result_ty, abi_id, symbol_id)
-                .with_export(foreign.exported);
+                .with_export(foreign.exported)
+                .with_hot(foreign.hot)
+                .with_cold(foreign.cold);
         if let Some(link_id) = link_id {
             descriptor = descriptor.with_link(link_id);
         }
@@ -243,6 +248,8 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
             &mut state.artifact,
             name.as_ref(),
             callable.exported,
+            callable.hot,
+            callable.cold,
             params,
         );
         let _ = layout
@@ -258,7 +265,7 @@ fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     for global in module.globals() {
         let name = qualified_name(module.module_key(), &global.name);
         let init_name = format!("{name}::init");
-        let init_method = alloc_method(&mut state.artifact, &init_name, false, 0);
+        let init_method = alloc_method(&mut state.artifact, &init_name, false, false, false, 0);
         let name_id = state.artifact.intern_string(name.as_ref());
         let global_id = state.artifact.globals.alloc(
             GlobalDescriptor::new(name_id)

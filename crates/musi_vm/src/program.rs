@@ -73,6 +73,7 @@ pub struct ProgramDataLayout {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
 }
 
 impl ProgramDataLayout {
@@ -104,6 +105,7 @@ impl ProgramDataLayout {
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
+            frozen: false,
         }
     }
 
@@ -122,6 +124,12 @@ impl ProgramDataLayout {
     #[must_use]
     pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
         self.layout_pack = Some(layout_pack);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
         self
     }
 
@@ -473,6 +481,9 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
         }
         if let Some(layout_pack) = descriptor.layout_pack {
             layout = layout.with_layout_pack(layout_pack);
+        }
+        if descriptor.frozen {
+            layout = layout.with_frozen(true);
         }
         let _ = layout_map.insert(ty, layout.clone());
         layout_list.push(layout);

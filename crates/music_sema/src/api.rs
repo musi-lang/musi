@@ -14,6 +14,7 @@ use crate::effects::EffectRow;
 
 pub type SemaDiagList = Vec<Diag>;
 pub type NameList = Box<[Box<str>]>;
+pub type SymbolList = Box<[Symbol]>;
 pub type AttrList = Box<[Attr]>;
 pub type ConstraintSurfaceList = Box<[ConstraintSurface]>;
 pub type HirTyIdList = Box<[HirTyId]>;
@@ -453,6 +454,7 @@ pub struct DataSurface {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
 }
@@ -466,6 +468,7 @@ impl DataSurface {
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
+            frozen: false,
             inert_attrs: Box::default(),
             musi_attrs: Box::default(),
         }
@@ -489,6 +492,12 @@ impl DataSurface {
     #[must_use]
     pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
         self.layout_pack = Some(layout_pack);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
         self
     }
 
@@ -669,7 +678,7 @@ impl ClassSurface {
     }
 
     #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<Box<[Box<str>]>>) -> Self {
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
         self
     }
@@ -769,7 +778,7 @@ impl InstanceSurface {
     pub fn new<ClassArgs>(
         class_key: DefinitionKey,
         class_args: ClassArgs,
-        member_names: impl Into<Box<[Box<str>]>>,
+        member_names: impl Into<NameList>,
     ) -> Self
     where
         ClassArgs: Into<SurfaceTyIdList>,
@@ -786,7 +795,7 @@ impl InstanceSurface {
     }
 
     #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<Box<[Box<str>]>>) -> Self {
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
         self
     }
@@ -959,6 +968,7 @@ pub struct SemaDataDef {
     repr_kind: Option<Box<str>>,
     layout_align: Option<u32>,
     layout_pack: Option<u32>,
+    frozen: bool,
 }
 
 impl SemaEffectOpDef {
@@ -1062,6 +1072,7 @@ impl SemaDataDef {
         repr_kind: Option<Box<str>>,
         layout_align: Option<u32>,
         layout_pack: Option<u32>,
+        frozen: bool,
     ) -> Self {
         Self {
             key,
@@ -1069,6 +1080,7 @@ impl SemaDataDef {
             repr_kind,
             layout_align,
             layout_pack,
+            frozen,
         }
     }
 
@@ -1112,6 +1124,11 @@ impl SemaDataDef {
     #[must_use]
     pub const fn layout_pack(&self) -> Option<u32> {
         self.layout_pack
+    }
+
+    #[must_use]
+    pub const fn frozen(&self) -> bool {
+        self.frozen
     }
 }
 
@@ -1275,7 +1292,7 @@ impl ClassFacts {
     }
 
     #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<Box<[Symbol]>>) -> Self {
+    pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
         self.type_params = type_params.into();
         self
     }
@@ -1306,7 +1323,7 @@ impl InstanceFacts {
         class_key: DefinitionKey,
         class_name: Symbol,
         class_args: ClassArgs,
-        member_names: impl Into<Box<[Symbol]>>,
+        member_names: impl Into<SymbolList>,
     ) -> Self
     where
         ClassArgs: Into<HirTyIdList>,
@@ -1324,7 +1341,7 @@ impl InstanceFacts {
     }
 
     #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<Box<[Symbol]>>) -> Self {
+    pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
         self.type_params = type_params.into();
         self
     }

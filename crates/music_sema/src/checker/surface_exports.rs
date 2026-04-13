@@ -61,16 +61,20 @@ impl<'a, 'store> ExportSurfaceCollector<'a, 'store> {
 }
 
 fn attr_is_musi(path: &[Box<str>]) -> bool {
-    path.first().is_some_and(|seg| seg.as_ref() == "musi")
+    matches!(path, [head] if head.as_ref() == "known" || head.as_ref() == "intrinsic")
+        || path.first().is_some_and(|seg| seg.as_ref() == "musi")
 }
 
 fn attr_is_reserved(path: &[Box<str>]) -> bool {
     match path {
+        [head] if head.as_ref() == "known" => true,
+        [head] if head.as_ref() == "intrinsic" => true,
         [head] if head.as_ref() == "link" => true,
         [head] if head.as_ref() == "when" => true,
         [head] if head.as_ref() == "repr" => true,
         [head] if head.as_ref() == "layout" => true,
         [head, ..] if head.as_ref() == "diag" => true,
+        [head, ..] if head.as_ref() == "musi" => true,
         _ => false,
     }
 }
@@ -441,6 +445,9 @@ impl ExportSurfaceCollector<'_, '_> {
             }
             if let Some(layout_pack) = data.layout_pack() {
                 surface = surface.with_layout_pack(layout_pack);
+            }
+            if data.frozen() {
+                surface = surface.with_frozen(true);
             }
             Some(surface)
         })

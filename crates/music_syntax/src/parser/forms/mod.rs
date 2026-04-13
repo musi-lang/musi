@@ -7,13 +7,27 @@ mod lists;
 
 impl Parser<'_> {
     pub(super) fn parse_atom_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        match self.peek_kind() {
+        self.parse_atom_literal_or_name()
+            .or_else(|| self.parse_atom_structural())
+            .or_else(|| self.parse_atom_keyword_expr())
+            .unwrap_or_else(|| Err(self.expected_expression()))
+    }
+
+    fn parse_atom_literal_or_name(&mut self) -> Option<ParseResult<SyntaxNodeId>> {
+        Some(match self.peek_kind() {
             TokenKind::Int | TokenKind::Float | TokenKind::String | TokenKind::Rune => {
                 Ok(self.parse_literal_expr())
             }
             TokenKind::TemplateNoSubst | TokenKind::TemplateHead => self.parse_template_expr(),
             TokenKind::Ident | TokenKind::OpIdent => self.parse_name_expr(),
             TokenKind::Hash => self.parse_splice_expr(),
+            TokenKind::KwQuote => self.parse_quote_expr(),
+            _ => return None,
+        })
+    }
+
+    fn parse_atom_structural(&mut self) -> Option<ParseResult<SyntaxNodeId>> {
+        Some(match self.peek_kind() {
             TokenKind::LParen => {
                 if self.is_pi_paren() {
                     self.parse_pi_expr()
@@ -26,6 +40,13 @@ impl Parser<'_> {
             TokenKind::LBracket => self.parse_array_expr(),
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
+            TokenKind::At | TokenKind::KwExport => self.parse_with_mods_expr(),
+            _ => return None,
+        })
+    }
+
+    fn parse_atom_keyword_expr(&mut self) -> Option<ParseResult<SyntaxNodeId>> {
+        Some(match self.peek_kind() {
             TokenKind::KwCase => self.parse_case_expr(),
             TokenKind::KwLet => self.parse_let_expr(Vec::new()),
             TokenKind::KwResume => self.parse_resume_expr(),
@@ -38,10 +59,8 @@ impl Parser<'_> {
             TokenKind::KwUsing => self.parse_handler_expr(),
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),
-            TokenKind::KwQuote => self.parse_quote_expr(),
-            TokenKind::At | TokenKind::KwExport => self.parse_with_mods_expr(),
-            _ => Err(self.expected_expression()),
-        }
+            _ => return None,
+        })
     }
 
     pub(super) fn parse_record_item(&mut self) -> ParseResult<SyntaxNodeId> {

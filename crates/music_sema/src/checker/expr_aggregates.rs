@@ -3,13 +3,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirArrayItem, HirDim, HirExprId, HirOrigin, HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    HirAccessKind, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirOrigin,
+    HirPartialRangeKind, HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 
 use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
+use super::decls::module_export_for_expr;
 use super::exprs::peel_mut_ty;
 use super::state::DataDef;
 use super::{CheckPass, DiagKind};
@@ -18,6 +20,36 @@ type ExprIdList = Vec<HirExprId>;
 type TyIdList = Vec<HirTyId>;
 
 impl CheckPass<'_, '_, '_> {
+    pub(super) fn check_index_expr(
+        &mut self,
+        origin: HirOrigin,
+        base: HirExprId,
+        args: SliceRange<HirExprId>,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let base_facts = super::exprs::check_expr(self, base);
+        let mut effects = base_facts.effects.clone();
+        let arg_count = self.check_index_args(origin, args, &mut effects);
+        let ty = if let HirTyKind::Array { dims, item } =
+            self.ty(peel_mut_ty(self, base_facts.ty)).kind
+        {
+            let dims = self.dims(dims);
+            if !dims.is_empty() && dims.len() != arg_count {
+                self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+            }
+            item
+        } else if let HirTyKind::Seq { item } = self.ty(peel_mut_ty(self, base_facts.ty)).kind {
+            if arg_count != 1 {
+                self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+            }
+            item
+        } else {
+            self.diag(origin.span, DiagKind::InvalidIndexTarget, "");
+            builtins.unknown
+        };
+        ExprFacts::new(ty, effects)
+    }
+
     pub(super) fn check_array_expr(&mut self, items: SliceRange<HirArrayItem>) -> ExprFacts {
         let builtins = self.builtins();
         let mut effects = EffectRow::empty();
@@ -246,6 +278,177 @@ impl CheckPass<'_, '_, '_> {
         let ty = self.alloc_ty(HirTyKind::Record { fields });
         ExprFacts::new(ty, effects)
     }
+}
+
+impl CheckPass<'_, '_, '_> {
+    pub(super) fn check_field_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        base: HirExprId,
+        access: HirAccessKind,
+        name: Ident,
+    ) -> ExprFacts {
+        let base_facts = super::exprs::check_expr(self, base);
+        let effects = base_facts.effects.clone();
+
+        if let HirExprKind::Name { name: effect_name } = self.expr(base).kind {
+            let effect_name = self.resolve_symbol(effect_name.name);
+            let op_name = self.resolve_symbol(name.name);
+            if let Some(effect) = self.effect_def(effect_name)
+                && let Some(op) = effect.op(op_name).cloned()
+            {
+                let params = self.alloc_ty_list(op.params().iter().copied());
+                let ty = self.alloc_ty(HirTyKind::Arrow {
+                    params,
+                    ret: op.result(),
+                    is_effectful: true,
+                });
+                return ExprFacts::new(ty, effects);
+            }
+        }
+
+        let base_ty = peel_mut_ty(self, base_facts.ty);
+        let ty = self
+            .record_like_field_ty(base_ty, self.resolve_symbol(name.name))
+            .unwrap_or_else(|| {
+                self.check_non_record_field_expr(expr_id, origin, base, access, name)
+            });
+        ExprFacts::new(ty, effects)
+    }
+
+    pub(super) fn check_record_update_expr(
+        &mut self,
+        origin: HirOrigin,
+        base: HirExprId,
+        items: SliceRange<HirRecordItem>,
+    ) -> ExprFacts {
+        let base_facts = super::exprs::check_expr(self, base);
+        let mut effects = base_facts.effects.clone();
+        let base_ty = peel_mut_ty(self, base_facts.ty);
+        let mut fields = self.record_like_fields(base_ty).unwrap_or_else(|| {
+            self.diag(origin.span, DiagKind::InvalidRecordUpdateTarget, "");
+            BTreeMap::new()
+        });
+        for record_item in self.record_items(items) {
+            if record_item.spread {
+                let facts = super::exprs::check_expr(self, record_item.value);
+                effects.union_with(&facts.effects);
+                let spread_origin = self.expr(record_item.value).origin;
+                let spread_ty = peel_mut_ty(self, facts.ty);
+                let Some(spread_fields) = self.record_like_fields(spread_ty) else {
+                    self.diag(spread_origin.span, DiagKind::InvalidRecordSpreadSource, "");
+                    continue;
+                };
+                for (field_name, field_ty) in spread_fields {
+                    let _prev = fields.insert(field_name, field_ty);
+                }
+                continue;
+            }
+
+            let expected = record_item
+                .name
+                .and_then(|name| fields.get(self.resolve_symbol(name.name)).copied())
+                .unwrap_or_else(|| self.builtins().unknown);
+            self.push_expected_ty(expected);
+            let facts = super::exprs::check_expr(self, record_item.value);
+            let _ = self.pop_expected_ty();
+            effects.union_with(&facts.effects);
+            if let Some(name) = record_item.name {
+                let _prev = fields.insert(self.resolve_symbol(name.name).into(), facts.ty);
+            }
+        }
+
+        ExprFacts::new(
+            self.rebuild_record_like_ty(origin, base_ty, fields),
+            effects,
+        )
+    }
+}
+
+impl CheckPass<'_, '_, '_> {
+    pub(super) fn check_binary_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        op: &HirBinaryOp,
+        left: HirExprId,
+        right: HirExprId,
+    ) -> ExprFacts {
+        if matches!(op, HirBinaryOp::Assign) {
+            return self.check_assign_expr(origin, left, right);
+        }
+        let builtins = self.builtins();
+        let left_facts = super::exprs::check_expr(self, left);
+        let right_facts = super::exprs::check_expr(self, right);
+        let mut effects = left_facts.effects.clone();
+        effects.union_with(&right_facts.effects);
+        if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
+            return self.check_range_binary_expr(
+                origin,
+                op,
+                left_facts.ty,
+                right_facts.ty,
+                effects,
+            );
+        }
+        if matches!(op, HirBinaryOp::In) {
+            return self.check_in_binary_expr(
+                expr_id,
+                origin,
+                left_facts.ty,
+                right_facts.ty,
+                effects,
+            );
+        }
+        if matches!(
+            op,
+            HirBinaryOp::Pipe
+                | HirBinaryOp::Or
+                | HirBinaryOp::Xor
+                | HirBinaryOp::And
+                | HirBinaryOp::Shl
+                | HirBinaryOp::Shr
+                | HirBinaryOp::UserOp(_)
+        ) {
+            self.diag(
+                origin.span,
+                DiagKind::BinaryOperatorHasNoExecutableLowering,
+                "",
+            );
+            return ExprFacts::new(builtins.unknown, effects);
+        }
+        ExprFacts::new(
+            self.binary_result_ty(origin, op, left, right, left_facts.ty, right_facts.ty),
+            effects,
+        )
+    }
+
+    pub(super) fn check_partial_range_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        kind: HirPartialRangeKind,
+        expr: HirExprId,
+    ) -> ExprFacts {
+        let facts = super::exprs::check_expr(self, expr);
+        let bound = self.normalize_range_bound_ty(facts.ty);
+        let obligations = [
+            self.range_obligation(bound, self.known().rangeable),
+            self.range_obligation(bound, self.known().range_bounds),
+        ];
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &obligations)
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
+        let ty = match kind {
+            HirPartialRangeKind::From => self.alloc_ty(HirTyKind::PartialRangeFrom { bound }),
+            HirPartialRangeKind::UpTo => self.alloc_ty(HirTyKind::PartialRangeUpTo { bound }),
+            HirPartialRangeKind::Thru => self.alloc_ty(HirTyKind::PartialRangeThru { bound }),
+        };
+        ExprFacts::new(ty, facts.effects)
+    }
 
     pub(super) fn check_variant_expr(
         &mut self,
@@ -303,7 +506,9 @@ impl CheckPass<'_, '_, '_> {
 
         ExprFacts::new(expected_ty, effects)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn expected_array_contract(&self) -> (Option<SliceRange<HirDim>>, Option<HirTyId>, bool) {
         let expected_array = self.expected_ty().and_then(|expected| {
             let expected_inner = peel_mut_ty(self, expected);
@@ -469,6 +674,451 @@ impl CheckPass<'_, '_, '_> {
                 self.diag(tag.span, DiagKind::AmbiguousVariantTag, "");
                 None
             }
+        }
+    }
+}
+
+impl CheckPass<'_, '_, '_> {
+    fn check_index_args(
+        &mut self,
+        origin: HirOrigin,
+        args: SliceRange<HirExprId>,
+        effects: &mut EffectRow,
+    ) -> usize {
+        let builtins = self.builtins();
+        let index_exprs = self.expr_ids(args);
+        if index_exprs.is_empty() {
+            self.diag(origin.span, DiagKind::IndexRequiresArgument, "");
+        }
+        for index_expr in &index_exprs {
+            let facts = super::exprs::check_expr(self, *index_expr);
+            effects.union_with(&facts.effects);
+            let index_origin = self.expr(*index_expr).origin;
+            self.type_mismatch(index_origin, builtins.int_, facts.ty);
+        }
+        index_exprs.len()
+    }
+
+    fn check_non_record_field_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        base: HirExprId,
+        access: HirAccessKind,
+        name: Ident,
+    ) -> HirTyId {
+        let builtins = self.builtins();
+        let base_facts = super::exprs::check_expr(self, base);
+        let base_ty = peel_mut_ty(self, base_facts.ty);
+        match self.ty(base_ty).kind {
+            HirTyKind::Module => {
+                if let Some((surface, export)) = module_export_for_expr(self, base, name) {
+                    if let Some(target) = export.module_target.clone() {
+                        self.set_expr_module_target(expr_id, target);
+                    }
+                    let scheme = self.scheme_from_export(&surface, &export);
+                    if scheme.type_params.is_empty() {
+                        let instantiated = self.instantiate_monomorphic_scheme(&scheme);
+                        if let Some(evidence) =
+                            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                            && !evidence.is_empty()
+                        {
+                            self.set_expr_evidence(expr_id, evidence);
+                        }
+                    }
+                    self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+                    scheme.ty
+                } else {
+                    builtins.any
+                }
+            }
+            HirTyKind::Record { .. } | HirTyKind::Range { .. } => {
+                let field_name = self.resolve_symbol(name.name).to_owned();
+                self.diag(
+                    origin.span,
+                    DiagKind::UnknownField,
+                    &format!("unknown field `{field_name}`"),
+                );
+                builtins.unknown
+            }
+            _ => {
+                if matches!(access, HirAccessKind::Direct) {
+                    self.diag(origin.span, DiagKind::InvalidFieldAccess, "");
+                } else {
+                    self.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+                }
+                builtins.unknown
+            }
+        }
+    }
+
+    fn rebuild_record_like_ty(
+        &mut self,
+        origin: HirOrigin,
+        base_ty: HirTyId,
+        fields: BTreeMap<Box<str>, HirTyId>,
+    ) -> HirTyId {
+        (match self.ty(base_ty).kind {
+            HirTyKind::Range { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                if let Some(found) = fields.get("upperBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                Some(self.alloc_ty(HirTyKind::Range { bound }))
+            }
+            HirTyKind::ClosedRange { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                if let Some(found) = fields.get("upperBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                Some(self.alloc_ty(HirTyKind::ClosedRange { bound }))
+            }
+            HirTyKind::PartialRangeFrom { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                Some(self.alloc_ty(HirTyKind::PartialRangeFrom { bound }))
+            }
+            HirTyKind::PartialRangeUpTo { bound } => {
+                if let Some(found) = fields.get("upperBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                Some(self.alloc_ty(HirTyKind::PartialRangeUpTo { bound }))
+            }
+            HirTyKind::PartialRangeThru { bound } => {
+                if let Some(found) = fields.get("upperBound").copied() {
+                    self.type_mismatch(origin, bound, found);
+                }
+                Some(self.alloc_ty(HirTyKind::PartialRangeThru { bound }))
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            let fields = fields
+                .into_iter()
+                .map(|(name, ty)| HirTyField::new(self.intern(name.as_ref()), ty))
+                .collect::<Vec<_>>();
+            let fields = self.alloc_ty_fields(fields);
+            self.alloc_ty(HirTyKind::Record { fields })
+        })
+    }
+
+    fn check_assign_expr(
+        &mut self,
+        origin: HirOrigin,
+        left: HirExprId,
+        right: HirExprId,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let (expected_rhs, mut effects) = self.assignment_contract(origin, left);
+        self.push_expected_ty(expected_rhs);
+        let rhs_facts = super::exprs::check_expr(self, right);
+        let _ = self.pop_expected_ty();
+        effects.union_with(&rhs_facts.effects);
+        self.type_mismatch(origin, expected_rhs, rhs_facts.ty);
+        ExprFacts::new(builtins.unit, effects)
+    }
+
+    fn assignment_contract(&mut self, origin: HirOrigin, left: HirExprId) -> (HirTyId, EffectRow) {
+        let builtins = self.builtins();
+        match self.expr(left).kind {
+            HirExprKind::Name { name } => {
+                let binding = self.binding_id_for_use(name);
+                let ty = binding
+                    .and_then(|binding| self.binding_type(binding))
+                    .unwrap_or_else(|| self.symbol_value_type(name.name));
+                if self.is_mut_ty(ty) {
+                    (peel_mut_ty(self, ty), EffectRow::empty())
+                } else {
+                    self.diag(origin.span, DiagKind::WriteRequiresMutValue, "");
+                    (builtins.unknown, EffectRow::empty())
+                }
+            }
+            HirExprKind::Index { base, args } => self.assignment_index_contract(origin, base, args),
+            HirExprKind::Field { base, name, .. } => {
+                self.assignment_field_contract(origin, base, name)
+            }
+            _ => {
+                self.diag(origin.span, DiagKind::UnsupportedAssignmentTarget, "");
+                (builtins.unknown, EffectRow::empty())
+            }
+        }
+    }
+
+    fn assignment_index_contract(
+        &mut self,
+        origin: HirOrigin,
+        base: HirExprId,
+        args: SliceRange<HirExprId>,
+    ) -> (HirTyId, EffectRow) {
+        let builtins = self.builtins();
+        let base_facts = super::exprs::check_expr(self, base);
+        let mut effects = base_facts.effects;
+        let arg_count = self.check_index_args(origin, args, &mut effects);
+        let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
+            HirTyKind::Array { dims, item } if self.is_mut_ty(base_facts.ty) => {
+                let dims = self.dims(dims);
+                if !dims.is_empty() && dims.len() != arg_count {
+                    self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                }
+                item
+            }
+            HirTyKind::Array { .. } => {
+                self.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
+                builtins.unknown
+            }
+            HirTyKind::Seq { item } => {
+                if arg_count != 1 {
+                    self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                }
+                if self.is_mut_ty(base_facts.ty) {
+                    item
+                } else {
+                    self.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
+                    builtins.unknown
+                }
+            }
+            _ => {
+                self.diag(origin.span, DiagKind::InvalidIndexTarget, "");
+                builtins.unknown
+            }
+        };
+        (expected, effects)
+    }
+
+    fn assignment_field_contract(
+        &mut self,
+        origin: HirOrigin,
+        base: HirExprId,
+        name: Ident,
+    ) -> (HirTyId, EffectRow) {
+        let builtins = self.builtins();
+        let base_facts = super::exprs::check_expr(self, base);
+        let effects = base_facts.effects;
+        let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
+            HirTyKind::Record { fields } if self.is_mut_ty(base_facts.ty) => self
+                .ty_fields(fields)
+                .into_iter()
+                .find(|field| field.name == name.name)
+                .map_or_else(
+                    || {
+                        let field_name = self.resolve_symbol(name.name).to_owned();
+                        self.diag(
+                            origin.span,
+                            DiagKind::UnknownField,
+                            &format!("unknown field `{field_name}`"),
+                        );
+                        builtins.unknown
+                    },
+                    |field| field.ty,
+                ),
+            HirTyKind::Record { .. } => {
+                self.diag(origin.span, DiagKind::WriteRequiresMutRecord, "");
+                builtins.unknown
+            }
+            _ => {
+                self.diag(origin.span, DiagKind::InvalidFieldUpdateTarget, "");
+                builtins.unknown
+            }
+        };
+        (expected, effects)
+    }
+
+    fn check_range_binary_expr(
+        &mut self,
+        origin: HirOrigin,
+        op: &HirBinaryOp,
+        left: HirTyId,
+        right: HirTyId,
+        effects: EffectRow,
+    ) -> ExprFacts {
+        let item_ty = self.range_item_ty(origin, left, right);
+        let ty = match op {
+            HirBinaryOp::OpenRange => self.alloc_ty(HirTyKind::Range { bound: item_ty }),
+            HirBinaryOp::ClosedRange => self.alloc_ty(HirTyKind::ClosedRange { bound: item_ty }),
+            _ => self.builtins().unknown,
+        };
+        ExprFacts::new(ty, effects)
+    }
+
+    fn check_in_binary_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        left: HirTyId,
+        right: HirTyId,
+        effects: EffectRow,
+    ) -> ExprFacts {
+        let builtins = self.builtins();
+        let Some(item_ty) = self.range_item_type(right) else {
+            let expected = self.alloc_ty(HirTyKind::Range { bound: left });
+            self.type_mismatch(origin, expected, right);
+            return ExprFacts::new(builtins.bool_, effects);
+        };
+        self.type_mismatch(origin, item_ty, left);
+        let obligation = self.range_obligation(item_ty, self.known().rangeable);
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
+        ExprFacts::new(builtins.bool_, effects)
+    }
+
+    fn binary_result_ty(
+        &mut self,
+        origin: HirOrigin,
+        op: &HirBinaryOp,
+        left: HirExprId,
+        right: HirExprId,
+        left_ty: HirTyId,
+        right_ty: HirTyId,
+    ) -> HirTyId {
+        let builtins = self.builtins();
+        match op {
+            HirBinaryOp::Arrow | HirBinaryOp::EffectArrow => {
+                let left_origin = self.expr(left).origin;
+                let left_ty = self.lower_type_expr(left, left_origin);
+                let params = self.alloc_ty_list([left_ty]);
+                let right_origin = self.expr(right).origin;
+                let ret = self.lower_type_expr(right, right_origin);
+                self.alloc_ty(HirTyKind::Arrow {
+                    params,
+                    ret,
+                    is_effectful: matches!(op, HirBinaryOp::EffectArrow),
+                })
+            }
+            HirBinaryOp::Add
+                if matches!(self.ty(left_ty).kind, HirTyKind::Type)
+                    || matches!(self.ty(right_ty).kind, HirTyKind::Type) =>
+            {
+                let left_origin = self.expr(left).origin;
+                let right_origin = self.expr(right).origin;
+                let left_ty = self.lower_type_expr(left, left_origin);
+                let right_ty = self.lower_type_expr(right, right_origin);
+                self.alloc_ty(HirTyKind::Sum {
+                    left: left_ty,
+                    right: right_ty,
+                })
+            }
+            HirBinaryOp::Add
+                if matches!(self.ty(left_ty).kind, HirTyKind::String)
+                    || matches!(self.ty(right_ty).kind, HirTyKind::String) =>
+            {
+                self.type_mismatch(origin, builtins.string_, left_ty);
+                self.type_mismatch(origin, builtins.string_, right_ty);
+                builtins.string_
+            }
+            HirBinaryOp::Add
+            | HirBinaryOp::Sub
+            | HirBinaryOp::Mul
+            | HirBinaryOp::Div
+            | HirBinaryOp::Rem => self.numeric_binary_type(origin, left_ty, right_ty),
+            HirBinaryOp::Eq
+            | HirBinaryOp::Ne
+            | HirBinaryOp::Lt
+            | HirBinaryOp::Gt
+            | HirBinaryOp::Le
+            | HirBinaryOp::Ge => builtins.bool_,
+            HirBinaryOp::Assign
+            | HirBinaryOp::Pipe
+            | HirBinaryOp::Or
+            | HirBinaryOp::Xor
+            | HirBinaryOp::And
+            | HirBinaryOp::ClosedRange
+            | HirBinaryOp::OpenRange
+            | HirBinaryOp::In
+            | HirBinaryOp::Shl
+            | HirBinaryOp::Shr
+            | HirBinaryOp::UserOp(_) => builtins.unknown,
+        }
+    }
+
+    fn normalize_range_bound_ty(&self, ty: HirTyId) -> HirTyId {
+        match self.ty(ty).kind {
+            HirTyKind::NatLit(_) => self.builtins().nat,
+            _ => ty,
+        }
+    }
+
+    fn range_item_ty(&mut self, origin: HirOrigin, left: HirTyId, right: HirTyId) -> HirTyId {
+        let builtins = self.builtins();
+        let left = self.normalize_range_bound_ty(left);
+        let right = self.normalize_range_bound_ty(right);
+        if left == right {
+            return left;
+        }
+        if self.is_integer_like_range_ty(left) && self.is_integer_like_range_ty(right) {
+            self.type_mismatch(origin, left, right);
+            return left;
+        }
+        self.type_mismatch(origin, builtins.int_, left);
+        self.type_mismatch(origin, builtins.int_, right);
+        builtins.int_
+    }
+
+    fn is_integer_like_range_ty(&self, ty: HirTyId) -> bool {
+        let builtins = self.builtins();
+        ty == builtins.int_ || ty == builtins.nat
+    }
+
+    fn range_item_type(&self, ty: HirTyId) -> Option<HirTyId> {
+        match self.ty(peel_mut_ty(self, ty)).kind {
+            HirTyKind::Range { bound }
+            | HirTyKind::ClosedRange { bound }
+            | HirTyKind::PartialRangeFrom { bound }
+            | HirTyKind::PartialRangeUpTo { bound }
+            | HirTyKind::PartialRangeThru { bound } => Some(bound),
+            _ => None,
+        }
+    }
+
+    fn record_like_fields(&self, ty: HirTyId) -> Option<BTreeMap<Box<str>, HirTyId>> {
+        match self.ty(ty).kind {
+            HirTyKind::Record { fields } => Some(
+                self.ty_fields(fields)
+                    .into_iter()
+                    .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
+                    .collect(),
+            ),
+            HirTyKind::Range { bound } | HirTyKind::ClosedRange { bound } => {
+                Some(BTreeMap::from([
+                    ("lowerBound".into(), bound),
+                    ("upperBound".into(), bound),
+                ]))
+            }
+            HirTyKind::PartialRangeFrom { bound } => {
+                Some(BTreeMap::from([("lowerBound".into(), bound)]))
+            }
+            HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
+                Some(BTreeMap::from([("upperBound".into(), bound)]))
+            }
+            _ => None,
+        }
+    }
+
+    fn record_like_field_ty(&self, ty: HirTyId, field_name: &str) -> Option<HirTyId> {
+        self.record_like_fields(ty)
+            .and_then(|fields| fields.get(field_name).copied())
+    }
+
+    fn range_obligation(
+        &mut self,
+        subject: HirTyId,
+        class_name: Symbol,
+    ) -> super::schemes::ConstraintObligation {
+        let class_ty = self.named_type_for_symbol(class_name);
+        super::schemes::ConstraintObligation {
+            kind: ConstraintKind::Implements,
+            subject,
+            value: class_ty,
+            class_key: self
+                .class_facts_by_name(class_name)
+                .map(|facts| facts.key.clone()),
         }
     }
 }

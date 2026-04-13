@@ -352,6 +352,7 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
             None,
             None,
             None,
+            false,
         ),
     );
 }
@@ -463,7 +464,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn expr(&self, id: HirExprId) -> HirExpr {
         self.module.resolved.module.store.exprs.get(id).clone()
     }
@@ -492,10 +495,6 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.runtime.target.as_ref()
     }
 
-    pub const fn sema_env(&self) -> Option<&'env dyn SemaEnv> {
-        self.runtime.env
-    }
-
     pub const fn interner(&self) -> &Interner {
         self.runtime.interner
     }
@@ -507,7 +506,15 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub fn resolve_symbol(&self, symbol: Symbol) -> &str {
         self.runtime.interner.resolve(symbol)
     }
+}
 
+impl<'env> PassBase<'_, '_, 'env> {
+    pub const fn sema_env(&self) -> Option<&'env dyn SemaEnv> {
+        self.runtime.env
+    }
+}
+
+impl PassBase<'_, '_, '_> {
     pub fn expr_ids(&self, range: SliceRange<HirExprId>) -> ExprIdList {
         self.module
             .resolved
@@ -685,7 +692,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .get(range)
             .to_vec()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn set_expr_facts(&mut self, id: HirExprId, facts: ExprFacts) {
         let slot = self
             .facts
@@ -764,7 +773,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .store
             .alloc_ty_field_list(fields)
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn binding_id_for_decl(&self, ident: Ident) -> Option<NameBindingId> {
         let site = NameSite::new(self.source_id(), ident.span);
         if let Some(id) = self.module.binding_ids.get(&site).copied() {
@@ -802,7 +813,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .get(&NameSite::new(self.source_id(), ident.span))
             .copied()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn binding_type(&self, id: NameBindingId) -> Option<HirTyId> {
         self.typing.binding_types.get(&id).copied()
     }
@@ -862,7 +875,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub fn set_foreign_link(&mut self, binding: NameBindingId, link: ForeignLinkInfo) {
         let _prev = self.typing.foreign_links.insert(binding, link);
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
         self.decls.effect_defs.get(name)
     }
@@ -902,11 +917,13 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         ]);
         let _prev = self.decls.data_defs.insert(
             name.clone(),
-            SemaDataDef::new(key, variants, None, None, None),
+            SemaDataDef::new(key, variants, None, None, None, false),
         );
         name
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {
         self.decls.class_index.get(&symbol).copied()
     }
@@ -938,7 +955,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
         &self.decls.instance_facts
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn lit_kind(&self, lit: HirLitId) -> HirLitKind {
         self.lit(lit).kind
     }

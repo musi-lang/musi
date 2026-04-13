@@ -190,44 +190,53 @@ impl<'tree, 'src> Expr<'tree, 'src> {
         if !kind.is_expr() {
             return ExprKind::Other;
         }
-        match kind {
-            SyntaxNodeKind::LiteralExpr => ExprKind::Literal,
-            SyntaxNodeKind::TemplateExpr => ExprKind::Template,
-            SyntaxNodeKind::NameExpr => ExprKind::Name,
-            SyntaxNodeKind::PiExpr => ExprKind::Pi,
-            SyntaxNodeKind::LambdaExpr => ExprKind::Lambda,
-            SyntaxNodeKind::TupleExpr => ExprKind::Tuple,
-            SyntaxNodeKind::SequenceExpr => ExprKind::Sequence,
-            SyntaxNodeKind::ArrayExpr => ExprKind::Array,
-            SyntaxNodeKind::RecordExpr => ExprKind::Record,
-            SyntaxNodeKind::VariantExpr => ExprKind::Variant,
-            SyntaxNodeKind::CallExpr => ExprKind::Call,
-            SyntaxNodeKind::ApplyExpr => ExprKind::Apply,
-            SyntaxNodeKind::IndexExpr => ExprKind::Index,
-            SyntaxNodeKind::RecordUpdateExpr => ExprKind::RecordUpdate,
-            SyntaxNodeKind::FieldExpr => ExprKind::FieldAccess,
-            SyntaxNodeKind::TypeTestExpr => ExprKind::TypeTest,
-            SyntaxNodeKind::TypeCastExpr => ExprKind::TypeCast,
-            SyntaxNodeKind::PrefixExpr | SyntaxNodeKind::PostfixExpr => ExprKind::Prefix,
-            SyntaxNodeKind::BinaryExpr => ExprKind::Binary,
-            SyntaxNodeKind::CaseExpr => ExprKind::Case,
-            SyntaxNodeKind::AttributedExpr => ExprKind::Attributed,
-            SyntaxNodeKind::LetExpr => ExprKind::Let,
-            SyntaxNodeKind::ResumeExpr => ExprKind::Resume,
-            SyntaxNodeKind::ImportExpr => ExprKind::Import,
-            SyntaxNodeKind::DataExpr => ExprKind::Data,
-            SyntaxNodeKind::EffectExpr => ExprKind::Effect,
-            SyntaxNodeKind::ClassExpr => ExprKind::Class,
-            SyntaxNodeKind::InstanceExpr => ExprKind::Instance,
-            SyntaxNodeKind::PerformExpr => ExprKind::Perform,
-            SyntaxNodeKind::HandlerExpr => ExprKind::Handler,
-            SyntaxNodeKind::HandleExpr => ExprKind::Handle,
-            SyntaxNodeKind::ForeignBlockExpr => ExprKind::Foreign,
-            SyntaxNodeKind::QuoteExpr => ExprKind::Quote,
-            SyntaxNodeKind::SpliceExpr => ExprKind::Splice,
-            _ => ExprKind::Other,
-        }
+        expr_kind_from_syntax(kind)
     }
+}
+
+fn expr_kind_from_syntax(kind: SyntaxNodeKind) -> ExprKind {
+    const EXPR_KIND_PAIRS: &[(SyntaxNodeKind, ExprKind)] = &[
+        (SyntaxNodeKind::LiteralExpr, ExprKind::Literal),
+        (SyntaxNodeKind::TemplateExpr, ExprKind::Template),
+        (SyntaxNodeKind::NameExpr, ExprKind::Name),
+        (SyntaxNodeKind::PiExpr, ExprKind::Pi),
+        (SyntaxNodeKind::LambdaExpr, ExprKind::Lambda),
+        (SyntaxNodeKind::TupleExpr, ExprKind::Tuple),
+        (SyntaxNodeKind::SequenceExpr, ExprKind::Sequence),
+        (SyntaxNodeKind::ArrayExpr, ExprKind::Array),
+        (SyntaxNodeKind::RecordExpr, ExprKind::Record),
+        (SyntaxNodeKind::VariantExpr, ExprKind::Variant),
+        (SyntaxNodeKind::CallExpr, ExprKind::Call),
+        (SyntaxNodeKind::ApplyExpr, ExprKind::Apply),
+        (SyntaxNodeKind::IndexExpr, ExprKind::Index),
+        (SyntaxNodeKind::RecordUpdateExpr, ExprKind::RecordUpdate),
+        (SyntaxNodeKind::FieldExpr, ExprKind::FieldAccess),
+        (SyntaxNodeKind::TypeTestExpr, ExprKind::TypeTest),
+        (SyntaxNodeKind::TypeCastExpr, ExprKind::TypeCast),
+        (SyntaxNodeKind::PrefixExpr, ExprKind::Prefix),
+        (SyntaxNodeKind::PostfixExpr, ExprKind::Prefix),
+        (SyntaxNodeKind::BinaryExpr, ExprKind::Binary),
+        (SyntaxNodeKind::CaseExpr, ExprKind::Case),
+        (SyntaxNodeKind::AttributedExpr, ExprKind::Attributed),
+        (SyntaxNodeKind::LetExpr, ExprKind::Let),
+        (SyntaxNodeKind::ResumeExpr, ExprKind::Resume),
+        (SyntaxNodeKind::ImportExpr, ExprKind::Import),
+        (SyntaxNodeKind::DataExpr, ExprKind::Data),
+        (SyntaxNodeKind::EffectExpr, ExprKind::Effect),
+        (SyntaxNodeKind::ClassExpr, ExprKind::Class),
+        (SyntaxNodeKind::InstanceExpr, ExprKind::Instance),
+        (SyntaxNodeKind::PerformExpr, ExprKind::Perform),
+        (SyntaxNodeKind::HandlerExpr, ExprKind::Handler),
+        (SyntaxNodeKind::HandleExpr, ExprKind::Handle),
+        (SyntaxNodeKind::ForeignBlockExpr, ExprKind::Foreign),
+        (SyntaxNodeKind::QuoteExpr, ExprKind::Quote),
+        (SyntaxNodeKind::SpliceExpr, ExprKind::Splice),
+    ];
+
+    EXPR_KIND_PAIRS
+        .iter()
+        .find_map(|(candidate, expr_kind)| (kind == *candidate).then_some(*expr_kind))
+        .unwrap_or(ExprKind::Other)
 }
 
 impl<'tree, 'src> LetExpr<'tree, 'src> {

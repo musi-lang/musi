@@ -9,6 +9,8 @@ pub struct ForeignDescriptor {
     pub symbol: StringId,
     pub link: Option<StringId>,
     pub export: bool,
+    pub hot: bool,
+    pub cold: bool,
 }
 
 impl ForeignDescriptor {
@@ -28,6 +30,8 @@ impl ForeignDescriptor {
             symbol,
             link: None,
             export: false,
+            hot: false,
+            cold: false,
         }
     }
 
@@ -40,6 +44,18 @@ impl ForeignDescriptor {
     #[must_use]
     pub const fn with_export(mut self, export: bool) -> Self {
         self.export = export;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
         self
     }
 }

@@ -495,7 +495,7 @@ fn finish_emitter_method(emitter: MethodEmitter<'_, '_>, method_id: MethodId) {
 }
 
 fn build_entry_method(artifact: &mut Artifact, name: &str, init_methods: &[MethodId]) -> MethodId {
-    let method_id = alloc_method(artifact, name, false, 0);
+    let method_id = alloc_method(artifact, name, false, false, false, 0);
     let labels = initial_labels(artifact);
     finalize_method(artifact, method_id, 1, labels, entry_code(init_methods));
     method_id
@@ -532,11 +532,21 @@ fn initial_labels(artifact: &mut Artifact) -> Vec<StringId> {
     vec![artifact.intern_string("L0")]
 }
 
-fn alloc_method(artifact: &mut Artifact, name: &str, export: bool, params: u16) -> MethodId {
+fn alloc_method(
+    artifact: &mut Artifact,
+    name: &str,
+    export: bool,
+    hot: bool,
+    cold: bool,
+    params: u16,
+) -> MethodId {
     let name_id = artifact.intern_string(name);
-    artifact
-        .methods
-        .alloc(MethodDescriptor::new(name_id, params, 0, Box::new([])).with_export(export))
+    artifact.methods.alloc(
+        MethodDescriptor::new(name_id, params, 0, Box::new([]))
+            .with_export(export)
+            .with_hot(hot)
+            .with_cold(cold),
+    )
 }
 
 fn finalize_method(

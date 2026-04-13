@@ -867,13 +867,13 @@ export const renderedDocs = [
 			}
 		],
 		"title": "Attributes and foreign declarations",
-		"description": "Use public attributes and foreign declarations.",
+		"description": "Use stable public attributes, reserved compiler attributes, and foreign bindings.",
 		"group": "Abstractions",
 		"section": "Abstractions",
 		"order": 13,
 		"slug": "attributes-and-foreign",
-		"summary": "Public attributes, foreign bindings, and symbol metadata.",
-		"descriptionHtml": "Use public attributes and foreign declarations.",
+		"summary": "Stable public attrs, reserved compiler attrs, and foreign bindings.",
+		"descriptionHtml": "Use stable public attributes, reserved compiler attributes, and foreign bindings.",
 		"headings": [
 			{
 				"depth": 2,
@@ -882,8 +882,13 @@ export const renderedDocs = [
 			},
 			{
 				"depth": 2,
-				"id": "attribute-form",
-				"text": "Attribute form"
+				"id": "public-attributes",
+				"text": "Public attributes"
+			},
+			{
+				"depth": 2,
+				"id": "reserved-compiler-attributes",
+				"text": "Reserved compiler attributes"
 			},
 			{
 				"depth": 2,
@@ -896,8 +901,8 @@ export const renderedDocs = [
 				"text": "Next step"
 			}
 		],
-		"html": "<p>Attributes and foreign declarations are explicit annotations on declarations.</p>\n<h2 id=\"foreign-binding\"><a href=\"#foreign-binding\">Foreign binding</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"attribute-form\"><a href=\"#attribute-form\">Attribute form</a></h2><p>Use <code>@link</code>, <code>@when</code>, <code>@repr</code>, and <code>@layout</code> when a declaration needs explicit metadata.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">@</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">link</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Declare one <code>foreign</code> binding.</li><li>Add one attribute to it.</li><li>Keep the declaration minimal and explicit.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Review attributes first, then the foreign example, then continue to <a href=\"/docs/types-and-abstractions/quote-and-syntax\">Quote and syntax values</a>.</p>\n",
-		"summaryHtml": "Public attributes, foreign bindings, and symbol metadata."
+		"html": "<p>Attributes are plain metadata on declarations. Most are public. Two are compiler-owned: <code>@known</code> and <code>@intrinsic</code>.</p>\n<h2 id=\"foreign-binding\"><a href=\"#foreign-binding\">Foreign binding</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"public-attributes\"><a href=\"#public-attributes\">Public attributes</a></h2><p>Use these when a declaration needs explicit metadata:</p>\n<ul>\n<li><code>@link</code></li>\n<li><code>@when</code></li>\n<li><code>@repr</code></li>\n<li><code>@layout</code></li>\n<li><code>@frozen</code></li>\n<li><code>@hot</code></li>\n<li><code>@cold</code></li>\n<li><code>@deprecated</code></li>\n<li><code>@since</code></li>\n</ul>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">@</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">link</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><p><code>@frozen</code> is ABI/layout promise for exported non-opaque <code>data</code>. It does not mean immutability.</p>\n<p><code>@hot</code> and <code>@cold</code> are optimizer hints on callable declarations. They do not change semantics.</p>\n<h2 id=\"reserved-compiler-attributes\"><a href=\"#reserved-compiler-attributes\">Reserved compiler attributes</a></h2><p>Use reserved attrs only inside foundation/compiler-owned modules:</p>\n<ul>\n<li><code>@known(name := &quot;...&quot;)</code></li>\n<li><code>@intrinsic(name := &quot;...&quot;)</code></li>\n</ul>\n<p><code>@known</code> marks compiler-known bindings such as <code>Type</code> or <code>CString</code>.</p>\n<p><code>@intrinsic</code> marks compiler-owned runtime hooks in <code>musi:intrinsics</code>. It is not general user metadata.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Declare one <code>foreign</code> binding.</li><li>Add one attribute to it.</li><li>Keep the declaration minimal and explicit.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Read foreign examples first, then continue to <a href=\"/docs/types-and-abstractions/quote-and-syntax\">Quote and syntax values</a>.</p>\n",
+		"summaryHtml": "Stable public attrs, reserved compiler attrs, and foreign bindings."
 	},
 	{
 		"id": "foundation-and-standard-library",

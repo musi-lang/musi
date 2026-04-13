@@ -34,9 +34,11 @@ mod effects;
 mod foreign;
 mod meta;
 mod patterns;
+mod range;
 mod record;
 mod rewrite;
 mod toplevel;
+mod types;
 mod validate;
 
 use closures::{
@@ -46,7 +48,11 @@ use closures::{
 use effects::{lower_handle_expr, lower_handler_literal_expr, lower_perform_expr};
 use foreign::lower_foreign_let;
 use patterns::{collect_pattern_bindings, lower_case_expr};
+use range::{lower_in_expr, lower_partial_range_expr, lower_range_expr};
 use rewrite::rewrite_recursive_binding_refs;
+use types::{
+    is_builtin_type_name_symbol, render_named_ty_name, render_ty_name, render_type_value_expr_name,
+};
 
 #[derive(Default)]
 struct TopLevelItems {
@@ -236,6 +242,9 @@ fn append_synthesized_sum_data_defs(
         if let Some(layout_pack) = data.layout_pack() {
             data_def = data_def.with_layout_pack(layout_pack);
         }
+        if data.frozen() {
+            data_def = data_def.with_frozen(true);
+        }
         items.data_defs.push(data_def);
     }
 }
@@ -281,7 +290,54 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             },
         );
     }
+    if let HirExprKind::Apply { callee, .. } = &expr.kind {
+        let lowered = lower_expr_with_origin(ctx, *callee, origin);
+        return bind_expr_evidence(ctx, expr_id, origin, lowered);
+    }
     let kind = match &expr.kind {
+        HirExprKind::Name { .. }
+        | HirExprKind::Lit { .. }
+        | HirExprKind::Sequence { .. }
+        | HirExprKind::Tuple { .. }
+        | HirExprKind::Array { .. }
+        | HirExprKind::Template { .. }
+        | HirExprKind::Record { .. } => lower_value_expr(ctx, expr_id, origin, &expr.kind),
+        HirExprKind::Let { .. }
+        | HirExprKind::Binary { .. }
+        | HirExprKind::PartialRange { .. }
+        | HirExprKind::Call { .. }
+        | HirExprKind::Prefix { .. }
+        | HirExprKind::Index { .. }
+        | HirExprKind::Field { .. }
+        | HirExprKind::RecordUpdate { .. } => {
+            lower_operation_expr(ctx, expr_id, origin, &expr.kind)
+        }
+        HirExprKind::Case { .. }
+        | HirExprKind::Variant { .. }
+        | HirExprKind::Lambda { .. }
+        | HirExprKind::Perform { .. }
+        | HirExprKind::HandlerLit { .. }
+        | HirExprKind::Handle { .. } => lower_control_expr(ctx, expr_id, origin, &expr.kind),
+        HirExprKind::TypeTest { .. }
+        | HirExprKind::TypeCast { .. }
+        | HirExprKind::Resume { .. }
+        | HirExprKind::Import { .. }
+        | HirExprKind::Quote { .. }
+        | HirExprKind::Splice { .. } => lower_misc_expr(ctx, expr_id, &expr.kind),
+        other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
+    };
+    bind_expr_evidence(ctx, expr_id, origin, IrExpr::new(origin, kind))
+}
+
+fn lower_value_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    origin: IrOrigin,
+    kind: &HirExprKind,
+) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    match kind {
         HirExprKind::Name { name } => lower_name_expr(sema, expr_id, *name, interner),
         HirExprKind::Lit { lit } => lower_lit_expr(sema, *lit),
         HirExprKind::Sequence { exprs } => lower_sequence_expr(ctx, *exprs),
@@ -291,6 +347,17 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Template { parts } => lower_template_expr(ctx, origin, parts.clone()),
         HirExprKind::Record { items } => lower_record_expr(ctx, expr_id, items.clone())
             .unwrap_or_else(|description| invalid_lowering_path(description)),
+        _ => invalid_lowering_path("value expr dispatcher mismatch"),
+    }
+}
+
+fn lower_operation_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    origin: IrOrigin,
+    kind: &HirExprKind,
+) -> IrExprKind {
+    match kind {
         HirExprKind::Let {
             mods,
             pat,
@@ -307,19 +374,26 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         }
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
-        HirExprKind::Apply { callee, .. } => {
-            let lowered = lower_expr_with_origin(ctx, *callee, origin);
-            return bind_expr_evidence(ctx, expr_id, origin, lowered);
-        }
         HirExprKind::Prefix { op, expr } => lower_prefix_expr(ctx, expr_id, op, *expr, origin),
         HirExprKind::Index { base, args } => lower_index_expr(ctx, *base, *args),
         HirExprKind::Field { base, name, .. } => {
-            lower_field_expr(ctx, expr_id, *base, name.name, &expr.kind)
+            lower_field_expr(ctx, expr_id, *base, name.name, kind)
         }
         HirExprKind::RecordUpdate { base, items } => {
             lower_record_update_expr(ctx, expr_id, *base, items.clone())
                 .unwrap_or_else(|description| invalid_lowering_path(description))
         }
+        _ => invalid_lowering_path("operation expr dispatcher mismatch"),
+    }
+}
+
+fn lower_control_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    origin: IrOrigin,
+    kind: &HirExprKind,
+) -> IrExprKind {
+    match kind {
         HirExprKind::Case { scrutinee, arms } => lower_case_expr(ctx, *scrutinee, arms),
         HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, *args),
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
@@ -329,6 +403,14 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             lower_handler_literal_expr(ctx, expr_id, *effect, clauses.clone())
         }
         HirExprKind::Handle { expr, handler } => lower_handle_expr(ctx, expr_id, *expr, *handler),
+        _ => invalid_lowering_path("control expr dispatcher mismatch"),
+    }
+}
+
+fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKind) -> IrExprKind {
+    let sema = ctx.sema;
+    let interner = ctx.interner;
+    match kind {
         HirExprKind::TypeTest { base, .. } => {
             let ty_name = sema.type_test_target(expr_id).map_or_else(
                 || Box::<str>::from("Unknown"),
@@ -362,9 +444,8 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         }
         HirExprKind::Quote { kind } => lower_quote_expr(kind),
         HirExprKind::Splice { kind } => lower_splice_expr(kind),
-        other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
-    };
-    bind_expr_evidence(ctx, expr_id, origin, IrExpr::new(origin, kind))
+        _ => invalid_lowering_path("misc expr dispatcher mismatch"),
+    }
 }
 
 fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner) -> bool {
@@ -1002,148 +1083,6 @@ fn lower_field_expr(
     invalid_lowering_path(format!("{kind:?}"))
 }
 
-fn render_type_value_expr_name(
-    sema: &SemaModule,
-    expr_id: HirExprId,
-    interner: &Interner,
-) -> Box<str> {
-    match &sema.module().store.exprs.get(expr_id).kind {
-        HirExprKind::Error => "Error".into(),
-        HirExprKind::Name { name } | HirExprKind::Field { name, .. } => {
-            interner.resolve(name.name).into()
-        }
-        HirExprKind::Tuple { items } => {
-            let items = sema
-                .module()
-                .store
-                .expr_ids
-                .get(*items)
-                .iter()
-                .copied()
-                .map(|item| render_type_value_expr_name(sema, item, interner).into_string())
-                .collect::<Vec<_>>();
-            format!("({})", items.join(", ")).into()
-        }
-        HirExprKind::ArrayTy { dims, item } => {
-            render_array_type_value_expr_name(sema, dims.clone(), *item, interner)
-        }
-        HirExprKind::Pi {
-            binder,
-            binder_ty,
-            ret,
-            is_effectful,
-        } => {
-            let binder = interner.resolve(binder.name);
-            let binder_ty = render_type_value_expr_name(sema, *binder_ty, interner);
-            let ret = render_type_value_expr_name(sema, *ret, interner);
-            let arrow = if *is_effectful { "~>" } else { "->" };
-            format!("forall ({binder} : {binder_ty}) {arrow} {ret}").into()
-        }
-        HirExprKind::Apply { callee, args } => {
-            render_apply_type_value_expr_name(sema, *callee, *args, interner)
-        }
-        HirExprKind::Binary { op, left, right } => {
-            let left = render_type_value_expr_name(sema, *left, interner);
-            let right = render_type_value_expr_name(sema, *right, interner);
-            match op {
-                HirBinaryOp::Arrow => format!("{left} -> {right}").into(),
-                HirBinaryOp::EffectArrow => format!("{left} ~> {right}").into(),
-                HirBinaryOp::Add => format!("{left} + {right}").into(),
-                _ => invalid_lowering_path("invalid type-value binary op"),
-            }
-        }
-        HirExprKind::Prefix {
-            op: HirPrefixOp::Mut,
-            expr,
-        } => format!("mut {}", render_type_value_expr_name(sema, *expr, interner)).into(),
-        HirExprKind::Record { items } => {
-            let fields = sema
-                .module()
-                .store
-                .record_items
-                .get(items.clone())
-                .iter()
-                .filter_map(|item| {
-                    item.name.map(|name| {
-                        let name = interner.resolve(name.name);
-                        let value = render_type_value_expr_name(sema, item.value, interner);
-                        format!("{name} : {value}")
-                    })
-                })
-                .collect::<Vec<_>>();
-            format!("{{ {} }}", fields.join(", ")).into()
-        }
-        other => invalid_lowering_path(format!("invalid type value expr {other:?}")),
-    }
-}
-
-fn render_apply_type_value_expr_name(
-    sema: &SemaModule,
-    callee: HirExprId,
-    args: SliceRange<HirExprId>,
-    interner: &Interner,
-) -> Box<str> {
-    let HirExprKind::Name { name } = sema.module().store.exprs.get(callee).kind else {
-        invalid_lowering_path("invalid type-value callee");
-    };
-    let callee_name = interner.resolve(name.name);
-    let args = sema
-        .module()
-        .store
-        .expr_ids
-        .get(args)
-        .iter()
-        .copied()
-        .map(|arg| render_type_value_apply_arg_name(sema, arg, interner).into_string())
-        .collect::<Vec<_>>();
-    format!("{callee_name}[{}]", args.join(", ")).into()
-}
-
-fn render_type_value_apply_arg_name(
-    sema: &SemaModule,
-    expr_id: HirExprId,
-    interner: &Interner,
-) -> Box<str> {
-    match &sema.module().store.exprs.get(expr_id).kind {
-        HirExprKind::Lit { lit } => match &sema.module().store.lits.get(*lit).kind {
-            HirLitKind::Int { raw } => raw.clone(),
-            _ => invalid_lowering_path("invalid type-value literal arg"),
-        },
-        _ => render_type_value_expr_name(sema, expr_id, interner),
-    }
-}
-
-fn is_builtin_type_name_symbol(text: &str) -> bool {
-    matches!(
-        text,
-        "Type"
-            | "Any"
-            | "Unknown"
-            | "Syntax"
-            | "Empty"
-            | "Unit"
-            | "Bool"
-            | "Nat"
-            | "Int"
-            | "Float"
-            | "String"
-            | "CString"
-            | "CPtr"
-            | "Module"
-    )
-}
-
-fn render_array_type_value_expr_name(
-    sema: &SemaModule,
-    dims: SliceRange<HirDim>,
-    item: HirExprId,
-    interner: &Interner,
-) -> Box<str> {
-    let item = render_type_value_expr_name(sema, item, interner);
-    let dims = render_dim_prefix(sema.module().store.dims.get(dims), interner);
-    format!("{dims}{item}").into()
-}
-
 fn lower_record_update_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
@@ -1179,92 +1118,6 @@ fn lower_binary_expr(
         op: lower_binary_op(ctx, op, left, right, interner),
         left: lower_boxed_expr(ctx, left),
         right: lower_boxed_expr(ctx, right),
-    }
-}
-
-fn lower_range_expr(
-    ctx: &mut LowerCtx<'_>,
-    expr_id: HirExprId,
-    op: &HirBinaryOp,
-    left: HirExprId,
-    right: HirExprId,
-) -> IrExprKind {
-    let ty = ctx
-        .sema
-        .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for range"));
-    let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
-    let kind = match op {
-        HirBinaryOp::ClosedRange => IrRangeKind::Closed,
-        HirBinaryOp::OpenRange => IrRangeKind::Open,
-        _ => invalid_lowering_path("invalid range op"),
-    };
-    IrExprKind::Range {
-        ty_name,
-        kind,
-        lower: lower_boxed_expr(ctx, left),
-        upper: lower_boxed_expr(ctx, right),
-        bounds_evidence: None,
-    }
-}
-
-fn lower_partial_range_expr(
-    ctx: &mut LowerCtx<'_>,
-    expr_id: HirExprId,
-    kind: HirPartialRangeKind,
-    expr: HirExprId,
-) -> IrExprKind {
-    let ty = ctx
-        .sema
-        .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for partial range"));
-    let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
-    let origin = IrOrigin::new(
-        ctx.sema.module().store.exprs.get(expr_id).origin.source_id,
-        ctx.sema.module().store.exprs.get(expr_id).origin.span,
-    );
-    let bounds_evidence = ctx
-        .sema
-        .expr_evidence(expr_id)
-        .and_then(|items| items.get(1))
-        .map(|item| Box::new(lower_evidence_expr(ctx, origin, item)));
-    let bound = lower_boxed_expr(ctx, expr);
-    let range_kind = match kind {
-        HirPartialRangeKind::From => IrRangeKind::From,
-        HirPartialRangeKind::UpTo => IrRangeKind::UpTo,
-        HirPartialRangeKind::Thru => IrRangeKind::Thru,
-    };
-    IrExprKind::Range {
-        ty_name,
-        kind: range_kind,
-        lower: bound.clone(),
-        upper: bound,
-        bounds_evidence,
-    }
-}
-
-fn lower_in_expr(
-    ctx: &mut LowerCtx<'_>,
-    expr_id: HirExprId,
-    left: HirExprId,
-    right: HirExprId,
-) -> IrExprKind {
-    let origin = IrOrigin::new(
-        ctx.sema.module().store.exprs.get(expr_id).origin.source_id,
-        ctx.sema.module().store.exprs.get(expr_id).origin.span,
-    );
-    let evidence = ctx
-        .sema
-        .expr_evidence(expr_id)
-        .and_then(|items| items.first())
-        .map_or_else(
-            || invalid_lowering_path("range membership evidence missing"),
-            |item| lower_evidence_expr(ctx, origin, item),
-        );
-    IrExprKind::RangeContains {
-        value: lower_boxed_expr(ctx, left),
-        range: lower_boxed_expr(ctx, right),
-        evidence: Box::new(evidence),
     }
 }
 
@@ -1363,190 +1216,4 @@ fn use_binding_id(sema: &SemaModule, ident: Ident) -> Option<NameBindingId> {
         .refs
         .get(&NameSite::new(sema.module().source_id, ident.span))
         .copied()
-}
-
-fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
-    match &sema.ty(ty).kind {
-        HirTyKind::Error => "Error".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::NatLit(value) => value.to_string().into(),
-        HirTyKind::Named { name, args } => render_named_ty_name(sema, *name, *args, interner),
-        HirTyKind::Pi {
-            binder,
-            binder_ty,
-            body,
-            is_effectful,
-        } => {
-            let binder = interner.resolve(*binder);
-            let binder_ty = render_ty_name(sema, *binder_ty, interner);
-            let body = render_ty_name(sema, *body, interner);
-            let arrow = if *is_effectful { "~>" } else { "->" };
-            format!("forall ({binder} : {binder_ty}) {arrow} {body}").into()
-        }
-        HirTyKind::Arrow {
-            params,
-            ret,
-            is_effectful,
-        } => render_arrow_ty_name(sema, *params, *ret, *is_effectful, interner),
-        HirTyKind::Sum { left, right } => format!(
-            "{} + {}",
-            render_ty_name(sema, *left, interner),
-            render_ty_name(sema, *right, interner)
-        )
-        .into(),
-        HirTyKind::Tuple { items } => render_tuple_ty_name(sema, *items, interner),
-        HirTyKind::Seq { item } => format!("[]{}", render_ty_name(sema, *item, interner)).into(),
-        HirTyKind::Array { dims, item } => render_array_ty_name(sema, dims, *item, interner),
-        HirTyKind::Range { bound } => {
-            format!("Range[{}]", render_ty_name(sema, *bound, interner)).into()
-        }
-        HirTyKind::ClosedRange { bound } => {
-            format!("ClosedRange[{}]", render_ty_name(sema, *bound, interner)).into()
-        }
-        HirTyKind::PartialRangeFrom { bound } => format!(
-            "PartialRangeFrom[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
-        HirTyKind::PartialRangeUpTo { bound } => format!(
-            "PartialRangeUpTo[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
-        HirTyKind::PartialRangeThru { bound } => format!(
-            "PartialRangeThru[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
-        HirTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => format!(
-            "using {} ({} -> {})",
-            render_ty_name(sema, *effect, interner),
-            render_ty_name(sema, *input, interner),
-            render_ty_name(sema, *output, interner)
-        )
-        .into(),
-        HirTyKind::Mut { inner } => {
-            format!("mut {}", render_ty_name(sema, *inner, interner)).into()
-        }
-        HirTyKind::Record { fields } => render_record_ty_name(sema, fields, interner),
-    }
-}
-
-fn render_named_ty_name(
-    sema: &SemaModule,
-    name: Symbol,
-    args: SliceRange<HirTyId>,
-    interner: &Interner,
-) -> Box<str> {
-    let args = render_ty_name_list(sema, args, interner);
-    if args.is_empty() {
-        interner.resolve(name).into()
-    } else {
-        format!("{}[{}]", interner.resolve(name), args.join(", ")).into()
-    }
-}
-
-fn render_arrow_ty_name(
-    sema: &SemaModule,
-    params: SliceRange<HirTyId>,
-    ret: HirTyId,
-    is_effectful: bool,
-    interner: &Interner,
-) -> Box<str> {
-    let params = render_ty_name_list(sema, params, interner);
-    let ret = render_ty_name(sema, ret, interner);
-    let arrow = if is_effectful { "~>" } else { "->" };
-    format!("({}) {arrow} {}", params.join(", "), ret).into()
-}
-
-fn render_tuple_ty_name(
-    sema: &SemaModule,
-    items: SliceRange<HirTyId>,
-    interner: &Interner,
-) -> Box<str> {
-    let items = render_ty_name_list(sema, items, interner);
-    format!("({})", items.join(", ")).into()
-}
-
-fn render_array_ty_name(
-    sema: &SemaModule,
-    dims: &SliceRange<HirDim>,
-    item: HirTyId,
-    interner: &Interner,
-) -> Box<str> {
-    let dims = render_dim_prefix(sema.module().store.dims.get(dims.clone()), interner);
-    let item = render_ty_name(sema, item, interner);
-    format!("{dims}{item}").into()
-}
-
-fn render_dim_prefix(dims: &[HirDim], interner: &Interner) -> String {
-    let mut rendered = String::new();
-    for dim in dims {
-        rendered.push('[');
-        rendered.push_str(&render_dim(dim, interner));
-        rendered.push(']');
-    }
-    rendered
-}
-
-fn render_record_ty_name(
-    sema: &SemaModule,
-    fields: &SliceRange<HirTyField>,
-    interner: &Interner,
-) -> Box<str> {
-    let fields = sema
-        .module()
-        .store
-        .ty_fields
-        .get(fields.clone())
-        .iter()
-        .map(|field| {
-            format!(
-                "{}: {}",
-                interner.resolve(field.name),
-                render_ty_name(sema, field.ty, interner)
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("{{ {} }}", fields.join("; ")).into()
-}
-
-fn render_ty_name_list(
-    sema: &SemaModule,
-    tys: SliceRange<HirTyId>,
-    interner: &Interner,
-) -> Vec<String> {
-    sema.module()
-        .store
-        .ty_ids
-        .get(tys)
-        .iter()
-        .copied()
-        .map(|ty| render_ty_name(sema, ty, interner).into_string())
-        .collect()
-}
-
-fn render_dim(dim: &HirDim, interner: &Interner) -> String {
-    match dim {
-        HirDim::Unknown => "_".into(),
-        HirDim::Name(ident) => interner.resolve(ident.name).into(),
-        HirDim::Int(value) => value.to_string(),
-    }
 }

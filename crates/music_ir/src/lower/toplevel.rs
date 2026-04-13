@@ -3,7 +3,8 @@ use std::iter::repeat_n;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirParam, HirPatKind, HirTyId, HirTyKind,
+    HirAttr, HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirParam, HirPatKind, HirTyId,
+    HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId};
@@ -136,6 +137,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         items.callables.push(lower_callable_item(
             ctx,
             CallableItemInput {
+                expr_id,
                 binding,
                 name,
                 params,
@@ -393,6 +395,7 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
     let repr_kind: Option<Box<str>> = def.and_then(|data| data.repr_kind().map(Into::into));
     let layout_align = def.and_then(SemaDataDef::layout_align);
     let layout_pack = def.and_then(SemaDataDef::layout_pack);
+    let frozen = def.is_some_and(SemaDataDef::frozen);
     let variants = def.map_or_else(
         || {
             let field_tys = sema
@@ -449,6 +452,9 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
     if let Some(layout_pack) = layout_pack {
         data_def = data_def.with_layout_pack(layout_pack);
     }
+    if frozen {
+        data_def = data_def.with_frozen(true);
+    }
     Some(data_def)
 }
 
@@ -503,6 +509,7 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
 }
 
 struct CallableItemInput {
+    expr_id: HirExprId,
     binding: Option<NameBindingId>,
     name: Ident,
     params: SliceRange<HirParam>,
@@ -524,12 +531,23 @@ fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCa
     super::pop_evidence_bindings(ctx);
     let mut params = hidden_params;
     params.extend(lower_params(ctx, input.params));
+    let attrs = ctx
+        .sema
+        .module()
+        .store
+        .exprs
+        .get(input.expr_id)
+        .mods
+        .attrs
+        .clone();
     let mut callable = IrCallable::new(
         interner.resolve(input.name.name),
         params.into_boxed_slice(),
         body,
     )
     .with_exported(input.exported)
+    .with_hot(attrs_have_name(ctx.sema, interner, attrs.clone(), "hot"))
+    .with_cold(attrs_have_name(ctx.sema, interner, attrs, "cold"))
     .with_effects(input.effects);
     if let Some(binding) = input.binding {
         callable = callable.with_binding(binding);
@@ -615,6 +633,18 @@ fn skip_module_value(sema: &SemaModule, value: HirExprId) -> bool {
         .kind,
         HirTyKind::Module
     )
+}
+
+pub(super) fn attrs_have_name(
+    sema: &SemaModule,
+    interner: &Interner,
+    attrs: SliceRange<HirAttr>,
+    name: &str,
+) -> bool {
+    sema.module().store.attrs.get(attrs).iter().any(|attr| {
+        let parts = sema.module().store.idents.get(attr.path);
+        parts.len() == 1 && interner.resolve(parts[0].name) == name
+    })
 }
 
 fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrParam]> {

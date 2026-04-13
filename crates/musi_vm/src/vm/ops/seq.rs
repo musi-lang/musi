@@ -4,6 +4,7 @@ use std::slice::from_ref;
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
 use crate::VmValueKind;
+use crate::value::DataValuePtr;
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
@@ -255,15 +256,8 @@ impl Vm {
     }
 
     fn range_dictionary(evidence: Value) -> VmResult<(Value, Value, Value)> {
-        let found = evidence.kind();
-        let data = Self::expect_data(evidence)
-            .map_err(|_| VmError::new(VmErrorKind::InvalidRangeEvidence { found }))?;
+        let data = Self::range_evidence_data(evidence, 3, "range dictionary field count")?;
         let data = data.borrow();
-        if data.fields.len() < 3 {
-            return Err(VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "range dictionary field count".into(),
-            }));
-        }
         Ok((
             data.fields[0].clone(),
             data.fields[1].clone(),
@@ -272,16 +266,25 @@ impl Vm {
     }
 
     fn range_bounds_dictionary(evidence: Value) -> VmResult<(Value, Value)> {
+        let data = Self::range_evidence_data(evidence, 2, "range bounds dictionary field count")?;
+        let data = data.borrow();
+        Ok((data.fields[0].clone(), data.fields[1].clone()))
+    }
+
+    fn range_evidence_data(
+        evidence: Value,
+        min_fields: usize,
+        detail: &'static str,
+    ) -> VmResult<DataValuePtr> {
         let found = evidence.kind();
         let data = Self::expect_data(evidence)
             .map_err(|_| VmError::new(VmErrorKind::InvalidRangeEvidence { found }))?;
-        let data = data.borrow();
-        if data.fields.len() < 2 {
+        if data.borrow().fields.len() < min_fields {
             return Err(VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "range bounds dictionary field count".into(),
+                detail: detail.into(),
             }));
         }
-        Ok((data.fields[0].clone(), data.fields[1].clone()))
+        Ok(data)
     }
 
     fn range_sequence_type(&self, range: &Value) -> VmResult<TypeId> {
