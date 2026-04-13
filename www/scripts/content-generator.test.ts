@@ -17,7 +17,16 @@ describe("content watch paths", () => {
 	it("tracks docs, registries, grammar, and generator sources", () => {
 		expect(
 			isWatchedContentPath(
-				join(root, "..", "src", "content", "docs", "first-program.md"),
+				join(
+					root,
+					"..",
+					"..",
+					"docs",
+					"what",
+					"language",
+					"start",
+					"first-program.md",
+				),
 			),
 		).toBe(true);
 		expect(
