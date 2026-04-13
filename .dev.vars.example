@@ -1,0 +1,2 @@
+# Server-only Turnstile secret for Pages Functions guestbook verification.
+TURNSTILE_SECRET=your-turnstile-secret

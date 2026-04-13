@@ -1,12 +1,16 @@
 !.github/workflows
-.agents/
-.claude/
+.wrangler/
 tempdocs/
 
 .cursorignore
 .cursorindexingignore
 
 .env
+.env.local
+.env.production
+.env.*.local
+.dev.vars
+.dev.vars.*
 
 *~
 
