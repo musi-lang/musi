@@ -363,15 +363,14 @@ fn collects_test_effect_reports() {
     host.begin_test_session();
     let source = format!(
         r#"
-            let Intrinsics := import "{spec}";
-            let Test := Intrinsics.Test;
+            let Test := import "{spec}";
 
             export let answer () :=
                 (
-                  perform Test.suiteStart("demo");
-                  perform Test.testCase("first", 1 = 1);
-                  perform Test.testCase("second", 1 = 2);
-                  perform Test.suiteEnd()
+                  Test.suiteStart("demo");
+                  Test.testCase("first", 1 = 1);
+                  Test.testCase("second", 1 = 2);
+                  Test.suiteEnd()
                 );
             "#,
         spec = test::SPEC,
@@ -402,9 +401,8 @@ fn collects_test_effect_reports() {
 fn rejects_test_effect_without_active_session() {
     let source = format!(
         r#"
-        let Intrinsics := import "{spec}";
-        let Test := Intrinsics.Test;
-        export let answer () := perform Test.testCase("first", 1 = 1);
+        let Test := import "{spec}";
+        export let answer () := Test.testCase("first", 1 = 1);
         "#,
         spec = test::SPEC,
     );

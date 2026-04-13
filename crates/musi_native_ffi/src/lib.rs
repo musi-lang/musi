@@ -894,12 +894,39 @@ fn open_library(foreign: &ForeignCall, link: &str) -> VmResult<*mut c_void> {
 }
 
 fn library_candidates(link: &str) -> Vec<String> {
+    if link == "c" {
+        return c_runtime_library_candidates();
+    }
     let mut out = vec![link.to_owned()];
     if !link.contains('/') {
         out.push(format!("lib{link}.dylib"));
         out.push(format!("lib{link}.so"));
     }
     out
+}
+
+#[cfg(target_os = "macos")]
+fn c_runtime_library_candidates() -> Vec<String> {
+    vec![
+        "libSystem.B.dylib".to_owned(),
+        "libc.dylib".to_owned(),
+        "libc.so".to_owned(),
+    ]
+}
+
+#[cfg(target_os = "linux")]
+fn c_runtime_library_candidates() -> Vec<String> {
+    vec!["libc.so.6".to_owned(), "libc.so".to_owned()]
+}
+
+#[cfg(target_os = "windows")]
+fn c_runtime_library_candidates() -> Vec<String> {
+    vec!["ucrtbase.dll".to_owned(), "msvcrt.dll".to_owned()]
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn c_runtime_library_candidates() -> Vec<String> {
+    vec!["c".to_owned()]
 }
 
 fn dlerror_text() -> Box<str> {
@@ -1047,5 +1074,45 @@ fn ffi_child(ffi: &FfiTypeRef, index: usize) -> Option<&FfiTypeRef> {
     match ffi {
         FfiTypeRef::Borrowed(_) => None,
         FfiTypeRef::Owned(owned) => owned.children.get(index),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::panic, clippy::unwrap_used)]
+mod tests {
+    use super::library_candidates;
+
+    #[test]
+    fn c_runtime_link_uses_platform_candidates() {
+        let candidates = library_candidates("c");
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            candidates,
+            vec!["libSystem.B.dylib", "libc.dylib", "libc.so"]
+        );
+        #[cfg(target_os = "linux")]
+        assert_eq!(candidates, vec!["libc.so.6", "libc.so"]);
+        #[cfg(target_os = "windows")]
+        assert_eq!(candidates, vec!["ucrtbase.dll", "msvcrt.dll"]);
+    }
+
+    #[test]
+    fn generic_library_name_keeps_default_candidates() {
+        assert_eq!(
+            library_candidates("sqlite3"),
+            vec![
+                "sqlite3".to_owned(),
+                "libsqlite3.dylib".to_owned(),
+                "libsqlite3.so".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn explicit_path_is_preserved() {
+        assert_eq!(
+            library_candidates("/usr/lib/libSystem.B.dylib"),
+            vec!["/usr/lib/libSystem.B.dylib".to_owned()]
+        );
     }
 }
