@@ -1,8 +1,14 @@
-let Core := import "musi:core";
-let Array := Core.Array;
+let Build := import "./_build.ms";
+let Compare := import "./_compare.ms";
 
-export let concat (left : Array[Int], right : Array[Int]) : Array[Int] := [...left, ...right];
+export let empty := Build.empty;
+export let single := Build.single;
+export let copy := Build.copy;
+export let concat := Build.concat;
+export let append := Build.append;
+export let prepend := Build.prepend;
 
-export let copy (src : Array[Int]) : Array[Int] := [...src];
-
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
+export let equals := Compare.equals;
+export let notEquals := Compare.notEquals;
+export let isEmpty := Compare.isEmpty;
+export let nonEmpty := Compare.nonEmpty;

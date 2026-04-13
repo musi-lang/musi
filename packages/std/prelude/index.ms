@@ -1,4 +1,5 @@
 let Core := import "musi:core";
+let OptionPkg := import "@std/option";
 let ResultPkg := import "@std/result";
 
 export let Type := Core.Type;
@@ -20,9 +21,9 @@ export let PartialRangeUpTo := Core.PartialRangeUpTo;
 export let PartialRangeThru := Core.PartialRangeThru;
 export let CString := Core.CString;
 export let CPtr := Core.CPtr;
-export opaque let Option := Core.Option;
-export let some := Core.some;
-export let none := Core.none;
+export opaque let Option := OptionPkg.Option;
+export let some := OptionPkg.some;
+export let none := OptionPkg.none;
 export let abort := Core.abort;
 export opaque let Abort := Core.Abort;
 export opaque let Rangeable := Core.Rangeable;

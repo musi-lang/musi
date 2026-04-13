@@ -7,11 +7,28 @@
     "exports": {
         ".": "./index.ms",
         "./assert": "./assert/index.ms",
+        "./array": "./array/index.ms",
         "./bytes": "./bytes/index.ms",
+        "./cmp": "./cmp/index.ms",
+        "./encoding/base64": "./encoding/base64/index.ms",
+        "./encoding/hex": "./encoding/hex/index.ms",
+        "./encoding/utf8": "./encoding/utf8/index.ms",
+        "./env": "./env/index.ms",
+        "./fs": "./fs/index.ms",
+        "./io": "./io/index.ms",
+        "./iter": "./iter/index.ms",
+        "./json": "./json/index.ms",
+        "./log": "./log/index.ms",
         "./math": "./math/index.ms",
         "./option": "./option/index.ms",
+        "./path": "./path/index.ms",
         "./prelude": "./prelude/index.ms",
+        "./process": "./process/index.ms",
+        "./random": "./random/index.ms",
         "./result": "./result/index.ms",
+        "./slice": "./slice/index.ms",
+        "./text": "./text/index.ms",
+        "./time": "./time/index.ms",
         "./testing": "./testing/index.ms"
     }
 }
