@@ -6,13 +6,15 @@ use music_base::diag::DiagCode;
 
 use crate::errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
 
+type ManifestSpanMap = BTreeMap<String, Span>;
+
 #[derive(Debug, Clone)]
 pub struct ManifestSource {
     path: PathBuf,
     text: String,
     root_span: Span,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 impl ManifestSource {
@@ -76,13 +78,13 @@ impl ManifestSource {
         span: Span,
         label: impl Into<String>,
     ) -> ProjectError {
-        ProjectError::ManifestSourceDiagnostic(ProjectSourceDiagnostic::new(
+        ProjectError::SourceDiagnostic(Box::new(ProjectSourceDiagnostic::new(
             self.path.clone(),
             self.text.clone(),
             code,
             message,
             ProjectSourceLabel::new(span, label),
-        ))
+        )))
     }
 
     pub fn error_with_hint(
@@ -101,23 +103,23 @@ impl ManifestSource {
             ProjectSourceLabel::new(span, label),
         );
         diag.set_hint(hint);
-        ProjectError::ManifestSourceDiagnostic(diag)
+        ProjectError::SourceDiagnostic(Box::new(diag))
     }
 }
 
 #[derive(Debug)]
 struct ManifestSpanIndex {
     root_span: Span,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 struct JsonSpanIndexer<'a> {
     text: &'a str,
     bytes: &'a [u8],
     pos: usize,
-    key_spans: BTreeMap<String, Span>,
-    value_spans: BTreeMap<String, Span>,
+    key_spans: ManifestSpanMap,
+    value_spans: ManifestSpanMap,
 }
 
 impl<'a> JsonSpanIndexer<'a> {

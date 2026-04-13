@@ -9,8 +9,9 @@ pub(crate) mod value;
 mod vm;
 
 pub use api::{
-    Program, ProgramExport, ProgramExportKind, RecordView, RejectingHost, RejectingLoader, SeqView,
-    StringView, Value, ValueView, Vm, VmHost, VmLoader, VmOptions,
+    Program, ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,
+    ProgramTypeAbiKind, RecordView, RejectingHost, RejectingLoader, SeqView, StringView, Value,
+    ValueView, Vm, VmHost, VmLoader, VmOptions, render_value_view,
 };
 pub use error::{OperandShape, VmError, VmErrorKind, VmValueKind};
 pub use host::{EffectCall, ForeignCall};

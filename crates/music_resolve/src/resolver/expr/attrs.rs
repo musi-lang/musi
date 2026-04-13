@@ -23,9 +23,7 @@ where
         if export_mod_node.is_some()
             && (export_foreign_abi.is_some() || is_foreign_group_target(&node))
         {
-            mods = mods.with_foreign(HirForeignMod {
-                abi: export_foreign_abi,
-            });
+            mods = mods.with_foreign(HirForeignMod::new(export_foreign_abi));
         }
 
         let target = node.child_nodes().find(|n| {
@@ -82,7 +80,7 @@ where
             .collect();
         let args = self.store.attr_args.alloc_from_iter(args);
 
-        HirAttr { origin, path, args }
+        HirAttr::new(origin, path, args)
     }
 
     pub(super) fn lower_attr_arg(&mut self, node: SyntaxNode<'tree, 'src>) -> HirAttrArg {
@@ -97,7 +95,7 @@ where
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
-        HirAttrArg { name, value }
+        HirAttrArg::new(name, value)
     }
 
     fn parse_export_mod(
@@ -118,7 +116,7 @@ where
         } else {
             None
         };
-        (Some(HirExportMod { opaque }), foreign_abi)
+        (Some(HirExportMod::new(opaque)), foreign_abi)
     }
 }
 

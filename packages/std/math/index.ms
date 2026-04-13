@@ -1,30 +1,13 @@
-export let abs (value : Int) : Int :=
-    case () of (
-        | _ if value >= 0 => value
-        | _ => -value
-    );
+let IntMath := import "./_int.ms";
+let FloatMath := import "./_float.ms";
 
-export let abs_float (value : Float) : Float :=
-    case () of (
-        | _ if value >= 0.0 => value
-        | _ => -value
-    );
+export let abs := IntMath.abs;
+export let signInt := IntMath.signInt;
+export let max := IntMath.max;
+export let min := IntMath.min;
+export let clamp := IntMath.clamp;
 
-export let max (left : Int, right : Int) : Int :=
-    case () of (
-        | _ if left >= right => left
-        | _ => right
-    );
-
-export let min (left : Int, right : Int) : Int :=
-    case () of (
-        | _ if left <= right => left
-        | _ => right
-    );
-
-export let clamp (value : Int, low : Int, high : Int) : Int :=
-    case () of (
-        | _ if value < low => low
-        | _ if value > high => high
-        | _ => value
-    );
+export let absFloat := FloatMath.absFloat;
+export let maxFloat := FloatMath.maxFloat;
+export let minFloat := FloatMath.minFloat;
+export let clampFloat := FloatMath.clampFloat;

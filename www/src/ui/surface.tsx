@@ -1,23 +1,35 @@
-import { Paper, type PaperProps } from "@mantine/core";
-import type { ReactNode } from "react";
+import { createElement, type ElementType, type ReactNode } from "react";
 
-type SurfaceTone = "base" | "panel" | "hero" | "code";
+type SurfaceTone =
+	| "base"
+	| "panel"
+	| "hero"
+	| "code"
+	| "accent"
+	| "well"
+	| "raised";
 
-export function Surface(
-	props: PaperProps & {
-		children: ReactNode;
-		tone?: SurfaceTone;
-	},
-) {
-	const tone = props.tone ?? "panel";
-	return (
-		<Paper
-			{...props}
-			radius="xs"
-			withBorder={true}
-			className={`surface surface-${tone}${props.className ? ` ${props.className}` : ""}`}
-		>
-			{props.children}
-		</Paper>
+interface SurfaceProps {
+	children?: ReactNode;
+	className?: string;
+	component?: ElementType;
+	tone?: SurfaceTone;
+}
+
+export function Surface(props: SurfaceProps & Record<string, unknown>) {
+	const {
+		children,
+		className,
+		component = "section",
+		tone = "panel",
+		...rest
+	} = props;
+	return createElement(
+		component,
+		{
+			...rest,
+			className: `surface surface-${tone}${className ? ` ${className}` : ""}`,
+		},
+		children,
 	);
 }

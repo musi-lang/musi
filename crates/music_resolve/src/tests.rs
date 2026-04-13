@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use music_base::SourceId;
+use music_hir::HirExprKind;
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
 };
@@ -40,12 +41,9 @@ fn find_nth_name_site(
     let mut stack = vec![tree.root()];
     while let Some(node) = stack.pop() {
         if node.kind() == SyntaxNodeKind::NameExpr {
-            let tok = node.child_tokens().find(|t| {
-                matches!(
-                    t.kind(),
-                    TokenKind::Ident | TokenKind::OpIdent
-                )
-            });
+            let tok = node
+                .child_tokens()
+                .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent));
             if let Some(tok) = tok {
                 if let Some(raw) = tok.text() {
                     let canon = canonical_name_text(tok.kind(), raw);
@@ -65,10 +63,13 @@ fn find_nth_name_site(
     None
 }
 
-#[test]
-fn resolves_let_name_use() {
-    let src = "let x := 1; x;";
-    let source_id = SourceId::from_raw(1);
+fn assert_name_binding(
+    src: &str,
+    source_id: SourceId,
+    spelling: &str,
+    nth: usize,
+    expected_kind: NameBindingKind,
+) {
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
     assert!(parsed.errors().is_empty());
@@ -79,22 +80,47 @@ fn resolves_let_name_use() {
         &module_key,
         parsed.tree(),
         &mut interner,
-        ResolveOptions::default(),
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
     );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("use site");
+    let site = find_nth_name_site(source_id, parsed.tree(), spelling, nth).expect("use site");
     let binding_id = resolved.names.refs.get(&site).copied().expect("binding");
     let binding = resolved.names.bindings.get(binding_id);
-    assert_eq!(binding.kind, NameBindingKind::Let);
-    assert_eq!(interner.resolve(binding.name), "x");
+    assert_eq!(binding.kind, expected_kind);
+    assert_eq!(interner.resolve(binding.name), spelling);
+}
+
+#[test]
+fn resolves_let_name_use() {
+    assert_name_binding(
+        "let x := 1; x;",
+        SourceId::from_raw(1),
+        "x",
+        0,
+        NameBindingKind::Let,
+    );
 }
 
 #[test]
 fn resolves_rec_name_use_in_rhs() {
-    let src = "let rec f := f;";
-    let source_id = SourceId::from_raw(2);
+    assert_name_binding(
+        "let rec f := f;",
+        SourceId::from_raw(2),
+        "f",
+        0,
+        NameBindingKind::Let,
+    );
+}
+
+#[test]
+fn lowers_receiver_prefixed_let_into_hir_mods() {
+    let src = "let (self : Int).abs () : Int := self;";
+    let source_id = SourceId::from_raw(12);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
 
     let mut interner = Interner::new();
     let resolved = resolve_module(
@@ -102,13 +128,70 @@ fn resolves_rec_name_use_in_rhs() {
         &module_key,
         parsed.tree(),
         &mut interner,
-        ResolveOptions::default(),
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
     );
-    let site = find_nth_name_site(source_id, parsed.tree(), "f", 0).expect("use site");
-    let binding_id = resolved.names.refs.get(&site).copied().expect("binding");
-    let binding = resolved.names.bindings.get(binding_id);
-    assert_eq!(binding.kind, NameBindingKind::Let);
-    assert_eq!(interner.resolve(binding.name), "f");
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_id = expr_ids[0];
+    let let_expr = resolved.module.store.exprs.get(let_id);
+    let receiver = match &let_expr.kind {
+        HirExprKind::Let { mods, .. } => mods.receiver.expect("receiver"),
+        other => panic!("unexpected root stmt kind: {other:?}"),
+    };
+
+    assert!(!receiver.is_mut);
+    assert_eq!(interner.resolve(receiver.binder.name), "self");
+    assert_eq!(interner.resolve(receiver.member.name), "abs");
+    match &resolved.module.store.exprs.get(receiver.ty).kind {
+        HirExprKind::Name { name } => assert_eq!(interner.resolve(name.name), "Int"),
+        other => panic!("unexpected receiver type kind: {other:?}"),
+    }
+}
+
+#[test]
+fn lowers_mut_receiver_prefixed_let_into_hir_mods() {
+    let src = "let (mut self : Int).push (value : Int) := self;";
+    let source_id = SourceId::from_raw(13);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
+    );
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_id = expr_ids[0];
+    let let_expr = resolved.module.store.exprs.get(let_id);
+    let receiver = match &let_expr.kind {
+        HirExprKind::Let { mods, .. } => mods.receiver.expect("receiver"),
+        other => panic!("unexpected root stmt kind: {other:?}"),
+    };
+
+    assert!(receiver.is_mut);
+    assert_eq!(interner.resolve(receiver.binder.name), "self");
+    assert_eq!(interner.resolve(receiver.member.name), "push");
 }
 
 #[test]
@@ -154,49 +237,23 @@ fn resolves_case_pat_binder_in_arm() {
 
 #[test]
 fn resolves_lambda_param_in_body() {
-    let src = "(x: Int) => x;";
-    let source_id = SourceId::from_raw(4);
-    let module_key = ModuleKey::new("main");
-    let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
-
-    let mut interner = Interner::new();
-    let resolved = resolve_module(
-        source_id,
-        &module_key,
-        parsed.tree(),
-        &mut interner,
-        ResolveOptions::default(),
-    );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
-    let binding = resolved.names.refs.get(&site).copied().expect("binding");
-    assert_eq!(
-        resolved.names.bindings.get(binding).kind,
-        NameBindingKind::Param
+    assert_name_binding(
+        "(x: Int) => x;",
+        SourceId::from_raw(4),
+        "x",
+        0,
+        NameBindingKind::Param,
     );
 }
 
 #[test]
 fn resolves_pi_binder_in_ret() {
-    let src = "(x: Type) -> x;";
-    let source_id = SourceId::from_raw(5);
-    let module_key = ModuleKey::new("main");
-    let parsed = parse(Lexer::new(src).lex());
-    assert!(parsed.errors().is_empty());
-
-    let mut interner = Interner::new();
-    let resolved = resolve_module(
-        source_id,
-        &module_key,
-        parsed.tree(),
-        &mut interner,
-        ResolveOptions::default(),
-    );
-    let site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
-    let binding = resolved.names.refs.get(&site).copied().expect("binding");
-    assert_eq!(
-        resolved.names.bindings.get(binding).kind,
-        NameBindingKind::PiBinder
+    assert_name_binding(
+        "(x: Type) -> x;",
+        SourceId::from_raw(5),
+        "x",
+        0,
+        NameBindingKind::PiBinder,
     );
 }
 
@@ -248,6 +305,7 @@ fn static_imports_resolve_but_do_not_open_export_names() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -295,6 +353,7 @@ fn import_resolution_only_creates_explicit_let_binding() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -327,6 +386,7 @@ fn static_template_imports_resolve_from_import_env() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -356,6 +416,7 @@ fn unresolved_static_imports_emit_diag() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -390,6 +451,7 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -423,6 +485,7 @@ fn dynamic_imports_do_not_populate_resolved_imports() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -439,7 +502,7 @@ fn dynamic_imports_do_not_populate_resolved_imports() {
 
 #[test]
 fn handle_clause_params_resolve_in_body() {
-    let src = "handle x with h of (| op(a, b) => a);";
+    let src = "handle x using h { op(a, b) => a; };";
     let source_id = SourceId::from_raw(13);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());

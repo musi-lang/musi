@@ -103,6 +103,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -638,9 +644,19 @@ name = "musi_native"
 version = "0.1.0-alpha.1"
 dependencies = [
  "musi_foundation",
+ "musi_native_ffi",
  "musi_vm",
  "music_module",
+ "music_seam",
  "music_session",
+]
+
+[[package]]
+name = "musi_native_ffi"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "musi_vm",
+ "music_seam",
 ]
 
 [[package]]
@@ -664,12 +680,14 @@ dependencies = [
 name = "musi_rt"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "base64",
  "musi_foundation",
  "musi_native",
  "musi_vm",
  "music_module",
  "music_session",
  "music_term",
+ "serde_json",
  "thiserror",
 ]
 
@@ -679,6 +697,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "musi_foundation",
  "musi_project",
+ "music_arena",
  "music_base",
  "music_hir",
  "music_module",
@@ -696,6 +715,7 @@ dependencies = [
 name = "musi_vm"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_foundation",
  "music_module",
  "music_seam",
  "music_session",
@@ -757,6 +777,7 @@ dependencies = [
 name = "music_ir"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_foundation",
  "music_arena",
  "music_base",
  "music_hir",
@@ -826,6 +847,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "music_base",
  "music_emit",
+ "music_hir",
  "music_ir",
  "music_module",
  "music_names",

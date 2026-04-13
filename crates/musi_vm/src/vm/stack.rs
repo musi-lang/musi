@@ -58,13 +58,12 @@ impl Vm {
                 *local = arg;
             }
         }
-        self.frames.push(CallFrame {
+        self.frames.push(CallFrame::new(
             module_slot,
             method,
-            ip: 0,
             locals,
-            stack: ValueList::new(),
-        });
+            ValueList::new(),
+        ));
         Ok(())
     }
 

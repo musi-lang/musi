@@ -15,7 +15,7 @@ impl Session {
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error for the target module.
     pub fn compile_module(&mut self, key: &ModuleKey) -> Result<CompiledOutput, SessionError> {
         let artifact = self.compile_module_artifact(key)?;
-        Self::build_output(artifact)
+        Self::build_output(&artifact)
     }
 
     /// Emits one module to a validated in-memory artifact.
@@ -52,7 +52,7 @@ impl Session {
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error from the reachable graph.
     pub fn compile_entry(&mut self, key: &ModuleKey) -> Result<CompiledOutput, SessionError> {
         let artifact = self.compile_entry_artifact(key)?;
-        Self::build_output(artifact)
+        Self::build_output(&artifact)
     }
 
     /// Emits the reachable static-import graph rooted at `key` to an in-memory artifact.
@@ -110,11 +110,11 @@ impl Session {
         Ok(self.compile_entry(key)?.text)
     }
 
-    fn build_output(artifact: Artifact) -> Result<CompiledOutput, SessionError> {
-        Ok(CompiledOutput {
-            bytes: encode_binary(&artifact)?,
-            text: format_text(&artifact),
-            artifact,
-        })
+    fn build_output(artifact: &Artifact) -> Result<CompiledOutput, SessionError> {
+        Ok(CompiledOutput::new(
+            artifact.clone(),
+            encode_binary(artifact)?,
+            format_text(artifact),
+        ))
     }
 }

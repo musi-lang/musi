@@ -20,6 +20,22 @@ const CHECK_DEBOUNCE_MS = 250;
 type PendingTimer = ReturnType<typeof setTimeout>;
 type DiagnosticsMode = "disabled" | "full" | "manifest-only";
 
+function workspaceOnlyManifest(pkg: PackageRoot): boolean {
+	return Boolean(
+		pkg.manifest.workspace && !pkg.manifest.name && !pkg.manifest.version,
+	);
+}
+
+function filterWorkspaceRootDiagnostics(
+	pkg: PackageRoot,
+	diagnostics: readonly DiagnosticPayload[],
+): DiagnosticPayload[] {
+	if (!workspaceOnlyManifest(pkg)) {
+		return [...diagnostics];
+	}
+	return diagnostics.filter((entry) => entry.code !== "MS3610");
+}
+
 function toSeverity(value: string | undefined): vscode.DiagnosticSeverity {
 	switch (value?.toLowerCase()) {
 		case "warning":
@@ -163,14 +179,14 @@ export class DiagnosticsController {
 			this.#statusBar.update(`Ready: ${path.basename(pkg.rootDir)}`, "ready");
 		} catch (error) {
 			this.#statusBar.update("Invalid musi.json", "error");
-			void vscode.window.showErrorMessage(
+			vscode.window.showErrorMessage(
 				`Failed to read owning musi.json: ${String(error)}`,
 			);
 		}
 	}
 
 	scheduleDocumentCheck(document: vscode.TextDocument) {
-		if (!getConfig().checkOnSave || !this.#shouldCheckDocument(document)) {
+		if (!(getConfig().checkOnSave && this.#shouldCheckDocument(document))) {
 			return;
 		}
 
@@ -186,7 +202,7 @@ export class DiagnosticsController {
 		}
 
 		const timer = setTimeout(() => {
-			void this.checkManifestPath(manifestPath);
+			this.checkManifestPath(manifestPath);
 		}, CHECK_DEBOUNCE_MS);
 		this.#timers.set(manifestPath, timer);
 	}
@@ -241,8 +257,12 @@ export class DiagnosticsController {
 			if (controller.signal.aborted) {
 				return;
 			}
-			this.publishPackageDiagnostics(pkg, result.payload.diagnostics);
-			if (result.exitCode === 0) {
+			const diagnostics = filterWorkspaceRootDiagnostics(
+				pkg,
+				result.payload.diagnostics,
+			);
+			this.publishPackageDiagnostics(pkg, diagnostics);
+			if (result.exitCode === 0 || diagnostics.length === 0) {
 				this.#statusBar.update(`Ready: ${path.basename(pkg.rootDir)}`, "ready");
 			} else {
 				this.#statusBar.update(

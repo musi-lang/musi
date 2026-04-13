@@ -53,8 +53,7 @@ fn write_file(root: &Path, relative: &str, text: &str) {
 }
 
 fn load_project_error(root: &Path) -> ProjectError {
-    Project::load(root, ProjectOptions::default())
-        .expect_err("project load should fail")
+    Project::load(root, ProjectOptions::default()).expect_err("project load should fail")
 }
 
 #[test]
@@ -71,7 +70,7 @@ fn loads_direct_graph_with_relative_imports() {
     write_file(temp.path(), "dep.ms", "export let base : Int := 41;");
 
     let graph = load_direct_graph(&temp.path().join("main.ms")).expect("graph should load");
-    let texts = graph.module_texts().collect::<Vec<_>>();
+    let texts = graph.module_texts();
     let expected = temp
         .path()
         .join("main.ms")
@@ -82,7 +81,7 @@ fn loads_direct_graph_with_relative_imports() {
         graph.entry_key(),
         &ModuleKey::new(expected.display().to_string())
     );
-    assert_eq!(texts.len(), 2);
+    assert_eq!(texts.count(), 2);
 }
 
 #[test]
@@ -133,7 +132,7 @@ fn tooling_error_report_carries_typed_code() {
     let report = tooling_error_report("music", "check", None, None, &error);
 
     assert_eq!(report.diagnostics[0].phase, "tooling");
-    assert_eq!(report.diagnostics[0].code.as_deref(), Some("ms3631"));
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3631"));
 }
 
 #[test]
@@ -145,7 +144,7 @@ fn project_error_report_carries_typed_code() {
     let report = project_error_report("musi", "check", None, None, &error);
 
     assert_eq!(report.diagnostics[0].phase, "project");
-    assert_eq!(report.diagnostics[0].code.as_deref(), Some("ms3606"));
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3606"));
 }
 
 #[test]
@@ -165,8 +164,36 @@ fn project_error_report_carries_manifest_source_range() {
     let report = project_error_report("musi", "check", None, None, &error);
 
     assert_eq!(report.diagnostics[0].phase, "project");
-    assert_eq!(report.diagnostics[0].code.as_deref(), Some("ms3606"));
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3606"));
     assert!(report.diagnostics[0].file.is_some());
     assert!(report.diagnostics[0].range.is_some());
     assert_eq!(report.diagnostics[0].message, "export key `bad` invalid");
+}
+
+#[test]
+fn project_error_report_carries_unresolved_import_range() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+    );
+
+    let error = load_project_error(temp.path());
+    let report = project_error_report("musi", "check", None, None, &error);
+
+    assert_eq!(report.diagnostics[0].phase, "project");
+    assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3615"));
+    assert_eq!(report.diagnostics[0].message, "unresolved import `missing`");
+    assert!(report.diagnostics[0].file.is_some());
+    assert!(report.diagnostics[0].range.is_some());
+    assert_eq!(
+        report.diagnostics[0].labels[0].message,
+        "import `missing` does not resolve"
+    );
 }

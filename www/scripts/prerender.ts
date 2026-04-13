@@ -20,7 +20,7 @@ function buildSitemap(paths: string[]) {
 	const items = paths
 		.map(
 			(path) =>
-				`<url><loc>https://musi-lang.com${path}</loc><lastmod>${today}</lastmod></url>`,
+				`<url><loc>https://musi-lang.org${path}</loc><lastmod>${today}</lastmod></url>`,
 		)
 		.join("");
 	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${items}</urlset>\n`;
@@ -28,7 +28,7 @@ function buildSitemap(paths: string[]) {
 
 async function main() {
 	const template = await readFile(templatePath, "utf8");
-	const paths: string[] = [];
+	const paths = new Set<string>();
 
 	for (const route of appRoutes) {
 		const html = template
@@ -43,13 +43,17 @@ async function main() {
 		const path = outputPath(route.path);
 		await mkdir(dirname(path), { recursive: true });
 		await writeFile(path, html, "utf8");
-		paths.push(route.path);
+		paths.add(route.canonicalPath ?? route.path);
 	}
 
-	await writeFile(join(distDir, "sitemap.xml"), buildSitemap(paths), "utf8");
+	await writeFile(
+		join(distDir, "sitemap.xml"),
+		buildSitemap([...paths]),
+		"utf8",
+	);
 	await writeFile(
 		join(distDir, "robots.txt"),
-		"User-agent: *\nAllow: /\n\nSitemap: https://musi-lang.com/sitemap.xml\n",
+		"User-agent: *\nAllow: /\n\nSitemap: https://musi-lang.org/sitemap.xml\n",
 		"utf8",
 	);
 }

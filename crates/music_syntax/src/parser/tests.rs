@@ -38,6 +38,26 @@ fn parses_simple_let_statement() {
 }
 
 #[test]
+fn parses_receiver_prefixed_let_statement() {
+    let parsed = parse(Lexer::new("let (self : Int).abs () : Int := self;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_mut_receiver_prefixed_let_statement() {
+    let parsed = parse(Lexer::new("let (mut self : Buffer).push (value : Int) := self;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
 fn parses_apply_and_index_chain() {
     let parsed = parse(Lexer::new("foo[Bar].[0];").lex());
     assert!(
@@ -58,6 +78,16 @@ fn parses_instance_expr() {
 }
 
 #[test]
+fn parses_instance_expr_with_target_then_where() {
+    let parsed = parse(Lexer::new("instance Eq[Int] where Int : Show { };").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
 fn parses_all_atom_forms_smoke() {
     let kinds = parse_kinds(
         r#"
@@ -65,7 +95,7 @@ fn parses_all_atom_forms_smoke() {
 	import "std/io";
 	resume x;
 	perform x;
-	handle x with h of (| x => x);
+	handle x using h { x => x; };
 	case x of (| _ => 0);
 	foreign "c" let puts (msg : CString) : Int;
 	export let y := 2;
@@ -195,7 +225,52 @@ fn error_non_associative_chain_with_in_is_reported() {
 #[test]
 fn parses_case_and_handle_with_trailing_pipe() {
     let parsed =
-        parse(Lexer::new("case x of (| _ => 0 |); handle x with h of (| op(a, b) => a |);").lex());
+        parse(Lexer::new("case x of (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_new_signature_order_and_array_type_syntax() {
+    let parsed = parse(
+        Lexer::new("let f[T] (xs : []Int) : [2]Int where T : Eq using { Console } := xs;").lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_tuple_and_array_destructuring_let_patterns() {
+    let parsed = parse(
+        Lexer::new(
+            "let pair := (1, 2); let items := [3, 4]; let (a, b) := pair; let [c, d] := items;",
+        )
+        .lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_handler_type_annotation() {
+    let parsed = parse(
+        Lexer::new(
+            r"
+            let Console := effect { let readln () : Int; };
+            let h : using Console (Int -> Int) := using Console { value => value; readln(k) => resume 41; };
+        ",
+        )
+        .lex(),
+    );
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",

@@ -7,13 +7,43 @@ where
     pub(super) fn lower_prefix_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let op_tok = node.child_tokens().next();
-        let op = match op_tok.map(SyntaxToken::kind) {
-            Some(TokenKind::Minus) => HirPrefixOp::Neg,
-            Some(TokenKind::KwMut) => HirPrefixOp::Mut,
+        let Some(kind) = op_tok.map(SyntaxToken::kind) else {
+            return self.error_expr(origin);
+        };
+        if matches!(kind, TokenKind::DotDot | TokenKind::DotDotLt) {
+            let expr = self.lower_opt_expr(origin, node.child_nodes().next());
+            let partial_kind = match kind {
+                TokenKind::DotDot => HirPartialRangeKind::Thru,
+                TokenKind::DotDotLt => HirPartialRangeKind::UpTo,
+                _ => return self.error_expr(origin),
+            };
+            return self.alloc_expr(
+                origin,
+                HirExprKind::PartialRange {
+                    kind: partial_kind,
+                    expr,
+                },
+            );
+        }
+        let op = match kind {
+            TokenKind::Minus => HirPrefixOp::Neg,
+            TokenKind::KwMut => HirPrefixOp::Mut,
             _ => HirPrefixOp::Not,
         };
         let expr = self.lower_opt_expr(origin, node.child_nodes().next());
         self.alloc_expr(origin, HirExprKind::Prefix { op, expr })
+    }
+
+    pub(super) fn lower_postfix_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let expr = self.lower_opt_expr(origin, node.child_nodes().next());
+        self.alloc_expr(
+            origin,
+            HirExprKind::PartialRange {
+                kind: HirPartialRangeKind::From,
+                expr,
+            },
+        )
     }
 
     pub(super) fn lower_binary_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -36,6 +66,8 @@ where
             Some(TokenKind::Gt) => HirBinaryOp::Gt,
             Some(TokenKind::LtEq) => HirBinaryOp::Le,
             Some(TokenKind::GtEq) => HirBinaryOp::Ge,
+            Some(TokenKind::DotDot) => HirBinaryOp::ClosedRange,
+            Some(TokenKind::DotDotLt) => HirBinaryOp::OpenRange,
             Some(TokenKind::KwIn) => HirBinaryOp::In,
             Some(TokenKind::KwShl) => HirBinaryOp::Shl,
             Some(TokenKind::KwShr) => HirBinaryOp::Shr,

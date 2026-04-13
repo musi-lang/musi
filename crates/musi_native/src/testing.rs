@@ -13,10 +13,31 @@ pub struct NativeTestCaseResult {
     pub passed: bool,
 }
 
+impl NativeTestCaseResult {
+    #[must_use]
+    pub const fn new(suite: Box<str>, name: Box<str>, passed: bool) -> Self {
+        Self {
+            suite,
+            name,
+            passed,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeTestReport {
     pub module: Box<str>,
     pub cases: Box<[NativeTestCaseResult]>,
+}
+
+impl NativeTestReport {
+    #[must_use]
+    pub fn new(module: impl Into<Box<str>>, cases: Box<[NativeTestCaseResult]>) -> Self {
+        Self {
+            module: module.into(),
+            cases,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -38,10 +59,7 @@ impl TestHost {
     #[must_use]
     pub fn finish_session(&mut self, module: &str) -> NativeTestReport {
         let mut collector = self.collector.take().unwrap_or_default();
-        NativeTestReport {
-            module: module.into(),
-            cases: take(&mut collector.cases).into_boxed_slice(),
-        }
+        NativeTestReport::new(module, take(&mut collector.cases).into_boxed_slice())
     }
 
     #[must_use]
@@ -54,11 +72,7 @@ impl TestHost {
             return None;
         }
         let Some(collector) = self.collector.as_mut() else {
-            return Some(Err(VmError::new(VmErrorKind::EffectRejected {
-                effect: effect.effect_name().into(),
-                op: Some(effect.op_name().into()),
-                reason: "test session not active".into(),
-            })));
+            return Some(Err(reject_test_effect(effect, "test session not active")));
         };
         Some(handle_test_effect(collector, effect, args).map(|()| Value::Unit))
     }
@@ -83,26 +97,33 @@ fn handle_test_effect(
             let _ = collector.active_suites.pop();
         }
         test::TEST_CASE_OP => {
-            let [Value::String(name), Value::Bool(passed)] = args else {
+            let [Value::String(name), passed] = args else {
                 return Err(invalid_test_effect(effect));
             };
-            collector.cases.push(NativeTestCaseResult {
-                suite: suite_name(&collector.active_suites),
-                name: name.as_ref().into(),
-                passed: *passed,
-            });
+            let Some(passed) = bool_flag(passed) else {
+                return Err(invalid_test_effect(effect));
+            };
+            collector.cases.push(NativeTestCaseResult::new(
+                suite_name(&collector.active_suites),
+                name.as_ref().into(),
+                passed,
+            ));
         }
         _ => return Err(invalid_test_effect(effect)),
     }
     Ok(())
 }
 
-fn invalid_test_effect(effect: &EffectCall) -> VmError {
+fn reject_test_effect(effect: &EffectCall, reason: impl Into<Box<str>>) -> VmError {
     VmError::new(VmErrorKind::EffectRejected {
         effect: effect.effect_name().into(),
         op: Some(effect.op_name().into()),
-        reason: "invalid test event".into(),
+        reason: reason.into(),
     })
+}
+
+fn invalid_test_effect(effect: &EffectCall) -> VmError {
+    reject_test_effect(effect, "invalid test event")
 }
 
 fn suite_name(path: &[Box<str>]) -> Box<str> {
@@ -111,4 +132,9 @@ fn suite_name(path: &[Box<str>]) -> Box<str> {
         .collect::<Vec<_>>()
         .join(" / ")
         .into_boxed_str()
+}
+
+fn bool_flag(value: &Value) -> Option<bool> {
+    let record = value.as_record()?;
+    (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
 }

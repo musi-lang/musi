@@ -1,0 +1,334 @@
+use super::*;
+
+fn symbol_needs_quote(text: &str) -> bool {
+    text.chars().any(char::is_whitespace) || text.contains('"') || text.contains('\\')
+}
+
+fn push_symbol_ref(out: &mut String, text: &str) {
+    out.push('$');
+    if symbol_needs_quote(text) {
+        push_quoted(out, text);
+    } else {
+        out.push_str(text);
+    }
+}
+
+fn push_quoted(out: &mut String, text: &str) {
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+}
+
+#[must_use]
+pub fn format_text(artifact: &Artifact) -> String {
+    let mut out = String::new();
+
+    format_types(&mut out, artifact);
+    format_data(&mut out, artifact);
+    format_constants(&mut out, artifact);
+    format_effects(&mut out, artifact);
+    format_classes(&mut out, artifact);
+    format_foreigns(&mut out, artifact);
+    format_globals(&mut out, artifact);
+    format_exports(&mut out, artifact);
+    format_meta(&mut out, artifact);
+    format_methods(&mut out, artifact);
+
+    out
+}
+
+fn format_types(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.types.iter() {
+        out.push_str(".type ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push_str(" term ");
+        push_quoted(out, artifact.string_text(descriptor.term));
+        out.push('\n');
+    }
+}
+
+fn format_data(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.data.iter() {
+        out.push_str(".data ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push_str(" variants ");
+        out.push_str(&descriptor.variant_count.to_string());
+        out.push_str(" fields ");
+        out.push_str(&descriptor.field_count.to_string());
+        for variant in &descriptor.variants {
+            out.push_str(" variant ");
+            push_symbol_ref(out, artifact.string_text(variant.name));
+            for ty in &variant.field_tys {
+                out.push_str(" field ");
+                push_symbol_ref(out, artifact.type_name(*ty));
+            }
+        }
+        if let Some(repr) = descriptor.repr_kind {
+            out.push_str(" repr ");
+            push_quoted(out, artifact.string_text(repr));
+        }
+        if let Some(align) = descriptor.layout_align {
+            out.push_str(" align ");
+            out.push_str(&align.to_string());
+        }
+        if let Some(pack) = descriptor.layout_pack {
+            out.push_str(" pack ");
+            out.push_str(&pack.to_string());
+        }
+        if descriptor.frozen {
+            out.push_str(" frozen");
+        }
+        out.push('\n');
+    }
+}
+
+fn format_constants(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.constants.iter() {
+        out.push_str(".const ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        match descriptor.value {
+            ConstantValue::Int(value) => {
+                out.push_str(" int ");
+                out.push_str(&value.to_string());
+            }
+            ConstantValue::Float(value) => {
+                out.push_str(" float ");
+                out.push_str(&value.to_string());
+            }
+            ConstantValue::Bool(value) => {
+                out.push_str(" bool ");
+                out.push_str(if value { "true" } else { "false" });
+            }
+            ConstantValue::String(text) => {
+                out.push_str(" string ");
+                push_quoted(out, artifact.string_text(text));
+            }
+            ConstantValue::Syntax { shape, text } => {
+                out.push_str(" syntax ");
+                out.push_str(match shape {
+                    SyntaxShape::Expr => "expr ",
+                    SyntaxShape::Module => "module ",
+                });
+                push_quoted(out, artifact.string_text(text));
+            }
+        }
+        out.push('\n');
+    }
+}
+
+fn format_effects(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.effects.iter() {
+        out.push_str(".effect ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        for op in &descriptor.ops {
+            out.push(' ');
+            push_symbol_ref(out, artifact.string_text(op.name));
+            for ty in &op.param_tys {
+                out.push_str(" param ");
+                push_symbol_ref(out, artifact.type_name(*ty));
+            }
+            out.push_str(" result ");
+            push_symbol_ref(out, artifact.type_name(op.result_ty));
+        }
+        out.push('\n');
+    }
+}
+
+fn format_classes(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.classes.iter() {
+        out.push_str(".class ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push('\n');
+    }
+}
+
+fn format_meta(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.meta.iter() {
+        out.push_str(".meta ");
+        push_symbol_ref(out, artifact.string_text(descriptor.target));
+        out.push(' ');
+        push_symbol_ref(out, artifact.string_text(descriptor.key));
+        for value in &descriptor.values {
+            out.push(' ');
+            push_symbol_ref(out, artifact.string_text(*value));
+        }
+        out.push('\n');
+    }
+}
+
+fn format_methods(out: &mut String, artifact: &Artifact) {
+    for (_, method) in artifact.methods.iter() {
+        out.push_str(".method ");
+        push_symbol_ref(out, artifact.string_text(method.name));
+        out.push_str(" params ");
+        out.push_str(&method.params.to_string());
+        out.push_str(" locals ");
+        out.push_str(&method.locals.to_string());
+        if method.export {
+            out.push_str(" export");
+        }
+        if method.hot {
+            out.push_str(" hot");
+        }
+        if method.cold {
+            out.push_str(" cold");
+        }
+        out.push('\n');
+        for entry in &method.code {
+            match entry {
+                CodeEntry::Label(label) => {
+                    out.push_str(artifact.string_text(method.labels[usize::from(label.id)]));
+                    out.push_str(":\n");
+                }
+                CodeEntry::Instruction(instruction) => {
+                    out.push_str("  ");
+                    out.push_str(instruction.opcode.mnemonic());
+                    if !matches!(instruction.operand, Operand::None) {
+                        out.push(' ');
+                        format_operand(out, artifact, method, &instruction.operand);
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+        out.push_str(".end\n");
+    }
+}
+
+fn format_foreigns(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.foreigns.iter() {
+        out.push_str(".foreign ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        for ty in &descriptor.param_tys {
+            out.push_str(" param ");
+            push_symbol_ref(out, artifact.type_name(*ty));
+        }
+        out.push_str(" result ");
+        push_symbol_ref(out, artifact.type_name(descriptor.result_ty));
+        out.push_str(" abi ");
+        push_quoted(out, artifact.string_text(descriptor.abi));
+        out.push_str(" symbol ");
+        push_quoted(out, artifact.string_text(descriptor.symbol));
+        if let Some(link) = descriptor.link {
+            out.push_str(" link ");
+            push_quoted(out, artifact.string_text(link));
+        }
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        if descriptor.hot {
+            out.push_str(" hot");
+        }
+        if descriptor.cold {
+            out.push_str(" cold");
+        }
+        out.push('\n');
+    }
+}
+
+fn format_globals(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.globals.iter() {
+        out.push_str(".global ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        if descriptor.export {
+            out.push_str(" export");
+        }
+        if let Some(method) = descriptor.initializer {
+            out.push(' ');
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(method).name));
+        }
+        out.push('\n');
+    }
+}
+
+fn format_exports(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.exports.iter() {
+        out.push_str(".export ");
+        push_symbol_ref(out, artifact.string_text(descriptor.name));
+        out.push(' ');
+        match descriptor.target {
+            ExportTarget::Method(_) => out.push_str("method"),
+            ExportTarget::Global(_) => out.push_str("global"),
+            ExportTarget::Foreign(_) => out.push_str("foreign"),
+            ExportTarget::Type(_) => out.push_str("type"),
+            ExportTarget::Effect(_) => out.push_str("effect"),
+            ExportTarget::Class(_) => out.push_str("class"),
+        }
+        if descriptor.opaque {
+            out.push_str(" opaque");
+        }
+        out.push('\n');
+    }
+}
+
+fn format_operand(
+    out: &mut String,
+    artifact: &Artifact,
+    method: &MethodDescriptor,
+    operand: &Operand,
+) {
+    match operand {
+        Operand::None => {}
+        Operand::I16(value) => out.push_str(&value.to_string()),
+        Operand::Local(slot) => {
+            out.push('%');
+            out.push_str(&slot.to_string());
+        }
+        Operand::String(text) => push_quoted(out, artifact.string_text(*text)),
+        Operand::Type(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.types.get(*id).name));
+        }
+        Operand::Constant(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.constants.get(*id).name));
+        }
+        Operand::Global(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.globals.get(*id).name));
+        }
+        Operand::Method(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
+        }
+        Operand::WideMethodCaptures {
+            method: id,
+            captures,
+        } => {
+            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
+            out.push(' ');
+            out.push_str(&captures.to_string());
+        }
+        Operand::Foreign(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.foreigns.get(*id).name));
+        }
+        Operand::Effect { effect, op } => {
+            let effect = artifact.effects.get(*effect);
+            push_symbol_ref(out, artifact.string_text(effect.name));
+            out.push(' ');
+            push_symbol_ref(out, artifact.string_text(effect.ops[usize::from(*op)].name));
+        }
+        Operand::EffectId(effect) => {
+            let effect = artifact.effects.get(*effect);
+            push_symbol_ref(out, artifact.string_text(effect.name));
+        }
+        Operand::Label(id) => {
+            out.push_str(artifact.string_text(method.labels[usize::from(*id)]));
+        }
+        Operand::TypeLen { ty, len } => {
+            push_symbol_ref(out, artifact.string_text(artifact.types.get(*ty).name));
+            out.push(' ');
+            out.push_str(&len.to_string());
+        }
+        Operand::BranchTable(labels) => {
+            for (idx, label) in labels.iter().copied().enumerate() {
+                if idx != 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(artifact.string_text(method.labels[usize::from(label)]));
+            }
+        }
+    }
+}

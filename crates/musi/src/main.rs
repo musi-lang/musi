@@ -9,14 +9,15 @@ use clap::Parser;
 use cli::{Cli, Command, DiagnosticsFormatArg};
 use musi_native::NativeHost;
 use musi_project::{
-    Project, ProjectEntry, ProjectError, ProjectOptions, TaskSpec, load_project_ancestor,
+    Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
+    ProjectTestTargetSource, TaskSpec, load_project_ancestor,
 };
 use musi_rt::{Runtime, RuntimeError, RuntimeOptions};
 use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, project_error_report,
     render_project_error, render_session_error, session_error_report, write_artifact_bytes,
 };
-use musi_vm::{Value, ValueView};
+use musi_vm::{Value, render_value_view};
 use music_sema::TargetInfo;
 use music_session::{Session, SessionError};
 use thiserror::Error;
@@ -95,8 +96,7 @@ fn new_package(name: &str) -> MusiResult {
     fs::write(
         root.join("musi.json"),
         format!(
-            "{{\n  \"name\": \"{}\",\n  \"version\": \"0.1.0\",\n  \"main\": \"index.ms\"\n}}\n",
-            name
+            "{{\n  \"name\": \"{name}\",\n  \"version\": \"0.1.0\",\n  \"main\": \"index.ms\"\n}}\n"
         ),
     )
     .map_err(|source| ToolingError::ToolingIoFailed {
@@ -215,9 +215,10 @@ fn test_project(target: Option<&Path>) -> MusiResult {
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
     let tests = resolve_test_targets(&project, target)?;
     let mut runtime = project_runtime(&project);
+    register_synthetic_test_modules(&project, &tests, &mut runtime)?;
     let mut failed = 0usize;
     for test in tests {
-        let report = runtime.run_test_module(test.module_key.as_str())?;
+        let report = runtime.run_test_export(test.module_key.as_str(), &test.export_name)?;
         for case in &report.cases {
             let status = if case.passed { "pass" } else { "fail" };
             println!(
@@ -251,7 +252,7 @@ fn run_task_command(project: &Project, task: &TaskSpec) -> MusiResult {
     println!("{}", task.command);
     #[cfg(windows)]
     let status = ProcessCommand::new("cmd")
-        .args(["/C", task.command.as_str()])
+        .args([windows_shell_run_arg(), task.command.as_str()])
         .current_dir(project.root_dir())
         .status();
     #[cfg(not(windows))]
@@ -272,11 +273,16 @@ fn run_task_command(project: &Project, task: &TaskSpec) -> MusiResult {
     }
 }
 
+#[cfg(windows)]
+const fn windows_shell_run_arg() -> &'static str {
+    concat!("/", "C")
+}
+
 fn project_anchor(target: Option<&Path>) -> MusiResult<PathBuf> {
-    match target {
-        Some(path) => Ok(path.to_path_buf()),
-        None => current_dir().map_err(|_| MusiError::MissingCurrentDirectory),
-    }
+    target.map_or_else(
+        || current_dir().map_err(|_| MusiError::MissingCurrentDirectory),
+        |path| Ok(path.to_path_buf()),
+    )
 }
 
 fn project_runtime(project: &Project) -> Runtime {
@@ -322,46 +328,75 @@ fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<Pr
     for package in project.workspace().packages.values() {
         for (module_key, path) in &package.module_keys {
             if path == &resolved {
-                return Ok(ProjectEntry {
-                    package: package.id.clone(),
-                    module_key: module_key.clone(),
-                    path: path.clone(),
-                });
+                return Ok(ProjectEntry::new(
+                    package.id.clone(),
+                    module_key.clone(),
+                    path.clone(),
+                ));
             }
         }
     }
     Err(MusiError::UnknownTarget { target: resolved })
 }
 
-fn resolve_test_targets(project: &Project, target: Option<&Path>) -> MusiResult<Vec<ProjectEntry>> {
+fn resolve_test_targets(
+    project: &Project,
+    target: Option<&Path>,
+) -> MusiResult<Vec<ProjectTestTarget>> {
     let Some(target) = target else {
-        return Ok(project
-            .package_test_modules()
-            .into_iter()
-            .map(|test| ProjectEntry {
-                package: test.package,
-                module_key: test.module_key,
-                path: test.path,
-            })
-            .collect());
+        return project.test_targets().map_err(Into::into);
     };
     if target.extension().is_some_and(|ext| ext == "ms") || target.components().count() > 1 {
-        return Ok(vec![resolve_project_path_entry(project, target)?]);
+        let entry = resolve_project_path_entry(project, target)?;
+        return Ok(vec![ProjectTestTarget::module(
+            entry.package,
+            entry.module_key,
+            entry.path,
+        )]);
     }
     let package_name = target.to_string_lossy();
     let Some(package) = project.package(package_name.as_ref()) else {
-        return Ok(vec![resolve_project_path_entry(project, target)?]);
+        let entry = resolve_project_path_entry(project, target)?;
+        return Ok(vec![ProjectTestTarget::module(
+            entry.package,
+            entry.module_key,
+            entry.path,
+        )]);
     };
     Ok(project
-        .package_test_modules()
+        .test_targets()?
         .into_iter()
         .filter(|test| test.package == package.id)
-        .map(|test| ProjectEntry {
-            package: test.package,
-            module_key: test.module_key,
-            path: test.path,
-        })
         .collect())
+}
+
+fn register_synthetic_test_modules(
+    project: &Project,
+    tests: &[ProjectTestTarget],
+    runtime: &mut Runtime,
+) -> MusiResult {
+    if !tests
+        .iter()
+        .any(|target| matches!(target.source, ProjectTestTargetSource::SyntheticModule))
+    {
+        return Ok(());
+    }
+    let mut session = project.build_session()?;
+    let _ = session.law_suite_modules()?;
+    for target in tests {
+        if !matches!(target.source, ProjectTestTargetSource::SyntheticModule) {
+            continue;
+        }
+        let Some(source) = session.module_text(&target.module_key) else {
+            return Err(MusiError::SessionCompilationFailed(
+                SessionError::ModuleNotRegistered {
+                    key: target.module_key.clone(),
+                },
+            ));
+        };
+        runtime.register_module_text(target.module_key.as_str(), source.to_owned())?;
+    }
+    Ok(())
 }
 
 fn manifest_output_path(project: &Project, entry: &ProjectEntry) -> Option<PathBuf> {
@@ -375,34 +410,15 @@ fn manifest_output_path(project: &Project, entry: &ProjectEntry) -> Option<PathB
 }
 
 fn target_info(target_name: &str) -> TargetInfo {
-    TargetInfo {
-        os: Some(target_name.into()),
-        ..TargetInfo::default()
-    }
+    TargetInfo::new().with_os(target_name)
 }
 
 fn print_runtime_value(runtime: &Runtime, value: &Value) {
-    let rendered = match runtime
-        .inspect(value)
-        .expect("runtime should inspect loaded value")
-    {
-        ValueView::Unit => None,
-        ValueView::Int(value) => Some(value.to_string()),
-        ValueView::Float(value) => Some(value.to_string()),
-        ValueView::Bool(value) => Some(value.to_string()),
-        ValueView::String(text) => Some(text.as_str().to_owned()),
-        ValueView::Syntax(term) => Some(term.term().text().to_owned()),
-        ValueView::Seq(seq) => Some(format!("<seq:{}>", seq.len())),
-        ValueView::Record(record) => Some(format!("<record:{}>", record.len())),
-        ValueView::Data(record) => Some(format!("<data:{}:{}>", record.tag(), record.len())),
-        ValueView::Closure => Some("<closure>".to_owned()),
-        ValueView::Continuation => Some("<continuation>".to_owned()),
-        ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
-        ValueView::Module(spec) => Some(format!("<module:{spec}>")),
-        ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
-        ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
-        ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
-    };
+    let rendered = render_value_view(
+        runtime
+            .inspect(value)
+            .expect("runtime should inspect loaded value"),
+    );
     if let Some(rendered) = rendered {
         println!("{rendered}");
     }
@@ -414,27 +430,19 @@ fn ok_report(
     package_root: Option<&Path>,
     manifest: Option<&Path>,
 ) -> CliDiagnosticsReport {
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "ok",
-        package_root: package_root.map(|path| path.display().to_string()),
-        manifest: manifest.map(|path| path.display().to_string()),
-        diagnostics: Vec::new(),
-    }
+    CliDiagnosticsReport::ok(tool, command, package_root, manifest)
 }
 
 enum CheckProjectFailure {
     ProjectModelFailure {
         package_root: Option<PathBuf>,
         manifest: Option<PathBuf>,
-        error: ProjectError,
+        error: Box<ProjectError>,
     },
     SessionCompilationFailure {
-        project: Project,
-        session: Session,
-        error: SessionError,
+        project: Box<Project>,
+        session: Box<Session>,
+        error: Box<SessionError>,
     },
 }
 
@@ -444,10 +452,11 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
             package_root: None,
             manifest: None,
             error: match error {
-                MusiError::ProjectModelFailed(project) => project,
+                MusiError::ProjectModelFailed(project) => Box::new(project),
                 other => ProjectError::ManifestValidationFailed {
                     message: other.to_string(),
-                },
+                }
+                .into(),
             },
         })?;
     let project = load_project_ancestor(&anchor, ProjectOptions::default()).map_err(|error| {
@@ -458,7 +467,7 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
                 .or_else(|| anchor.parent().map(Path::to_path_buf)),
             manifest: (anchor.file_name().is_some_and(|name| name == "musi.json"))
                 .then(|| anchor.clone()),
-            error,
+            error: Box::new(error),
         }
     })?;
     let entry = resolve_project_entry(&project, target).map_err(|error| {
@@ -466,10 +475,11 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
             package_root: Some(project.root_dir().to_path_buf()),
             manifest: Some(project.root_manifest_path().to_path_buf()),
             error: match error {
-                MusiError::ProjectModelFailed(project) => project,
+                MusiError::ProjectModelFailed(project) => Box::new(project),
                 other => ProjectError::ManifestValidationFailed {
                     message: other.to_string(),
-                },
+                }
+                .into(),
             },
         }
     })?;
@@ -479,14 +489,14 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
             .map_err(|error| CheckProjectFailure::ProjectModelFailure {
                 package_root: Some(project.root_dir().to_path_buf()),
                 manifest: Some(project.root_manifest_path().to_path_buf()),
-                error,
+                error: Box::new(error),
             })?;
     match session.check_module(&entry.module_key) {
         Ok(_) => Ok((project, entry)),
         Err(error) => Err(CheckProjectFailure::SessionCompilationFailure {
-            project,
-            session,
-            error,
+            project: Box::new(project),
+            session: Box::new(session),
+            error: Box::new(error),
         }),
     }
 }

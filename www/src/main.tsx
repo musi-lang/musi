@@ -1,4 +1,3 @@
-import "@mantine/core/styles.css";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./pages";
 import "./app.css";

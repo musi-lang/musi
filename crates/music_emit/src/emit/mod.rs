@@ -1,5 +1,6 @@
+use std::any::Any;
 use std::collections::{BTreeSet, HashMap};
-use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
@@ -32,6 +33,7 @@ type ForeignTable = HashMap<NameBindingId, ForeignId>;
 type GlobalTable = HashMap<NameBindingId, GlobalId>;
 type TypeTable = HashMap<Box<str>, TypeId>;
 type LocalSlots = HashMap<NameBindingId, u16>;
+type SyntheticLocalSlots = HashMap<Box<str>, u16>;
 type CodeBuffer = Vec<CodeEntry>;
 type QualifiedMethodTable = HashMap<(ModuleKey, Box<str>), MethodId>;
 type QualifiedForeignTable = HashMap<(ModuleKey, Box<str>), ForeignId>;
@@ -40,6 +42,9 @@ type UniqueMethodTable = HashMap<Box<str>, MethodId>;
 type UniqueForeignTable = HashMap<Box<str>, ForeignId>;
 type UniqueGlobalTable = HashMap<Box<str>, GlobalId>;
 type EffectTable = HashMap<DefinitionKey, EffectId>;
+type ExprEmitter<'artifact, 'module> = MethodEmitter<'artifact, 'module>;
+type ExprEmitterMut<'emitter, 'artifact, 'module> = &'emitter mut ExprEmitter<'artifact, 'module>;
+type ExprEmitterRef<'emitter, 'artifact, 'module> = &'emitter ExprEmitter<'artifact, 'module>;
 
 #[derive(Debug, Default)]
 struct UniqueTables {
@@ -84,6 +89,7 @@ struct MethodEmitter<'artifact, 'module> {
     layout: &'module ModuleLayout,
     tables: EmitterTables<'module>,
     locals: LocalSlots,
+    synthetic_locals: SyntheticLocalSlots,
     temps: HashMap<IrTempId, u16>,
     next_local: u16,
     labels: Vec<StringId>,
@@ -121,19 +127,7 @@ pub fn lower_ir_module(
     module: &IrModule,
     options: EmitOptions,
 ) -> Result<EmittedModule, EmitDiagList> {
-    match catch_unwind(AssertUnwindSafe(|| lower_ir_module_impl(module, options))) {
-        Ok(result) => result,
-        Err(payload) => {
-            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
-                resume_unwind(payload);
-            };
-            Err(vec![
-                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
-                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
-                    .with_note(format!("detail `{}`", invariant.description)),
-            ])
-        }
-    }
+    with_emit_invariant_guard(|| lower_ir_module_impl(module, options))
 }
 
 fn lower_ir_module_impl(
@@ -150,13 +144,13 @@ fn lower_ir_module_impl(
     }
 
     let entry_method = build_module_entry(&mut state.artifact, module.module_key(), &layout);
-    Ok(EmittedModule {
-        module_key: module.module_key().clone(),
-        artifact: state.artifact,
+    Ok(EmittedModule::new(
+        module.module_key().clone(),
+        state.artifact,
         entry_method,
-        exports: collect_exports(module, &layout).into_boxed_slice(),
-        static_imports: module.static_imports().to_vec().into_boxed_slice(),
-    })
+        collect_exports(module, &layout).into_boxed_slice(),
+        module.static_imports().to_vec().into_boxed_slice(),
+    ))
 }
 
 /// Lowers a reachable IR module set into one merged SEAM artifact.
@@ -170,21 +164,40 @@ pub fn lower_ir_program(
     entry_module: &ModuleKey,
     options: EmitOptions,
 ) -> Result<EmittedProgram, EmitDiagList> {
-    match catch_unwind(AssertUnwindSafe(|| {
-        lower_ir_program_impl(modules, entry_module, options)
-    })) {
+    with_emit_invariant_guard(|| lower_ir_program_impl(modules, entry_module, options))
+}
+
+fn with_emit_invariant_guard<T>(
+    emit: impl FnOnce() -> Result<T, EmitDiagList>,
+) -> Result<T, EmitDiagList> {
+    match catch_unwind(AssertUnwindSafe(emit)) {
         Ok(result) => result,
         Err(payload) => {
-            let Some(invariant) = payload.downcast_ref::<EmitInvariant>() else {
-                resume_unwind(payload);
-            };
-            Err(vec![
-                Diag::error(EmitDiagKind::EmitInvariantViolated.message())
-                    .with_code(EmitDiagKind::EmitInvariantViolated.code())
-                    .with_note(format!("detail `{}`", invariant.description)),
-            ])
+            let detail = payload.downcast_ref::<EmitInvariant>().map_or_else(
+                || panic_payload_text(payload.as_ref()),
+                |invariant| invariant.description.clone(),
+            );
+            Err(invariant_violation_diag(&detail))
         }
     }
+}
+
+fn invariant_violation_diag(detail: &str) -> EmitDiagList {
+    vec![
+        Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+            .with_code(EmitDiagKind::EmitInvariantViolated.code())
+            .with_note(format!("detail `{detail}`")),
+    ]
+}
+
+fn panic_payload_text(payload: &(dyn Any + Send)) -> Box<str> {
+    if let Some(text) = payload.downcast_ref::<String>() {
+        return text.clone().into_boxed_str();
+    }
+    if let Some(text) = payload.downcast_ref::<&'static str>() {
+        return (*text).into();
+    }
+    "<non-string panic payload>".into()
 }
 
 fn lower_ir_program_impl(
@@ -206,22 +219,16 @@ fn lower_ir_program_impl(
     if !state.diags.is_empty() {
         return Err(state.diags);
     }
-    Ok(EmittedProgram {
-        entry_module: entry_module.clone(),
-        artifact: state.artifact,
+    Ok(EmittedProgram::new(
+        entry_module.clone(),
+        state.artifact,
         entry_method,
-        modules: modules
+        modules
             .iter()
             .map(|module| module.module_key().clone())
             .collect::<Vec<_>>()
             .into_boxed_slice(),
-    })
-}
-
-fn invalid_emit_path(description: impl AsRef<str>) -> ! {
-    let description = description.as_ref().to_owned().into_boxed_str();
-    debug_assert!(false, "invalid emit path: {description}");
-    resume_unwind(Box::new(EmitInvariant { description }));
+    ))
 }
 
 fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &[ModuleLayout]) {
@@ -230,8 +237,10 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
     let mut global_candidates = HashMap::<Box<str>, Vec<GlobalId>>::new();
     for (module, layout) in modules.iter().zip(layouts) {
         for callable in module.callables() {
-            if let Some(binding) = callable.binding
-                && let Some(method) = layout.callables.get(&binding).copied()
+            if let Some(method) = layout
+                .callables_by_name
+                .get(callable.name.as_ref())
+                .copied()
             {
                 let _ = state
                     .qualified
@@ -258,9 +267,10 @@ fn build_unique_maps(state: &mut ProgramState, modules: &[&IrModule], layouts: &
             }
         }
         for global in module.globals() {
-            if let Some(binding) = global.binding
-                && let Some(id) = layout.globals.get(&binding).copied()
-            {
+            let id = global
+                .binding
+                .and_then(|binding| layout.globals.get(&binding).copied());
+            if let Some(id) = id {
                 let _ = state
                     .qualified
                     .globals
@@ -315,8 +325,15 @@ fn compile_callables(state: &mut ProgramState, module: &IrModule, layout: &Modul
         else {
             continue;
         };
-        let locals = build_param_locals(&callable.params);
-        let mut emitter = method_emitter(artifact, module.module_key(), layout, tables, locals);
+        let (locals, synthetic_locals) = build_param_locals(&callable.params);
+        let mut emitter = method_emitter(
+            artifact,
+            module.module_key(),
+            layout,
+            tables,
+            locals,
+            synthetic_locals,
+        );
         expr::compile_expr(&mut emitter, &callable.body, true, diags);
         emitter.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::Ret,
@@ -350,6 +367,7 @@ fn compile_globals(state: &mut ProgramState, module: &IrModule, layout: &ModuleL
             module.module_key(),
             layout,
             tables,
+            HashMap::new(),
             HashMap::new(),
         );
         expr::compile_expr(&mut emitter, &global.body, true, diags);
@@ -419,14 +437,17 @@ fn collect_exports(module: &IrModule, layout: &ModuleLayout) -> Vec<EmittedBindi
     module
         .exports()
         .iter()
-        .map(|export| EmittedBinding {
-            name: export.name.clone(),
-            method: binding_export(module, export.name.as_ref(), |binding| {
-                layout.callables.get(&binding).copied()
-            }),
-            global: binding_export(module, export.name.as_ref(), |binding| {
-                layout.globals.get(&binding).copied()
-            }),
+        .map(|export| {
+            EmittedBinding::new(
+                export.name.clone(),
+                binding_export(module, export.name.as_ref(), |binding| {
+                    layout.callables.get(&binding).copied()
+                })
+                .or_else(|| layout.callables_by_name.get(export.name.as_ref()).copied()),
+                binding_export(module, export.name.as_ref(), |binding| {
+                    layout.globals.get(&binding).copied()
+                }),
+            )
         })
         .collect()
 }
@@ -444,8 +465,10 @@ fn method_emitter<'artifact, 'module>(
     layout: &'module ModuleLayout,
     tables: EmitterTables<'module>,
     locals: LocalSlots,
+    synthetic_locals: SyntheticLocalSlots,
 ) -> MethodEmitter<'artifact, 'module> {
-    let next_local = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+    let next_local =
+        u16::try_from(locals.len().saturating_add(synthetic_locals.len())).unwrap_or(u16::MAX);
     let labels = initial_labels(artifact);
     MethodEmitter {
         artifact,
@@ -453,6 +476,7 @@ fn method_emitter<'artifact, 'module>(
         layout,
         tables,
         locals,
+        synthetic_locals,
         temps: HashMap::new(),
         next_local,
         labels,
@@ -471,18 +495,26 @@ fn finish_emitter_method(emitter: MethodEmitter<'_, '_>, method_id: MethodId) {
 }
 
 fn build_entry_method(artifact: &mut Artifact, name: &str, init_methods: &[MethodId]) -> MethodId {
-    let method_id = alloc_method(artifact, name, false, 0);
+    let method_id = alloc_method(artifact, name, false, false, false, 0);
     let labels = initial_labels(artifact);
     finalize_method(artifact, method_id, 1, labels, entry_code(init_methods));
     method_id
 }
 
-fn build_param_locals(params: &[IrParam]) -> LocalSlots {
-    params
-        .iter()
-        .enumerate()
-        .filter_map(|(index, param)| u16::try_from(index).ok().map(|slot| (param.binding, slot)))
-        .collect()
+fn build_param_locals(params: &[IrParam]) -> (LocalSlots, SyntheticLocalSlots) {
+    let mut locals = HashMap::new();
+    let mut synthetic = HashMap::new();
+    for (index, param) in params.iter().enumerate() {
+        let Ok(slot) = u16::try_from(index) else {
+            continue;
+        };
+        if let Some(binding) = param.binding {
+            let _ = locals.insert(binding, slot);
+        } else {
+            let _ = synthetic.insert(param.name.clone(), slot);
+        }
+    }
+    (locals, synthetic)
 }
 
 fn emit_zero(emitter: &mut MethodEmitter<'_, '_>) {
@@ -500,16 +532,21 @@ fn initial_labels(artifact: &mut Artifact) -> Vec<StringId> {
     vec![artifact.intern_string("L0")]
 }
 
-fn alloc_method(artifact: &mut Artifact, name: &str, export: bool, params: u16) -> MethodId {
+fn alloc_method(
+    artifact: &mut Artifact,
+    name: &str,
+    export: bool,
+    hot: bool,
+    cold: bool,
+    params: u16,
+) -> MethodId {
     let name_id = artifact.intern_string(name);
-    artifact.methods.alloc(MethodDescriptor {
-        name: name_id,
-        params,
-        locals: 0,
-        export,
-        labels: Box::new([]),
-        code: Box::new([]),
-    })
+    artifact.methods.alloc(
+        MethodDescriptor::new(name_id, params, 0, Box::new([]))
+            .with_export(export)
+            .with_hot(hot)
+            .with_cold(cold),
+    )
 }
 
 fn finalize_method(

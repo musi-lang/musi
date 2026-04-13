@@ -16,7 +16,7 @@
 		"quote",
 		"forall",
 		"where",
-		"with"
+		"using"
 	],
 	"requiredOperatorPatterns": [
 		":=",
@@ -27,9 +27,61 @@
 		"~>",
 		"\\|>",
 		"<:",
+		"\\.\\.<",
+		"\\.\\.",
 		"\\.\\.\\."
 	],
+	"requiredScopePatterns": [
+		"comment.line.documentation.musi",
+		"comment.block.documentation.musi",
+		"punctuation.separator.definition.documentation.musi",
+		"meta.documentation.param.musi",
+		"meta.documentation.type.musi",
+		"meta.documentation.option.musi",
+		"meta.documentation.reference.musi",
+		"meta.documentation.formatting.musi",
+		"entity.name.function.musi",
+		"entity.name.function.call.musi",
+		"entity.name.type.musi",
+		"entity.name.type.constructor.musi",
+		"entity.name.function.method.musi",
+		"entity.name.function.method.call.musi",
+		"entity.other.attribute-name.musi",
+		"entity.name.function.operator.fixity.musi",
+		"entity.name.function.operator.musi",
+		"variable.parameter.receiver.musi",
+		"keyword.control.effects.using.musi",
+		"keyword.operator.range.musi",
+		"variable.parameter.documentation.musi",
+		"variable.parameter.optional.documentation.musi",
+		"storage.type.documentation.musi",
+		"markup.underline.link.documentation.musi",
+		"markup.inline.raw.documentation.musi",
+		"keyword.other.documentation.tag.musi"
+	],
+	"requiredDocumentationPatterns": [
+		"@(param(?:eter)?|arg(?:ument)?|property|var)",
+		"@(type|template)",
+		"@(default|optional)",
+		"@(see)",
+		"@(code|literal)",
+		"@(returns?|deprecated|example|remarks?|summary|since|version)",
+		"\\{@(?:link(?:plain)?|linkplain|see)\\b",
+		"\\{@(?:code|literal)\\b",
+		":="
+	],
+	"documentationCommentSamples": [
+		"/// @parameter value := input value",
+		"/// @arg [count := 10] optional count",
+		"/// @see {@linkplain Std.Option | Option} and https://example.com",
+		"/** @type T := result type @default [count := 10] @code let value := 1 */"
+	],
 	"requiredAccessorScope": "punctuation.accessor.musi",
+	"forbiddenScopePatterns": [
+		"entity.name.method.",
+		"entity.name.constructor.",
+		"entity.name.attribute."
+	],
 	"requiredSnippetPrefixes": [
 		"let",
 		"letrec",
@@ -41,5 +93,126 @@
 		"quotemod",
 		"foreign",
 		"forall"
+	],
+	"tokenFixtures": [
+		{
+			"name": "receiver-prefixed let declaration",
+			"source": "let (mut self : Buffer).push (value : Int) : Unit := self;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "let",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "self",
+					"occurrence": 1,
+					"scope": "variable.parameter.receiver.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "push",
+					"scope": "entity.name.function.method.musi"
+				}
+			]
+		},
+		{
+			"name": "dot call and constructor literal",
+			"source": "let out := one.inc(2); let ctor := .Some(1);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "inc",
+					"scope": "entity.name.function.method.call.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": ".",
+					"occurrence": 2,
+					"scope": "punctuation.accessor.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Some",
+					"scope": "entity.name.type.constructor.musi"
+				}
+			]
+		},
+		{
+			"name": "using clauses",
+			"source": "let run () using { Console } := 1;\nhandle run() using Console { value => value };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "using",
+					"scope": "keyword.control.effects.using.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "using",
+					"scope": "keyword.control.effects.using.musi"
+				}
+			]
+		},
+		{
+			"name": "ranges and spread",
+			"source": "let a := 1 ..< 4; let b := 1 .. 4; let c := [ ...xs ];",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "..<",
+					"scope": "keyword.operator.range.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "..",
+					"occurrence": 2,
+					"scope": "keyword.operator.range.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "...",
+					"scope": "keyword.operator.spread.musi"
+				}
+			]
+		},
+		{
+			"name": "attributes and docs",
+			"source": "/// @param value := input\n@known(name := \"Type\")\nlet x := 1;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "@param",
+					"scope": "keyword.other.documentation.tag.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "@",
+					"scope": "punctuation.definition.attribute.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "known",
+					"scope": "entity.other.attribute-name.musi"
+				}
+			]
+		},
+		{
+			"name": "operator naming scopes",
+			"source": "infixl 6 (+)\nlet plus := (+);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "(+)",
+					"scope": "entity.name.function.operator.fixity.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "(+)",
+					"scope": "entity.name.function.operator.musi"
+				}
+			]
+		}
 	]
 }

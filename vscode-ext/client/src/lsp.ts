@@ -6,7 +6,11 @@ import {
 	State,
 	TransportKind,
 } from "vscode-languageclient/node";
-import { findLspPath } from "./bootstrap.ts";
+import {
+	findLspBinary,
+	showLspNotFoundUI,
+	showStaleLspBinaryUI,
+} from "./bootstrap.ts";
 import type { DiagnosticsController } from "./diagnostics.ts";
 import type { StatusBar } from "./status.ts";
 
@@ -25,9 +29,19 @@ export class LspController implements vscode.Disposable {
 	}
 
 	async start(context: vscode.ExtensionContext): Promise<boolean> {
-		const serverPath = findLspPath();
+		const server = findLspBinary();
+		const serverPath = server.path;
 		if (!serverPath) {
 			this.#diagnostics.setMode("full");
+			if (server.staleWorkspacePath) {
+				this.#statusBar.update("LSP stale", "error");
+				await showStaleLspBinaryUI(
+					server.staleWorkspacePath,
+					server.freshnessPath,
+				);
+			} else {
+				await showLspNotFoundUI();
+			}
 			return false;
 		}
 
@@ -66,9 +80,14 @@ export class LspController implements vscode.Disposable {
 		} catch (error) {
 			this.#diagnostics.setMode("full");
 			this.#statusBar.update("LSP unavailable", "error");
-			void vscode.window.showErrorMessage(
-				`Failed to start Musi LSP: ${String(error)}`,
-			);
+			vscode.window
+				.showErrorMessage(`Failed to start Musi LSP: ${String(error)}`)
+				.then(undefined, (messageError: unknown) => {
+					console.error(
+						"[musi-vscode] failed to show LSP error message:",
+						messageError,
+					);
+				});
 			return false;
 		}
 	}
@@ -88,6 +107,8 @@ export class LspController implements vscode.Disposable {
 	}
 
 	dispose() {
-		void this.stop();
+		this.stop().catch((error) => {
+			console.error("[musi-vscode] failed to stop LSP client:", error);
+		});
 	}
 }

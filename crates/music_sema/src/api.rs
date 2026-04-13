@@ -7,11 +7,18 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
+use crate::BindingScheme;
 use crate::SemaModuleBuild;
 use crate::diag::SemaDiagKind;
 use crate::effects::EffectRow;
 
 pub type SemaDiagList = Vec<Diag>;
+pub type NameList = Box<[Box<str>]>;
+pub type SymbolList = Box<[Symbol]>;
+pub type AttrList = Box<[Attr]>;
+pub type ConstraintSurfaceList = Box<[ConstraintSurface]>;
+pub type HirTyIdList = Box<[HirTyId]>;
+pub type SurfaceTyIdList = Box<[SurfaceTyId]>;
 
 #[must_use]
 pub fn sema_diag_kind(diag: &Diag) -> Option<SemaDiagKind> {
@@ -24,6 +31,34 @@ pub struct ForeignLinkInfo {
     pub symbol: Option<Box<str>>,
 }
 
+impl ForeignLinkInfo {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            name: None,
+            symbol: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_name<Name>(mut self, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_symbol<SymbolName>(mut self, symbol: SymbolName) -> Self
+    where
+        SymbolName: Into<Box<str>>,
+    {
+        self.symbol = Some(symbol.into());
+        self
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TargetInfo {
     pub os: Option<Box<str>>,
@@ -32,6 +67,71 @@ pub struct TargetInfo {
     pub abi: Option<Box<str>>,
     pub vendor: Option<Box<str>>,
     pub features: BTreeSet<Box<str>>,
+}
+
+impl TargetInfo {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            os: None,
+            arch: None,
+            env: None,
+            abi: None,
+            vendor: None,
+            features: BTreeSet::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_os<Os>(mut self, os: Os) -> Self
+    where
+        Os: Into<Box<str>>,
+    {
+        self.os = Some(os.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_arch<Arch>(mut self, arch: Arch) -> Self
+    where
+        Arch: Into<Box<str>>,
+    {
+        self.arch = Some(arch.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_env<Env>(mut self, env: Env) -> Self
+    where
+        Env: Into<Box<str>>,
+    {
+        self.env = Some(env.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_abi<Abi>(mut self, abi: Abi) -> Self
+    where
+        Abi: Into<Box<str>>,
+    {
+        self.abi = Some(abi.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_vendor<Vendor>(mut self, vendor: Vendor) -> Self
+    where
+        Vendor: Into<Box<str>>,
+    {
+        self.vendor = Some(vendor.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_features(mut self, features: BTreeSet<Box<str>>) -> Self {
+        self.features = features;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +170,7 @@ pub trait SemaEnv {
 pub struct SemaOptions<'env> {
     pub target: Option<TargetInfo>,
     pub env: Option<&'env dyn SemaEnv>,
+    pub prelude: Option<&'env ModuleSurface>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -80,7 +181,10 @@ pub struct DefinitionKey {
 
 impl DefinitionKey {
     #[must_use]
-    pub fn new(module: ModuleKey, name: impl Into<Box<str>>) -> Self {
+    pub fn new<Name>(module: ModuleKey, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
         Self {
             module,
             name: name.into(),
@@ -106,6 +210,13 @@ impl SurfaceTyId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceTy {
     pub kind: SurfaceTyKind,
+}
+
+impl SurfaceTy {
+    #[must_use]
+    pub const fn new(kind: SurfaceTyKind) -> Self {
+        Self { kind }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,9 +259,32 @@ pub enum SurfaceTyKind {
     Tuple {
         items: Box<[SurfaceTyId]>,
     },
+    Seq {
+        item: SurfaceTyId,
+    },
     Array {
         dims: Box<[SurfaceDim]>,
         item: SurfaceTyId,
+    },
+    Range {
+        bound: SurfaceTyId,
+    },
+    ClosedRange {
+        bound: SurfaceTyId,
+    },
+    PartialRangeFrom {
+        bound: SurfaceTyId,
+    },
+    PartialRangeUpTo {
+        bound: SurfaceTyId,
+    },
+    PartialRangeThru {
+        bound: SurfaceTyId,
+    },
+    Handler {
+        effect: SurfaceTyId,
+        input: SurfaceTyId,
+        output: SurfaceTyId,
     },
     Mut {
         inner: SurfaceTyId,
@@ -173,26 +307,155 @@ pub struct SurfaceTyField {
     pub ty: SurfaceTyId,
 }
 
+impl SurfaceTyField {
+    #[must_use]
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            ty,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
-    pub type_params: Box<[Box<str>]>,
-    pub constraints: Box<[ConstraintSurface]>,
+    pub receiver_ty: Option<SurfaceTyId>,
+    pub receiver_mut: bool,
+    pub type_params: NameList,
+    pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
     pub opaque: bool,
     pub module_target: Option<ModuleKey>,
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
-    pub inert_attrs: Box<[Attr]>,
-    pub musi_attrs: Box<[Attr]>,
+    pub inert_attrs: AttrList,
+    pub musi_attrs: AttrList,
+}
+
+impl ExportedValue {
+    #[must_use]
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            ty,
+            receiver_ty: None,
+            receiver_mut: false,
+            type_params: Box::default(),
+            constraints: Box::default(),
+            effects: SurfaceEffectRow::default(),
+            opaque: false,
+            module_target: None,
+            class_key: None,
+            effect_key: None,
+            data_key: None,
+            inert_attrs: Box::default(),
+            musi_attrs: Box::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub const fn with_receiver(mut self, receiver_ty: SurfaceTyId, receiver_mut: bool) -> Self {
+        self.receiver_ty = Some(receiver_ty);
+        self.receiver_mut = receiver_mut;
+        self
+    }
+
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: impl Into<ConstraintSurfaceList>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_effects(mut self, effects: SurfaceEffectRow) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_opaque(mut self, opaque: bool) -> Self {
+        self.opaque = opaque;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
+        self.class_key = Some(class_key);
+        self
+    }
+
+    #[must_use]
+    pub fn with_effect_key(mut self, effect_key: DefinitionKey) -> Self {
+        self.effect_key = Some(effect_key);
+        self
+    }
+
+    #[must_use]
+    pub fn with_data_key(mut self, data_key: DefinitionKey) -> Self {
+        self.data_key = Some(data_key);
+        self
+    }
+
+    #[must_use]
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
+        self.inert_attrs = inert_attrs.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
+        self.musi_attrs = musi_attrs.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataVariantSurface {
     pub name: Box<str>,
     pub payload: Option<SurfaceTyId>,
+    pub field_tys: SurfaceTyIdList,
+}
+
+impl DataVariantSurface {
+    #[must_use]
+    pub fn new<Name, FieldTys>(name: Name, field_tys: FieldTys) -> Self
+    where
+        Name: Into<Box<str>>,
+        FieldTys: Into<SurfaceTyIdList>,
+    {
+        Self {
+            name: name.into(),
+            payload: None,
+            field_tys: field_tys.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn with_payload(mut self, payload: SurfaceTyId) -> Self {
+        self.payload = Some(payload);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,8 +465,64 @@ pub struct DataSurface {
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
+}
+
+impl DataSurface {
+    #[must_use]
+    pub fn new(key: DefinitionKey, variants: impl Into<Box<[DataVariantSurface]>>) -> Self {
+        Self {
+            key,
+            variants: variants.into(),
+            repr_kind: None,
+            layout_align: None,
+            layout_pack: None,
+            frozen: false,
+            inert_attrs: Box::default(),
+            musi_attrs: Box::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_repr_kind<ReprKind>(mut self, repr_kind: ReprKind) -> Self
+    where
+        ReprKind: Into<Box<str>>,
+    {
+        self.repr_kind = Some(repr_kind.into());
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_align(mut self, layout_align: u32) -> Self {
+        self.layout_align = Some(layout_align);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
+        self.layout_pack = Some(layout_pack);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
+        self
+    }
+
+    #[must_use]
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
+        self.inert_attrs = inert_attrs.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
+        self.musi_attrs = musi_attrs.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,16 +533,69 @@ pub struct ConstraintSurface {
     pub class_key: Option<DefinitionKey>,
 }
 
+impl ConstraintSurface {
+    #[must_use]
+    pub fn new<Name>(name: Name, kind: ConstraintKind, value: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            kind,
+            value,
+            class_key: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
+        self.class_key = Some(class_key);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceEffectItem {
     pub name: Box<str>,
     pub arg: Option<SurfaceTyId>,
 }
 
+impl SurfaceEffectItem {
+    #[must_use]
+    pub fn new<Name>(name: Name, arg: Option<SurfaceTyId>) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            arg,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SurfaceEffectRow {
     pub items: Box<[SurfaceEffectItem]>,
     pub open: Option<Box<str>>,
+}
+
+impl SurfaceEffectRow {
+    #[must_use]
+    pub fn new(items: impl Into<Box<[SurfaceEffectItem]>>) -> Self {
+        Self {
+            items: items.into(),
+            open: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_open<Open>(mut self, open: Open) -> Self
+    where
+        Open: Into<Box<str>>,
+    {
+        self.open = Some(open.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,14 +605,112 @@ pub struct ClassMemberSurface {
     pub result: SurfaceTyId,
 }
 
+impl ClassMemberSurface {
+    #[must_use]
+    pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<SurfaceTyIdList>,
+    {
+        Self {
+            name: name.into(),
+            params: params.into(),
+            result,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawParamSurface {
+    pub name: Box<str>,
+    pub ty: SurfaceTyId,
+}
+
+impl LawParamSurface {
+    #[must_use]
+    pub fn new<Name>(name: Name, ty: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            ty,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawSurface {
+    pub name: Box<str>,
+    pub params: Box<[LawParamSurface]>,
+}
+
+impl LawSurface {
+    #[must_use]
+    pub fn new<Name, Params>(name: Name, params: Params) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<Box<[LawParamSurface]>>,
+    {
+        Self {
+            name: name.into(),
+            params: params.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassSurface {
     pub key: DefinitionKey,
+    pub type_params: Box<[Box<str>]>,
     pub constraints: Box<[ConstraintSurface]>,
     pub members: Box<[ClassMemberSurface]>,
-    pub laws: Box<[Box<str>]>,
+    pub laws: Box<[LawSurface]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
+}
+
+impl ClassSurface {
+    #[must_use]
+    pub fn new(
+        key: DefinitionKey,
+        members: impl Into<Box<[ClassMemberSurface]>>,
+        laws: impl Into<Box<[LawSurface]>>,
+    ) -> Self {
+        Self {
+            key,
+            type_params: Box::default(),
+            constraints: Box::default(),
+            members: members.into(),
+            laws: laws.into(),
+            inert_attrs: Box::default(),
+            musi_attrs: Box::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintSurface]>>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
+        self.inert_attrs = inert_attrs.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
+        self.musi_attrs = musi_attrs.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -250,13 +720,57 @@ pub struct EffectOpSurface {
     pub result: SurfaceTyId,
 }
 
+impl EffectOpSurface {
+    #[must_use]
+    pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
+    where
+        Name: Into<Box<str>>,
+        Params: Into<SurfaceTyIdList>,
+    {
+        Self {
+            name: name.into(),
+            params: params.into(),
+            result,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectSurface {
     pub key: DefinitionKey,
     pub ops: Box<[EffectOpSurface]>,
-    pub laws: Box<[Box<str>]>,
+    pub laws: Box<[LawSurface]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
+}
+
+impl EffectSurface {
+    #[must_use]
+    pub fn new(
+        key: DefinitionKey,
+        ops: impl Into<Box<[EffectOpSurface]>>,
+        laws: impl Into<Box<[LawSurface]>>,
+    ) -> Self {
+        Self {
+            key,
+            ops: ops.into(),
+            laws: laws.into(),
+            inert_attrs: Box::default(),
+            musi_attrs: Box::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
+        self.inert_attrs = inert_attrs.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
+        self.musi_attrs = musi_attrs.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,6 +782,52 @@ pub struct InstanceSurface {
     pub member_names: Box<[Box<str>]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
+}
+
+impl InstanceSurface {
+    #[must_use]
+    pub fn new<ClassArgs>(
+        class_key: DefinitionKey,
+        class_args: ClassArgs,
+        member_names: impl Into<NameList>,
+    ) -> Self
+    where
+        ClassArgs: Into<SurfaceTyIdList>,
+    {
+        Self {
+            type_params: Box::default(),
+            class_key,
+            class_args: class_args.into(),
+            constraints: Box::default(),
+            member_names: member_names.into(),
+            inert_attrs: Box::default(),
+            musi_attrs: Box::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintSurface]>>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
+        self.inert_attrs = inert_attrs.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_musi_attrs(mut self, musi_attrs: impl Into<AttrList>) -> Self {
+        self.musi_attrs = musi_attrs.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -386,9 +946,16 @@ pub struct ExprFacts {
     pub effects: EffectRow,
 }
 
+impl ExprFacts {
+    #[must_use]
+    pub const fn new(ty: HirTyId, effects: EffectRow) -> Self {
+        Self { ty, effects }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
-    params: Box<[HirTyId]>,
+    params: HirTyIdList,
     result: HirTyId,
 }
 
@@ -396,12 +963,13 @@ pub struct SemaEffectOpDef {
 pub struct SemaEffectDef {
     key: DefinitionKey,
     ops: BTreeMap<Box<str>, SemaEffectOpDef>,
-    laws: Box<[Symbol]>,
+    laws: Box<[LawFacts]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
     payload: Option<HirTyId>,
+    field_tys: HirTyIdList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -411,11 +979,15 @@ pub struct SemaDataDef {
     repr_kind: Option<Box<str>>,
     layout_align: Option<u32>,
     layout_pack: Option<u32>,
+    frozen: bool,
 }
 
 impl SemaEffectOpDef {
     #[must_use]
-    pub(crate) fn new(params: impl Into<Box<[HirTyId]>>, result: HirTyId) -> Self {
+    pub(crate) fn new<Params>(params: Params, result: HirTyId) -> Self
+    where
+        Params: Into<HirTyIdList>,
+    {
         Self {
             params: params.into(),
             result,
@@ -438,7 +1010,7 @@ impl SemaEffectDef {
     pub(crate) fn new(
         key: DefinitionKey,
         ops: impl Into<BTreeMap<Box<str>, SemaEffectOpDef>>,
-        laws: impl Into<Box<[Symbol]>>,
+        laws: impl Into<Box<[LawFacts]>>,
     ) -> Self {
         Self {
             key,
@@ -475,20 +1047,31 @@ impl SemaEffectDef {
     }
 
     #[must_use]
-    pub fn laws(&self) -> &[Symbol] {
+    pub fn laws(&self) -> &[LawFacts] {
         &self.laws
     }
 }
 
 impl SemaDataVariantDef {
     #[must_use]
-    pub(crate) const fn new(payload: Option<HirTyId>) -> Self {
-        Self { payload }
+    pub(crate) fn new<FieldTys>(payload: Option<HirTyId>, field_tys: FieldTys) -> Self
+    where
+        FieldTys: Into<HirTyIdList>,
+    {
+        Self {
+            payload,
+            field_tys: field_tys.into(),
+        }
     }
 
     #[must_use]
     pub const fn payload(&self) -> Option<HirTyId> {
         self.payload
+    }
+
+    #[must_use]
+    pub fn field_tys(&self) -> &[HirTyId] {
+        &self.field_tys
     }
 }
 
@@ -500,6 +1083,7 @@ impl SemaDataDef {
         repr_kind: Option<Box<str>>,
         layout_align: Option<u32>,
         layout_pack: Option<u32>,
+        frozen: bool,
     ) -> Self {
         Self {
             key,
@@ -507,6 +1091,7 @@ impl SemaDataDef {
             repr_kind,
             layout_align,
             layout_pack,
+            frozen,
         }
     }
 
@@ -551,6 +1136,11 @@ impl SemaDataDef {
     pub const fn layout_pack(&self) -> Option<u32> {
         self.layout_pack
     }
+
+    #[must_use]
+    pub const fn frozen(&self) -> bool {
+        self.frozen
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -558,7 +1148,14 @@ pub struct PatFacts {
     pub ty: HirTyId,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl PatFacts {
+    #[must_use]
+    pub const fn new(ty: HirTyId) -> Self {
+        Self { ty }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConstraintKind {
     Subtype,
     Implements,
@@ -572,20 +1169,150 @@ pub struct ConstraintFacts {
     pub class_key: Option<DefinitionKey>,
 }
 
+impl ConstraintFacts {
+    #[must_use]
+    pub const fn new(name: Symbol, kind: ConstraintKind, value: HirTyId) -> Self {
+        Self {
+            name,
+            kind,
+            value,
+            class_key: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
+        self.class_key = Some(class_key);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConstraintKey {
+    pub kind: ConstraintKind,
+    pub subject: HirTyId,
+    pub value: HirTyId,
+    pub class_key: Option<DefinitionKey>,
+}
+
+impl ConstraintKey {
+    #[must_use]
+    pub const fn new(
+        kind: ConstraintKind,
+        subject: HirTyId,
+        value: HirTyId,
+        class_key: Option<DefinitionKey>,
+    ) -> Self {
+        Self {
+            kind,
+            subject,
+            value,
+            class_key,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintEvidence {
+    Param {
+        key: ConstraintKey,
+    },
+    Provider {
+        module: ModuleKey,
+        name: Box<str>,
+        args: Box<[Self]>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassMemberFacts {
     pub name: Symbol,
-    pub params: Box<[HirTyId]>,
+    pub params: HirTyIdList,
     pub result: HirTyId,
+}
+
+impl ClassMemberFacts {
+    #[must_use]
+    pub fn new<Params>(name: Symbol, params: Params, result: HirTyId) -> Self
+    where
+        Params: Into<HirTyIdList>,
+    {
+        Self {
+            name,
+            params: params.into(),
+            result,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawParamFacts {
+    pub name: Symbol,
+    pub ty: HirTyId,
+}
+
+impl LawParamFacts {
+    #[must_use]
+    pub const fn new(name: Symbol, ty: HirTyId) -> Self {
+        Self { name, ty }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawFacts {
+    pub name: Symbol,
+    pub params: Box<[LawParamFacts]>,
+}
+
+impl LawFacts {
+    #[must_use]
+    pub fn new(name: Symbol, params: impl Into<Box<[LawParamFacts]>>) -> Self {
+        Self {
+            name,
+            params: params.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassFacts {
     pub key: DefinitionKey,
     pub name: Symbol,
+    pub type_params: Box<[Symbol]>,
     pub constraints: Box<[ConstraintFacts]>,
     pub members: Box<[ClassMemberFacts]>,
-    pub laws: Box<[Symbol]>,
+    pub laws: Box<[LawFacts]>,
+}
+
+impl ClassFacts {
+    #[must_use]
+    pub fn new(
+        key: DefinitionKey,
+        name: Symbol,
+        members: impl Into<Box<[ClassMemberFacts]>>,
+        laws: impl Into<Box<[LawFacts]>>,
+    ) -> Self {
+        Self {
+            key,
+            name,
+            type_params: Box::default(),
+            constraints: Box::default(),
+            members: members.into(),
+            laws: laws.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintFacts]>>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -594,9 +1321,53 @@ pub struct InstanceFacts {
     pub type_params: Box<[Symbol]>,
     pub class_key: DefinitionKey,
     pub class_name: Symbol,
-    pub class_args: Box<[HirTyId]>,
+    pub class_args: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
+    pub evidence_keys: Box<[ConstraintKey]>,
     pub member_names: Box<[Symbol]>,
+}
+
+impl InstanceFacts {
+    #[must_use]
+    pub fn new<ClassArgs>(
+        origin: HirOrigin,
+        class_key: DefinitionKey,
+        class_name: Symbol,
+        class_args: ClassArgs,
+        member_names: impl Into<SymbolList>,
+    ) -> Self
+    where
+        ClassArgs: Into<HirTyIdList>,
+    {
+        Self {
+            origin,
+            type_params: Box::default(),
+            class_key,
+            class_name,
+            class_args: class_args.into(),
+            constraints: Box::default(),
+            evidence_keys: Box::default(),
+            member_names: member_names.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintFacts]>>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_evidence_keys(mut self, evidence_keys: impl Into<Box<[ConstraintKey]>>) -> Self {
+        self.evidence_keys = evidence_keys.into();
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -606,10 +1377,14 @@ pub struct SemaModule {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
+    binding_schemes: HashMap<NameBindingId, BindingScheme>,
+    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -623,6 +1398,8 @@ struct SemaContextTables {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
+    binding_schemes: HashMap<NameBindingId, BindingScheme>,
+    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
 }
 
 struct SemaFactTables {
@@ -630,6 +1407,8 @@ struct SemaFactTables {
     pat_facts: Vec<PatFacts>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
 }
 
 struct SemaDeclTables {
@@ -641,32 +1420,45 @@ struct SemaDeclTables {
 
 impl From<SemaModuleBuild> for SemaModule {
     fn from(build: SemaModuleBuild) -> Self {
+        let crate::SemaModuleBuild {
+            resolved,
+            context: build_context,
+            facts: build_facts,
+            decls: build_decls,
+            surface,
+            diags,
+        } = build;
+        let crate::SemaFactsBuild {
+            expr_facts,
+            pat_facts,
+            expr_module_targets,
+            type_test_targets,
+            expr_evidence,
+            expr_attached_bindings,
+        } = build_facts;
         let context = SemaContextTables {
-            target: build.context.target,
-            gated_bindings: build.context.gated_bindings,
-            foreign_links: build.context.foreign_links,
-            binding_types: build.context.binding_types,
+            target: build_context.target,
+            gated_bindings: build_context.gated_bindings,
+            foreign_links: build_context.foreign_links,
+            binding_types: build_context.binding_types,
+            binding_schemes: build_context.binding_schemes,
+            binding_evidence_keys: build_context.binding_evidence_keys,
         };
         let facts = SemaFactTables {
-            expr_facts: build.facts.expr_facts,
-            pat_facts: build.facts.pat_facts,
-            expr_module_targets: build.facts.expr_module_targets,
-            type_test_targets: build.facts.type_test_targets,
+            expr_facts,
+            pat_facts,
+            expr_module_targets,
+            type_test_targets,
+            expr_evidence,
+            expr_attached_bindings,
         };
         let decls = SemaDeclTables {
-            effect_defs: build.decls.effect_defs,
-            data_defs: build.decls.data_defs,
-            class_facts: build.decls.class_facts,
-            instance_facts: build.decls.instance_facts,
+            effect_defs: build_decls.effect_defs,
+            data_defs: build_decls.data_defs,
+            class_facts: build_decls.class_facts,
+            instance_facts: build_decls.instance_facts,
         };
-        Self::from_parts(
-            build.resolved,
-            context,
-            facts,
-            decls,
-            build.surface,
-            build.diags,
-        )
+        Self::from_parts(resolved, context, facts, decls, surface, diags)
     }
 }
 
@@ -714,6 +1506,16 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn expr_evidence(&self, id: HirExprId) -> Option<&[ConstraintEvidence]> {
+        self.expr_evidence.get(&id).map(Box::as_ref)
+    }
+
+    #[must_use]
+    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.expr_attached_bindings.get(&id).copied()
+    }
+
+    #[must_use]
     pub fn is_gated_binding(&self, binding: NameBindingId) -> bool {
         self.gated_bindings.contains(&binding)
     }
@@ -729,6 +1531,16 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn binding_scheme(&self, binding: NameBindingId) -> Option<&BindingScheme> {
+        self.binding_schemes.get(&binding)
+    }
+
+    #[must_use]
+    pub fn binding_evidence_keys(&self, binding: NameBindingId) -> Option<&[ConstraintKey]> {
+        self.binding_evidence_keys.get(&binding).map(Box::as_ref)
+    }
+
+    #[must_use]
     pub fn try_pat_ty(&self, id: HirPatId) -> Option<HirTyId> {
         self.pat_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
     }
@@ -736,6 +1548,11 @@ impl SemaModule {
     #[must_use]
     pub fn class_facts(&self, id: HirExprId) -> Option<&ClassFacts> {
         self.class_facts.get(&id)
+    }
+
+    #[must_use]
+    pub fn class_facts_by_name(&self, name: Symbol) -> Option<&ClassFacts> {
+        self.class_facts.values().find(|facts| facts.name == name)
     }
 
     #[must_use]
@@ -765,7 +1582,9 @@ impl SemaModule {
     pub const fn surface(&self) -> &ModuleSurface {
         &self.surface
     }
+}
 
+impl SemaModule {
     fn from_parts(
         resolved: ResolvedModule,
         context: SemaContextTables,
@@ -780,10 +1599,14 @@ impl SemaModule {
             gated_bindings: context.gated_bindings,
             foreign_links: context.foreign_links,
             binding_types: context.binding_types,
+            binding_schemes: context.binding_schemes,
+            binding_evidence_keys: context.binding_evidence_keys,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
+            expr_evidence: facts.expr_evidence,
+            expr_attached_bindings: facts.expr_attached_bindings,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             class_facts: decls.class_facts,

@@ -53,6 +53,17 @@ port;`,
 		},
 	},
 	{
+		id: "mutable-value",
+		language: "musi",
+		sourceText: `let counter := mut 1;
+counter := 2;
+counter;`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1212,
+		},
+	},
+	{
 		id: "sequence",
 		language: "musi",
 		sourceText: `(
@@ -110,7 +121,7 @@ let Result := Std.Result;`,
 		id: "types-basic",
 		language: "musi",
 		sourceText: `let port : Int := 8080;
-let identity[T] (input : T) : T := input;`,
+let identityFn[T] (input : T) : T := input;`,
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 3,
@@ -119,7 +130,7 @@ let identity[T] (input : T) : T := input;`,
 	{
 		id: "types-apply",
 		language: "musi",
-		sourceText: "identity[Int](port);",
+		sourceText: "identityFn[Int](port);",
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 8,
@@ -179,9 +190,85 @@ let extended := [0, ...values];`,
 		},
 	},
 	{
+		id: "operators-literals-basic",
+		language: "musi",
+		sourceText: `let port := 8080;
+let label := "ready";
+let next := port + 1;
+let same := next = port + 1;
+let capped := port <= 9000;
+let masked := 1 shl 3;`,
+		evidence: {
+			path: "grammar/Musi.g4",
+			line: 380,
+		},
+	},
+	{
+		id: "ranges-basic",
+		language: "musi",
+		sourceText: `let closed := 0..10;
+let halfOpen := 0..<10;
+closed;`,
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 239,
+		},
+	},
+	{
+		id: "receiver-method",
+		language: "musi",
+		sourceText: "let (self : Int).abs () : Int := self;",
+		evidence: {
+			path: "crates/music_resolve/src/tests.rs",
+			line: 118,
+		},
+	},
+	{
+		id: "receiver-method-call",
+		language: "musi",
+		sourceText: `let one := 1;
+one.abs();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 510,
+		},
+	},
+	{
+		id: "slice-helpers",
+		language: "musi",
+		sourceText: `let Slice := import "@std/slice";
+Slice.concat[Int]([1], [2, 3]);`,
+		evidence: {
+			path: "packages/std/slice/index.test.ms",
+			line: 8,
+		},
+	},
+	{
+		id: "export-import",
+		language: "musi",
+		sourceText: `export let answer := 42;
+let Local := import "./index.ms";
+Local.answer;`,
+		evidence: {
+			path: "crates/music_sema/src/checker/surface_exports.rs",
+			line: 607,
+		},
+	},
+	{
+		id: "type-inference",
+		language: "musi",
+		sourceText: `let port : Int := 8080;
+let next := port + 1;
+next;`,
+		evidence: {
+			path: "docs/what/language/type-system.md",
+			line: 3,
+		},
+	},
+	{
 		id: "effect-console",
 		language: "musi",
-		sourceText: `let Console := effect {
+		sourceText: `let console := effect {
   let readln () : String;
 };`,
 		evidence: {
@@ -192,7 +279,7 @@ let extended := [0, ...values];`,
 	{
 		id: "perform-console",
 		language: "musi",
-		sourceText: "perform Console.readln();",
+		sourceText: "perform console.readln();",
 		evidence: {
 			path: "grammar/Musi.g4",
 			line: 205,
@@ -201,13 +288,23 @@ let extended := [0, ...values];`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle perform Console.readln() with Console of (
-| value => value
-| readln(k) => resume "ok"
-);`,
+		sourceText: `handle perform console.readln() using console {
+  value => value;
+  readln(k) => resume "ok";
+};`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 331,
+		},
+	},
+	{
+		id: "using-signature",
+		language: "musi",
+		sourceText: `let readClosed (x : Int) : String using { Console } :=
+  perform State.readln();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1444,
 		},
 	},
 	{
@@ -215,7 +312,7 @@ let extended := [0, ...values];`,
 		language: "musi",
 		sourceText: `let Eq[T] := class {
   let (=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := true;
+  law reflexive (x : T) := .True;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -226,7 +323,7 @@ let extended := [0, ...values];`,
 		id: "instance-eq-int",
 		language: "musi",
 		sourceText: `let eqInt := instance Eq[Int] {
-  let (=) (a : Int, b : Int) : Bool := true;
+  let (=) (a : Int, b : Int) : Bool := .True;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -273,15 +370,76 @@ let extended := [0, ...values];`,
 		},
 	},
 	{
-		id: "install-source",
+		id: "quote-without-meta",
+		language: "musi",
+		sourceText: `let addOne (x : Int) : Int := x + 1;
+let addTwo (x : Int) : Int := x + 2;`,
+		evidence: {
+			path: "docs/what/language/metaprogramming.md",
+			line: 1,
+		},
+	},
+	{
+		id: "quote-with-meta",
+		language: "musi",
+		sourceText: `let addTemplate := quote (x + #(delta));
+let addOneSyntax := quote (#(x) + 1);
+let addTwoSyntax := quote (#(x) + 2);`,
+		evidence: {
+			path: "docs/what/language/metaprogramming.md",
+			line: 8,
+		},
+	},
+	{
+		id: "install-curl",
+		language: "bash",
+		sourceText:
+			"curl -fsSL https://raw.githubusercontent.com/musi-lang/musi/main/install.sh | sh",
+		evidence: {
+			path: "README.md",
+			line: 61,
+		},
+	},
+	{
+		id: "install-powershell",
+		language: "powershell",
+		sourceText:
+			'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/musi-lang/musi/main/install.ps1 | iex"',
+		evidence: {
+			path: "README.md",
+			line: 67,
+		},
+	},
+	{
+		id: "install-cargo",
 		language: "bash",
 		sourceText: `git clone https://github.com/musi-lang/musi.git
 cd musi
-cargo build --release
-export PATH="/path/to/musi/target/release:$PATH"`,
+cargo install --locked --force --path crates/music
+cargo install --locked --force --path crates/musi`,
 		evidence: {
 			path: "README.md",
+			line: 84,
+		},
+	},
+	{
+		id: "foundation-import",
+		language: "musi",
+		sourceText: `let Core := import "musi:core";
+Core;`,
+		evidence: {
+			path: "crates/music_session/src/session/foundation.rs",
 			line: 1,
+		},
+	},
+	{
+		id: "runtime-import",
+		language: "musi",
+		sourceText: `let Runtime := import "musi:runtime";
+Runtime.envGet("HOME");`,
+		evidence: {
+			path: "packages/std/env/index.ms",
+			line: 2,
 		},
 	},
 	{
@@ -311,7 +469,7 @@ musi test`,
 		id: "stdlib-option-import",
 		language: "musi",
 		sourceText: `let configured := Option.some[Int](8080);
-Option.unwrap_or[Int](configured, 3000);`,
+Option.unwrapOr[Int](configured, 3000);`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 6,
@@ -321,7 +479,7 @@ Option.unwrap_or[Int](configured, 3000);`,
 		id: "stdlib-result-import",
 		language: "musi",
 		sourceText: `let parsed := Result.ok[Int, String](8080);
-Result.unwrap_or[Int, String](parsed, 3000);`,
+Result.unwrapOr[Int, String](parsed, 3000);`,
 		evidence: {
 			path: "packages/std/result/index.ms",
 			line: 6,
@@ -333,7 +491,7 @@ Result.unwrap_or[Int, String](parsed, 3000);`,
 		sourceText: `let Testing := import "@std/testing";
 
 export let test () :=
-  Testing.it("adds values", Testing.to_be(1 + 2, 3));`,
+  Testing.it("adds values", Testing.toBe(1 + 2, 3));`,
 		evidence: {
 			path: "packages/std/option/index.test.ms",
 			line: 4,

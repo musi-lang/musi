@@ -24,10 +24,28 @@ pub struct ImportSite {
     pub kind: ImportSiteKind,
 }
 
+impl ImportSite {
+    #[must_use]
+    pub const fn new(source_id: SourceId, span: Span, kind: ImportSiteKind) -> Self {
+        Self {
+            source_id,
+            span,
+            kind,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExportedInstanceSite {
     pub source_id: SourceId,
     pub span: Span,
+}
+
+impl ExportedInstanceSite {
+    #[must_use]
+    pub const fn new(source_id: SourceId, span: Span) -> Self {
+        Self { source_id, span }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -38,6 +56,11 @@ pub struct ModuleExportSummary {
 }
 
 impl ModuleExportSummary {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn exports(&self) -> impl Iterator<Item = &str> {
         self.exports.iter().map(Box::as_ref)
     }
@@ -80,18 +103,14 @@ pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree) -> Vec<Impor
         }
         let span = node.span();
         let kind = classify_import_expr(node);
-        out.push(ImportSite {
-            source_id,
-            span,
-            kind,
-        });
+        out.push(ImportSite::new(source_id, span, kind));
     });
     out
 }
 
 #[must_use]
 pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleExportSummary {
-    let mut summary = ModuleExportSummary::default();
+    let mut summary = ModuleExportSummary::new();
     walk_nodes(tree.root(), &mut |node| {
         if node.kind() != SyntaxNodeKind::AttributedExpr {
             return;
@@ -133,10 +152,9 @@ pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleE
             .child_nodes()
             .any(|child| child.kind() == SyntaxNodeKind::InstanceExpr)
         {
-            summary.exported_instances.push(ExportedInstanceSite {
-                source_id,
-                span: node.span(),
-            });
+            summary
+                .exported_instances
+                .push(ExportedInstanceSite::new(source_id, node.span()));
         }
     });
     summary

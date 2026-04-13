@@ -57,65 +57,70 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
-#[test]
-fn json_check_success_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let output = run_music(&[
-        "check",
-        temp.path().join("main.ms").to_str().expect("utf-8 path"),
-        "--diagnostics-format",
-        "json",
-    ]);
+    #[test]
+    fn json_check_success_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
 
-    assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "ok");
-    assert_eq!(payload["tool"], "music");
-}
+        let output = run_music(&[
+            "check",
+            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            "--diagnostics-format",
+            "json",
+        ]);
 
-#[test]
-fn json_check_tooling_failure_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(
-        temp.path(),
-        "main.ms",
-        "import \"@std/math\"; export let main () : Int := 42;\n",
-    );
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["tool"], "music");
+    }
 
-    let output = run_music(&[
-        "check",
-        temp.path().join("main.ms").to_str().expect("utf-8 path"),
-        "--diagnostics-format",
-        "json",
-    ]);
+    #[test]
+    fn json_check_tooling_failure_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "main.ms",
+            "import \"@std/math\"; export let main () : Int := 42;\n",
+        );
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "error");
-    assert_eq!(payload["diagnostics"][0]["phase"], "tooling");
-    assert_eq!(payload["diagnostics"][0]["code"], "ms3631");
-}
+        let output = run_music(&[
+            "check",
+            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            "--diagnostics-format",
+            "json",
+        ]);
 
-#[test]
-fn json_check_parse_failure_writes_only_json_to_stdout() {
-    let temp = TempDir::new();
-    write_file(temp.path(), "main.ms", "let x := 1");
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "error");
+        assert_eq!(payload["diagnostics"][0]["phase"], "tooling");
+        assert_eq!(payload["diagnostics"][0]["code"], "MS3631");
+    }
 
-    let output = run_music(&[
-        "check",
-        temp.path().join("main.ms").to_str().expect("utf-8 path"),
-        "--diagnostics-format",
-        "json",
-    ]);
+    #[test]
+    fn json_check_parse_failure_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "main.ms", "let x := 1");
 
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-    let payload = parse_json(&output.stdout);
-    assert_eq!(payload["status"], "error");
-    assert_eq!(payload["diagnostics"][0]["phase"], "parse");
-    assert!(payload["diagnostics"][0]["code"].as_str().is_some());
+        let output = run_music(&[
+            "check",
+            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            "--diagnostics-format",
+            "json",
+        ]);
+
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(payload["status"], "error");
+        assert_eq!(payload["diagnostics"][0]["phase"], "parse");
+        assert!(payload["diagnostics"][0]["code"].as_str().is_some());
+    }
 }

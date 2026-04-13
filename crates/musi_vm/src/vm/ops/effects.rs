@@ -24,14 +24,13 @@ impl Vm {
                 let pop_ip = self.find_matching_handler_pop(frame_depth)?;
                 let handler_id = self.next_handler_id;
                 self.next_handler_id = self.next_handler_id.saturating_add(1);
-                self.handlers.push(EffectHandler {
-                    handler_id,
-                    effect,
-                    handler,
-                    frame_depth,
-                    stack_depth,
-                    pop_ip,
-                });
+                self.handlers.push(
+                    EffectHandler::new(handler_id, effect, handler).with_stack_state(
+                        frame_depth,
+                        stack_depth,
+                        pop_ip,
+                    ),
+                );
                 Ok(StepOutcome::Continue)
             }
             Opcode::HdlPop => {
@@ -277,50 +276,32 @@ impl Vm {
 
 impl From<ContinuationFrame> for CallFrame {
     fn from(frame: ContinuationFrame) -> Self {
-        Self {
-            module_slot: frame.module_slot,
-            method: frame.method,
-            ip: frame.ip,
-            locals: frame.locals,
-            stack: frame.stack,
-        }
+        Self::new(frame.module_slot, frame.method, frame.locals, frame.stack).with_ip(frame.ip)
     }
 }
 
 impl From<CallFrame> for ContinuationFrame {
     fn from(frame: CallFrame) -> Self {
-        Self {
-            module_slot: frame.module_slot,
-            method: frame.method,
-            ip: frame.ip,
-            locals: frame.locals,
-            stack: frame.stack,
-        }
+        Self::new(frame.module_slot, frame.method, frame.locals, frame.stack).with_ip(frame.ip)
     }
 }
 
 impl From<ContinuationHandler> for EffectHandler {
     fn from(handler: ContinuationHandler) -> Self {
-        Self {
-            handler_id: handler.handler_id,
-            effect: handler.effect,
-            handler: handler.handler,
-            frame_depth: handler.frame_depth,
-            stack_depth: handler.stack_depth,
-            pop_ip: handler.pop_ip,
-        }
+        Self::new(handler.handler_id, handler.effect, handler.handler).with_stack_state(
+            handler.frame_depth,
+            handler.stack_depth,
+            handler.pop_ip,
+        )
     }
 }
 
 impl From<EffectHandler> for ContinuationHandler {
     fn from(handler: EffectHandler) -> Self {
-        Self {
-            handler_id: handler.handler_id,
-            effect: handler.effect,
-            handler: handler.handler,
-            frame_depth: handler.frame_depth,
-            stack_depth: handler.stack_depth,
-            pop_ip: handler.pop_ip,
-        }
+        Self::new(handler.handler_id, handler.effect, handler.handler).with_stack_state(
+            handler.frame_depth,
+            handler.stack_depth,
+            handler.pop_ip,
+        )
     }
 }

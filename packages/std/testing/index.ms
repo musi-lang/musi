@@ -1,30 +1,42 @@
+let Core := import "musi:core";
 let Intrinsics := import "musi:test";
-let Test := Intrinsics.Test;
 let Assert := import "@std/assert";
+let Bool := Core.Bool;
+let String := Core.String;
+let Unit := Core.Unit;
 
-export let pass := Assert.to_be(0, 0);
+export let pass : Bool := Assert.passValue;
 
 export let fail := Assert.fail;
 
+export let equal := Assert.equal;
+export let notEqual := Assert.notEqual;
+export let isTrue := Assert.isTrue;
+export let isFalse := Assert.isFalse;
+export let greaterThan := Assert.greaterThan;
+export let lessThan := Assert.lessThan;
+export let betweenInclusive := Assert.betweenInclusive;
+export let expectInt := Assert.expectInt;
+
+export let toBe := Assert.toBe;
+export let toEqual := Assert.toEqual;
+export let toBeTruthy := Assert.toBeTruthy;
+export let toBeFalsy := Assert.toBeFalsy;
+export let toBeGreaterThan := Assert.toBeGreaterThan;
+export let toBeLessThan := Assert.toBeLessThan;
 export let expect := Assert.expect;
-export let to_be := Assert.to_be;
-export let to_equal := Assert.to_equal;
-export let to_be_truthy := Assert.to_be_truthy;
-export let to_be_falsy := Assert.to_be_falsy;
-export let to_be_greater_than := Assert.to_be_greater_than;
-export let to_be_less_than := Assert.to_be_less_than;
 
 export let describe (name : String) :=
-    perform Test.suiteStart(name);
-export let end_describe () :=
-    perform Test.suiteEnd();
+  Intrinsics.suiteStart(name);
+export let endDescribe () :=
+  Intrinsics.suiteEnd();
 export let it (name : String, passed : Bool) :=
-    perform Test.testCase(name, passed);
+  Intrinsics.testCase(name, passed);
 
-export let before_all (body) : Unit := (;);
+export let beforeAll (body : Unit -> Unit) : Unit := endDescribe();
 
-export let after_all (body) : Unit := (;);
+export let afterAll (body : Unit -> Unit) : Unit := endDescribe();
 
-export let before_each (body) : Unit := (;);
+export let beforeEach (body : Unit -> Unit) : Unit := endDescribe();
 
-export let after_each (body) : Unit := (;);
+export let afterEach (body : Unit -> Unit) : Unit := endDescribe();

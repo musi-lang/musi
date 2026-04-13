@@ -10,6 +10,13 @@ pub struct HirPat {
     pub kind: HirPatKind,
 }
 
+impl HirPat {
+    #[must_use]
+    pub const fn new(origin: HirOrigin, kind: HirPatKind) -> Self {
+        Self { origin, kind }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirPatKind {
     Error,
@@ -47,4 +54,11 @@ pub enum HirPatKind {
 pub struct HirRecordPatField {
     pub name: Ident,
     pub value: Option<HirPatId>,
+}
+
+impl HirRecordPatField {
+    #[must_use]
+    pub const fn new(name: Ident, value: Option<HirPatId>) -> Self {
+        Self { name, value }
+    }
 }

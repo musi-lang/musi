@@ -115,7 +115,7 @@ function normalizeLabel(value: unknown): DiagnosticLabelPayload | undefined {
 		range?: RawDiagnosticRangePayload;
 	};
 	const range =
-		label.range !== undefined ? normalizeRange(label.range) : undefined;
+		label.range === undefined ? undefined : normalizeRange(label.range);
 	return {
 		...(typeof label.file === "string" ? { file: label.file } : {}),
 		...(typeof label.message === "string" ? { message: label.message } : {}),
@@ -143,11 +143,11 @@ function normalizeDiagnostic(value: unknown): DiagnosticPayload | undefined {
 		return undefined;
 	}
 	const range =
-		payload.range !== undefined ? normalizeRange(payload.range) : undefined;
+		payload.range === undefined ? undefined : normalizeRange(payload.range);
 	const primaryRange =
-		payload.primaryRange !== undefined
-			? normalizeRange(payload.primaryRange)
-			: undefined;
+		payload.primaryRange === undefined
+			? undefined
+			: normalizeRange(payload.primaryRange);
 	return {
 		message: payload.message,
 		...(typeof payload.file === "string" ? { file: payload.file } : {}),
@@ -228,14 +228,14 @@ export function buildPackageExecutionRequest(
 	const config = getConfig();
 	return {
 		pkg,
-		...(runConfig?.entry !== undefined ? { entry: runConfig.entry } : {}),
+		...(runConfig?.entry === undefined ? {} : { entry: runConfig.entry }),
 		cliArgs: [...(runConfig?.cliArgs ?? [])],
 		runtimeArgs: [...config.runtime.args, ...(runConfig?.runtimeArgs ?? [])],
 		env: buildEnv(pkg, runConfig),
 		cwd: resolveCwd(pkg, runConfig?.cwd ?? config.runtime.cwd),
-		...(runConfig?.preLaunchTask !== undefined
-			? { preLaunchTask: runConfig.preLaunchTask }
-			: {}),
+		...(runConfig?.preLaunchTask === undefined
+			? {}
+			: { preLaunchTask: runConfig.preLaunchTask }),
 	};
 }
 
@@ -275,10 +275,10 @@ export async function executePackageCommandInTerminal(
 	);
 }
 
-export async function executeTaskPlanInTerminal(
+export function executeTaskPlanInTerminal(
 	request: PackageExecutionRequest,
 	taskPlan: readonly MsTaskSpec[],
-): Promise<void> {
+): void {
 	const terminal = terminalForRequest(request);
 	const terminalConfig = getConfig().terminal;
 	const commands = taskPlan.map((task) => task.command);
@@ -334,7 +334,7 @@ function parseStructuredDiagnostics(
 	);
 }
 
-export async function runStructuredPackageCheck(
+export function runStructuredPackageCheck(
 	pkg: PackageRoot,
 	signal?: AbortSignal,
 ): Promise<StructuredCheckResult> {

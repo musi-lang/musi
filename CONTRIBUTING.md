@@ -1,160 +1,116 @@
 # Contributing to Musi
 
-This guide covers repo workflow and project rules.
+This repo moves fast. Keep changes small, current, and well-tested.
 
-## Before Starting
+## Read first
 
-- Read `grammar/Musi.g4` before grammar changes.
-- Use `grammar/Musi.abnf` as the strict RFC 5234 ABNF reference.
-- Read `AGENTS.md` and `docs/where/workspace-map.md` before large changes.
-- Check open issues to avoid duplicating work.
+Before large changes, read:
 
-## Standard Workflow
+- `AGENTS.md`
+- `README.md`
+- `docs/what/language/index.md`
+- `grammar/MusiParser.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/Musi.abnf`
 
-1. Fork the repository.
-2. Clone your fork: `git clone https://github.com/<your-user>/musi.git`
-3. Create a topic branch: `git checkout -b feat/<short-description>`
-4. Make focused changes.
-5. Build and test the relevant crates (see [Testing](#testing)).
-6. Commit with a clear message explaining *why* the change exists.
-7. Push and open a pull request describing the behavior change and how you tested it.
+If you touch website or docs generation, also read the relevant `www/` source near the page or generator you change.
 
-## Coding Guidelines
+## Workflow
 
-### Core Principles
+1. Fork the repo.
+2. Clone your fork.
+3. Create a focused branch.
+4. Make one coherent change set.
+5. Run targeted validation.
+6. Commit with a message that explains why.
+7. Open a pull request with motivation, approach, and test evidence.
 
-- **KISS** -- prefer the simplest solution that works today.
-- **YAGNI** -- do not build future features until they are needed.
-- **No over-engineering** -- three similar lines of code is better than a premature abstraction.
+## Ground rules
 
-### Naming
+- Prefer surgical diffs over broad rewrites.
+- Keep public docs aligned with current behavior.
+- Do not add placeholders such as `todo!()` or `unimplemented!()` in `crates/`.
+- Keep tests next to owned code. Musi tests live in `*.test.ms` files and export `test`.
+- Grammar changes must keep parser structure intentional and update both grammar and docs when syntax meaning changes.
 
-- Types and enum variants use `PascalCase` (`Expr`, `TokenKind`, `VmError`).
-- Functions, methods, and local variables use `snake_case`.
-- Prefix intentionally unused bindings with `_`.
+## Validation
 
-### Rust Style
+Pick commands that match touched areas.
 
-- Follow Rust edition 2024 conventions.
-- Use `thiserror` for error types; avoid `anyhow`.
-- Prefer `match` exhaustiveness over `_` fallbacks where practical.
-- Keep functions short and focused; avoid nesting beyond three levels.
-- Remove dead or commented-out code before submitting.
-
-### Comments
-
-Comments are noise. Only add them where the logic is genuinely non-obvious. Section dividers use the form `// -- Name ---`.
-
-### Grammar Changes
-
-Every grammar change must satisfy both project constraints:
-
-1. **Strict LL(1)** -- compute FIRST sets explicitly and verify disjointness.
-2. **Mathematical purity** -- syntax must reflect type-theoretic meaning.
-
-## Testing
-
-The workspace is large. Test crates individually:
+### Core repo
 
 ```bash
-# Build test binaries for the crates you changed
-cargo build --tests -p music_syntax
-cargo build --tests -p music_sema
-cargo build --tests -p music_emit
-cargo build --tests -p musi_vm
-
-# Run the built binary (hash will differ)
-./target/debug/deps/music_syntax-<hash>
+make lint
+make check
 ```
 
-Run `cargo clippy -p <crate>` on every crate you touch.
-
-Install `rscheck` for local Rust style checks:
+### Rust crates
 
 ```bash
-cargo install --git https://github.com/xsyetopz/rscheck --locked rscheck-cli
+cargo test -p music_syntax
+cargo test -p music_resolve
+cargo test -p music_sema
+cargo test -p music_ir
+cargo test -p musi_project
+cargo test -p musi_rt
 ```
 
-Run it from the repo root:
+Use targeted crate tests first. Avoid `cargo test --workspace` on low-memory machines.
+
+### Website and generated content
 
 ```bash
-rscheck check --with-clippy=false
+rtk bun run --cwd www generate:content
+rtk bunx tsc -p www/tsconfig.json --noEmit
+rtk bun run --cwd www build
 ```
 
-This repo treats `absolute_module_paths` as the blocking `rscheck` rule. Other configured
-rules currently report triage-visible warnings and may still exit with status `1`.
+Run these whenever you touch:
 
-Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB free RAM.
+- `www/`
+- repo docs consumed by `www`
+- snippet registries or generated content inputs
 
-## Pull Request Checklist
-
-- [ ] Relevant crates build cleanly with no warnings.
-- [ ] `rscheck check --with-clippy=false` is clean or reviewed for new warnings.
-- [ ] `cargo clippy -p <crate>` passes for each changed crate.
-- [ ] Tests pass for changed crates.
-- [ ] Grammar changes update `grammar/Musi.g4` and relevant docs (`docs/what/language/syntax.md`, `grammar/Musi.abnf` if the spec reference changes).
-- [ ] Commit messages explain intent (the *why*, not the *what*).
-- [ ] PR description covers motivation, approach, and how it was tested.
-
-## Reporting Issues
-
-When filing a bug, include:
-
-- Steps to reproduce.
-- Expected versus actual behavior.
-- Relevant source snippet or error output.
-- Musi commit hash and platform (OS + architecture).
-
-Feature requests should describe the use case and why it fits the language design.
-
-## Development Setup
-
-### Prerequisites
-
-- Rust 1.88 or newer (edition 2024)
-- Cargo (comes with Rust)
-- Git
-
-### Typical Commands
+### VS Code extension
 
 ```bash
-# Build the toolchain
-cargo build
-
-# Build release binaries
-cargo build --release
-
-# Run one direct source file
-./target/release/music run path/to/main.ms
-
-# Type-check one direct source file
-./target/release/music check myfile.ms
-
-# Check one package root
-./target/release/musi check /path/to/package
-
-# Run package tests
-./target/release/musi test /path/to/package
-
-# Lint
-cargo clippy --workspace
-
-# Rust style and repo-specific path checks
-rscheck check --with-clippy=false
+rtk bun run --cwd vscode-ext grammar:check
+rtk bun run --cwd vscode-ext test
+rtk bunx tsc -p vscode-ext/tsconfig.json --noEmit
+rtk bun run --cwd vscode-ext build
 ```
 
-## Using AI Assistants
+Run extension checks when you touch `vscode-ext/`, TextMate grammars, or editor bootstrap code.
 
-You may use AI tools. You remain responsible for the result:
+## Pull request checklist
 
-- Understand surrounding code before accepting AI suggestions.
-- Review and test generated code carefully.
-- Never merge output you do not fully understand.
+- [ ] Scope is focused.
+- [ ] `make lint` passes.
+- [ ] `make check` passes.
+- [ ] Touched crates or surfaces have targeted tests/build checks.
+- [ ] Docs/examples changed with behavior changes.
+- [ ] Commit messages explain intent.
+- [ ] PR description states what changed and how it was validated.
 
-## Questions and Support
+## Reporting bugs
 
-Open an issue if you need clarification on direction, architecture, or roadmap priorities.
+Include:
+
+- reproduction steps
+- expected vs actual behavior
+- relevant source snippet or diagnostic output
+- commit hash
+- platform details
+
+## Using AI tools
+
+AI assistance is allowed. You own the result.
+
+- read surrounding code first
+- verify generated changes
+- run real tests
+- do not merge code you do not understand
 
 ## Code of Conduct
 
-All contributors must follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors must follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

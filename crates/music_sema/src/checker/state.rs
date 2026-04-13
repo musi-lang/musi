@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use music_arena::{Idx, SliceRange};
@@ -11,20 +11,75 @@ use music_hir::{
     HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
-use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
+use music_names::{
+    Ident, Interner, KnownSymbols, NameBindingId, NameBindingKind, NameSite, Symbol,
+};
 use music_resolve::ResolvedModule;
 
 use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, DefinitionKey, ExprFacts, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef,
-    SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule,
-    SemaOptions, TargetInfo,
+    ClassFacts, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts, ForeignLinkInfo,
+    InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef,
+    SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
 const SYNTH_SUM_PREFIX: &str = "__sum__";
+
+type BindingIdMap = HashMap<NameSite, NameBindingId>;
+type ImportTargetMap = HashMap<Span, ModuleKey>;
+type BindingTypeMap = HashMap<NameBindingId, HirTyId>;
+type BindingEffectsMap = HashMap<NameBindingId, EffectRow>;
+type BindingSchemeMap = HashMap<NameBindingId, BindingScheme>;
+type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
+type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
+type BindingAttachedReceiverMap = HashMap<NameBindingId, AttachedReceiverInfo>;
+type SealedClassSet = HashSet<DefinitionKey>;
+type GatedBindingSet = HashSet<NameBindingId>;
+type ForeignLinkMap = HashMap<NameBindingId, ForeignLinkInfo>;
+type EffectDefMap = HashMap<Box<str>, EffectDef>;
+type DataDefMap = HashMap<Box<str>, DataDef>;
+type AttachedMethodMap = HashMap<AttachedMethodKey, Vec<NameBindingId>>;
+type ClassIndexMap = HashMap<Symbol, HirExprId>;
+type ClassFactsByNameMap = HashMap<Symbol, ClassFacts>;
+type ClassFactsMap = HashMap<HirExprId, ClassFacts>;
+type InstanceFactsMap = HashMap<HirExprId, InstanceFacts>;
+type ExprFactsList = Vec<ExprFacts>;
+type PatFactsList = Vec<PatFacts>;
+type ExprCallableEffectsMap = HashMap<HirExprId, EffectRow>;
+type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
+type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
+type ExprEvidenceMap = HashMap<HirExprId, Box<[ConstraintEvidence]>>;
+type ExprAttachedBindingMap = HashMap<HirExprId, NameBindingId>;
+type ResumeCtxList = Vec<ResumeCtx>;
+type ExpectedTyList = Vec<HirTyId>;
+type EvidenceScope = HashMap<ConstraintKey, ConstraintEvidence>;
+type EvidenceScopeList = Vec<EvidenceScope>;
+type StaticImportList = Vec<ModuleKey>;
+type ExprIdList = Vec<HirExprId>;
+type ArgList = Vec<HirArg>;
+type DimList = Vec<HirDim>;
+type TyIdList = Vec<HirTyId>;
+type TyFieldList = Vec<HirTyField>;
+type ArrayItemList = Vec<HirArrayItem>;
+type RecordItemList = Vec<HirRecordItem>;
+type ParamList = Vec<HirParam>;
+type AttrList = Vec<HirAttr>;
+type AttrArgList = Vec<HirAttrArg>;
+type MemberDefList = Vec<HirMemberDef>;
+type HandleClauseList = Vec<HirHandleClause>;
+type CaseArmList = Vec<HirCaseArm>;
+type ConstraintList = Vec<HirConstraint>;
+type VariantDefList = Vec<HirVariantDef>;
+type FieldDefList = Vec<HirFieldDef>;
+type EffectItemList = Vec<HirEffectItem>;
+type PatIdList = Vec<HirPatId>;
+type RecordPatFieldList = Vec<HirRecordPatField>;
+type IdentList = Vec<Ident>;
+type BinderList = Vec<HirBinder>;
+type TemplatePartList = Vec<HirTemplatePart>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
@@ -45,10 +100,56 @@ pub struct Builtins {
     pub cptr: HirTyId,
 }
 
+impl Builtins {
+    fn from_resolved(resolved: &mut ResolvedModule, _known: KnownSymbols) -> Self {
+        Self {
+            error: alloc_builtin(resolved, HirTyKind::Error),
+            unknown: alloc_builtin(resolved, HirTyKind::Unknown),
+            type_: alloc_builtin(resolved, HirTyKind::Type),
+            module: alloc_builtin(resolved, HirTyKind::Module),
+            syntax: alloc_builtin(resolved, HirTyKind::Syntax),
+            any: alloc_builtin(resolved, HirTyKind::Any),
+            empty: alloc_builtin(resolved, HirTyKind::Empty),
+            unit: alloc_builtin(resolved, HirTyKind::Unit),
+            bool_: alloc_builtin(resolved, HirTyKind::Bool),
+            nat: alloc_builtin(resolved, HirTyKind::Nat),
+            int_: alloc_builtin(resolved, HirTyKind::Int),
+            float_: alloc_builtin(resolved, HirTyKind::Float),
+            string_: alloc_builtin(resolved, HirTyKind::String),
+            cstring: alloc_builtin(resolved, HirTyKind::CString),
+            cptr: alloc_builtin(resolved, HirTyKind::CPtr),
+        }
+    }
+}
+
 pub type EffectOpDef = SemaEffectOpDef;
 pub type EffectDef = SemaEffectDef;
 pub type DataVariantDef = SemaDataVariantDef;
 pub type DataDef = SemaDataDef;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct AttachedMethodKey {
+    receiver: HirTyId,
+    name: Symbol,
+}
+
+impl AttachedMethodKey {
+    const fn new(receiver: HirTyId, name: Symbol) -> Self {
+        Self { receiver, name }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttachedReceiverInfo {
+    pub receiver: HirTyId,
+    pub is_mut: bool,
+}
+
+impl AttachedReceiverInfo {
+    const fn new(receiver: HirTyId, is_mut: bool) -> Self {
+        Self { receiver, is_mut }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ResumeCtx {
@@ -56,10 +157,31 @@ pub struct ResumeCtx {
     pub result: HirTyId,
 }
 
+impl ResumeCtx {
+    #[must_use]
+    pub const fn new(arg: HirTyId, result: HirTyId) -> Self {
+        Self { arg, result }
+    }
+}
+
 pub struct ModuleState {
     pub(crate) resolved: ResolvedModule,
-    binding_ids: HashMap<NameSite, NameBindingId>,
-    import_targets: HashMap<Span, ModuleKey>,
+    binding_ids: BindingIdMap,
+    import_targets: ImportTargetMap,
+}
+
+impl ModuleState {
+    const fn new(
+        resolved: ResolvedModule,
+        binding_ids: BindingIdMap,
+        import_targets: ImportTargetMap,
+    ) -> Self {
+        Self {
+            resolved,
+            binding_ids,
+            import_targets,
+        }
+    }
 }
 
 pub struct RuntimeEnv<'interner, 'env> {
@@ -70,40 +192,104 @@ pub struct RuntimeEnv<'interner, 'env> {
     env: Option<&'env dyn SemaEnv>,
 }
 
+impl<'interner, 'env> RuntimeEnv<'interner, 'env> {
+    fn new(interner: &'interner mut Interner, known: KnownSymbols, builtins: Builtins) -> Self {
+        Self {
+            interner,
+            known,
+            builtins,
+            target: None,
+            env: None,
+        }
+    }
+
+    fn with_target(mut self, target: TargetInfo) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    const fn with_env(mut self, env: Option<&'env dyn SemaEnv>) -> Self {
+        self.env = env;
+        self
+    }
+}
+
 #[derive(Default)]
 pub struct TypingState {
-    binding_types: HashMap<NameBindingId, HirTyId>,
-    binding_effects: HashMap<NameBindingId, EffectRow>,
-    binding_schemes: HashMap<NameBindingId, BindingScheme>,
-    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
-    sealed_classes: HashSet<DefinitionKey>,
-    gated_bindings: HashSet<NameBindingId>,
-    foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
+    binding_types: BindingTypeMap,
+    binding_effects: BindingEffectsMap,
+    binding_schemes: BindingSchemeMap,
+    binding_evidence_keys: BindingEvidenceKeyMap,
+    binding_module_targets: BindingModuleTargetMap,
+    binding_attached_receivers: BindingAttachedReceiverMap,
+    sealed_classes: SealedClassSet,
+    gated_bindings: GatedBindingSet,
+    foreign_links: ForeignLinkMap,
     next_open_row_id: u32,
+}
+
+impl TypingState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 #[derive(Default)]
 pub struct DeclState {
-    effect_defs: HashMap<Box<str>, EffectDef>,
-    data_defs: HashMap<Box<str>, DataDef>,
-    class_index: HashMap<Symbol, HirExprId>,
-    class_facts_by_name: HashMap<Symbol, ClassFacts>,
-    class_facts: HashMap<HirExprId, ClassFacts>,
-    instance_facts: HashMap<HirExprId, InstanceFacts>,
+    effect_defs: EffectDefMap,
+    data_defs: DataDefMap,
+    attached_methods: AttachedMethodMap,
+    class_index: ClassIndexMap,
+    class_facts_by_name: ClassFactsByNameMap,
+    class_facts: ClassFactsMap,
+    instance_facts: InstanceFactsMap,
+}
+
+impl DeclState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 pub struct FactState {
     diags: SemaDiagList,
-    expr_facts: Vec<ExprFacts>,
-    pat_facts: Vec<PatFacts>,
-    expr_callable_effects: HashMap<HirExprId, EffectRow>,
-    expr_module_targets: HashMap<HirExprId, ModuleKey>,
-    type_test_targets: HashMap<HirExprId, HirTyId>,
+    expr_facts: ExprFactsList,
+    pat_facts: PatFactsList,
+    expr_callable_effects: ExprCallableEffectsMap,
+    expr_module_targets: ExprModuleTargetMap,
+    type_test_targets: TypeTestTargetMap,
+    expr_evidence: ExprEvidenceMap,
+    expr_attached_bindings: ExprAttachedBindingMap,
+}
+
+impl FactState {
+    #[must_use]
+    fn new(expr_facts: ExprFactsList, pat_facts: PatFactsList) -> Self {
+        Self {
+            diags: Vec::new(),
+            expr_facts,
+            pat_facts,
+            expr_callable_effects: HashMap::new(),
+            expr_module_targets: HashMap::new(),
+            type_test_targets: HashMap::new(),
+            expr_evidence: HashMap::new(),
+            expr_attached_bindings: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Default)]
 pub struct ResumeState {
-    stack: Vec<ResumeCtx>,
+    stack: ResumeCtxList,
+}
+
+impl ResumeState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 pub struct PassBase<'ctx, 'interner, 'env> {
@@ -114,14 +300,23 @@ pub struct PassBase<'ctx, 'interner, 'env> {
     facts: &'ctx mut FactState,
 }
 
+pub struct PassParts<'ctx, 'interner, 'env> {
+    pub module: &'ctx mut ModuleState,
+    pub runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
+    pub typing: &'ctx mut TypingState,
+    pub decls: &'ctx mut DeclState,
+    pub facts: &'ctx mut FactState,
+}
+
 pub struct CollectPass<'ctx, 'interner, 'env> {
     base: PassBase<'ctx, 'interner, 'env>,
 }
 
 pub struct CheckPass<'ctx, 'interner, 'env> {
-    base: PassBase<'ctx, 'interner, 'env>,
+    collect: CollectPass<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
-    expected: Vec<HirTyId>,
+    expected: ExpectedTyList,
+    evidence_scopes: EvidenceScopeList,
     module_stmt_depth: u32,
 }
 
@@ -138,23 +333,7 @@ pub fn prepare_module<'interner, 'env>(
     ResumeState,
 ) {
     let known = KnownSymbols::new(interner);
-    let builtins = Builtins {
-        error: alloc_builtin(&mut resolved, HirTyKind::Error),
-        unknown: alloc_builtin(&mut resolved, HirTyKind::Unknown),
-        type_: alloc_builtin(&mut resolved, HirTyKind::Type),
-        module: alloc_builtin(&mut resolved, HirTyKind::Module),
-        syntax: alloc_builtin(&mut resolved, HirTyKind::Syntax),
-        any: alloc_builtin(&mut resolved, HirTyKind::Any),
-        empty: alloc_builtin(&mut resolved, HirTyKind::Empty),
-        unit: alloc_builtin(&mut resolved, HirTyKind::Unit),
-        bool_: alloc_builtin(&mut resolved, HirTyKind::Bool),
-        nat: alloc_builtin(&mut resolved, HirTyKind::Nat),
-        int_: alloc_builtin(&mut resolved, HirTyKind::Int),
-        float_: alloc_builtin(&mut resolved, HirTyKind::Float),
-        string_: alloc_builtin(&mut resolved, HirTyKind::String),
-        cstring: alloc_builtin(&mut resolved, HirTyKind::CString),
-        cptr: alloc_builtin(&mut resolved, HirTyKind::CPtr),
-    };
+    let builtins = Builtins::from_resolved(&mut resolved, known);
     let binding_ids = resolved
         .names
         .bindings
@@ -167,44 +346,46 @@ pub fn prepare_module<'interner, 'env>(
         .map(|import| (import.span, import.to.clone()))
         .collect::<HashMap<_, _>>();
     let expr_facts = vec![
-        ExprFacts {
-            ty: builtins.unknown,
-            effects: EffectRow::empty(),
-        };
+        ExprFacts::new(builtins.unknown, EffectRow::empty());
         resolved.module.store.exprs.len()
     ];
-    let pat_facts = vec![
-        PatFacts {
-            ty: builtins.unknown
-        };
-        resolved.module.store.pats.len()
-    ];
+    let pat_facts = vec![PatFacts::new(builtins.unknown); resolved.module.store.pats.len()];
+
+    let mut decls = DeclState::new();
+    let module_key = resolved.module_key.clone();
+    seed_builtin_data_defs(&mut decls, &module_key);
 
     (
-        ModuleState {
-            resolved,
-            binding_ids,
-            import_targets,
-        },
-        RuntimeEnv {
-            interner,
-            known,
-            builtins,
-            target: options.target.or_else(|| Some(host_target_info())),
-            env: options.env,
-        },
-        TypingState::default(),
-        DeclState::default(),
-        FactState {
-            diags: Vec::new(),
-            expr_facts,
-            pat_facts,
-            expr_callable_effects: HashMap::new(),
-            expr_module_targets: HashMap::new(),
-            type_test_targets: HashMap::new(),
-        },
-        ResumeState::default(),
+        ModuleState::new(resolved, binding_ids, import_targets),
+        RuntimeEnv::new(interner, known, builtins)
+            .with_target(options.target.unwrap_or_else(host_target_info))
+            .with_env(options.env),
+        TypingState::new(),
+        decls,
+        FactState::new(expr_facts, pat_facts),
+        ResumeState::new(),
     )
+}
+
+fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
+    let bool_variants = BTreeMap::from([
+        (
+            "False".into(),
+            SemaDataVariantDef::new(None, Box::default()),
+        ),
+        ("True".into(), SemaDataVariantDef::new(None, Box::default())),
+    ]);
+    let _ = decls.data_defs.insert(
+        "Bool".into(),
+        SemaDataDef::new(
+            DefinitionKey::new(module.clone(), "Bool"),
+            bool_variants,
+            None,
+            None,
+            None,
+            false,
+        ),
+    );
 }
 
 fn host_target_info() -> TargetInfo {
@@ -214,14 +395,7 @@ fn host_target_info() -> TargetInfo {
         "macos" => "mac",
         other => other,
     };
-    TargetInfo {
-        os: Some(os.into()),
-        arch: Some(ARCH.into()),
-        env: None,
-        abi: None,
-        vendor: None,
-        features: BTreeSet::default(),
-    }
+    TargetInfo::new().with_os(os).with_arch(ARCH)
 }
 
 pub fn finish_module(
@@ -239,12 +413,16 @@ pub fn finish_module(
             gated_bindings: typing.gated_bindings.clone(),
             foreign_links: typing.foreign_links.clone(),
             binding_types: typing.binding_types().clone(),
+            binding_schemes: typing.binding_schemes().clone(),
+            binding_evidence_keys: typing.binding_evidence_keys().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,
             pat_facts: facts.pat_facts,
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
+            expr_evidence: facts.expr_evidence,
+            expr_attached_bindings: facts.expr_attached_bindings,
         },
         decls: crate::SemaDeclsBuild {
             effect_defs: decls.effect_defs,
@@ -264,13 +442,14 @@ impl ModuleState {
 }
 
 impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
-    const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
-    ) -> Self {
+    pub(super) const fn new(parts: PassParts<'ctx, 'interner, 'env>) -> Self {
+        let PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        } = parts;
         Self {
             module,
             runtime,
@@ -296,7 +475,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.module.import_targets.get(&span).cloned()
     }
 
-    pub fn static_imports(&self) -> Vec<ModuleKey> {
+    pub fn static_imports(&self) -> StaticImportList {
         self.module
             .resolved
             .imports
@@ -305,6 +484,21 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .collect()
     }
 
+    pub fn prelude_bindings(&self) -> Box<[(NameBindingId, Symbol)]> {
+        self.module
+            .resolved
+            .names
+            .bindings
+            .iter()
+            .filter_map(|(id, binding)| {
+                (binding.kind == NameBindingKind::Prelude).then_some((id, binding.name))
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+}
+
+impl PassBase<'_, '_, '_> {
     pub fn expr(&self, id: HirExprId) -> HirExpr {
         self.module.resolved.module.store.exprs.get(id).clone()
     }
@@ -333,10 +527,6 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         self.runtime.target.as_ref()
     }
 
-    pub const fn sema_env(&self) -> Option<&'env dyn SemaEnv> {
-        self.runtime.env
-    }
-
     pub const fn interner(&self) -> &Interner {
         self.runtime.interner
     }
@@ -348,8 +538,16 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub fn resolve_symbol(&self, symbol: Symbol) -> &str {
         self.runtime.interner.resolve(symbol)
     }
+}
 
-    pub fn expr_ids(&self, range: SliceRange<HirExprId>) -> Vec<HirExprId> {
+impl<'env> PassBase<'_, '_, 'env> {
+    pub const fn sema_env(&self) -> Option<&'env dyn SemaEnv> {
+        self.runtime.env
+    }
+}
+
+impl PassBase<'_, '_, '_> {
+    pub fn expr_ids(&self, range: SliceRange<HirExprId>) -> ExprIdList {
         self.module
             .resolved
             .module
@@ -359,19 +557,19 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn args(&self, range: SliceRange<HirArg>) -> Vec<HirArg> {
+    pub fn args(&self, range: SliceRange<HirArg>) -> ArgList {
         self.module.resolved.module.store.args.get(range).to_vec()
     }
 
-    pub fn dims(&self, range: SliceRange<HirDim>) -> Vec<HirDim> {
+    pub fn dims(&self, range: SliceRange<HirDim>) -> DimList {
         self.module.resolved.module.store.dims.get(range).to_vec()
     }
 
-    pub fn ty_ids(&self, range: SliceRange<HirTyId>) -> Vec<HirTyId> {
+    pub fn ty_ids(&self, range: SliceRange<HirTyId>) -> TyIdList {
         self.module.resolved.module.store.ty_ids.get(range).to_vec()
     }
 
-    pub fn ty_fields(&self, range: SliceRange<HirTyField>) -> Vec<HirTyField> {
+    pub fn ty_fields(&self, range: SliceRange<HirTyField>) -> TyFieldList {
         self.module
             .resolved
             .module
@@ -381,7 +579,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn array_items(&self, range: SliceRange<HirArrayItem>) -> Vec<HirArrayItem> {
+    pub fn array_items(&self, range: SliceRange<HirArrayItem>) -> ArrayItemList {
         self.module
             .resolved
             .module
@@ -391,7 +589,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn record_items(&self, range: SliceRange<HirRecordItem>) -> Vec<HirRecordItem> {
+    pub fn record_items(&self, range: SliceRange<HirRecordItem>) -> RecordItemList {
         self.module
             .resolved
             .module
@@ -401,15 +599,15 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn params(&self, range: SliceRange<HirParam>) -> Vec<HirParam> {
+    pub fn params(&self, range: SliceRange<HirParam>) -> ParamList {
         self.module.resolved.module.store.params.get(range).to_vec()
     }
 
-    pub fn attrs(&self, range: SliceRange<HirAttr>) -> Vec<HirAttr> {
+    pub fn attrs(&self, range: SliceRange<HirAttr>) -> AttrList {
         self.module.resolved.module.store.attrs.get(range).to_vec()
     }
 
-    pub fn attr_args(&self, range: SliceRange<HirAttrArg>) -> Vec<HirAttrArg> {
+    pub fn attr_args(&self, range: SliceRange<HirAttrArg>) -> AttrArgList {
         self.module
             .resolved
             .module
@@ -419,7 +617,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn members(&self, range: SliceRange<HirMemberDef>) -> Vec<HirMemberDef> {
+    pub fn members(&self, range: SliceRange<HirMemberDef>) -> MemberDefList {
         self.module
             .resolved
             .module
@@ -429,7 +627,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn handle_clauses(&self, range: SliceRange<HirHandleClause>) -> Vec<HirHandleClause> {
+    pub fn handle_clauses(&self, range: SliceRange<HirHandleClause>) -> HandleClauseList {
         self.module
             .resolved
             .module
@@ -439,7 +637,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn case_arms(&self, range: SliceRange<HirCaseArm>) -> Vec<HirCaseArm> {
+    pub fn case_arms(&self, range: SliceRange<HirCaseArm>) -> CaseArmList {
         self.module
             .resolved
             .module
@@ -449,7 +647,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn constraints(&self, range: SliceRange<HirConstraint>) -> Vec<HirConstraint> {
+    pub fn constraints(&self, range: SliceRange<HirConstraint>) -> ConstraintList {
         self.module
             .resolved
             .module
@@ -459,7 +657,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn variants(&self, range: SliceRange<HirVariantDef>) -> Vec<HirVariantDef> {
+    pub fn variants(&self, range: SliceRange<HirVariantDef>) -> VariantDefList {
         self.module
             .resolved
             .module
@@ -469,11 +667,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn fields(&self, range: SliceRange<HirFieldDef>) -> Vec<HirFieldDef> {
+    pub fn fields(&self, range: SliceRange<HirFieldDef>) -> FieldDefList {
         self.module.resolved.module.store.fields.get(range).to_vec()
     }
 
-    pub fn effect_items(&self, set: &HirEffectSet) -> Vec<HirEffectItem> {
+    pub fn effect_items(&self, set: &HirEffectSet) -> EffectItemList {
         self.module
             .resolved
             .module
@@ -483,7 +681,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> Vec<HirPatId> {
+    pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> PatIdList {
         self.module
             .resolved
             .module
@@ -493,10 +691,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn record_pat_fields(
-        &self,
-        range: SliceRange<HirRecordPatField>,
-    ) -> Vec<HirRecordPatField> {
+    pub fn record_pat_fields(&self, range: SliceRange<HirRecordPatField>) -> RecordPatFieldList {
         self.module
             .resolved
             .module
@@ -506,11 +701,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn idents(&self, range: SliceRange<Ident>) -> Vec<Ident> {
+    pub fn idents(&self, range: SliceRange<Ident>) -> IdentList {
         self.module.resolved.module.store.idents.get(range).to_vec()
     }
 
-    pub fn binders(&self, range: SliceRange<HirBinder>) -> Vec<HirBinder> {
+    pub fn binders(&self, range: SliceRange<HirBinder>) -> BinderList {
         self.module
             .resolved
             .module
@@ -520,7 +715,7 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .to_vec()
     }
 
-    pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> Vec<HirTemplatePart> {
+    pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> TemplatePartList {
         self.module
             .resolved
             .module
@@ -529,7 +724,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .get(range)
             .to_vec()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn set_expr_facts(&mut self, id: HirExprId, facts: ExprFacts) {
         let slot = self
             .facts
@@ -559,6 +756,22 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.facts.type_test_targets.insert(id, target);
     }
 
+    pub fn set_expr_evidence(
+        &mut self,
+        id: HirExprId,
+        evidence: impl Into<Box<[ConstraintEvidence]>>,
+    ) {
+        let _prev = self.facts.expr_evidence.insert(id, evidence.into());
+    }
+
+    pub fn set_expr_attached_binding(&mut self, id: HirExprId, binding: NameBindingId) {
+        let _prev = self.facts.expr_attached_bindings.insert(id, binding);
+    }
+
+    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.facts.expr_attached_bindings.get(&id).copied()
+    }
+
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {
         let slot = self
             .facts
@@ -576,10 +789,11 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     }
 
     pub fn alloc_ty(&mut self, kind: HirTyKind) -> HirTyId {
-        self.module.resolved.module.store.alloc_ty(HirTy {
-            origin: HirOrigin::dummy(),
-            kind,
-        })
+        self.module
+            .resolved
+            .module
+            .store
+            .alloc_ty(HirTy::new(HirOrigin::dummy(), kind))
     }
 
     pub fn alloc_ty_list<I>(&mut self, tys: I) -> SliceRange<HirTyId>
@@ -599,7 +813,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .store
             .alloc_ty_field_list(fields)
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn binding_id_for_decl(&self, ident: Ident) -> Option<NameBindingId> {
         let site = NameSite::new(self.source_id(), ident.span);
         if let Some(id) = self.module.binding_ids.get(&site).copied() {
@@ -637,7 +853,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .get(&NameSite::new(self.source_id(), ident.span))
             .copied()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn binding_type(&self, id: NameBindingId) -> Option<HirTyId> {
         self.typing.binding_types.get(&id).copied()
     }
@@ -660,6 +878,14 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
     pub fn insert_binding_scheme(&mut self, id: NameBindingId, scheme: BindingScheme) {
         let _prev = self.typing.binding_schemes.insert(id, scheme);
+    }
+
+    pub fn set_binding_evidence_keys(
+        &mut self,
+        id: NameBindingId,
+        keys: impl Into<Box<[ConstraintKey]>>,
+    ) {
+        let _prev = self.typing.binding_evidence_keys.insert(id, keys.into());
     }
 
     pub fn binding_module_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
@@ -689,7 +915,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub fn set_foreign_link(&mut self, binding: NameBindingId, link: ForeignLinkInfo) {
         let _prev = self.typing.foreign_links.insert(binding, link);
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
         self.decls.effect_defs.get(name)
     }
@@ -710,6 +938,31 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
         let _prev = self.decls.data_defs.insert(name.into(), def);
     }
 
+    pub fn insert_attached_method_binding(
+        &mut self,
+        receiver: HirTyId,
+        name: Symbol,
+        binding: NameBindingId,
+        is_mut: bool,
+    ) {
+        let _prev = self
+            .typing
+            .binding_attached_receivers
+            .insert(binding, AttachedReceiverInfo::new(receiver, is_mut));
+        self.decls
+            .attached_methods
+            .entry(AttachedMethodKey::new(receiver, name))
+            .or_default()
+            .push(binding);
+    }
+
+    pub fn attached_method_bindings(&self, receiver: HirTyId, name: Symbol) -> &[NameBindingId] {
+        self.decls
+            .attached_methods
+            .get(&AttachedMethodKey::new(receiver, name))
+            .map_or(&[], Vec::as_slice)
+    }
+
     pub fn ensure_sum_data_def(&mut self, left: HirTyId, right: HirTyId) -> Box<str> {
         let name: Box<str> = format!("{SYNTH_SUM_PREFIX}{}_{}", left.raw(), right.raw()).into();
         if self.decls.data_defs.contains_key(name.as_ref()) {
@@ -718,16 +971,24 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
 
         let key = DefinitionKey::new(self.module_key().clone(), name.clone());
         let variants = BTreeMap::from([
-            ("Left".into(), SemaDataVariantDef::new(Some(left))),
-            ("Right".into(), SemaDataVariantDef::new(Some(right))),
+            (
+                "Left".into(),
+                SemaDataVariantDef::new(Some(left), vec![left].into_boxed_slice()),
+            ),
+            (
+                "Right".into(),
+                SemaDataVariantDef::new(Some(right), vec![right].into_boxed_slice()),
+            ),
         ]);
         let _prev = self.decls.data_defs.insert(
             name.clone(),
-            SemaDataDef::new(key, variants, None, None, None),
+            SemaDataDef::new(key, variants, None, None, None, false),
         );
         name
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {
         self.decls.class_index.get(&symbol).copied()
     }
@@ -759,7 +1020,9 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
     pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
         &self.decls.instance_facts
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn lit_kind(&self, lit: HirLitId) -> HirLitKind {
         self.lit(lit).kind
     }
@@ -810,8 +1073,16 @@ impl TypingState {
         &self.binding_schemes
     }
 
+    pub const fn binding_evidence_keys(&self) -> &HashMap<NameBindingId, Box<[ConstraintKey]>> {
+        &self.binding_evidence_keys
+    }
+
     pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
         &self.binding_module_targets
+    }
+
+    pub fn binding_attached_receiver(&self, id: NameBindingId) -> Option<AttachedReceiverInfo> {
+        self.binding_attached_receivers.get(&id).copied()
     }
 
     pub(super) fn is_gated_binding(&self, id: NameBindingId) -> bool {
@@ -838,16 +1109,8 @@ impl DeclState {
 }
 
 impl<'ctx, 'interner, 'env> CollectPass<'ctx, 'interner, 'env> {
-    pub const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
-    ) -> Self {
-        Self {
-            base: PassBase::new(module, runtime, typing, decls, facts),
-        }
+    pub const fn new(base: PassBase<'ctx, 'interner, 'env>) -> Self {
+        Self { base }
     }
 }
 
@@ -867,17 +1130,14 @@ impl DerefMut for CollectPass<'_, '_, '_> {
 
 impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
     pub const fn new(
-        module: &'ctx mut ModuleState,
-        runtime: &'ctx mut RuntimeEnv<'interner, 'env>,
-        typing: &'ctx mut TypingState,
-        decls: &'ctx mut DeclState,
-        facts: &'ctx mut FactState,
+        collect: CollectPass<'ctx, 'interner, 'env>,
         resume: &'ctx mut ResumeState,
     ) -> Self {
         Self {
-            base: PassBase::new(module, runtime, typing, decls, facts),
+            collect,
             resume,
             expected: Vec::new(),
+            evidence_scopes: Vec::new(),
             module_stmt_depth: 0,
         }
     }
@@ -892,6 +1152,21 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 
     pub const fn in_module_stmt(&self) -> bool {
         self.module_stmt_depth > 0
+    }
+
+    pub fn push_evidence_scope(&mut self, scope: EvidenceScope) {
+        self.evidence_scopes.push(scope);
+    }
+
+    pub fn pop_evidence_scope(&mut self) -> Option<EvidenceScope> {
+        self.evidence_scopes.pop()
+    }
+
+    pub fn resolve_in_scope_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
+        self.evidence_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(key).cloned())
     }
 
     pub fn push_resume(&mut self, ctx: ResumeCtx) {
@@ -920,24 +1195,24 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 }
 
 impl<'ctx, 'interner, 'env> Deref for CheckPass<'ctx, 'interner, 'env> {
-    type Target = PassBase<'ctx, 'interner, 'env>;
+    type Target = CollectPass<'ctx, 'interner, 'env>;
 
     fn deref(&self) -> &Self::Target {
-        &self.base
+        &self.collect
     }
 }
 
 impl DerefMut for CheckPass<'_, '_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
+        &mut self.collect
     }
 }
 
 fn alloc_builtin(resolved: &mut ResolvedModule, kind: HirTyKind) -> HirTyId {
-    resolved.module.store.alloc_ty(HirTy {
-        origin: HirOrigin::dummy(),
-        kind,
-    })
+    resolved
+        .module
+        .store
+        .alloc_ty(HirTy::new(HirOrigin::dummy(), kind))
 }
 
 fn idx_to_usize<T>(idx: Idx<T>) -> usize {

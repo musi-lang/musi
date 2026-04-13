@@ -1,11 +1,22 @@
+version = 2
+extends = []
+scope = []
+
+[engine]
+semantic = "auto"
+
+[workspace]
 include = ["**/*.rs"]
 exclude = ["target/**", ".git/**"]
 
 [output]
-format = "human"
-with_clippy = false
+format = "text"
 
-[rules.absolute_module_paths]
+[adapters.clippy]
+enabled = false
+args = []
+
+[rules."architecture.qualified_module_paths"]
 level = "deny"
 allow_prefixes = []
 roots = [
@@ -40,20 +51,38 @@ allow_crate_root_macros = true
 allow_crate_root_consts = true
 allow_crate_root_fn_calls = true
 
-[rules.absolute_filesystem_paths]
+[rules."portability.absolute_literal_paths"]
 level = "warn"
 check_comments = false
 allow_globs = []
 allow_regex = []
 
-[rules.file_complexity]
+[rules."shape.file_complexity"]
 level = "warn"
 
-[rules.duplicate_logic]
+[rules."shape.duplicate_logic"]
 level = "warn"
 
-[rules.duplicate_types_alias_candidate]
+[rules."design.repeated_type_aliases"]
 level = "warn"
+min_occurrences = 3
+exclude_outer = [
+  "Option",
+  "Result",
+  "VmResult",
+  "ToolingResult",
+  "SyntaxTermResult",
+  "ProjectResult",
+  "TypeTermResult",
+  "RuntimeResult",
+  "ParseResult",
+  "StringLitResult",
+  "AssemblyResult",
+  "MusiResult",
+  "MusicResult",
+  "ImportResolveResult",
+  "SyntaxNode",
+]
 
-[rules.srp_heuristic]
+[rules."shape.responsibility_split"]
 level = "warn"

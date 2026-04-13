@@ -54,6 +54,169 @@ pub struct CliDiagnosticRange {
     pub end_col: usize,
 }
 
+impl CliDiagnosticsReport {
+    pub const SCHEMA: &'static str = "musi.diagnostics.v1";
+
+    #[must_use]
+    pub fn ok(
+        tool: &str,
+        command: &str,
+        package_root: Option<&Path>,
+        manifest: Option<&Path>,
+    ) -> Self {
+        Self {
+            schema: Self::SCHEMA,
+            tool: tool.to_owned(),
+            command: command.to_owned(),
+            status: "ok",
+            package_root: package_root.map(path_string),
+            manifest: manifest.map(path_string),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn error(
+        tool: &str,
+        command: &str,
+        package_root: Option<&Path>,
+        manifest: Option<&Path>,
+        diagnostics: Vec<CliDiagnostic>,
+    ) -> Self {
+        Self {
+            schema: Self::SCHEMA,
+            tool: tool.to_owned(),
+            command: command.to_owned(),
+            status: "error",
+            package_root: package_root.map(path_string),
+            manifest: manifest.map(path_string),
+            diagnostics,
+        }
+    }
+}
+
+impl CliDiagnostic {
+    #[must_use]
+    pub fn new(phase: &'static str, severity: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            phase,
+            severity,
+            code: None,
+            message: message.into(),
+            file: None,
+            range: None,
+            labels: Vec::new(),
+            notes: Vec::new(),
+            hint: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn error_with_file(
+        phase: &'static str,
+        code: Option<String>,
+        message: String,
+        file: Option<String>,
+    ) -> Self {
+        Self::error_inner(phase, code, message, file, None)
+    }
+
+    #[must_use]
+    pub const fn error_with_file_and_hint(
+        phase: &'static str,
+        code: Option<String>,
+        message: String,
+        file: Option<String>,
+        hint: Option<String>,
+    ) -> Self {
+        Self::error_inner(phase, code, message, file, hint)
+    }
+
+    const fn error_inner(
+        phase: &'static str,
+        code: Option<String>,
+        message: String,
+        file: Option<String>,
+        hint: Option<String>,
+    ) -> Self {
+        Self {
+            phase,
+            severity: "error",
+            code,
+            message,
+            file,
+            range: None,
+            labels: Vec::new(),
+            notes: Vec::new(),
+            hint,
+        }
+    }
+
+    #[must_use]
+    pub fn with_code(mut self, code: Option<String>) -> Self {
+        self.code = code;
+        self
+    }
+
+    #[must_use]
+    pub fn with_file(mut self, file: Option<String>) -> Self {
+        self.file = file;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_range(mut self, range: Option<CliDiagnosticRange>) -> Self {
+        self.range = range;
+        self
+    }
+
+    #[must_use]
+    pub fn with_labels(mut self, labels: Vec<CliDiagnosticLabel>) -> Self {
+        self.labels = labels;
+        self
+    }
+
+    #[must_use]
+    pub fn with_notes(mut self, notes: Vec<String>) -> Self {
+        self.notes = notes;
+        self
+    }
+
+    #[must_use]
+    pub fn with_hint(mut self, hint: Option<String>) -> Self {
+        self.hint = hint;
+        self
+    }
+}
+
+impl CliDiagnosticLabel {
+    #[must_use]
+    pub const fn new(
+        file: Option<String>,
+        range: Option<CliDiagnosticRange>,
+        message: String,
+    ) -> Self {
+        Self {
+            file,
+            range,
+            message,
+        }
+    }
+}
+
+impl CliDiagnosticRange {
+    #[must_use]
+    pub const fn new(start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> Self {
+        Self {
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        }
+    }
+}
+
+#[must_use]
 pub fn session_error_report(
     tool: &str,
     command: &str,
@@ -63,20 +226,14 @@ pub fn session_error_report(
     error: &SessionError,
 ) -> CliDiagnosticsReport {
     let diags = session_error_diags(error);
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "error",
-        package_root: package_root.map(path_string),
-        manifest: manifest.map(path_string),
-        diagnostics: diags
-            .iter()
-            .map(|diag| cli_diag(session.source_map(), session_phase(error), diag))
-            .collect(),
-    }
+    let diagnostics = diags
+        .iter()
+        .map(|diag| cli_diag(session.source_map(), session_phase(error), diag))
+        .collect();
+    CliDiagnosticsReport::error(tool, command, package_root, manifest, diagnostics)
 }
 
+#[must_use]
 pub fn project_error_report(
     tool: &str,
     command: &str,
@@ -84,17 +241,16 @@ pub fn project_error_report(
     manifest: Option<&Path>,
     error: &ProjectError,
 ) -> CliDiagnosticsReport {
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "error",
-        package_root: package_root.map(path_string),
-        manifest: manifest.map(path_string),
-        diagnostics: vec![project_diag(error)],
-    }
+    CliDiagnosticsReport::error(
+        tool,
+        command,
+        package_root,
+        manifest,
+        vec![project_diag(error)],
+    )
 }
 
+#[must_use]
 pub fn tooling_error_report(
     tool: &str,
     command: &str,
@@ -102,17 +258,18 @@ pub fn tooling_error_report(
     manifest: Option<&Path>,
     error: &ToolingError,
 ) -> CliDiagnosticsReport {
-    CliDiagnosticsReport {
-        schema: "musi.diagnostics.v1",
-        tool: tool.to_owned(),
-        command: command.to_owned(),
-        status: "error",
-        package_root: package_root.map(path_string),
-        manifest: manifest.map(path_string),
-        diagnostics: vec![tooling_diag(error)],
-    }
+    CliDiagnosticsReport::error(
+        tool,
+        command,
+        package_root,
+        manifest,
+        vec![tooling_diag(error)],
+    )
 }
 
+/// # Errors
+///
+/// Returns [`ToolingError`] when emitting a structured session diagnostic report fails.
 pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingResult<String> {
     let mut output = Vec::new();
     let diags = session_error_diags(error);
@@ -131,6 +288,7 @@ pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingR
     Ok(String::from_utf8_lossy(&output).into_owned())
 }
 
+#[must_use]
 pub fn render_project_error(error: &ProjectError) -> String {
     if let Some(diag) = error.source_diag() {
         return render_project_source_error(diag);
@@ -144,6 +302,7 @@ pub fn render_project_error(error: &ProjectError) -> String {
     )
 }
 
+#[must_use]
 pub fn render_tooling_error(error: &ToolingError) -> String {
     render_simple_error_line(
         error.diag_code().map(|code| code.to_string()),
@@ -162,12 +321,13 @@ fn session_error_diags(error: &SessionError) -> &[Diag] {
         | SessionError::ModuleLoweringFailed { diags, .. }
         | SessionError::ModuleEmissionFailed { diags, .. } => diags,
         SessionError::ModuleNotRegistered { .. }
+        | SessionError::LawSuiteSynthesisFailed { .. }
         | SessionError::SourceMapUpdateFailed { .. }
         | SessionError::ArtifactTransportFailed(_) => &[],
     }
 }
 
-fn session_phase(error: &SessionError) -> &'static str {
+const fn session_phase(error: &SessionError) -> &'static str {
     match error {
         SessionError::ModuleParseFailed { .. } => "parse",
         SessionError::ModuleResolveFailed { .. } => "resolve",
@@ -175,6 +335,7 @@ fn session_phase(error: &SessionError) -> &'static str {
         SessionError::ModuleLoweringFailed { .. } => "ir",
         SessionError::ModuleEmissionFailed { .. } => "emit",
         SessionError::ModuleNotRegistered { .. } => "session",
+        SessionError::LawSuiteSynthesisFailed { .. } => "laws",
         SessionError::SourceMapUpdateFailed { .. } => "source",
         SessionError::ArtifactTransportFailed(_) => "assembly",
     }
@@ -189,46 +350,38 @@ fn cli_diag(sources: &SourceMap, phase: &'static str, diag: &Diag) -> CliDiagnos
             )
         })
     });
-    CliDiagnostic {
-        phase,
-        severity: diag.level().label(),
-        code: diag.code().map(|code| code.to_string()),
-        message: diag.message().to_owned(),
-        file: primary.as_ref().map(|(file, _)| file.clone()),
-        range: primary.and_then(|(_, range)| range),
-        labels: diag
-            .labels()
-            .iter()
-            .map(|label| {
-                let located = sources.get(label.source_id()).map(|source| {
-                    (
-                        source.path().display().to_string(),
-                        range_for_label(source, label),
+    CliDiagnostic::new(phase, diag.level().label(), diag.message().to_owned())
+        .with_code(diag.code().map(|code| code.to_string()))
+        .with_file(primary.as_ref().map(|(file, _)| file.clone()))
+        .with_range(primary.map(|(_, range)| range))
+        .with_labels(
+            diag.labels()
+                .iter()
+                .map(|label| {
+                    let located = sources.get(label.source_id()).map(|source| {
+                        (
+                            source.path().display().to_string(),
+                            range_for_label(source, label),
+                        )
+                    });
+                    CliDiagnosticLabel::new(
+                        located.as_ref().map(|(file, _)| file.clone()),
+                        located.map(|(_, range)| range),
+                        label.message().to_owned(),
                     )
-                });
-                CliDiagnosticLabel {
-                    file: located.as_ref().map(|(file, _)| file.clone()),
-                    range: located.and_then(|(_, range)| range),
-                    message: label.message().to_owned(),
-                }
-            })
-            .collect(),
-        notes: diag.notes().to_vec(),
-        hint: diag.hint().map(str::to_owned),
-    }
+                })
+                .collect(),
+        )
+        .with_notes(diag.notes().to_vec())
+        .with_hint(diag.hint().map(str::to_owned))
 }
 
-fn range_for_label(source: &Source, label: &DiagLabel) -> Option<CliDiagnosticRange> {
+fn range_for_label(source: &Source, label: &DiagLabel) -> CliDiagnosticRange {
     let span = label.span();
     let (start_line, start_col) = source.line_col(span.start);
-    let end_offset = span.end.saturating_sub(u32::from(span.len() > 0));
+    let end_offset = span.end.saturating_sub(u32::from(!span.is_empty()));
     let (end_line, end_col) = source.line_col(end_offset);
-    Some(CliDiagnosticRange {
-        start_line,
-        start_col,
-        end_line,
-        end_col,
-    })
+    CliDiagnosticRange::new(start_line, start_col, end_line, end_col)
 }
 
 fn tooling_diag(error: &ToolingError) -> CliDiagnostic {
@@ -239,20 +392,15 @@ fn tooling_diag(error: &ToolingError) -> CliDiagnostic {
         ToolingError::PackageImportRequiresMusi { .. }
         | ToolingError::SessionCompilationFailed(_) => None,
     };
-    CliDiagnostic {
-        phase: "tooling",
-        severity: "error",
-        code: error.diag_code().map(|code| code.to_string()),
-        message: error
+    CliDiagnostic::error_with_file(
+        "tooling",
+        error.diag_code().map(|code| code.to_string()),
+        error
             .diag_message()
             .unwrap_or_else(|| error.to_string().into())
             .into_owned(),
         file,
-        range: None,
-        labels: Vec::new(),
-        notes: Vec::new(),
-        hint: None,
-    }
+    )
 }
 
 fn project_diag(error: &ProjectError) -> CliDiagnostic {
@@ -277,44 +425,37 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
         | ProjectError::UnknownTask { .. }
         | ProjectError::TaskDependencyCycle { .. }
         | ProjectError::PackageDependencyCycle { .. }
-        | ProjectError::UnresolvedDependency { .. }
+        | ProjectError::UnresolvedImport { .. }
         | ProjectError::MissingRegistryRoot { .. }
         | ProjectError::MissingCacheRoot { .. }
         | ProjectError::RegistryVersionNotFound { .. }
         | ProjectError::InvalidVersionRequirement { .. }
+        | ProjectError::UnknownPackage { .. }
+        | ProjectError::PackageGraphEntryMissing { .. }
         | ProjectError::SessionCompilationFailed(_)
-        | ProjectError::ManifestSourceDiagnostic(_) => None,
+        | ProjectError::SourceDiagnostic(_) => None,
     };
-    CliDiagnostic {
-        phase: "project",
-        severity: "error",
-        code: error.diag_code().map(|code| code.to_string()),
-        message: error
+    CliDiagnostic::error_with_file(
+        "project",
+        error.diag_code().map(|code| code.to_string()),
+        error
             .diag_message()
             .unwrap_or_else(|| error.to_string().into())
             .into_owned(),
         file,
-        range: None,
-        labels: Vec::new(),
-        notes: Vec::new(),
-        hint: None,
-    }
+    )
 }
 
 fn project_source_diag(error: &ProjectSourceDiagnostic) -> CliDiagnostic {
     let mut sources = SourceMap::new();
     let Ok(source_id) = sources.add(error.path().to_path_buf(), error.text().to_owned()) else {
-        return CliDiagnostic {
-            phase: "project",
-            severity: "error",
-            code: Some(error.code().to_string()),
-            message: error.message().to_owned(),
-            file: Some(error.path().display().to_string()),
-            range: None,
-            labels: Vec::new(),
-            notes: Vec::new(),
-            hint: error.hint().map(str::to_owned),
-        };
+        return CliDiagnostic::error_with_file_and_hint(
+            "project",
+            Some(error.code().to_string()),
+            error.message().to_owned(),
+            Some(error.path().display().to_string()),
+            error.hint().map(str::to_owned),
+        );
     };
     cli_diag(&sources, "project", &error.to_diag(source_id))
 }
@@ -324,10 +465,10 @@ fn path_string(path: &Path) -> String {
 }
 
 fn render_simple_error_line(code: Option<String>, message: &str) -> String {
-    match code {
-        Some(code) => format!("error[{code}]: {message}\n"),
-        None => format!("error: {message}\n"),
-    }
+    code.map_or_else(
+        || format!("error: {message}\n"),
+        |code| format!("error[{code}]: {message}\n"),
+    )
 }
 
 fn render_project_source_error(error: &ProjectSourceDiagnostic) -> String {

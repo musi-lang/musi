@@ -5,8 +5,8 @@ use std::rc::Rc;
 use musi_foundation::{extend_import_map, register_modules, syntax};
 use musi_native::{NativeHost, NativeTestReport, WeakNativeHost};
 use musi_vm::{
-    EffectCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmOptions,
-    VmResult, VmValueKind,
+    EffectCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmOptions, VmResult,
+    VmValueKind,
 };
 use music_module::ModuleKey;
 use music_session::{Session, SessionError, SessionOptions};
@@ -14,9 +14,12 @@ use music_term::SyntaxTerm;
 
 use crate::api::RuntimeOptions;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
+use crate::runtime_handlers::register_runtime_handlers;
 
 type ModuleTextMap = HashMap<Box<str>, String>;
 type ProgramMap = HashMap<Box<str>, Program>;
+type RuntimeStoreCell = Rc<RefCell<RuntimeStore>>;
+type RuntimeProgramResult = RuntimeResult<Program>;
 
 #[derive(Default)]
 struct RuntimeStore {
@@ -27,11 +30,11 @@ struct RuntimeStore {
 
 #[derive(Clone)]
 struct SessionLoader {
-    store: Rc<RefCell<RuntimeStore>>,
+    store: RuntimeStoreCell,
 }
 
 pub struct Runtime {
-    store: Rc<RefCell<RuntimeStore>>,
+    store: RuntimeStoreCell,
     host: NativeHost,
     vm: Option<Vm>,
     options: RuntimeOptions,
@@ -48,12 +51,8 @@ impl Runtime {
             ..RuntimeStore::default()
         }));
         let nested_host = host.downgrade();
-        register_syntax_handlers(
-            &mut host,
-            Rc::clone(&store),
-            nested_host,
-            options.vm.clone(),
-        );
+        register_syntax_handlers(&mut host, Rc::clone(&store), &nested_host, &options.vm);
+        register_runtime_handlers(&mut host);
         Self {
             store,
             host,
@@ -230,6 +229,19 @@ impl Runtime {
     ///
     /// Returns [`RuntimeError`] if compilation, intrinsic test-event collection, or test-body execution fails.
     pub fn run_test_module(&mut self, spec: &str) -> RuntimeResult<NativeTestReport> {
+        self.run_test_export(spec, "test")
+    }
+
+    /// Runs one registered test export and returns structured case results.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RuntimeError`] if compilation, intrinsic test-event collection, or test-body execution fails.
+    pub fn run_test_export(
+        &mut self,
+        spec: &str,
+        export_name: &str,
+    ) -> RuntimeResult<NativeTestReport> {
         let program = self.compile_registered_program(spec)?;
         let loader = SessionLoader {
             store: Rc::clone(&self.store),
@@ -238,7 +250,7 @@ impl Runtime {
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
         self.host.begin_test_session();
-        let result = vm.call_export("test", &[]);
+        let result = vm.call_export(export_name, &[]);
         let report = self.host.finish_test_session(spec);
         let _ = result?;
         Ok(report)
@@ -250,7 +262,7 @@ impl Runtime {
             .ok_or_else(|| RuntimeError::new(RuntimeErrorKind::RootModuleRequired))
     }
 
-    fn compile_registered_program(&self, spec: &str) -> RuntimeResult<Program> {
+    fn compile_registered_program(&self, spec: &str) -> RuntimeProgramResult {
         if let Some(program) = self.store.borrow().programs.get(spec).cloned() {
             return Ok(program);
         }
@@ -290,29 +302,8 @@ impl Runtime {
         Ok(Some(program))
     }
 
-    fn compile_synthetic_program(&self, spec: &str, source: &str) -> RuntimeResult<Program> {
-        let store = self.store.borrow();
-        let session_options = store.session_options.clone();
-        let module_texts = store.module_texts.clone();
-        drop(store);
-
-        let mut session = Session::new(session_options);
-        register_modules(&mut session).map_err(runtime_session_error)?;
-        for (module, text) in &module_texts {
-            if module.as_ref() == spec {
-                continue;
-            }
-            session
-                .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
-                .map_err(runtime_session_error)?;
-        }
-        session
-            .set_module_text(&ModuleKey::new(spec), source.to_owned())
-            .map_err(runtime_session_error)?;
-        let output = session
-            .compile_module(&ModuleKey::new(spec))
-            .map_err(runtime_session_error)?;
-        Program::from_bytes(&output.bytes).map_err(Into::into)
+    fn compile_synthetic_program(&self, spec: &str, source: &str) -> RuntimeProgramResult {
+        compile_synthetic_program_from_store(&self.store, spec, source)
     }
 
     fn syntax_term(value: &Value) -> RuntimeResult<&SyntaxTerm> {
@@ -373,8 +364,8 @@ fn runtime_session_error(err: SessionError) -> RuntimeError {
 fn register_syntax_handlers(
     host: &mut NativeHost,
     store: Rc<RefCell<RuntimeStore>>,
-    nested_host: WeakNativeHost,
-    vm_options: VmOptions,
+    nested_host: &WeakNativeHost,
+    vm_options: &VmOptions,
 ) {
     let eval_store = Rc::clone(&store);
     let eval_host = nested_host.clone();
@@ -414,14 +405,15 @@ fn register_syntax_handlers(
 }
 
 fn eval_syntax_value(
-    store: &Rc<RefCell<RuntimeStore>>,
+    store: &RuntimeStoreCell,
     nested_host: &WeakNativeHost,
     vm_options: &VmOptions,
     body: &str,
     result_ty: &str,
 ) -> VmResult<Value> {
     let source = format!("export let answer () : {result_ty} := {body};");
-    let program = compile_synthetic_program(store, "main", &source).map_err(vm_runtime_error)?;
+    let program = compile_synthetic_program_from_store(store, "main", &source)
+        .map_err(|error| vm_runtime_error(&error))?;
     let Some(host) = nested_host.upgrade() else {
         return Err(VmError::new(VmErrorKind::EffectRejected {
             effect: syntax::EFFECT.into(),
@@ -437,11 +429,11 @@ fn eval_syntax_value(
     vm.call_export("answer", &[])
 }
 
-fn compile_synthetic_program(
-    store: &Rc<RefCell<RuntimeStore>>,
+fn compile_synthetic_program_from_store(
+    store: &RuntimeStoreCell,
     spec: &str,
     source: &str,
-) -> RuntimeResult<Program> {
+) -> RuntimeProgramResult {
     let store = store.borrow();
     let session_options = store.session_options.clone();
     let module_texts = store.module_texts.clone();
@@ -474,7 +466,7 @@ fn invalid_syntax_effect(effect: &EffectCall, reason: &'static str) -> VmError {
     })
 }
 
-fn vm_runtime_error(err: RuntimeError) -> VmError {
+fn vm_runtime_error(err: &RuntimeError) -> VmError {
     match err.kind() {
         RuntimeErrorKind::SessionSetupFailed { detail }
         | RuntimeErrorKind::SessionParseFailed { detail }
@@ -506,18 +498,27 @@ fn vm_runtime_error(err: RuntimeError) -> VmError {
 
 fn session_error_detail(err: &SessionError) -> Box<str> {
     match err {
-        SessionError::ModuleParseFailed { syntax, .. } => syntax
-            .diags()
-            .first()
-            .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
+        SessionError::ModuleParseFailed { syntax, .. } => {
+            first_diag_message_or_error(syntax.diags(), err, |diag| -> &str { diag.message() })
+        }
         SessionError::ModuleResolveFailed { diags, .. }
         | SessionError::ModuleSemanticCheckFailed { diags, .. }
         | SessionError::ModuleLoweringFailed { diags, .. }
-        | SessionError::ModuleEmissionFailed { diags, .. } => diags
-            .first()
-            .map_or_else(|| err.to_string().into(), |diag| diag.message().into()),
+        | SessionError::ModuleEmissionFailed { diags, .. } => {
+            first_diag_message_or_error(diags, err, |diag| -> &str { diag.message() })
+        }
         _ => err.to_string().into(),
     }
+}
+
+fn first_diag_message_or_error<T>(
+    diags: &[T],
+    err: &SessionError,
+    message: impl Fn(&T) -> &str,
+) -> Box<str> {
+    diags
+        .first()
+        .map_or_else(|| err.to_string().into(), |diag| message(diag).into())
 }
 
 fn vm_session_error(err: &SessionError) -> VmError {

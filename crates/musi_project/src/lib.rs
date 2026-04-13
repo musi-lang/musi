@@ -14,7 +14,7 @@ pub use project::{
     PackageId, PackageSource, Project, ProjectEntry, ProjectOptions, ResolvedPackage, TaskSpec,
     WorkspaceGraph, load_project, load_project_ancestor,
 };
-pub use testing::PackageTestModule;
+pub use testing::{ProjectTestTarget, ProjectTestTargetKind, ProjectTestTargetSource};
 pub use types::ProjectResult;
 
 #[cfg(test)]

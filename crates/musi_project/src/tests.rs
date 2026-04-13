@@ -9,7 +9,10 @@ use music_base::diag::DiagCode;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
-use crate::{PackageSource, Project, ProjectError, ProjectOptions};
+use crate::{
+    PackageSource, Project, ProjectError, ProjectOptions, ProjectTestTargetKind,
+    ProjectTestTargetSource,
+};
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -153,11 +156,9 @@ fn resolves_registry_dependency_and_caches_it_locally() {
 
     let project = Project::load(
         temp.path(),
-        ProjectOptions {
-            registry_root: Some(registry_root),
-            cache_root: Some(cache_root.clone()),
-            ..ProjectOptions::default()
-        },
+        ProjectOptions::new()
+            .with_registry_root(registry_root)
+            .with_cache_root(cache_root.clone()),
     )
     .expect("project loads");
     let output = project.compile_root_entry().expect("project compiles");
@@ -201,6 +202,66 @@ fn validation_error_carries_typed_diag_identity() {
     assert_eq!(
         error.diag_message().as_deref(),
         Some("manifest validation failed (`name is required`)")
+    );
+}
+
+#[test]
+fn unresolved_static_import_carries_source_diag() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+    );
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unresolved import `missing`")
+    );
+    let diag = error.source_diag().expect("source diagnostic expected");
+    assert!(diag.path().ends_with("index.ms"));
+    assert_eq!(
+        diag.primary_label().message(),
+        "import `missing` does not resolve"
+    );
+    assert_eq!(
+        diag.hint(),
+        Some("declare package/import map entry or fix import spec")
+    );
+}
+
+#[test]
+fn missing_package_entry_uses_unknown_package_code() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(temp.path(), "index.ms", "export let answer : Int := 42;\n");
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let error = project
+        .package_entry("missing")
+        .expect_err("package should be missing");
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3622)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unknown package `missing`")
     );
 }
 
@@ -274,7 +335,7 @@ fn manifest_imports_remap_specifiers_before_project_resolution() {
 }
 
 #[test]
-fn discovers_co_located_package_test_modules() {
+fn discovers_co_located_project_test_targets() {
     let temp = TempDir::new();
     write_file(
         temp.path(),
@@ -314,21 +375,74 @@ export let it (_name, _body) : Unit ~> Unit := _body();
     );
     write_file(
         temp.path(),
-        "packages/std/math/abs.test.ms",
+        "packages/std/math/index.test.ms",
         r"
 export let test () : Unit := 0;
 ",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
-    let tests = project.package_test_modules();
+    let tests = project.test_targets().expect("test targets should resolve");
 
     assert!(tests.iter().any(|test| test.package.name == "@std"));
     assert!(tests.iter().any(|test| {
         test.module_key
             .as_str()
-            .contains("@@std@0.1.0/math/abs.test.ms")
+            .contains("@@std@0.1.0/math/index.test.ms")
     }));
+}
+
+#[test]
+fn merges_synthetic_law_suites_into_project_test_targets() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"
+foreign let musi_true () : Bool;
+
+export let Console := effect {
+  let readln () : String;
+  law total () := musi_true();
+};
+",
+    );
+    write_file(
+        temp.path(),
+        "laws.test.ms",
+        r"
+export let test () := 0;
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let targets = project
+        .test_targets()
+        .expect("test targets should synthesize");
+
+    assert_eq!(targets.len(), 2);
+    assert_eq!(targets[0].kind, ProjectTestTargetKind::Module);
+    assert_eq!(targets[1].kind, ProjectTestTargetKind::SyntheticLawSuite);
+    assert_eq!(
+        targets[1].module_key,
+        ModuleKey::new("@app@1.0.0/index.ms::__laws")
+    );
+    assert_eq!(
+        targets[1].source_module_key,
+        ModuleKey::new("@app@1.0.0/index.ms")
+    );
+    assert_eq!(targets[1].export_name.as_ref(), "__laws_test");
+    let ProjectTestTargetSource::SyntheticModule = &targets[1].source else {
+        panic!("synthetic suite source expected");
+    };
 }
 
 #[test]
@@ -344,7 +458,10 @@ fn compiles_workspace_std_package_and_test_modules() {
         .expect("@std entry compiles");
     assert!(output.artifact.validate().is_ok());
 
-    for test in project.package_test_modules() {
+    for test in project.test_targets().expect("test targets should resolve") {
+        if test.kind != ProjectTestTargetKind::Module {
+            continue;
+        }
         let output = project
             .compile_module(&test.module_key)
             .expect("package test module compiles");
@@ -407,9 +524,9 @@ export let Dep := import "dep";
     write_file(
         temp.path(),
         "packages/dep/index.ms",
-        r#"
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
-"#,
+        r"
+export let equals (left : []Int, right : []Int) : Bool := left = right;
+",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
@@ -437,14 +554,14 @@ fn std_root_exports_keep_static_module_targets() {
     let surface = sema.surface();
 
     let bytes = surface
-        .exported_value("Bytes")
-        .expect("Bytes export should exist");
+        .exported_value("bytes")
+        .expect("bytes export should exist");
     let math = surface
-        .exported_value("Math")
-        .expect("Math export should exist");
+        .exported_value("math")
+        .expect("math export should exist");
     let option = surface
-        .exported_value("Option")
-        .expect("Option export should exist");
+        .exported_value("option")
+        .expect("option export should exist");
 
     assert_eq!(
         bytes.module_target.as_ref(),
@@ -500,7 +617,7 @@ fn std_root_member_alias_keeps_module_target() {
         "index.ms",
         r#"
 let Std := import "@std";
-export let Bytes := Std.Bytes;
+export let bytes := Std.bytes;
 "#,
     );
     write_file(
@@ -520,15 +637,15 @@ export let Bytes := Std.Bytes;
         temp.path(),
         "packages/std/index.ms",
         r#"
-export let Bytes := import "@std/bytes";
+export let bytes := import "@std/bytes";
 "#,
     );
     write_file(
         temp.path(),
         "packages/std/bytes/index.ms",
-        r#"
-export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right;
-"#,
+        r"
+export let equals (left : []Int, right : []Int) : Bool := left = right;
+",
     );
 
     let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
@@ -539,11 +656,85 @@ export let equals (left : Array[Int], right : Array[Int]) : Bool := left = right
         .expect("root sema should succeed");
     let bytes = sema
         .surface()
-        .exported_value("Bytes")
-        .expect("Bytes export should exist");
+        .exported_value("bytes")
+        .expect("bytes export should exist");
 
     assert_eq!(
         bytes.module_target.as_ref(),
         Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
     );
+}
+
+#[test]
+fn root_package_gets_auto_std_prelude() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" },
+  "workspace": ["packages/std"]
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"
+export let answer () : Option[Int] := some[Int](1);
+",
+    );
+    write_file(
+        temp.path(),
+        "packages/std/musi.json",
+        r#"{
+  "name": "@std",
+  "version": "0.1.0",
+  "main": "./index.ms",
+  "exports": {
+    ".": "./index.ms",
+    "./prelude": "./prelude/index.ms",
+    "./option": "./option/index.ms"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/index.ms",
+        r#"
+export let Prelude := import "@std/prelude";
+export let Option := import "@std/option";
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/prelude/index.ms",
+        r#"
+let OptionPkg := import "@std/option";
+export let Int := Int;
+export opaque let Option := OptionPkg.Option;
+export let some := OptionPkg.some;
+export let none := OptionPkg.none;
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/option/index.ms",
+        r"
+export opaque let Option[T] := data {
+  | Some : T
+  | None
+};
+export let some[T] (value : T) : Option[T] := .Some(value);
+export let none[T] () : Option[T] := .None;
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let entry = project.root_entry().expect("root entry resolves");
+    let mut session = project.build_session().expect("project session builds");
+    let _sema = session
+        .check_module(&entry.module_key)
+        .expect("root module should typecheck with auto prelude");
 }

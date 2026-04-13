@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use music_seam::TypeId;
 use music_seam::descriptor::ConstantValue;
 use music_term::SyntaxTerm;
 
@@ -10,11 +11,15 @@ use super::{
 use super::Vm;
 
 impl Vm {
-    pub(crate) fn constant_value(&self, module_slot: usize, value: &ConstantValue) -> Value {
-        match value {
+    pub(crate) fn constant_value(
+        &self,
+        module_slot: usize,
+        value: &ConstantValue,
+    ) -> VmResult<Value> {
+        Ok(match value {
             ConstantValue::Int(value) => Value::Int(*value),
             ConstantValue::Float(value) => Value::Float(*value),
-            ConstantValue::Bool(value) => Value::Bool(*value),
+            ConstantValue::Bool(value) => self.bool_value(module_slot, *value)?,
             ConstantValue::String(id) => Value::string(
                 self.module(module_slot)
                     .map_or("", |module| module.program.string_text(*id)),
@@ -23,11 +28,14 @@ impl Vm {
                 let text = self
                     .module(module_slot)
                     .map_or("", |module| module.program.string_text(*text));
-                let term = SyntaxTerm::parse(*shape, text)
-                    .expect("artifact syntax constants must carry valid syntax fragments");
+                let term = SyntaxTerm::parse(*shape, text).map_err(|detail| {
+                    VmError::new(VmErrorKind::SyntaxConstantInvalid {
+                        detail: detail.to_string().into(),
+                    })
+                })?;
                 Value::syntax(term)
             }
-        }
+        })
     }
 
     pub(crate) const fn expect_int(value: &Value) -> VmResult<i64> {
@@ -126,6 +134,45 @@ impl Vm {
         VmError::new(VmErrorKind::InvalidValueKind {
             expected,
             found: value.kind(),
+        })
+    }
+
+    pub(crate) fn bool_value(&self, module_slot: usize, value: bool) -> VmResult<Value> {
+        let bool_ty = self.named_type_id(module_slot, "Bool").ok_or_else(|| {
+            VmError::new(VmErrorKind::InvalidValueKind {
+                expected: VmValueKind::Bool,
+                found: VmValueKind::Unit,
+            })
+        })?;
+        Ok(Value::data(bool_ty, i64::from(value), []))
+    }
+
+    pub(crate) fn bool_flag(&self, value: &Value) -> Option<bool> {
+        let Value::Data(data) = value else {
+            return None;
+        };
+        let data = data.borrow();
+        (data.fields.is_empty() && self.is_named_type(data.ty, "Bool")).then_some(data.tag != 0)
+    }
+
+    pub(crate) fn named_type_id(&self, module_slot: usize, name: &str) -> Option<TypeId> {
+        let module = self.module(module_slot).ok()?;
+        module.program.artifact().types.iter().find_map(|(id, _)| {
+            let ty_name = module.program.type_name(id);
+            let tail = ty_name.rsplit_once("::").map_or(ty_name, |(_, tail)| tail);
+            (tail == name).then_some(id)
+        })
+    }
+
+    pub(crate) fn is_named_type(&self, ty: TypeId, expected: &str) -> bool {
+        self.named_type_tail(ty) == Some(expected)
+    }
+
+    pub(crate) fn named_type_tail(&self, ty: TypeId) -> Option<&str> {
+        self.loaded_modules.iter().find_map(|module| {
+            let ty_name = module.program.type_name(ty);
+            let tail = ty_name.rsplit_once("::").map_or(ty_name, |(_, tail)| tail);
+            (!tail.is_empty()).then_some(tail)
         })
     }
 }

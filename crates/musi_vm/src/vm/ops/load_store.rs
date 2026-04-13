@@ -67,7 +67,7 @@ impl Vm {
                 let value = {
                     let module = self.module(module_slot)?;
                     let constant = module.program.artifact().constants.get(constant);
-                    self.constant_value(module_slot, &constant.value)
+                    self.constant_value(module_slot, &constant.value)?
                 };
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)

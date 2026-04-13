@@ -6,8 +6,16 @@ export interface MsTaskDefinitionObject {
 
 export type MsTaskDefinition = string | MsTaskDefinitionObject;
 
+export interface MsWorkspaceDefinition {
+	members?: string[];
+}
+
 export interface MsPackageManifest {
+	name?: string;
+	version?: string;
 	main?: string;
+	imports?: Record<string, string>;
+	workspace?: MsWorkspaceDefinition | string[];
 	tasks?: Record<string, MsTaskDefinition>;
 }
 

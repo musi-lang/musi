@@ -1,251 +1,208 @@
 # Musi
 
-A programming language with typed effects, a SEAM bytecode pipeline, and a runtime built on `musi:` and `@std`.
+Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, and a standard library built on `musi:` and `@std`.
 
 > [!WARNING]
-> Musi is `v0.1.0-alpha.1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
+> Musi is `v0.1.0-alpha.1`. Language, tooling, and stdlib shape will still change.
 
-## What Musi Is
+## What Musi ships
 
-Musi source files use the `.ms` extension. The repo now ships two user-facing binaries:
+Musi source files use the `.ms` extension. The repo currently ships two user-facing binaries:
 
 | Binary  | What it does                                  |
 | ------- | --------------------------------------------- |
-| `music` | Direct `.ms` and `.seam` work                 |
-| `musi`  | Package-aware manifest and workspace workflow |
+| `music` | direct `.ms` and `.seam` work                 |
+| `musi`  | package-aware manifest and workspace workflow |
 
-- `musi:...` is the low-level capability namespace.
-- `@std/<family>` is the standard library built on top of `musi:`.
-- `@std` re-exports the standard-library families.
-- `*.test.ms` files export `test`; `musi test` runs them through `musi:test`.
+Core surface:
 
-## Prerequisites
+- `musi:...` is compiler-owned foundation and runtime capability space.
+- `@std/<family>` is the first-party standard library surface.
+- `@std` re-exports stdlib families from its root module.
+- `*.test.ms` files export `test`; `musi test` runs them.
 
-### 1. Rust 1.87 or newer
+## Install
+
+### Prerequisites
+
+**Rust 1.87 or newer**
 
 ```bash
-# install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# or update
 rustup update stable
-
-# verify
 rustc --version
 ```
 
-### 2. libffi
+**libffi**
 
-Musi uses libffi for its foreign function interface.
-
-**macOS:**
+macOS:
 
 ```bash
 brew install libffi
 ```
 
-**Ubuntu / Debian:**
+Ubuntu / Debian:
 
 ```bash
 sudo apt install libffi-dev
 ```
 
-**Fedora / RHEL:**
+Fedora / RHEL:
 
 ```bash
 sudo dnf install libffi-devel
 ```
 
-### 3. Git
+### Install script
 
-If you do not already have Git: <https://git-scm.com/downloads>
+macOS / Linux:
 
-## Install from Source
+```bash
+curl -fsSL https://raw.githubusercontent.com/musi-lang/musi/main/install.sh | sh
+```
 
-There are no pre-built binaries yet.
+Windows PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/musi-lang/musi/main/install.ps1 | iex"
+```
+
+The scripts download the repo archive, then run:
+
+- `cargo install --locked --force --path crates/music`
+- `cargo install --locked --force --path crates/musi`
+
+Installed binaries land in Cargo's bin directory:
+
+- macOS / Linux: `~/.cargo/bin`
+- Windows: `%USERPROFILE%\.cargo\bin`
+
+Make sure that directory is on `PATH`.
+
+### Install from local clone
 
 ```bash
 git clone https://github.com/musi-lang/musi.git
 cd musi
-cargo build --release
+cargo install --locked --force --path crates/music
+cargo install --locked --force --path crates/musi
 ```
 
-Binaries land in `./target/release/`:
+## Quick start
 
-- `music`
-- `musi`
-
-Add to your PATH:
-
-```bash
-export PATH="/path/to/musi/target/release:$PATH"
-```
-
-## Quick Start
+Create a package:
 
 ```bash
 musi new hello
 cd hello
-```
-
-This creates:
-
-```text
-hello/
-  musi.json     project manifest
-  index.ms      source file
-  .gitignore
-```
-
-Run it:
-
-```bash
 musi run
 ```
 
-Current commands:
+Create a direct scratch file:
+
+```musi
+let base := 21;
+
+let twice (x : Int) : Int := x + x;
+
+let answer := twice(base);
+answer;
+```
+
+Check it:
 
 ```bash
-musi check              # type-check the owning package
-musi build              # compile the package entry to .seam bytecode
-musi run                # run the package entry
-musi test               # discover and run *.test.ms files
-music check index.ms    # check one direct source graph
-music build index.ms    # emit one direct .seam artifact
-music run index.seam    # run compiled bytecode directly
+music check index.ms
 ```
 
-## Imports and Packages
+## Command lanes
 
-- `@std` is the first-party standard library root namespace under `packages/std`.
-- `@std/<family>` is the canonical import shape for standard library code such as `@std/bytes`, `@std/math`, `@std/assert`, `@std/option`, `@std/result`, and `@std/testing`.
-- `@std` re-exports those family modules directly from its root module.
-- `musi:...` is the compiler-owned intrinsic namespace for low-level host/runtime capabilities.
-- Prelude names such as builtin types and core classes are injected by the compiler. They are not loaded from `@std`.
+Package lane:
 
-Rules:
-
-- Standard library code should prefer family imports such as `@std/bytes` and `@std/math`.
-- Root imports through `@std` are supported.
-- `@std` is the only first-party package family.
-- Low-level runtime capabilities live in `musi:`.
-- Test files export `test`, not `suite`.
-
-Import style:
-
-```musi
-let Bytes := import "@std/bytes";
-let Math := import "@std/math";
+```bash
+musi check
+musi build
+musi run
+musi test
 ```
 
-Root import is supported:
+Direct lane:
 
-```musi
-let Std := import "@std";
-let Bytes := Std.Bytes;
-let Math := Std.Math;
+```bash
+music check index.ms
+music build index.ms
+music run index.seam
 ```
 
-## Example
+Use `musi` inside package roots. Use `music` when you want one file or one artifact.
+
+## Imports and stdlib
+
+Prefer focused stdlib imports:
 
 ```musi
-let Bytes := import "@std/bytes";
-let Math := import "@std/math";
-
-export let normalized_port () : Int := (
-  let configured := Option.none[Int]();
-  let fallback := 8080;
-  Math.clamp(Option.unwrap_or[Int](configured, fallback), 1024, 65535)
-);
-
-export let payload () : Array[Int] :=
-  Bytes.concat([1, 2, 3], [4, 5]);
-
-export let main () : Int := normalized_port();
-```
-
-Test:
-
-```musi
+let Option := import "@std/option";
 let Testing := import "@std/testing";
-let Std := import "@std";
-
-export let test () := (
-  let (Math, Option) := (Std.Math, Std.Option);
-  Testing.describe("app");
-  Testing.it("normalizes default port", Testing.to_be(Math.clamp(Option.unwrap_or[Int](Option.none[Int](), 8080), 1024, 65535), 8080));
-  Testing.end_describe()
-);
 ```
 
-## Runtime
+Root import also works:
 
-- `musi_vm` executes validated SEAM programs.
-- `musi_rt` is the source-aware runtime layer used by the repo tooling.
-- `musi_native` is the first-party native host adapter behind low-level runtime capabilities.
-- `music` is the direct source/artifact CLI.
-- `musi` is the package-aware CLI.
+```musi
+let Std := import "@std";
+let Option := Std.option;
+let Testing := Std.testing;
+```
 
-## Project Structure
+Small current example:
 
-Rust crates live under `crates/`.
+```musi
+let Option := import "@std/option";
 
-First-party Musi packages live under `packages/`.
+let configured := Option.some[Int](8080);
+let port := Option.unwrapOr[Int](configured, 3000);
 
-Canonical reading order:
+port;
+```
 
-1. `docs/what/language/syntax.md`
-2. `docs/what/runtime/seam-vm.md`
-3. `docs/how/runtime/runtime-api.md`
-4. `docs/where/workspace-map.md`
-5. `docs/where/stack-map.md`
+## Read next
 
-Grammar and language reference:
+Repo-canonical language docs live under `docs/what/language/`.
 
-- `grammar/Musi.g4`
+Good entry points:
+
+- `docs/what/language/index.md`
+- `docs/what/language/start/getting-started.md`
+- `docs/what/language/advanced/running-and-tooling.md`
+- `grammar/MusiParser.g4`
+- `grammar/MusiLexer.g4`
 - `grammar/Musi.abnf`
-- `docs/what/language/syntax.md`
 
-## Editor Support
+Website source and extension source live here too:
 
-VS Code syntax support lives under `vscode-ext/`.
+- `www/`
+- `vscode-ext/`
 
-## Testing
+## Testing and validation
+
+Common commands:
 
 ```bash
-cargo test -p music_syntax     # test a specific crate
-cargo clippy -p music_syntax   # lint a specific crate
-musi test                      # run Musi tests
+make lint
+make check
+cargo test -p music_syntax
+cargo test -p music_sema
+rtk bun run --cwd www build
 ```
 
-Test layout:
-
-- co-locate tests as `*.test.ms`
-- export `test`
-- import `@std/testing`
-- emit test events through `musi:test`
-
-Avoid `cargo test --workspace` on machines with less than 16 GB of free RAM.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor workflow and project rules.
+Prefer targeted crate tests over `cargo test --workspace` on lower-memory machines.
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, coding guidelines, and the PR checklist.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, validation, and website/doc guidance.
 
 ## Code of Conduct
 
-All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=musi-lang%2Fmusi&type=date&logscale=&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&theme=dark&logscale&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
- </picture>
-</a>
+All contributors must follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 

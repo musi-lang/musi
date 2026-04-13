@@ -7,6 +7,8 @@ use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField};
 use music_syntax::SyntaxElement;
 use music_syntax::{SyntaxNodeKind, pattern_binder_tokens};
 
+type PatItemList = SliceRange<HirPatId>;
+
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,
@@ -42,18 +44,13 @@ where
 
     fn alloc_error_pat(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Error,
-        })
+        self.store.alloc_pat(HirPat::new(origin, HirPatKind::Error))
     }
 
     fn lower_pat_wildcard(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Wildcard,
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Wildcard))
     }
 
     fn lower_pat_lit(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
@@ -65,10 +62,8 @@ where
             return self.alloc_error_pat(node);
         };
         let expr: HirExprId = self.alloc_expr(origin, HirExprKind::Lit { lit });
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Lit { expr },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Lit { expr }))
     }
 
     fn lower_pat_bind(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
@@ -80,10 +75,8 @@ where
                 let sym = self.interner.intern("_");
                 Ident::new(sym, node.span())
             });
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Bind { name },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Bind { name }))
     }
 
     fn lower_pat_variant(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
@@ -101,27 +94,23 @@ where
             .map(|n| self.lower_pat(n))
             .collect();
         let args = self.store.alloc_pat_list(args);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Variant { tag, args },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Variant { tag, args }))
     }
 
     fn lower_pat_tuple(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
-        let origin = self.origin_node(node);
-        let items: Vec<_> = node
-            .child_nodes()
-            .filter(|n| n.kind().is_pat())
-            .map(|n| self.lower_pat(n))
-            .collect();
-        let items = self.store.alloc_pat_list(items);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Tuple { items },
-        })
+        self.lower_pat_sequence(node, tuple_pat_kind)
     }
 
     fn lower_pat_array(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
+        self.lower_pat_sequence(node, array_pat_kind)
+    }
+
+    fn lower_pat_sequence(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+        kind: fn(PatItemList) -> HirPatKind,
+    ) -> HirPatId {
         let origin = self.origin_node(node);
         let items: Vec<_> = node
             .child_nodes()
@@ -129,19 +118,14 @@ where
             .map(|n| self.lower_pat(n))
             .collect();
         let items = self.store.alloc_pat_list(items);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Array { items },
-        })
+        self.store.alloc_pat(HirPat::new(origin, kind(items)))
     }
 
     fn lower_pat_record(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
         let fields = self.lower_record_pat_fields(node);
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Record { fields },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Record { fields }))
     }
 
     fn lower_pat_or(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
@@ -155,10 +139,8 @@ where
             Some(pat) => self.lower_pat(pat),
             None => self.alloc_error_pat(node),
         };
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::Or { left, right },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Or { left, right }))
     }
 
     fn lower_pat_as(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
@@ -175,10 +157,8 @@ where
                 let sym = self.interner.intern("_");
                 Ident::new(sym, node.span())
             });
-        self.store.alloc_pat(HirPat {
-            origin,
-            kind: HirPatKind::As { pat, name },
-        })
+        self.store
+            .alloc_pat(HirPat::new(origin, HirPatKind::As { pat, name }))
     }
 
     fn lower_record_pat_fields(
@@ -222,8 +202,16 @@ where
                 None
             };
 
-            fields.push(HirRecordPatField { name, value });
+            fields.push(HirRecordPatField::new(name, value));
         }
         self.store.record_pat_fields.alloc_from_iter(fields)
     }
+}
+
+const fn tuple_pat_kind(items: PatItemList) -> HirPatKind {
+    HirPatKind::Tuple { items }
+}
+
+const fn array_pat_kind(items: PatItemList) -> HirPatKind {
+    HirPatKind::Array { items }
 }

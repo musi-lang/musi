@@ -102,6 +102,10 @@ impl ProjectSourceDiagnostic {
         self.notes.as_slice()
     }
 
+    pub fn push_note(&mut self, note: impl Into<String>) {
+        self.notes.push(note.into());
+    }
+
     #[must_use]
     pub fn hint(&self) -> Option<&str> {
         self.hint.as_deref()
@@ -156,7 +160,7 @@ pub enum ProjectError {
         source: serde_json::Error,
     },
     #[error("{0}")]
-    ManifestSourceDiagnostic(ProjectSourceDiagnostic),
+    SourceDiagnostic(Box<ProjectSourceDiagnostic>),
     #[error("project I/O failed at `{path}`")]
     ProjectIoFailed {
         path: PathBuf,
@@ -181,8 +185,12 @@ pub enum ProjectError {
     TaskDependencyCycle { name: String },
     #[error("package dependency cycle reaches `{name}`")]
     PackageDependencyCycle { name: String },
-    #[error("dependency `{name}` could not be resolved")]
-    UnresolvedDependency { name: String },
+    #[error("unresolved import `{spec}`")]
+    UnresolvedImport { spec: String },
+    #[error("unknown package `{name}`")]
+    UnknownPackage { name: String },
+    #[error("package graph entry missing `{name}`")]
+    PackageGraphEntryMissing { name: String },
     #[error("registry root is required to resolve `{name}`")]
     MissingRegistryRoot { name: String },
     #[error("package cache root is required to resolve `{name}`")]
@@ -200,23 +208,13 @@ pub enum ProjectError {
 }
 
 impl ProjectError {
-    #[must_use]
-    pub fn source_diag(&self) -> Option<&ProjectSourceDiagnostic> {
-        match self {
-            Self::ManifestSourceDiagnostic(diag) => Some(diag),
-            _ => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn diag_code(&self) -> Option<DiagCode> {
-        Some(DiagCode::new(match self {
+    const fn manifest_diag_code(&self) -> Option<DiagCode> {
+        let code = match self {
             Self::MissingManifest { .. } => 3600,
             Self::MissingManifestAncestor { .. } => 3601,
             Self::MissingPackageRoot { .. } => 3602,
             Self::MissingModule { .. } => 3603,
             Self::ManifestJsonInvalid { .. } => 3604,
-            Self::ManifestSourceDiagnostic(diag) => return Some(diag.code()),
             Self::ProjectIoFailed { .. } => 3605,
             Self::ManifestValidationFailed { .. } => 3606,
             Self::DuplicateWorkspaceMember { .. } => 3607,
@@ -224,29 +222,77 @@ impl ProjectError {
             Self::MissingPackageVersion { .. } => 3609,
             Self::NoRootPackage => 3610,
             Self::PackageEntryModuleMissing { .. } => 3611,
+            _ => return None,
+        };
+        Some(DiagCode::new(code))
+    }
+
+    const fn graph_diag_code(&self) -> Option<DiagCode> {
+        let code = match self {
+            Self::PackageDependencyCycle { .. } => 3614,
+            Self::UnresolvedImport { .. } => 3615,
+            Self::UnknownPackage { .. } => 3622,
+            Self::PackageGraphEntryMissing { .. } => 3623,
+            _ => return None,
+        };
+        Some(DiagCode::new(code))
+    }
+
+    const fn task_diag_code(&self) -> Option<DiagCode> {
+        let code = match self {
             Self::UnknownTask { .. } => 3612,
             Self::TaskDependencyCycle { .. } => 3613,
-            Self::PackageDependencyCycle { .. } => 3614,
-            Self::UnresolvedDependency { .. } => 3615,
+            _ => return None,
+        };
+        Some(DiagCode::new(code))
+    }
+
+    const fn registry_diag_code(&self) -> Option<DiagCode> {
+        let code = match self {
             Self::MissingRegistryRoot { .. } => 3616,
             Self::MissingCacheRoot { .. } => 3617,
             Self::RegistryVersionNotFound { .. } => 3618,
             Self::InvalidVersionRequirement { .. } => 3619,
-            Self::MissingFrozenLockfile { .. } => 3620,
-            Self::FrozenLockfileOutOfDate { .. } => 3621,
-            Self::SessionCompilationFailed(_) => return None,
-        }))
+            _ => return None,
+        };
+        Some(DiagCode::new(code))
     }
 
-    #[must_use]
-    pub fn diag_message(&self) -> Option<Cow<'static, str>> {
+    const fn lockfile_diag_code(&self) -> Option<DiagCode> {
+        let code = match self {
+            Self::MissingFrozenLockfile { .. } => 3620,
+            Self::FrozenLockfileOutOfDate { .. } => 3621,
+            _ => return None,
+        };
+        Some(DiagCode::new(code))
+    }
+
+    const fn builtin_diag_code(&self) -> Option<DiagCode> {
+        if let Some(code) = self.manifest_diag_code() {
+            return Some(code);
+        }
+        if let Some(code) = self.graph_diag_code() {
+            return Some(code);
+        }
+        if let Some(code) = self.task_diag_code() {
+            return Some(code);
+        }
+        if let Some(code) = self.registry_diag_code() {
+            return Some(code);
+        }
+        if let Some(code) = self.lockfile_diag_code() {
+            return Some(code);
+        }
+        None
+    }
+
+    fn manifest_diag_message(&self) -> Option<Cow<'static, str>> {
         Some(match self {
             Self::MissingManifest { .. } => Cow::Borrowed("manifest not found"),
             Self::MissingManifestAncestor { .. } => Cow::Borrowed("ancestor manifest not found"),
             Self::MissingPackageRoot { .. } => Cow::Borrowed("package root not found"),
             Self::MissingModule { .. } => Cow::Borrowed("module path not found"),
             Self::ManifestJsonInvalid { .. } => Cow::Borrowed("manifest JSON invalid"),
-            Self::ManifestSourceDiagnostic(diag) => Cow::Owned(diag.message().to_owned()),
             Self::ProjectIoFailed { .. } => Cow::Borrowed("project I/O failed"),
             Self::ManifestValidationFailed { message } => {
                 Cow::Owned(format!("manifest validation failed (`{message}`)"))
@@ -264,16 +310,36 @@ impl ProjectError {
             Self::PackageEntryModuleMissing { package } => {
                 Cow::Owned(format!("package `{package}` entry module not found"))
             }
+            _ => return None,
+        })
+    }
+
+    fn graph_diag_message(&self) -> Option<Cow<'static, str>> {
+        Some(match self {
+            Self::PackageDependencyCycle { name } => {
+                Cow::Owned(format!("package dependency cycle reaches `{name}`"))
+            }
+            Self::UnresolvedImport { spec } => Cow::Owned(format!("unresolved import `{spec}`")),
+            Self::UnknownPackage { name } => Cow::Owned(format!("unknown package `{name}`")),
+            Self::PackageGraphEntryMissing { name } => {
+                Cow::Owned(format!("package graph entry missing `{name}`"))
+            }
+            _ => return None,
+        })
+    }
+
+    fn task_diag_message(&self) -> Option<Cow<'static, str>> {
+        Some(match self {
             Self::UnknownTask { name } => Cow::Owned(format!("task `{name}` not found")),
             Self::TaskDependencyCycle { name } => {
                 Cow::Owned(format!("task dependency cycle reaches `{name}`"))
             }
-            Self::PackageDependencyCycle { name } => {
-                Cow::Owned(format!("package dependency cycle reaches `{name}`"))
-            }
-            Self::UnresolvedDependency { name } => {
-                Cow::Owned(format!("dependency `{name}` could not be resolved"))
-            }
+            _ => return None,
+        })
+    }
+
+    fn registry_diag_message(&self) -> Option<Cow<'static, str>> {
+        Some(match self {
             Self::MissingRegistryRoot { name } => {
                 Cow::Owned(format!("registry root is required for `{name}`"))
             }
@@ -286,9 +352,47 @@ impl ProjectError {
             Self::InvalidVersionRequirement { name, requirement } => Cow::Owned(format!(
                 "semver requirement `{requirement}` for `{name}` is invalid"
             )),
+            _ => return None,
+        })
+    }
+
+    const fn lockfile_diag_message(&self) -> Option<Cow<'static, str>> {
+        Some(match self {
             Self::MissingFrozenLockfile { .. } => Cow::Borrowed("frozen lockfile is required"),
             Self::FrozenLockfileOutOfDate { .. } => Cow::Borrowed("frozen lockfile is out of date"),
-            Self::SessionCompilationFailed(_) => return None,
+            _ => return None,
         })
+    }
+
+    fn builtin_diag_message(&self) -> Option<Cow<'static, str>> {
+        self.manifest_diag_message()
+            .or_else(|| self.graph_diag_message())
+            .or_else(|| self.task_diag_message())
+            .or_else(|| self.registry_diag_message())
+            .or_else(|| self.lockfile_diag_message())
+    }
+
+    #[must_use]
+    pub const fn source_diag(&self) -> Option<&ProjectSourceDiagnostic> {
+        match self {
+            Self::SourceDiagnostic(diag) => Some(diag),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn diag_code(&self) -> Option<DiagCode> {
+        match self {
+            Self::SourceDiagnostic(diag) => Some(diag.code()),
+            _ => self.builtin_diag_code(),
+        }
+    }
+
+    #[must_use]
+    pub fn diag_message(&self) -> Option<Cow<'static, str>> {
+        match self {
+            Self::SourceDiagnostic(diag) => Some(Cow::Owned(diag.message().to_owned())),
+            _ => self.builtin_diag_message(),
+        }
     }
 }

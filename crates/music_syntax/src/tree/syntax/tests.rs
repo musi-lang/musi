@@ -11,36 +11,34 @@ use super::{
 
 #[test]
 fn syntax_tree_exposes_root_and_token_text() {
-    let lexed = LexedSource {
-        text: "x;".into(),
-        tokens: vec![
+    let lexed = LexedSource::new(
+        "x;",
+        vec![
             Token::new(TokenKind::Ident, Span::new(0, 1)),
             Token::new(TokenKind::Semicolon, Span::new(1, 2)),
             Token::new(TokenKind::Eof, Span::new(2, 2)),
         ],
-        trivia: Vec::new(),
-        token_trivia: vec![TriviaRange::EMPTY, TriviaRange::EMPTY, TriviaRange::EMPTY],
-        errors: Vec::new(),
-    };
+        Vec::new(),
+        vec![TriviaRange::EMPTY, TriviaRange::EMPTY, TriviaRange::EMPTY],
+        Vec::new(),
+    );
     let mut nodes = Arena::new();
     let mut children = SliceArena::new();
     let stmt_children = children.alloc_from_iter([
         SyntaxElementId::Token(SyntaxTokenId::from_raw(0)),
         SyntaxElementId::Token(SyntaxTokenId::from_raw(1)),
     ]);
-    let stmt = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::SequenceExpr,
-        span: Span::new(0, 2),
-        parent: None,
-        children: stmt_children,
-    });
+    let stmt = nodes.alloc(SyntaxNodeData::new(
+        SyntaxNodeKind::SequenceExpr,
+        Span::new(0, 2),
+        stmt_children,
+    ));
     let root_children = children.alloc_from_iter([SyntaxElementId::Node(stmt)]);
-    let root = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::SourceFile,
-        span: Span::new(0, 2),
-        parent: None,
-        children: root_children,
-    });
+    let root = nodes.alloc(SyntaxNodeData::new(
+        SyntaxNodeKind::SourceFile,
+        Span::new(0, 2),
+        root_children,
+    ));
     nodes.get_mut(stmt).parent = Some(root);
     let tree = SyntaxTree::new(
         lexed,
@@ -59,19 +57,15 @@ fn syntax_tree_exposes_root_and_token_text() {
 
 #[test]
 fn syntax_element_span_matches_inner_item() {
-    let lexed = LexedSource {
-        text: "".into(),
-        ..LexedSource::default()
-    };
+    let lexed = LexedSource::new("", Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut nodes = Arena::new();
     let mut children = SliceArena::new();
     let range = children.alloc_from_iter(Vec::<SyntaxElementId>::new());
-    let root = nodes.alloc(SyntaxNodeData {
-        kind: SyntaxNodeKind::SourceFile,
-        span: Span::new(0, 0),
-        parent: None,
-        children: range,
-    });
+    let root = nodes.alloc(SyntaxNodeData::new(
+        SyntaxNodeKind::SourceFile,
+        Span::new(0, 0),
+        range,
+    ));
     let tree = SyntaxTree::new(lexed, nodes, children, Vec::new(), root);
     let node = SyntaxNode::new(&tree, root);
     assert_eq!(SyntaxElement::Node(node).span(), Span::new(0, 0));

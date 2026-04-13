@@ -2,8 +2,8 @@ mod api;
 mod session;
 
 pub use api::{
-    CompiledOutput, ParsedModule, SessionDiagList, SessionError, SessionOptions, SessionStats,
-    SessionSyntaxErrors,
+    CompiledOutput, LawSuiteModule, ParsedModule, SessionDiagList, SessionError, SessionOptions,
+    SessionStats, SessionSyntaxErrors,
 };
 pub use session::Session;
 

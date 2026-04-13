@@ -9,7 +9,7 @@
 	"license": "MIT",
 	"private": true,
 	"publisher": "musi-lang",
-	"homepage": "https://github.com/musi-lang/musi",
+	"homepage": "https://musi-lang.org",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/musi-lang/musi.git"
@@ -35,7 +35,6 @@
 		"vscode": "^1.75.0"
 	},
 	"activationEvents": [
-		"onLanguage:musi",
 		"workspaceContains:**/musi.json"
 	],
 	"contributes": {
@@ -263,6 +262,7 @@
 	"scripts": {
 		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs --minify",
 		"grammar:check": "node ./scripts/verify-grammars.mjs",
+		"test": "bun test ./client/src",
 		"package": "bun run build && vsce package --no-dependencies",
 		"typecheck": "tsc --noEmit",
 		"biome:check": "bunx biome check . --write --unsafe --max-diagnostics 16384",
@@ -273,13 +273,18 @@
 	"dependencies": {
 		"vscode-languageclient": "^9.0.1"
 	},
+	"optionalDependencies": {
+		"vscode": "npm:@types/vscode@1.75.0"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.11",
 		"@types/bun": "1.3.12",
 		"@types/node": "25.6.0",
-		"@types/vscode": "^1.75.0",
+		"@types/vscode": "1.75.0",
 		"@vscode/vsce": "3.7.1",
-		"typescript": "6.0.2"
+		"typescript": "6.0.2",
+		"vscode-oniguruma": "^2.0.1",
+		"vscode-textmate": "^9.3.2"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome",

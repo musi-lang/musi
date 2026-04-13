@@ -19,6 +19,8 @@ music_module = { path = "../music_module" }
 music_session = { path = "../music_session" }
 music_term = { path = "../music_term" }
 musi_vm = { path = "../musi_vm" }
+base64 = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]

@@ -58,6 +58,35 @@ pub struct SessionOptions {
     pub target: Option<TargetInfo>,
 }
 
+impl SessionOptions {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            emit: EmitOptions,
+            import_map: ImportMap::default(),
+            target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_emit(mut self, emit: EmitOptions) -> Self {
+        self.emit = emit;
+        self
+    }
+
+    #[must_use]
+    pub fn with_import_map(mut self, import_map: ImportMap) -> Self {
+        self.import_map = import_map;
+        self
+    }
+
+    #[must_use]
+    pub fn with_target(mut self, target: TargetInfo) -> Self {
+        self.target = Some(target);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionStats {
     pub parse_runs: u64,
@@ -65,6 +94,19 @@ pub struct SessionStats {
     pub sema_runs: u64,
     pub ir_runs: u64,
     pub emit_runs: u64,
+}
+
+impl SessionStats {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            parse_runs: 0,
+            resolve_runs: 0,
+            sema_runs: 0,
+            ir_runs: 0,
+            emit_runs: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -76,11 +118,78 @@ pub struct ParsedModule {
     pub syntax: SessionSyntaxErrors,
 }
 
+impl ParsedModule {
+    #[must_use]
+    pub fn new(module_key: ModuleKey, source_id: SourceId) -> Self {
+        Self {
+            module_key,
+            source_id,
+            import_sites: Box::default(),
+            export_summary: ModuleExportSummary::new(),
+            syntax: SessionSyntaxErrors::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_import_sites(mut self, import_sites: impl Into<Box<[ImportSite]>>) -> Self {
+        self.import_sites = import_sites.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_export_summary(mut self, export_summary: ModuleExportSummary) -> Self {
+        self.export_summary = export_summary;
+        self
+    }
+
+    #[must_use]
+    pub fn with_syntax(mut self, syntax: SessionSyntaxErrors) -> Self {
+        self.syntax = syntax;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompiledOutput {
     pub artifact: Artifact,
     pub bytes: Vec<u8>,
     pub text: String,
+}
+
+impl CompiledOutput {
+    #[must_use]
+    pub const fn new(artifact: Artifact, bytes: Vec<u8>, text: String) -> Self {
+        Self {
+            artifact,
+            bytes,
+            text,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawSuiteModule {
+    pub source_module_key: ModuleKey,
+    pub suite_module_key: ModuleKey,
+    pub export_name: Box<str>,
+    pub law_count: usize,
+}
+
+impl LawSuiteModule {
+    #[must_use]
+    pub fn new(
+        source_module_key: ModuleKey,
+        suite_module_key: ModuleKey,
+        export_name: impl Into<Box<str>>,
+        law_count: usize,
+    ) -> Self {
+        Self {
+            source_module_key,
+            suite_module_key,
+            export_name: export_name.into(),
+            law_count,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -114,6 +223,8 @@ pub enum SessionError {
         module: ModuleKey,
         diags: SessionDiagList,
     },
+    #[error("module `{module}` law-suite synthesis failed")]
+    LawSuiteSynthesisFailed { module: ModuleKey, reason: Box<str> },
     #[error("artifact transport failed")]
     ArtifactTransportFailed(#[from] AssemblyError),
 }

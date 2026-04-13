@@ -11,7 +11,7 @@ mod expr_calls;
 mod exprs;
 mod normalize;
 mod patterns;
-mod schemes;
+pub mod schemes;
 mod state;
 mod surface;
 mod surface_exports;
@@ -19,10 +19,11 @@ mod surface_types;
 
 use state::{
     CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, EffectDef, EffectOpDef, FactState,
-    ModuleState, PassBase, ResumeCtx, ResumeState, RuntimeEnv, TypingState, finish_module,
-    prepare_module,
+    ModuleState, PassBase, PassParts, ResumeCtx, ResumeState, RuntimeEnv, TypingState,
+    finish_module, prepare_module,
 };
 
+use crate::api::ModuleSurface;
 use crate::diag::SemaDiagKind as DiagKind;
 
 struct Checker<'interner, 'env> {
@@ -53,16 +54,42 @@ impl<'interner, 'env> Checker<'interner, 'env> {
         interner: &'interner mut Interner,
         options: SemaOptions<'env>,
     ) -> Self {
+        let prelude = options.prelude.cloned();
         let (module, runtime, typing, decls, facts, resume) =
             prepare_module(resolved, interner, options);
-        Self {
+        let mut this = Self {
             module,
             runtime,
             typing,
             decls,
             facts,
             resume,
+        };
+        if let Some(prelude) = prelude.as_ref() {
+            this.seed_prelude(prelude);
         }
+        this
+    }
+
+    fn seed_prelude(&mut self, prelude: &ModuleSurface) {
+        let Self {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+            resume,
+        } = self;
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
+        decls::seed_prelude_bindings(&mut check, prelude);
     }
 
     fn collect_module(&mut self) {
@@ -74,7 +101,14 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             ..
         } = self;
-        let mut collect = CollectPass::new(module, runtime, typing, decls, facts);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let mut collect = CollectPass::new(base);
         collect::collect_module(&mut collect);
     }
 
@@ -87,7 +121,15 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             resume,
         } = self;
-        let mut check = CheckPass::new(module, runtime, typing, decls, facts, resume);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
         let root = check.root_expr_id();
         let _root_facts = exprs::check_module_root(&mut check, root);
     }
@@ -101,8 +143,16 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             resume,
         } = self;
-        let mut check = CheckPass::new(module, runtime, typing, decls, facts, resume);
-        decls::check_instance_coherence(&mut check);
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
+        check.check_instance_coherence();
     }
 
     fn finish(self) -> SemaModule {

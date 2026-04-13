@@ -19,6 +19,7 @@ smallvec = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+musi_foundation = { path = "../musi_foundation" }
 music_module = { path = "../music_module" }
 music_session = { path = "../music_session" }
 

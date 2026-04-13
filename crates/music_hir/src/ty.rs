@@ -10,6 +10,13 @@ pub struct HirTy {
     pub kind: HirTyKind,
 }
 
+impl HirTy {
+    #[must_use]
+    pub const fn new(origin: HirOrigin, kind: HirTyKind) -> Self {
+        Self { origin, kind }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirTyKind {
     Error,
@@ -50,9 +57,32 @@ pub enum HirTyKind {
     Tuple {
         items: SliceRange<HirTyId>,
     },
+    Seq {
+        item: HirTyId,
+    },
     Array {
         dims: SliceRange<HirDim>,
         item: HirTyId,
+    },
+    Range {
+        bound: HirTyId,
+    },
+    ClosedRange {
+        bound: HirTyId,
+    },
+    PartialRangeFrom {
+        bound: HirTyId,
+    },
+    PartialRangeUpTo {
+        bound: HirTyId,
+    },
+    PartialRangeThru {
+        bound: HirTyId,
+    },
+    Handler {
+        effect: HirTyId,
+        input: HirTyId,
+        output: HirTyId,
     },
     Mut {
         inner: HirTyId,
@@ -73,4 +103,11 @@ pub enum HirDim {
 pub struct HirTyField {
     pub name: Symbol,
     pub ty: HirTyId,
+}
+
+impl HirTyField {
+    #[must_use]
+    pub const fn new(name: Symbol, ty: HirTyId) -> Self {
+        Self { name, ty }
+    }
 }

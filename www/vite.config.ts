@@ -1,78 +1,33 @@
-import { resolve } from "node:path";
+import { exec } from "node:child_process";
+import path from "node:path";
 import react from "@vitejs/plugin-react";
-import type { PluginOption, ViteDevServer } from "vite";
-import { defineConfig } from "vitest/config";
-import {
-	generateContent,
-	generatedContentPath,
-	isWatchedContentPath,
-	watchedContentPaths,
-} from "./scripts/content-generator";
+import { defineConfig, type PluginOption } from "vite";
+import { isWatchedContentPath } from "./scripts/content-generator";
 
-function musiContentPlugin(): PluginOption {
-	let queue = Promise.resolve();
-
-	async function regenerate(server: ViteDevServer, file: string) {
-		queue = queue.then(async () => {
-			try {
-				await generateContent();
-				const generatedModule =
-					server.moduleGraph.getModuleById(generatedContentPath);
-				if (generatedModule) {
-					server.moduleGraph.invalidateModule(generatedModule);
-				}
-				server.ws.send({
-					type: "full-reload",
-					path: "*",
-				});
-			} catch (error) {
-				const message =
-					error instanceof Error
-						? (error.stack ?? error.message)
-						: String(error);
-				server.config.logger.error(
-					`[musi-content-watch] failed after ${file}\n${message}`,
-				);
-			}
-		});
-
-		await queue;
-	}
-
+function contentHotReloadPlugin(): PluginOption {
 	return {
-		name: "musi-content-watch",
-		configureServer(server) {
-			server.watcher.add([...watchedContentPaths]);
-		},
-		async handleHotUpdate(ctx) {
-			if (ctx.file === generatedContentPath) {
-				return [];
+		name: "musi-content-generator",
+		handleHotUpdate({ file }) {
+			if (isWatchedContentPath(file)) {
+				console.log(`Content file changed: ${file}. Regenerating...`);
+				exec("bun run scripts/generate-content.ts", (err) => {
+					if (err) {
+						console.error(`Failed to generate content: ${err.message}`);
+						return;
+					}
+					console.log("Content regenerated successfully.");
+				});
 			}
-
-			if (!isWatchedContentPath(ctx.file)) {
-				return;
-			}
-
-			await regenerate(ctx.server, ctx.file);
-			return [];
 		},
 	};
 }
 
+// https://vitejs.dev/config/
 export default defineConfig({
-	root: resolve(import.meta.dirname),
-	plugins: [react(), musiContentPlugin()],
+	plugins: [react(), contentHotReloadPlugin()],
 	resolve: {
 		alias: {
-			"@": resolve(import.meta.dirname, "src"),
+			"@": path.resolve(__dirname, "./src"),
 		},
-	},
-	build: {
-		outDir: "dist",
-		emptyOutDir: true,
-	},
-	test: {
-		environment: "jsdom",
-		include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.ts"],
 	},
 });

@@ -4,8 +4,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules, resolve_spec};
-use music_base::SourceId;
 use music_base::diag::DiagCode;
+use music_base::{SourceId, Span};
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
 use music_seam::Artifact;
@@ -14,16 +14,34 @@ use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
-use crate::errors::ProjectError;
+use crate::errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::{CompilerOptions, PackageManifest, TaskConfig};
 use crate::manifest_source::ManifestSource;
 use crate::registry::{RegistryPackage, resolve_registry_package};
 
+type ExportModuleMap = BTreeMap<String, ModuleKey>;
+type DependencyPackageMap = BTreeMap<String, PackageId>;
+type VisitedPackageNames = BTreeSet<String>;
+type TaskNameSet = BTreeSet<String>;
+type PackageRecordMapRef<'a> = &'a BTreeMap<PackageId, PackageRecord>;
+type ModuleKeyMapRef<'a> = &'a BTreeMap<String, ModuleKey>;
+type CompiledOutputResult = ProjectResult<CompiledOutput>;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PackageId {
     pub name: String,
     pub version: String,
+}
+
+impl PackageId {
+    #[must_use]
+    pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            version: version.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,11 +60,45 @@ pub struct ProjectEntry {
     pub path: PathBuf,
 }
 
+impl ProjectEntry {
+    #[must_use]
+    pub const fn new(package: PackageId, module_key: ModuleKey, path: PathBuf) -> Self {
+        Self {
+            package,
+            module_key,
+            path,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskSpec {
     pub description: Option<String>,
     pub command: String,
     pub dependencies: Vec<String>,
+}
+
+impl TaskSpec {
+    #[must_use]
+    pub fn new(command: impl Into<String>) -> Self {
+        Self {
+            description: None,
+            command: command.into(),
+            dependencies: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependencies(mut self, dependencies: Vec<String>) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,12 +109,78 @@ pub struct ResolvedPackage {
     pub source: PackageSource,
     pub manifest: PackageManifest,
     pub entry: ProjectEntry,
-    pub exports: BTreeMap<String, ModuleKey>,
+    pub exports: ExportModuleMap,
     pub module_keys: BTreeMap<ModuleKey, PathBuf>,
-    pub dependencies: BTreeMap<String, PackageId>,
-    pub dev_dependencies: BTreeMap<String, PackageId>,
-    pub peer_dependencies: BTreeMap<String, PackageId>,
-    pub optional_dependencies: BTreeMap<String, PackageId>,
+    pub dependencies: DependencyPackageMap,
+    pub dev_dependencies: DependencyPackageMap,
+    pub peer_dependencies: DependencyPackageMap,
+    pub optional_dependencies: DependencyPackageMap,
+}
+
+impl ResolvedPackage {
+    #[must_use]
+    pub const fn new(
+        id: PackageId,
+        manifest_path: PathBuf,
+        root_dir: PathBuf,
+        source: PackageSource,
+        manifest: PackageManifest,
+        entry: ProjectEntry,
+    ) -> Self {
+        Self {
+            id,
+            manifest_path,
+            root_dir,
+            source,
+            manifest,
+            entry,
+            exports: BTreeMap::new(),
+            module_keys: BTreeMap::new(),
+            dependencies: BTreeMap::new(),
+            dev_dependencies: BTreeMap::new(),
+            peer_dependencies: BTreeMap::new(),
+            optional_dependencies: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_exports(mut self, exports: ExportModuleMap) -> Self {
+        self.exports = exports;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_keys(mut self, module_keys: BTreeMap<ModuleKey, PathBuf>) -> Self {
+        self.module_keys = module_keys;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependencies(mut self, dependencies: DependencyPackageMap) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_dev_dependencies(mut self, dev_dependencies: DependencyPackageMap) -> Self {
+        self.dev_dependencies = dev_dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_peer_dependencies(mut self, peer_dependencies: DependencyPackageMap) -> Self {
+        self.peer_dependencies = peer_dependencies;
+        self
+    }
+
+    #[must_use]
+    pub fn with_optional_dependencies(
+        mut self,
+        optional_dependencies: DependencyPackageMap,
+    ) -> Self {
+        self.optional_dependencies = optional_dependencies;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,12 +190,68 @@ pub struct WorkspaceGraph {
     pub packages: BTreeMap<PackageId, ResolvedPackage>,
 }
 
+impl WorkspaceGraph {
+    #[must_use]
+    pub const fn new(
+        members: Vec<PackageId>,
+        packages: BTreeMap<PackageId, ResolvedPackage>,
+    ) -> Self {
+        Self {
+            root_package: None,
+            members,
+            packages,
+        }
+    }
+
+    #[must_use]
+    pub fn with_root_package(mut self, root_package: PackageId) -> Self {
+        self.root_package = Some(root_package);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProjectOptions {
     pub registry_root: Option<PathBuf>,
     pub cache_root: Option<PathBuf>,
     pub emit: EmitOptions,
     pub target: Option<TargetInfo>,
+}
+
+impl ProjectOptions {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            registry_root: None,
+            cache_root: None,
+            emit: EmitOptions,
+            target: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_registry_root(mut self, registry_root: PathBuf) -> Self {
+        self.registry_root = Some(registry_root);
+        self
+    }
+
+    #[must_use]
+    pub fn with_cache_root(mut self, cache_root: PathBuf) -> Self {
+        self.cache_root = Some(cache_root);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_emit(mut self, emit: EmitOptions) -> Self {
+        self.emit = emit;
+        self
+    }
+
+    #[must_use]
+    pub fn with_target(mut self, target: TargetInfo) -> Self {
+        self.target = Some(target);
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -103,14 +277,20 @@ struct LoadedModule {
     package_relative: String,
     local_scope_key: ModuleKey,
     text: String,
-    imports: Vec<String>,
+    imports: Vec<LoadedImportSite>,
+}
+
+#[derive(Debug, Clone)]
+struct LoadedImportSite {
+    spec: String,
+    span: Span,
 }
 
 #[derive(Debug, Clone)]
 struct PackageRecord {
     package: ResolvedPackage,
     modules: BTreeMap<ModuleKey, LoadedModule>,
-    relative_modules: BTreeMap<String, ModuleKey>,
+    relative_modules: ExportModuleMap,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +305,19 @@ struct LocalPackage {
 struct LoadedManifest {
     manifest: PackageManifest,
     source: ManifestSource,
+}
+
+struct WorkspaceSeed {
+    package_records: BTreeMap<PackageId, PackageRecord>,
+    package_name_index: DependencyPackageMap,
+}
+
+struct ResolvedWorkspaceState {
+    workspace: WorkspaceGraph,
+    package_name_index: DependencyPackageMap,
+    import_map: ImportMap,
+    module_texts: BTreeMap<ModuleKey, String>,
+    resolved_lockfile: Lockfile,
 }
 
 /// # Errors
@@ -172,67 +365,20 @@ impl Project {
             });
         }
         let loaded_lockfile = load_lockfile(&lockfile_path)?;
-
-        let local_packages = load_local_packages(
+        let ResolvedWorkspaceState {
+            workspace,
+            package_name_index,
+            import_map,
+            module_texts,
+            resolved_lockfile,
+        } = resolve_workspace_state(
             &root_dir,
-            &manifest,
             &root_manifest_path,
             &root_manifest_source,
+            &manifest,
+            &options,
+            &loaded_lockfile,
         )?;
-        let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
-        let mut package_name_index = BTreeMap::<String, PackageId>::new();
-        let mut resolving = BTreeSet::<String>::new();
-
-        for (name, package) in &local_packages {
-            let package_record = load_package_record(
-                package.root_dir.clone(),
-                package.manifest_path.clone(),
-                package.source.clone(),
-                package.manifest.clone(),
-                PackageSource::Workspace,
-            )?;
-            let _ = package_name_index.insert(name.clone(), package_record.package.id.clone());
-            let _ = package_records.insert(package_record.package.id.clone(), package_record);
-        }
-
-        let root_package = manifest
-            .name
-            .as_ref()
-            .and_then(|name| package_name_index.get(name).cloned());
-        let members = manifest
-            .workspace_members()
-            .iter()
-            .map(|member| member_manifest_name(&root_dir, member))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .filter_map(|name| package_name_index.get(&name).cloned())
-            .collect::<Vec<_>>();
-
-        let package_ids = package_records.keys().cloned().collect::<Vec<_>>();
-        for package_id in package_ids {
-            resolve_package_dependencies(
-                &package_id,
-                &local_packages,
-                &options,
-                &loaded_lockfile,
-                &mut package_records,
-                &mut package_name_index,
-                &mut resolving,
-            )?;
-        }
-
-        let import_map = build_import_map(&package_records, &package_name_index)?;
-        let module_texts = package_records
-            .values()
-            .flat_map(|record| {
-                record
-                    .modules
-                    .values()
-                    .map(|module| (module.key.clone(), module.text.clone()))
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let resolved_lockfile = build_lockfile(&package_records);
         if manifest.is_lock_frozen()
             && loaded_lockfile.clone().normalized() != resolved_lockfile.clone().normalized()
         {
@@ -240,16 +386,6 @@ impl Project {
                 path: lockfile_path,
             });
         }
-
-        let packages = package_records
-            .into_iter()
-            .map(|(id, record)| (id, record.package))
-            .collect();
-        let workspace = WorkspaceGraph {
-            root_package,
-            members,
-            packages,
-        };
 
         Ok(Self {
             options,
@@ -275,7 +411,9 @@ impl Project {
         let manifest_path = manifest_ancestor_path_for(path.as_ref())?;
         Self::load(manifest_path, options)
     }
+}
 
+impl Project {
     #[must_use]
     pub const fn manifest(&self) -> &PackageManifest {
         &self.manifest
@@ -367,10 +505,12 @@ impl Project {
     pub fn package_entry(&self, name: &str) -> ProjectResult<&ProjectEntry> {
         let package = self
             .package(name)
-            .ok_or_else(|| ProjectError::UnresolvedDependency { name: name.into() })?;
+            .ok_or_else(|| ProjectError::UnknownPackage { name: name.into() })?;
         Ok(&package.entry)
     }
+}
 
+impl Project {
     #[must_use]
     pub const fn lockfile(&self) -> &Lockfile {
         &self.resolved_lockfile
@@ -409,11 +549,12 @@ impl Project {
             command,
             dependencies,
         } = self.manifest.task_config(name)?;
-        Some(TaskSpec {
-            description,
-            command,
-            dependencies,
-        })
+        let task = if let Some(description) = description {
+            TaskSpec::new(command).with_description(description)
+        } else {
+            TaskSpec::new(command)
+        };
+        Some(task.with_dependencies(dependencies))
     }
 
     /// # Errors
@@ -422,8 +563,8 @@ impl Project {
     /// dependency cycle.
     pub fn task_plan(&self, name: &str) -> ProjectResult<Vec<TaskSpec>> {
         let mut order = Vec::new();
-        let mut seen = BTreeSet::new();
-        let mut active = BTreeSet::new();
+        let mut seen = VisitedPackageNames::new();
+        let mut active = VisitedPackageNames::new();
         self.collect_task_plan(name, &mut seen, &mut active, &mut order)?;
         Ok(order)
     }
@@ -431,8 +572,8 @@ impl Project {
     fn collect_task_plan(
         &self,
         name: &str,
-        seen: &mut BTreeSet<String>,
-        active: &mut BTreeSet<String>,
+        seen: &mut VisitedPackageNames,
+        active: &mut VisitedPackageNames,
         out: &mut Vec<TaskSpec>,
     ) -> ProjectResult {
         if !seen.insert(name.into()) {
@@ -451,7 +592,9 @@ impl Project {
         out.push(task);
         Ok(())
     }
+}
 
+impl Project {
     /// # Errors
     ///
     /// Returns [`ProjectError`] when the project modules cannot be registered into a configured
@@ -459,11 +602,13 @@ impl Project {
     pub fn build_session(&self) -> ProjectResult<Session> {
         let mut import_map = self.import_map.clone();
         extend_import_map(&mut import_map);
-        let mut session = Session::new(SessionOptions {
-            emit: self.options.emit,
-            import_map,
-            target: self.options.target.clone(),
-        });
+        let mut session_options = SessionOptions::new()
+            .with_emit(self.options.emit)
+            .with_import_map(import_map);
+        if let Some(target) = self.options.target.clone() {
+            session_options = session_options.with_target(target);
+        }
+        let mut session = Session::new(session_options);
         register_modules(&mut session)?;
         for (key, text) in &self.module_texts {
             session.set_module_text(key, text.clone())?;
@@ -498,7 +643,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled through
     /// [`Session`].
-    pub fn compile_root_entry(&self) -> ProjectResult<CompiledOutput> {
+    pub fn compile_root_entry(&self) -> CompiledOutputResult {
         self.compile_root_entry_with(Session::compile_entry)
     }
 
@@ -539,6 +684,78 @@ impl Project {
             Ok(session.compile_entry(entry)?)
         })
     }
+}
+
+fn resolve_workspace_state(
+    root_dir: &Path,
+    root_manifest_path: &Path,
+    root_manifest_source: &ManifestSource,
+    manifest: &PackageManifest,
+    options: &ProjectOptions,
+    loaded_lockfile: &Lockfile,
+) -> ProjectResult<ResolvedWorkspaceState> {
+    let local_packages =
+        load_local_packages(root_dir, manifest, root_manifest_path, root_manifest_source)?;
+    let WorkspaceSeed {
+        mut package_records,
+        mut package_name_index,
+    } = seed_workspace_packages(&local_packages)?;
+    let mut resolving = BTreeSet::<String>::new();
+
+    let root_package = manifest
+        .name
+        .as_ref()
+        .and_then(|name| package_name_index.get(name).cloned());
+    let members = manifest
+        .workspace_members()
+        .iter()
+        .map(|member| member_manifest_name(root_dir, member))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter_map(|name| package_name_index.get(&name).cloned())
+        .collect::<Vec<_>>();
+
+    let package_ids = package_records.keys().cloned().collect::<Vec<_>>();
+    for package_id in package_ids {
+        resolve_package_dependencies(
+            &package_id,
+            &local_packages,
+            options,
+            loaded_lockfile,
+            &mut package_records,
+            &mut package_name_index,
+            &mut resolving,
+        )?;
+    }
+
+    let import_map = build_import_map(&package_records, &package_name_index)?;
+    let module_texts = package_records
+        .values()
+        .flat_map(|record| {
+            record
+                .modules
+                .values()
+                .map(|module| (module.key.clone(), module.text.clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let resolved_lockfile = build_lockfile(&package_records);
+    let packages = package_records
+        .into_iter()
+        .map(|(id, record)| (id, record.package))
+        .collect();
+    let workspace = if let Some(root_package) = root_package {
+        WorkspaceGraph::new(members, packages).with_root_package(root_package)
+    } else {
+        WorkspaceGraph::new(members, packages)
+    };
+
+    Ok(ResolvedWorkspaceState {
+        workspace,
+        package_name_index,
+        import_map,
+        module_texts,
+        resolved_lockfile,
+    })
 }
 
 fn manifest_path_for(path: &Path) -> ProjectResult<PathBuf> {
@@ -599,7 +816,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     if let Some(name) = &manifest.name {
         if name.trim().is_empty() {
             let span = source
-                .value_span("/name")
+                .value_span(&json_pointer(&["name"]))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -614,7 +831,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
             let span = source
                 .key_span(&pointer)
-                .or_else(|| source.value_span("/exports"))
+                .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -627,7 +844,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
             let span = source
                 .value_span(&pointer)
-                .or_else(|| source.value_span("/exports"))
+                .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
@@ -654,8 +871,8 @@ fn validate_task_node(
     name: &str,
     manifest: &PackageManifest,
     source: &ManifestSource,
-    seen: &mut BTreeSet<String>,
-    active: &mut BTreeSet<String>,
+    seen: &mut TaskNameSet,
+    active: &mut TaskNameSet,
 ) -> ProjectResult {
     if !seen.insert(name.into()) {
         return Ok(());
@@ -702,6 +919,28 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
     serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJsonInvalid {
         path: path.to_path_buf(),
         source,
+    })
+}
+
+fn seed_workspace_packages(
+    local_packages: &BTreeMap<String, LocalPackage>,
+) -> ProjectResult<WorkspaceSeed> {
+    let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
+    let mut package_name_index = BTreeMap::<String, PackageId>::new();
+    for (name, package) in local_packages {
+        let package_record = load_package_record(
+            package.root_dir.clone(),
+            package.manifest_path.clone(),
+            &package.source,
+            package.manifest.clone(),
+            PackageSource::Workspace,
+        )?;
+        let _ = package_name_index.insert(name.clone(), package_record.package.id.clone());
+        let _ = package_records.insert(package_record.package.id.clone(), package_record);
+    }
+    Ok(WorkspaceSeed {
+        package_records,
+        package_name_index,
     })
 }
 
@@ -800,7 +1039,7 @@ fn resolve_package_dependencies(
     let manifest = package_records
         .get(package_id)
         .map(|record| record.package.manifest.clone())
-        .ok_or_else(|| ProjectError::UnresolvedDependency {
+        .ok_or_else(|| ProjectError::PackageGraphEntryMissing {
             name: package_id.name.clone(),
         })?;
 
@@ -825,7 +1064,7 @@ fn resolve_package_dependencies(
             }
         }
         let record = package_records.get_mut(package_id).ok_or_else(|| {
-            ProjectError::UnresolvedDependency {
+            ProjectError::PackageGraphEntryMissing {
                 name: package_id.name.clone(),
             }
         })?;
@@ -867,19 +1106,19 @@ fn resolve_dependency(
     } = ctx;
 
     if let Some(package) = local_packages.get(name) {
-        let package_id = PackageId {
-            name: name.into(),
-            version: package
+        let package_id = PackageId::new(
+            name,
+            package
                 .manifest
                 .version
                 .clone()
                 .ok_or_else(|| ProjectError::MissingPackageVersion { name: name.into() })?,
-        };
+        );
         if !package_records.contains_key(&package_id) {
             let record = load_package_record(
                 package.root_dir.clone(),
                 package.manifest_path.clone(),
-                package.source.clone(),
+                &package.source,
                 package.manifest.clone(),
                 PackageSource::Workspace,
             )?;
@@ -928,15 +1167,12 @@ fn resolve_dependency(
         .version
         .clone()
         .unwrap_or_else(|| registry_package.version.clone());
-    let package_id = PackageId {
-        name: name.into(),
-        version,
-    };
+    let package_id = PackageId::new(name, version);
     if !package_records.contains_key(&package_id) {
         let record = load_package_record(
             registry_package.cache_dir.clone(),
             manifest_path,
-            source,
+            &source,
             manifest,
             PackageSource::Registry {
                 registry_dir: registry_package.registry_dir,
@@ -981,12 +1217,12 @@ fn locked_or_latest_registry_package(
 fn load_package_record(
     root_dir: PathBuf,
     manifest_path: PathBuf,
-    manifest_source: ManifestSource,
+    manifest_source: &ManifestSource,
     manifest: PackageManifest,
     source: PackageSource,
 ) -> ProjectResult<PackageRecord> {
-    let id = PackageId {
-        name: manifest.name.clone().ok_or_else(|| {
+    let id = PackageId::new(
+        manifest.name.clone().ok_or_else(|| {
             manifest_source.error_with_hint(
                 DiagCode::new(3606),
                 "package name missing",
@@ -995,7 +1231,7 @@ fn load_package_record(
                 "add `name` to this package manifest",
             )
         })?,
-        version: manifest.version.clone().ok_or_else(|| {
+        manifest.version.clone().ok_or_else(|| {
             manifest_source.error_with_hint(
                 DiagCode::new(3606),
                 "package version missing",
@@ -1004,7 +1240,7 @@ fn load_package_record(
                 "add `version` to this package manifest",
             )
         })?,
-    };
+    );
 
     let modules = discover_modules(&id, &root_dir)?;
     let relative_modules = modules
@@ -1018,38 +1254,23 @@ fn load_package_record(
     let entry_key =
         resolve_module_target(&root_dir, &relative_modules, None, manifest.main_entry())
             .ok_or_else(|| {
-                package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
+                package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
             })?;
     let entry_path = module_keys.get(&entry_key).cloned().ok_or_else(|| {
-        package_entry_missing(&manifest_source, &id.name, manifest.main.as_deref())
+        package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
     })?;
-    let entry = ProjectEntry {
-        package: id.clone(),
-        module_key: entry_key,
-        path: entry_path,
-    };
+    let entry = ProjectEntry::new(id.clone(), entry_key, entry_path);
 
     let mut exports = BTreeMap::new();
     for (name, target) in manifest.export_map() {
         let export_key = resolve_module_target(&root_dir, &relative_modules, None, &target)
-            .ok_or_else(|| missing_export_target(&manifest_source, &id.name, &name, &target))?;
+            .ok_or_else(|| missing_export_target(manifest_source, &id.name, &name, &target))?;
         let _ = exports.insert(name, export_key);
     }
 
-    let package = ResolvedPackage {
-        id,
-        manifest_path,
-        root_dir,
-        source,
-        manifest,
-        entry,
-        exports,
-        module_keys,
-        dependencies: BTreeMap::new(),
-        dev_dependencies: BTreeMap::new(),
-        peer_dependencies: BTreeMap::new(),
-        optional_dependencies: BTreeMap::new(),
-    };
+    let package = ResolvedPackage::new(id, manifest_path, root_dir, source, manifest, entry)
+        .with_exports(exports)
+        .with_module_keys(module_keys);
 
     Ok(PackageRecord {
         package,
@@ -1064,12 +1285,12 @@ fn package_entry_missing(
     main_target: Option<&str>,
 ) -> ProjectError {
     let span = main_target
-        .and_then(|_| manifest_source.value_span("/main"))
+        .and_then(|_| manifest_source.value_span(&json_pointer(&["main"])))
         .unwrap_or_else(|| manifest_source.insertion_span());
-    let label = match main_target {
-        Some(target) => format!("entry target `{target}` does not resolve"),
-        None => "`main` field missing and `index.ms` was not found".into(),
-    };
+    let label = main_target.map_or_else(
+        || "`main` field missing and `index.ms` was not found".into(),
+        |target| format!("entry target `{target}` does not resolve"),
+    );
     let hint = match main_target {
         Some(_) => "update `main` to an existing module path",
         None => "add `main`, or create `index.ms` at package root",
@@ -1081,6 +1302,15 @@ fn package_entry_missing(
         label,
         hint,
     )
+}
+
+fn json_pointer(segments: &[&str]) -> String {
+    let mut pointer = String::new();
+    for segment in segments {
+        pointer.push('/');
+        pointer.push_str(segment);
+    }
+    pointer
 }
 
 fn missing_export_target(
@@ -1153,7 +1383,10 @@ fn discover_modules_recursive(
         let imports = collect_import_sites(SourceId::from_raw(0), parsed.tree())
             .into_iter()
             .filter_map(|site| match site.kind {
-                ImportSiteKind::Static { spec } => Some(spec.as_str().to_owned()),
+                ImportSiteKind::Static { spec } => Some(LoadedImportSite {
+                    spec: spec.as_str().to_owned(),
+                    span: site.span,
+                }),
                 ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
             })
             .collect::<Vec<_>>();
@@ -1171,8 +1404,8 @@ fn discover_modules_recursive(
 }
 
 fn build_import_map(
-    package_records: &BTreeMap<PackageId, PackageRecord>,
-    package_name_index: &BTreeMap<String, PackageId>,
+    package_records: PackageRecordMapRef<'_>,
+    package_name_index: &DependencyPackageMap,
 ) -> ProjectResult<ImportMap> {
     let mut import_map = ImportMap::default();
     for record in package_records.values() {
@@ -1185,13 +1418,11 @@ fn build_import_map(
                 .scopes
                 .entry(module.key.as_str().to_owned())
                 .or_default();
-            for import_spec in &module.imports {
+            for import_site in &module.imports {
+                let import_spec = import_site.spec.as_str();
                 let remapped = manifest_map
-                    .resolve(
-                        &module.local_scope_key,
-                        &ModuleSpecifier::new(import_spec.as_str()),
-                    )
-                    .map_or_else(|| import_spec.clone(), |spec| spec.as_str().to_owned());
+                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec))
+                    .map_or_else(|| import_spec.to_owned(), |spec| spec.as_str().to_owned());
                 let target = resolve_import_spec(
                     record,
                     module,
@@ -1199,14 +1430,46 @@ fn build_import_map(
                     package_records,
                     package_name_index,
                 )
-                .ok_or_else(|| ProjectError::UnresolvedDependency {
-                    name: import_spec.clone(),
-                })?;
-                let _ = scope.insert(import_spec.clone(), target.as_str().to_owned());
+                .ok_or_else(|| unresolved_import(record, module, import_site, &remapped))?;
+                let _ = scope.insert(import_spec.to_owned(), target.as_str().to_owned());
             }
         }
     }
     Ok(import_map)
+}
+
+fn unresolved_import(
+    _package: &PackageRecord,
+    module: &LoadedModule,
+    import_site: &LoadedImportSite,
+    remapped: &str,
+) -> ProjectError {
+    let mut diag = ProjectSourceDiagnostic::new(
+        module.path.clone(),
+        module.text.clone(),
+        DiagCode::new(3615),
+        format!("unresolved import `{}`", import_site.spec),
+        ProjectSourceLabel::new(
+            import_site.span,
+            format!("import `{}` does not resolve", import_site.spec),
+        ),
+    );
+    if remapped != import_site.spec {
+        diag.push_note(format!(
+            "import map resolved `{}` to `{remapped}`",
+            import_site.spec
+        ));
+    }
+    let hint = if import_site.spec.starts_with("./")
+        || import_site.spec.starts_with("../")
+        || import_site.spec.starts_with('/')
+    {
+        "update import path or add target module"
+    } else {
+        "declare package/import map entry or fix import spec"
+    };
+    diag.set_hint(hint);
+    ProjectError::SourceDiagnostic(Box::new(diag))
 }
 
 fn resolve_import_spec(
@@ -1248,7 +1511,7 @@ fn resolve_import_spec(
 
 fn resolve_compiler_path(
     root_dir: &Path,
-    relative_modules: &BTreeMap<String, ModuleKey>,
+    relative_modules: ModuleKeyMapRef<'_>,
     compiler_options: Option<&CompilerOptions>,
     spec: &str,
 ) -> Option<ModuleKey> {

@@ -1,7 +1,7 @@
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, MethodDescriptor, TypeDescriptor,
+    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
+    EffectDescriptor, EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
+    GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
 };
 use crate::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
@@ -179,6 +179,8 @@ fn encode_methods(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u16(out, entry.params);
         push_u16(out, entry.locals);
         out.push(u8::from(entry.export));
+        out.push(u8::from(entry.hot));
+        out.push(u8::from(entry.cold));
         push_u16(
             out,
             u16::try_from(entry.labels.len()).expect("too many labels"),
@@ -265,6 +267,8 @@ fn encode_foreigns(out: &mut Vec<u8>, artifact: &Artifact) {
             out.push(0);
         }
         out.push(u8::from(entry.export));
+        out.push(u8::from(entry.hot));
+        out.push(u8::from(entry.cold));
     }
 }
 
@@ -316,6 +320,20 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
         push_u32(out, entry.name.raw());
         push_u32(out, entry.variant_count);
         push_u32(out, entry.field_count);
+        push_u32(
+            out,
+            u32::try_from(entry.variants.len()).expect("data variant overflow"),
+        );
+        for variant in &entry.variants {
+            push_u32(out, variant.name.raw());
+            push_u32(
+                out,
+                u32::try_from(variant.field_tys.len()).expect("data field overflow"),
+            );
+            for ty in &variant.field_tys {
+                push_u32(out, ty.raw());
+            }
+        }
         match entry.repr_kind {
             Some(id) => {
                 out.push(1);
@@ -337,6 +355,7 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
             }
             None => out.push(0),
         }
+        out.push(u8::from(entry.frozen));
     }
 }
 
@@ -449,7 +468,7 @@ fn decode_types(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyRes
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
         let term = cursor.read_idx()?;
-        let _ = artifact.types.alloc(TypeDescriptor { name, term });
+        let _ = artifact.types.alloc(TypeDescriptor::new(name, term));
     }
     Ok(())
 }
@@ -482,7 +501,9 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
                 ));
             }
         };
-        let _ = artifact.constants.alloc(ConstantDescriptor { name, value });
+        let _ = artifact
+            .constants
+            .alloc(ConstantDescriptor::new(name, value));
     }
     Ok(())
 }
@@ -497,11 +518,11 @@ fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         } else {
             Some(cursor.read_idx()?)
         };
-        let _ = artifact.globals.alloc(GlobalDescriptor {
-            name,
-            export,
-            initializer,
-        });
+        let mut descriptor = GlobalDescriptor::new(name).with_export(export);
+        if let Some(initializer) = initializer {
+            descriptor = descriptor.with_initializer(initializer);
+        }
+        let _ = artifact.globals.alloc(descriptor);
     }
     Ok(())
 }
@@ -513,6 +534,8 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let params = cursor.read_u16()?;
         let locals = cursor.read_u16()?;
         let export = cursor.read_u8()? != 0;
+        let hot = cursor.read_u8()? != 0;
+        let cold = cursor.read_u8()? != 0;
         let label_count = usize::from(cursor.read_u16()?);
         let mut labels = Vec::with_capacity(label_count);
         for _ in 0..label_count {
@@ -542,14 +565,13 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             };
             code.push(entry);
         }
-        let _ = artifact.methods.alloc(MethodDescriptor {
-            name,
-            params,
-            locals,
-            export,
-            labels: labels.into_boxed_slice(),
-            code: code.into_boxed_slice(),
-        });
+        let _ = artifact.methods.alloc(
+            MethodDescriptor::new(name, params, locals, code.into_boxed_slice())
+                .with_export(export)
+                .with_hot(hot)
+                .with_cold(cold)
+                .with_labels(labels.into_boxed_slice()),
+        );
     }
     Ok(())
 }
@@ -567,16 +589,15 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             for _ in 0..param_len {
                 param_tys.push(cursor.read_idx()?);
             }
-            ops.push(EffectOpDescriptor {
+            ops.push(EffectOpDescriptor::new(
                 name,
-                param_tys: param_tys.into_boxed_slice(),
-                result_ty: cursor.read_idx()?,
-            });
+                param_tys.into_boxed_slice(),
+                cursor.read_idx()?,
+            ));
         }
-        let _ = artifact.effects.alloc(EffectDescriptor {
-            name,
-            ops: ops.into_boxed_slice(),
-        });
+        let _ = artifact
+            .effects
+            .alloc(EffectDescriptor::new(name, ops.into_boxed_slice()));
     }
     Ok(())
 }
@@ -584,9 +605,9 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
 fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
     require_section(cursor, SectionTag::Classes)?;
     for _ in 0..cursor.read_u32()? {
-        let _ = artifact.classes.alloc(ClassDescriptor {
-            name: cursor.read_idx()?,
-        });
+        let _ = artifact
+            .classes
+            .alloc(ClassDescriptor::new(cursor.read_idx()?));
     }
     Ok(())
 }
@@ -612,15 +633,15 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
                 ));
             }
         };
-        let _ = artifact.foreigns.alloc(ForeignDescriptor {
-            name,
-            param_tys: param_tys.into_boxed_slice(),
-            result_ty,
-            abi,
-            symbol,
-            link,
-            export: cursor.read_u8()? != 0,
-        });
+        let mut descriptor =
+            ForeignDescriptor::new(name, param_tys.into_boxed_slice(), result_ty, abi, symbol)
+                .with_export(cursor.read_u8()? != 0)
+                .with_hot(cursor.read_u8()? != 0)
+                .with_cold(cursor.read_u8()? != 0);
+        if let Some(link) = link {
+            descriptor = descriptor.with_link(link);
+        }
+        let _ = artifact.foreigns.alloc(descriptor);
     }
     Ok(())
 }
@@ -642,11 +663,9 @@ fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             _ => return Err(AssemblyError::InvalidBinaryHeader),
         };
         let opaque = cursor.read_u8()? != 0;
-        let _ = artifact.exports.alloc(ExportDescriptor {
-            name,
-            opaque,
-            target,
-        });
+        let _ = artifact
+            .exports
+            .alloc(ExportDescriptor::new(name, opaque, target));
     }
     Ok(())
 }
@@ -658,6 +677,21 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         let name = Idx::from_raw(cursor.read_u32()?);
         let variant_count = cursor.read_u32()?;
         let field_count = cursor.read_u32()?;
+        let variant_len = cursor.read_u32()?;
+        let mut variants = Vec::with_capacity(usize::try_from(variant_len).unwrap_or(usize::MAX));
+        for _ in 0..variant_len {
+            let variant_name = Idx::from_raw(cursor.read_u32()?);
+            let field_len = cursor.read_u32()?;
+            let mut field_tys =
+                Vec::with_capacity(usize::try_from(field_len).unwrap_or(usize::MAX));
+            for _ in 0..field_len {
+                field_tys.push(Idx::from_raw(cursor.read_u32()?));
+            }
+            variants.push(DataVariantDescriptor::new(
+                variant_name,
+                field_tys.into_boxed_slice(),
+            ));
+        }
         let repr_kind = if cursor.read_u8()? != 0 {
             Some(Idx::from_raw(cursor.read_u32()?))
         } else {
@@ -673,14 +707,21 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         } else {
             None
         };
-        let _ = artifact.data.alloc(DataDescriptor {
-            name,
-            variant_count,
-            field_count,
-            repr_kind,
-            layout_align,
-            layout_pack,
-        });
+        let frozen = cursor.read_u8()? != 0;
+        let mut descriptor = DataDescriptor::new(name, variants.into_boxed_slice());
+        debug_assert_eq!(descriptor.variant_count, variant_count);
+        debug_assert_eq!(descriptor.field_count, field_count);
+        if let Some(repr_kind) = repr_kind {
+            descriptor = descriptor.with_repr_kind(repr_kind);
+        }
+        if let Some(layout_align) = layout_align {
+            descriptor = descriptor.with_layout_align(layout_align);
+        }
+        if let Some(layout_pack) = layout_pack {
+            descriptor = descriptor.with_layout_pack(layout_pack);
+        }
+        descriptor = descriptor.with_frozen(frozen);
+        let _ = artifact.data.alloc(descriptor);
     }
     Ok(())
 }
@@ -695,11 +736,9 @@ fn decode_meta(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         for _ in 0..value_len {
             values.push(cursor.read_idx()?);
         }
-        let _ = artifact.meta.alloc(MetaDescriptor {
-            target,
-            key,
-            values: values.into_boxed_slice(),
-        });
+        let _ = artifact
+            .meta
+            .alloc(MetaDescriptor::new(target, key, values.into_boxed_slice()));
     }
     Ok(())
 }

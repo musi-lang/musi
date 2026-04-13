@@ -1,5 +1,5 @@
-use crate::Symbol;
 use super::Interner;
+use crate::Symbol;
 
 #[test]
 fn interns_same_string_to_same_symbol() {

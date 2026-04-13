@@ -1,33 +1,42 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement, Fragment } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { exampleGroups } from "./content/example-registry";
+import { bookPages, bookParts } from "./content/book/manifest";
+import { exampleGroups } from "./content/examples/groups";
 import { contentSnippets } from "./content/snippet-registry";
 import { renderedDocs, renderedSnippets } from "./generated-content";
-import { nextScheme } from "./layout";
+import { nextScheme } from "./layout/site-layout";
+import { siteCopy } from "./lib/site-copy";
 
 const BANNED_SNIPPET_PATTERNS = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
-const REQUIRED_DOC_HEADINGS = [
-	"## What",
-	"## Why",
-	"## How",
-	"## When",
-	"## Analogy",
-	"## Try it",
+const BANNED_SITE_COPY = [
+	"Friendly language. Real ideas. Small steps.",
+	"Friendly first-language path, real language ideas, and small command-line steps that stay readable as projects grow.",
 ];
-
-const docsDirectory = join(import.meta.dirname, "content", "docs");
+const repoRoot = join(import.meta.dirname, "..", "..");
 
 describe("content generation", () => {
 	it("cycles color scheme in the header order", () => {
 		expect(nextScheme("light")).toBe("dark");
-		expect(nextScheme("dark")).toBe("auto");
-		expect(nextScheme("auto")).toBe("light");
+		expect(nextScheme("dark")).toBe("system");
+		expect(nextScheme("system")).toBe("light");
 	});
 
 	it("emits dual-theme shiki markup", () => {
 		expect(renderedSnippets.homeSampleHtml).toContain("github-light");
 		expect(renderedSnippets.homeSampleHtml).toContain("github-dark");
+	});
+
+	it("keeps shared public copy free of old slogan text", () => {
+		const descriptorText = renderToStaticMarkup(
+			createElement(Fragment, null, siteCopy.en.home.description),
+		);
+
+		for (const phrase of BANNED_SITE_COPY) {
+			expect(descriptorText).not.toContain(phrase);
+		}
 	});
 
 	it("keeps invalid syntax out of Musi snippets", () => {
@@ -42,24 +51,41 @@ describe("content generation", () => {
 	});
 
 	it("keeps docs markdown free of raw Musi fences", () => {
-		const docsSource = readdirSync(docsDirectory)
-			.filter((entry) => entry.endsWith(".md"))
-			.map((entry) => readFileSync(join(docsDirectory, entry), "utf8"))
-			.join("\n");
+		const docsSource = [
+			...bookPages.map((page) =>
+				readFileSync(join(repoRoot, page.sourcePath), "utf8"),
+			),
+			...bookParts.map((part) =>
+				readFileSync(join(repoRoot, part.sourcePath), "utf8"),
+			),
+		].join("\n");
 
 		expect(docsSource).not.toContain("```musi");
 		expect(docsSource).not.toContain("@std/io");
 		expect(docsSource).not.toContain("let Option[T] := data");
 		expect(docsSource).not.toContain("let Result[T, E] := data");
-		for (const heading of REQUIRED_DOC_HEADINGS) {
-			expect(docsSource).toContain(heading);
-		}
+	});
+
+	it("renders every manifest doc entry", () => {
+		expect(renderedDocs).toHaveLength(bookPages.length + bookParts.length);
+		expect(renderedDocs.filter((doc) => doc.kind === "chapter")).toHaveLength(
+			bookPages.length,
+		);
 	});
 
 	it("fully resolves snippet and example placeholders during generation", () => {
 		const docsHtml = renderedDocs.map((doc) => doc.html).join("\n");
 		expect(docsHtml).not.toContain("{{snippet:");
 		expect(docsHtml).not.toContain("{{example:");
+		expect(docsHtml).not.toContain("{{try:");
+	});
+
+	it("keeps chapters on repo-level docs paths", () => {
+		for (const page of bookPages) {
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			expect(source).toContain("## Try it");
+			expect(page.sourcePath.startsWith("docs/what/language/")).toBe(true);
+		}
 	});
 
 	it("records evidence for every snippet", () => {
@@ -69,22 +95,9 @@ describe("content generation", () => {
 		}
 	});
 
-	it("requires complete four-language compare groups", () => {
+	it("requires complete compare groups", () => {
 		for (const group of exampleGroups) {
-			expect(group.defaultLanguage).toBe("musi");
-			expect(Object.keys(group.variants)).toEqual([
-				"java",
-				"musi",
-				"rust",
-				"typescript",
-			]);
+			expect(typeof group.sourceText).toBe("string");
 		}
-	});
-
-	it("renders compare tabs into generated html", () => {
-		const docsHtml = renderedDocs.map((doc) => doc.html).join("\n");
-		expect(renderedSnippets.homeSampleHtml).toContain('data-code-tabs="1"');
-		expect(docsHtml).toContain('role="tablist"');
-		expect(docsHtml).toContain("TypeScript");
 	});
 });

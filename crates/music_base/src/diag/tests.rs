@@ -43,7 +43,7 @@ fn emit_colorless_matches_expected_format() {
     let output = emit_to_string(&diag, &sources, false);
 
     let expected = concat!(
-        "src/main.ms:1:14: error[ms2001]: expected ';' after expression\n",
+        "src/main.ms:1:14: error[MS2001]: expected ';' after expression\n",
         "  |\n",
         "1 | let x = 42 + y\n",
         "  |              ^\n",
@@ -69,7 +69,7 @@ fn no_labels_just_message() {
 
     let output = emit_to_string(&diag, &sources, false);
 
-    assert_eq!(output, "error[ms2999]: something went wrong\n");
+    assert_eq!(output, "error[MS2999]: something went wrong\n");
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn hint_renders_as_help_line() {
         .with_label(Span::new(0, 7), source_id, "");
 
     let output = emit_to_string(&diag, &sources, false);
-    assert!(output.contains("error[ms3001]: undefined binding 'writein'"));
+    assert!(output.contains("error[MS3001]: undefined binding 'writein'"));
     assert!(output.contains("help: did you mean 'writeln'?"));
 }
 

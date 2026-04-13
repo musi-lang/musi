@@ -91,7 +91,23 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
                 validate_surface_ty_id(types, item, diags);
             }
         }
-        SurfaceTyKind::Array { item, .. } => validate_surface_ty_id(types, *item, diags),
+        SurfaceTyKind::Seq { item } | SurfaceTyKind::Array { item, .. } => {
+            validate_surface_ty_id(types, *item, diags);
+        }
+        SurfaceTyKind::Range { bound }
+        | SurfaceTyKind::ClosedRange { bound }
+        | SurfaceTyKind::PartialRangeFrom { bound }
+        | SurfaceTyKind::PartialRangeUpTo { bound }
+        | SurfaceTyKind::PartialRangeThru { bound } => validate_surface_ty_id(types, *bound, diags),
+        SurfaceTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => {
+            validate_surface_ty_id(types, *effect, diags);
+            validate_surface_ty_id(types, *input, diags);
+            validate_surface_ty_id(types, *output, diags);
+        }
         SurfaceTyKind::Mut { inner } => validate_surface_ty_id(types, *inner, diags),
         SurfaceTyKind::Record { fields } => {
             for field in fields {

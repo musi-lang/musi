@@ -11,7 +11,7 @@ use crate::descriptor::{
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 7;
+pub const BINARY_VERSION: u16 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -158,20 +158,8 @@ pub enum ArtifactError {
 
 impl Artifact {
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            strings: Table::new(),
-            types: Table::new(),
-            constants: Table::new(),
-            globals: Table::new(),
-            methods: Table::new(),
-            effects: Table::new(),
-            classes: Table::new(),
-            foreigns: Table::new(),
-            exports: Table::new(),
-            data: Table::new(),
-            meta: Table::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn intern_string(&mut self, text: &str) -> StringId {
@@ -195,6 +183,23 @@ impl Artifact {
         self.string_text(descriptor.term)
     }
 
+    #[must_use]
+    pub fn data_for_type(&self, ty: TypeId) -> Option<(DataId, &DataDescriptor)> {
+        let type_name = self.type_name(ty);
+        self.data.iter().find(|(_, descriptor)| {
+            same_source_or_qualified_name(self.string_text(descriptor.name), type_name)
+        })
+    }
+
+    #[must_use]
+    pub fn data_by_name(&self, name: &str) -> Option<(DataId, &DataDescriptor)> {
+        self.data.iter().find(|(_, descriptor)| {
+            same_source_or_qualified_name(self.string_text(descriptor.name), name)
+        })
+    }
+}
+
+impl Artifact {
     /// Validates descriptor references, instruction operand shapes, and method label usage.
     ///
     /// # Errors
@@ -202,88 +207,16 @@ impl Artifact {
     /// Returns [`ArtifactError`] when the artifact contains an invalid table reference, label,
     /// effect op, or opcode/operand pairing.
     pub fn validate(&self) -> Result<(), ArtifactError> {
-        for (_, descriptor) in self.types.iter() {
-            self.require_string(descriptor.name)?;
-            self.require_string(descriptor.term)?;
-        }
-        for (_, descriptor) in self.constants.iter() {
-            self.require_string(descriptor.name)?;
-            match descriptor.value {
-                ConstantValue::String(id) => self.require_string(id)?,
-                ConstantValue::Syntax { text, .. } => self.require_string(text)?,
-                ConstantValue::Int(_) | ConstantValue::Float(_) | ConstantValue::Bool(_) => {}
-            }
-        }
-        for (_, descriptor) in self.globals.iter() {
-            self.require_string(descriptor.name)?;
-            if let Some(method) = descriptor.initializer {
-                self.require_method(method)?;
-            }
-        }
-        for (_, descriptor) in self.effects.iter() {
-            self.require_string(descriptor.name)?;
-            for op in &descriptor.ops {
-                self.require_string(op.name)?;
-                for ty in &op.param_tys {
-                    self.require_type(*ty)?;
-                }
-                self.require_type(op.result_ty)?;
-            }
-        }
-        for (_, descriptor) in self.classes.iter() {
-            self.require_string(descriptor.name)?;
-        }
-        for (_, descriptor) in self.foreigns.iter() {
-            self.require_string(descriptor.name)?;
-            for ty in &descriptor.param_tys {
-                self.require_type(*ty)?;
-            }
-            self.require_type(descriptor.result_ty)?;
-            self.require_string(descriptor.abi)?;
-            self.require_string(descriptor.symbol)?;
-            if let Some(link) = descriptor.link {
-                self.require_string(link)?;
-            }
-        }
-        for (_, descriptor) in self.data.iter() {
-            self.require_string(descriptor.name)?;
-            if let Some(repr) = descriptor.repr_kind {
-                self.require_string(repr)?;
-            }
-        }
-        for (_, descriptor) in self.exports.iter() {
-            self.require_string(descriptor.name)?;
-            match descriptor.target {
-                ExportTarget::Method(method) => self.require_method(method)?,
-                ExportTarget::Global(global) => self.require_global(global)?,
-                ExportTarget::Foreign(foreign) => self.require_foreign(foreign)?,
-                ExportTarget::Type(ty) => self.require_type(ty)?,
-                ExportTarget::Effect(effect) => {
-                    let _ = self
-                        .effects
-                        .as_slice()
-                        .get(usize::try_from(effect.raw()).unwrap_or(usize::MAX))
-                        .ok_or(ArtifactError::InvalidReference { table: "effects" })?;
-                }
-                ExportTarget::Class(class) => {
-                    let _ = self
-                        .classes
-                        .as_slice()
-                        .get(usize::try_from(class.raw()).unwrap_or(usize::MAX))
-                        .ok_or(ArtifactError::InvalidReference { table: "classes" })?;
-                }
-            }
-        }
-        for (_, descriptor) in self.methods.iter() {
-            self.validate_method(descriptor)?;
-        }
-        for (_, descriptor) in self.meta.iter() {
-            self.require_string(descriptor.target)?;
-            self.require_string(descriptor.key)?;
-            for value in &descriptor.values {
-                self.require_string(*value)?;
-            }
-        }
+        self.validate_types()?;
+        self.validate_constants()?;
+        self.validate_globals()?;
+        self.validate_effects()?;
+        self.validate_classes()?;
+        self.validate_foreigns()?;
+        self.validate_data()?;
+        self.validate_exports()?;
+        self.validate_methods()?;
+        self.validate_meta()?;
         Ok(())
     }
 
@@ -327,7 +260,15 @@ impl Artifact {
                 opcode: instruction.opcode.mnemonic(),
             });
         }
-        match &instruction.operand {
+        self.validate_instruction_operand(method, &instruction.operand)
+    }
+
+    fn validate_instruction_operand(
+        &self,
+        method: &MethodDescriptor,
+        operand: &Operand,
+    ) -> Result<(), ArtifactError> {
+        match operand {
             Operand::None | Operand::I16(_) | Operand::Local(_) => {}
             Operand::String(id) => {
                 self.require_string(*id)?;
@@ -344,8 +285,10 @@ impl Artifact {
             Operand::Method(id) => {
                 self.require_method(*id)?;
             }
-            Operand::WideMethodCaptures { method, .. } => {
-                self.require_method(*method)?;
+            Operand::WideMethodCaptures {
+                method: method_id, ..
+            } => {
+                self.require_method(*method_id)?;
             }
             Operand::Foreign(id) => {
                 self.require_foreign(*id)?;
@@ -358,7 +301,7 @@ impl Artifact {
                 }
             }
             Operand::EffectId(effect) => {
-                let _effect = self.effects.get(*effect);
+                self.require_effect(*effect)?;
             }
             Operand::Label(id) => {
                 require_label(method, *id)?;
@@ -370,6 +313,126 @@ impl Artifact {
                 for label in labels.iter().copied() {
                     require_label(method, label)?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_types(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.types.iter() {
+            self.require_string(descriptor.name)?;
+            self.require_string(descriptor.term)?;
+        }
+        Ok(())
+    }
+
+    fn validate_constants(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.constants.iter() {
+            self.require_string(descriptor.name)?;
+            match descriptor.value {
+                ConstantValue::String(id) => self.require_string(id)?,
+                ConstantValue::Syntax { text, .. } => self.require_string(text)?,
+                ConstantValue::Int(_) | ConstantValue::Float(_) | ConstantValue::Bool(_) => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_globals(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.globals.iter() {
+            self.require_string(descriptor.name)?;
+            if let Some(method) = descriptor.initializer {
+                self.require_method(method)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_effects(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.effects.iter() {
+            self.require_string(descriptor.name)?;
+            for op in &descriptor.ops {
+                self.require_string(op.name)?;
+                for ty in &op.param_tys {
+                    self.require_type(*ty)?;
+                }
+                self.require_type(op.result_ty)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_classes(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.classes.iter() {
+            self.require_string(descriptor.name)?;
+        }
+        Ok(())
+    }
+
+    fn validate_foreigns(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.foreigns.iter() {
+            self.require_string(descriptor.name)?;
+            for ty in &descriptor.param_tys {
+                self.require_type(*ty)?;
+            }
+            self.require_type(descriptor.result_ty)?;
+            self.require_string(descriptor.abi)?;
+            self.require_string(descriptor.symbol)?;
+            if let Some(link) = descriptor.link {
+                self.require_string(link)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_data(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.data.iter() {
+            self.require_string(descriptor.name)?;
+            for variant in &descriptor.variants {
+                self.require_string(variant.name)?;
+                for ty in &variant.field_tys {
+                    self.require_type(*ty)?;
+                }
+            }
+            if let Some(repr) = descriptor.repr_kind {
+                self.require_string(repr)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_exports(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.exports.iter() {
+            self.require_string(descriptor.name)?;
+            self.validate_export_target(descriptor.target)?;
+        }
+        Ok(())
+    }
+
+    fn validate_export_target(&self, target: ExportTarget) -> Result<(), ArtifactError> {
+        match target {
+            ExportTarget::Method(method) => self.require_method(method),
+            ExportTarget::Global(global) => self.require_global(global),
+            ExportTarget::Foreign(foreign) => self.require_foreign(foreign),
+            ExportTarget::Type(ty) => self.require_type(ty),
+            ExportTarget::Effect(effect) => self.require_effect(effect),
+            ExportTarget::Class(class) => self.require_class(class),
+        }
+    }
+
+    fn validate_methods(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.methods.iter() {
+            self.validate_method(descriptor)?;
+        }
+        Ok(())
+    }
+
+    fn validate_meta(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.meta.iter() {
+            self.require_string(descriptor.target)?;
+            self.require_string(descriptor.key)?;
+            for value in &descriptor.values {
+                self.require_string(*value)?;
             }
         }
         Ok(())
@@ -428,6 +491,32 @@ impl Artifact {
             .ok_or(ArtifactError::InvalidReference { table: "foreigns" })?;
         Ok(())
     }
+
+    fn require_effect(&self, id: EffectId) -> Result<(), ArtifactError> {
+        let _ = self
+            .effects
+            .as_slice()
+            .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
+            .ok_or(ArtifactError::InvalidReference { table: "effects" })?;
+        Ok(())
+    }
+
+    fn require_class(&self, id: ClassId) -> Result<(), ArtifactError> {
+        let _ = self
+            .classes
+            .as_slice()
+            .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
+            .ok_or(ArtifactError::InvalidReference { table: "classes" })?;
+        Ok(())
+    }
+}
+
+fn same_source_or_qualified_name(left: &str, right: &str) -> bool {
+    left == right || source_name(left) == source_name(right)
+}
+
+fn source_name(name: &str) -> &str {
+    name.rsplit_once("::").map_or(name, |(_, tail)| tail)
 }
 
 fn require_label(method: &MethodDescriptor, id: LabelId) -> Result<(), ArtifactError> {

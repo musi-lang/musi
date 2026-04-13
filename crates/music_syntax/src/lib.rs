@@ -35,6 +35,23 @@ pub struct LexedSource {
 
 impl LexedSource {
     #[must_use]
+    pub fn new(
+        text: impl Into<Box<str>>,
+        tokens: Vec<Token>,
+        trivia: TriviaList,
+        token_trivia: Vec<TriviaRange>,
+        errors: LexErrorList,
+    ) -> Self {
+        Self {
+            text: text.into(),
+            tokens,
+            trivia,
+            token_trivia,
+            errors,
+        }
+    }
+
+    #[must_use]
     pub fn text(&self) -> &str {
         &self.text
     }

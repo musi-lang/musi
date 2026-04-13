@@ -5,14 +5,31 @@ use crate::module::{HirExprId, HirLitId, HirPatId};
 use crate::origin::HirOrigin;
 use crate::ty::HirDim;
 
+type ConstraintRange = SliceRange<HirConstraint>;
+type MemberDefRange = SliceRange<HirMemberDef>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirExportMod {
     pub opaque: bool,
 }
 
+impl HirExportMod {
+    #[must_use]
+    pub const fn new(opaque: bool) -> Self {
+        Self { opaque }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirForeignMod {
     pub abi: Option<Symbol>,
+}
+
+impl HirForeignMod {
+    #[must_use]
+    pub const fn new(abi: Option<Symbol>) -> Self {
+        Self { abi }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +40,19 @@ pub struct HirMods {
 }
 
 impl HirMods {
+    #[must_use]
+    pub const fn new(
+        attrs: SliceRange<HirAttr>,
+        export: Option<HirExportMod>,
+        foreign: Option<HirForeignMod>,
+    ) -> Self {
+        Self {
+            attrs,
+            export,
+            foreign,
+        }
+    }
+
     pub const EMPTY: Self = Self {
         attrs: SliceRange::EMPTY,
         export: None,
@@ -59,11 +89,34 @@ pub struct HirBinder {
     pub ty: Option<HirExprId>,
 }
 
+impl HirBinder {
+    #[must_use]
+    pub const fn new(name: Ident, ty: Option<HirExprId>) -> Self {
+        Self { name, ty }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirExpr {
     pub origin: HirOrigin,
     pub mods: HirMods,
     pub kind: HirExprKind,
+}
+
+impl HirExpr {
+    #[must_use]
+    pub const fn new(origin: HirOrigin, kind: HirExprKind) -> Self {
+        Self {
+            origin,
+            mods: HirMods::EMPTY,
+            kind,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_mods(origin: HirOrigin, mods: HirMods, kind: HirExprKind) -> Self {
+        Self { origin, mods, kind }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +144,11 @@ pub enum HirExprKind {
     ArrayTy {
         dims: SliceRange<HirDim>,
         item: HirExprId,
+    },
+    HandlerTy {
+        effect: HirExprId,
+        input: HirExprId,
+        output: HirExprId,
     },
     Record {
         items: SliceRange<HirRecordItem>,
@@ -147,6 +205,10 @@ pub enum HirExprKind {
         op: HirPrefixOp,
         expr: HirExprId,
     },
+    PartialRange {
+        kind: HirPartialRangeKind,
+        expr: HirExprId,
+    },
     Binary {
         op: HirBinaryOp,
         left: HirExprId,
@@ -159,7 +221,7 @@ pub enum HirExprKind {
         type_params: SliceRange<HirBinder>,
         has_param_clause: bool,
         params: SliceRange<HirParam>,
-        constraints: SliceRange<HirConstraint>,
+        constraints: ConstraintRange,
         effects: Option<HirEffectSet>,
         sig: Option<HirExprId>,
         value: HirExprId,
@@ -177,25 +239,28 @@ pub enum HirExprKind {
         fields: SliceRange<HirFieldDef>,
     },
     Effect {
-        members: SliceRange<HirMemberDef>,
+        members: MemberDefRange,
     },
     Class {
-        constraints: SliceRange<HirConstraint>,
-        members: SliceRange<HirMemberDef>,
+        constraints: ConstraintRange,
+        members: MemberDefRange,
     },
     Instance {
         type_params: SliceRange<HirBinder>,
-        constraints: SliceRange<HirConstraint>,
+        constraints: ConstraintRange,
         class: HirExprId,
-        members: SliceRange<HirMemberDef>,
+        members: MemberDefRange,
     },
     Perform {
         expr: HirExprId,
     },
+    HandlerLit {
+        effect: Ident,
+        clauses: SliceRange<HirHandleClause>,
+    },
     Handle {
         expr: HirExprId,
-        handler: Ident,
-        clauses: SliceRange<HirHandleClause>,
+        handler: HirExprId,
     },
     Resume {
         expr: Option<HirExprId>,
@@ -223,6 +288,13 @@ pub enum HirPrefixOp {
     Mut,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirPartialRangeKind {
+    From,
+    UpTo,
+    Thru,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirBinaryOp {
     Assign,
@@ -238,6 +310,8 @@ pub enum HirBinaryOp {
     Gt,
     Le,
     Ge,
+    ClosedRange,
+    OpenRange,
     In,
     Shl,
     Shr,
@@ -255,6 +329,13 @@ pub struct HirArg {
     pub expr: HirExprId,
 }
 
+impl HirArg {
+    #[must_use]
+    pub const fn new(spread: bool, expr: HirExprId) -> Self {
+        Self { spread, expr }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirParam {
     pub name: Ident,
@@ -262,9 +343,53 @@ pub struct HirParam {
     pub default: Option<HirExprId>,
 }
 
+impl HirParam {
+    #[must_use]
+    pub const fn new(name: Ident, ty: Option<HirExprId>, default: Option<HirExprId>) -> Self {
+        Self { name, ty, default }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirLetMods {
     pub is_rec: bool,
+    pub receiver: Option<HirLetReceiver>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirLetReceiver {
+    pub is_mut: bool,
+    pub binder: Ident,
+    pub ty: HirExprId,
+    pub member: Ident,
+}
+
+impl HirLetReceiver {
+    #[must_use]
+    pub const fn new(is_mut: bool, binder: Ident, ty: HirExprId, member: Ident) -> Self {
+        Self {
+            is_mut,
+            binder,
+            ty,
+            member,
+        }
+    }
+}
+
+impl HirLetMods {
+    #[must_use]
+    pub const fn new(is_rec: bool) -> Self {
+        Self {
+            is_rec,
+            receiver: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_receiver(mut self, receiver: HirLetReceiver) -> Self {
+        self.receiver = Some(receiver);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,11 +398,29 @@ pub struct HirArrayItem {
     pub expr: HirExprId,
 }
 
+impl HirArrayItem {
+    #[must_use]
+    pub const fn new(spread: bool, expr: HirExprId) -> Self {
+        Self { spread, expr }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirRecordItem {
     pub spread: bool,
     pub name: Option<Ident>,
     pub value: HirExprId,
+}
+
+impl HirRecordItem {
+    #[must_use]
+    pub const fn new(spread: bool, name: Option<Ident>, value: HirExprId) -> Self {
+        Self {
+            spread,
+            name,
+            value,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,10 +436,28 @@ pub struct HirAttr {
     pub args: SliceRange<HirAttrArg>,
 }
 
+impl HirAttr {
+    #[must_use]
+    pub const fn new(
+        origin: HirOrigin,
+        path: SliceRange<Ident>,
+        args: SliceRange<HirAttrArg>,
+    ) -> Self {
+        Self { origin, path, args }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirAttrArg {
     pub name: Option<Ident>,
     pub value: HirExprId,
+}
+
+impl HirAttrArg {
+    #[must_use]
+    pub const fn new(name: Option<Ident>, value: HirExprId) -> Self {
+        Self { name, value }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -305,6 +466,23 @@ pub struct HirCaseArm {
     pub pat: HirPatId,
     pub guard: Option<HirExprId>,
     pub expr: HirExprId,
+}
+
+impl HirCaseArm {
+    #[must_use]
+    pub const fn new(
+        attrs: SliceRange<HirAttr>,
+        pat: HirPatId,
+        guard: Option<HirExprId>,
+        expr: HirExprId,
+    ) -> Self {
+        Self {
+            attrs,
+            pat,
+            guard,
+            expr,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -320,16 +498,37 @@ pub struct HirConstraint {
     pub value: HirExprId,
 }
 
+impl HirConstraint {
+    #[must_use]
+    pub const fn new(name: Ident, kind: HirConstraintKind, value: HirExprId) -> Self {
+        Self { name, kind, value }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirEffectSet {
     pub items: SliceRange<HirEffectItem>,
     pub open: Option<Ident>,
 }
 
+impl HirEffectSet {
+    #[must_use]
+    pub const fn new(items: SliceRange<HirEffectItem>, open: Option<Ident>) -> Self {
+        Self { items, open }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirEffectItem {
     pub name: Ident,
     pub arg: Option<HirExprId>,
+}
+
+impl HirEffectItem {
+    #[must_use]
+    pub const fn new(name: Ident, arg: Option<HirExprId>) -> Self {
+        Self { name, arg }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -349,6 +548,29 @@ pub struct HirMemberDef {
     pub value: Option<HirExprId>,
 }
 
+impl HirMemberDef {
+    #[must_use]
+    pub const fn new(
+        origin: HirOrigin,
+        attrs: SliceRange<HirAttr>,
+        kind: HirMemberKind,
+        name: Ident,
+        params: SliceRange<HirParam>,
+        sig: Option<HirExprId>,
+        value: Option<HirExprId>,
+    ) -> Self {
+        Self {
+            origin,
+            attrs,
+            kind,
+            name,
+            params,
+            sig,
+            value,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirVariantDef {
     pub origin: HirOrigin,
@@ -356,6 +578,25 @@ pub struct HirVariantDef {
     pub name: Ident,
     pub arg: Option<HirExprId>,
     pub value: Option<HirExprId>,
+}
+
+impl HirVariantDef {
+    #[must_use]
+    pub const fn new(
+        origin: HirOrigin,
+        attrs: SliceRange<HirAttr>,
+        name: Ident,
+        arg: Option<HirExprId>,
+        value: Option<HirExprId>,
+    ) -> Self {
+        Self {
+            origin,
+            attrs,
+            name,
+            arg,
+            value,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -367,11 +608,37 @@ pub struct HirFieldDef {
     pub value: Option<HirExprId>,
 }
 
+impl HirFieldDef {
+    #[must_use]
+    pub const fn new(
+        origin: HirOrigin,
+        attrs: SliceRange<HirAttr>,
+        name: Ident,
+        ty: HirExprId,
+        value: Option<HirExprId>,
+    ) -> Self {
+        Self {
+            origin,
+            attrs,
+            name,
+            ty,
+            value,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirHandleClause {
     pub op: Ident,
     pub params: SliceRange<Ident>,
     pub body: HirExprId,
+}
+
+impl HirHandleClause {
+    #[must_use]
+    pub const fn new(op: Ident, params: SliceRange<Ident>, body: HirExprId) -> Self {
+        Self { op, params, body }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -406,6 +673,13 @@ pub enum HirSpliceKind {
 pub struct HirLit {
     pub origin: HirOrigin,
     pub kind: HirLitKind,
+}
+
+impl HirLit {
+    #[must_use]
+    pub const fn new(origin: HirOrigin, kind: HirLitKind) -> Self {
+        Self { origin, kind }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

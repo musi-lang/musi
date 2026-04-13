@@ -168,10 +168,11 @@ impl Vm {
                 };
                 self.invoke_continuation(&continuation, value.clone())
             }
-            Value::Foreign(ForeignValue {
-                module_slot,
-                foreign,
-            }) => {
+            Value::Foreign(foreign_value) => {
+                let ForeignValue {
+                    module_slot,
+                    foreign,
+                } = foreign_value;
                 let call = self.foreign_call(module_slot, foreign);
                 self.host.call_foreign(&call, args)
             }
@@ -187,20 +188,18 @@ impl Vm {
             Value::Unit => ValueView::Unit,
             Value::Int(value) => ValueView::Int(*value),
             Value::Float(value) => ValueView::Float(*value),
-            Value::Bool(value) => ValueView::Bool(*value),
-            Value::String(text) => ValueView::String(StringView { text }),
-            Value::Syntax(term) => ValueView::Syntax(SyntaxView {
-                inner: term.as_ref(),
-            }),
-            Value::Seq(seq) => ValueView::Seq(SeqView {
-                inner: seq.borrow(),
-            }),
+            Value::String(text) => ValueView::String(StringView::new(text)),
+            Value::CPtr(address) => ValueView::CPtr(*address),
+            Value::Syntax(term) => ValueView::Syntax(SyntaxView::new(term.as_ref())),
+            Value::Seq(seq) => ValueView::Seq(SeqView::new(seq.borrow())),
             Value::Data(data) => {
                 let inner = data.borrow();
-                if inner.tag == 0 {
-                    ValueView::Record(RecordView { inner })
+                if inner.fields.is_empty() && self.is_named_type(inner.ty, "Bool") {
+                    ValueView::Bool(inner.tag != 0)
+                } else if inner.tag == 0 {
+                    ValueView::Record(RecordView::new(inner))
                 } else {
-                    ValueView::Data(RecordView { inner })
+                    ValueView::Data(RecordView::new(inner))
                 }
             }
             Value::Closure(_) => ValueView::Closure,

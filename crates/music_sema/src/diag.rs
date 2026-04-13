@@ -1,5 +1,6 @@
 use music_base::diag::{Diag, DiagCode};
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SemaDiagKind {
     AttrDuplicateRepr,
@@ -10,17 +11,29 @@ pub enum SemaDiagKind {
     AttrDuplicateLayoutPack,
     AttrLayoutPackRequiresU32,
     AttrUnknownArg,
-    AttrMusiLangRequiresPlainBindLet,
-    AttrMusiLangRequiresNameString,
-    AttrMusiIntrinsicRequiresOpcodeString,
+    AttrKnownRequiresPlainBindLet,
+    AttrKnownRequiresNameString,
+    AttrKnownRequiresFoundationModule,
+    AttrKnownRequiresExport,
+    AttrKnownUnknownName,
+    AttrIntrinsicRequiresNameString,
+    AttrIntrinsicRequiresIntrinsicsModule,
+    AttrIntrinsicRequiresForeignLet,
     AttrLinkRequiresForeignLet,
     AttrDataLayoutRequiresDataTarget,
+    AttrFrozenRequiresExportedNonOpaqueData,
+    AttrHotColdRequiresCallable,
+    AttrHotColdConflict,
+    AttrDeprecatedRequiresStringValue,
+    AttrSinceRequiresVersionString,
+    AttrOpaqueRequiresStructuralExport,
     AttrForeignRequiresForeignLet,
     AttrLinkRequiresStringValue,
     AttrWhenRequiresStringValue,
     AttrWhenRequiresStringList,
     ForeignSignatureRequired,
     InvalidFfiType,
+    LawMustBePure,
     CollectDuplicateDataVariant,
     CollectDuplicateEffectOp,
     CollectDuplicateEffectLaw,
@@ -73,6 +86,8 @@ pub enum SemaDiagKind {
     InvalidIndexTarget,
     IndexRequiresArgument,
     UnknownField,
+    AmbiguousAttachedMethod,
+    AttachedMethodRequiresMutReceiver,
     InvalidFieldAccess,
     InvalidOptionalFieldAccess,
     InvalidRecordUpdateTarget,
@@ -94,395 +109,49 @@ pub enum SemaDiagKind {
     OrPatternBindersMismatch,
     UnsatisfiedConstraint,
     AmbiguousInstanceMatch,
+    ConstrainedNonCallableBinding,
+    ExportedCallableRequiresConcreteConstraints,
 }
 
 impl SemaDiagKind {
     #[must_use]
-    pub const fn code(self) -> DiagCode {
-        DiagCode::new(match self {
-            Self::AttrDuplicateRepr => 3000,
-            Self::AttrReprRequiresKindString => 3001,
-            Self::AttrLayoutArgRequiresName => 3002,
-            Self::AttrDuplicateLayoutAlign => 3003,
-            Self::AttrLayoutAlignRequiresU32 => 3004,
-            Self::AttrDuplicateLayoutPack => 3005,
-            Self::AttrLayoutPackRequiresU32 => 3006,
-            Self::AttrUnknownArg => 3007,
-            Self::AttrMusiLangRequiresPlainBindLet => 3008,
-            Self::AttrMusiLangRequiresNameString => 3009,
-            Self::AttrMusiIntrinsicRequiresOpcodeString => 3010,
-            Self::AttrLinkRequiresForeignLet => 3011,
-            Self::AttrDataLayoutRequiresDataTarget => 3012,
-            Self::AttrForeignRequiresForeignLet => 3013,
-            Self::AttrLinkRequiresStringValue => 3014,
-            Self::AttrWhenRequiresStringValue => 3015,
-            Self::AttrWhenRequiresStringList => 3016,
-            Self::ForeignSignatureRequired => 3017,
-            Self::InvalidFfiType => 3018,
-            Self::CollectDuplicateDataVariant => 3019,
-            Self::CollectDuplicateEffectOp => 3020,
-            Self::CollectDuplicateEffectLaw => 3021,
-            Self::CollectDuplicateClassMember => 3022,
-            Self::CollectDuplicateClassLaw => 3023,
-            Self::UnknownExport => 3024,
-            Self::InvalidPerformTarget => 3025,
-            Self::UnknownEffect => 3026,
-            Self::DuplicateHandlerClause => 3027,
-            Self::UnknownEffectOp => 3028,
-            Self::HandlerClauseArityMismatch => 3029,
-            Self::HandleRequiresSingleValueClause => 3030,
-            Self::HandlerMissingOperationClause => 3031,
-            Self::ResumeOutsideHandlerClause => 3032,
-            Self::EffectNotDeclared => 3033,
-            Self::InstanceMemberArityMismatch => 3034,
-            Self::UnknownInstanceMember => 3035,
-            Self::InstanceMemberValueRequired => 3036,
-            Self::DuplicateInstanceMember => 3037,
-            Self::MissingInstanceMember => 3038,
-            Self::InvalidInstanceTarget => 3039,
-            Self::SealedClass => 3040,
-            Self::UnknownClass => 3041,
-            Self::DuplicateInstance => 3042,
-            Self::PlainLetRequiresIrrefutablePattern => 3043,
-            Self::ModuleDestructuringRequiresStaticModule => 3044,
-            Self::RecordDestructuringRequiresRecordOrModule => 3045,
-            Self::CallableLetRequiresSimpleBindingPattern => 3046,
-            Self::ArraySpreadRequiresOneDimensionalArray => 3047,
-            Self::InvalidArraySpreadSource => 3048,
-            Self::InvalidRecordSpreadSource => 3049,
-            Self::DuplicateRecordField => 3050,
-            Self::VariantMissingDataContext => 3051,
-            Self::VariantConstructorArityMismatch => 3052,
-            Self::InvalidVariantArity => 3053,
-            Self::UnknownDataVariant => 3054,
-            Self::RecordLiteralRequiresNamedFields => 3055,
-            Self::ArrayLiteralLengthUnknownFromRuntimeSpread => 3056,
-            Self::ArrayLiteralLengthMismatch => 3057,
-            Self::SumConstructorArityMismatch => 3058,
-            Self::InvalidIndexArity => 3059,
-            Self::InvalidCallTarget => 3060,
-            Self::CallArityMismatch => 3061,
-            Self::InvalidTypeApplication => 3062,
-            Self::InvalidCallSpreadSource => 3063,
-            Self::CallRuntimeSpreadRequiresArrayAny => 3064,
-            Self::CallSpreadRequiresTupleOrArray => 3065,
-            Self::DeclarationUsedAsValue => 3066,
-            Self::TargetGateRejected => 3067,
-            Self::InvalidIndexTarget => 3068,
-            Self::IndexRequiresArgument => 3069,
-            Self::UnknownField => 3070,
-            Self::InvalidFieldAccess => 3071,
-            Self::InvalidOptionalFieldAccess => 3072,
-            Self::InvalidRecordUpdateTarget => 3073,
-            Self::MutForbiddenInTypeTestTarget => 3074,
-            Self::MutForbiddenInTypeCastTarget => 3075,
-            Self::WriteRequiresMutValue => 3076,
-            Self::WriteRequiresMutArray => 3077,
-            Self::WriteRequiresMutRecord => 3078,
-            Self::InvalidFieldUpdateTarget => 3079,
-            Self::UnsupportedAssignmentTarget => 3080,
-            Self::NumericOperandRequired => 3081,
-            Self::BinaryOperatorHasNoExecutableLowering => 3082,
-            Self::TypeMismatch => 3083,
-            Self::InvalidTypeExpression => 3084,
-            Self::TypeApplicationArityMismatch => 3085,
-            Self::ArrayTypeRequiresItem => 3086,
-            Self::AmbiguousVariantTag => 3087,
-            Self::VariantPatternArityMismatch => 3088,
-            Self::OrPatternBindersMismatch => 3089,
-            Self::UnsatisfiedConstraint => 3090,
-            Self::AmbiguousInstanceMatch => 3091,
-        })
+    pub fn code(self) -> DiagCode {
+        DiagCode::new(self.info().code)
     }
 
     #[must_use]
-    pub const fn message(self) -> &'static str {
-        match self {
-            Self::AttrDuplicateRepr
-            | Self::AttrReprRequiresKindString
-            | Self::AttrLayoutArgRequiresName
-            | Self::AttrDuplicateLayoutAlign
-            | Self::AttrLayoutAlignRequiresU32
-            | Self::AttrDuplicateLayoutPack
-            | Self::AttrLayoutPackRequiresU32
-            | Self::AttrUnknownArg
-            | Self::AttrMusiLangRequiresPlainBindLet
-            | Self::AttrMusiLangRequiresNameString
-            | Self::AttrMusiIntrinsicRequiresOpcodeString
-            | Self::AttrLinkRequiresForeignLet
-            | Self::AttrDataLayoutRequiresDataTarget
-            | Self::AttrForeignRequiresForeignLet
-            | Self::AttrLinkRequiresStringValue
-            | Self::AttrWhenRequiresStringValue
-            | Self::AttrWhenRequiresStringList
-            | Self::ForeignSignatureRequired
-            | Self::InvalidFfiType => attr_message(self),
-            Self::CollectDuplicateDataVariant
-            | Self::CollectDuplicateEffectOp
-            | Self::CollectDuplicateEffectLaw
-            | Self::CollectDuplicateClassMember
-            | Self::CollectDuplicateClassLaw
-            | Self::UnknownExport
-            | Self::InvalidPerformTarget
-            | Self::UnknownEffect
-            | Self::DuplicateHandlerClause
-            | Self::UnknownEffectOp
-            | Self::HandlerClauseArityMismatch
-            | Self::HandleRequiresSingleValueClause
-            | Self::HandlerMissingOperationClause
-            | Self::ResumeOutsideHandlerClause
-            | Self::EffectNotDeclared
-            | Self::InstanceMemberArityMismatch
-            | Self::UnknownInstanceMember
-            | Self::InstanceMemberValueRequired
-            | Self::DuplicateInstanceMember
-            | Self::MissingInstanceMember
-            | Self::InvalidInstanceTarget
-            | Self::SealedClass
-            | Self::UnknownClass
-            | Self::DuplicateInstance
-            | Self::PlainLetRequiresIrrefutablePattern
-            | Self::ModuleDestructuringRequiresStaticModule
-            | Self::RecordDestructuringRequiresRecordOrModule
-            | Self::CallableLetRequiresSimpleBindingPattern => decl_message(self),
-            _ => expr_message(self),
-        }
+    pub fn message(self) -> &'static str {
+        self.info().message
     }
 
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         self.message()
     }
-}
 
-const fn attr_message(kind: SemaDiagKind) -> &'static str {
-    match kind {
-        SemaDiagKind::AttrDuplicateRepr => "duplicate `@repr`",
-        SemaDiagKind::AttrReprRequiresKindString => "`@repr` requires string `kind` arg",
-        SemaDiagKind::AttrLayoutArgRequiresName => "`@layout` arg requires name",
-        SemaDiagKind::AttrDuplicateLayoutAlign => "duplicate `@layout align`",
-        SemaDiagKind::AttrLayoutAlignRequiresU32 => "`@layout align` requires u32 value",
-        SemaDiagKind::AttrDuplicateLayoutPack => "duplicate `@layout pack`",
-        SemaDiagKind::AttrLayoutPackRequiresU32 => "`@layout pack` requires u32 value",
-        SemaDiagKind::AttrUnknownArg => "unknown attr arg",
-        SemaDiagKind::AttrMusiLangRequiresPlainBindLet => {
-            "`@musi.lang` requires plain bind `let` target"
+    fn info(self) -> &'static SemaDiagInfo {
+        let mut index = 0;
+        while index < SEMA_DIAG_INFOS.len() {
+            let info = &SEMA_DIAG_INFOS[index];
+            if info.kind == self {
+                return info;
+            }
+            index += 1;
         }
-        SemaDiagKind::AttrMusiLangRequiresNameString => "`@musi.lang` requires string `name` arg",
-        SemaDiagKind::AttrMusiIntrinsicRequiresOpcodeString => {
-            "`@musi.intrinsic` requires string `opcode` arg"
-        }
-        SemaDiagKind::AttrLinkRequiresForeignLet => "`@link` requires foreign `let` target",
-        SemaDiagKind::AttrDataLayoutRequiresDataTarget => "data layout attr requires data target",
-        SemaDiagKind::AttrForeignRequiresForeignLet => "foreign attr requires foreign `let` target",
-        SemaDiagKind::AttrLinkRequiresStringValue => "`@link` requires string values",
-        SemaDiagKind::AttrWhenRequiresStringValue => "`@when` requires string values",
-        SemaDiagKind::AttrWhenRequiresStringList => "`@when` requires string list for `feature`",
-        SemaDiagKind::ForeignSignatureRequired => "foreign signature required",
-        SemaDiagKind::InvalidFfiType => "invalid ffi type",
-        _ => "",
+        &SEMA_DIAG_INFOS[0]
     }
-}
 
-const fn decl_message(kind: SemaDiagKind) -> &'static str {
-    match kind {
-        SemaDiagKind::CollectDuplicateDataVariant => "duplicate data variant",
-        SemaDiagKind::CollectDuplicateEffectOp => "duplicate effect op",
-        SemaDiagKind::CollectDuplicateEffectLaw => "duplicate effect law",
-        SemaDiagKind::CollectDuplicateClassMember => "duplicate class member",
-        SemaDiagKind::CollectDuplicateClassLaw => "duplicate class law",
-        SemaDiagKind::UnknownExport => "unknown export",
-        SemaDiagKind::InvalidPerformTarget => "invalid perform target",
-        SemaDiagKind::UnknownEffect => "unknown effect",
-        SemaDiagKind::DuplicateHandlerClause => "duplicate handler clause",
-        SemaDiagKind::UnknownEffectOp => "unknown effect op",
-        SemaDiagKind::HandlerClauseArityMismatch => "handler clause arity mismatch",
-        SemaDiagKind::HandleRequiresSingleValueClause => "handle requires exactly one value clause",
-        SemaDiagKind::HandlerMissingOperationClause => "handler missing operation clause",
-        SemaDiagKind::ResumeOutsideHandlerClause => "resume outside handler clause",
-        SemaDiagKind::EffectNotDeclared => "effect not declared",
-        SemaDiagKind::InstanceMemberArityMismatch => "instance member arity mismatch",
-        SemaDiagKind::UnknownInstanceMember => "unknown instance member",
-        SemaDiagKind::InstanceMemberValueRequired => "instance member value required",
-        SemaDiagKind::DuplicateInstanceMember => "duplicate instance member",
-        SemaDiagKind::MissingInstanceMember => "missing instance member",
-        SemaDiagKind::InvalidInstanceTarget => "invalid instance target",
-        SemaDiagKind::SealedClass => "sealed class",
-        SemaDiagKind::UnknownClass => "unknown class",
-        SemaDiagKind::DuplicateInstance => "duplicate instance",
-        SemaDiagKind::PlainLetRequiresIrrefutablePattern => {
-            "plain `let` requires irrefutable pattern"
-        }
-        SemaDiagKind::ModuleDestructuringRequiresStaticModule => {
-            "module destructuring requires static module value"
-        }
-        SemaDiagKind::RecordDestructuringRequiresRecordOrModule => {
-            "record destructuring requires record or module value"
-        }
-        SemaDiagKind::CallableLetRequiresSimpleBindingPattern => {
-            "callable `let` requires simple binding pattern"
-        }
-        _ => "",
-    }
-}
-
-const fn expr_message(kind: SemaDiagKind) -> &'static str {
-    match kind {
-        SemaDiagKind::ArraySpreadRequiresOneDimensionalArray => {
-            "array spread requires one-dimensional array"
-        }
-        SemaDiagKind::InvalidArraySpreadSource => "invalid array spread source",
-        SemaDiagKind::InvalidRecordSpreadSource => "invalid record spread source",
-        SemaDiagKind::DuplicateRecordField => "duplicate record field",
-        SemaDiagKind::VariantMissingDataContext => "variant constructor requires data type context",
-        SemaDiagKind::VariantConstructorArityMismatch => "variant constructor arity mismatch",
-        SemaDiagKind::InvalidVariantArity => "invalid variant arity",
-        SemaDiagKind::UnknownDataVariant => "unknown data variant",
-        SemaDiagKind::RecordLiteralRequiresNamedFields => "record literal requires named fields",
-        SemaDiagKind::ArrayLiteralLengthUnknownFromRuntimeSpread => {
-            "array literal length unknown from runtime spread"
-        }
-        SemaDiagKind::ArrayLiteralLengthMismatch => "array literal length mismatch",
-        SemaDiagKind::SumConstructorArityMismatch => "sum constructor arity mismatch",
-        SemaDiagKind::InvalidIndexArity => "invalid index arity",
-        SemaDiagKind::InvalidCallTarget => "invalid call target",
-        SemaDiagKind::CallArityMismatch => "call arity mismatch",
-        SemaDiagKind::InvalidTypeApplication => "invalid type application",
-        SemaDiagKind::InvalidCallSpreadSource => "invalid call spread source",
-        SemaDiagKind::CallRuntimeSpreadRequiresArrayAny => {
-            "call runtime spread requires `Array[Any]`"
-        }
-        SemaDiagKind::CallSpreadRequiresTupleOrArray => "call spread requires tuple or array",
-        SemaDiagKind::DeclarationUsedAsValue => "declaration form used as value",
-        SemaDiagKind::TargetGateRejected => "target gate rejected item",
-        SemaDiagKind::InvalidIndexTarget => "invalid index target",
-        SemaDiagKind::IndexRequiresArgument => "index requires one or more args",
-        SemaDiagKind::UnknownField => "unknown field",
-        SemaDiagKind::InvalidFieldAccess => "invalid field access",
-        SemaDiagKind::InvalidOptionalFieldAccess => "invalid optional field access",
-        SemaDiagKind::InvalidRecordUpdateTarget => "invalid record update target",
-        SemaDiagKind::MutForbiddenInTypeTestTarget => "`mut` not allowed in type test target",
-        SemaDiagKind::MutForbiddenInTypeCastTarget => "`mut` not allowed in type cast target",
-        SemaDiagKind::WriteRequiresMutValue => "write requires `mut T`",
-        SemaDiagKind::WriteRequiresMutArray => "write requires `mut []T`",
-        SemaDiagKind::WriteRequiresMutRecord => "write requires `mut { ... }`",
-        SemaDiagKind::InvalidFieldUpdateTarget => "invalid field update target",
-        SemaDiagKind::UnsupportedAssignmentTarget => "unsupported assignment target",
-        SemaDiagKind::NumericOperandRequired => "numeric operand required",
-        SemaDiagKind::BinaryOperatorHasNoExecutableLowering => {
-            "binary operator has no executable lowering"
-        }
-        SemaDiagKind::TypeMismatch => "type mismatch",
-        SemaDiagKind::InvalidTypeExpression => "invalid type expression",
-        SemaDiagKind::TypeApplicationArityMismatch => "type application arity mismatch",
-        SemaDiagKind::ArrayTypeRequiresItem => "Array requires at least one arg",
-        SemaDiagKind::AmbiguousVariantTag => "ambiguous variant tag; add type annotation",
-        SemaDiagKind::VariantPatternArityMismatch => "variant pattern arity mismatch",
-        SemaDiagKind::OrPatternBindersMismatch => "or-pattern binders must match",
-        SemaDiagKind::UnsatisfiedConstraint => "unsatisfied constraint",
-        SemaDiagKind::AmbiguousInstanceMatch => "ambiguous instance match",
-        _ => "",
-    }
-}
-
-impl SemaDiagKind {
     #[must_use]
-    pub const fn from_code(code: DiagCode) -> Option<Self> {
-        Some(match code.raw() {
-            3000 => Self::AttrDuplicateRepr,
-            3001 => Self::AttrReprRequiresKindString,
-            3002 => Self::AttrLayoutArgRequiresName,
-            3003 => Self::AttrDuplicateLayoutAlign,
-            3004 => Self::AttrLayoutAlignRequiresU32,
-            3005 => Self::AttrDuplicateLayoutPack,
-            3006 => Self::AttrLayoutPackRequiresU32,
-            3007 => Self::AttrUnknownArg,
-            3008 => Self::AttrMusiLangRequiresPlainBindLet,
-            3009 => Self::AttrMusiLangRequiresNameString,
-            3010 => Self::AttrMusiIntrinsicRequiresOpcodeString,
-            3011 => Self::AttrLinkRequiresForeignLet,
-            3012 => Self::AttrDataLayoutRequiresDataTarget,
-            3013 => Self::AttrForeignRequiresForeignLet,
-            3014 => Self::AttrLinkRequiresStringValue,
-            3015 => Self::AttrWhenRequiresStringValue,
-            3016 => Self::AttrWhenRequiresStringList,
-            3017 => Self::ForeignSignatureRequired,
-            3018 => Self::InvalidFfiType,
-            3019 => Self::CollectDuplicateDataVariant,
-            3020 => Self::CollectDuplicateEffectOp,
-            3021 => Self::CollectDuplicateEffectLaw,
-            3022 => Self::CollectDuplicateClassMember,
-            3023 => Self::CollectDuplicateClassLaw,
-            3024 => Self::UnknownExport,
-            3025 => Self::InvalidPerformTarget,
-            3026 => Self::UnknownEffect,
-            3027 => Self::DuplicateHandlerClause,
-            3028 => Self::UnknownEffectOp,
-            3029 => Self::HandlerClauseArityMismatch,
-            3030 => Self::HandleRequiresSingleValueClause,
-            3031 => Self::HandlerMissingOperationClause,
-            3032 => Self::ResumeOutsideHandlerClause,
-            3033 => Self::EffectNotDeclared,
-            3034 => Self::InstanceMemberArityMismatch,
-            3035 => Self::UnknownInstanceMember,
-            3036 => Self::InstanceMemberValueRequired,
-            3037 => Self::DuplicateInstanceMember,
-            3038 => Self::MissingInstanceMember,
-            3039 => Self::InvalidInstanceTarget,
-            3040 => Self::SealedClass,
-            3041 => Self::UnknownClass,
-            3042 => Self::DuplicateInstance,
-            3043 => Self::PlainLetRequiresIrrefutablePattern,
-            3044 => Self::ModuleDestructuringRequiresStaticModule,
-            3045 => Self::RecordDestructuringRequiresRecordOrModule,
-            3046 => Self::CallableLetRequiresSimpleBindingPattern,
-            3047 => Self::ArraySpreadRequiresOneDimensionalArray,
-            3048 => Self::InvalidArraySpreadSource,
-            3049 => Self::InvalidRecordSpreadSource,
-            3050 => Self::DuplicateRecordField,
-            3051 => Self::VariantMissingDataContext,
-            3052 => Self::VariantConstructorArityMismatch,
-            3053 => Self::InvalidVariantArity,
-            3054 => Self::UnknownDataVariant,
-            3055 => Self::RecordLiteralRequiresNamedFields,
-            3056 => Self::ArrayLiteralLengthUnknownFromRuntimeSpread,
-            3057 => Self::ArrayLiteralLengthMismatch,
-            3058 => Self::SumConstructorArityMismatch,
-            3059 => Self::InvalidIndexArity,
-            3060 => Self::InvalidCallTarget,
-            3061 => Self::CallArityMismatch,
-            3062 => Self::InvalidTypeApplication,
-            3063 => Self::InvalidCallSpreadSource,
-            3064 => Self::CallRuntimeSpreadRequiresArrayAny,
-            3065 => Self::CallSpreadRequiresTupleOrArray,
-            3066 => Self::DeclarationUsedAsValue,
-            3067 => Self::TargetGateRejected,
-            3068 => Self::InvalidIndexTarget,
-            3069 => Self::IndexRequiresArgument,
-            3070 => Self::UnknownField,
-            3071 => Self::InvalidFieldAccess,
-            3072 => Self::InvalidOptionalFieldAccess,
-            3073 => Self::InvalidRecordUpdateTarget,
-            3074 => Self::MutForbiddenInTypeTestTarget,
-            3075 => Self::MutForbiddenInTypeCastTarget,
-            3076 => Self::WriteRequiresMutValue,
-            3077 => Self::WriteRequiresMutArray,
-            3078 => Self::WriteRequiresMutRecord,
-            3079 => Self::InvalidFieldUpdateTarget,
-            3080 => Self::UnsupportedAssignmentTarget,
-            3081 => Self::NumericOperandRequired,
-            3082 => Self::BinaryOperatorHasNoExecutableLowering,
-            3083 => Self::TypeMismatch,
-            3084 => Self::InvalidTypeExpression,
-            3085 => Self::TypeApplicationArityMismatch,
-            3086 => Self::ArrayTypeRequiresItem,
-            3087 => Self::AmbiguousVariantTag,
-            3088 => Self::VariantPatternArityMismatch,
-            3089 => Self::OrPatternBindersMismatch,
-            3090 => Self::UnsatisfiedConstraint,
-            3091 => Self::AmbiguousInstanceMatch,
-            _ => return None,
-        })
+    pub fn from_code(code: DiagCode) -> Option<Self> {
+        let mut index = 0;
+        while index < SEMA_DIAG_INFOS.len() {
+            let info = &SEMA_DIAG_INFOS[index];
+            if info.code == code.raw() {
+                return Some(info.kind);
+            }
+            index += 1;
+        }
+        None
     }
 
     #[must_use]
@@ -490,3 +159,552 @@ impl SemaDiagKind {
         diag.code().and_then(Self::from_code)
     }
 }
+
+struct SemaDiagInfo {
+    kind: SemaDiagKind,
+    code: u16,
+    message: &'static str,
+}
+
+const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrDuplicateRepr,
+        code: 3000,
+        message: "duplicate `@repr`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrReprRequiresKindString,
+        code: 3001,
+        message: "`@repr` requires string `kind` arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrLayoutArgRequiresName,
+        code: 3002,
+        message: "`@layout` arg requires name",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrDuplicateLayoutAlign,
+        code: 3003,
+        message: "duplicate `@layout align`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrLayoutAlignRequiresU32,
+        code: 3004,
+        message: "`@layout align` requires u32 value",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrDuplicateLayoutPack,
+        code: 3005,
+        message: "duplicate `@layout pack`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrLayoutPackRequiresU32,
+        code: 3006,
+        message: "`@layout pack` requires u32 value",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrUnknownArg,
+        code: 3007,
+        message: "unknown attr arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrKnownRequiresPlainBindLet,
+        code: 3008,
+        message: "`@known` requires plain bind `let` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrKnownRequiresNameString,
+        code: 3009,
+        message: "`@known` requires string `name` arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrKnownRequiresFoundationModule,
+        code: 3010,
+        message: "`@known` requires `musi:*` module",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrKnownRequiresExport,
+        code: 3011,
+        message: "`@known` requires exported binding",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrKnownUnknownName,
+        code: 3012,
+        message: "`@known` name is unknown",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrIntrinsicRequiresNameString,
+        code: 3013,
+        message: "`@intrinsic` requires string `name` arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrIntrinsicRequiresIntrinsicsModule,
+        code: 3014,
+        message: "`@intrinsic` requires `musi:intrinsics` module",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrIntrinsicRequiresForeignLet,
+        code: 3300,
+        message: "`@intrinsic` requires foreign `let` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrLinkRequiresForeignLet,
+        code: 3015,
+        message: "`@link` requires foreign `let` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrDataLayoutRequiresDataTarget,
+        code: 3016,
+        message: "data layout attr requires data target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrFrozenRequiresExportedNonOpaqueData,
+        code: 3301,
+        message: "`@frozen` requires exported non-opaque `data` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrHotColdRequiresCallable,
+        code: 3302,
+        message: "`@hot` and `@cold` require callable target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrHotColdConflict,
+        code: 3303,
+        message: "`@hot` conflicts with `@cold`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrDeprecatedRequiresStringValue,
+        code: 3304,
+        message: "`@deprecated` requires string values",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrSinceRequiresVersionString,
+        code: 3305,
+        message: "`@since` requires string `version` arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrOpaqueRequiresStructuralExport,
+        code: 3306,
+        message: "`opaque` requires exported structural target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrForeignRequiresForeignLet,
+        code: 3017,
+        message: "foreign attr requires foreign `let` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrLinkRequiresStringValue,
+        code: 3018,
+        message: "`@link` requires string values",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrWhenRequiresStringValue,
+        code: 3019,
+        message: "`@when` requires string values",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttrWhenRequiresStringList,
+        code: 3020,
+        message: "`@when` requires string list for `feature`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ForeignSignatureRequired,
+        code: 3021,
+        message: "foreign signature required",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidFfiType,
+        code: 3022,
+        message: "invalid ffi type",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::LawMustBePure,
+        code: 3023,
+        message: "law must be pure",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CollectDuplicateDataVariant,
+        code: 3024,
+        message: "duplicate data variant",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CollectDuplicateEffectOp,
+        code: 3025,
+        message: "duplicate effect op",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CollectDuplicateEffectLaw,
+        code: 3026,
+        message: "duplicate effect law",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CollectDuplicateClassMember,
+        code: 3027,
+        message: "duplicate class member",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CollectDuplicateClassLaw,
+        code: 3028,
+        message: "duplicate class law",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownExport,
+        code: 3029,
+        message: "unknown export",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidPerformTarget,
+        code: 3030,
+        message: "invalid perform target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownEffect,
+        code: 3031,
+        message: "unknown effect",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DuplicateHandlerClause,
+        code: 3032,
+        message: "duplicate handler clause",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownEffectOp,
+        code: 3033,
+        message: "unknown effect op",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::HandlerClauseArityMismatch,
+        code: 3034,
+        message: "handler clause arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::HandleRequiresSingleValueClause,
+        code: 3035,
+        message: "handle requires exactly one value clause",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::HandlerMissingOperationClause,
+        code: 3036,
+        message: "handler missing operation clause",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ResumeOutsideHandlerClause,
+        code: 3037,
+        message: "resume outside handler clause",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::EffectNotDeclared,
+        code: 3038,
+        message: "effect not declared",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InstanceMemberArityMismatch,
+        code: 3039,
+        message: "instance member arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownInstanceMember,
+        code: 3040,
+        message: "unknown instance member",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InstanceMemberValueRequired,
+        code: 3041,
+        message: "instance member value required",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DuplicateInstanceMember,
+        code: 3042,
+        message: "duplicate instance member",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::MissingInstanceMember,
+        code: 3043,
+        message: "missing instance member",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidInstanceTarget,
+        code: 3044,
+        message: "invalid instance target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::SealedClass,
+        code: 3045,
+        message: "sealed class",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownClass,
+        code: 3046,
+        message: "unknown class",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DuplicateInstance,
+        code: 3047,
+        message: "duplicate instance",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::PlainLetRequiresIrrefutablePattern,
+        code: 3048,
+        message: "plain `let` requires irrefutable pattern",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ModuleDestructuringRequiresStaticModule,
+        code: 3049,
+        message: "module destructuring requires static module value",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::RecordDestructuringRequiresRecordOrModule,
+        code: 3050,
+        message: "record destructuring requires record or module value",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallableLetRequiresSimpleBindingPattern,
+        code: 3051,
+        message: "callable `let` requires simple binding pattern",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ArraySpreadRequiresOneDimensionalArray,
+        code: 3052,
+        message: "array spread requires one-dimensional array",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidArraySpreadSource,
+        code: 3053,
+        message: "invalid array spread source",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidRecordSpreadSource,
+        code: 3054,
+        message: "invalid record spread source",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DuplicateRecordField,
+        code: 3055,
+        message: "duplicate record field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::VariantMissingDataContext,
+        code: 3056,
+        message: "variant constructor requires data type context",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::VariantConstructorArityMismatch,
+        code: 3057,
+        message: "variant constructor arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidVariantArity,
+        code: 3058,
+        message: "invalid variant arity",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownDataVariant,
+        code: 3059,
+        message: "unknown data variant",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::RecordLiteralRequiresNamedFields,
+        code: 3060,
+        message: "record literal requires named fields",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ArrayLiteralLengthUnknownFromRuntimeSpread,
+        code: 3061,
+        message: "array literal length unknown from runtime spread",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ArrayLiteralLengthMismatch,
+        code: 3062,
+        message: "array literal length mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::SumConstructorArityMismatch,
+        code: 3063,
+        message: "sum constructor arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidIndexArity,
+        code: 3064,
+        message: "invalid index arity",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidCallTarget,
+        code: 3065,
+        message: "invalid call target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallArityMismatch,
+        code: 3066,
+        message: "call arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidTypeApplication,
+        code: 3067,
+        message: "invalid type application",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidCallSpreadSource,
+        code: 3068,
+        message: "invalid call spread source",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallRuntimeSpreadRequiresArrayAny,
+        code: 3069,
+        message: "call runtime spread requires `[]Any`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallSpreadRequiresTupleOrArray,
+        code: 3070,
+        message: "call spread requires tuple or array",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DeclarationUsedAsValue,
+        code: 3071,
+        message: "declaration form used as value",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::TargetGateRejected,
+        code: 3072,
+        message: "target gate rejected item",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidIndexTarget,
+        code: 3073,
+        message: "invalid index target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::IndexRequiresArgument,
+        code: 3074,
+        message: "index requires one or more args",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownField,
+        code: 3075,
+        message: "unknown field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AmbiguousAttachedMethod,
+        code: 3099,
+        message: "ambiguous attached method match",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttachedMethodRequiresMutReceiver,
+        code: 3100,
+        message: "attached method requires mutable receiver",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidFieldAccess,
+        code: 3076,
+        message: "invalid field access",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidOptionalFieldAccess,
+        code: 3077,
+        message: "invalid optional field access",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidRecordUpdateTarget,
+        code: 3078,
+        message: "invalid record update target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::MutForbiddenInTypeTestTarget,
+        code: 3079,
+        message: "`mut` not allowed in type test target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::MutForbiddenInTypeCastTarget,
+        code: 3080,
+        message: "`mut` not allowed in type cast target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::WriteRequiresMutValue,
+        code: 3081,
+        message: "write requires `mut T`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::WriteRequiresMutArray,
+        code: 3082,
+        message: "write requires `mut []T`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::WriteRequiresMutRecord,
+        code: 3083,
+        message: "write requires `mut { ... }`",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidFieldUpdateTarget,
+        code: 3084,
+        message: "invalid field update target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnsupportedAssignmentTarget,
+        code: 3085,
+        message: "unsupported assignment target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::NumericOperandRequired,
+        code: 3086,
+        message: "numeric operand required",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::BinaryOperatorHasNoExecutableLowering,
+        code: 3087,
+        message: "binary operator has no executable lowering",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::TypeMismatch,
+        code: 3088,
+        message: "type mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidTypeExpression,
+        code: 3089,
+        message: "invalid type expression",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::TypeApplicationArityMismatch,
+        code: 3090,
+        message: "type application arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ArrayTypeRequiresItem,
+        code: 3091,
+        message: "Array requires at least one arg",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AmbiguousVariantTag,
+        code: 3092,
+        message: "ambiguous variant tag; add type annotation",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::VariantPatternArityMismatch,
+        code: 3093,
+        message: "variant pattern arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::OrPatternBindersMismatch,
+        code: 3094,
+        message: "or-pattern binders must match",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnsatisfiedConstraint,
+        code: 3095,
+        message: "unsatisfied constraint",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AmbiguousInstanceMatch,
+        code: 3096,
+        message: "ambiguous instance match",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ConstrainedNonCallableBinding,
+        code: 3097,
+        message: "non-callable `let` cannot have `where` constraints",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::ExportedCallableRequiresConcreteConstraints,
+        code: 3098,
+        message: "exported callable requires fully resolved constraints",
+    },
+];

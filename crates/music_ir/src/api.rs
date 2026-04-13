@@ -10,6 +10,7 @@ use music_term::{TypeDim, TypeField, TypeModuleRef, TypeTerm, TypeTermKind};
 use crate::IrDiagKind;
 
 pub type IrDiagList = Vec<Diag>;
+pub type IrNameList = Box<[Box<str>]>;
 
 #[must_use]
 pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
@@ -18,7 +19,16 @@ pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
 
 #[must_use]
 pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm {
-    match &ty.kind {
+    lower_surface_primitive_type_term(ty)
+        .or_else(|| lower_surface_named_callable_type_term(types, ty))
+        .or_else(|| lower_surface_collection_type_term(types, ty))
+        .or_else(|| lower_surface_range_type_term(types, ty))
+        .or_else(|| lower_surface_record_type_term(types, ty))
+        .unwrap_or_else(|| TypeTerm::new(TypeTermKind::Error))
+}
+
+const fn lower_surface_primitive_type_term(ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Error => TypeTerm::new(TypeTermKind::Error),
         SurfaceTyKind::Unknown => TypeTerm::new(TypeTermKind::Unknown),
         SurfaceTyKind::Type => TypeTerm::new(TypeTermKind::Type),
@@ -35,6 +45,12 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
         SurfaceTyKind::CPtr => TypeTerm::new(TypeTermKind::CPtr),
         SurfaceTyKind::Module => TypeTerm::new(TypeTermKind::Module),
         SurfaceTyKind::NatLit(value) => TypeTerm::new(TypeTermKind::NatLit(*value)),
+        _ => return None,
+    })
+}
+
+fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Named { name, args } => lower_named_term(
             name,
             args.iter()
@@ -70,12 +86,33 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
             left: Box::new(lower_surface_type_term_id(types, *left)),
             right: Box::new(lower_surface_type_term_id(types, *right)),
         }),
+        SurfaceTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => TypeTerm::new(TypeTermKind::Handler {
+            effect: Box::new(lower_surface_type_term_id(types, *effect)),
+            input: Box::new(lower_surface_type_term_id(types, *input)),
+            output: Box::new(lower_surface_type_term_id(types, *output)),
+        }),
+        SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
+            inner: Box::new(lower_surface_type_term_id(types, *inner)),
+        }),
+        _ => return None,
+    })
+}
+
+fn lower_surface_collection_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
         SurfaceTyKind::Tuple { items } => TypeTerm::new(TypeTermKind::Tuple {
             items: items
                 .iter()
                 .map(|item| lower_surface_type_term_id(types, *item))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
+        }),
+        SurfaceTyKind::Seq { item } => TypeTerm::new(TypeTermKind::Seq {
+            item: Box::new(lower_surface_type_term_id(types, *item)),
         }),
         SurfaceTyKind::Array { dims, item } => TypeTerm::new(TypeTermKind::Array {
             dims: dims
@@ -89,20 +126,51 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 .into_boxed_slice(),
             item: Box::new(lower_surface_type_term_id(types, *item)),
         }),
-        SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
-            inner: Box::new(lower_surface_type_term_id(types, *inner)),
+        _ => return None,
+    })
+}
+
+fn lower_surface_range_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    Some(match &ty.kind {
+        SurfaceTyKind::Range { bound } => TypeTerm::new(TypeTermKind::Range {
+            bound: Box::new(lower_surface_type_term_id(types, *bound)),
         }),
-        SurfaceTyKind::Record { fields } => TypeTerm::new(TypeTermKind::Record {
-            fields: fields
-                .iter()
-                .map(|field| TypeField {
-                    name: field.name.clone(),
-                    ty: lower_surface_type_term_id(types, field.ty),
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+        SurfaceTyKind::ClosedRange { bound } => TypeTerm::new(TypeTermKind::ClosedRange {
+            bound: Box::new(lower_surface_type_term_id(types, *bound)),
         }),
-    }
+        SurfaceTyKind::PartialRangeFrom { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeFrom {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
+        SurfaceTyKind::PartialRangeUpTo { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeUpTo {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
+        SurfaceTyKind::PartialRangeThru { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeThru {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
+        _ => return None,
+    })
+}
+
+fn lower_surface_record_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<TypeTerm> {
+    let SurfaceTyKind::Record { fields } = &ty.kind else {
+        return None;
+    };
+    Some(TypeTerm::new(TypeTermKind::Record {
+        fields: fields
+            .iter()
+            .map(|field| TypeField {
+                name: field.name.clone(),
+                ty: lower_surface_type_term_id(types, field.ty),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    }))
 }
 
 fn lower_surface_type_term_id(types: &[SurfaceTy], ty: SurfaceTyId) -> TypeTerm {
@@ -137,6 +205,13 @@ pub struct IrOrigin {
     pub span: Span,
 }
 
+impl IrOrigin {
+    #[must_use]
+    pub const fn new(source_id: SourceId, span: Span) -> Self {
+        Self { source_id, span }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrTempId(u32);
 
@@ -154,14 +229,45 @@ impl IrTempId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrParam {
-    pub binding: NameBindingId,
+    pub binding: Option<NameBindingId>,
     pub name: Box<str>,
+}
+
+impl IrParam {
+    #[must_use]
+    pub fn new<Name>(binding: NameBindingId, name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: Some(binding),
+            name: name.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn synthetic<Name>(name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
+            name: name.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrArg {
     pub spread: bool,
     pub expr: IrExpr,
+}
+
+impl IrArg {
+    #[must_use]
+    pub const fn new(spread: bool, expr: IrExpr) -> Self {
+        Self { spread, expr }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -200,10 +306,26 @@ pub enum IrBinaryOp {
     Other(Box<str>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IrRangeKind {
+    Open,
+    Closed,
+    From,
+    UpTo,
+    Thru,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrExpr {
     pub origin: IrOrigin,
     pub kind: IrExprKind,
+}
+
+impl IrExpr {
+    #[must_use]
+    pub const fn new(origin: IrOrigin, kind: IrExprKind) -> Self {
+        Self { origin, kind }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,10 +335,37 @@ pub struct IrRecordField {
     pub expr: IrExpr,
 }
 
+impl IrRecordField {
+    #[must_use]
+    pub fn new<Name>(name: Name, index: u16, expr: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            index,
+            expr,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrRecordLayoutField {
     pub name: Box<str>,
     pub index: u16,
+}
+
+impl IrRecordLayoutField {
+    #[must_use]
+    pub fn new<Name>(name: Name, index: u16) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            index,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -224,6 +373,44 @@ pub struct IrNameRef {
     pub binding: Option<NameBindingId>,
     pub name: Box<str>,
     pub module_target: Option<ModuleKey>,
+}
+
+impl IrNameRef {
+    #[must_use]
+    pub fn new<Name>(name: Name) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
+            name: name.into(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,10 +467,37 @@ pub struct IrCaseArm {
     pub expr: IrExpr,
 }
 
+impl IrCaseArm {
+    #[must_use]
+    pub const fn new(pattern: IrCasePattern, expr: IrExpr) -> Self {
+        Self {
+            pattern,
+            guard: None,
+            expr,
+        }
+    }
+
+    #[must_use]
+    pub fn with_guard(mut self, guard: IrExpr) -> Self {
+        self.guard = Some(guard);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCaseRecordField {
     pub index: u16,
     pub pat: Box<IrCasePattern>,
+}
+
+impl IrCaseRecordField {
+    #[must_use]
+    pub fn new(index: u16, pat: IrCasePattern) -> Self {
+        Self {
+            index,
+            pat: Box::new(pat),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,6 +583,22 @@ pub enum IrExprKind {
         left: Box<IrExpr>,
         right: Box<IrExpr>,
     },
+    Range {
+        ty_name: Box<str>,
+        kind: IrRangeKind,
+        lower: Box<IrExpr>,
+        upper: Box<IrExpr>,
+        bounds_evidence: Option<Box<IrExpr>>,
+    },
+    RangeContains {
+        value: Box<IrExpr>,
+        range: Box<IrExpr>,
+        evidence: Box<IrExpr>,
+    },
+    RangeMaterialize {
+        range: Box<IrExpr>,
+        evidence: Box<IrExpr>,
+    },
     Not {
         expr: Box<IrExpr>,
     },
@@ -408,10 +638,14 @@ pub enum IrExprKind {
         op_index: u16,
         args: Box<[IrSeqPart]>,
     },
-    Handle {
+    HandlerLit {
         effect_key: DefinitionKey,
         value: Box<IrExpr>,
         ops: Box<[IrHandleOp]>,
+    },
+    Handle {
+        effect_key: DefinitionKey,
+        handler: Box<IrExpr>,
         body: Box<IrExpr>,
     },
     Resume {
@@ -426,6 +660,20 @@ pub struct IrHandleOp {
     pub closure: IrExpr,
 }
 
+impl IrHandleOp {
+    #[must_use]
+    pub fn new<Name>(op_index: u16, name: Name, closure: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            op_index,
+            name: name.into(),
+            closure,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrCallable {
     pub binding: Option<NameBindingId>,
@@ -433,8 +681,97 @@ pub struct IrCallable {
     pub params: Box<[IrParam]>,
     pub body: IrExpr,
     pub exported: bool,
+    pub hot: bool,
+    pub cold: bool,
     pub effects: EffectRow,
     pub module_target: Option<ModuleKey>,
+}
+
+impl IrCallable {
+    #[must_use]
+    pub fn new<Name>(name: Name, params: Box<[IrParam]>, body: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
+            name: name.into(),
+            params,
+            body,
+            exported: false,
+            hot: false,
+            cold: false,
+            effects: EffectRow::default(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
+        self
+    }
+
+    #[must_use]
+    pub fn with_effects(mut self, effects: EffectRow) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrDataVariantDef {
+    pub name: Box<str>,
+    pub field_tys: IrNameList,
+}
+
+impl IrDataVariantDef {
+    #[must_use]
+    pub fn new<Name>(name: Name, field_tys: IrNameList) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            field_tys,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -442,9 +779,64 @@ pub struct IrDataDef {
     pub key: DefinitionKey,
     pub variant_count: u32,
     pub field_count: u32,
+    pub variants: Box<[IrDataVariantDef]>,
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
+    pub frozen: bool,
+}
+
+impl IrDataDef {
+    /// # Panics
+    ///
+    /// Panics if the variant count or max field count does not fit in `u32`.
+    #[must_use]
+    pub fn new(key: DefinitionKey, variants: Box<[IrDataVariantDef]>) -> Self {
+        let variant_count =
+            u32::try_from(variants.len()).expect("IR data variant count should fit in u32");
+        let field_count = variants
+            .iter()
+            .map(|variant| u32::try_from(variant.field_tys.len()).unwrap_or(u32::MAX))
+            .max()
+            .unwrap_or(0);
+        Self {
+            key,
+            variant_count,
+            field_count,
+            variants,
+            repr_kind: None,
+            layout_align: None,
+            layout_pack: None,
+            frozen: false,
+        }
+    }
+
+    #[must_use]
+    pub fn with_repr_kind<ReprKind>(mut self, repr_kind: ReprKind) -> Self
+    where
+        ReprKind: Into<Box<str>>,
+    {
+        self.repr_kind = Some(repr_kind.into());
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_align(mut self, layout_align: u32) -> Self {
+        self.layout_align = Some(layout_align);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_layout_pack(mut self, layout_pack: u32) -> Self {
+        self.layout_pack = Some(layout_pack);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_frozen(mut self, frozen: bool) -> Self {
+        self.frozen = frozen;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -454,9 +846,86 @@ pub struct IrForeignDef {
     pub abi: Box<str>,
     pub symbol: Box<str>,
     pub link: Option<Box<str>>,
-    pub param_tys: Box<[Box<str>]>,
+    pub param_tys: IrNameList,
     pub result_ty: Box<str>,
     pub exported: bool,
+    pub hot: bool,
+    pub cold: bool,
+}
+
+impl IrForeignDef {
+    #[must_use]
+    pub fn new<Name, Abi, SymbolName, ResultTy>(
+        name: Name,
+        abi: Abi,
+        symbol: SymbolName,
+        param_tys: IrNameList,
+        result_ty: ResultTy,
+    ) -> Self
+    where
+        Name: Into<Box<str>>,
+        Abi: Into<Box<str>>,
+        SymbolName: Into<Box<str>>,
+        ResultTy: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
+            name: name.into(),
+            abi: abi.into(),
+            symbol: symbol.into(),
+            link: None,
+            param_tys,
+            result_ty: result_ty.into(),
+            exported: false,
+            hot: false,
+            cold: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub fn with_link<Link>(mut self, link: Link) -> Self
+    where
+        Link: Into<Box<str>>,
+    {
+        self.link = Some(link.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_link_opt(mut self, link: Option<Box<str>>) -> Self {
+        self.link = link;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_hot(mut self, hot: bool) -> Self {
+        self.hot = hot;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cold(mut self, cold: bool) -> Self {
+        self.cold = cold;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -469,36 +938,143 @@ pub struct IrGlobal {
     pub module_target: Option<ModuleKey>,
 }
 
+impl IrGlobal {
+    #[must_use]
+    pub fn new<Name>(name: Name, body: IrExpr) -> Self
+    where
+        Name: Into<Box<str>>,
+    {
+        Self {
+            binding: None,
+            name: name.into(),
+            body,
+            exported: false,
+            effects: EffectRow::default(),
+            module_target: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_binding_opt(mut self, binding: Option<NameBindingId>) -> Self {
+        self.binding = binding;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_exported(mut self, exported: bool) -> Self {
+        self.exported = exported;
+        self
+    }
+
+    #[must_use]
+    pub fn with_effects(mut self, effects: EffectRow) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
+        self.module_target = Some(module_target);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
+        self.module_target = module_target;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectDef {
     pub key: DefinitionKey,
     pub ops: Box<[IrEffectOpDef]>,
 }
 
+impl IrEffectDef {
+    #[must_use]
+    pub const fn new(key: DefinitionKey, ops: Box<[IrEffectOpDef]>) -> Self {
+        Self { key, ops }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrEffectOpDef {
     pub name: Box<str>,
-    pub param_tys: Box<[Box<str>]>,
+    pub param_tys: IrNameList,
     pub result_ty: Box<str>,
+}
+
+impl IrEffectOpDef {
+    #[must_use]
+    pub fn new<Name, ResultTy>(name: Name, param_tys: IrNameList, result_ty: ResultTy) -> Self
+    where
+        Name: Into<Box<str>>,
+        ResultTy: Into<Box<str>>,
+    {
+        Self {
+            name: name.into(),
+            param_tys,
+            result_ty: result_ty.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrClassDef {
     pub key: DefinitionKey,
-    pub member_names: Box<[Box<str>]>,
+    pub member_names: IrNameList,
+}
+
+impl IrClassDef {
+    #[must_use]
+    pub const fn new(key: DefinitionKey, member_names: IrNameList) -> Self {
+        Self { key, member_names }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrInstanceDef {
     pub class_key: DefinitionKey,
-    pub member_names: Box<[Box<str>]>,
+    pub member_names: IrNameList,
+}
+
+impl IrInstanceDef {
+    #[must_use]
+    pub const fn new(class_key: DefinitionKey, member_names: IrNameList) -> Self {
+        Self {
+            class_key,
+            member_names,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrMetaRecord {
     pub target: Box<str>,
     pub key: Box<str>,
-    pub values: Box<[Box<str>]>,
+    pub values: IrNameList,
+}
+
+impl IrMetaRecord {
+    #[must_use]
+    pub fn new<Target, Key>(target: Target, key: Key, values: IrNameList) -> Self
+    where
+        Target: Into<Box<str>>,
+        Key: Into<Box<str>>,
+    {
+        Self {
+            target: target.into(),
+            key: key.into(),
+            values,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -633,23 +1209,20 @@ impl IrModule {
 
 impl From<&ClassSurface> for IrClassDef {
     fn from(value: &ClassSurface) -> Self {
-        Self {
-            key: value.key.clone(),
-            member_names: value
+        Self::new(
+            value.key.clone(),
+            value
                 .members
                 .iter()
                 .map(|member| member.name.clone())
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
-        }
+        )
     }
 }
 
 impl From<&InstanceSurface> for IrInstanceDef {
     fn from(value: &InstanceSurface) -> Self {
-        Self {
-            class_key: value.class_key.clone(),
-            member_names: value.member_names.clone(),
-        }
+        Self::new(value.class_key.clone(), value.member_names.clone())
     }
 }

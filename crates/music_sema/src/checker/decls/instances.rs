@@ -8,207 +8,230 @@ use music_module::ModuleKey;
 use music_names::Symbol;
 
 use super::super::exprs::check_expr;
-use super::super::normalize::{lower_constraints, render_ty, type_mismatch};
 use super::super::surface::{canonical_surface_ty, surface_key};
 use super::super::{CheckPass, DiagKind};
 use super::declarations::member_signature;
 use crate::api::{ClassMemberFacts, DefinitionKey, ExprFacts, InstanceFacts};
 use crate::effects::EffectRow;
 
-fn class_member_map(
-    ctx: &CheckPass<'_, '_, '_>,
-    class_name: Symbol,
-) -> HashMap<Symbol, ClassMemberFacts> {
-    ctx.class_facts_by_name(class_name)
-        .map(|facts| {
-            facts
-                .members
-                .iter()
-                .map(|member| (member.name, member.clone()))
-                .collect::<HashMap<_, _>>()
-        })
-        .unwrap_or_default()
-}
+type MemberDefRange = SliceRange<HirMemberDef>;
 
-fn check_instance_member(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    member: &HirMemberDef,
-    expected_members: &HashMap<Symbol, ClassMemberFacts>,
-) {
-    let signature = member_signature(ctx, member, true);
-    if let Some(expected) = expected_members.get(&member.name.name) {
-        if expected.params.len() != signature.params.len() {
-            ctx.diag(
+impl CheckPass<'_, '_, '_> {
+    fn class_member_map(
+        &mut self,
+        class_name: Symbol,
+        class_args: &[HirTyId],
+    ) -> HashMap<Symbol, ClassMemberFacts> {
+        let Some(facts) = self.class_facts_by_name(class_name).cloned() else {
+            return HashMap::default();
+        };
+        let subst = facts
+            .type_params
+            .iter()
+            .copied()
+            .zip(class_args.iter().copied())
+            .collect::<HashMap<_, _>>();
+        facts
+            .members
+            .iter()
+            .map(|member| {
+                let params = member
+                    .params
+                    .iter()
+                    .copied()
+                    .map(|param| self.substitute_ty(param, &subst))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                let result = self.substitute_ty(member.result, &subst);
+                (
+                    member.name,
+                    ClassMemberFacts::new(member.name, params, result),
+                )
+            })
+            .collect::<HashMap<_, _>>()
+    }
+
+    fn check_instance_member(
+        &mut self,
+        member: &HirMemberDef,
+        expected_members: &HashMap<Symbol, ClassMemberFacts>,
+    ) {
+        let signature = member_signature(self, member, true);
+        if let Some(expected) = expected_members.get(&member.name.name) {
+            if expected.params.len() != signature.params.len() {
+                self.diag(
+                    member.origin.span,
+                    DiagKind::InstanceMemberArityMismatch,
+                    "",
+                );
+            }
+            for (expected_param, actual_param) in expected
+                .params
+                .iter()
+                .copied()
+                .zip(signature.params.iter().copied())
+            {
+                self.type_mismatch(member.origin, expected_param, actual_param);
+            }
+            self.type_mismatch(member.origin, expected.result, signature.result);
+        } else {
+            let member_name = self.resolve_symbol(member.name.name).to_owned();
+            self.diag(
                 member.origin.span,
-                DiagKind::InstanceMemberArityMismatch,
+                DiagKind::UnknownInstanceMember,
+                &format!("unknown instance member `{member_name}`"),
+            );
+        }
+        if let Some(value) = member.value {
+            let facts = check_expr(self, value);
+            let origin = self.expr(value).origin;
+            self.type_mismatch(origin, signature.result, facts.ty);
+        } else {
+            self.diag(
+                member.origin.span,
+                DiagKind::InstanceMemberValueRequired,
                 "",
             );
         }
-        for (expected_param, actual_param) in expected
-            .params
-            .iter()
-            .copied()
-            .zip(signature.params.iter().copied())
-        {
-            type_mismatch(ctx, member.origin, expected_param, actual_param);
-        }
-        type_mismatch(ctx, member.origin, expected.result, signature.result);
-    } else {
-        ctx.diag(member.origin.span, DiagKind::UnknownInstanceMember, "");
     }
-    if let Some(value) = member.value {
-        let params = ctx.alloc_ty_list(signature.params.iter().copied());
-        let expected = ctx.alloc_ty(HirTyKind::Arrow {
-            params,
-            ret: signature.result,
-            is_effectful: false,
-        });
-        let facts = check_expr(ctx, value);
-        let origin = ctx.expr(value).origin;
-        type_mismatch(ctx, origin, expected, facts.ty);
-    } else {
-        ctx.diag(
-            member.origin.span,
-            DiagKind::InstanceMemberValueRequired,
-            "",
+
+    fn check_instance_member_set(
+        &mut self,
+        origin: HirOrigin,
+        members: &[HirMemberDef],
+        expected_members: &HashMap<Symbol, ClassMemberFacts>,
+    ) -> Box<[Symbol]> {
+        let member_names = members
+            .iter()
+            .filter(|member| member.kind == HirMemberKind::Let)
+            .map(|member| member.name.name)
+            .collect::<Vec<_>>();
+        let mut seen_members = BTreeSet::new();
+        for member in members {
+            if member.kind != HirMemberKind::Let {
+                continue;
+            }
+            if !seen_members.insert(member.name.name) {
+                self.diag(member.origin.span, DiagKind::DuplicateInstanceMember, "");
+            }
+            self.check_instance_member(member, expected_members);
+        }
+        for expected in expected_members.keys() {
+            if !seen_members.contains(expected) {
+                self.diag(origin.span, DiagKind::MissingInstanceMember, "");
+            }
+        }
+        member_names.into_boxed_slice()
+    }
+
+    pub(in super::super) fn check_instance_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        type_params: SliceRange<HirBinder>,
+        constraints: SliceRange<HirConstraint>,
+        class: HirExprId,
+        members: &MemberDefRange,
+    ) -> ExprFacts {
+        let class_origin = self.expr(class).origin;
+        let class_ty = self.lower_type_expr(class, class_origin);
+        let (class_name, class_args) =
+            if let HirTyKind::Named { name, args } = self.ty(class_ty).kind {
+                (name, self.ty_ids(args).into_boxed_slice())
+            } else {
+                self.diag(origin.span, DiagKind::InvalidInstanceTarget, "");
+                (
+                    self.known().unknown,
+                    Vec::<HirTyId>::new().into_boxed_slice(),
+                )
+            };
+
+        let class_key = self.class_facts_by_name(class_name).map_or_else(
+            || surface_key(self.module_key(), self.interner(), class_name),
+            |facts| facts.key.clone(),
         );
-    }
-}
-
-fn check_instance_member_set(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    origin: HirOrigin,
-    members: &[HirMemberDef],
-    expected_members: &HashMap<Symbol, ClassMemberFacts>,
-) -> Box<[Symbol]> {
-    let member_names = members
-        .iter()
-        .filter(|member| member.kind == HirMemberKind::Let)
-        .map(|member| member.name.name)
-        .collect::<Vec<_>>();
-    let mut seen_members = BTreeSet::new();
-    for member in members {
-        if member.kind != HirMemberKind::Let {
-            continue;
+        if self.is_sealed_class(&class_key) && class_key.module != *self.module_key() {
+            self.diag(origin.span, DiagKind::SealedClass, "");
         }
-        if !seen_members.insert(member.name.name) {
-            ctx.diag(member.origin.span, DiagKind::DuplicateInstanceMember, "");
+
+        if self.class_id(class_name).is_none() && self.class_facts_by_name(class_name).is_none() {
+            let class_name = self.resolve_symbol(class_name).to_owned();
+            self.diag(
+                origin.span,
+                DiagKind::UnknownClass,
+                &format!("unknown class `{class_name}`"),
+            );
         }
-        check_instance_member(ctx, member, expected_members);
-    }
-    for expected in expected_members.keys() {
-        if !seen_members.contains(expected) {
-            ctx.diag(origin.span, DiagKind::MissingInstanceMember, "");
-        }
-    }
-    member_names.into_boxed_slice()
-}
 
-pub(in super::super) fn check_instance_expr(
-    ctx: &mut CheckPass<'_, '_, '_>,
-    expr_id: HirExprId,
-    origin: HirOrigin,
-    type_params: SliceRange<HirBinder>,
-    constraints: SliceRange<HirConstraint>,
-    class: HirExprId,
-    members: &SliceRange<HirMemberDef>,
-) -> ExprFacts {
-    let class_origin = ctx.expr(class).origin;
-    let class_ty = super::super::normalize::lower_type_expr(ctx, class, class_origin);
-    let (class_name, class_args) = if let HirTyKind::Named { name, args } = ctx.ty(class_ty).kind {
-        (name, ctx.ty_ids(args).into_boxed_slice())
-    } else {
-        ctx.diag(origin.span, DiagKind::InvalidInstanceTarget, "");
-        (
-            ctx.known().unknown,
-            Vec::<HirTyId>::new().into_boxed_slice(),
-        )
-    };
-
-    let class_key = ctx.class_facts_by_name(class_name).map_or_else(
-        || surface_key(ctx.module_key(), ctx.interner(), class_name),
-        |facts| facts.key.clone(),
-    );
-    if ctx.is_sealed_class(&class_key) && class_key.module != *ctx.module_key() {
-        ctx.diag(origin.span, DiagKind::SealedClass, "");
-    }
-
-    if ctx.class_id(class_name).is_none() && ctx.class_facts_by_name(class_name).is_none() {
-        ctx.diag(origin.span, DiagKind::UnknownClass, "");
-    }
-
-    let members_vec = ctx.members((*members).clone());
-    let expected_members = class_member_map(ctx, class_name);
-    let member_names = check_instance_member_set(ctx, origin, &members_vec, &expected_members);
-
-    let type_params = ctx
-        .binders(type_params)
-        .into_iter()
-        .map(|binder| binder.name.name)
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let constraints = lower_constraints(ctx, constraints);
-    ctx.insert_instance_facts(
-        expr_id,
-        InstanceFacts {
-            origin,
-            type_params,
-            class_key,
-            class_name,
-            class_args,
-            constraints,
-            member_names,
-        },
-    );
-    ExprFacts {
-        ty: class_ty,
-        effects: EffectRow::empty(),
-    }
-}
-
-pub(in super::super) fn check_instance_coherence(ctx: &mut CheckPass<'_, '_, '_>) {
-    let Some(env) = ctx.sema_env() else {
-        return;
-    };
-    let mut seen = HashMap::<(DefinitionKey, Box<[String]>), ModuleKey>::new();
-    let local_instances = ctx.instance_facts().values().cloned().collect::<Vec<_>>();
-
-    for facts in local_instances {
-        let args = facts
-            .class_args
-            .iter()
-            .copied()
-            .map(|ty| render_ty(ctx, ty))
+        let members_vec = self.members((*members).clone());
+        let expected_members = self.class_member_map(class_name, &class_args);
+        let member_names = self.check_instance_member_set(origin, &members_vec, &expected_members);
+        let type_params = self
+            .binders(type_params)
+            .into_iter()
+            .map(|binder| binder.name.name)
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let key = (facts.class_key.clone(), args);
-        if seen.insert(key, ctx.module_key().clone()).is_some() {
-            ctx.diag(facts.origin.span, DiagKind::DuplicateInstance, "");
-        }
+        let constraints = self.lower_constraints(constraints);
+        let evidence_keys = constraints
+            .iter()
+            .filter_map(|constraint| self.constraint_key_for_facts(constraint))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        self.insert_instance_facts(
+            expr_id,
+            InstanceFacts::new(origin, class_key, class_name, class_args, member_names)
+                .with_type_params(type_params)
+                .with_constraints(constraints)
+                .with_evidence_keys(evidence_keys),
+        );
+        ExprFacts::new(class_ty, EffectRow::empty())
     }
 
-    let mut visited = BTreeSet::new();
-    let mut stack = ctx.static_imports();
-    let root_span = ctx.expr(ctx.root_expr_id()).origin.span;
-    while let Some(module) = stack.pop() {
-        if !visited.insert(module.clone()) {
-            continue;
-        }
-        let Some(surface) = env.module_surface(&module) else {
-            continue;
+    pub(in super::super) fn check_instance_coherence(&mut self) {
+        let Some(env) = self.sema_env() else {
+            return;
         };
-        stack.extend(surface.static_imports().iter().cloned());
-        for instance in surface.exported_instances() {
-            let args = instance
+        let mut seen = HashMap::<(DefinitionKey, Box<[String]>), ModuleKey>::new();
+        let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
+
+        for facts in local_instances {
+            let args = facts
                 .class_args
                 .iter()
                 .copied()
-                .map(|ty| canonical_surface_ty(&surface, ty))
+                .map(|ty| self.render_ty(ty))
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            let key = (instance.class_key.clone(), args);
-            if seen.insert(key, module.clone()).is_some() {
-                ctx.diag(root_span, DiagKind::DuplicateInstance, "");
+            let key = (facts.class_key.clone(), args);
+            if seen.insert(key, self.module_key().clone()).is_some() {
+                self.diag(facts.origin.span, DiagKind::DuplicateInstance, "");
+            }
+        }
+
+        let mut visited = BTreeSet::new();
+        let mut stack = self.static_imports();
+        let root_span = self.expr(self.root_expr_id()).origin.span;
+        while let Some(module) = stack.pop() {
+            if !visited.insert(module.clone()) {
+                continue;
+            }
+            let Some(surface) = env.module_surface(&module) else {
+                continue;
+            };
+            stack.extend(surface.static_imports().iter().cloned());
+            for instance in surface.exported_instances() {
+                let args = instance
+                    .class_args
+                    .iter()
+                    .copied()
+                    .map(|ty| canonical_surface_ty(&surface, ty))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                let key = (instance.class_key.clone(), args);
+                if seen.insert(key, module.clone()).is_some() {
+                    self.diag(root_span, DiagKind::DuplicateInstance, "");
+                }
             }
         }
     }

@@ -30,7 +30,10 @@ export class StatusBar {
 	update(message: string, state: StatusState) {
 		const style = STATE_STYLE[state];
 		this.#item.text = `${style.icon} Musi: ${message}`;
-		this.#item.backgroundColor = style.bg
+		const statusItem = this.#item as vscode.StatusBarItem & {
+			backgroundColor: vscode.ThemeColor | undefined;
+		};
+		statusItem.backgroundColor = style.bg
 			? new vscode.ThemeColor(style.bg)
 			: undefined;
 		this.#item.color = new vscode.ThemeColor(style.fg);

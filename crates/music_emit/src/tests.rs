@@ -4,12 +4,15 @@ use music_ir::{IrModule, lower_module};
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
-use music_seam::{CodeEntry, Opcode};
 use music_seam::descriptor::ConstantValue;
+use music_seam::{CodeEntry, Opcode};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
-use crate::{EmitDiagKind, EmitOptions, emit_diag_kind, lower_ir_module, lower_ir_program};
+use crate::{
+    EmitDiagKind, EmitDiagList, EmitOptions, EmittedModule, emit_diag_kind, lower_ir_module,
+    lower_ir_program,
+};
 
 fn lower_ir(src: &str, key: &str) -> IrModule {
     let lexed = Lexer::new(src).lex();
@@ -30,9 +33,37 @@ fn lower_ir(src: &str, key: &str) -> IrModule {
         SemaOptions {
             target: None,
             env: None,
+            prelude: None,
         },
     );
     lower_module(&sema, &interner).expect("ir lowering should succeed")
+}
+
+fn emit_module(src: &str) -> Result<EmittedModule, EmitDiagList> {
+    let ir = lower_ir(src, "main");
+    lower_ir_module(&ir, EmitOptions)
+}
+
+fn emitted_opcodes(emitted: &EmittedModule) -> Vec<Opcode> {
+    emitted
+        .artifact
+        .methods
+        .iter()
+        .flat_map(|(_, method)| method.code.iter())
+        .filter_map(|entry| match entry {
+            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
+            CodeEntry::Label(_) => None,
+        })
+        .collect()
+}
+
+fn assert_module_opcodes(src: &str, expected: &[Opcode]) {
+    let emitted = emit_module(src).expect("emit should succeed");
+    assert!(emitted.artifact.validate().is_ok());
+    let opcodes = emitted_opcodes(&emitted);
+    for opcode in expected {
+        assert!(opcodes.contains(opcode));
+    }
 }
 
 #[test]
@@ -104,7 +135,7 @@ fn emits_float_tuple_array_and_type_apply() {
 
 #[test]
 fn emits_globals_locals_assignment_index_and_case() {
-    let ir = lower_ir(
+    assert_module_opcodes(
         r"
         export let base : Int := 41;
         export let answer (x : Int) : Int := (
@@ -113,92 +144,46 @@ fn emits_globals_locals_assignment_index_and_case() {
           case x of (| 0 => items.[0] | value => value + base);
         );
     ",
-        "main",
+        &[
+            Opcode::LdGlob,
+            Opcode::StGlob,
+            Opcode::SeqGet,
+            Opcode::SeqSet,
+            Opcode::BrFalse,
+        ],
     );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&Opcode::LdGlob));
-    assert!(opcodes.contains(&Opcode::StGlob));
-    assert!(opcodes.contains(&Opcode::SeqGet));
-    assert!(opcodes.contains(&Opcode::SeqSet));
-    assert!(opcodes.contains(&Opcode::BrFalse));
 }
 
 #[test]
 fn emits_multi_index_get_set_and_dynamic_import() {
-    let ir = lower_ir(
+    assert_module_opcodes(
         r"
-        export let touch (name : String, grid : mut Array[Int, 2, 2]) : Int := (
+        export let touch (name : String, grid : mut [2][2]Int) : Int := (
           let loaded := import name;
           grid.[0, 1] := 7;
           grid.[0, 1]
         );
     ",
-        "main",
+        &[Opcode::ModLoad, Opcode::SeqGetN, Opcode::SeqSetN],
     );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&Opcode::ModLoad));
-    assert!(opcodes.contains(&Opcode::SeqGetN));
-    assert!(opcodes.contains(&Opcode::SeqSetN));
 }
 
 #[test]
 fn emits_dynamic_module_export_lookup() {
-    let ir = lower_ir(
+    assert_module_opcodes(
         r"
         export let read (name : String) : Any := (
           let loaded := import name;
           loaded.answer
         );
     ",
-        "main",
+        &[Opcode::ModLoad, Opcode::ModGet],
     );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&Opcode::ModLoad));
-    assert!(opcodes.contains(&Opcode::ModGet));
 }
 
 #[test]
 fn emits_case_tuple_and_array_patterns() {
-    let ir = lower_ir(
+    let emitted = emit_module(
         r"
         export let answer () : Int := (
           let pair := (1, 2);
@@ -208,21 +193,10 @@ fn emits_case_tuple_and_array_patterns() {
           p + q
         );
     ",
-        "main",
-    );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    )
+    .expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
+    let opcodes = emitted_opcodes(&emitted);
     assert!(opcodes.contains(&Opcode::SeqGet));
     assert!(opcodes.contains(&Opcode::BrFalse));
 }
@@ -257,24 +231,23 @@ fn emits_named_type_values_as_ty_id() {
     );
 
     let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
-
     assert!(emitted.artifact.validate().is_ok());
-    assert!(opcodes.contains(&Opcode::TyId));
+    assert!(
+        emitted
+            .artifact
+            .methods
+            .iter()
+            .flat_map(|(_, method)| method.code.iter())
+            .any(|entry| matches!(
+                entry,
+                CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::TyId
+            ))
+    );
 }
 
 #[test]
 fn emits_records_with_projection_and_update() {
-    let ir = lower_ir(
+    let emitted = emit_module(
         r"
         export let answer () : Int := (
           let r := { y := 2, x := 1 };
@@ -283,49 +256,29 @@ fn emits_records_with_projection_and_update() {
           a + s.x
         );
     ",
-        "main",
-    );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    )
+    .expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
+    let opcodes = emitted_opcodes(&emitted);
     assert!(opcodes.contains(&Opcode::DataNew));
     assert!(opcodes.contains(&Opcode::DataGet));
 }
 
 #[test]
 fn emits_foreign_calls() {
-    let ir = lower_ir(
+    let emitted = emit_module(
         r#"
         foreign "c" (
           let puts (value : Int) : Int;
         );
         export let answer () : Int := puts(1);
     "#,
-        "main",
-    );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    )
+    .expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
     assert!(
-        emitted
-            .artifact
-            .methods
-            .iter()
-            .flat_map(|(_, method)| method.code.iter())
-            .filter_map(|entry| match entry {
-                CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-                CodeEntry::Label(_) => None,
-            })
+        emitted_opcodes(&emitted)
+            .into_iter()
             .any(|opcode| opcode == Opcode::FfiCall)
     );
 }
@@ -399,34 +352,22 @@ fn emits_local_recursive_callable_lets() {
 
 #[test]
 fn emits_type_test_and_cast() {
-    let ir = lower_ir(
+    let emitted = emit_module(
         r"
         export let check (x : Any) : Bool := x :? Int;
         export let cast (x : Any) : Int := x :?> Int;
     ",
-        "main",
-    );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    )
+    .expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
-
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
+    let opcodes = emitted_opcodes(&emitted);
     assert!(opcodes.contains(&Opcode::TyChk));
     assert!(opcodes.contains(&Opcode::TyCast));
 }
 
 #[test]
 fn emits_type_values_record_patterns_and_capturing_recursion() {
-    let ir = lower_ir(
+    let emitted = emit_module(
         r"
         export let answer (n : Int) : Int := (
           let base := 1;
@@ -436,22 +377,10 @@ fn emits_type_values_record_patterns_and_capturing_recursion() {
           picked + loop(n)
         );
     ",
-        "main",
-    );
-
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+    )
+    .expect("emit should succeed");
     assert!(emitted.artifact.validate().is_ok());
-
-    let opcodes = emitted
-        .artifact
-        .methods
-        .iter()
-        .flat_map(|(_, method)| method.code.iter())
-        .filter_map(|entry| match entry {
-            CodeEntry::Instruction(instruction) => Some(instruction.opcode),
-            CodeEntry::Label(_) => None,
-        })
-        .collect::<Vec<_>>();
+    let opcodes = emitted_opcodes(&emitted);
     assert!(opcodes.contains(&Opcode::DataGet));
     assert!(opcodes.contains(&Opcode::CallCls));
 

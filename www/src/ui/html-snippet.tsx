@@ -1,21 +1,17 @@
-import { useLayoutEffect, useRef } from "react";
-import { initCodeTabsWithin } from "../code-tabs";
+import type { Locale } from "../lib/site-copy";
+import { localizeHtmlLinks } from "../lib/site-links";
 
-export function HtmlSnippet(props: { className?: string; html: string }) {
-	const rootRef = useRef<HTMLDivElement | null>(null);
-
-	useLayoutEffect(() => {
-		if (!rootRef.current) {
-			return;
-		}
-		initCodeTabsWithin(rootRef.current);
-	});
-
+export function HtmlSnippet(props: {
+	className?: string;
+	html: string;
+	locale: Locale;
+}) {
 	return (
 		<div
-			ref={rootRef}
 			className={props.className}
-			dangerouslySetInnerHTML={{ __html: props.html }}
+			dangerouslySetInnerHTML={{
+				__html: localizeHtmlLinks(props.locale, props.html),
+			}}
 		/>
 	);
 }

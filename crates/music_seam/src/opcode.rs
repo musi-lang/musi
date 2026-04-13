@@ -57,6 +57,10 @@ pub enum Opcode {
     SeqSet,
     SeqSetN,
     SeqCat,
+    RangeNew,
+    RangeContains,
+    RangeMaterialize,
+    SeqHas,
     DataNew,
     DataTag,
     DataGet,
@@ -77,349 +81,491 @@ pub enum Opcode {
 
 impl Opcode {
     #[must_use]
-    pub const fn family(self) -> OpcodeFamily {
-        match self {
-            Self::LdLoc
-            | Self::StLoc
-            | Self::LdGlob
-            | Self::StGlob
-            | Self::LdConst
-            | Self::LdSmi
-            | Self::LdStr => OpcodeFamily::LoadStore,
-            Self::IAdd
-            | Self::ISub
-            | Self::IMul
-            | Self::IDiv
-            | Self::IRem
-            | Self::FAdd
-            | Self::FSub
-            | Self::FMul
-            | Self::FDiv
-            | Self::FRem
-            | Self::StrCat => OpcodeFamily::Scalar,
-            Self::CmpEq | Self::CmpNe | Self::CmpLt | Self::CmpGt | Self::CmpLe | Self::CmpGe => {
-                OpcodeFamily::LogicCompare
-            }
-            Self::Br | Self::BrFalse | Self::BrTbl => OpcodeFamily::Branch,
-            Self::Call
-            | Self::CallSeq
-            | Self::CallCls
-            | Self::CallClsSeq
-            | Self::CallTail
-            | Self::Ret
-            | Self::ClsNew => OpcodeFamily::CallClosure,
-            Self::SeqNew
-            | Self::SeqGet
-            | Self::SeqGetN
-            | Self::SeqSet
-            | Self::SeqSetN
-            | Self::SeqCat => OpcodeFamily::Sequence,
-            Self::DataNew | Self::DataTag | Self::DataGet | Self::DataSet => OpcodeFamily::Data,
-            Self::TyChk | Self::TyCast | Self::TyId => OpcodeFamily::Ty,
-            Self::HdlPush | Self::HdlPop | Self::EffInvk | Self::EffInvkSeq | Self::EffResume => {
-                OpcodeFamily::Eff
-            }
-            Self::FfiCall | Self::FfiCallSeq => OpcodeFamily::Ffi,
-            Self::ModLoad | Self::ModGet => OpcodeFamily::Module,
-        }
+    pub fn family(self) -> OpcodeFamily {
+        self.info().family
     }
 
     #[must_use]
-    pub const fn mnemonic(self) -> &'static str {
-        match self {
-            Self::LdLoc => "ld.loc",
-            Self::StLoc => "st.loc",
-            Self::LdGlob => "ld.glob",
-            Self::StGlob => "st.glob",
-            Self::LdConst => "ld.const",
-            Self::LdSmi => "ld.smi",
-            Self::LdStr => "ld.str",
-            Self::IAdd => "i.add",
-            Self::ISub => "i.sub",
-            Self::IMul => "i.mul",
-            Self::IDiv => "i.div",
-            Self::IRem => "i.rem",
-            Self::FAdd => "f.add",
-            Self::FSub => "f.sub",
-            Self::FMul => "f.mul",
-            Self::FDiv => "f.div",
-            Self::FRem => "f.rem",
-            Self::StrCat => "str.cat",
-            Self::CmpEq => "cmp.eq",
-            Self::CmpNe => "cmp.ne",
-            Self::CmpLt => "cmp.lt",
-            Self::CmpGt => "cmp.gt",
-            Self::CmpLe => "cmp.le",
-            Self::CmpGe => "cmp.ge",
-            Self::Br => "br",
-            Self::BrFalse => "br.false",
-            Self::BrTbl => "br.tbl",
-            Self::Call => "call",
-            Self::CallSeq => "call.seq",
-            Self::CallCls => "call.cls",
-            Self::CallClsSeq => "callcls.seq",
-            Self::CallTail => "call.tail",
-            Self::Ret => "ret",
-            Self::ClsNew => "cls.new",
-            Self::SeqNew => "seq.new",
-            Self::SeqGet => "seq.get",
-            Self::SeqGetN => "seq.getn",
-            Self::SeqSet => "seq.set",
-            Self::SeqSetN => "seq.setn",
-            Self::SeqCat => "seq.cat",
-            Self::DataNew => "data.new",
-            Self::DataTag => "data.tag",
-            Self::DataGet => "data.get",
-            Self::DataSet => "data.set",
-            Self::TyChk => "ty.chk",
-            Self::TyCast => "ty.cast",
-            Self::TyId => "ty.id",
-            Self::HdlPush => "hdl.push",
-            Self::HdlPop => "hdl.pop",
-            Self::EffInvk => "eff.invk",
-            Self::EffInvkSeq => "eff.invk.seq",
-            Self::EffResume => "eff.resume",
-            Self::FfiCall => "ffi.call",
-            Self::FfiCallSeq => "ffi.call.seq",
-            Self::ModLoad => "mod.load",
-            Self::ModGet => "mod.get",
-        }
+    pub fn mnemonic(self) -> &'static str {
+        self.info().mnemonic
     }
 
     #[must_use]
-    pub const fn operand_shape(self) -> OperandShape {
-        match self {
-            Self::LdLoc | Self::StLoc => OperandShape::Local,
-            Self::LdGlob | Self::StGlob => OperandShape::Global,
-            Self::LdConst => OperandShape::Constant,
-            Self::LdSmi | Self::SeqGetN | Self::SeqSetN => OperandShape::I16,
-            Self::LdStr => OperandShape::String,
-            Self::IAdd
-            | Self::ISub
-            | Self::IMul
-            | Self::IDiv
-            | Self::IRem
-            | Self::FAdd
-            | Self::FSub
-            | Self::FMul
-            | Self::FDiv
-            | Self::FRem
-            | Self::StrCat
-            | Self::CmpEq
-            | Self::CmpNe
-            | Self::CmpLt
-            | Self::CmpGt
-            | Self::CmpLe
-            | Self::CmpGe
-            | Self::Ret
-            | Self::SeqGet
-            | Self::SeqSet
-            | Self::SeqCat
-            | Self::HdlPop
-            | Self::EffResume
-            | Self::CallCls
-            | Self::CallClsSeq
-            | Self::DataGet
-            | Self::DataSet
-            | Self::ModLoad => OperandShape::None,
-            Self::ModGet => OperandShape::String,
-            Self::Br | Self::BrFalse => OperandShape::Label,
-            Self::BrTbl => OperandShape::BranchTable,
-            Self::Call | Self::CallSeq | Self::CallTail => OperandShape::Method,
-            Self::ClsNew => OperandShape::WideMethodCaptures,
-            Self::SeqNew | Self::DataNew => OperandShape::TypeLen,
-            Self::DataTag | Self::TyChk | Self::TyCast | Self::TyId => OperandShape::Type,
-            Self::HdlPush => OperandShape::EffectId,
-            Self::EffInvk | Self::EffInvkSeq => OperandShape::Effect,
-            Self::FfiCall | Self::FfiCallSeq => OperandShape::Foreign,
-        }
+    pub fn operand_shape(self) -> OperandShape {
+        self.info().operand_shape
     }
 
     #[must_use]
-    pub const fn wire_code(self) -> u16 {
-        match self {
-            Self::LdLoc => 0x0001,
-            Self::StLoc => 0x0002,
-            Self::LdGlob => 0x0003,
-            Self::StGlob => 0x0004,
-            Self::LdConst => 0x0005,
-            Self::LdSmi => 0x0006,
-            Self::LdStr => 0x0007,
-            Self::IAdd => 0x0101,
-            Self::ISub => 0x0102,
-            Self::IMul => 0x0103,
-            Self::IDiv => 0x0104,
-            Self::IRem => 0x0105,
-            Self::FAdd => 0x0106,
-            Self::FSub => 0x0107,
-            Self::FMul => 0x0108,
-            Self::FDiv => 0x0109,
-            Self::FRem => 0x010A,
-            Self::StrCat => 0x010B,
-            Self::CmpEq => 0x0201,
-            Self::CmpNe => 0x0202,
-            Self::CmpLt => 0x0203,
-            Self::CmpGt => 0x0204,
-            Self::CmpLe => 0x0205,
-            Self::CmpGe => 0x0206,
-            Self::Br => 0x0301,
-            Self::BrFalse => 0x0302,
-            Self::BrTbl => 0x0303,
-            Self::Call => 0x0401,
-            Self::CallCls => 0x0402,
-            Self::CallTail => 0x0403,
-            Self::Ret => 0x0404,
-            Self::ClsNew => 0x0405,
-            Self::CallSeq => 0x0406,
-            Self::CallClsSeq => 0x0407,
-            Self::SeqNew => 0x0501,
-            Self::SeqGet => 0x0502,
-            Self::SeqGetN => 0x0503,
-            Self::SeqSet => 0x0504,
-            Self::SeqSetN => 0x0505,
-            Self::SeqCat => 0x0506,
-            Self::DataNew => 0x0601,
-            Self::DataTag => 0x0602,
-            Self::DataGet => 0x0603,
-            Self::DataSet => 0x0604,
-            Self::TyChk => 0x0701,
-            Self::TyCast => 0x0702,
-            Self::TyId => 0x0703,
-            Self::HdlPush => 0x0801,
-            Self::HdlPop => 0x0802,
-            Self::EffInvk => 0x0803,
-            Self::EffResume => 0x0804,
-            Self::EffInvkSeq => 0x0805,
-            Self::FfiCall => 0x0901,
-            Self::FfiCallSeq => 0x0902,
-            Self::ModLoad => 0x0A01,
-            Self::ModGet => 0x0A02,
-        }
+    pub fn wire_code(self) -> u16 {
+        self.info().wire_code
     }
 
     #[must_use]
     pub fn from_mnemonic(text: &str) -> Option<Self> {
-        Some(match text {
-            "ld.loc" => Self::LdLoc,
-            "st.loc" => Self::StLoc,
-            "ld.glob" => Self::LdGlob,
-            "st.glob" => Self::StGlob,
-            "ld.const" => Self::LdConst,
-            "ld.smi" => Self::LdSmi,
-            "ld.str" => Self::LdStr,
-            "i.add" => Self::IAdd,
-            "i.sub" => Self::ISub,
-            "i.mul" => Self::IMul,
-            "i.div" => Self::IDiv,
-            "i.rem" => Self::IRem,
-            "f.add" => Self::FAdd,
-            "f.sub" => Self::FSub,
-            "f.mul" => Self::FMul,
-            "f.div" => Self::FDiv,
-            "f.rem" => Self::FRem,
-            "str.cat" => Self::StrCat,
-            "cmp.eq" => Self::CmpEq,
-            "cmp.ne" => Self::CmpNe,
-            "cmp.lt" => Self::CmpLt,
-            "cmp.gt" => Self::CmpGt,
-            "cmp.le" => Self::CmpLe,
-            "cmp.ge" => Self::CmpGe,
-            "br" => Self::Br,
-            "br.false" => Self::BrFalse,
-            "br.tbl" => Self::BrTbl,
-            "call" => Self::Call,
-            "call.seq" => Self::CallSeq,
-            "call.cls" => Self::CallCls,
-            "callcls.seq" => Self::CallClsSeq,
-            "call.tail" => Self::CallTail,
-            "ret" => Self::Ret,
-            "cls.new" => Self::ClsNew,
-            "seq.new" => Self::SeqNew,
-            "seq.get" => Self::SeqGet,
-            "seq.getn" => Self::SeqGetN,
-            "seq.set" => Self::SeqSet,
-            "seq.setn" => Self::SeqSetN,
-            "seq.cat" => Self::SeqCat,
-            "data.new" => Self::DataNew,
-            "data.tag" => Self::DataTag,
-            "data.get" => Self::DataGet,
-            "data.set" => Self::DataSet,
-            "ty.chk" => Self::TyChk,
-            "ty.cast" => Self::TyCast,
-            "ty.id" => Self::TyId,
-            "hdl.push" => Self::HdlPush,
-            "hdl.pop" => Self::HdlPop,
-            "eff.invk" => Self::EffInvk,
-            "eff.invk.seq" => Self::EffInvkSeq,
-            "eff.resume" => Self::EffResume,
-            "ffi.call" => Self::FfiCall,
-            "ffi.call.seq" => Self::FfiCallSeq,
-            "mod.load" => Self::ModLoad,
-            "mod.get" => Self::ModGet,
-            _ => return None,
-        })
+        let mut index = 0;
+        while index < OPCODE_INFOS.len() {
+            let info = &OPCODE_INFOS[index];
+            if info.mnemonic == text {
+                return Some(info.opcode);
+            }
+            index += 1;
+        }
+        None
     }
 
     #[must_use]
-    pub const fn from_wire_code(code: u16) -> Option<Self> {
-        Some(match code {
-            0x0001 => Self::LdLoc,
-            0x0002 => Self::StLoc,
-            0x0003 => Self::LdGlob,
-            0x0004 => Self::StGlob,
-            0x0005 => Self::LdConst,
-            0x0006 => Self::LdSmi,
-            0x0007 => Self::LdStr,
-            0x0101 => Self::IAdd,
-            0x0102 => Self::ISub,
-            0x0103 => Self::IMul,
-            0x0104 => Self::IDiv,
-            0x0105 => Self::IRem,
-            0x0106 => Self::FAdd,
-            0x0107 => Self::FSub,
-            0x0108 => Self::FMul,
-            0x0109 => Self::FDiv,
-            0x010A => Self::FRem,
-            0x010B => Self::StrCat,
-            0x0201 => Self::CmpEq,
-            0x0202 => Self::CmpNe,
-            0x0203 => Self::CmpLt,
-            0x0204 => Self::CmpGt,
-            0x0205 => Self::CmpLe,
-            0x0206 => Self::CmpGe,
-            0x0301 => Self::Br,
-            0x0302 => Self::BrFalse,
-            0x0303 => Self::BrTbl,
-            0x0401 => Self::Call,
-            0x0402 => Self::CallCls,
-            0x0403 => Self::CallTail,
-            0x0404 => Self::Ret,
-            0x0405 => Self::ClsNew,
-            0x0406 => Self::CallSeq,
-            0x0407 => Self::CallClsSeq,
-            0x0501 => Self::SeqNew,
-            0x0502 => Self::SeqGet,
-            0x0503 => Self::SeqGetN,
-            0x0504 => Self::SeqSet,
-            0x0505 => Self::SeqSetN,
-            0x0506 => Self::SeqCat,
-            0x0601 => Self::DataNew,
-            0x0602 => Self::DataTag,
-            0x0603 => Self::DataGet,
-            0x0604 => Self::DataSet,
-            0x0701 => Self::TyChk,
-            0x0702 => Self::TyCast,
-            0x0703 => Self::TyId,
-            0x0801 => Self::HdlPush,
-            0x0802 => Self::HdlPop,
-            0x0803 => Self::EffInvk,
-            0x0804 => Self::EffResume,
-            0x0805 => Self::EffInvkSeq,
-            0x0901 => Self::FfiCall,
-            0x0902 => Self::FfiCallSeq,
-            0x0A01 => Self::ModLoad,
-            0x0A02 => Self::ModGet,
-            _ => return None,
-        })
+    pub fn from_wire_code(code: u16) -> Option<Self> {
+        let mut index = 0;
+        while index < OPCODE_INFOS.len() {
+            let info = &OPCODE_INFOS[index];
+            if info.wire_code == code {
+                return Some(info.opcode);
+            }
+            index += 1;
+        }
+        None
+    }
+
+    fn info(self) -> &'static OpcodeInfo {
+        let mut index = 0;
+        while index < OPCODE_INFOS.len() {
+            let info = &OPCODE_INFOS[index];
+            if info.opcode == self {
+                return info;
+            }
+            index += 1;
+        }
+        &OPCODE_INFOS[0]
     }
 }
+
+struct OpcodeInfo {
+    opcode: Opcode,
+    family: OpcodeFamily,
+    mnemonic: &'static str,
+    operand_shape: OperandShape,
+    wire_code: u16,
+}
+
+const OPCODE_INFOS: &[OpcodeInfo] = &[
+    OpcodeInfo {
+        opcode: Opcode::LdLoc,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "ld.loc",
+        operand_shape: OperandShape::Local,
+        wire_code: 0x0001,
+    },
+    OpcodeInfo {
+        opcode: Opcode::StLoc,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "st.loc",
+        operand_shape: OperandShape::Local,
+        wire_code: 0x0002,
+    },
+    OpcodeInfo {
+        opcode: Opcode::LdGlob,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "ld.glob",
+        operand_shape: OperandShape::Global,
+        wire_code: 0x0003,
+    },
+    OpcodeInfo {
+        opcode: Opcode::StGlob,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "st.glob",
+        operand_shape: OperandShape::Global,
+        wire_code: 0x0004,
+    },
+    OpcodeInfo {
+        opcode: Opcode::LdConst,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "ld.const",
+        operand_shape: OperandShape::Constant,
+        wire_code: 0x0005,
+    },
+    OpcodeInfo {
+        opcode: Opcode::LdSmi,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "ld.smi",
+        operand_shape: OperandShape::I16,
+        wire_code: 0x0006,
+    },
+    OpcodeInfo {
+        opcode: Opcode::LdStr,
+        family: OpcodeFamily::LoadStore,
+        mnemonic: "ld.str",
+        operand_shape: OperandShape::String,
+        wire_code: 0x0007,
+    },
+    OpcodeInfo {
+        opcode: Opcode::IAdd,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "i.add",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0101,
+    },
+    OpcodeInfo {
+        opcode: Opcode::ISub,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "i.sub",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0102,
+    },
+    OpcodeInfo {
+        opcode: Opcode::IMul,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "i.mul",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0103,
+    },
+    OpcodeInfo {
+        opcode: Opcode::IDiv,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "i.div",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0104,
+    },
+    OpcodeInfo {
+        opcode: Opcode::IRem,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "i.rem",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0105,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FAdd,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "f.add",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0106,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FSub,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "f.sub",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0107,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FMul,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "f.mul",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0108,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FDiv,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "f.div",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0109,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FRem,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "f.rem",
+        operand_shape: OperandShape::None,
+        wire_code: 0x010A,
+    },
+    OpcodeInfo {
+        opcode: Opcode::StrCat,
+        family: OpcodeFamily::Scalar,
+        mnemonic: "str.cat",
+        operand_shape: OperandShape::None,
+        wire_code: 0x010B,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpEq,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.eq",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0201,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpNe,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.ne",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0202,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpLt,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.lt",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0203,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpGt,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.gt",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0204,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpLe,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.le",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0205,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CmpGe,
+        family: OpcodeFamily::LogicCompare,
+        mnemonic: "cmp.ge",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0206,
+    },
+    OpcodeInfo {
+        opcode: Opcode::Br,
+        family: OpcodeFamily::Branch,
+        mnemonic: "br",
+        operand_shape: OperandShape::Label,
+        wire_code: 0x0301,
+    },
+    OpcodeInfo {
+        opcode: Opcode::BrFalse,
+        family: OpcodeFamily::Branch,
+        mnemonic: "br.false",
+        operand_shape: OperandShape::Label,
+        wire_code: 0x0302,
+    },
+    OpcodeInfo {
+        opcode: Opcode::BrTbl,
+        family: OpcodeFamily::Branch,
+        mnemonic: "br.tbl",
+        operand_shape: OperandShape::BranchTable,
+        wire_code: 0x0303,
+    },
+    OpcodeInfo {
+        opcode: Opcode::Call,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "call",
+        operand_shape: OperandShape::Method,
+        wire_code: 0x0401,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CallSeq,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "call.seq",
+        operand_shape: OperandShape::Method,
+        wire_code: 0x0406,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CallCls,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "call.cls",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0402,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CallClsSeq,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "callcls.seq",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0407,
+    },
+    OpcodeInfo {
+        opcode: Opcode::CallTail,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "call.tail",
+        operand_shape: OperandShape::Method,
+        wire_code: 0x0403,
+    },
+    OpcodeInfo {
+        opcode: Opcode::Ret,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "ret",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0404,
+    },
+    OpcodeInfo {
+        opcode: Opcode::ClsNew,
+        family: OpcodeFamily::CallClosure,
+        mnemonic: "cls.new",
+        operand_shape: OperandShape::WideMethodCaptures,
+        wire_code: 0x0405,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqNew,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.new",
+        operand_shape: OperandShape::TypeLen,
+        wire_code: 0x0501,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqGet,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.get",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0502,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqGetN,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.getn",
+        operand_shape: OperandShape::I16,
+        wire_code: 0x0503,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqSet,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.set",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0504,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqSetN,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.setn",
+        operand_shape: OperandShape::I16,
+        wire_code: 0x0505,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqCat,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.cat",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0506,
+    },
+    OpcodeInfo {
+        opcode: Opcode::RangeNew,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "range.new",
+        operand_shape: OperandShape::TypeLen,
+        wire_code: 0x0507,
+    },
+    OpcodeInfo {
+        opcode: Opcode::RangeContains,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "range.contains",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0508,
+    },
+    OpcodeInfo {
+        opcode: Opcode::RangeMaterialize,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "range.materialize",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0509,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqHas,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.has",
+        operand_shape: OperandShape::None,
+        wire_code: 0x050A,
+    },
+    OpcodeInfo {
+        opcode: Opcode::DataNew,
+        family: OpcodeFamily::Data,
+        mnemonic: "data.new",
+        operand_shape: OperandShape::TypeLen,
+        wire_code: 0x0601,
+    },
+    OpcodeInfo {
+        opcode: Opcode::DataTag,
+        family: OpcodeFamily::Data,
+        mnemonic: "data.tag",
+        operand_shape: OperandShape::Type,
+        wire_code: 0x0602,
+    },
+    OpcodeInfo {
+        opcode: Opcode::DataGet,
+        family: OpcodeFamily::Data,
+        mnemonic: "data.get",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0603,
+    },
+    OpcodeInfo {
+        opcode: Opcode::DataSet,
+        family: OpcodeFamily::Data,
+        mnemonic: "data.set",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0604,
+    },
+    OpcodeInfo {
+        opcode: Opcode::TyChk,
+        family: OpcodeFamily::Ty,
+        mnemonic: "ty.chk",
+        operand_shape: OperandShape::Type,
+        wire_code: 0x0701,
+    },
+    OpcodeInfo {
+        opcode: Opcode::TyCast,
+        family: OpcodeFamily::Ty,
+        mnemonic: "ty.cast",
+        operand_shape: OperandShape::Type,
+        wire_code: 0x0702,
+    },
+    OpcodeInfo {
+        opcode: Opcode::TyId,
+        family: OpcodeFamily::Ty,
+        mnemonic: "ty.id",
+        operand_shape: OperandShape::Type,
+        wire_code: 0x0703,
+    },
+    OpcodeInfo {
+        opcode: Opcode::HdlPush,
+        family: OpcodeFamily::Eff,
+        mnemonic: "hdl.push",
+        operand_shape: OperandShape::EffectId,
+        wire_code: 0x0801,
+    },
+    OpcodeInfo {
+        opcode: Opcode::HdlPop,
+        family: OpcodeFamily::Eff,
+        mnemonic: "hdl.pop",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0802,
+    },
+    OpcodeInfo {
+        opcode: Opcode::EffInvk,
+        family: OpcodeFamily::Eff,
+        mnemonic: "eff.invk",
+        operand_shape: OperandShape::Effect,
+        wire_code: 0x0803,
+    },
+    OpcodeInfo {
+        opcode: Opcode::EffInvkSeq,
+        family: OpcodeFamily::Eff,
+        mnemonic: "eff.invk.seq",
+        operand_shape: OperandShape::Effect,
+        wire_code: 0x0805,
+    },
+    OpcodeInfo {
+        opcode: Opcode::EffResume,
+        family: OpcodeFamily::Eff,
+        mnemonic: "eff.resume",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0804,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FfiCall,
+        family: OpcodeFamily::Ffi,
+        mnemonic: "ffi.call",
+        operand_shape: OperandShape::Foreign,
+        wire_code: 0x0901,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FfiCallSeq,
+        family: OpcodeFamily::Ffi,
+        mnemonic: "ffi.call.seq",
+        operand_shape: OperandShape::Foreign,
+        wire_code: 0x0902,
+    },
+    OpcodeInfo {
+        opcode: Opcode::ModLoad,
+        family: OpcodeFamily::Module,
+        mnemonic: "mod.load",
+        operand_shape: OperandShape::None,
+        wire_code: 0x0A01,
+    },
+    OpcodeInfo {
+        opcode: Opcode::ModGet,
+        family: OpcodeFamily::Module,
+        mnemonic: "mod.get",
+        operand_shape: OperandShape::String,
+        wire_code: 0x0A02,
+    },
+];

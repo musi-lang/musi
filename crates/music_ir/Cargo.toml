@@ -24,6 +24,7 @@ music_resolve = { path = "../music_resolve" }
 music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }
 music_term = { path = "../music_term" }
+musi_foundation = { path = "../musi_foundation" }
 
 [lints]
 workspace = true
