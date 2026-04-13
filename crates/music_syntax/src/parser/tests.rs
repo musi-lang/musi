@@ -246,6 +246,21 @@ fn parses_new_signature_order_and_array_type_syntax() {
 }
 
 #[test]
+fn parses_tuple_and_array_destructuring_let_patterns() {
+    let parsed = parse(
+        Lexer::new(
+            "let pair := (1, 2); let items := [3, 4]; let (a, b) := pair; let [c, d] := items;",
+        )
+        .lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
 fn parses_handler_type_annotation() {
     let parsed = parse(
         Lexer::new(

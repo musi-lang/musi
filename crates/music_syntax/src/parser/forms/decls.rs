@@ -9,7 +9,6 @@ impl Parser<'_> {
         if self.at(TokenKind::KwRec) {
             attrs.push(self.advance_element());
         }
-        self.parse_optional_type_params_clause(&mut attrs)?;
         if self.is_receiver_prefixed_let_head() {
             attrs.push(SyntaxElementId::Node(self.parse_receiver_let_head()?));
         } else {

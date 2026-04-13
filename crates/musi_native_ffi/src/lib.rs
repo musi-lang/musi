@@ -19,7 +19,6 @@ impl NativeFfi {
 }
 
 const FFI_OK: c_uint = 0;
-const FFI_DEFAULT_ABI: c_uint = 1;
 const FFI_TYPE_STRUCT: u16 = 13;
 const RTLD_NOW: c_int = 2;
 
@@ -227,7 +226,7 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         unsafe {
             ffi_prep_cif(
                 cif.as_mut_ptr(),
-                FFI_DEFAULT_ABI,
+                default_ffi_abi(),
                 arg_count,
                 result_type_ptr,
                 arg_type_ptrs.as_mut_ptr(),
@@ -237,7 +236,11 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
     if prep_status != FFI_OK {
         return Err(VmError::new(VmErrorKind::NativeAbiUnsupported {
             foreign: foreign.name().into(),
-            reason: format!("ffi_prep_cif failed with status `{prep_status}`").into(),
+            reason: format!(
+                "ffi_prep_cif failed with status `{prep_status}` for abi `{}`",
+                default_ffi_abi()
+            )
+            .into(),
         }));
     }
     let mut cif = {
@@ -442,7 +445,7 @@ fn build_struct_ffi_type(fields: &[NativeAbiType]) -> VmResult<FfiTypeRef> {
         // SAFETY: `owned.raw` points to a live struct type and `ffi_offsets` has one slot per field.
         unsafe {
             ffi_get_struct_offsets(
-                FFI_DEFAULT_ABI,
+                default_ffi_abi(),
                 &raw mut owned.raw,
                 ffi_offsets.as_mut_ptr(),
             )
@@ -451,7 +454,11 @@ fn build_struct_ffi_type(fields: &[NativeAbiType]) -> VmResult<FfiTypeRef> {
     if status != FFI_OK {
         return Err(VmError::new(VmErrorKind::NativeAbiUnsupported {
             foreign: "<struct>".into(),
-            reason: format!("ffi_get_struct_offsets failed with status `{status}`").into(),
+            reason: format!(
+                "ffi_get_struct_offsets failed with status `{status}` for abi `{}`",
+                default_ffi_abi()
+            )
+            .into(),
         }));
     }
     owned.offsets = ffi_offsets
@@ -929,6 +936,42 @@ fn c_runtime_library_candidates() -> Vec<String> {
     vec!["c".to_owned()]
 }
 
+#[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
+const fn default_ffi_abi() -> c_uint {
+    2
+}
+
+#[cfg(all(target_arch = "x86_64", target_os = "windows", target_env = "gnu"))]
+const fn default_ffi_abi() -> c_uint {
+    2
+}
+
+#[cfg(all(target_arch = "x86_64", target_os = "windows", not(target_env = "gnu")))]
+const fn default_ffi_abi() -> c_uint {
+    1
+}
+
+#[cfg(all(target_arch = "aarch64", not(target_os = "windows")))]
+const fn default_ffi_abi() -> c_uint {
+    1
+}
+
+#[cfg(all(target_arch = "aarch64", target_os = "windows"))]
+const fn default_ffi_abi() -> c_uint {
+    2
+}
+
+#[cfg(not(any(
+    all(target_arch = "x86_64", not(target_os = "windows")),
+    all(target_arch = "x86_64", target_os = "windows", target_env = "gnu"),
+    all(target_arch = "x86_64", target_os = "windows", not(target_env = "gnu")),
+    all(target_arch = "aarch64", not(target_os = "windows")),
+    all(target_arch = "aarch64", target_os = "windows")
+)))]
+const fn default_ffi_abi() -> c_uint {
+    1
+}
+
 fn dlerror_text() -> Box<str> {
     let error_ptr = {
         // SAFETY: reading the dynamic loader thread-local error string is side-effect free.
@@ -1080,7 +1123,7 @@ fn ffi_child(ffi: &FfiTypeRef, index: usize) -> Option<&FfiTypeRef> {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-    use super::library_candidates;
+    use super::{default_ffi_abi, library_candidates};
 
     #[test]
     fn c_runtime_link_uses_platform_candidates() {
@@ -1114,5 +1157,19 @@ mod tests {
             library_candidates("/usr/lib/libSystem.B.dylib"),
             vec!["/usr/lib/libSystem.B.dylib".to_owned()]
         );
+    }
+
+    #[test]
+    fn default_ffi_abi_matches_current_target() {
+        #[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
+        assert_eq!(default_ffi_abi(), 2);
+        #[cfg(all(target_arch = "x86_64", target_os = "windows", target_env = "gnu"))]
+        assert_eq!(default_ffi_abi(), 2);
+        #[cfg(all(target_arch = "x86_64", target_os = "windows", not(target_env = "gnu")))]
+        assert_eq!(default_ffi_abi(), 1);
+        #[cfg(all(target_arch = "aarch64", not(target_os = "windows")))]
+        assert_eq!(default_ffi_abi(), 1);
+        #[cfg(all(target_arch = "aarch64", target_os = "windows"))]
+        assert_eq!(default_ffi_abi(), 2);
     }
 }

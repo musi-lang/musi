@@ -269,14 +269,14 @@ fn rejects_opaque_exports_from_root_and_dynamic_modules() {
     let dep = compile_program(
         &[(
             "dep",
-            "export opaque let hidden : Int := 41; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden : Int }; export let answer () : Int := 42;",
         )],
         "dep",
     );
     let main = compile_program(
         &[(
             "main",
-            "export opaque let secret : Int := 7; export let root () : Int := 0;",
+            "export opaque let Secret := data { | Secret : Int }; export let root () : Int := 0;",
         )],
         "main",
     );
@@ -286,21 +286,21 @@ fn rejects_opaque_exports_from_root_and_dynamic_modules() {
     let mut vm = Vm::new(main, loader, TestHost, VmOptions);
     vm.initialize().expect("vm init should succeed");
 
-    let err = vm.lookup_export("secret").unwrap_err();
+    let err = vm.lookup_export("Secret").unwrap_err();
     assert!(matches!(
         err.kind(),
         VmErrorKind::OpaqueExport { module, export }
-            if module.as_ref() == "<root>" && export.as_ref() == "secret"
+            if module.as_ref() == "<root>" && export.as_ref() == "Secret"
     ));
 
     let module = vm
         .load_module("dep")
         .expect("dynamic import should succeed");
-    let err = vm.lookup_module_export(&module, "hidden").unwrap_err();
+    let err = vm.lookup_module_export(&module, "Hidden").unwrap_err();
     assert!(matches!(
         err.kind(),
         VmErrorKind::OpaqueExport { module, export }
-            if module.as_ref() == "dep" && export.as_ref() == "hidden"
+            if module.as_ref() == "dep" && export.as_ref() == "Hidden"
     ));
 }
 
