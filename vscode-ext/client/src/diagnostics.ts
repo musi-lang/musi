@@ -20,6 +20,22 @@ const CHECK_DEBOUNCE_MS = 250;
 type PendingTimer = ReturnType<typeof setTimeout>;
 type DiagnosticsMode = "disabled" | "full" | "manifest-only";
 
+function workspaceOnlyManifest(pkg: PackageRoot): boolean {
+	return Boolean(
+		pkg.manifest.workspace && !pkg.manifest.name && !pkg.manifest.version,
+	);
+}
+
+function filterWorkspaceRootDiagnostics(
+	pkg: PackageRoot,
+	diagnostics: readonly DiagnosticPayload[],
+): DiagnosticPayload[] {
+	if (!workspaceOnlyManifest(pkg)) {
+		return [...diagnostics];
+	}
+	return diagnostics.filter((entry) => entry.code !== "MS3610");
+}
+
 function toSeverity(value: string | undefined): vscode.DiagnosticSeverity {
 	switch (value?.toLowerCase()) {
 		case "warning":
@@ -241,8 +257,12 @@ export class DiagnosticsController {
 			if (controller.signal.aborted) {
 				return;
 			}
-			this.publishPackageDiagnostics(pkg, result.payload.diagnostics);
-			if (result.exitCode === 0) {
+			const diagnostics = filterWorkspaceRootDiagnostics(
+				pkg,
+				result.payload.diagnostics,
+			);
+			this.publishPackageDiagnostics(pkg, diagnostics);
+			if (result.exitCode === 0 || diagnostics.length === 0) {
 				this.#statusBar.update(`Ready: ${path.basename(pkg.rootDir)}`, "ready");
 			} else {
 				this.#statusBar.update(

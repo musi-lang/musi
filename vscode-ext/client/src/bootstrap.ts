@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { findWorkspaceLspBinary } from "./binary-selection.ts";
 import { CONFIG_DEFAULTS, getConfig } from "./config.ts";
 import {
 	getCargoBinDir,
@@ -10,7 +11,7 @@ import {
 } from "./utils.ts";
 
 function workspaceCandidates(binaryName: string): string[] {
-	const workspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	const workspace = workspacePath();
 	if (!workspace) {
 		return [];
 	}
@@ -59,6 +60,34 @@ function configuredBinary(
 	return undefined;
 }
 
+function workspacePath(): string | undefined {
+	return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+export interface BinaryLookup {
+	path?: string;
+	staleWorkspacePath?: string;
+	freshnessPath?: string;
+}
+
+function binaryLookup(
+	path: string | undefined,
+	staleWorkspacePath: string | undefined,
+	freshnessPath: string | undefined,
+): BinaryLookup {
+	const lookup: BinaryLookup = {};
+	if (path) {
+		lookup.path = path;
+	}
+	if (staleWorkspacePath) {
+		lookup.staleWorkspacePath = staleWorkspacePath;
+	}
+	if (freshnessPath) {
+		lookup.freshnessPath = freshnessPath;
+	}
+	return lookup;
+}
+
 function findBinaryPath(
 	configuredPath: string,
 	defaultValue: string,
@@ -82,14 +111,36 @@ export function findCliPath(): string | undefined {
 	);
 }
 
-export function findLspPath(): string | undefined {
+export function findLspBinary(): BinaryLookup {
 	const config = getConfig();
-	return findBinaryPath(
+	const configured = configuredBinary(
 		config.lspPath,
 		CONFIG_DEFAULTS.lspPath,
-		getLspBinaryName(),
 		"Musi LSP",
 	);
+	if (configured) {
+		return binaryLookup(configured, undefined, undefined);
+	}
+	const workspaceBinary = findWorkspaceLspBinary(
+		workspacePath(),
+		getLspBinaryName(),
+	);
+	if (workspaceBinary.path) {
+		return workspaceBinary;
+	}
+	const global = firstExisting(globalCandidates(getLspBinaryName()));
+	if (global) {
+		return binaryLookup(
+			global,
+			workspaceBinary.staleWorkspacePath,
+			workspaceBinary.freshnessPath,
+		);
+	}
+	return workspaceBinary;
+}
+
+export function findLspPath(): string | undefined {
+	return findLspBinary().path;
 }
 
 export async function showCliNotFoundUI() {
@@ -116,4 +167,16 @@ export async function showLspNotFoundUI() {
 			"musi.lspPath",
 		);
 	}
+}
+
+export async function showStaleLspBinaryUI(
+	staleWorkspacePath: string,
+	freshnessPath?: string,
+) {
+	const freshnessDetail = freshnessPath
+		? ` Source stamp: ${path.relative(workspacePath() ?? path.dirname(freshnessPath), freshnessPath)}.`
+		: "";
+	await vscode.window.showWarningMessage(
+		`Workspace Musi LSP binary is stale: ${staleWorkspacePath}. Rebuild \`musi_lsp\` to restore current editor diagnostics.${freshnessDetail}`,
+	);
 }
