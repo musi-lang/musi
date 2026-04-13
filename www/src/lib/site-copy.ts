@@ -148,8 +148,8 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 			guestbookForm: "Guestbook form",
 		},
 		home: {
-			eyebrow: "Learn",
-			title: "Learn Musi",
+			eyebrow: "Home",
+			title: "What is Musi?",
 			description:
 				"Musi is an expression-first programming language with pattern matching, effects, and a small command surface. Learn the language, install it from source, check playground status, and find community links from one site.",
 			sectionsTitle: "Why Musi",
