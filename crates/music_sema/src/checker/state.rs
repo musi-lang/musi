@@ -11,16 +11,18 @@ use music_hir::{
     HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
-use music_names::{Ident, Interner, KnownSymbols, NameBindingId, NameSite, Symbol};
+use music_names::{
+    Ident, Interner, KnownSymbols, NameBindingId, NameBindingKind, NameSite, Symbol,
+};
 use music_resolve::ResolvedModule;
 
 use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, ClassMemberFacts, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts,
-    ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList,
-    SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
+    ClassFacts, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts, ForeignLinkInfo,
+    InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef,
+    SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -91,13 +93,12 @@ pub struct Builtins {
     pub int_: HirTyId,
     pub float_: HirTyId,
     pub string_: HirTyId,
-    pub bound: HirTyId,
     pub cstring: HirTyId,
     pub cptr: HirTyId,
 }
 
 impl Builtins {
-    fn from_resolved(resolved: &mut ResolvedModule, known: KnownSymbols) -> Self {
+    fn from_resolved(resolved: &mut ResolvedModule, _known: KnownSymbols) -> Self {
         Self {
             error: alloc_builtin(resolved, HirTyKind::Error),
             unknown: alloc_builtin(resolved, HirTyKind::Unknown),
@@ -112,7 +113,6 @@ impl Builtins {
             int_: alloc_builtin(resolved, HirTyKind::Int),
             float_: alloc_builtin(resolved, HirTyKind::Float),
             string_: alloc_builtin(resolved, HirTyKind::String),
-            bound: alloc_named_builtin(resolved, known.bound),
             cstring: alloc_builtin(resolved, HirTyKind::CString),
             cptr: alloc_builtin(resolved, HirTyKind::CPtr),
         }
@@ -322,15 +322,7 @@ pub fn prepare_module<'interner, 'env>(
 
     let mut decls = DeclState::new();
     let module_key = resolved.module_key.clone();
-    seed_builtin_data_defs(&mut decls, module_key.clone(), builtins);
-    seed_builtin_class_facts(
-        &mut resolved,
-        &mut decls,
-        interner,
-        known,
-        builtins,
-        module_key,
-    );
+    seed_builtin_data_defs(&mut decls, &module_key);
 
     (
         ModuleState::new(resolved, binding_ids, import_targets),
@@ -344,33 +336,13 @@ pub fn prepare_module<'interner, 'env>(
     )
 }
 
-fn alloc_named_builtin(resolved: &mut ResolvedModule, name: Symbol) -> HirTyId {
-    resolved.module.store.alloc_ty(HirTy::new(
-        HirOrigin::dummy(),
-        HirTyKind::Named {
-            name,
-            args: SliceRange::EMPTY,
-        },
-    ))
-}
-
-fn seed_builtin_data_defs(decls: &mut DeclState, module: ModuleKey, _builtins: Builtins) {
+fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
     let bool_variants = BTreeMap::from([
         (
             "False".into(),
             SemaDataVariantDef::new(None, Box::default()),
         ),
         ("True".into(), SemaDataVariantDef::new(None, Box::default())),
-    ]);
-    let bound_variants = BTreeMap::from([
-        (
-            "Inclusive".into(),
-            SemaDataVariantDef::new(None, Box::default()),
-        ),
-        (
-            "Exclusive".into(),
-            SemaDataVariantDef::new(None, Box::default()),
-        ),
     ]);
     let _ = decls.data_defs.insert(
         "Bool".into(),
@@ -382,58 +354,6 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: ModuleKey, _builtins: B
             None,
         ),
     );
-    let _ = decls.data_defs.insert(
-        "Bound".into(),
-        SemaDataDef::new(
-            DefinitionKey::new(module, "Bound"),
-            bound_variants,
-            None,
-            None,
-            None,
-        ),
-    );
-}
-
-fn seed_builtin_class_facts(
-    resolved: &mut ResolvedModule,
-    decls: &mut DeclState,
-    interner: &mut Interner,
-    known: KnownSymbols,
-    builtins: Builtins,
-    module: ModuleKey,
-) {
-    let item_symbol = interner.intern("T");
-    let item_ty = resolved.module.store.alloc_ty(HirTy::new(
-        HirOrigin::dummy(),
-        HirTyKind::Named {
-            name: item_symbol,
-            args: SliceRange::EMPTY,
-        },
-    ));
-    let option_args = resolved.module.store.alloc_ty_list([item_ty]);
-    let option_item_ty = resolved.module.store.alloc_ty(HirTy::new(
-        HirOrigin::dummy(),
-        HirTyKind::Named {
-            name: known.lang_option,
-            args: option_args,
-        },
-    ));
-    let facts = ClassFacts::new(
-        DefinitionKey::new(module, "Rangeable"),
-        known.rangeable,
-        vec![
-            ClassMemberFacts::new(
-                known.compare,
-                vec![item_ty, item_ty].into_boxed_slice(),
-                builtins.int_,
-            ),
-            ClassMemberFacts::new(known.next, vec![item_ty].into_boxed_slice(), option_item_ty),
-            ClassMemberFacts::new(known.prev, vec![item_ty].into_boxed_slice(), option_item_ty),
-        ]
-        .into_boxed_slice(),
-        Box::default(),
-    );
-    let _ = decls.class_facts_by_name.insert(known.rangeable, facts);
 }
 
 fn host_target_info() -> TargetInfo {
@@ -529,6 +449,19 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .iter()
             .map(|import| import.to.clone())
             .collect()
+    }
+
+    pub fn prelude_bindings(&self) -> Box<[(NameBindingId, Symbol)]> {
+        self.module
+            .resolved
+            .names
+            .bindings
+            .iter()
+            .filter_map(|(id, binding)| {
+                (binding.kind == NameBindingKind::Prelude).then_some((id, binding.name))
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     pub fn expr(&self, id: HirExprId) -> HirExpr {

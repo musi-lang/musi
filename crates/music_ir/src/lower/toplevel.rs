@@ -63,60 +63,6 @@ pub(super) fn collect_top_level_items(
     }
 }
 
-pub(super) fn append_builtin_rangeable_items(ctx: &LowerCtx<'_>, items: &mut TopLevelItems) {
-    let provider_name = "__builtin_dict__Rangeable_Int";
-    if items
-        .callables
-        .iter()
-        .any(|callable| callable.name.as_ref() == provider_name)
-    {
-        return;
-    }
-    items.data_defs.push(IrDataDef::new(
-        DefinitionKey::new(ctx.module_key.clone(), "__builtin_dict__Rangeable_Int_Dict"),
-        vec![IrDataVariantDef::new(
-            "__builtin_dict__Rangeable_Int_Dict",
-            Box::default(),
-        )]
-        .into_boxed_slice(),
-    ));
-    items.callables.push(
-        IrCallable::new(
-            provider_name,
-            Box::default(),
-            IrExpr::new(
-                IrOrigin::new(
-                    ctx.sema
-                        .module()
-                        .store
-                        .exprs
-                        .get(ctx.sema.module().root)
-                        .origin
-                        .source_id,
-                    ctx.sema
-                        .module()
-                        .store
-                        .exprs
-                        .get(ctx.sema.module().root)
-                        .origin
-                        .span,
-                ),
-                IrExprKind::VariantNew {
-                    data_key: DefinitionKey::new(
-                        ctx.module_key.clone(),
-                        "__builtin_dict__Rangeable_Int_Dict",
-                    ),
-                    tag_index: 0,
-                    field_count: 0,
-                    args: Box::default(),
-                },
-            ),
-        )
-        .with_module_target_opt(Some(ctx.module_key.clone()))
-        .with_effects(EffectRow::empty()),
-    );
-}
-
 fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut TopLevelItems) {
     let sema = ctx.sema;
     let interner = ctx.interner;
@@ -543,6 +489,10 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
         HirTyKind::Seq { .. }
         | HirTyKind::Array { .. }
         | HirTyKind::Range { .. }
+        | HirTyKind::ClosedRange { .. }
+        | HirTyKind::PartialRangeFrom { .. }
+        | HirTyKind::PartialRangeUpTo { .. }
+        | HirTyKind::PartialRangeThru { .. }
         | HirTyKind::Handler { .. }
         | HirTyKind::Pi { .. }
         | HirTyKind::Arrow { .. }

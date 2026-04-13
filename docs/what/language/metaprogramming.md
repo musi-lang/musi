@@ -15,6 +15,15 @@ Current metaprogramming surface includes:
 
 It is part of the language surface and semantic model, not merely parser sugar.
 
+Examples:
+
+```musi
+quote (x + 1);
+quote {
+  x;
+};
+```
+
 ## Splice
 
 Splice forms are valid inside quote-shaped contexts.

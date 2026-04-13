@@ -6,9 +6,9 @@ use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirHandleClause,
-    HirLetMods, HirLitId, HirLitKind, HirParam, HirPatId, HirPatKind, HirPrefixOp, HirQuoteKind,
-    HirRecordItem, HirRecordPatField, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId,
-    HirTyKind,
+    HirLetMods, HirLitId, HirLitKind, HirParam, HirPartialRangeKind, HirPatId, HirPatKind,
+    HirPrefixOp, HirQuoteKind, HirRecordItem, HirRecordPatField, HirSpliceKind, HirTemplatePart,
+    HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
@@ -19,7 +19,7 @@ use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
     IrCaseRecordField, IrClassDef, IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef,
     IrEffectOpDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit,
-    IrModule, IrNameRef, IrOrigin, IrParam, IrRangeEndBound, IrRecordField, IrRecordLayoutField,
+    IrModule, IrNameRef, IrOrigin, IrParam, IrRangeKind, IrRecordField, IrRecordLayoutField,
     IrSeqPart, IrTempId,
 };
 
@@ -154,7 +154,6 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
 
     let mut items = TopLevelItems::default();
     toplevel::collect_top_level_items(&mut ctx, sema.module().root, false, &mut items);
-    toplevel::append_builtin_rangeable_items(&ctx, &mut items);
     items.callables.extend(ctx.extra_callables);
     append_synthesized_sum_data_defs(sema, interner, &mut items);
     let meta = meta::collect_meta(sema);
@@ -303,6 +302,9 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         HirExprKind::Binary { op, left, right } => {
             lower_binary_expr(ctx, expr_id, op, *left, *right)
         }
+        HirExprKind::PartialRange { kind, expr } => {
+            lower_partial_range_expr(ctx, expr_id, *kind, *expr)
+        }
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
         HirExprKind::Apply { callee, .. } => {
@@ -369,6 +371,15 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
     match &sema.module().store.exprs.get(expr_id).kind {
         HirExprKind::Error => true,
         HirExprKind::Name { name } => {
+            if matches!(
+                sema.ty(sema
+                    .try_expr_ty(expr_id)
+                    .unwrap_or_else(|| invalid_lowering_path("expr type missing for name ref")))
+                    .kind,
+                HirTyKind::Type
+            ) {
+                return true;
+            }
             if sema.expr_module_target(expr_id).is_some() {
                 return false;
             }
@@ -421,6 +432,13 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
             .get(items.clone())
             .iter()
             .all(|item| is_type_value_expr(sema, item.value, interner)),
+        HirExprKind::Field { .. } => matches!(
+            sema.ty(sema
+                .try_expr_ty(expr_id)
+                .unwrap_or_else(|| invalid_lowering_path("expr type missing for field ref")))
+                .kind,
+            HirTyKind::Type
+        ),
         _ => false,
     }
 }
@@ -612,7 +630,15 @@ fn record_layout_for_ty(
             items.sort();
             items
         }
-        HirTyKind::Range { .. } => vec!["start".into(), "end".into(), "end_bound".into()],
+        HirTyKind::Range { .. } | HirTyKind::ClosedRange { .. } => {
+            vec!["lowerBound".into(), "upperBound".into()]
+        }
+        HirTyKind::PartialRangeFrom { .. } => {
+            vec!["__upperBound".into(), "lowerBound".into()]
+        }
+        HirTyKind::PartialRangeUpTo { .. } | HirTyKind::PartialRangeThru { .. } => {
+            vec!["__lowerBound".into(), "upperBound".into()]
+        }
         _ => return None,
     };
 
@@ -983,7 +1009,9 @@ fn render_type_value_expr_name(
 ) -> Box<str> {
     match &sema.module().store.exprs.get(expr_id).kind {
         HirExprKind::Error => "Error".into(),
-        HirExprKind::Name { name } => interner.resolve(name.name).into(),
+        HirExprKind::Name { name } | HirExprKind::Field { name, .. } => {
+            interner.resolve(name.name).into()
+        }
         HirExprKind::Tuple { items } => {
             let items = sema
                 .module()
@@ -1141,10 +1169,7 @@ fn lower_binary_expr(
     if matches!(op, HirBinaryOp::Assign) {
         return lower_assign_expr(ctx, left, right);
     }
-    if matches!(
-        op,
-        HirBinaryOp::RangeInclusive | HirBinaryOp::RangeExcludeEnd
-    ) {
+    if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
         return lower_range_expr(ctx, expr_id, op, left, right);
     }
     if matches!(op, HirBinaryOp::In) {
@@ -1169,16 +1194,52 @@ fn lower_range_expr(
         .try_expr_ty(expr_id)
         .unwrap_or_else(|| invalid_lowering_path("expr type missing for range"));
     let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
-    let end_bound = match op {
-        HirBinaryOp::RangeInclusive => IrRangeEndBound::Inclusive,
-        HirBinaryOp::RangeExcludeEnd => IrRangeEndBound::Exclusive,
+    let kind = match op {
+        HirBinaryOp::ClosedRange => IrRangeKind::Closed,
+        HirBinaryOp::OpenRange => IrRangeKind::Open,
         _ => invalid_lowering_path("invalid range op"),
     };
     IrExprKind::Range {
         ty_name,
-        start: lower_boxed_expr(ctx, left),
-        end: lower_boxed_expr(ctx, right),
-        end_bound,
+        kind,
+        lower: lower_boxed_expr(ctx, left),
+        upper: lower_boxed_expr(ctx, right),
+        bounds_evidence: None,
+    }
+}
+
+fn lower_partial_range_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    kind: HirPartialRangeKind,
+    expr: HirExprId,
+) -> IrExprKind {
+    let ty = ctx
+        .sema
+        .try_expr_ty(expr_id)
+        .unwrap_or_else(|| invalid_lowering_path("expr type missing for partial range"));
+    let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
+    let origin = IrOrigin::new(
+        ctx.sema.module().store.exprs.get(expr_id).origin.source_id,
+        ctx.sema.module().store.exprs.get(expr_id).origin.span,
+    );
+    let bounds_evidence = ctx
+        .sema
+        .expr_evidence(expr_id)
+        .and_then(|items| items.get(1))
+        .map(|item| Box::new(lower_evidence_expr(ctx, origin, item)));
+    let bound = lower_boxed_expr(ctx, expr);
+    let range_kind = match kind {
+        HirPartialRangeKind::From => IrRangeKind::From,
+        HirPartialRangeKind::UpTo => IrRangeKind::UpTo,
+        HirPartialRangeKind::Thru => IrRangeKind::Thru,
+    };
+    IrExprKind::Range {
+        ty_name,
+        kind: range_kind,
+        lower: bound.clone(),
+        upper: bound,
+        bounds_evidence,
     }
 }
 
@@ -1349,9 +1410,27 @@ fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<st
         HirTyKind::Tuple { items } => render_tuple_ty_name(sema, *items, interner),
         HirTyKind::Seq { item } => format!("[]{}", render_ty_name(sema, *item, interner)).into(),
         HirTyKind::Array { dims, item } => render_array_ty_name(sema, dims, *item, interner),
-        HirTyKind::Range { item } => {
-            format!("Range[{}]", render_ty_name(sema, *item, interner)).into()
+        HirTyKind::Range { bound } => {
+            format!("Range[{}]", render_ty_name(sema, *bound, interner)).into()
         }
+        HirTyKind::ClosedRange { bound } => {
+            format!("ClosedRange[{}]", render_ty_name(sema, *bound, interner)).into()
+        }
+        HirTyKind::PartialRangeFrom { bound } => format!(
+            "PartialRangeFrom[{}]",
+            render_ty_name(sema, *bound, interner)
+        )
+        .into(),
+        HirTyKind::PartialRangeUpTo { bound } => format!(
+            "PartialRangeUpTo[{}]",
+            render_ty_name(sema, *bound, interner)
+        )
+        .into(),
+        HirTyKind::PartialRangeThru { bound } => format!(
+            "PartialRangeThru[{}]",
+            render_ty_name(sema, *bound, interner)
+        )
+        .into(),
         HirTyKind::Handler {
             effect,
             input,

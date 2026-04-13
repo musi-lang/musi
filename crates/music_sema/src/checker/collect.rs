@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind, HirVariantDef,
+    HirArg, HirArrayItem, HirAttr, HirBinder, HirCaseArm, HirConstraint, HirExprId, HirExprKind,
+    HirFieldDef, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind,
+    HirVariantDef,
 };
 use music_names::Ident;
 
@@ -56,16 +57,23 @@ impl CollectPass<'_, '_, '_> {
                 self.visit_expr(base);
                 self.visit_expr(ty);
             }
-            HirExprKind::Prefix { expr, .. } => self.visit_expr(expr),
+            HirExprKind::Prefix { expr, .. } | HirExprKind::PartialRange { expr, .. } => {
+                self.visit_expr(expr);
+            }
             HirExprKind::Binary { left, right, .. } => {
                 self.visit_expr(left);
                 self.visit_expr(right);
             }
-            HirExprKind::Let { pat, value, .. } => {
+            HirExprKind::Let {
+                pat,
+                value,
+                type_params,
+                ..
+            } => {
                 if let Some(name) = bound_name_from_pat(self, pat) {
                     let attrs = self.expr(id).mods.attrs;
                     let outer_attrs = (!attrs.is_empty()).then_some((self.expr(id).origin, attrs));
-                    self.collect_bound_decl(value, name, outer_attrs.as_ref());
+                    self.collect_bound_decl(value, name, type_params, outer_attrs.as_ref());
                 }
                 self.visit_expr(value);
             }
@@ -165,6 +173,7 @@ impl CollectPass<'_, '_, '_> {
         &mut self,
         value: HirExprId,
         name: Ident,
+        type_params: SliceRange<HirBinder>,
         outer_attrs: Option<&(HirOrigin, SliceRange<HirAttr>)>,
     ) {
         let origin = outer_attrs.map_or_else(|| self.expr(value).origin, |(o, _)| *o);
@@ -177,7 +186,7 @@ impl CollectPass<'_, '_, '_> {
             HirExprKind::Class {
                 constraints,
                 members,
-            } => self.collect_class_decl(value, name, constraints, members),
+            } => self.collect_class_decl(value, name, type_params, constraints, members),
             _ => {}
         }
     }
@@ -291,6 +300,7 @@ impl CollectPass<'_, '_, '_> {
         &mut self,
         value: HirExprId,
         name: Ident,
+        type_params: SliceRange<HirBinder>,
         constraints: SliceRange<HirConstraint>,
         members: SliceRange<HirMemberDef>,
     ) {
@@ -334,6 +344,12 @@ impl CollectPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_class_id(name.name, value);
+        let type_params = self
+            .binders(type_params)
+            .into_iter()
+            .map(|binder| binder.name.name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let constraints = self.lower_constraints(constraints);
         let facts = ClassFacts::new(
             surface_key(self.module_key(), self.interner(), name.name),
@@ -341,6 +357,7 @@ impl CollectPass<'_, '_, '_> {
             class_members,
             laws,
         )
+        .with_type_params(type_params)
         .with_constraints(constraints);
         self.insert_class_facts(value, facts.clone());
         self.insert_class_facts_by_name(name.name, facts);

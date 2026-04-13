@@ -33,6 +33,7 @@ fn lower_ir(src: &str, key: &str) -> IrModule {
         SemaOptions {
             target: None,
             env: None,
+            prelude: None,
         },
     );
     lower_module(&sema, &interner).expect("ir lowering should succeed")

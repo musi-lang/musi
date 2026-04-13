@@ -8,33 +8,29 @@ slug: "data-and-pattern-matching"
 summary: "Data definitions, constructors, and pattern matching."
 ---
 
-## What
 Use `data` to model bounded domains directly in code.
 The `case` form reads shape by shape and keeps branching explicit.
 
-## When
-Reach for this chapter when values have distinct outcomes (task states, command result states, protocol messages).
+## Match first
 
 {{snippet:data-port-case}}
 
-## Why
-Named variants make domain rules obvious and easier to test.
-You avoid stringly-typed flags and boolean ambiguity.
+Use `data` when a value can be one of several known shapes.
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Define variants once, construct values from those constructors, then consume them with `case`.
+## Define and construct
 
 {{snippet:data-port}}
 
 {{snippet:data-port-value}}
 
+## Compare
+
 {{example:data-named-record}}
 
-## Analogy
-Like a JavaScript union with explicit branches, but checked and navigated with one `case` expression.
-
 ## Try it
+
+{{try:data-and-pattern-matching}}
+
+## Next step
+
 Read the three snippets in order, then continue to [Records and arrays](/docs/records-arrays-and-mutation).

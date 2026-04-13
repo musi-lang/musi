@@ -188,7 +188,11 @@ impl CheckPass<'_, '_, '_> {
                     .unwrap_or(builtins.unknown);
                 self.type_mismatch(origin, expected, seq_item);
             }
-            HirTyKind::Range { item: range_item } => {
+            HirTyKind::Range { bound: range_item }
+            | HirTyKind::ClosedRange { bound: range_item }
+            | HirTyKind::PartialRangeFrom { bound: range_item }
+            | HirTyKind::PartialRangeUpTo { bound: range_item }
+            | HirTyKind::PartialRangeThru { bound: range_item } => {
                 *has_runtime_spread = true;
                 let expected = params
                     .get(*param_index)

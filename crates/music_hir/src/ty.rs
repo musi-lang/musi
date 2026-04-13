@@ -65,7 +65,19 @@ pub enum HirTyKind {
         item: HirTyId,
     },
     Range {
-        item: HirTyId,
+        bound: HirTyId,
+    },
+    ClosedRange {
+        bound: HirTyId,
+    },
+    PartialRangeFrom {
+        bound: HirTyId,
+    },
+    PartialRangeUpTo {
+        bound: HirTyId,
+    },
+    PartialRangeThru {
+        bound: HirTyId,
     },
     Handler {
         effect: HirTyId,

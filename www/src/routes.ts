@@ -10,6 +10,8 @@ export interface AppRoute {
 	description: string;
 	kind: AppRouteKind;
 	docSlug?: string;
+	canonicalPath?: string;
+	disabled?: boolean;
 }
 
 export const primaryRoutes: AppRoute[] = [
@@ -19,15 +21,25 @@ export const primaryRoutes: AppRoute[] = [
 		label: "Home",
 		title: "Musi",
 		description:
-			"Programming language built around first-class resumable effects.",
+			"Musi language overview, docs, install steps, and public references.",
 		kind: "page",
+	},
+	{
+		id: "playground",
+		path: "/playground",
+		label: "Playground",
+		title: "Playground | Musi",
+		description: "Musi WASM web compiler",
+		kind: "page",
+		disabled: true,
 	},
 	{
 		id: "docs",
 		path: "/docs",
 		label: "Docs",
 		title: "Docs | Musi",
-		description: "Guided Musi documentation.",
+		description:
+			"Musi docs with current syntax, stdlib names, and learning order.",
 		kind: "docs-index",
 	},
 	{
@@ -35,7 +47,8 @@ export const primaryRoutes: AppRoute[] = [
 		path: "/install",
 		label: "Install",
 		title: "Install | Musi",
-		description: "Build Musi from source and start a project.",
+		description:
+			"Build Musi from source and set up direct and package commands.",
 		kind: "page",
 	},
 	{
@@ -43,7 +56,8 @@ export const primaryRoutes: AppRoute[] = [
 		path: "/reference",
 		label: "Reference",
 		title: "Reference | Musi",
-		description: "Repository, grammar, editor, and project links.",
+		description:
+			"Repository, grammar, editor, and public source links for Musi.",
 		kind: "page",
 	},
 ];

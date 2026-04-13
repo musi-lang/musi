@@ -2,6 +2,7 @@ import {
 	ActionIcon,
 	Anchor,
 	AppShell,
+	Box,
 	Burger,
 	Container,
 	Divider,
@@ -17,9 +18,15 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import type { ReactNode } from "react";
 import { docGroups } from "../docs";
-import { DesktopIcon, GithubIcon, MoonIcon, SunIcon } from "../icons";
+import {
+	DesktopIcon,
+	GithubIcon,
+	MoonIcon,
+	MusiMarkIcon,
+	SunIcon,
+} from "../icons";
 import type { AppRoute } from "../routes";
-import { primaryRoutes } from "../routes";
+import { isDocsRoute, primaryRoutes } from "../routes";
 
 type ColorScheme = "light" | "dark" | "auto";
 
@@ -57,13 +64,18 @@ function HeaderLinks(props: { route: AppRoute; onNavigate?: () => void }) {
 				.map((route) => (
 					<Anchor
 						key={route.id}
-						href={route.path}
-						onClick={props.onNavigate}
+						href={route.disabled ? "#" : route.path}
+						onClick={
+							route.disabled ? (e) => e.preventDefault() : props.onNavigate
+						}
 						underline="never"
 						c={props.route.path === route.path ? "text" : "dimmed"}
 						fw={props.route.path === route.path ? 700 : 500}
 						size="sm"
 						className={`header-link ${props.route.path === route.path ? "header-link-active" : ""}`}
+						style={
+							route.disabled ? { opacity: 0.5, cursor: "not-allowed" } : {}
+						}
 					>
 						{route.label}
 					</Anchor>
@@ -111,9 +123,16 @@ function DocsSidebar(props: { route: AppRoute; onNavigate?: () => void }) {
 		<Stack gap="md">
 			{docGroups.map((group) => (
 				<Stack key={group.group} gap={4} className="docs-nav-group">
-					<Text fw={700} size="sm" tt="uppercase" c="dimmed">
+					<Anchor
+						href={group.path}
+						onClick={props.onNavigate}
+						underline="never"
+						fw={700}
+						size="sm"
+						c={props.route.path === group.path ? "text" : "dimmed"}
+					>
 						{group.group}
-					</Text>
+					</Anchor>
 					{group.pages.map((page) => (
 						<NavLink
 							key={page.slug}
@@ -140,7 +159,7 @@ function DocsSidebar(props: { route: AppRoute; onNavigate?: () => void }) {
 
 export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 	const [opened, handlers] = useDisclosure(false);
-	const docsMode = props.route.kind === "doc";
+	const docsMode = isDocsRoute(props.route);
 
 	const headerContent = (
 		<Group h="100%" px={4} justify="space-between" wrap="nowrap">
@@ -155,9 +174,16 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 					}
 				/>
 				<Anchor href="/" underline="never" className="site-logo">
-					<Text fw={700} size="lg" c="inherit">
-						Musi
-					</Text>
+					<Group gap="xs" wrap="nowrap" align="center">
+						<Box className="site-logo-mark" aria-hidden="true">
+							<MusiMarkIcon size={26} />
+						</Box>
+						<div className="site-logo-copy">
+							<Text fw={700} size="lg" c="inherit" className="site-logo-title">
+								Musi
+							</Text>
+						</div>
+					</Group>
 				</Anchor>
 			</Group>
 			<Group gap="md" wrap="nowrap">
@@ -224,13 +250,33 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 
 export function PageFooter() {
 	return (
-		<Stack gap="sm" mt={56} mb={12}>
+		<Stack gap="lg" mt={56} mb={32}>
 			<Divider />
-			<Group justify="space-between" gap="sm" c="dimmed" fz="sm">
-				<Text component="a" href="https://github.com/musi-lang/musi">
-					github.com/musi-lang/musi
-				</Text>
-				<Text>musi-lang.com</Text>
+			<Group justify="space-between" align="center" gap="md" wrap="wrap">
+				<Group gap="sm" wrap="nowrap" align="center">
+					<Box className="site-logo-mark" aria-hidden="true">
+						<MusiMarkIcon size={24} />
+					</Box>
+					<Text fw={700}>Musi</Text>
+				</Group>
+				<Group gap="lg" align="center" wrap="wrap">
+					<Anchor href="/docs" underline="never" c="dimmed">
+						Docs
+					</Anchor>
+					<Anchor href="/docs/reference" underline="never" c="dimmed">
+						Reference
+					</Anchor>
+					<Anchor href="/install" underline="never" c="dimmed">
+						Install
+					</Anchor>
+					<Anchor
+						href="https://github.com/musi-lang/musi"
+						underline="never"
+						c="dimmed"
+					>
+						GitHub
+					</Anchor>
+				</Group>
 			</Group>
 		</Stack>
 	);

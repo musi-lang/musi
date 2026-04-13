@@ -4,7 +4,10 @@ import type { AppRoute } from "./routes";
 const scriptCloseTagPattern = /<\/script/gi;
 
 export function canonicalUrl(route: AppRoute) {
-	return new URL(route.path, `${siteOrigin}/`).toString();
+	return new URL(
+		route.canonicalPath ?? route.path,
+		`${siteOrigin}/`,
+	).toString();
 }
 
 function escapeJson(payload: string) {

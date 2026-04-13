@@ -604,3 +604,77 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
     );
 }
+
+#[test]
+fn root_package_gets_auto_std_prelude() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" },
+  "workspace": ["packages/std"]
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"
+export let answer () : Option[Int] := some[Int](1);
+",
+    );
+    write_file(
+        temp.path(),
+        "packages/std/musi.json",
+        r#"{
+  "name": "@std",
+  "version": "0.1.0",
+  "main": "./index.ms",
+  "exports": {
+    ".": "./index.ms",
+    "./prelude": "./prelude/index.ms",
+    "./option": "./option/index.ms"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/index.ms",
+        r#"
+export let Prelude := import "@std/prelude";
+export let Option := import "@std/option";
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/prelude/index.ms",
+        r#"
+let OptionPkg := import "@std/option";
+export let Int := Int;
+export opaque let Option := OptionPkg.Option;
+export let some := OptionPkg.some;
+export let none := OptionPkg.none;
+"#,
+    );
+    write_file(
+        temp.path(),
+        "packages/std/option/index.ms",
+        r"
+export opaque let Option[T] := data {
+  | Some : T
+  | None
+};
+export let some[T] (value : T) : Option[T] := .Some(value);
+export let none[T] () : Option[T] := .None;
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let entry = project.root_entry().expect("root entry resolves");
+    let mut session = project.build_session().expect("project session builds");
+    let _sema = session
+        .check_module(&entry.module_key)
+        .expect("root module should typecheck with auto prelude");
+}

@@ -35,6 +35,7 @@ pub fn resolve_diag_kind(diag: &Diag) -> Option<ResolveDiagKind> {
 
 #[derive(Default)]
 pub struct ResolveOptions<'env> {
+    pub inject_compiler_prelude: bool,
     pub prelude: Vec<Symbol>,
     pub import_env: Option<&'env dyn ImportEnv>,
 }
@@ -114,13 +115,15 @@ where
         let mut root = Scope::default();
 
         let known = KnownSymbols::new(interner);
-        for sym in known.compiler_prelude() {
-            let binding = names.alloc_binding(NameBinding {
-                name: sym,
-                site: NameSite::new(source_id, Span::DUMMY),
-                kind: NameBindingKind::Prelude,
-            });
-            let _prev = root.names.insert(sym, binding);
+        if options.inject_compiler_prelude {
+            for sym in known.compiler_prelude() {
+                let binding = names.alloc_binding(NameBinding {
+                    name: sym,
+                    site: NameSite::new(source_id, Span::DUMMY),
+                    kind: NameBindingKind::Prelude,
+                });
+                let _prev = root.names.insert(sym, binding);
+            }
         }
         for sym in options.prelude {
             if root.names.contains_key(&sym) {

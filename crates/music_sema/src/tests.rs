@@ -75,6 +75,7 @@ fn check_module_src(
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env,
         },
@@ -85,6 +86,7 @@ fn check_module_src(
         SemaOptions {
             target: None,
             env: sema_env,
+            prelude: None,
         },
     )
 }
@@ -143,6 +145,76 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
         !has_diag(&sema, SemaDiagKind::UnknownEffect),
         "{:?}",
         sema.diags()
+    );
+}
+
+#[test]
+fn opaque_imported_data_stays_abstract() {
+    let import_env = TestImportEnv::default().with_module("a", "a");
+    let module_a = check_module_src(
+        40,
+        "a",
+        r"
+        export opaque let Token := data {
+          | Token : Int
+        };
+        export let makeToken (value : Int) : Token := .Token(value);
+    ",
+        Some(&import_env),
+        None,
+    );
+    let sema_env = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
+    let module_b = check_module_src(
+        41,
+        "b",
+        r#"
+        let A := import "a";
+        let Token := A.Token;
+        let makeToken := A.makeToken;
+        let ok : Token := makeToken(1);
+        let bad : Token := .Token(1);
+    "#,
+        Some(&import_env),
+        Some(&sema_env),
+    );
+    assert!(
+        has_diag(&module_b, SemaDiagKind::UnknownDataVariant),
+        "{:?}",
+        module_b.diags()
+    );
+}
+
+#[test]
+fn opaque_imported_effect_hides_ops() {
+    let import_env = TestImportEnv::default().with_module("a", "a");
+    let module_a = check_module_src(
+        42,
+        "a",
+        r"
+        export opaque let Console := effect {
+          let readln () : Int;
+        };
+        export let readln () : Int := perform Console.readln();
+    ",
+        Some(&import_env),
+        None,
+    );
+    let sema_env = TestSemaEnv::default().with_surface("a", module_a.surface().clone());
+    let module_b = check_module_src(
+        43,
+        "b",
+        r#"
+        let A := import "a";
+        let Console := A.Console;
+        let direct () : Int := perform Console.readln();
+    "#,
+        Some(&import_env),
+        Some(&sema_env),
+    );
+    assert!(
+        has_diag(&module_b, SemaDiagKind::InvalidPerformTarget),
+        "{:?}",
+        module_b.diags()
     );
 }
 
@@ -1047,10 +1119,15 @@ fn multi_index_arrays_check_expected_arity() {
 #[test]
 fn ranges_typecheck_and_membership_is_bool() {
     let sema = check(
-        r"
+        r#"
+        let Core := import "musi:core";
+        let Bool := Core.Bool;
+        let Int := Core.Int;
+        let Range := Core.Range;
+        let Rangeable := Core.Rangeable;
         let xs : Range[Int] := 1 ..< 4;
         let ok : Bool := 2 in xs;
-    ",
+    "#,
     );
     assert!(
         !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),

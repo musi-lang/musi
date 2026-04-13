@@ -1,6 +1,6 @@
 use super::closures::lower_binding_capture_exprs;
 use super::*;
-use crate::api::IrRangeEndBound;
+use crate::api::IrRangeKind;
 
 pub(super) struct RecursiveBindingInput<'a, 'b> {
     pub(super) ctx: &'a LowerCtx<'b>,
@@ -157,10 +157,11 @@ impl RecursiveBindingInput<'_, '_> {
             IrExprKind::Binary { op, left, right } => self.rewrite_binary_kind(op, *left, *right),
             IrExprKind::Range {
                 ty_name,
-                start,
-                end,
-                end_bound,
-            } => self.rewrite_range_kind(ty_name, *start, *end, end_bound),
+                kind,
+                lower,
+                upper,
+                bounds_evidence,
+            } => self.rewrite_range_kind(ty_name, kind, *lower, *upper, bounds_evidence),
             IrExprKind::RangeContains {
                 value,
                 range,
@@ -356,29 +357,40 @@ impl RecursiveBindingInput<'_, '_> {
     fn rewrite_range_kind(
         &self,
         ty_name: Box<str>,
-        start: IrExpr,
-        end: IrExpr,
-        end_bound: IrRangeEndBound,
+        kind: IrRangeKind,
+        lower: IrExpr,
+        upper: IrExpr,
+        bounds_evidence: Option<Box<IrExpr>>,
     ) -> IrExprKind {
         IrExprKind::Range {
             ty_name,
-            start: Box::new(rewrite_recursive_binding_refs(
+            kind,
+            lower: Box::new(rewrite_recursive_binding_refs(
                 self.ctx,
                 self.origin,
-                start,
+                lower,
                 self.binding,
                 self.callable_name,
                 self.captures,
             )),
-            end: Box::new(rewrite_recursive_binding_refs(
+            upper: Box::new(rewrite_recursive_binding_refs(
                 self.ctx,
                 self.origin,
-                end,
+                upper,
                 self.binding,
                 self.callable_name,
                 self.captures,
             )),
-            end_bound,
+            bounds_evidence: bounds_evidence.map(|expr| {
+                Box::new(rewrite_recursive_binding_refs(
+                    self.ctx,
+                    self.origin,
+                    *expr,
+                    self.binding,
+                    self.callable_name,
+                    self.captures,
+                ))
+            }),
         }
     }
 

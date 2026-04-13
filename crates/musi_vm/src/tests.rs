@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use musi_foundation::register_modules;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 use music_seam::descriptor::{DataDescriptor, DataVariantDescriptor, TypeDescriptor};
@@ -98,6 +99,7 @@ fn session() -> Session {
 
 fn compile_program(modules: &[(&str, &str)], entry: &str) -> Program {
     let mut session = session();
+    register_modules(&mut session).expect("foundation modules should install");
     for &(name, source) in modules {
         session
             .set_module_text(&ModuleKey::new(name), source)
@@ -359,7 +361,11 @@ fn reuses_handler_value_and_executes_range_membership_and_spread() {
     let program = compile_program(
         &[(
             "main",
-            r"
+            r#"
+            let Core := import "musi:core";
+            let Bool := Core.Bool;
+            let Int := Core.Int;
+            let Rangeable := Core.Rangeable;
             let Console := effect { let readln () : Int; };
             let ConsoleHandler := using Console {
               value => value + 1;
@@ -375,7 +381,7 @@ fn reuses_handler_value_and_executes_range_membership_and_spread() {
               let xs := [0, ...span, 4];
               xs.[2]
             );
-        ",
+        "#,
         )],
         "main",
     );

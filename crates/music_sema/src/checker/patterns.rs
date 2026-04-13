@@ -119,11 +119,16 @@ impl CheckPass<'_, '_, '_> {
                 .into_iter()
                 .map(|field| (field.name, field.ty))
                 .collect::<BTreeMap<_, _>>(),
-            HirTyKind::Range { item } => BTreeMap::from([
-                (self.intern("start"), item),
-                (self.intern("end"), item),
-                (self.intern("end_bound"), self.builtins().bound),
+            HirTyKind::Range { bound } | HirTyKind::ClosedRange { bound } => BTreeMap::from([
+                (self.intern("lowerBound"), bound),
+                (self.intern("upperBound"), bound),
             ]),
+            HirTyKind::PartialRangeFrom { bound } => {
+                BTreeMap::from([(self.intern("lowerBound"), bound)])
+            }
+            HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
+                BTreeMap::from([(self.intern("upperBound"), bound)])
+            }
             _ => BTreeMap::new(),
         };
         for field in self.record_pat_fields(fields) {

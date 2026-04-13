@@ -17,16 +17,38 @@ use crate::effects::EffectRow;
 type MemberDefRange = SliceRange<HirMemberDef>;
 
 impl CheckPass<'_, '_, '_> {
-    fn class_member_map(&self, class_name: Symbol) -> HashMap<Symbol, ClassMemberFacts> {
-        self.class_facts_by_name(class_name)
-            .map(|facts| {
-                facts
-                    .members
+    fn class_member_map(
+        &mut self,
+        class_name: Symbol,
+        class_args: &[HirTyId],
+    ) -> HashMap<Symbol, ClassMemberFacts> {
+        let Some(facts) = self.class_facts_by_name(class_name).cloned() else {
+            return HashMap::default();
+        };
+        let subst = facts
+            .type_params
+            .iter()
+            .copied()
+            .zip(class_args.iter().copied())
+            .collect::<HashMap<_, _>>();
+        facts
+            .members
+            .iter()
+            .map(|member| {
+                let params = member
+                    .params
                     .iter()
-                    .map(|member| (member.name, member.clone()))
-                    .collect::<HashMap<_, _>>()
+                    .copied()
+                    .map(|param| self.substitute_ty(param, &subst))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                let result = self.substitute_ty(member.result, &subst);
+                (
+                    member.name,
+                    ClassMemberFacts::new(member.name, params, result),
+                )
             })
-            .unwrap_or_default()
+            .collect::<HashMap<_, _>>()
     }
 
     fn check_instance_member(
@@ -53,7 +75,12 @@ impl CheckPass<'_, '_, '_> {
             }
             self.type_mismatch(member.origin, expected.result, signature.result);
         } else {
-            self.diag(member.origin.span, DiagKind::UnknownInstanceMember, "");
+            let member_name = self.resolve_symbol(member.name.name).to_owned();
+            self.diag(
+                member.origin.span,
+                DiagKind::UnknownInstanceMember,
+                &format!("unknown instance member `{member_name}`"),
+            );
         }
         if let Some(value) = member.value {
             let facts = check_expr(self, value);
@@ -128,11 +155,16 @@ impl CheckPass<'_, '_, '_> {
         }
 
         if self.class_id(class_name).is_none() && self.class_facts_by_name(class_name).is_none() {
-            self.diag(origin.span, DiagKind::UnknownClass, "");
+            let class_name = self.resolve_symbol(class_name).to_owned();
+            self.diag(
+                origin.span,
+                DiagKind::UnknownClass,
+                &format!("unknown class `{class_name}`"),
+            );
         }
 
         let members_vec = self.members((*members).clone());
-        let expected_members = self.class_member_map(class_name);
+        let expected_members = self.class_member_map(class_name, &class_args);
         let member_names = self.check_instance_member_set(origin, &members_vec, &expected_members);
         let type_params = self
             .binders(type_params)

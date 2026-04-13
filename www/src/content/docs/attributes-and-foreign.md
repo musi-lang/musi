@@ -8,27 +8,22 @@ slug: "attributes-and-foreign"
 summary: "Public attributes, foreign bindings, and symbol metadata."
 ---
 
-## What
 Attributes and foreign declarations are explicit annotations on declarations.
 
-## When
-Use foreign declarations when you integrate existing runtime boundaries.
-
-## Why
-They connect Musi declarations to external systems and symbol semantics without hiding behavior in implicit magic.
-
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Use `@link`, `@when`, `@repr`, and `@layout` where external binding or metadata is required.
-
-{{snippet:attr-link-foreign}}
+## Foreign binding
 
 {{snippet:foreign-puts}}
 
-## Analogy
-Like adding attributes in C# or annotations in Java, but in a compact declaration style.
+## Attribute form
+
+Use `@link`, `@when`, `@repr`, and `@layout` when a declaration needs explicit metadata.
+
+{{snippet:attr-link-foreign}}
 
 ## Try it
+
+{{try:attributes-and-foreign}}
+
+## Next step
+
 Review attributes first, then the foreign example, then continue to [Quote and syntax values](/docs/quote-and-syntax).

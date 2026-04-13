@@ -1,9 +1,18 @@
 import { createTheme } from "@mantine/core";
 
+// IBM/Wong Colorblind-friendly Palette
+// Black: #000000
+// Orange: #E69F00
+// Sky Blue: #56B4E9
+// Bluish Green: #009E73
+// Yellow: #F0E442
+// Blue: #0072B2
+// Vermilion: #D55E00
+// Reddish Purple: #CC79A7
+
 export const theme = createTheme({
-	primaryColor: "slate",
-	primaryShade: { light: 6, dark: 5 },
-	defaultRadius: "xs",
+	primaryColor: "wongBlue",
+	defaultRadius: 0, // "less soft curves and more rigid sharp squarish shapes"
 	fontFamily:
 		'"BIZ UDPGothic", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif',
 	fontFamilyMonospace:
@@ -14,6 +23,90 @@ export const theme = createTheme({
 			'"BIZ UDPGothic", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", sans-serif',
 	},
 	colors: {
+		wongOrange: [
+			"#fdf5e6",
+			"#faebd0",
+			"#f2d6a5",
+			"#ebc177",
+			"#e5ae4d",
+			"#e1a22f",
+			"#E69F00",
+			"#c18300",
+			"#ab7400",
+			"#946300",
+		],
+		wongSky: [
+			"#eef7fc",
+			"#deeff9",
+			"#bcdff1",
+			"#98cfea",
+			"#77c2e3",
+			"#60b8df",
+			"#56B4E9",
+			"#419ecf",
+			"#338dbb",
+			"#1f7ca4",
+		],
+		wongGreen: [
+			"#e5fcf5",
+			"#d4f2e9",
+			"#afdfd0",
+			"#87ccb6",
+			"#64bc9e",
+			"#4aaf8d",
+			"#009E73",
+			"#28876e",
+			"#1b7860",
+			"#086650",
+		],
+		wongYellow: [
+			"#fefde6",
+			"#fcfbd0",
+			"#f9f6a4",
+			"#f7f174",
+			"#F0E442",
+			"#e3d538",
+			"#c8bd2b",
+			"#b1a721",
+			"#999015",
+			"#807804",
+		],
+		wongBlue: [
+			"#e4f2fc",
+			"#c8e2f8",
+			"#9dc9f1",
+			"#6aafe8",
+			"#3f95df",
+			"#207dca",
+			"#0072B2",
+			"#005b8d",
+			"#00456a",
+			"#002f48",
+		],
+		wongVermilion: [
+			"#fbece4",
+			"#f5d8c8",
+			"#edb18e",
+			"#e58852",
+			"#df651f",
+			"#D55E00",
+			"#ad4500",
+			"#933a00",
+			"#7a2d00",
+			"#632200",
+		],
+		wongPurple: [
+			"#faeef5",
+			"#f1dbea",
+			"#dfb4d4",
+			"#ce8dbd",
+			"#c16ba9",
+			"#CC79A7",
+			"#ac5385",
+			"#984774",
+			"#823b61",
+			"#6d2f50",
+		],
 		slate: [
 			"#f4f4f1",
 			"#e7e5df",
@@ -26,70 +119,20 @@ export const theme = createTheme({
 			"#2e2d27",
 			"#171815",
 		],
-		ocean: [
-			"#e4f2fc",
-			"#c8e2f8",
-			"#9dc9f1",
-			"#6aafe8",
-			"#3f95df",
-			"#207dca",
-			"#0072b2",
-			"#005b8d",
-			"#00456a",
-			"#002f48",
-		],
-		teal: [
-			"#def6f0",
-			"#bcecdf",
-			"#87ddc5",
-			"#4dcda9",
-			"#1dbb92",
-			"#06a581",
-			"#009e73",
-			"#007c5a",
-			"#005a41",
-			"#003829",
-		],
-		dark: [
-			"#e6e4dd",
-			"#cfcbc0",
-			"#b0aa9d",
-			"#8f8979",
-			"#6f695a",
-			"#595446",
-			"#433f35",
-			"#2f2c24",
-			"#1d1b16",
-			"#0f0e0b",
-		],
 	},
 	components: {
 		Button: {
 			defaultProps: {
-				radius: "xs",
 				size: "sm",
 			},
 		},
-	},
-	other: {
-		colors: {
-			wongBlue: "#0072B2",
-			wongOrange: "#E69F00",
-			wongGreen: "#009E73",
-			wongSky: "#56B4E9",
-			wongVermillion: "#D55E00",
+		Paper: {
+			defaultProps: {
+				withBorder: true,
+			},
 		},
-		surface: {
-			lightBody: "#f4f4f1",
-			lightPanel: "#fcfbf8",
-			lightPanelAlt: "#efeee8",
-			lightBorder: "#cdc8bd",
-			lightMuted: "#5f5b52",
-			darkBody: "#0f0e0b",
-			darkPanel: "#171510",
-			darkPanelAlt: "#1f1c17",
-			darkBorder: "#373227",
-			darkMuted: "#b0aa9d",
+		TextInput: {
+			defaultProps: {},
 		},
 	},
 });

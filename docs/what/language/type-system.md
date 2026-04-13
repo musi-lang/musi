@@ -25,9 +25,16 @@ Important built-in roles include:
 - `Type`
 - `[]T`
 - `[N]T`
+- `Range[T]`
+- `ClosedRange[T]`
+- `PartialRangeFrom[T]`
+- `PartialRangeUpTo[T]`
+- `PartialRangeThru[T]`
 - `mut T`
 
 Tuples, records, sums, and function types are ordinary parts of the surface, not special compiler-only encodings.
+
+Ranges use distinct type identities for open, closed, and one-sided forms. Musi exposes `Range[T]`, `ClosedRange[T]`, `PartialRangeFrom[T]`, `PartialRangeUpTo[T]`, and `PartialRangeThru[T]`.
 
 ## Type-Valued Expressions
 
@@ -53,6 +60,14 @@ The language supports:
 - open effect rows with `using { ... }`
 
 Rows are part of function meaning, not late metadata.
+
+Examples:
+
+```musi
+let port : Int := 8080;
+let identityFn[T] (input : T) : T := input;
+identityFn[Int](port);
+```
 
 ## Data, Effects, And Classes
 

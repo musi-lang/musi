@@ -18,6 +18,7 @@ pub fn ir_diag_kind(diag: &Diag) -> Option<IrDiagKind> {
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm {
     match &ty.kind {
         SurfaceTyKind::Error => TypeTerm::new(TypeTermKind::Error),
@@ -93,9 +94,27 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
                 .into_boxed_slice(),
             item: Box::new(lower_surface_type_term_id(types, *item)),
         }),
-        SurfaceTyKind::Range { item } => TypeTerm::new(TypeTermKind::Range {
-            item: Box::new(lower_surface_type_term_id(types, *item)),
+        SurfaceTyKind::Range { bound } => TypeTerm::new(TypeTermKind::Range {
+            bound: Box::new(lower_surface_type_term_id(types, *bound)),
         }),
+        SurfaceTyKind::ClosedRange { bound } => TypeTerm::new(TypeTermKind::ClosedRange {
+            bound: Box::new(lower_surface_type_term_id(types, *bound)),
+        }),
+        SurfaceTyKind::PartialRangeFrom { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeFrom {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
+        SurfaceTyKind::PartialRangeUpTo { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeUpTo {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
+        SurfaceTyKind::PartialRangeThru { bound } => {
+            TypeTerm::new(TypeTermKind::PartialRangeThru {
+                bound: Box::new(lower_surface_type_term_id(types, *bound)),
+            })
+        }
         SurfaceTyKind::Handler {
             effect,
             input,
@@ -255,9 +274,12 @@ pub enum IrBinaryOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IrRangeEndBound {
-    Inclusive,
-    Exclusive,
+pub enum IrRangeKind {
+    Open,
+    Closed,
+    From,
+    UpTo,
+    Thru,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -530,9 +552,10 @@ pub enum IrExprKind {
     },
     Range {
         ty_name: Box<str>,
-        start: Box<IrExpr>,
-        end: Box<IrExpr>,
-        end_bound: IrRangeEndBound,
+        kind: IrRangeKind,
+        lower: Box<IrExpr>,
+        upper: Box<IrExpr>,
+        bounds_evidence: Option<Box<IrExpr>>,
     },
     RangeContains {
         value: Box<IrExpr>,

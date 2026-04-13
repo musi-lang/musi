@@ -60,7 +60,17 @@ impl PassBase<'_, '_, '_> {
             HirTyKind::Tuple { items } => self.render_tuple_ty(items),
             HirTyKind::Seq { item } => format!("[]{}", self.render_ty(item)),
             HirTyKind::Array { dims, item } => self.render_array_ty(dims, item),
-            HirTyKind::Range { item } => format!("Range[{}]", self.render_ty(item)),
+            HirTyKind::Range { bound } => format!("Range[{}]", self.render_ty(bound)),
+            HirTyKind::ClosedRange { bound } => format!("ClosedRange[{}]", self.render_ty(bound)),
+            HirTyKind::PartialRangeFrom { bound } => {
+                format!("PartialRangeFrom[{}]", self.render_ty(bound))
+            }
+            HirTyKind::PartialRangeUpTo { bound } => {
+                format!("PartialRangeUpTo[{}]", self.render_ty(bound))
+            }
+            HirTyKind::PartialRangeThru { bound } => {
+                format!("PartialRangeThru[{}]", self.render_ty(bound))
+            }
             HirTyKind::Handler {
                 effect,
                 input,
@@ -189,6 +199,7 @@ impl PassBase<'_, '_, '_> {
         self.ty_matches_kinds(left, right)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn ty_matches_kinds(&self, left: HirTyKind, right: HirTyKind) -> bool {
         match (left, right) {
             (HirTyKind::Type, HirTyKind::Type)
@@ -262,7 +273,20 @@ impl PassBase<'_, '_, '_> {
                 },
             ) => self.ty_matches(left_item, right_item),
             (HirTyKind::Seq { item: left }, HirTyKind::Seq { item: right })
-            | (HirTyKind::Range { item: left }, HirTyKind::Range { item: right })
+            | (HirTyKind::Range { bound: left }, HirTyKind::Range { bound: right })
+            | (HirTyKind::ClosedRange { bound: left }, HirTyKind::ClosedRange { bound: right })
+            | (
+                HirTyKind::PartialRangeFrom { bound: left },
+                HirTyKind::PartialRangeFrom { bound: right },
+            )
+            | (
+                HirTyKind::PartialRangeUpTo { bound: left },
+                HirTyKind::PartialRangeUpTo { bound: right },
+            )
+            | (
+                HirTyKind::PartialRangeThru { bound: left },
+                HirTyKind::PartialRangeThru { bound: right },
+            )
             | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right }) => {
                 self.ty_matches(left, right)
             }
@@ -355,8 +379,6 @@ impl PassBase<'_, '_, '_> {
             builtins.unit
         } else if symbol == known.bool_ {
             builtins.bool_
-        } else if symbol == known.bound {
-            builtins.bound
         } else if symbol == known.nat {
             builtins.nat
         } else if symbol == known.int_ {
@@ -380,13 +402,18 @@ impl PassBase<'_, '_, '_> {
         let builtins = self.builtins();
         if [
             known.type_,
+            known.array,
             known.any,
             known.unknown,
             known.syntax,
             known.empty,
             known.unit,
             known.bool_,
-            known.bound,
+            known.range,
+            known.closed_range,
+            known.partial_range_from,
+            known.partial_range_up_to,
+            known.partial_range_thru,
             known.nat,
             known.int_,
             known.float_,
@@ -505,7 +532,26 @@ impl PassBase<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
         match self.resolve_symbol(name.name) {
-            "Range" if args.len() == 1 => self.alloc_ty(HirTyKind::Range { item: args[0] }),
+            "Array" if args.len() == 1 => {
+                let dims = self.alloc_dims([HirDim::Unknown]);
+                self.alloc_ty(HirTyKind::Array {
+                    dims,
+                    item: args[0],
+                })
+            }
+            "Range" if args.len() == 1 => self.alloc_ty(HirTyKind::Range { bound: args[0] }),
+            "ClosedRange" if args.len() == 1 => {
+                self.alloc_ty(HirTyKind::ClosedRange { bound: args[0] })
+            }
+            "PartialRangeFrom" if args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeFrom { bound: args[0] })
+            }
+            "PartialRangeUpTo" if args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeUpTo { bound: args[0] })
+            }
+            "PartialRangeThru" if args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeThru { bound: args[0] })
+            }
             _ => {
                 let args = self.alloc_ty_list(args);
                 self.alloc_ty(HirTyKind::Named {

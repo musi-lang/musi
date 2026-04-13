@@ -74,7 +74,30 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         SurfaceTyKind::Tuple { items } => canonical_surface_tuple(surface, items),
         SurfaceTyKind::Seq { item } => format!("[]{}", canonical_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
-        SurfaceTyKind::Range { item } => format!("Range[{}]", canonical_surface_ty(surface, *item)),
+        SurfaceTyKind::Range { bound } => {
+            format!("Range[{}]", canonical_surface_ty(surface, *bound))
+        }
+        SurfaceTyKind::ClosedRange { bound } => {
+            format!("ClosedRange[{}]", canonical_surface_ty(surface, *bound))
+        }
+        SurfaceTyKind::PartialRangeFrom { bound } => {
+            format!(
+                "PartialRangeFrom[{}]",
+                canonical_surface_ty(surface, *bound)
+            )
+        }
+        SurfaceTyKind::PartialRangeUpTo { bound } => {
+            format!(
+                "PartialRangeUpTo[{}]",
+                canonical_surface_ty(surface, *bound)
+            )
+        }
+        SurfaceTyKind::PartialRangeThru { bound } => {
+            format!(
+                "PartialRangeThru[{}]",
+                canonical_surface_ty(surface, *bound)
+            )
+        }
         SurfaceTyKind::Handler {
             effect,
             input,
@@ -298,8 +321,20 @@ impl<'a> SurfaceTyBuilder<'a> {
                 dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
             },
-            HirTyKind::Range { item } => SurfaceTyKind::Range {
-                item: self.lower(*item),
+            HirTyKind::Range { bound } => SurfaceTyKind::Range {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::ClosedRange { bound } => SurfaceTyKind::ClosedRange {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeFrom { bound } => SurfaceTyKind::PartialRangeFrom {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeUpTo { bound } => SurfaceTyKind::PartialRangeUpTo {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeThru { bound } => SurfaceTyKind::PartialRangeThru {
+                bound: self.lower(*bound),
             },
             HirTyKind::Handler {
                 effect,
@@ -446,8 +481,20 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                 dims: self.import_dims(dims),
                 item: self.import(*item),
             },
-            SurfaceTyKind::Range { item } => HirTyKind::Range {
-                item: self.import(*item),
+            SurfaceTyKind::Range { bound } => HirTyKind::Range {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::ClosedRange { bound } => HirTyKind::ClosedRange {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeFrom { bound } => HirTyKind::PartialRangeFrom {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeUpTo { bound } => HirTyKind::PartialRangeUpTo {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeThru { bound } => HirTyKind::PartialRangeThru {
+                bound: self.import(*bound),
             },
             SurfaceTyKind::Handler {
                 effect,
@@ -555,6 +602,10 @@ impl SimpleTyKind {
             | HirTyKind::Seq { .. }
             | HirTyKind::Array { .. }
             | HirTyKind::Range { .. }
+            | HirTyKind::ClosedRange { .. }
+            | HirTyKind::PartialRangeFrom { .. }
+            | HirTyKind::PartialRangeUpTo { .. }
+            | HirTyKind::PartialRangeThru { .. }
             | HirTyKind::Handler { .. }
             | HirTyKind::Mut { .. }
             | HirTyKind::Record { .. } => None,
@@ -572,6 +623,10 @@ impl SimpleTyKind {
                 | SurfaceTyKind::Seq { .. }
                 | SurfaceTyKind::Array { .. }
                 | SurfaceTyKind::Range { .. }
+                | SurfaceTyKind::ClosedRange { .. }
+                | SurfaceTyKind::PartialRangeFrom { .. }
+                | SurfaceTyKind::PartialRangeUpTo { .. }
+                | SurfaceTyKind::PartialRangeThru { .. }
                 | SurfaceTyKind::Handler { .. }
                 | SurfaceTyKind::Mut { .. }
                 | SurfaceTyKind::Record { .. }
@@ -603,6 +658,10 @@ impl SimpleTyKind {
             | SurfaceTyKind::Seq { .. }
             | SurfaceTyKind::Array { .. }
             | SurfaceTyKind::Range { .. }
+            | SurfaceTyKind::ClosedRange { .. }
+            | SurfaceTyKind::PartialRangeFrom { .. }
+            | SurfaceTyKind::PartialRangeUpTo { .. }
+            | SurfaceTyKind::PartialRangeThru { .. }
             | SurfaceTyKind::Handler { .. }
             | SurfaceTyKind::Mut { .. }
             | SurfaceTyKind::Record { .. } => None,

@@ -1,11 +1,22 @@
 use std::rc::Rc;
 use std::slice::from_ref;
 
-use music_seam::{Instruction, Opcode, Operand};
+use music_seam::{Instruction, Opcode, Operand, TypeId};
 
 use crate::VmValueKind;
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
+
+const MAX_RANGE_MATERIALIZE_LEN: usize = 1_000_000;
+
+#[derive(Clone, Copy)]
+enum RuntimeRangeKind {
+    Open,
+    Closed,
+    From,
+    UpTo,
+    Thru,
+}
 
 impl Vm {
     pub(crate) fn exec_seq(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
@@ -112,11 +123,23 @@ impl Vm {
         let Operand::TypeLen { ty, len } = instruction.operand else {
             return Err(Self::invalid_operand(instruction));
         };
-        let end = self.pop_value()?;
-        let start = self.pop_value()?;
-        let module_slot = self.current_module_slot()?;
-        let end_bound = self.range_end_bound_value(module_slot, len)?;
-        self.push_value(Value::data(ty, 0, [start, end, end_bound]))?;
+        let kind = Self::decode_range_kind(len)?;
+        let upper = self.pop_value()?;
+        let lower = self.pop_value()?;
+        let fields = match kind {
+            RuntimeRangeKind::Open | RuntimeRangeKind::Closed => vec![lower, upper],
+            RuntimeRangeKind::From => {
+                let evidence = self.pop_value()?;
+                let (_, default_upper) = Self::range_bounds_dictionary(evidence)?;
+                vec![self.call_value(default_upper, &[])?, lower]
+            }
+            RuntimeRangeKind::UpTo | RuntimeRangeKind::Thru => {
+                let evidence = self.pop_value()?;
+                let (default_lower, _) = Self::range_bounds_dictionary(evidence)?;
+                vec![self.call_value(default_lower, &[])?, upper]
+            }
+        };
+        self.push_value(Value::data(ty, 0, fields))?;
         Ok(StepOutcome::Continue)
     }
 
@@ -157,27 +180,21 @@ impl Vm {
         }
     }
 
-    fn range_end_bound_value(&self, module_slot: usize, flags: u16) -> VmResult<Value> {
-        let bound_ty = self.named_type_id(module_slot, "Bound").ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidValueKind {
-                expected: VmValueKind::Data,
-                found: VmValueKind::Unit,
-            })
-        })?;
-        let tag = i64::from(flags != 0);
-        Ok(Value::data(bound_ty, tag, []))
-    }
-
-    fn bound_tag(value: Value) -> VmResult<i64> {
-        let data = Self::expect_data(value)?;
-        Ok(data.borrow().tag)
+    fn decode_range_kind(flags: u16) -> VmResult<RuntimeRangeKind> {
+        match flags {
+            0 => Ok(RuntimeRangeKind::Open),
+            1 => Ok(RuntimeRangeKind::Closed),
+            2 => Ok(RuntimeRangeKind::From),
+            3 => Ok(RuntimeRangeKind::UpTo),
+            4 => Ok(RuntimeRangeKind::Thru),
+            _ => Err(VmError::new(VmErrorKind::InvalidRangeStep {
+                detail: "unknown range kind".into(),
+            })),
+        }
     }
 
     fn materialize_range_items(&mut self, range: Value, evidence: Value) -> VmResult<Vec<Value>> {
-        let (start, end, inclusive_end) = self.range_parts(range)?;
-        if self.is_builtin_rangeable_int_evidence(&evidence) {
-            return Self::materialize_builtin_int_range(&start, &end, inclusive_end);
-        }
+        let (start, end, kind) = self.range_parts(range)?;
         let (compare, next, prev) = Self::range_dictionary(evidence)?;
         let direction = self.compare_range_values(&compare, &start, &end)?;
         let is_ascending = direction <= 0;
@@ -192,8 +209,15 @@ impl Vm {
                 cmp_to_end > 0
             };
             let at_end = cmp_to_end == 0;
-            if !(before_end || inclusive_end && at_end) {
+            let include_end = matches!(kind, RuntimeRangeKind::Closed | RuntimeRangeKind::Thru);
+            if !(before_end || include_end && at_end) {
                 break;
+            }
+            if items.len() >= MAX_RANGE_MATERIALIZE_LEN {
+                return Err(VmError::new(VmErrorKind::RangeMaterializeTooLarge {
+                    len: items.len().saturating_add(1),
+                    limit: MAX_RANGE_MATERIALIZE_LEN,
+                }));
             }
             items.push(current.clone());
             if at_end {
@@ -205,19 +229,29 @@ impl Vm {
         Ok(items)
     }
 
-    fn range_parts(&self, range: Value) -> VmResult<(Value, Value, bool)> {
+    fn range_parts(&self, range: Value) -> VmResult<(Value, Value, RuntimeRangeKind)> {
         let data = Self::expect_data(range)?;
         let data = data.borrow();
-        if !self.is_range_type(data.ty) || data.fields.len() != 3 {
+        let Some(kind) = self.range_type_kind(data.ty) else {
             return Err(VmError::new(VmErrorKind::InvalidValueKind {
                 expected: VmValueKind::Data,
                 found: VmValueKind::Data,
             }));
-        }
-        let start = data.fields.first().cloned().unwrap_or(Value::Unit);
-        let end = data.fields.get(1).cloned().unwrap_or(Value::Unit);
-        let end_bound = data.fields.get(2).cloned().unwrap_or(Value::Unit);
-        Ok((start, end, Self::bound_tag(end_bound)? == 0))
+        };
+        let (start, end) = match kind {
+            RuntimeRangeKind::From => (
+                data.fields.get(1).cloned().unwrap_or(Value::Unit),
+                data.fields.first().cloned().unwrap_or(Value::Unit),
+            ),
+            RuntimeRangeKind::Open
+            | RuntimeRangeKind::Closed
+            | RuntimeRangeKind::UpTo
+            | RuntimeRangeKind::Thru => (
+                data.fields.first().cloned().unwrap_or(Value::Unit),
+                data.fields.get(1).cloned().unwrap_or(Value::Unit),
+            ),
+        };
+        Ok((start, end, kind))
     }
 
     fn range_dictionary(evidence: Value) -> VmResult<(Value, Value, Value)> {
@@ -237,15 +271,20 @@ impl Vm {
         ))
     }
 
-    fn is_builtin_rangeable_int_evidence(&self, evidence: &Value) -> bool {
-        let Value::Data(data) = evidence else {
-            return false;
-        };
+    fn range_bounds_dictionary(evidence: Value) -> VmResult<(Value, Value)> {
+        let found = evidence.kind();
+        let data = Self::expect_data(evidence)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidRangeEvidence { found }))?;
         let data = data.borrow();
-        data.fields.is_empty() && self.is_named_type(data.ty, "__builtin_dict__Rangeable_Int_Dict")
+        if data.fields.len() < 2 {
+            return Err(VmError::new(VmErrorKind::InvalidRangeStep {
+                detail: "range bounds dictionary field count".into(),
+            }));
+        }
+        Ok((data.fields[0].clone(), data.fields[1].clone()))
     }
 
-    fn range_sequence_type(&self, range: &Value) -> VmResult<music_seam::TypeId> {
+    fn range_sequence_type(&self, range: &Value) -> VmResult<TypeId> {
         let Value::Data(data) = range else {
             return Err(Self::invalid_value_kind(VmValueKind::Data, range));
         };
@@ -255,7 +294,7 @@ impl Vm {
             .iter()
             .find_map(|module| {
                 let name = module.program.type_name(range_ty);
-                name.contains("Range[").then_some(name)
+                Self::range_item_name(name).is_some().then_some(name)
             })
             .ok_or_else(|| {
                 VmError::new(VmErrorKind::InvalidValueKind {
@@ -263,11 +302,7 @@ impl Vm {
                     found: VmValueKind::Unit,
                 })
             })?;
-        let item_name = range_name
-            .rsplit_once("Range[")
-            .map_or(range_name, |(_, tail)| tail)
-            .strip_suffix(']')
-            .unwrap_or(range_name);
+        let item_name = Self::range_item_name(range_name).unwrap_or(range_name);
         let seq_name = format!("[]{item_name}");
         let module_slot = self.current_module_slot()?;
         self.named_type_id(module_slot, &seq_name).ok_or_else(|| {
@@ -276,28 +311,6 @@ impl Vm {
                 found: VmValueKind::Unit,
             })
         })
-    }
-
-    fn materialize_builtin_int_range(
-        start: &Value,
-        end: &Value,
-        inclusive_end: bool,
-    ) -> VmResult<Vec<Value>> {
-        let (Some(start), Some(end)) = (Self::int_like_value(start), Self::int_like_value(end))
-        else {
-            return Err(VmError::new(VmErrorKind::InvalidRangeBounds {
-                start: start.kind(),
-                end: end.kind(),
-            }));
-        };
-        Ok(build_range_items(start, end, inclusive_end))
-    }
-
-    const fn int_like_value(value: &Value) -> Option<i64> {
-        match value {
-            Value::Int(value) => Some(*value),
-            _ => None,
-        }
     }
 
     fn compare_range_values(
@@ -373,21 +386,31 @@ impl Vm {
             })),
         }
     }
-}
 
-fn build_range_items(start: i64, end: i64, inclusive_end: bool) -> Vec<Value> {
-    let mut current = start;
-    let mut items = Vec::<Value>::new();
-    if start <= end {
-        while current < end || (inclusive_end && current == end) {
-            items.push(Value::Int(current));
-            current = current.saturating_add(1);
-        }
-    } else {
-        while current > end || (inclusive_end && current == end) {
-            items.push(Value::Int(current));
-            current = current.saturating_sub(1);
+    fn range_type_kind(&self, ty: TypeId) -> Option<RuntimeRangeKind> {
+        match self.named_type_tail(ty)? {
+            tail if tail.starts_with("Range[") => Some(RuntimeRangeKind::Open),
+            tail if tail.starts_with("ClosedRange[") => Some(RuntimeRangeKind::Closed),
+            tail if tail.starts_with("PartialRangeFrom[") => Some(RuntimeRangeKind::From),
+            tail if tail.starts_with("PartialRangeUpTo[") => Some(RuntimeRangeKind::UpTo),
+            tail if tail.starts_with("PartialRangeThru[") => Some(RuntimeRangeKind::Thru),
+            _ => None,
         }
     }
-    items
+
+    fn range_item_name(range_name: &str) -> Option<&str> {
+        [
+            "Range[",
+            "ClosedRange[",
+            "PartialRangeFrom[",
+            "PartialRangeUpTo[",
+            "PartialRangeThru[",
+        ]
+        .into_iter()
+        .find_map(|prefix| {
+            range_name
+                .rsplit_once(prefix)
+                .map(|(_, tail)| tail.strip_suffix(']').unwrap_or(tail))
+        })
+    }
 }

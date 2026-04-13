@@ -96,7 +96,43 @@ impl PassBase<'_, '_, '_> {
 }
 
 impl CheckPass<'_, '_, '_> {
+    fn in_foundation_module(&self) -> bool {
+        self.module_key().as_str().starts_with("musi:")
+    }
+
+    fn is_known_lang_name(name: &str) -> bool {
+        matches!(
+            name,
+            "Type"
+                | "Array"
+                | "Any"
+                | "Unknown"
+                | "Syntax"
+                | "Empty"
+                | "Unit"
+                | "Bool"
+                | "Nat"
+                | "Int"
+                | "Float"
+                | "String"
+                | "Range"
+                | "ClosedRange"
+                | "PartialRangeFrom"
+                | "PartialRangeUpTo"
+                | "PartialRangeThru"
+                | "CString"
+                | "CPtr"
+        )
+    }
+
     fn validate_musi_lang_attr(&mut self, attr: &HirAttr, origin: HirOrigin, inner: HirExprId) {
+        if !self.in_foundation_module() {
+            self.diag(
+                origin.span,
+                DiagKind::AttrMusiLangRequiresFoundationModule,
+                "",
+            );
+        }
         if !self.in_module_stmt() {
             self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
             return;
@@ -119,13 +155,27 @@ impl CheckPass<'_, '_, '_> {
             self.diag(origin.span, DiagKind::AttrMusiLangRequiresPlainBindLet, "");
             return;
         }
+        if self.expr(inner).mods.export.is_none() {
+            self.diag(origin.span, DiagKind::AttrMusiLangRequiresExport, "");
+        }
         let name = self.parse_named_string_arg(attr, "name");
-        if name.is_none() {
-            self.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, "");
+        match name.as_deref() {
+            None => self.diag(origin.span, DiagKind::AttrMusiLangRequiresNameString, ""),
+            Some(name) if !Self::is_known_lang_name(name) => {
+                self.diag(origin.span, DiagKind::AttrMusiLangUnknownName, "");
+            }
+            Some(_) => {}
         }
     }
 
     fn validate_musi_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        if !self.in_foundation_module() {
+            self.diag(
+                origin.span,
+                DiagKind::AttrMusiIntrinsicRequiresFoundationModule,
+                "",
+            );
+        }
         let opcode = self.parse_named_string_arg(attr, "opcode");
         if opcode.is_none() {
             self.diag(

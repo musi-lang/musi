@@ -110,7 +110,7 @@ let Result := Std.Result;`,
 		id: "types-basic",
 		language: "musi",
 		sourceText: `let port : Int := 8080;
-let identity_fn[T] (input : T) : T := input;`,
+let identityFn[T] (input : T) : T := input;`,
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 3,
@@ -119,7 +119,7 @@ let identity_fn[T] (input : T) : T := input;`,
 	{
 		id: "types-apply",
 		language: "musi",
-		sourceText: "identity_fn[Int](port);",
+		sourceText: "identityFn[Int](port);",
 		evidence: {
 			path: "docs/what/language/type-system.md",
 			line: 8,
@@ -215,10 +215,10 @@ let masked := 1 shl 3;`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle perform console.readln() with console of (
-| value => value
-| readln(k) => resume "ok"
-);`,
+		sourceText: `handle perform console.readln() using console {
+  value => value;
+  readln(k) => resume "ok";
+};`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 331,
@@ -239,7 +239,7 @@ let masked := 1 shl 3;`,
 	{
 		id: "instance-eq-int",
 		language: "musi",
-		sourceText: `let eq_int := instance Eq[Int] {
+		sourceText: `let eqInt := instance Eq[Int] {
   let (=) (a : Int, b : Int) : Bool := .True;
 };`,
 		evidence: {
@@ -289,8 +289,8 @@ let masked := 1 shl 3;`,
 	{
 		id: "quote-without-meta",
 		language: "musi",
-		sourceText: `let add_one (x : Int) : Int := x + 1;
-let add_two (x : Int) : Int := x + 2;`,
+		sourceText: `let addOne (x : Int) : Int := x + 1;
+let addTwo (x : Int) : Int := x + 2;`,
 		evidence: {
 			path: "docs/what/language/metaprogramming.md",
 			line: 1,
@@ -299,9 +299,9 @@ let add_two (x : Int) : Int := x + 2;`,
 	{
 		id: "quote-with-meta",
 		language: "musi",
-		sourceText: `let add_template := quote (x + #(delta));
-let add_one_syntax := quote (#(x) + 1);
-let add_two_syntax := quote (#(x) + 2);`,
+		sourceText: `let addTemplate := quote (x + #(delta));
+let addOneSyntax := quote (#(x) + 1);
+let addTwoSyntax := quote (#(x) + 2);`,
 		evidence: {
 			path: "docs/what/language/metaprogramming.md",
 			line: 8,
@@ -346,7 +346,7 @@ musi test`,
 		id: "stdlib-option-import",
 		language: "musi",
 		sourceText: `let configured := Option.some[Int](8080);
-Option.unwrap_or[Int](configured, 3000);`,
+Option.unwrapOr[Int](configured, 3000);`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 6,
@@ -356,7 +356,7 @@ Option.unwrap_or[Int](configured, 3000);`,
 		id: "stdlib-result-import",
 		language: "musi",
 		sourceText: `let parsed := Result.ok[Int, String](8080);
-Result.unwrap_or[Int, String](parsed, 3000);`,
+Result.unwrapOr[Int, String](parsed, 3000);`,
 		evidence: {
 			path: "packages/std/result/index.ms",
 			line: 6,
@@ -368,7 +368,7 @@ Result.unwrap_or[Int, String](parsed, 3000);`,
 		sourceText: `let Testing := import "@std/testing";
 
 export let test () :=
-  Testing.it("adds values", Testing.to_be(1 + 2, 3));`,
+  Testing.it("adds values", Testing.toBe(1 + 2, 3));`,
 		evidence: {
 			path: "packages/std/option/index.test.ms",
 			line: 4,

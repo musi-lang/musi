@@ -295,8 +295,20 @@ impl PassBase<'_, '_, '_> {
                 ctx.substitute_item_ty(item, subst, |item| HirTyKind::Seq { item })
             }
             HirTyKind::Array { dims, item } => ctx.substitute_array_ty(dims, item, subst),
-            HirTyKind::Range { item } => {
-                ctx.substitute_item_ty(item, subst, |item| HirTyKind::Range { item })
+            HirTyKind::Range { bound } => {
+                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::Range { bound })
+            }
+            HirTyKind::ClosedRange { bound } => {
+                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::ClosedRange { bound })
+            }
+            HirTyKind::PartialRangeFrom { bound } => {
+                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeFrom { bound })
+            }
+            HirTyKind::PartialRangeUpTo { bound } => {
+                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeUpTo { bound })
+            }
+            HirTyKind::PartialRangeThru { bound } => {
+                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeThru { bound })
             }
             HirTyKind::Handler {
                 effect,
@@ -586,9 +598,6 @@ impl CheckPass<'_, '_, '_> {
         stack.push(frame);
 
         let mut matches = Vec::<ConstraintEvidence>::new();
-        if let Some(evidence) = self.builtin_rangeable_evidence(&class_key, &class_args) {
-            matches.push(evidence);
-        }
         let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
         for instance in &local_instances {
             if instance.class_key != class_key {
@@ -646,23 +655,6 @@ impl CheckPass<'_, '_, '_> {
                 None
             }
         }
-    }
-
-    fn builtin_rangeable_evidence(
-        &self,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
-    ) -> Option<ConstraintEvidence> {
-        if class_key.name.as_ref() != "Rangeable" || class_args.len() != 1 {
-            return None;
-        }
-        matches!(self.ty(class_args[0]).kind, HirTyKind::Int).then(|| {
-            ConstraintEvidence::Provider {
-                module: self.module_key().clone(),
-                name: "__builtin_dict__Rangeable_Int".into(),
-                args: Box::default(),
-            }
-        })
     }
 
     fn obligation_class_target(

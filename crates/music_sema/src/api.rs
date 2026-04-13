@@ -7,6 +7,7 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
+use crate::BindingScheme;
 use crate::SemaModuleBuild;
 use crate::diag::SemaDiagKind;
 use crate::effects::EffectRow;
@@ -168,6 +169,7 @@ pub trait SemaEnv {
 pub struct SemaOptions<'env> {
     pub target: Option<TargetInfo>,
     pub env: Option<&'env dyn SemaEnv>,
+    pub prelude: Option<&'env ModuleSurface>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -264,7 +266,19 @@ pub enum SurfaceTyKind {
         item: SurfaceTyId,
     },
     Range {
-        item: SurfaceTyId,
+        bound: SurfaceTyId,
+    },
+    ClosedRange {
+        bound: SurfaceTyId,
+    },
+    PartialRangeFrom {
+        bound: SurfaceTyId,
+    },
+    PartialRangeUpTo {
+        bound: SurfaceTyId,
+    },
+    PartialRangeThru {
+        bound: SurfaceTyId,
     },
     Handler {
         effect: SurfaceTyId,
@@ -628,6 +642,7 @@ impl LawSurface {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassSurface {
     pub key: DefinitionKey,
+    pub type_params: Box<[Box<str>]>,
     pub constraints: Box<[ConstraintSurface]>,
     pub members: Box<[ClassMemberSurface]>,
     pub laws: Box<[LawSurface]>,
@@ -644,12 +659,19 @@ impl ClassSurface {
     ) -> Self {
         Self {
             key,
+            type_params: Box::default(),
             constraints: Box::default(),
             members: members.into(),
             laws: laws.into(),
             inert_attrs: Box::default(),
             musi_attrs: Box::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<Box<[Box<str>]>>) -> Self {
+        self.type_params = type_params.into();
+        self
     }
 
     #[must_use]
@@ -1228,6 +1250,7 @@ impl LawFacts {
 pub struct ClassFacts {
     pub key: DefinitionKey,
     pub name: Symbol,
+    pub type_params: Box<[Symbol]>,
     pub constraints: Box<[ConstraintFacts]>,
     pub members: Box<[ClassMemberFacts]>,
     pub laws: Box<[LawFacts]>,
@@ -1244,10 +1267,17 @@ impl ClassFacts {
         Self {
             key,
             name,
+            type_params: Box::default(),
             constraints: Box::default(),
             members: members.into(),
             laws: laws.into(),
         }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<Box<[Symbol]>>) -> Self {
+        self.type_params = type_params.into();
+        self
     }
 
     #[must_use]
@@ -1319,7 +1349,7 @@ pub struct SemaModule {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
-    binding_schemes: HashMap<NameBindingId, crate::BindingScheme>,
+    binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
@@ -1339,7 +1369,7 @@ struct SemaContextTables {
     gated_bindings: HashSet<NameBindingId>,
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
-    binding_schemes: HashMap<NameBindingId, crate::BindingScheme>,
+    binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
 }
 
@@ -1456,7 +1486,7 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn binding_scheme(&self, binding: NameBindingId) -> Option<&crate::BindingScheme> {
+    pub fn binding_scheme(&self, binding: NameBindingId) -> Option<&BindingScheme> {
         self.binding_schemes.get(&binding)
     }
 

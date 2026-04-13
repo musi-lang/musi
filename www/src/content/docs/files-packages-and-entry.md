@@ -8,38 +8,29 @@ slug: "files-packages-and-entry"
 summary: "Packages, <code>musi.json</code>, and the resolved entry file."
 ---
 
-Packages are the default shape for real projects. A package gives you an entry file and command entrypoints.
+Use plain files while you experiment. Use a package once you want repeatable commands and a stable project root.
 
-## What
-You use this when your project grows past one file: dependencies, scripts, and shared entry points stay in one place.
+## Package workflow
 
 {{snippet:package-commands}}
 
-## When
-Use package mode for project workflows and `music` for experimentation, quick checks, or artifact tests.
+- `musi` reads package config, resolves the entry file, and runs project commands.
+- `music` stays useful for direct checks on one source file or built artifact.
 
-## Why
-`musi` saves you from hand-managing file paths every time you run, test, or build.
-- entry resolution follows package config
-- commands stay stable across environments
-- team members use the same workflow
+## Why packages help
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
+Packages remove repeated path handling. They also give everyone on a project the same command surface.
 
-## How
-Keep the generated package shape and use package commands from the root:
-- `musi run`
-- `musi check`
-- `musi build`
-- `musi test`
-
-For direct one-off work, use a specific source file or artifact with `music`.
+## Direct mode
 
 {{snippet:music-direct}}
 
-## Analogy
-Think `musi` as the CLI wrapper around your project folder and `music` as a direct file runner.
+Use direct mode for one-off experiments, parser checks, and small examples that do not need package metadata yet.
 
 ## Try it
+
+{{try:files-packages-and-entry}}
+
+## Next step
+
 Create a package, confirm which entry file is used, then continue to [Imports and packages](/docs/imports-and-packages).

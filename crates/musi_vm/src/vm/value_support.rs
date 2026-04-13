@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use music_seam::TypeId;
 use music_seam::descriptor::ConstantValue;
 use music_term::SyntaxTerm;
 
@@ -154,11 +155,7 @@ impl Vm {
         (data.fields.is_empty() && self.is_named_type(data.ty, "Bool")).then_some(data.tag != 0)
     }
 
-    pub(crate) fn named_type_id(
-        &self,
-        module_slot: usize,
-        name: &str,
-    ) -> Option<music_seam::TypeId> {
+    pub(crate) fn named_type_id(&self, module_slot: usize, name: &str) -> Option<TypeId> {
         let module = self.module(module_slot).ok()?;
         module.program.artifact().types.iter().find_map(|(id, _)| {
             let ty_name = module.program.type_name(id);
@@ -167,16 +164,11 @@ impl Vm {
         })
     }
 
-    pub(crate) fn is_range_type(&self, ty: music_seam::TypeId) -> bool {
-        self.named_type_tail(ty)
-            .is_some_and(|tail| tail.starts_with("Range["))
-    }
-
-    pub(crate) fn is_named_type(&self, ty: music_seam::TypeId, expected: &str) -> bool {
+    pub(crate) fn is_named_type(&self, ty: TypeId, expected: &str) -> bool {
         self.named_type_tail(ty) == Some(expected)
     }
 
-    fn named_type_tail(&self, ty: music_seam::TypeId) -> Option<&str> {
+    pub(crate) fn named_type_tail(&self, ty: TypeId) -> Option<&str> {
         self.loaded_modules.iter().find_map(|module| {
             let ty_name = module.program.type_name(ty);
             let tail = ty_name.rsplit_once("::").map_or(ty_name, |(_, tail)| tail);

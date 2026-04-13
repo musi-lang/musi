@@ -8,28 +8,25 @@ slug: "imports-and-packages"
 summary: "Import expressions, <code>@std</code>, and the <code>musi:*</code> foundation namespace."
 ---
 
-## What
-Imports let you pull shared code into the current file: standard features from `@std` and lower-level building blocks from `musi:*` when needed.
+Imports are expressions. Bind them with `let`, then use the imported value like any other name.
 
-## When
-Use imports in most new files.
-- Start with `@std` for everyday tasks.
-- Use `musi:*` for boundary-level interoperability and foundation-level work.
+## Default rule
 
-## Why
-This keeps code short and reusable while avoiding copy-paste or duplicated helpers.
+- Start with `@std`.
+- Reach for `musi:*` only when you need lower-level foundation modules.
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
+That keeps application code on the standard library path and keeps compiler-facing pieces explicit.
 
-## How
-Add imports at the top of your file, then use imported names directly in regular expressions.
+## Example
 
-## Compare
 {{example:import-stdlib}}
 
-## Analogy
-Like Python imports or TypeScript module imports: one place for shared functionality, one place for lower-level tools.
+Imports can appear anywhere an expression can appear, but keeping them near the top of a file is still the easiest style to read.
 
 ## Try it
+
+{{try:imports-and-packages}}
+
+## Next step
+
 Replace duplicated snippets with imported names, then continue to [Expressions and bindings](/docs/expressions-and-bindings).

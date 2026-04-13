@@ -1,34 +1,122 @@
+use std::collections::BTreeMap;
+
+use musi_foundation::core::{MODULE as CORE_MODULE, SPEC as CORE_SPEC};
 use music_base::SourceId;
-use music_module::ModuleKey;
+use music_module::{
+    ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
+};
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
-use music_sema::{SemaOptions, check_module};
+use music_sema::{ModuleSurface, SemaEnv, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::{
-    IrAssignTarget, IrBinaryOp, IrCasePattern, IrExpr, IrExprKind, IrModule, IrSeqPart,
+    IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrExpr, IrExprKind, IrModule, IrSeqPart,
     lower_module,
 };
 
-fn lower(src: &str) -> IrModule {
+#[derive(Default)]
+struct TestImportEnv {
+    modules: BTreeMap<String, ModuleKey>,
+}
+
+impl TestImportEnv {
+    fn with_module(mut self, spec: &str, key: &str) -> Self {
+        let _prev = self.modules.insert(spec.into(), ModuleKey::new(key));
+        self
+    }
+}
+
+impl ImportEnv for TestImportEnv {
+    fn resolve(&self, _from: &ModuleKey, spec: &ModuleSpecifier) -> ImportResolveResult {
+        self.modules
+            .get(spec.as_str())
+            .cloned()
+            .ok_or_else(|| ImportError::new(ImportErrorKind::ModuleNotFound, spec.as_str()))
+    }
+}
+
+#[derive(Default)]
+struct TestSemaEnv {
+    modules: BTreeMap<String, ModuleSurface>,
+}
+
+impl TestSemaEnv {
+    fn with_surface(mut self, key: &str, surface: ModuleSurface) -> Self {
+        let _prev = self.modules.insert(key.into(), surface);
+        self
+    }
+}
+
+impl SemaEnv for TestSemaEnv {
+    fn module_surface(&self, key: &ModuleKey) -> Option<ModuleSurface> {
+        self.modules.get(key.as_str()).cloned()
+    }
+}
+
+fn compile_surface(
+    source_id: u32,
+    module_key: &str,
+    src: &str,
+    import_env: Option<&dyn ImportEnv>,
+    sema_env: Option<&dyn SemaEnv>,
+) -> ModuleSurface {
     let lexed = Lexer::new(src).lex();
     let parsed = parse(lexed);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
 
     let mut interner = Interner::new();
     let resolved = resolve_module(
-        SourceId::from_raw(1),
-        &ModuleKey::new("main"),
+        SourceId::from_raw(source_id),
+        &ModuleKey::new(module_key),
         parsed.tree(),
         &mut interner,
-        ResolveOptions::default(),
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            prelude: Vec::new(),
+            import_env,
+        },
     );
     let sema = check_module(
         resolved,
         &mut interner,
         SemaOptions {
             target: None,
-            env: None,
+            env: sema_env,
+            prelude: None,
+        },
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    sema.surface().clone()
+}
+
+fn lower(src: &str) -> IrModule {
+    let lexed = Lexer::new(src).lex();
+    let parsed = parse(lexed);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let import_env = TestImportEnv::default().with_module(CORE_SPEC, CORE_SPEC);
+    let core_surface = compile_surface(10, CORE_SPEC, CORE_MODULE, None, None);
+    let sema_env = TestSemaEnv::default().with_surface(CORE_SPEC, core_surface);
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        SourceId::from_raw(1),
+        &ModuleKey::new("main"),
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            prelude: Vec::new(),
+            import_env: Some(&import_env),
+        },
+    );
+    let sema = check_module(
+        resolved,
+        &mut interner,
+        SemaOptions {
+            target: None,
+            env: Some(&sema_env),
+            prelude: None,
         },
     );
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
@@ -53,7 +141,7 @@ fn assert_global_tail_matches(
     assert!(predicate(kind), "unexpected global tail kind");
 }
 
-fn callable<'a>(ir: &'a IrModule, name: &str) -> &'a crate::IrCallable {
+fn callable<'a>(ir: &'a IrModule, name: &str) -> &'a IrCallable {
     ir.callables()
         .iter()
         .find(|callable| callable.name.as_ref() == name)
@@ -138,17 +226,23 @@ fn lowers_array_cat_for_runtime_spread() {
 #[test]
 fn lowers_range_and_membership_exprs() {
     assert_global_tail_matches(
-        r"
+        r#"
+        let Core := import "musi:core";
+        let Range := Core.Range;
+        let Rangeable := Core.Rangeable;
         export let xs := 1 ..< 4;
-    ",
+    "#,
         "xs",
         |kind| matches!(kind, IrExprKind::Range { .. }),
     );
     assert_global_tail_matches(
-        r"
+        r#"
+        let Core := import "musi:core";
+        let Bool := Core.Bool;
+        let Rangeable := Core.Rangeable;
         let xs := 1 ..< 4;
         export let ok : Bool := 2 in xs;
-    ",
+    "#,
         "ok",
         |kind| matches!(kind, IrExprKind::RangeContains { .. }),
     );
@@ -426,7 +520,7 @@ fn contains_strcat(expr: &IrExpr) -> bool {
         | IrExprKind::RecordGet { base: value, .. }
         | IrExprKind::TyTest { base: value, .. }
         | IrExprKind::TyCast { base: value, .. } => contains_strcat(value),
-        IrExprKind::Range { start, end, .. } => contains_strcat(start) || contains_strcat(end),
+        IrExprKind::Range { lower, upper, .. } => contains_strcat(lower) || contains_strcat(upper),
         IrExprKind::RangeContains {
             value,
             range,
@@ -548,8 +642,8 @@ fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
 
 fn contains_named_value_ref_in_range(expr: &IrExpr, expected: &str) -> bool {
     match &expr.kind {
-        IrExprKind::Range { start, end, .. } => {
-            contains_named_value_ref(start, expected) || contains_named_value_ref(end, expected)
+        IrExprKind::Range { lower, upper, .. } => {
+            contains_named_value_ref(lower, expected) || contains_named_value_ref(upper, expected)
         }
         IrExprKind::RangeContains {
             value,

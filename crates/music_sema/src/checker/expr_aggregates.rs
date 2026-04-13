@@ -81,10 +81,22 @@ impl CheckPass<'_, '_, '_> {
                         }
                     }
                 }
-                HirTyKind::Seq { item } | HirTyKind::Range { item } => {
+                HirTyKind::Seq { item }
+                | HirTyKind::Range { bound: item }
+                | HirTyKind::ClosedRange { bound: item }
+                | HirTyKind::PartialRangeFrom { bound: item }
+                | HirTyKind::PartialRangeUpTo { bound: item }
+                | HirTyKind::PartialRangeThru { bound: item } => {
                     has_runtime_spread = true;
                     self.merge_array_item_ty(spread_origin, &mut item_ty, item);
-                    if matches!(self.ty(spread_ty).kind, HirTyKind::Range { .. }) {
+                    if matches!(
+                        self.ty(spread_ty).kind,
+                        HirTyKind::Range { .. }
+                            | HirTyKind::ClosedRange { .. }
+                            | HirTyKind::PartialRangeFrom { .. }
+                            | HirTyKind::PartialRangeUpTo { .. }
+                            | HirTyKind::PartialRangeThru { .. }
+                    ) {
                         self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
                     }
                 }
@@ -262,10 +274,14 @@ impl CheckPass<'_, '_, '_> {
             return ExprFacts::new(builtins.unknown, effects);
         };
 
-        let tag_name = self.resolve_symbol(tag.name);
-        let Some(variant) = data_def.variant(tag_name) else {
+        let tag_name = self.resolve_symbol(tag.name).to_owned();
+        let Some(variant) = data_def.variant(&tag_name) else {
             self.check_exprs_collect_effects(self.expr_ids(args), &mut effects);
-            self.diag(tag.span, DiagKind::UnknownDataVariant, "");
+            self.diag(
+                tag.span,
+                DiagKind::UnknownDataVariant,
+                &format!("unknown data variant `{tag_name}`"),
+            );
             return ExprFacts::new(expected_ty, effects);
         };
 
@@ -427,16 +443,20 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn infer_variant_context_ty(&mut self, tag: Ident) -> Option<HirTyId> {
-        let tag_name = self.resolve_symbol(tag.name);
+        let tag_name = self.resolve_symbol(tag.name).to_owned();
         let mut matches = self
             .data_defs()
             .iter()
-            .filter_map(|(name, data)| data.variant(tag_name).is_some().then_some(name.clone()))
+            .filter_map(|(name, data)| data.variant(&tag_name).is_some().then_some(name.clone()))
             .collect::<Vec<Box<str>>>();
 
         match matches.len() {
             0 => {
-                self.diag(tag.span, DiagKind::UnknownDataVariant, "");
+                self.diag(
+                    tag.span,
+                    DiagKind::UnknownDataVariant,
+                    &format!("unknown data variant `{tag_name}`"),
+                );
                 None
             }
             1 => {

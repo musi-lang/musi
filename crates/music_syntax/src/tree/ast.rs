@@ -208,7 +208,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::FieldExpr => ExprKind::FieldAccess,
             SyntaxNodeKind::TypeTestExpr => ExprKind::TypeTest,
             SyntaxNodeKind::TypeCastExpr => ExprKind::TypeCast,
-            SyntaxNodeKind::PrefixExpr => ExprKind::Prefix,
+            SyntaxNodeKind::PrefixExpr | SyntaxNodeKind::PostfixExpr => ExprKind::Prefix,
             SyntaxNodeKind::BinaryExpr => ExprKind::Binary,
             SyntaxNodeKind::CaseExpr => ExprKind::Case,
             SyntaxNodeKind::AttributedExpr => ExprKind::Attributed,

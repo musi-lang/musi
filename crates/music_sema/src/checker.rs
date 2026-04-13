@@ -23,6 +23,7 @@ use state::{
     finish_module, prepare_module,
 };
 
+use crate::api::ModuleSurface;
 use crate::diag::SemaDiagKind as DiagKind;
 
 struct Checker<'interner, 'env> {
@@ -53,16 +54,42 @@ impl<'interner, 'env> Checker<'interner, 'env> {
         interner: &'interner mut Interner,
         options: SemaOptions<'env>,
     ) -> Self {
+        let prelude = options.prelude.cloned();
         let (module, runtime, typing, decls, facts, resume) =
             prepare_module(resolved, interner, options);
-        Self {
+        let mut this = Self {
             module,
             runtime,
             typing,
             decls,
             facts,
             resume,
+        };
+        if let Some(prelude) = prelude.as_ref() {
+            this.seed_prelude(prelude);
         }
+        this
+    }
+
+    fn seed_prelude(&mut self, prelude: &ModuleSurface) {
+        let Self {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+            resume,
+        } = self;
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
+        decls::seed_prelude_bindings(&mut check, prelude);
     }
 
     fn collect_module(&mut self) {

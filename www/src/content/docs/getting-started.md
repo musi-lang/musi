@@ -8,31 +8,29 @@ slug: "getting-started"
 summary: "Install, PATH setup, and the difference between <code>musi</code> and <code>music</code>."
 ---
 
-This guide is for people who want to write Musi, run packages, and get useful behavior quickly.
+Musi has two CLI entry points. Learn that split first and the rest of the toolchain gets simpler.
 
-## What
-You install the command-line tools once, then use Musi as your package and source language for small scripts, services, or experiments.
+## Two commands
 
-## When
-Use this sequence when you have a new machine, a new clone, or you are onboarding from Python, JS, or TS and want the smallest working first step.
+- `musi` works at package level. Use it for `run`, `check`, `build`, and `test`.
+- `music` works on one source graph or built artifact directly.
 
-## Why
-Musi separates package workflows from direct file workflows.
-- `musi` handles package config, entry resolution, and project scripts.
-- `music` runs one source graph or artifact directly.
+If you already know tools like `cargo`, `npm`, or `dotnet`, `musi` fills that role. `music` is closer to a direct file runner.
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
+## First setup pass
 
-## How
 Start at the [install page](/install), then follow this order:
 - install binaries and PATH entries
 - create a package
 - add first expressions
 - run `musi check` and `musi run`
 
-## Analogy
-Treat `musi` like `npm` or `cargo` for project lifecycle, and `music` like a direct `node`/`deno`-style file runner.
+If you want the shortest feedback loop, start with one file and `music`. Move to `musi` once you want package commands and shared project structure.
 
 ## Try it
-Open install notes on [Install](/install), then continue to [First program](/docs/first-program).
+
+{{try:getting-started}}
+
+## Next step
+
+Open [Install](/install), make one command work, then continue to [First program](/docs/first-program).

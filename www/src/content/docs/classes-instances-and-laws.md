@@ -8,30 +8,27 @@ slug: "classes-instances-and-laws"
 summary: "Classes, methods, and instance declarations."
 ---
 
-## What
 Classes define shared behavior names.
 Instances provide concrete implementations for those behavior names.
 
-## When
-Use classes when you want one operation (for example equality or formatting) to work across multiple domains.
-
-## Why
-This pattern keeps behavior contracts explicit and avoids repeating equivalent helper sets.
-
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Define a class, then declare matching instances for concrete types.
+## Class
 
 {{snippet:class-eq}}
 
+## Instance
+
 {{snippet:instance-eq-int}}
+
+## Compare
 
 {{example:class-instance}}
 
-## Analogy
-Like interfaces in JavaScript/TypeScript, but with explicit instance attachment in the same language surface.
+Use a class when you want one operation shape to work across different types. Use an instance when you want to supply that behavior for one concrete type.
 
 ## Try it
+
+{{try:classes-instances-and-laws}}
+
+## Next step
+
 Review both snippets, then continue to [Effects and handlers](/docs/effects-and-handlers).

@@ -41,6 +41,8 @@ They exist for:
 - intrinsic wiring
 - runtime-layout and codegen metadata
 
+This matches Swift's layering goal: public attributes stay public, compiler-reserved implementation hooks stay separate.
+
 They are not general user metadata names.
 They are not the same thing as the `musi:*` foundation namespace.
 

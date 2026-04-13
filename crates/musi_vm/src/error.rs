@@ -132,6 +132,10 @@ pub enum VmErrorKind {
     InvalidRangeStep {
         detail: Box<str>,
     },
+    RangeMaterializeTooLarge {
+        len: usize,
+        limit: usize,
+    },
     InvalidDataIndex {
         index: i64,
         len: usize,
@@ -429,6 +433,12 @@ impl VmErrorKind {
             }
             Self::InvalidRangeStep { detail } => {
                 write!(f, "range stepping failed (`{detail}`)")
+            }
+            Self::RangeMaterializeTooLarge { len, limit } => {
+                write!(
+                    f,
+                    "range materialize length `{len}` exceeds limit `{limit}`"
+                )
             }
             Self::InvalidDataIndex { index, len } => {
                 write!(f, "data field index `{index}` invalid for length `{len}`")

@@ -7,6 +7,8 @@ export interface PageHeaderProps {
 	description?: ReactNode;
 	descriptionHtml?: string;
 	actions?: ReactNode;
+	badge?: ReactNode;
+	meta?: ReactNode;
 	titleOrder?: TitleProps["order"];
 	titleSize?: TitleProps["size"];
 }
@@ -15,9 +17,12 @@ export function PageHeader(props: PageHeaderProps) {
 	return (
 		<Stack gap="md" className="page-header">
 			<div>
-				<Text className="eyebrow" mb={8}>
-					{props.eyebrow}
-				</Text>
+				<div className="page-header-topline">
+					<Text className="eyebrow">{props.eyebrow}</Text>
+					{props.badge ? (
+						<div className="page-header-badge">{props.badge}</div>
+					) : null}
+				</div>
 				<Title
 					order={props.titleOrder ?? 1}
 					size={props.titleSize ?? "h1"}
@@ -36,6 +41,9 @@ export function PageHeader(props: PageHeaderProps) {
 					<Text mt="md" maw={760} className="page-copy page-header-copy">
 						{props.description}
 					</Text>
+				) : null}
+				{props.meta ? (
+					<div className="page-header-meta">{props.meta}</div>
 				) : null}
 			</div>
 			{props.actions ? (

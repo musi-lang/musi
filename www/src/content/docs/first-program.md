@@ -8,33 +8,25 @@ slug: "first-program"
 summary: "A first Musi file without extra ceremony."
 ---
 
-Musi files are read as expressions. A file is executed from top to bottom as a sequence.
+Musi files are read as expressions.
+Read top to bottom. Each expression leaves a result for the next one to use.
 
-## What
-This page teaches the smallest runnable surface: values, bindings, and simple expressions.
+## Smallest runnable file
 
 {{snippet:first-file}}
 
-## When
-Use this pattern for notes, toy utilities, and onboarding examples before you add package config.
+`let` binds a name. `;` ends an expression. That is enough to start writing and running Musi code.
 
-## Why
-Short files are the fastest way to learn language behavior without project scaffolding.
-You can spot how names and results flow before layering packages, effects, or classes.
+## Add one function
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Use `let` for values and end each expression with `;`. After a value exists, the next expression can use it.
-
-## Compare
 {{example:double-function}}
 
-The next snippet introduces a reusable function and direct call style.
-
-## Analogy
-Think like Python or JavaScript REPL cells: each statement creates a value, and later statements can use earlier results.
+Functions use the same `let` form as values. You do not switch to a separate declaration syntax.
 
 ## Try it
-Define the two snippets above, evaluate with `music`, then move to [Files, packages, and entry](/docs/files-packages-and-entry).
+
+{{try:first-program}}
+
+## Next step
+
+Type the snippets above, run them with `music`, then move to [Files, packages, and entry](/docs/files-packages-and-entry).

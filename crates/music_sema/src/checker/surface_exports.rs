@@ -490,6 +490,7 @@ impl ExportSurfaceCollector<'_, '_> {
                 .into_boxed_slice();
             Some(
                 ClassSurface::new(facts.key.clone(), members, laws)
+                    .with_type_params(lower_type_params(&facts.type_params, this.tys.interner))
                     .with_constraints(this.lower_constraints(&facts.constraints))
                     .with_inert_attrs(inert_attrs)
                     .with_musi_attrs(musi_attrs),
@@ -681,7 +682,8 @@ fn collect_exports_from_kind(
         HirExprKind::Field { base, .. }
         | HirExprKind::TypeTest { base, .. }
         | HirExprKind::TypeCast { base, .. }
-        | HirExprKind::Prefix { expr: base, .. } => {
+        | HirExprKind::Prefix { expr: base, .. }
+        | HirExprKind::PartialRange { expr: base, .. } => {
             collect_expr(module, interner, *base, exports, attr_stack);
         }
         HirExprKind::Binary { left, right, .. } => {

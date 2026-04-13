@@ -30,6 +30,12 @@ interface ReferenceGroup {
 	links: ReferenceLink[];
 }
 
+interface LearningTrack {
+	title: string;
+	copy: ReactNode;
+	href: string;
+}
+
 function inlineCode(text: string) {
 	return <code className="inline-code">{text}</code>;
 }
@@ -37,31 +43,49 @@ function inlineCode(text: string) {
 export const siteOrigin = "https://musi-lang.com";
 
 export const homeDescriptor = (
-	<>Language-first learning and practical command flow in one place.</>
+	<>
+		Musi is an expression-first programming language with effects, pattern
+		matching, and a small CLI surface. Start with one file, then move into
+		packages when you need them.
+	</>
 );
 
 export const homeSections: CopyBlock[] = [
 	{
-		title: "Effects",
+		title: "Expression-first",
 		copy: (
 			<>
-				Use {inlineCode("effect")}, {inlineCode("perform")},{" "}
-				{inlineCode("handle")}, and {inlineCode("resume")} directly in code.
+				Read files top to bottom with {inlineCode("let")}, {inlineCode("case")},
+				and ordinary expressions instead of hidden control machinery.
 			</>
 		),
 	},
 	{
-		title: "Packages",
+		title: "Simple CLI split",
 		copy: (
 			<>
-				Use {inlineCode("musi")} for package workflows and {inlineCode("music")}{" "}
-				for direct source or artifact execution.
+				Use {inlineCode("music")} for direct work on one file or artifact. Use{" "}
+				{inlineCode("musi")} for package commands.
 			</>
 		),
 	},
 	{
-		title: "Surface",
-		copy: <>Docs focus on what, why, how, and when for each pattern.</>,
+		title: "Core language features",
+		copy: (
+			<>
+				Use {inlineCode("Option")}, pattern matching, effects, and handlers as
+				part of ordinary code.
+			</>
+		),
+	},
+	{
+		title: "Docs that stay close",
+		copy: (
+			<>
+				Docs stay close to current syntax, current stdlib names, and current
+				tooling.
+			</>
+		),
 	},
 ];
 
@@ -69,17 +93,43 @@ export const startHereLinks: StartLink[] = [
 	{
 		title: "Read the docs",
 		href: "/docs",
-		copy: <>Start with Start, continue through Core language, then Tooling.</>,
+		copy: <>Start with setup, then move through syntax, types, and tooling.</>,
 	},
 	{
 		title: "Install Musi",
 		href: "/install",
-		copy: <>Build, add to PATH, run your first check.</>,
+		copy: <>Build from source, add binaries to PATH, run first commands.</>,
 	},
 	{
 		title: "Reference",
 		href: "/reference",
 		copy: <>Repository, grammar, extension, and issue links.</>,
+	},
+];
+
+export const learningTracks: LearningTrack[] = [
+	{
+		title: "Start",
+		href: "/docs/getting-started",
+		copy: (
+			<>Install tools, write one file, and run one command chain end to end.</>
+		),
+	},
+	{
+		title: "Docs",
+		href: "/docs",
+		copy: (
+			<>Move through current syntax, stdlib, and package structure in order.</>
+		),
+	},
+	{
+		title: "Reference",
+		href: "/reference",
+		copy: (
+			<>
+				Use grammar, repo sources, and public references when you need detail.
+			</>
+		),
 	},
 ];
 

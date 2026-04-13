@@ -221,6 +221,7 @@ fn static_imports_resolve_but_do_not_open_export_names() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -268,6 +269,7 @@ fn import_resolution_only_creates_explicit_let_binding() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -300,6 +302,7 @@ fn static_template_imports_resolve_from_import_env() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -329,6 +332,7 @@ fn unresolved_static_imports_emit_diag() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -363,6 +367,7 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },
@@ -396,6 +401,7 @@ fn dynamic_imports_do_not_populate_resolved_imports() {
         parsed.tree(),
         &mut interner,
         ResolveOptions {
+            inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&env),
         },

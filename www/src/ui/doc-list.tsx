@@ -11,12 +11,27 @@ interface DocListPage {
 
 export function DocListGroup(props: {
 	group: string;
+	path?: string;
+	summaryHtml?: string;
 	pages: readonly DocListPage[];
 }) {
 	return (
 		<Surface p="md" tone="panel" className="doc-group">
 			<Stack gap="xs">
-				<Text className="eyebrow">{props.group}</Text>
+				{props.path ? (
+					<Anchor href={props.path} underline="never">
+						<Text className="eyebrow">{props.group}</Text>
+					</Anchor>
+				) : (
+					<Text className="eyebrow">{props.group}</Text>
+				)}
+				{props.summaryHtml ? (
+					<Text
+						size="sm"
+						c="dimmed"
+						dangerouslySetInnerHTML={{ __html: props.summaryHtml }}
+					/>
+				) : null}
 				{props.pages.map((page) => (
 					<Anchor
 						key={page.slug}

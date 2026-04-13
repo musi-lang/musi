@@ -10,6 +10,7 @@
         "./bytes": "./bytes/index.ms",
         "./math": "./math/index.ms",
         "./option": "./option/index.ms",
+        "./prelude": "./prelude/index.ms",
         "./result": "./result/index.ms",
         "./testing": "./testing/index.ms"
     }

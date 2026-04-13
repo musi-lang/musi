@@ -97,7 +97,13 @@ impl Parser<'_> {
     }
 
     fn parse_prefix_expr(&mut self) -> SyntaxNodeParseResult {
-        if self.at_any(&[TokenKind::Minus, TokenKind::KwNot, TokenKind::KwMut]) {
+        if self.at_any(&[
+            TokenKind::Minus,
+            TokenKind::KwNot,
+            TokenKind::KwMut,
+            TokenKind::DotDot,
+            TokenKind::DotDotLt,
+        ]) {
             let op = self.advance_element();
             let operand = self.parse_expr(PREFIX_BP)?;
             return Ok(self.builder.push_node_from_children(
@@ -148,7 +154,57 @@ impl Parser<'_> {
         if self.at(TokenKind::ColonQuestionGt) {
             return self.parse_type_cast_expr(left).map(Some);
         }
+        if self.at_partial_range_from_postfix() {
+            let op = self.advance_element();
+            return Ok(Some(self.builder.push_node_from_children(
+                SyntaxNodeKind::PostfixExpr,
+                vec![SyntaxElementId::Node(left), op],
+            )));
+        }
         Ok(None)
+    }
+
+    fn at_partial_range_from_postfix(&self) -> bool {
+        self.at(TokenKind::DotDot) && !Self::starts_expr(self.nth_kind(1))
+    }
+
+    const fn starts_expr(kind: TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::Int
+                | TokenKind::Float
+                | TokenKind::String
+                | TokenKind::Rune
+                | TokenKind::TemplateNoSubst
+                | TokenKind::TemplateHead
+                | TokenKind::Ident
+                | TokenKind::OpIdent
+                | TokenKind::Hash
+                | TokenKind::LParen
+                | TokenKind::LBracket
+                | TokenKind::LBrace
+                | TokenKind::Dot
+                | TokenKind::KwCase
+                | TokenKind::KwLet
+                | TokenKind::KwResume
+                | TokenKind::KwImport
+                | TokenKind::KwData
+                | TokenKind::KwEffect
+                | TokenKind::KwClass
+                | TokenKind::KwInstance
+                | TokenKind::KwPerform
+                | TokenKind::KwUsing
+                | TokenKind::KwHandle
+                | TokenKind::KwForeign
+                | TokenKind::KwQuote
+                | TokenKind::At
+                | TokenKind::KwExport
+                | TokenKind::Minus
+                | TokenKind::KwNot
+                | TokenKind::KwMut
+                | TokenKind::DotDot
+                | TokenKind::DotDotLt
+        )
     }
 
     fn parse_call_expr(&mut self, callee: SyntaxNodeId) -> SyntaxNodeParseResult {

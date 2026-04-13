@@ -154,6 +154,7 @@ const fn binding_kind_label(kind: NameBindingKind) -> &'static str {
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)]
 fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
     match &sema.ty(ty).kind {
         HirTyKind::Error => "<error>".into(),
@@ -227,6 +228,30 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
             }
             format!("[{}]", parts.join("; "))
         }
+        HirTyKind::Seq { item } => format!("[]{}", render_hir_ty(sema, session, *item)),
+        HirTyKind::Range { bound } => format!("Range[{}]", render_hir_ty(sema, session, *bound)),
+        HirTyKind::ClosedRange { bound } => {
+            format!("ClosedRange[{}]", render_hir_ty(sema, session, *bound))
+        }
+        HirTyKind::PartialRangeFrom { bound } => {
+            format!("PartialRangeFrom[{}]", render_hir_ty(sema, session, *bound))
+        }
+        HirTyKind::PartialRangeUpTo { bound } => {
+            format!("PartialRangeUpTo[{}]", render_hir_ty(sema, session, *bound))
+        }
+        HirTyKind::PartialRangeThru { bound } => {
+            format!("PartialRangeThru[{}]", render_hir_ty(sema, session, *bound))
+        }
+        HirTyKind::Handler {
+            effect,
+            input,
+            output,
+        } => format!(
+            "using {} ({} -> {})",
+            render_hir_ty(sema, session, *effect),
+            render_hir_ty(sema, session, *input),
+            render_hir_ty(sema, session, *output)
+        ),
         HirTyKind::Mut { inner } => format!("mut {}", render_hir_ty(sema, session, *inner)),
         HirTyKind::Record { fields } => {
             let rendered = sema

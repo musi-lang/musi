@@ -8,33 +8,32 @@ slug: "effects-and-handlers"
 summary: "The main Musi differentiator, shown with real syntax."
 ---
 
-## What
-Effects are built into the language as part of normal flow control:
-you define an effect, perform it, and handle it at a boundary.
+Effects are part of ordinary Musi code. Define an effect, `perform` an operation, then `handle` it at a boundary.
 
-## When
-Use effects for cross-cutting concerns:
-resource usage, command routing, telemetry, and deferred behavior.
+## Handle first
 
 {{snippet:handle-console}}
 
-## Why
-This model separates “what happened” from “how to handle it,” which keeps business logic clearer as projects grow.
+Handlers decide what to do with an operation request. `resume` continues execution with a value.
+
+## Define effect
 
 {{snippet:effect-console}}
 
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Define one effect family, perform operations, and add handlers for policy (logging, fallback, default values, reporting).
+## Perform operation
 
 {{snippet:perform-console}}
 
+## Compare
+
 {{example:effect-handle}}
 
-## Analogy
-From ground level, Earth can look flat; as altitude increases, the curve becomes obvious. Effects are similar: in tiny examples they can look like callback plumbing, but as programs scale the separation between operation requests and handler policy becomes much clearer.
+Effects are useful when direct calls would otherwise drag boundary logic through many layers of code.
 
 ## Try it
+
+{{try:effects-and-handlers}}
+
+## Next step
+
 Read all three snippets end-to-end, then continue to [Attributes and foreign declarations](/docs/attributes-and-foreign).

@@ -70,8 +70,8 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         IrExprKind::Assign { target, value } => collect_used_in_assign_target(value, target, out),
         IrExprKind::Binary { left, right, .. }
         | IrExprKind::Range {
-            start: left,
-            end: right,
+            lower: left,
+            upper: right,
             ..
         } => {
             collect_used_bindings(left, out);
@@ -163,8 +163,8 @@ fn collect_used_synthetic_names_nested(expr: &IrExpr, out: SyntheticNameSetMut<'
         }
         IrExprKind::Binary { left, right, .. }
         | IrExprKind::Range {
-            start: left,
-            end: right,
+            lower: left,
+            upper: right,
             ..
         } => {
             collect_used_synthetic_names(left, out);
@@ -259,8 +259,8 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::Assign { value, .. } => collect_local_decl_bindings(value, out),
         IrExprKind::Binary { left, right, .. }
         | IrExprKind::Range {
-            start: left,
-            end: right,
+            lower: left,
+            upper: right,
             ..
         } => {
             collect_local_decl_bindings(left, out);

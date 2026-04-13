@@ -205,6 +205,10 @@ pub enum HirExprKind {
         op: HirPrefixOp,
         expr: HirExprId,
     },
+    PartialRange {
+        kind: HirPartialRangeKind,
+        expr: HirExprId,
+    },
     Binary {
         op: HirBinaryOp,
         left: HirExprId,
@@ -284,6 +288,13 @@ pub enum HirPrefixOp {
     Mut,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirPartialRangeKind {
+    From,
+    UpTo,
+    Thru,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirBinaryOp {
     Assign,
@@ -299,8 +310,8 @@ pub enum HirBinaryOp {
     Gt,
     Le,
     Ge,
-    RangeInclusive,
-    RangeExcludeEnd,
+    ClosedRange,
+    OpenRange,
     In,
     Shl,
     Shr,

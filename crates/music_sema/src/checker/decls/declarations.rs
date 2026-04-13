@@ -5,7 +5,7 @@ use music_hir::{
     HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirMemberKind,
     HirPatKind, HirTyId, HirTyKind, HirVariantDef,
 };
-use music_names::{Ident, NameBindingId};
+use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::exprs::check_expr;
 use super::super::surface::surface_key;
@@ -434,6 +434,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         expr_id: HirExprId,
         name: Ident,
+        type_params: &[Symbol],
         constraints: ConstraintRange,
         members: MemberDefRange,
     ) -> ExprFacts {
@@ -453,12 +454,14 @@ impl CheckPass<'_, '_, '_> {
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
             let constraints_facts = self.lower_constraints(constraints.clone());
+            let type_params = type_params.to_vec().into_boxed_slice();
             let facts = ClassFacts::new(
                 surface_key(self.module_key(), self.interner(), name.name),
                 name.name,
                 class_members,
                 laws,
             )
+            .with_type_params(type_params)
             .with_constraints(constraints_facts);
             self.insert_class_facts(expr_id, facts.clone());
             self.insert_class_facts_by_name(name.name, facts);

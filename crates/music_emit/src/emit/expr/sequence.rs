@@ -1,6 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
-use music_ir::IrRangeEndBound;
+use music_ir::IrRangeKind;
 
 use super::support::push_expr_diag;
 
@@ -8,18 +8,22 @@ impl MethodEmitter<'_, '_> {
     pub(super) fn compile_range(
         &mut self,
         ty_name: &str,
-        start: &IrExpr,
-        end: &IrExpr,
-        end_bound: IrRangeEndBound,
+        kind: IrRangeKind,
+        lower: &IrExpr,
+        upper: &IrExpr,
+        bounds_evidence: Option<&IrExpr>,
         diags: &mut EmitDiagList,
     ) {
-        self.compile_expr(start, true, diags);
-        self.compile_expr(end, true, diags);
+        if let Some(bounds_evidence) = bounds_evidence {
+            self.compile_expr(bounds_evidence, true, diags);
+        }
+        self.compile_expr(lower, true, diags);
+        self.compile_expr(upper, true, diags);
         let Some(ty) = self.layout.types.get(ty_name).copied() else {
             push_expr_diag(
                 diags,
                 self.module_key,
-                &start.origin,
+                &lower.origin,
                 EmitDiagKind::UnknownSequenceType,
                 format!("unknown emitted sequence type `{ty_name}`"),
             );
@@ -30,7 +34,7 @@ impl MethodEmitter<'_, '_> {
             Opcode::RangeNew,
             Operand::TypeLen {
                 ty,
-                len: range_end_bound_flag(end_bound),
+                len: range_kind_flag(kind),
             },
         )));
     }
@@ -228,9 +232,12 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-const fn range_end_bound_flag(end_bound: IrRangeEndBound) -> u16 {
-    match end_bound {
-        IrRangeEndBound::Inclusive => 0,
-        IrRangeEndBound::Exclusive => 1,
+const fn range_kind_flag(kind: IrRangeKind) -> u16 {
+    match kind {
+        IrRangeKind::Open => 0,
+        IrRangeKind::Closed => 1,
+        IrRangeKind::From => 2,
+        IrRangeKind::UpTo => 3,
+        IrRangeKind::Thru => 4,
     }
 }

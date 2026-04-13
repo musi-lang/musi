@@ -19,3 +19,19 @@ Local commands from repo root:
 - `bun run check`
 - `bun run test`
 - `bun run build`
+
+---
+
+```
+upper-left: #9E6663
+upper-right: #AD6D62
+lower-left: #D38F7B
+lower-right: #C98273
+
+---
+
+upper-left_test: #639B9E
+upper-right_test: #62A8AD
+lower-left_test: #7BBFD3
+lower-right_test: #73BAC9
+```

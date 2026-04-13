@@ -10,7 +10,7 @@ export function ReferencePage() {
 			<PageHeader
 				eyebrow="Reference"
 				title="Project links and source material."
-				description="Start with the public docs. Come here when you need the repository, grammar, editor sources, or source material that lives in the repo."
+				description="Use docs first. Come here for grammar, repository material, editor sources, and public reference links."
 				actions={
 					<Group gap="sm">
 						<SecondaryAction href="/docs">Read docs</SecondaryAction>
@@ -20,7 +20,12 @@ export function ReferencePage() {
 			/>
 			<SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
 				{referenceGroups.map((group) => (
-					<Surface key={group.title} p="md" tone="panel">
+					<Surface
+						key={group.title}
+						p="md"
+						tone="panel"
+						className="portal-card"
+					>
 						<Stack gap="md">
 							<Text component="h2" fw={700} fz="h4">
 								{group.title}

@@ -1,16 +1,11 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { createHighlighter } from "shiki";
-import {
-	exampleGroupById,
-	exampleGroups,
-} from "../src/content/examples/groups";
-import {
-	comparisonLanguageLabels,
-	comparisonLanguages,
-} from "../src/content/examples/languages";
+import { bookPages, bookParts } from "../src/content/book/manifest";
+import { tryBlockById } from "../src/content/book/try-registry";
+import { exampleGroupById } from "../src/content/examples/groups";
 import { contentSnippets, snippetById } from "../src/content/snippet-registry";
 
 interface TextMateRule {
@@ -49,6 +44,14 @@ interface GeneratedHeading {
 }
 
 interface GeneratedDoc extends MarkdownDocumentAttributes {
+	id: string;
+	kind: "part" | "chapter";
+	partId: string;
+	partTitle: string;
+	path: string;
+	canonicalPath: string;
+	aliases: string[];
+	questions: { label: string; href: string }[];
 	descriptionHtml: string;
 	headings: GeneratedHeading[];
 	html: string;
@@ -60,6 +63,7 @@ const numberValuePattern = /^\d+$/;
 const rawMusiFencePattern = /```musi\b/;
 const examplePattern = /\{\{example:([\w-]+)\}\}/g;
 const snippetPattern = /\{\{snippet:([\w-]+)\}\}/g;
+const tryPattern = /\{\{try:([\w-]+)\}\}/g;
 const bannedSyntaxPatterns = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
 const stdlibRedefinitionPattern = /let\s+(Option|Result)\[[^\]]+\]\s*:=/;
 const bannedDocsPatterns = [
@@ -70,22 +74,24 @@ const bannedDocsPatterns = [
 	/current design/i,
 	/@std\/io/,
 ];
-const requiredSectionHeadings = [
-	"## What",
-	"## When",
-	"## Why",
-	"## Where",
-	"## How",
-];
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(scriptsDirectory, "..");
 const docsDirectory = join(appRoot, "src", "content", "docs");
 const examplesDirectory = join(appRoot, "src", "content", "examples");
+const bookContentDirectory = join(appRoot, "src", "content", "book");
 const snippetRegistryPath = join(
 	appRoot,
 	"src",
 	"content",
 	"snippet-registry.ts",
+);
+const bookManifestPath = join(appRoot, "src", "content", "book", "manifest.ts");
+const tryRegistryPath = join(
+	appRoot,
+	"src",
+	"content",
+	"book",
+	"try-registry.ts",
 );
 const generatorModulePath = join(scriptsDirectory, "content-generator.ts");
 const generatorEntrypointPath = join(scriptsDirectory, "generate-content.ts");
@@ -181,7 +187,10 @@ export const generatedContentPath = join(
 export const watchedContentPaths = [
 	docsDirectory,
 	examplesDirectory,
+	bookContentDirectory,
 	snippetRegistryPath,
+	bookManifestPath,
+	tryRegistryPath,
 	generatorModulePath,
 	generatorEntrypointPath,
 	grammarPath,
@@ -196,7 +205,10 @@ export function isWatchedContentPath(path: string) {
 	return (
 		normalized.startsWith(pathWithTrailingSeparator(docsDirectory)) ||
 		normalized.startsWith(pathWithTrailingSeparator(examplesDirectory)) ||
+		normalized.startsWith(pathWithTrailingSeparator(bookContentDirectory)) ||
 		normalized === normalize(snippetRegistryPath) ||
+		normalized === normalize(bookManifestPath) ||
+		normalized === normalize(tryRegistryPath) ||
 		normalized === normalize(generatorModulePath) ||
 		normalized === normalize(generatorEntrypointPath) ||
 		normalized === normalize(grammarPath)
@@ -362,20 +374,8 @@ function assertConsumerSafeDocs(source: string, path: string) {
 	}
 }
 
-function assertRequiredSections(source: string, path: string) {
-	for (const heading of requiredSectionHeadings) {
-		if (!source.includes(heading)) {
-			throw new Error(`${path} is missing required section ${heading}`);
-		}
-	}
-}
-
-async function discoverDocPaths() {
-	const entries = await readdir(docsDirectory, { withFileTypes: true });
-	return entries
-		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-		.map((entry) => join(docsDirectory, entry.name))
-		.sort((left, right) => left.localeCompare(right));
+function docSourcePath(path: string) {
+	return join(appRoot, path);
 }
 
 function renderSnippet(id: string) {
@@ -400,54 +400,45 @@ function renderInlineHtml(source: string) {
 	return marked.parseInline(source, { gfm: true }) as string;
 }
 
-async function renderExample(id: string) {
+function renderTryBlock(id: string) {
+	const block = tryBlockById(id);
+	if (!block) {
+		throw new Error(`missing try block ${id}`);
+	}
+
+	const steps = block.steps
+		.map((step) => `<li>${renderInlineHtml(step)}</li>`)
+		.join("");
+
+	return `<div class="try-block"><ol>${steps}</ol></div>`;
+}
+
+function renderExample(id: string) {
 	const group = exampleGroupById(id);
 	if (!group) {
 		throw new Error(`missing example group ${id}`);
 	}
 
-	for (const language of comparisonLanguages) {
-		const variant = group.variants[language];
-		if (!variant) {
-			throw new Error(`example group ${id} is missing ${language}`);
-		}
-		validateSnippetSyntax(
-			`${id}:${language}`,
-			variant.sourceText,
-			variant.language,
-		);
-	}
+	validateSnippetSyntax(`${id}:musi`, group.sourceText, "musi");
 
-	const tabButtons = comparisonLanguages
-		.map((language) => {
-			const active = language === group.defaultLanguage;
-			return `<button type="button" role="tab" class="code-tab" data-language="${language}" aria-selected="${active ? "true" : "false"}" tabindex="${active ? "0" : "-1"}">${comparisonLanguageLabels[language]}</button>`;
-		})
-		.join("");
+	const html = renderHighlightedCode(group.sourceText, "musi");
 
-	const panels = await Promise.all(
-		comparisonLanguages.map((language) => {
-			const variant = group.variants[language];
-			const html = renderHighlightedCode(variant.sourceText, variant.language);
-			const hidden = language === group.defaultLanguage ? "" : ' hidden=""';
-			return `<section role="tabpanel" class="code-panel" data-language="${language}" data-active="${language === group.defaultLanguage ? "true" : "false"}"${hidden}>${html}</section>`;
-		}),
-	);
-
-	return `<div class="code-tabs" data-code-tabs="1" data-example-id="${escapeHtmlAttribute(id)}" data-default="${group.defaultLanguage}" data-active-language="${group.defaultLanguage}">
+	return `<div class="code-tabs" data-example-id="${escapeHtmlAttribute(id)}">
 <div class="code-tabs-meta">
 <p class="code-tabs-caption">${renderInlineHtml(group.caption)}</p>
 <p class="code-tabs-note">${renderInlineHtml(group.note)}</p>
 </div>
-<div class="code-tablist" role="tablist" aria-label="${escapeHtmlAttribute(group.title)}">${tabButtons}</div>
-${panels.join("\n")}
+<section role="tabpanel" class="code-panel">
+${html}
+</section>
 </div>`;
 }
 
-async function replaceContentPlaceholders(source: string) {
+function replaceContentPlaceholders(source: string) {
 	const snippetMatches = Array.from(source.matchAll(snippetPattern));
 	const exampleMatches = Array.from(source.matchAll(examplePattern));
-	const matches = [...snippetMatches, ...exampleMatches].sort(
+	const tryMatches = Array.from(source.matchAll(tryPattern));
+	const matches = [...snippetMatches, ...exampleMatches, ...tryMatches].sort(
 		(left, right) => (left.index ?? 0) - (right.index ?? 0),
 	);
 	if (matches.length === 0) {
@@ -461,9 +452,13 @@ async function replaceContentPlaceholders(source: string) {
 		const start = match.index ?? cursor;
 		const [matched, id] = match;
 		result += source.slice(cursor, start);
-		result += matched.startsWith("{{example:")
-			? await renderExample(id)
-			: await renderSnippet(id);
+		if (matched.startsWith("{{example:")) {
+			result += renderExample(id);
+		} else if (matched.startsWith("{{try:")) {
+			result += renderTryBlock(id);
+		} else {
+			result += renderSnippet(id);
+		}
 		cursor = start + matched.length;
 	}
 
@@ -471,7 +466,7 @@ async function replaceContentPlaceholders(source: string) {
 	return result;
 }
 
-async function renderMarkdown(source: string) {
+function renderMarkdown(source: string) {
 	const parsed = parseFrontmatter(source);
 	const headings: GeneratedHeading[] = [];
 	const renderer = new marked.Renderer();
@@ -493,7 +488,7 @@ async function renderMarkdown(source: string) {
 		return renderHighlightedCode(text, language);
 	};
 
-	const withSnippets = await replaceContentPlaceholders(parsed.body);
+	const withSnippets = replaceContentPlaceholders(parsed.body);
 	const html = marked.parse(withSnippets, {
 		gfm: true,
 		renderer,
@@ -505,16 +500,51 @@ async function renderMarkdown(source: string) {
 	};
 }
 
-async function renderMarkdownDocument(path: string) {
-	const source = await readFile(path, "utf8");
-	assertNoRawMusiFences(source, path);
-	assertConsumerSafeDocs(source, path);
-	assertRequiredSections(source, path);
-	const parsed = parseFrontmatter(source);
+function buildDocLinkMap() {
+	const rewrites = new Map<string, string>();
+	for (const page of bookPages) {
+		for (const alias of page.aliases) {
+			rewrites.set(alias, page.path);
+		}
+	}
+	return rewrites;
+}
+
+function rewriteDocLinks(source: string, rewrites: Map<string, string>) {
+	return source.replaceAll(/\]\((\/docs\/[^)#\s]+)\)/g, (matched, path) => {
+		const replacement = rewrites.get(path);
+		return replacement ? matched.replace(path, replacement) : matched;
+	});
+}
+
+async function renderMarkdownDocument(input: {
+	id: string;
+	kind: "part" | "chapter";
+	partId: string;
+	partTitle: string;
+	path: string;
+	aliases: string[];
+	sourcePath: string;
+	questions: { label: string; href: string }[];
+	rewrites: Map<string, string>;
+}) {
+	const source = await readFile(docSourcePath(input.sourcePath), "utf8");
+	assertNoRawMusiFences(source, input.sourcePath);
+	assertConsumerSafeDocs(source, input.sourcePath);
+	const rewrittenSource = rewriteDocLinks(source, input.rewrites);
+	const parsed = parseFrontmatter(rewrittenSource);
 	const attributes = parsed.attributes as Partial<MarkdownDocumentAttributes>;
-	const rendered = await renderMarkdown(source);
+	const rendered = renderMarkdown(rewrittenSource);
 
 	return {
+		id: input.id,
+		kind: input.kind,
+		partId: input.partId,
+		partTitle: input.partTitle,
+		path: input.path,
+		canonicalPath: input.path,
+		aliases: input.aliases,
+		questions: input.questions,
 		...(attributes as MarkdownDocumentAttributes),
 		descriptionHtml: renderInlineHtml(String(attributes.description ?? "")),
 		headings: rendered.headings,
@@ -527,30 +557,50 @@ export async function generateContent() {
 	for (const snippet of contentSnippets) {
 		validateSnippetSyntax(snippet.id, snippet.sourceText, snippet.language);
 	}
-	for (const example of exampleGroups) {
-		for (const language of comparisonLanguages) {
-			if (!example.variants[language]) {
-				throw new Error(`example group ${example.id} is missing ${language}`);
-			}
-		}
-	}
 
 	const renderedSnippets = {
-		homeSampleHtml: await renderExample("option-fallback"),
-		installSourceHtml: await renderSnippet("install-source"),
-		quickstartHtml: await renderSnippet("quickstart"),
+		homeSampleHtml: renderExample("home-intro"),
+		installSourceHtml: renderSnippet("install-source"),
+		quickstartHtml: renderSnippet("quickstart"),
 	};
 
-	const docPaths = await discoverDocPaths();
-	const renderedDocs = await Promise.all(
-		docPaths.map((path) => renderMarkdownDocument(path)),
-	);
-	renderedDocs.sort((left, right) => {
-		if (left.order !== right.order) {
-			return left.order - right.order;
-		}
-		return left.slug.localeCompare(right.slug);
-	});
+	const partById = new Map(bookParts.map((part) => [part.id, part] as const));
+	const rewrites = buildDocLinkMap();
+	const renderedDocs = await Promise.all([
+		...bookParts.map((part) =>
+			renderMarkdownDocument({
+				id: part.id,
+				kind: "part",
+				partId: part.id,
+				partTitle: part.id,
+				path: part.path,
+				aliases: [],
+				sourcePath: part.sourcePath,
+				questions: [],
+				rewrites,
+			}),
+		),
+		...bookPages.map((page) => {
+			const part = partById.get(page.partId);
+			if (!part) {
+				throw new Error(`missing part ${page.partId} for page ${page.id}`);
+			}
+			return renderMarkdownDocument({
+				id: page.id,
+				kind: "chapter",
+				partId: page.partId,
+				partTitle: part.id,
+				path: page.path,
+				aliases: page.aliases,
+				sourcePath: page.sourcePath,
+				questions: page.questions.map((question) => ({
+					label: question.label,
+					href: page.path,
+				})),
+				rewrites,
+			});
+		}),
+	]);
 
 	const generated = `export interface GeneratedHeading {
 \tdepth: number;
@@ -559,6 +609,14 @@ export async function generateContent() {
 }
 
 export interface GeneratedDoc {
+\tid: string;
+\tkind: "part" | "chapter";
+\tpartId: string;
+\tpartTitle: string;
+\tpath: string;
+\tcanonicalPath: string;
+\taliases: string[];
+\tquestions: { label: string; href: string }[];
 \ttitle: string;
 \tdescription: string;
 \tdescriptionHtml: string;

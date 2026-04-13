@@ -16,7 +16,7 @@ export function InstallPage() {
 			<PageHeader
 				eyebrow="Install"
 				title="Build Musi from source."
-				description="The current public path is source-first: install Rust and libffi, build the repository, and keep music plus musi on your PATH."
+				description="Current public install path is source-first: install Rust and libffi, build the repository, add `music` and `musi` to PATH, then run direct and package commands."
 				actions={
 					<Group gap="sm">
 						<SecondaryAction href="/docs/getting-started">
@@ -28,7 +28,7 @@ export function InstallPage() {
 			/>
 			<SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
 				{installPrerequisites.map((item) => (
-					<Surface key={item.title} p="md" tone="panel">
+					<Surface key={item.title} p="md" tone="panel" className="portal-card">
 						<Stack gap="sm">
 							<Text className="eyebrow">{item.title}</Text>
 							<Text fw={700}>{item.value}</Text>
@@ -55,10 +55,14 @@ export function InstallPage() {
 				<Stack gap="md">
 					<div>
 						<Text className="eyebrow" mb={8}>
-							Commands
+							Command map
 						</Text>
 						<Text component="h2" fw={700} fz="h3">
 							Current entry points
+						</Text>
+						<Text c="dimmed" mt={6}>
+							Use package commands most of the time. Use direct commands when
+							you want one file or one artifact.
 						</Text>
 					</div>
 					<Table

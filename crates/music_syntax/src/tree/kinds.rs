@@ -29,6 +29,7 @@ pub enum SyntaxNodeKind {
     TypeTestExpr,
     TypeCastExpr,
     PrefixExpr,
+    PostfixExpr,
     InfixExpr,
     BinaryExpr,
     CaseExpr,

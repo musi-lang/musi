@@ -706,6 +706,7 @@ dependencies = [
 name = "musi_vm"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_foundation",
  "music_module",
  "music_seam",
  "music_session",
@@ -767,6 +768,7 @@ dependencies = [
 name = "music_ir"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_foundation",
  "music_arena",
  "music_base",
  "music_hir",

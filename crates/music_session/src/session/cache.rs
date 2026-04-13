@@ -1,10 +1,13 @@
 use std::collections::BTreeSet;
 
+use music_base::Span;
 use music_emit::{EmittedModule, lower_ir_module};
 use music_ir::{IrModule, lower_module};
+use music_module::ModuleSpecifier;
 use music_module::{ImportEnv, ModuleKey, collect_export_summary, collect_import_sites};
-use music_resolve::{ResolveOptions, ResolvedModule, resolve_module};
-use music_sema::{SemaEnv, SemaModule, SemaOptions, check_module};
+use music_names::Symbol;
+use music_resolve::{ResolveOptions, ResolvedImport, ResolvedModule, resolve_module};
+use music_sema::{ModuleSurface, SemaEnv, SemaModule, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::api::{ParsedModule, SessionError, SessionSyntaxErrors};
@@ -13,6 +16,52 @@ use super::Session;
 use super::graph::{SessionImportEnv, SurfaceMap};
 
 impl Session {
+    fn auto_prelude_target(&self, key: &ModuleKey) -> Option<ModuleKey> {
+        if key.as_str().starts_with("musi:") || key.as_str().starts_with("@@std@") {
+            return None;
+        }
+        let spec = ModuleSpecifier::new("@std/prelude");
+        let target = self
+            .options
+            .import_map
+            .resolve(key, &spec)
+            .map(|resolved| ModuleKey::new(resolved.as_str()))
+            .or_else(|| {
+                self.store.modules.keys().find_map(|candidate| {
+                    let key = candidate.as_str();
+                    (key.starts_with("@@std@") && key.ends_with("/prelude/index.ms"))
+                        .then_some(candidate.clone())
+                })
+            })?;
+        (target != *key).then_some(target)
+    }
+
+    fn auto_prelude_surface(
+        &mut self,
+        key: &ModuleKey,
+    ) -> Result<Option<(ModuleKey, ModuleSurface)>, SessionError> {
+        let Some(target) = self.auto_prelude_target(key) else {
+            return Ok(None);
+        };
+        let sema = self.check_module(&target)?;
+        Ok(Some((target, sema.surface().clone())))
+    }
+
+    fn auto_prelude_symbols(
+        &mut self,
+        key: &ModuleKey,
+    ) -> Result<Option<(ModuleKey, Vec<Symbol>)>, SessionError> {
+        let Some((target, surface)) = self.auto_prelude_surface(key)? else {
+            return Ok(None);
+        };
+        let names = surface
+            .exported_values()
+            .iter()
+            .map(|export| self.interner.intern(export.name.as_ref()))
+            .collect::<Vec<_>>();
+        Ok(Some((target, names)))
+    }
+
     /// # Errors
     ///
     /// Returns [`SessionError::ModuleNotRegistered`] if the module is not registered.
@@ -305,16 +354,31 @@ impl Session {
             module_keys: &module_keys,
         };
         let import_env: Option<&dyn ImportEnv> = if has_imports { Some(&import_env) } else { None };
-        Ok(resolve_module(
+        let auto_prelude = self.auto_prelude_symbols(key)?;
+        let inject_compiler_prelude = auto_prelude.is_none();
+        let prelude = auto_prelude
+            .as_ref()
+            .map(|(_, names)| names.clone())
+            .unwrap_or_default();
+        let mut resolved = resolve_module(
             source_id,
             key,
             parsed.tree(),
             &mut self.interner,
             ResolveOptions {
-                prelude: Vec::new(),
+                inject_compiler_prelude,
+                prelude,
                 import_env,
             },
-        ))
+        );
+        if let Some((target, _)) = auto_prelude {
+            resolved.imports.push(ResolvedImport {
+                span: Span::DUMMY,
+                spec: ModuleSpecifier::new("@std/prelude"),
+                to: target,
+            });
+        }
+        Ok(resolved)
     }
 
     fn build_sema_module(&mut self, key: &ModuleKey) -> Result<SemaModule, SessionError> {
@@ -322,6 +386,10 @@ impl Session {
         let mut surfaces = SurfaceMap::default();
         let mut seen = BTreeSet::new();
         self.collect_import_surfaces(&resolved, &mut seen, &mut surfaces)?;
+        let prelude = self.auto_prelude_surface(key)?.map(|(target, surface)| {
+            let _ = surfaces.surfaces.insert(target, surface.clone());
+            surface
+        });
         let env: Option<&dyn SemaEnv> = if surfaces.surfaces.is_empty() {
             None
         } else {
@@ -333,6 +401,7 @@ impl Session {
             SemaOptions {
                 target: self.options.target.clone(),
                 env,
+                prelude: prelude.as_ref(),
             },
         ))
     }

@@ -1,5 +1,11 @@
 import { Box, Divider, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import { homeDescriptor, homeSampleHtml, homeSections } from "../../content";
+import {
+	homeDescriptor,
+	homeSampleHtml,
+	homeSections,
+	learningTracks,
+	startHereLinks,
+} from "../../content";
 import { docGroups } from "../../docs";
 import {
 	ActionStrip,
@@ -18,9 +24,28 @@ export function HomePage() {
 			<Surface p={{ base: "md", md: "lg" }} tone="hero">
 				<SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" verticalSpacing="md">
 					<PageHeader
-						eyebrow="Programming language"
+						eyebrow="Language"
 						title="Musi"
 						description={homeDescriptor}
+						meta={
+							<SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" mt="md">
+								{learningTracks.map((track) => (
+									<Surface
+										key={track.title}
+										component="a"
+										href={track.href}
+										p="sm"
+										tone="panel"
+										className="info-chip"
+									>
+										<Text className="eyebrow" mb={4}>
+											{track.title}
+										</Text>
+										<Text size="sm">{track.copy}</Text>
+									</Surface>
+								))}
+							</SimpleGrid>
+						}
 						actions={
 							<ActionStrip>
 								<PrimaryAction href="/docs">Docs</PrimaryAction>
@@ -37,9 +62,28 @@ export function HomePage() {
 					</Surface>
 				</SimpleGrid>
 			</Surface>
+			<SimpleGrid cols={{ base: 1, md: 3 }} spacing="sm">
+				{startHereLinks.map((link, index) => (
+					<Surface key={link.title} p="md" tone="panel" className="portal-card">
+						<Stack gap="xs">
+							<Text className="eyebrow">Path {index + 1}</Text>
+							<Text component="h2" fw={700} fz="h4">
+								{link.title}
+							</Text>
+							<Text>{link.copy}</Text>
+							<InlineAction href={link.href}>Open</InlineAction>
+						</Stack>
+					</Surface>
+				))}
+			</SimpleGrid>
 			<SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
 				{homeSections.map((section) => (
-					<Surface key={section.title} p="md" tone="panel">
+					<Surface
+						key={section.title}
+						p="md"
+						tone="panel"
+						className="portal-card"
+					>
 						<Stack gap="sm">
 							<Text className="eyebrow">{section.title}</Text>
 							<Text>{section.copy}</Text>
@@ -52,10 +96,14 @@ export function HomePage() {
 					<Group justify="space-between" align="end">
 						<Box>
 							<Text className="eyebrow" mb={6}>
-								Docs map
+								Docs
 							</Text>
 							<Text component="h2" fw={700} fz="h3">
-								Explore the book
+								Read in order
+							</Text>
+							<Text c="dimmed" mt={6}>
+								Start at setup, then move through syntax, types, and tooling.
+								Jump by chapter group if you already know the topic you need.
 							</Text>
 						</Box>
 						<InlineAction href="/docs">All chapters</InlineAction>

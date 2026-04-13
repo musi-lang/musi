@@ -3,10 +3,10 @@ use std::collections::BTreeMap;
 use music_arena::SliceRange;
 use music_hir::{
     HirAccessKind, HirBinaryOp, HirBinder, HirCaseArm, HirConstraint, HirExprId, HirExprKind,
-    HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPrefixOp, HirQuoteKind,
-    HirRecordItem, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
+    HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPartialRangeKind, HirPrefixOp,
+    HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
 };
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 
 use crate::api::{ConstraintKind, ExprFacts};
 
@@ -97,6 +97,9 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Prefix { op, expr: inner } => {
                 ctx.check_prefix_expr(expr.origin, &op, inner)
             }
+            HirExprKind::PartialRange { kind, expr: inner } => {
+                ctx.check_partial_range_expr(id, expr.origin, kind, inner)
+            }
             HirExprKind::Binary { op, left, right } => {
                 ctx.check_binary_expr(id, expr.origin, &op, left, right)
             }
@@ -177,6 +180,9 @@ impl CheckPass<'_, '_, '_> {
             }
             HirExprKind::TypeCast { base, ty } => ctx.check_type_cast_expr(base, ty),
             HirExprKind::Prefix { op, expr: inner } => ctx.check_prefix_expr(origin, &op, inner),
+            HirExprKind::PartialRange { kind, expr: inner } => {
+                ctx.check_partial_range_expr(id, origin, kind, inner)
+            }
             HirExprKind::Binary { op, left, right } => {
                 ctx.check_binary_expr(id, origin, &op, left, right)
             }
@@ -518,7 +524,12 @@ impl CheckPass<'_, '_, '_> {
             .record_like_field_ty(base_ty, ctx.resolve_symbol(name.name))
             .unwrap_or_else(|| match ctx.ty(base_ty).kind {
                 HirTyKind::Record { .. } | HirTyKind::Range { .. } => {
-                    ctx.diag(origin.span, DiagKind::UnknownField, "");
+                    let field_name = ctx.resolve_symbol(name.name).to_owned();
+                    ctx.diag(
+                        origin.span,
+                        DiagKind::UnknownField,
+                        &format!("unknown field `{field_name}`"),
+                    );
                     builtins.unknown
                 }
                 HirTyKind::Module => {
@@ -596,26 +607,53 @@ impl CheckPass<'_, '_, '_> {
                 let _prev = fields.insert(ctx.resolve_symbol(name.name).into(), facts.ty);
             }
         }
-        let ty = if let HirTyKind::Range { item } = ctx.ty(base_ty).kind {
-            let bound_ty = ctx.builtins().bound;
-            if let Some(found) = fields.get("start").copied() {
-                ctx.type_mismatch(origin, item, found);
+        let ty = (match ctx.ty(base_ty).kind {
+            HirTyKind::Range { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                if let Some(found) = fields.get("upperBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                Some(ctx.alloc_ty(HirTyKind::Range { bound }))
             }
-            if let Some(found) = fields.get("end").copied() {
-                ctx.type_mismatch(origin, item, found);
+            HirTyKind::ClosedRange { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                if let Some(found) = fields.get("upperBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                Some(ctx.alloc_ty(HirTyKind::ClosedRange { bound }))
             }
-            if let Some(found) = fields.get("end_bound").copied() {
-                ctx.type_mismatch(origin, bound_ty, found);
+            HirTyKind::PartialRangeFrom { bound } => {
+                if let Some(found) = fields.get("lowerBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                Some(ctx.alloc_ty(HirTyKind::PartialRangeFrom { bound }))
             }
-            ctx.alloc_ty(HirTyKind::Range { item })
-        } else {
+            HirTyKind::PartialRangeUpTo { bound } => {
+                if let Some(found) = fields.get("upperBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                Some(ctx.alloc_ty(HirTyKind::PartialRangeUpTo { bound }))
+            }
+            HirTyKind::PartialRangeThru { bound } => {
+                if let Some(found) = fields.get("upperBound").copied() {
+                    ctx.type_mismatch(origin, bound, found);
+                }
+                Some(ctx.alloc_ty(HirTyKind::PartialRangeThru { bound }))
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| {
             let fields = fields
                 .into_iter()
                 .map(|(name, ty)| HirTyField::new(ctx.intern(name.as_ref()), ty))
                 .collect::<Vec<_>>();
             let fields = ctx.alloc_ty_fields(fields);
             ctx.alloc_ty(HirTyKind::Record { fields })
-        };
+        });
         ExprFacts::new(ty, effects)
     }
 
@@ -691,10 +729,7 @@ impl CheckPass<'_, '_, '_> {
         let right_facts = check_expr(ctx, right);
         let mut effects = left_facts.effects.clone();
         effects.union_with(&right_facts.effects);
-        if matches!(
-            op,
-            HirBinaryOp::RangeInclusive | HirBinaryOp::RangeExcludeEnd
-        ) {
+        if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
             return ctx.check_range_binary_expr(origin, op, left_facts.ty, right_facts.ty, effects);
         }
         if matches!(op, HirBinaryOp::In) {
@@ -773,8 +808,8 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Or
             | HirBinaryOp::Xor
             | HirBinaryOp::And
-            | HirBinaryOp::RangeInclusive
-            | HirBinaryOp::RangeExcludeEnd
+            | HirBinaryOp::ClosedRange
+            | HirBinaryOp::OpenRange
             | HirBinaryOp::In
             | HirBinaryOp::Shl
             | HirBinaryOp::Shr
@@ -851,7 +886,12 @@ impl CheckPass<'_, '_, '_> {
                         .find(|field| field.name == name.name)
                         .map_or_else(
                             || {
-                                ctx.diag(origin.span, DiagKind::UnknownField, "");
+                                let field_name = ctx.resolve_symbol(name.name).to_owned();
+                                ctx.diag(
+                                    origin.span,
+                                    DiagKind::UnknownField,
+                                    &format!("unknown field `{field_name}`"),
+                                );
                                 builtins.unknown
                             },
                             |field| field.ty,
@@ -950,9 +990,13 @@ impl CheckPass<'_, '_, '_> {
                 .ty_ids(*items)
                 .into_iter()
                 .any(|ty| ctx.contains_mut_ty(ty)),
-            HirTyKind::Seq { item } | HirTyKind::Range { item } | HirTyKind::Array { item, .. } => {
-                ctx.contains_mut_ty(*item)
-            }
+            HirTyKind::Seq { item }
+            | HirTyKind::Range { bound: item }
+            | HirTyKind::ClosedRange { bound: item }
+            | HirTyKind::PartialRangeFrom { bound: item }
+            | HirTyKind::PartialRangeUpTo { bound: item }
+            | HirTyKind::PartialRangeThru { bound: item }
+            | HirTyKind::Array { item, .. } => ctx.contains_mut_ty(*item),
             HirTyKind::Handler {
                 effect,
                 input,
@@ -993,13 +1037,43 @@ impl CheckPass<'_, '_, '_> {
     fn check_range_binary_expr(
         &mut self,
         origin: HirOrigin,
-        _op: &HirBinaryOp,
+        op: &HirBinaryOp,
         left: HirTyId,
         right: HirTyId,
         effects: EffectRow,
     ) -> ExprFacts {
         let item_ty = self.range_item_ty(origin, left, right);
-        ExprFacts::new(self.make_range_ty(item_ty), effects)
+        let ty = match op {
+            HirBinaryOp::OpenRange => self.alloc_ty(HirTyKind::Range { bound: item_ty }),
+            HirBinaryOp::ClosedRange => self.alloc_ty(HirTyKind::ClosedRange { bound: item_ty }),
+            _ => self.builtins().unknown,
+        };
+        ExprFacts::new(ty, effects)
+    }
+
+    fn check_partial_range_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        kind: HirPartialRangeKind,
+        expr: HirExprId,
+    ) -> ExprFacts {
+        let facts = check_expr(self, expr);
+        let bound = self.normalize_range_bound_ty(facts.ty);
+        let rangeable = self.range_obligation(bound, self.known().rangeable);
+        let range_bounds = self.range_obligation(bound, self.known().range_bounds);
+        let obligations = [rangeable, range_bounds];
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &obligations)
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
+        let ty = match kind {
+            HirPartialRangeKind::From => self.alloc_ty(HirTyKind::PartialRangeFrom { bound }),
+            HirPartialRangeKind::UpTo => self.alloc_ty(HirTyKind::PartialRangeUpTo { bound }),
+            HirPartialRangeKind::Thru => self.alloc_ty(HirTyKind::PartialRangeThru { bound }),
+        };
+        ExprFacts::new(ty, facts.effects)
     }
 
     fn check_in_binary_expr(
@@ -1012,31 +1086,18 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let builtins = self.builtins();
         let Some(item_ty) = self.range_item_type(right) else {
-            let expected = self.make_range_ty(left);
+            let expected = self.alloc_ty(HirTyKind::Range { bound: left });
             self.type_mismatch(origin, expected, right);
             return ExprFacts::new(builtins.bool_, effects);
         };
         self.type_mismatch(origin, item_ty, left);
-        let rangeable_symbol = self.known().rangeable;
-        let rangeable = self.named_type_for_symbol(rangeable_symbol);
-        let obligation = super::schemes::ConstraintObligation {
-            kind: ConstraintKind::Implements,
-            subject: item_ty,
-            value: rangeable,
-            class_key: self
-                .class_facts_by_name(rangeable_symbol)
-                .map(|facts| facts.key.clone()),
-        };
+        let obligation = self.range_obligation(item_ty, self.known().rangeable);
         if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
             && !evidence.is_empty()
         {
             self.set_expr_evidence(expr_id, evidence);
         }
         ExprFacts::new(builtins.bool_, effects)
-    }
-
-    fn make_range_ty(&mut self, item: HirTyId) -> HirTyId {
-        self.alloc_ty(HirTyKind::Range { item })
     }
 
     fn range_item_ty(&mut self, origin: HirOrigin, left: HirTyId, right: HirTyId) -> HirTyId {
@@ -1069,7 +1130,11 @@ impl CheckPass<'_, '_, '_> {
 
     fn range_item_type(&self, ty: HirTyId) -> Option<HirTyId> {
         match self.ty(peel_mut_ty(self, ty)).kind {
-            HirTyKind::Range { item } => Some(item),
+            HirTyKind::Range { bound }
+            | HirTyKind::ClosedRange { bound }
+            | HirTyKind::PartialRangeFrom { bound }
+            | HirTyKind::PartialRangeUpTo { bound }
+            | HirTyKind::PartialRangeThru { bound } => Some(bound),
             _ => None,
         }
     }
@@ -1082,12 +1147,35 @@ impl CheckPass<'_, '_, '_> {
                     .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
                     .collect(),
             ),
-            HirTyKind::Range { item } => Some(BTreeMap::from([
-                ("start".into(), item),
-                ("end".into(), item),
-                ("end_bound".into(), self.builtins().bound),
-            ])),
+            HirTyKind::Range { bound } | HirTyKind::ClosedRange { bound } => {
+                Some(BTreeMap::from([
+                    ("lowerBound".into(), bound),
+                    ("upperBound".into(), bound),
+                ]))
+            }
+            HirTyKind::PartialRangeFrom { bound } => {
+                Some(BTreeMap::from([("lowerBound".into(), bound)]))
+            }
+            HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
+                Some(BTreeMap::from([("upperBound".into(), bound)]))
+            }
             _ => None,
+        }
+    }
+
+    fn range_obligation(
+        &mut self,
+        subject: HirTyId,
+        class_name: Symbol,
+    ) -> super::schemes::ConstraintObligation {
+        let class_ty = self.named_type_for_symbol(class_name);
+        super::schemes::ConstraintObligation {
+            kind: ConstraintKind::Implements,
+            subject,
+            value: class_ty,
+            class_key: self
+                .class_facts_by_name(class_name)
+                .map(|facts| facts.key.clone()),
         }
     }
 

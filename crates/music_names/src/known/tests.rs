@@ -15,11 +15,17 @@ fn compiler_prelude_contains_expected_symbols() {
     let mut interner = Interner::new();
     let known = KnownSymbols::new(&mut interner);
     let prelude = known.compiler_prelude();
-    assert_eq!(prelude.len(), 17);
+    assert_eq!(prelude.len(), 22);
     assert!(prelude.contains(&known.type_));
+    assert!(prelude.contains(&known.array));
     assert!(prelude.contains(&known.nat));
     assert!(prelude.contains(&known.int_));
-    assert!(prelude.contains(&known.bound));
+    assert!(prelude.contains(&known.range));
+    assert!(prelude.contains(&known.closed_range));
+    assert!(prelude.contains(&known.partial_range_from));
+    assert!(prelude.contains(&known.partial_range_up_to));
+    assert!(prelude.contains(&known.partial_range_thru));
     assert!(prelude.contains(&known.rangeable));
+    assert!(prelude.contains(&known.range_bounds));
     assert!(prelude.contains(&known.abort));
 }

@@ -237,6 +237,7 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         is_module_stmt: bool,
         bound_name: Option<Ident>,
+        type_params: &[Symbol],
         declared_ty: Option<HirTyId>,
         value: HirExprId,
     ) -> ExprFacts {
@@ -255,7 +256,13 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Class {
                 constraints,
                 members,
-            } => self.check_bound_class(value, name, constraints.clone(), members.clone()),
+            } => self.check_bound_class(
+                value,
+                name,
+                type_params,
+                constraints.clone(),
+                members.clone(),
+            ),
             HirExprKind::Instance {
                 type_params,
                 constraints,
@@ -358,6 +365,7 @@ impl CheckPass<'_, '_, '_> {
             origin,
             is_module_stmt,
             bound_name,
+            &type_params,
             declared_ty,
             value,
         );

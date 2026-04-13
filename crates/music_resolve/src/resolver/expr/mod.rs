@@ -5,8 +5,8 @@ use music_hir::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
     HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod, HirExprId,
     HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirMods,
-    HirParam, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind,
-    HirVariantDef,
+    HirParam, HirPartialRangeKind, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem,
+    HirSpliceKind, HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
@@ -70,6 +70,7 @@ where
             SyntaxNodeKind::TypeCastExpr => self.lower_type_cast_expr(node),
 
             SyntaxNodeKind::PrefixExpr => self.lower_prefix_expr(node),
+            SyntaxNodeKind::PostfixExpr => self.lower_postfix_expr(node),
             SyntaxNodeKind::BinaryExpr => self.lower_binary_expr(node),
 
             SyntaxNodeKind::CaseExpr => self.lower_case_expr(node),

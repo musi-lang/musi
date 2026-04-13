@@ -325,8 +325,8 @@ fn collect_expr_types_aggregate(
         }
         IrExprKind::Range {
             ty_name,
-            start,
-            end,
+            lower: start,
+            upper: end,
             ..
         } => {
             let _ = ensure_type(state, layout, ty_name);

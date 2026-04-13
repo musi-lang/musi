@@ -8,32 +8,26 @@ slug: "expressions-and-bindings"
 summary: "The base reading model for names, sequences, and branching."
 ---
 
-## What
-Expressions and bindings are the foundation of Musi reading.
-Start with a bound name, then read later expressions from the top of the file down.
+Expressions and bindings are the core reading model in Musi. Bind a name, then keep reading downward.
 
 {{snippet:let-binding}}
 
-## When
-Use these patterns when you want readable scripts, data preparation, and deterministic command flow.
-
-## Why
-This model is predictable for Python/JS users: each line can introduce data, then later lines consume it.
-
-## Where
-Apply this guidance in modules and packages where this construct appears.
-
-## How
-Use `let` for names and `;` for expression boundaries.
+## Sequencing
 
 {{snippet:sequence}}
 
-Case expressions are the branching form in this surface.
+`;` separates expressions. Parentheses can group a sequence into one larger expression.
+
+## Branching
 
 {{snippet:case-port}}
 
-## Analogy
-Like a recipe card: bind each ingredient first, then assemble a final step.
+`case ... of` handles branching. Match on shape, then return a value from each branch.
 
 ## Try it
+
+{{try:expressions-and-bindings}}
+
+## Next step
+
 Read the two snippets, then move to [Operators and literals](/docs/operators-and-literals).

@@ -12,10 +12,14 @@ describe("routes", () => {
 
 	it("resolves docs pages", () => {
 		expect(routeForPath("/docs/effects-and-handlers").kind).toBe("doc");
+		expect(
+			routeForPath("/docs/types-and-abstractions/effects-and-handlers").kind,
+		).toBe("doc");
 	});
 
 	it("keeps docs index separate from doc slugs", () => {
 		expect(routeForPath("/docs").kind).toBe("docs-index");
 		expect(routeForPath("/docs/types").kind).toBe("doc");
+		expect(routeForPath("/docs/types-and-abstractions/types").kind).toBe("doc");
 	});
 });

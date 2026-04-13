@@ -31,6 +31,35 @@ export function GithubIcon({ size, ...props }: IconProps) {
 	);
 }
 
+export function MusiMarkIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 512 512"
+			fill="none"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<path
+				d="M256 136v136h256S383.667 108 320 108c-32.042 0-52.031 15.922-64 28Z"
+				fill="#D44A3A"
+			/>
+			<path
+				d="M256 272v176s75.942 9.815 168-72c71.902-63.902 88-104 88-104H256Z"
+				fill="#A52B24"
+			/>
+			<path
+				d="M256 272v176s-75.942 9.815-168-72C16.098 312.098 0 272 0 272h256Z"
+				fill="#E15D48"
+			/>
+			<path
+				d="M256 136v136H0S128.333 108 192 108c32.042 0 52.031 15.922 64 28Z"
+				fill="#EE8E74"
+			/>
+		</svg>
+	);
+}
+
 export function SunIcon({ size, ...props }: IconProps) {
 	return (
 		<svg

@@ -105,7 +105,11 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let effect_name: Box<str> = self.resolve_symbol(effect.name).into();
         let Some(effect_def) = self.effect_def(&effect_name).cloned() else {
-            self.diag(origin.span, DiagKind::UnknownEffect, "");
+            self.diag(
+                origin.span,
+                DiagKind::UnknownEffect,
+                &format!("unknown effect `{effect_name}`"),
+            );
             return ExprFacts::new(self.builtins().unknown, EffectRow::empty());
         };
         let input_ty = input_hint.unwrap_or_else(|| {
@@ -158,7 +162,11 @@ impl CheckPass<'_, '_, '_> {
                 self.diag(origin.span, DiagKind::DuplicateHandlerClause, "");
             }
             let Some(op_def) = effect.op(clause_name.as_ref()).cloned() else {
-                self.diag(origin.span, DiagKind::UnknownEffectOp, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::UnknownEffectOp,
+                    &format!("unknown effect op `{clause_name}`"),
+                );
                 continue;
             };
             let params = self.idents(clause.params);

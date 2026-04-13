@@ -1,25 +1,23 @@
+use self::core::{MODULE as CORE_SOURCE, SPEC as CORE_SPEC};
+use self::intrinsics::{MODULE as INTRINSICS_SOURCE, SPEC as INTRINSICS_SPEC};
+use self::syntax::{MODULE as SYNTAX_SOURCE, SPEC as SYNTAX_SPEC};
+use self::test::{MODULE as TEST_SOURCE, SPEC as TEST_SPEC};
 use music_module::{ImportMap, ModuleKey};
 use music_session::{Session, SessionError};
 
+pub mod core {
+    pub const SPEC: &str = "musi:core";
+    pub const MODULE: &str = include_str!("../modules/core.ms");
+}
+
+pub mod intrinsics {
+    pub const SPEC: &str = "musi:intrinsics";
+    pub const MODULE: &str = include_str!("../modules/intrinsics.ms");
+}
+
 pub mod test {
     pub const SPEC: &str = "musi:test";
-    pub const MODULE: &str = r"
-export let SampleCase[T] := data {
-  | Case
-};
-
-export let SampleList[T] := data {
-  | Nil
-};
-
-export let Sample[T] := class { };
-
-export let Test := effect {
-  let suiteStart (name : String) : Unit;
-  let suiteEnd () : Unit;
-  let testCase (name : String, passed : Bool) : Unit;
-};
-";
+    pub const MODULE: &str = include_str!("../modules/test.ms");
     pub const EFFECT: &str = "musi:test::Test";
     pub const SUITE_START_OP: &str = "suiteStart";
     pub const SUITE_END_OP: &str = "suiteEnd";
@@ -28,18 +26,7 @@ export let Test := effect {
 
 pub mod syntax {
     pub const SPEC: &str = "musi:syntax";
-    pub const MODULE: &str = r"
-export let SyntaxOps := effect {
-  let eval (body : Syntax, result : Type) : Any;
-  let registerModule (spec : String, body : Syntax) : Unit;
-};
-
-export let eval (body : Syntax, result : Type) : Any :=
-    perform SyntaxOps.eval(body, result);
-
-export let register_module (spec : String, body : Syntax) : Unit :=
-    perform SyntaxOps.registerModule(spec, body);
-";
+    pub const MODULE: &str = include_str!("../modules/syntax.ms");
     pub const EFFECT: &str = "musi:syntax::SyntaxOps";
     pub const EVAL_OP: &str = "eval";
     pub const REGISTER_MODULE_OP: &str = "registerModule";
@@ -47,8 +34,13 @@ export let register_module (spec : String, body : Syntax) : Unit :=
 
 type FoundationModule = (&'static str, &'static str);
 
-const FOUNDATION_MODULES: [FoundationModule; 2] =
-    [(test::SPEC, test::MODULE), (syntax::SPEC, syntax::MODULE)];
+const CORE_MODULE: FoundationModule = (CORE_SPEC, CORE_SOURCE);
+const INTRINSICS_MODULE: FoundationModule = (INTRINSICS_SPEC, INTRINSICS_SOURCE);
+const TEST_MODULE: FoundationModule = (TEST_SPEC, TEST_SOURCE);
+const SYNTAX_MODULE: FoundationModule = (SYNTAX_SPEC, SYNTAX_SOURCE);
+
+const FOUNDATION_MODULES: [FoundationModule; 4] =
+    [CORE_MODULE, INTRINSICS_MODULE, TEST_MODULE, SYNTAX_MODULE];
 
 pub fn extend_import_map(import_map: &mut ImportMap) {
     for (spec, _) in FOUNDATION_MODULES {

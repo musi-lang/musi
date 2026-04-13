@@ -59,7 +59,19 @@ pub enum TypeTermKind {
         item: Box<TypeTerm>,
     },
     Range {
-        item: Box<TypeTerm>,
+        bound: Box<TypeTerm>,
+    },
+    ClosedRange {
+        bound: Box<TypeTerm>,
+    },
+    PartialRangeFrom {
+        bound: Box<TypeTerm>,
+    },
+    PartialRangeUpTo {
+        bound: Box<TypeTerm>,
+    },
+    PartialRangeThru {
+        bound: Box<TypeTerm>,
     },
     Handler {
         effect: Box<TypeTerm>,
@@ -121,6 +133,7 @@ impl TypeTerm {
 }
 
 impl Display for TypeTerm {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.kind {
             TypeTermKind::Error => f.write_str("<error>"),
@@ -204,7 +217,17 @@ impl Display for TypeTerm {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            TypeTermKind::Range { item } => write!(f, "Range[{item}]"),
+            TypeTermKind::Range { bound } => fmt_applied_name(f, "Range", bound),
+            TypeTermKind::ClosedRange { bound } => fmt_applied_name(f, "ClosedRange", bound),
+            TypeTermKind::PartialRangeFrom { bound } => {
+                fmt_applied_name(f, "PartialRangeFrom", bound)
+            }
+            TypeTermKind::PartialRangeUpTo { bound } => {
+                fmt_applied_name(f, "PartialRangeUpTo", bound)
+            }
+            TypeTermKind::PartialRangeThru { bound } => {
+                fmt_applied_name(f, "PartialRangeThru", bound)
+            }
             TypeTermKind::Handler {
                 effect,
                 input,
@@ -222,6 +245,10 @@ impl Display for TypeTerm {
             ),
         }
     }
+}
+
+fn fmt_applied_name(f: &mut Formatter<'_>, name: &str, bound: &TypeTerm) -> fmt::Result {
+    write!(f, "{name}[{bound}]")
 }
 
 /// # Errors

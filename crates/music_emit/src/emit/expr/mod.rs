@@ -95,11 +95,19 @@ impl MethodEmitter<'_, '_> {
             }
             IrExprKind::Range {
                 ty_name,
-                start,
-                end,
-                end_bound,
+                kind,
+                lower,
+                upper,
+                bounds_evidence,
             } => {
-                self.compile_range(ty_name, start, end, *end_bound, diags);
+                self.compile_range(
+                    ty_name,
+                    *kind,
+                    lower,
+                    upper,
+                    bounds_evidence.as_deref(),
+                    diags,
+                );
                 true
             }
             IrExprKind::Record {

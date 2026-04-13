@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind};
 use music_module::ModuleKey;
-use music_names::Ident;
+use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::patterns::{bind_pat, bound_name_from_pat};
 use super::super::surface::import_surface_ty;
@@ -79,7 +79,43 @@ pub(super) fn bind_imported_alias(ctx: &mut CheckPass<'_, '_, '_>, name: Ident, 
     ctx.bind_imported_alias_impl(name, value);
 }
 
+pub(in super::super) fn seed_prelude_bindings(
+    ctx: &mut CheckPass<'_, '_, '_>,
+    surface: &ModuleSurface,
+) {
+    ctx.seed_prelude_bindings_impl(surface);
+}
+
 impl CheckPass<'_, '_, '_> {
+    fn seed_prelude_bindings_impl(&mut self, surface: &ModuleSurface) {
+        let prelude_bindings = self.prelude_bindings();
+        for (binding, symbol) in prelude_bindings {
+            let name = self.resolve_symbol(symbol);
+            let Some(export) = surface.exported_value(name).cloned() else {
+                continue;
+            };
+            self.import_exported_value_binding_at(binding, surface, &export);
+            if let Some(target) = export.module_target.clone() {
+                self.insert_binding_module_target(binding, target);
+            }
+            if let Some(class_key) = export.class_key.as_ref()
+                && let Some(class) = surface.exported_class(class_key)
+            {
+                self.import_class_alias_as(symbol, surface, class, export.opaque);
+            }
+            if let Some(effect_key) = export.effect_key.as_ref()
+                && let Some(effect) = surface.exported_effect(effect_key)
+            {
+                self.import_effect_alias_as(symbol, surface, effect, export.opaque);
+            }
+            if let Some(data_key) = export.data_key.as_ref()
+                && let Some(data) = surface.exported_data(data_key)
+            {
+                self.import_data_alias_as(symbol, surface, data, export.opaque);
+            }
+        }
+    }
+
     fn bind_module_pattern_impl(&mut self, pat: HirPatId, value: HirExprId) -> bool {
         let Some(target) = module_target_for_expr(self, value) else {
             return false;
@@ -150,18 +186,28 @@ impl CheckPass<'_, '_, '_> {
         if let Some(effect_key) = export.effect_key.as_ref()
             && let Some(effect) = surface.exported_effect(effect_key)
         {
-            self.import_effect_alias(alias, surface, effect);
+            self.import_effect_alias(alias, surface, effect, export.opaque);
         }
         if let Some(data_key) = export.data_key.as_ref()
             && let Some(data) = surface.exported_data(data_key)
         {
-            self.import_data_alias(alias, surface, data);
+            self.import_data_alias(alias, surface, data, export.opaque);
         }
     }
 
     fn import_class_alias(
         &mut self,
         alias: Ident,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+        is_opaque: bool,
+    ) {
+        self.import_class_alias_as(alias.name, module_surface, surface, is_opaque);
+    }
+
+    fn import_class_alias_as(
+        &mut self,
+        alias_name: Symbol,
         module_surface: &ModuleSurface,
         surface: &ClassSurface,
         is_opaque: bool,
@@ -224,9 +270,17 @@ impl CheckPass<'_, '_, '_> {
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let facts = ClassFacts::new(surface.key.clone(), alias.name, members, laws)
+        let facts = ClassFacts::new(surface.key.clone(), alias_name, members, laws)
+            .with_type_params(
+                surface
+                    .type_params
+                    .iter()
+                    .map(|param| self.intern(param))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            )
             .with_constraints(constraints);
-        self.insert_class_facts_by_name(alias.name, facts);
+        self.insert_class_facts_by_name(alias_name, facts);
     }
 
     fn import_effect_alias(
@@ -234,7 +288,21 @@ impl CheckPass<'_, '_, '_> {
         alias: Ident,
         module_surface: &ModuleSurface,
         surface: &EffectSurface,
+        is_opaque: bool,
     ) {
+        self.import_effect_alias_as(alias.name, module_surface, surface, is_opaque);
+    }
+
+    fn import_effect_alias_as(
+        &mut self,
+        alias_name: Symbol,
+        module_surface: &ModuleSurface,
+        surface: &EffectSurface,
+        is_opaque: bool,
+    ) {
+        if is_opaque {
+            return;
+        }
         let ops = surface
             .ops
             .iter()
@@ -273,7 +341,7 @@ impl CheckPass<'_, '_, '_> {
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let alias_name: Box<str> = self.resolve_symbol(alias.name).into();
+        let alias_name: Box<str> = self.resolve_symbol(alias_name).into();
         self.insert_effect_def(alias_name, EffectDef::new(surface.key.clone(), ops, laws));
     }
 
@@ -282,7 +350,21 @@ impl CheckPass<'_, '_, '_> {
         alias: Ident,
         module_surface: &ModuleSurface,
         surface: &DataSurface,
+        is_opaque: bool,
     ) {
+        self.import_data_alias_as(alias.name, module_surface, surface, is_opaque);
+    }
+
+    fn import_data_alias_as(
+        &mut self,
+        alias_name: Symbol,
+        module_surface: &ModuleSurface,
+        surface: &DataSurface,
+        is_opaque: bool,
+    ) {
+        if is_opaque {
+            return;
+        }
         let variants = surface
             .variants
             .iter()
@@ -304,7 +386,7 @@ impl CheckPass<'_, '_, '_> {
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        let alias_name: Box<str> = self.resolve_symbol(alias.name).into();
+        let alias_name: Box<str> = self.resolve_symbol(alias_name).into();
         self.insert_data_def(
             alias_name,
             DataDef::new(
@@ -326,6 +408,15 @@ impl CheckPass<'_, '_, '_> {
         let Some(binding) = self.binding_id_for_decl(alias) else {
             return;
         };
+        self.import_exported_value_binding_at(binding, surface, export);
+    }
+
+    fn import_exported_value_binding_at(
+        &mut self,
+        binding: NameBindingId,
+        surface: &ModuleSurface,
+        export: &ExportedValue,
+    ) {
         let scheme = self.scheme_from_export(surface, export);
         let instantiated = if scheme.type_params.is_empty() {
             Some(self.instantiate_monomorphic_scheme(&scheme))
