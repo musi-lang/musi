@@ -11,7 +11,7 @@
 		"build": "bun run --cwd www build",
 		"check": "bun run generate:content && bun run typecheck && bun run biome:check",
 		"test": "bun run generate:content && bun run test:run",
-		"test:run": "bunx vitest run",
+		"test:run": "bunx vitest run www/src www/scripts",
 		"typecheck": "bunx tsc -p www/tsconfig.json --noEmit",
 		"preview": "bun run --cwd www preview",
 		"biome:check": "bun run --cwd www biome:check",
