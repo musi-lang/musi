@@ -24,7 +24,7 @@ describe("site accessibility scaffolding", () => {
 	});
 
 	it("renders docs page with complementary navigation landmarks", () => {
-		const html = render("/learn/start/getting-started");
+		const html = render("/learn/language/start/getting-started");
 		expect(html).toContain("Documentation sections");
 		expect(html).toContain("On this page");
 	});

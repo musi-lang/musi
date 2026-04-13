@@ -17,6 +17,7 @@ import { Surface } from "../../ui/surface";
 export function HomePage(props: { route: AppRoute }) {
 	const localeCopy = siteCopy[props.route.locale];
 	const copy = localeCopy.home;
+	const docsLocale = "en";
 	return (
 		<div className="page-stack page-home">
 			<Surface tone="hero" className="hero-grid hero-shell">
@@ -122,7 +123,7 @@ export function HomePage(props: { route: AppRoute }) {
 				</div>
 				<div className="doc-groups-grid doc-groups-grid-separated">
 					{docGroups
-						.filter((group) => group.locale === props.route.locale)
+						.filter((group) => group.locale === docsLocale)
 						.map((group) => (
 							<DocListGroup
 								key={`${group.locale}:${group.group}`}

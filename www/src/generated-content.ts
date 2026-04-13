@@ -5,7 +5,7 @@ export interface GeneratedHeading {
 }
 
 export interface GeneratedDoc {
-	locale: "en" | "ja";
+	locale: "en";
 	id: string;
 	kind: "part" | "chapter";
 	partId: string;
@@ -40,2082 +40,2173 @@ export const renderedDocs = [
 		"kind": "part",
 		"partId": "start",
 		"partTitle": "start",
-		"path": "/learn/start",
-		"canonicalPath": "/learn/start",
+		"path": "/learn/language/start",
+		"canonicalPath": "/learn/language/start",
 		"aliases": [],
 		"questions": [],
 		"title": "Start",
-		"description": "Setup, first file, packages, and imports.",
+		"description": "Set up Musi, write the first file, and learn the core reading model.",
 		"group": "Start",
 		"section": "Start",
 		"order": 1,
 		"slug": "start",
-		"summary": "Use this part to get Musi running and move from one file into package work.",
-		"descriptionHtml": "Setup, first file, packages, and imports.",
+		"summary": "Begin with setup, one file, one binding model, one expression model, then explicit mutation.",
+		"descriptionHtml": "Set up Musi, write the first file, and learn the core reading model.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "read-this-part",
-				"text": "Read this part"
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
 			}
 		],
-		"html": "<p>Start here if Musi is new to you. These chapters cover setup, first code, package shape, and imports in the order most developers need them.</p>\n<h2 id=\"read-this-part\"><a href=\"#read-this-part\">Read this part</a></h2><p>Move through install, first program, files and packages, then imports. Each chapter ends with a small exercise and a next step.</p>\n",
-		"summaryHtml": "Use this part to get Musi running and move from one file into package work."
+		"html": "<p>Start here if Musi is new. These chapters are intentionally small.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>This part establishes the first mental model.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners need one idea at a time.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Read these chapters in order.</p>\n",
+		"summaryHtml": "Begin with setup, one file, one binding model, one expression model, then explicit mutation."
 	},
 	{
 		"locale": "en",
-		"id": "core-language",
+		"id": "core",
 		"kind": "part",
-		"partId": "core-language",
-		"partTitle": "core-language",
-		"path": "/learn/core-language",
-		"canonicalPath": "/learn/core-language",
+		"partId": "core",
+		"partTitle": "core",
+		"path": "/learn/language/core",
+		"canonicalPath": "/learn/language/core",
 		"aliases": [],
 		"questions": [],
-		"title": "Core language",
-		"description": "Expressions, operators, functions, data, and updates.",
-		"group": "Core language",
-		"section": "Core language",
+		"title": "Core syntax",
+		"description": "Build comfort with literals, operators, ranges, functions, calls, and methods.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 2,
-		"slug": "core-language",
-		"summary": "Read this part to learn how Musi code flows and how data is shaped.",
-		"descriptionHtml": "Expressions, operators, functions, data, and updates.",
+		"slug": "core",
+		"summary": "Learn everyday syntax in very small pieces so nothing stacks too early.",
+		"descriptionHtml": "Build comfort with literals, operators, ranges, functions, calls, and methods.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "read-this-part",
-				"text": "Read this part"
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
 			}
 		],
-		"html": "<p>This part covers the syntax you read every day: expressions, calls, data, records, arrays, and pattern matching.</p>\n<h2 id=\"read-this-part\"><a href=\"#read-this-part\">Read this part</a></h2><p>Start with expressions and bindings, then operators, functions, data, and updates. The goal is to remove syntax guessing early.</p>\n",
-		"summaryHtml": "Read this part to learn how Musi code flows and how data is shaped."
+		"html": "<p>This part teaches the syntax you read every day.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Literals, operators, ranges, functions, calls, methods.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>These forms should feel ordinary before larger features arrive.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Work forward one chapter at a time.</p>\n",
+		"summaryHtml": "Learn everyday syntax in very small pieces so nothing stacks too early."
 	},
 	{
 		"locale": "en",
-		"id": "types-and-abstractions",
+		"id": "data",
 		"kind": "part",
-		"partId": "types-and-abstractions",
-		"partTitle": "types-and-abstractions",
-		"path": "/learn/types-and-abstractions",
-		"canonicalPath": "/learn/types-and-abstractions",
+		"partId": "data",
+		"partTitle": "data",
+		"path": "/learn/language/data",
+		"canonicalPath": "/learn/language/data",
 		"aliases": [],
 		"questions": [],
-		"title": "Types and abstractions",
-		"description": "Types, constraints, effects, quote, and foreign bindings.",
-		"group": "Types and abstractions",
-		"section": "Types and abstractions",
+		"title": "Data",
+		"description": "Work with records, arrays, slices, and patterns one step at a time.",
+		"group": "Data",
+		"section": "Data",
 		"order": 3,
-		"slug": "types-and-abstractions",
-		"summary": "Use this part once you want reusable APIs, constraints, and effectful code.",
-		"descriptionHtml": "Types, constraints, effects, quote, and foreign bindings.",
+		"slug": "data",
+		"summary": "Keep data-shape learning readable by separating records, sequences, and patterns.",
+		"descriptionHtml": "Work with records, arrays, slices, and patterns one step at a time.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "read-this-part",
-				"text": "Read this part"
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
 			}
 		],
-		"html": "<p>This part groups the features that often raise follow-up questions: types, classes, effects, quote, and foreign declarations.</p>\n<h2 id=\"read-this-part\"><a href=\"#read-this-part\">Read this part</a></h2><p>Move from types into classes, then effects, quote, and foreign declarations. Each chapter keeps syntax and practical use close together.</p>\n",
-		"summaryHtml": "Use this part once you want reusable APIs, constraints, and effectful code."
+		"html": "<p>This part teaches data shapes without overloading the reader.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Records, arrays, slices, patterns.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Shape-heavy syntax becomes much easier when split.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Learn the value shape first. Match on it later.</p>\n",
+		"summaryHtml": "Keep data-shape learning readable by separating records, sequences, and patterns."
 	},
 	{
 		"locale": "en",
-		"id": "tooling",
+		"id": "organization",
 		"kind": "part",
-		"partId": "tooling",
-		"partTitle": "tooling",
-		"path": "/learn/tooling",
-		"canonicalPath": "/learn/tooling",
+		"partId": "organization",
+		"partTitle": "organization",
+		"path": "/learn/language/organization",
+		"canonicalPath": "/learn/language/organization",
 		"aliases": [],
 		"questions": [],
-		"title": "Tooling",
-		"description": "Standard library, testing, and command-line workflows.",
-		"group": "Tooling",
-		"section": "Tooling",
+		"title": "Code organization",
+		"description": "Move from single files into packages, imports, and exports.",
+		"group": "Code organization",
+		"section": "Code organization",
 		"order": 4,
-		"slug": "tooling",
-		"summary": "Use this part for package commands, tests, and the standard library split.",
-		"descriptionHtml": "Standard library, testing, and command-line workflows.",
+		"slug": "organization",
+		"summary": "Grow from one file to packages without changing the mental model of code flow.",
+		"descriptionHtml": "Move from single files into packages, imports, and exports.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "read-this-part",
-				"text": "Read this part"
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
 			}
 		],
-		"html": "<p>This part covers the standard library, foundation modules, testing, and the command flow between <code>music</code> and <code>musi</code>.</p>\n<h2 id=\"read-this-part\"><a href=\"#read-this-part\">Read this part</a></h2><p>Start with <code>@std</code> versus <code>musi:*</code>, then move into tests and run/build commands.</p>\n",
-		"summaryHtml": "Use this part for package commands, tests, and the standard library split."
-	},
-	{
-		"locale": "en",
-		"id": "questions",
-		"kind": "part",
-		"partId": "questions",
-		"partTitle": "questions",
-		"path": "/learn/questions",
-		"canonicalPath": "/learn/questions",
-		"aliases": [],
-		"questions": [],
-		"title": "Common questions",
-		"description": "Direct answers to common Musi tasks.",
-		"group": "Questions",
-		"section": "Questions",
-		"order": 5,
-		"slug": "questions",
-		"summary": "Use this part when you know the task you want, but not the chapter name.",
-		"descriptionHtml": "Direct answers to common Musi tasks.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "read-this-part",
-				"text": "Read this part"
-			}
-		],
-		"html": "<p>This part is task-first. Jump here when your question starts with &quot;how do I...?&quot; and you want the shortest path to the right chapter.</p>\n<h2 id=\"read-this-part\"><a href=\"#read-this-part\">Read this part</a></h2><p>Use the task list below, then follow the linked chapter for syntax, explanation, and exercises.</p>\n",
-		"summaryHtml": "Use this part when you know the task you want, but not the chapter name."
-	},
-	{
-		"locale": "en",
-		"id": "getting-started",
-		"kind": "chapter",
-		"partId": "start",
-		"partTitle": "Start",
-		"path": "/learn/start/getting-started",
-		"canonicalPath": "/learn/start/getting-started",
-		"aliases": [
-			"/docs/start/getting-started",
-			"/docs/getting-started"
-		],
-		"questions": [
-			{
-				"label": "How do I install Musi and learn the <code>music</code> / <code>musi</code> split?",
-				"href": "/learn/start/getting-started"
-			}
-		],
-		"title": "Getting started",
-		"description": "Install the tools, know what they do, and start with the right command.",
-		"group": "Start",
-		"section": "Start",
-		"order": 1,
-		"slug": "getting-started",
-		"summary": "Install, PATH setup, and the difference between <code>musi</code> and <code>music</code>.",
-		"descriptionHtml": "Install the tools, know what they do, and start with the right command.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "two-commands",
-				"text": "Two commands"
-			},
-			{
-				"depth": 2,
-				"id": "first-setup-pass",
-				"text": "First setup pass"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Musi has two CLI entry points. Learn that split first and the rest of the toolchain gets simpler.</p>\n<h2 id=\"two-commands\"><a href=\"#two-commands\">Two commands</a></h2><ul>\n<li><code>musi</code> works at package level. Use it for <code>run</code>, <code>check</code>, <code>build</code>, and <code>test</code>.</li>\n<li><code>music</code> works on one source graph or built artifact directly.</li>\n</ul>\n<p>If you already know tools like <code>cargo</code>, <code>npm</code>, or <code>dotnet</code>, <code>musi</code> fills that role. <code>music</code> is closer to a direct file runner.</p>\n<h2 id=\"first-setup-pass\"><a href=\"#first-setup-pass\">First setup pass</a></h2><p>Start at the <a href=\"/install\">install page</a>, then follow this order:</p>\n<ul>\n<li>install binaries and PATH entries</li>\n<li>create a package</li>\n<li>add first expressions</li>\n<li>run <code>musi check</code> and <code>musi run</code></li>\n</ul>\n<p>If you want the shortest feedback loop, start with one file and <code>music</code>. Move to <code>musi</code> once you want package commands and shared project structure.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Install Rust and libffi.</li><li>Build Musi from source.</li><li>Run <code>music check index.ms</code> once <code>music</code> is on PATH.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Open <a href=\"/install\">Install</a>, make one command work, then continue to <a href=\"/docs/start/first-program\">First program</a>.</p>\n",
-		"summaryHtml": "Install, PATH setup, and the difference between <code>musi</code> and <code>music</code>."
-	},
-	{
-		"locale": "en",
-		"id": "first-program",
-		"kind": "chapter",
-		"partId": "start",
-		"partTitle": "Start",
-		"path": "/learn/start/first-program",
-		"canonicalPath": "/learn/start/first-program",
-		"aliases": [
-			"/docs/start/first-program",
-			"/docs/first-program"
-		],
-		"questions": [
-			{
-				"label": "How do I write and run the smallest Musi file?",
-				"href": "/learn/start/first-program"
-			}
-		],
-		"title": "First program",
-		"description": "Write a small file and read it as expressions.",
-		"group": "Start",
-		"section": "Start",
-		"order": 2,
-		"slug": "first-program",
-		"summary": "A first Musi file without extra ceremony.",
-		"descriptionHtml": "Write a small file and read it as expressions.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "smallest-runnable-file",
-				"text": "Smallest runnable file"
-			},
-			{
-				"depth": 2,
-				"id": "add-one-function",
-				"text": "Add one function"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Musi files are read as expressions.\nRead top to bottom. Each expression leaves a result for the next one to use.</p>\n<h2 id=\"smallest-runnable-file\"><a href=\"#smallest-runnable-file\">Smallest runnable file</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><p><code>let</code> binds a name. <code>;</code> ends an expression. That is enough to start writing and running Musi code.</p>\n<h2 id=\"add-one-function\"><a href=\"#add-one-function\">Add one function</a></h2><div class=\"code-tabs\" data-example-id=\"double-function\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Same small task across multiple languages. Musi keeps it as an expression-oriented <code>let</code> binding.</p>\n<p class=\"code-tabs-note\">Like doubling a recipe: same operation, different kitchens. Musi keeps the function as a normal binding so it reads like other definitions.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>Functions use the same <code>let</code> form as values. You do not switch to a separate declaration syntax.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Create <code>index.ms</code>.</li><li>Bind one value with <code>let</code>.</li><li>Run it with <code>music check index.ms</code>.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Type the snippets above, run them with <code>music</code>, then move to <a href=\"/docs/start/files-packages-and-entry\">Files, packages, and entry</a>.</p>\n",
-		"summaryHtml": "A first Musi file without extra ceremony."
-	},
-	{
-		"locale": "en",
-		"id": "files-packages-and-entry",
-		"kind": "chapter",
-		"partId": "start",
-		"partTitle": "Start",
-		"path": "/learn/start/files-packages-and-entry",
-		"canonicalPath": "/learn/start/files-packages-and-entry",
-		"aliases": [
-			"/docs/start/files-packages-and-entry",
-			"/docs/files-packages-and-entry"
-		],
-		"questions": [
-			{
-				"label": "How do I switch from one file to a package?",
-				"href": "/learn/start/files-packages-and-entry"
-			}
-		],
-		"title": "Files, packages, and entry",
-		"description": "Know what <code>musi new</code> creates and what <code>musi run</code> looks for.",
-		"group": "Start",
-		"section": "Start",
-		"order": 3,
-		"slug": "files-packages-and-entry",
-		"summary": "Packages, <code>musi.json</code>, and the resolved entry file.",
-		"descriptionHtml": "Know what <code>musi new</code> creates and what <code>musi run</code> looks for.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "package-workflow",
-				"text": "Package workflow"
-			},
-			{
-				"depth": 2,
-				"id": "why-packages-help",
-				"text": "Why packages help"
-			},
-			{
-				"depth": 2,
-				"id": "direct-mode",
-				"text": "Direct mode"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Use plain files while you experiment. Use a package once you want repeatable commands and a stable project root.</p>\n<h2 id=\"package-workflow\"><a href=\"#package-workflow\">Package workflow</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> test</span></span></code></pre><ul>\n<li><code>musi</code> reads package config, resolves the entry file, and runs project commands.</li>\n<li><code>music</code> stays useful for direct checks on one source file or built artifact.</li>\n</ul>\n<h2 id=\"why-packages-help\"><a href=\"#why-packages-help\">Why packages help</a></h2><p>Packages remove repeated path handling. They also give everyone on a project the same command surface.</p>\n<h2 id=\"direct-mode\"><a href=\"#direct-mode\">Direct mode</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.seam</span></span></code></pre><p>Use direct mode for one-off experiments, parser checks, and small examples that do not need package metadata yet.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Create a package with <code>musi new hello</code>.</li><li>Open the generated entry file.</li><li>Run <code>musi run</code> from the package root.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Create a package, confirm which entry file is used, then continue to <a href=\"/docs/start/imports-and-packages\">Imports and packages</a>.</p>\n",
-		"summaryHtml": "Packages, <code>musi.json</code>, and the resolved entry file."
-	},
-	{
-		"locale": "en",
-		"id": "imports-and-packages",
-		"kind": "chapter",
-		"partId": "start",
-		"partTitle": "Start",
-		"path": "/learn/start/imports-and-packages",
-		"canonicalPath": "/learn/start/imports-and-packages",
-		"aliases": [
-			"/docs/start/imports-and-packages",
-			"/docs/imports-and-packages"
-		],
-		"questions": [
-			{
-				"label": "How do I import <code>@std</code> modules and when do I use <code>musi:*</code>?",
-				"href": "/learn/start/imports-and-packages"
-			}
-		],
-		"title": "Imports and packages",
-		"description": "Import modules and use the main namespace families.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 4,
-		"slug": "imports-and-packages",
-		"summary": "Import expressions, <code>@std</code>, and the <code>musi:*</code> foundation namespace.",
-		"descriptionHtml": "Import modules and use the main namespace families.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "default-rule",
-				"text": "Default rule"
-			},
-			{
-				"depth": 2,
-				"id": "example",
-				"text": "Example"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Imports are expressions. Bind them with <code>let</code>, then use the imported value like any other name.</p>\n<h2 id=\"default-rule\"><a href=\"#default-rule\">Default rule</a></h2><ul>\n<li>Start with <code>@std</code>.</li>\n<li>Reach for <code>musi:*</code> only when you need lower-level foundation modules.</li>\n</ul>\n<p>That keeps application code on the standard library path and keeps compiler-facing pieces explicit.</p>\n<h2 id=\"example\"><a href=\"#example\">Example</a></h2><div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>Imports can appear anywhere an expression can appear, but keeping them near the top of a file is still the easiest style to read.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Import <code>@std/option</code> in one file.</li><li>Bind the module with <code>let</code>.</li><li>Call one exported function from it.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Replace duplicated snippets with imported names, then continue to <a href=\"/docs/core-language/expressions-and-bindings\">Expressions and bindings</a>.</p>\n",
-		"summaryHtml": "Import expressions, <code>@std</code>, and the <code>musi:*</code> foundation namespace."
-	},
-	{
-		"locale": "en",
-		"id": "expressions-and-bindings",
-		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "Core language",
-		"path": "/learn/core-language/expressions-and-bindings",
-		"canonicalPath": "/learn/core-language/expressions-and-bindings",
-		"aliases": [
-			"/docs/core-language/expressions-and-bindings",
-			"/docs/expressions-and-bindings"
-		],
-		"questions": [
-			{
-				"label": "How do I read a Musi file top to bottom?",
-				"href": "/learn/core-language/expressions-and-bindings"
-			}
-		],
-		"title": "Expressions and bindings",
-		"description": "Read Musi through <code>let</code>, sequences, and <code>case</code>.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 5,
-		"slug": "expressions-and-bindings",
-		"summary": "The base reading model for names, sequences, and branching.",
-		"descriptionHtml": "Read Musi through <code>let</code>, sequences, and <code>case</code>.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "sequencing",
-				"text": "Sequencing"
-			},
-			{
-				"depth": 2,
-				"id": "branching",
-				"text": "Branching"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Expressions and bindings are the core reading model in Musi. Bind a name, then keep reading downward.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><h2 id=\"sequencing\"><a href=\"#sequencing\">Sequencing</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 80</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p><code>;</code> separates expressions. Parentheses can group a sequence into one larger expression.</p>\n<h2 id=\"branching\"><a href=\"#branching\">Branching</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Default</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(port) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Default</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p><code>case ... of</code> handles branching. Match on shape, then return a value from each branch.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Write two <code>let</code> bindings.</li><li>Add a <code>case</code> expression under them.</li><li>Read the file top to bottom and check the final result.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Read the two snippets, then move to <a href=\"/docs/core-language/operators-and-literals\">Operators and literals</a>.</p>\n",
-		"summaryHtml": "The base reading model for names, sequences, and branching."
-	},
-	{
-		"locale": "en",
-		"id": "operators-and-literals",
-		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "Core language",
-		"path": "/learn/core-language/operators-and-literals",
-		"canonicalPath": "/learn/core-language/operators-and-literals",
-		"aliases": [
-			"/docs/core-language/operators-and-literals",
-			"/docs/operators-and-literals"
-		],
-		"questions": [
-			{
-				"label": "How do operators, records, and arrays fit in ordinary expressions?",
-				"href": "/learn/core-language/operators-and-literals"
-			}
-		],
-		"title": "Operators and literals",
-		"description": "Read numbers, strings, records, arrays, and operator chains in the same surface.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 6,
-		"slug": "operators-and-literals",
-		"summary": "Literal forms and operator precedence in ordinary expressions.",
-		"descriptionHtml": "Read numbers, strings, records, arrays, and operator chains in the same surface.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "common-forms",
-				"text": "Common forms"
-			},
-			{
-				"depth": 3,
-				"id": "operator-intent",
-				"text": "Operator intent"
-			},
-			{
-				"depth": 2,
-				"id": "examples",
-				"text": "Examples"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Operators and literals cover most day-one code: numbers, strings, arrays, records, comparisons, and small calculations.</p>\n<h2 id=\"common-forms\"><a href=\"#common-forms\">Common forms</a></h2><ul>\n<li>numeric literals like <code>8080</code></li>\n<li>string literals like <code>&quot;ready&quot;</code></li>\n<li>symbolic operators like <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>=</code>, <code>&lt;=</code>, <code>&gt;=</code>, and <code>/=</code></li>\n<li>word-like operators like <code>and</code>, <code>or</code>, <code>not</code>, <code>shl</code>, <code>shr</code>, and <code>xor</code></li>\n</ul>\n<h3 id=\"operator-intent\"><a href=\"#operator-intent\">Operator intent</a></h3><ul>\n<li><code>and</code>, <code>or</code>, <code>not</code>, and <code>xor</code> are word operators whose meaning depends on operand types and operator definitions in scope.</li>\n<li><code>shl</code> and <code>shr</code> are shift operators.</li>\n<li><code>/=</code> means not equal. It is not divide-and-assign.</li>\n</ul>\n<p>If you are coming from languages where <code>/=</code> means divide-and-assign, use <code>x := x / y</code> when you want reassignment from division.</p>\n<h2 id=\"examples\"><a href=\"#examples\">Examples</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> label </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ready\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> same </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> capped </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">&#x3C;=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> masked </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> shl</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point3 </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">point, z </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 5</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> extended </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">values];</span></span></code></pre><h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Make one record literal and one array literal.</li><li>Apply one operator expression.</li><li>Create one spread-based update.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Combine a few literals and operators in one file, then continue to <a href=\"/docs/core-language/functions-and-calls\">Functions and calls</a>.</p>\n",
-		"summaryHtml": "Literal forms and operator precedence in ordinary expressions."
-	},
-	{
-		"locale": "en",
-		"id": "functions-and-calls",
-		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "Core language",
-		"path": "/learn/core-language/functions-and-calls",
-		"canonicalPath": "/learn/core-language/functions-and-calls",
-		"aliases": [
-			"/docs/core-language/functions-and-calls",
-			"/docs/functions-and-calls"
-		],
-		"questions": [
-			{
-				"label": "How do I define functions and recursion with <code>let</code>?",
-				"href": "/learn/core-language/functions-and-calls"
-			}
-		],
-		"title": "Functions and calls",
-		"description": "Define functions with <code>let</code>, call them normally, and use <code>let rec</code> for recursion.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 7,
-		"slug": "functions-and-calls",
-		"summary": "Functions, calls, and recursion without extra control syntax.",
-		"descriptionHtml": "Define functions with <code>let</code>, call them normally, and use <code>let rec</code> for recursion.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "basic-call",
-				"text": "Basic call"
-			},
-			{
-				"depth": 2,
-				"id": "recursion",
-				"text": "Recursion"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Functions are values you can bind, pass, and call.</p>\n<h2 id=\"basic-call\"><a href=\"#basic-call\">Basic call</a></h2><div class=\"code-tabs\" data-example-id=\"double-function\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Same small task across multiple languages. Musi keeps it as an expression-oriented <code>let</code> binding.</p>\n<p class=\"code-tabs-note\">Like doubling a recipe: same operation, different kitchens. Musi keeps the function as a normal binding so it reads like other definitions.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>Calls look ordinary: <code>name(args)</code>. Function definitions use the same <code>let</code> syntax as other bindings.</p>\n<h2 id=\"recursion\"><a href=\"#recursion\">Recursion</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> rec</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> loop</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">_</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> loop</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">-</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  );</span></span></code></pre><p>Use <code>let rec</code> when a function needs to refer to itself.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Write one function with <code>let</code>.</li><li>Call it with one argument.</li><li>Add <code>let rec</code> and check recursive flow.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Bind and call a function, then add the recursive form and continue to <a href=\"/docs/core-language/data-and-pattern-matching\">Data and pattern matching</a>.</p>\n",
-		"summaryHtml": "Functions, calls, and recursion without extra control syntax."
-	},
-	{
-		"locale": "en",
-		"id": "data-and-pattern-matching",
-		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "Core language",
-		"path": "/learn/core-language/data-and-pattern-matching",
-		"canonicalPath": "/learn/core-language/data-and-pattern-matching",
-		"aliases": [
-			"/docs/core-language/data-and-pattern-matching",
-			"/docs/data-and-pattern-matching"
-		],
-		"questions": [
-			{
-				"label": "How do I model variants and branch with <code>case</code>?",
-				"href": "/learn/core-language/data-and-pattern-matching"
-			}
-		],
-		"title": "Data and pattern matching",
-		"description": "Define sums with <code>data</code>, construct variants, and read them with <code>case</code>.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 8,
-		"slug": "data-and-pattern-matching",
-		"summary": "Data definitions, constructors, and pattern matching.",
-		"descriptionHtml": "Define sums with <code>data</code>, construct variants, and read them with <code>case</code>.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "match-first",
-				"text": "Match first"
-			},
-			{
-				"depth": 2,
-				"id": "define-and-construct",
-				"text": "Define and construct"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Use <code>data</code> to model bounded domains directly in code.\nThe <code>case</code> form reads shape by shape and keeps branching explicit.</p>\n<h2 id=\"match-first\"><a href=\"#match-first\">Match first</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(value) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Default</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p>Use <code>data</code> when a value can be one of several known shapes.</p>\n<h2 id=\"define-and-construct\"><a href=\"#define-and-construct\">Define and construct</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Default</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"data-named-record\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Use named fields directly in a <code>data</code> definition, then construct values from that shape.</p>\n<p class=\"code-tabs-note\">Like filling out a passport form: named boxes with known defaults. This form keeps field intent explicit in the type itself.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> User</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  name : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  age : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> user : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">User</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"Ada\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span></code></pre>\n</section>\n</div><h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Define a <code>data</code> type with two cases.</li><li>Construct one value.</li><li>Match it with <code>case ... of</code>.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Read the three snippets in order, then continue to <a href=\"/docs/core-language/records-arrays-and-mutation\">Records and arrays</a>.</p>\n",
-		"summaryHtml": "Data definitions, constructors, and pattern matching."
-	},
-	{
-		"locale": "en",
-		"id": "records-arrays-and-mutation",
-		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "Core language",
-		"path": "/learn/core-language/records-arrays-and-mutation",
-		"canonicalPath": "/learn/core-language/records-arrays-and-mutation",
-		"aliases": [
-			"/docs/core-language/records-arrays-and-mutation",
-			"/docs/records-arrays-and-mutation"
-		],
-		"questions": [
-			{
-				"label": "How do I update records and arrays without guessing syntax?",
-				"href": "/learn/core-language/records-arrays-and-mutation"
-			}
-		],
-		"title": "Records and arrays",
-		"description": "Use record literals, arrays, and explicit spread forms.",
-		"group": "Core language",
-		"section": "Core language",
-		"order": 9,
-		"slug": "records-arrays-and-mutation",
-		"summary": "Structured values and the current writeable-data surface.",
-		"descriptionHtml": "Use record literals, arrays, and explicit spread forms.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "update-by-copy",
-				"text": "Update by copy"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "musi-note",
-				"text": "Musi note"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Records and arrays are ordinary values with predictable update patterns.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><h2 id=\"update-by-copy\"><a href=\"#update-by-copy\">Update by copy</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point3 </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">point, z </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 5</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> extended </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">values];</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"record-array-spread\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Build structured values, spread them, and update selected fields in one expression flow.</p>\n<p class=\"code-tabs-note\">Like copying a form and editing only one line instead of rewriting everything. Spread/update keeps the unchanged parts intact. Musi also has a nested record-update form inspired by F# and OCaml; the note below covers that separately.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> xs </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> ys </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">xs, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> p </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> q </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">p, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span></code></pre>\n</section>\n</div><h2 id=\"musi-note\"><a href=\"#musi-note\">Musi note</a></h2><p>Musi also supports nested record update syntax such as <code>let r := p.{ x := 3 };</code> and <code>let r := p.{ ...q, y := 9 };</code>.\nThat form is separate from the cross-language comparison above and comes from the same record-update family used in F# and OCaml.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Create one record value.</li><li>Create one array value.</li><li>Build a new value with spread syntax.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Create a base value then build one spread-based variant, then continue to <a href=\"/docs/types-and-abstractions/types\">Types and generics</a>.</p>\n",
-		"summaryHtml": "Structured values and the current writeable-data surface."
+		"html": "<p>This part explains how Musi code grows.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Files, packages, imports, exports.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Readers should understand one file before package ceremony.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Move from files to packages only when the reason is clear.</p>\n",
+		"summaryHtml": "Grow from one file to packages without changing the mental model of code flow."
 	},
 	{
 		"locale": "en",
 		"id": "types",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "Types and abstractions",
-		"path": "/learn/types-and-abstractions/types",
-		"canonicalPath": "/learn/types-and-abstractions/types",
-		"aliases": [
-			"/docs/types-and-abstractions/types",
-			"/docs/types"
-		],
-		"questions": [
-			{
-				"label": "How do I add type annotations and generics?",
-				"href": "/learn/types-and-abstractions/types"
-			}
-		],
-		"title": "Types and generics",
-		"description": "Read type annotations and generic parameters in the same surface as values.",
+		"kind": "part",
+		"partId": "types",
+		"partTitle": "types",
+		"path": "/learn/language/types",
+		"canonicalPath": "/learn/language/types",
+		"aliases": [],
+		"questions": [],
+		"title": "Types",
+		"description": "Add type information, understand inference, and write small generic helpers.",
 		"group": "Types",
 		"section": "Types",
-		"order": 10,
-		"slug": "types",
-		"summary": "Type annotations, generic parameters, and direct type application.",
-		"descriptionHtml": "Read type annotations and generic parameters in the same surface as values.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "generics",
-				"text": "Generics"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Types in Musi appear near values and functions.\nYou can read types without switching to a separate declaration section.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> identityFn</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> input;</span></span></code></pre><h2 id=\"generics\"><a href=\"#generics\">Generics</a></h2><p>Add annotations to values and functions, then apply generics where reusable behavior is needed.\nStart with concrete types first. Reach for generics after the single-type version already makes sense.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">identityFn[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](port);</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"generic-constraint\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Constrain polymorphic code to capabilities that must exist at call sites.</p>\n<p class=\"code-tabs-note\">Like requiring a driving license before renting a car: callers must provide the needed capability. Musi writes that requirement with <code>where T : Eq</code> before the result type annotation.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> requireEq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">where</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span></code></pre>\n</section>\n</div><h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Add a type annotation to one binding.</li><li>Add a generic parameter to one function.</li><li>Apply that generic explicitly.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Try the two snippets before moving to <a href=\"/docs/types-and-abstractions/classes-instances-and-laws\">Classes and instances</a>.</p>\n",
-		"summaryHtml": "Type annotations, generic parameters, and direct type application."
-	},
-	{
-		"locale": "en",
-		"id": "classes-instances-and-laws",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "Types and abstractions",
-		"path": "/learn/types-and-abstractions/classes-instances-and-laws",
-		"canonicalPath": "/learn/types-and-abstractions/classes-instances-and-laws",
-		"aliases": [
-			"/docs/types-and-abstractions/classes-instances-and-laws",
-			"/docs/classes-instances-and-laws"
-		],
-		"questions": [
-			{
-				"label": "How do I define a class and add an instance?",
-				"href": "/learn/types-and-abstractions/classes-instances-and-laws"
-			}
-		],
-		"title": "Classes and instances",
-		"description": "Read the class surface and define instances.",
-		"group": "Abstractions",
-		"section": "Abstractions",
-		"order": 11,
-		"slug": "classes-instances-and-laws",
-		"summary": "Classes, methods, and instance declarations.",
-		"descriptionHtml": "Read the class surface and define instances.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "class",
-				"text": "Class"
-			},
-			{
-				"depth": 2,
-				"id": "instance",
-				"text": "Instance"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Classes define shared behavior names.\nInstances provide concrete implementations for those behavior names.</p>\n<h2 id=\"class\"><a href=\"#class\">Class</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  law</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> reflexive</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"instance\"><a href=\"#instance\">Instance</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> eqInt </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> instance</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"class-instance\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Define shared behavior once, then attach concrete implementations per type.</p>\n<p class=\"code-tabs-note\">Like one wall-socket standard with different appliance designs behind the plug. Declare one behavior shape, then implement it per type.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> eqInt </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> instance</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre>\n</section>\n</div><p>Use a class when you want one operation shape to work across different types. Use an instance when you want to supply that behavior for one concrete type.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Define one class.</li><li>Add one instance for <code>Int</code>.</li><li>Call the behavior through the class surface.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Review both snippets, then continue to <a href=\"/docs/types-and-abstractions/effects-and-handlers\">Effects and handlers</a>.</p>\n",
-		"summaryHtml": "Classes, methods, and instance declarations."
-	},
-	{
-		"locale": "en",
-		"id": "effects-and-handlers",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "Types and abstractions",
-		"path": "/learn/types-and-abstractions/effects-and-handlers",
-		"canonicalPath": "/learn/types-and-abstractions/effects-and-handlers",
-		"aliases": [
-			"/docs/types-and-abstractions/effects-and-handlers",
-			"/docs/effects-and-handlers"
-		],
-		"questions": [
-			{
-				"label": "How do I define effects, handle them, and use <code>resume</code>?",
-				"href": "/learn/types-and-abstractions/effects-and-handlers"
-			}
-		],
-		"title": "Effects and handlers",
-		"description": "Use <code>effect</code>, <code>perform</code>, <code>handle</code>, and <code>resume</code> as part of normal Musi code.",
-		"group": "Effects",
-		"section": "Effects",
-		"order": 12,
-		"slug": "effects-and-handlers",
-		"summary": "The main Musi differentiator, shown with real syntax.",
-		"descriptionHtml": "Use <code>effect</code>, <code>perform</code>, <code>handle</code>, and <code>resume</code> as part of normal Musi code.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "handle-first",
-				"text": "Handle first"
-			},
-			{
-				"depth": 2,
-				"id": "define-effect",
-				"text": "Define effect"
-			},
-			{
-				"depth": 2,
-				"id": "perform-operation",
-				"text": "Perform operation"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Effects are part of ordinary Musi code. Define an effect, <code>perform</code> an operation, then <code>handle</code> it at a boundary.</p>\n<h2 id=\"handle-first\"><a href=\"#handle-first\">Handle first</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">handle</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">() </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">using</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value;</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">  readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(k) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> resume</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ok\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><p>Handlers decide what to do with an operation request. <code>resume</code> continues execution with a value.</p>\n<h2 id=\"define-effect\"><a href=\"#define-effect\">Define effect</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> effect</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"perform-operation\"><a href=\"#perform-operation\">Perform operation</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">();</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"effect-handle\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Capture side-effect requests in one place, then resolve them through handlers.</p>\n<p class=\"code-tabs-note\">At small scale this can look like callback wiring, but at larger scale handlers keep policy at boundaries and reduce plumbing across call chains.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> effect</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">handle</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">() with console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(k) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> resume</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ok\"</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>Effects are useful when direct calls would otherwise drag boundary logic through many layers of code.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Define one effect with one operation.</li><li>Perform that operation.</li><li>Handle it and use <code>resume</code> once.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Read all three snippets end-to-end, then continue to <a href=\"/docs/types-and-abstractions/attributes-and-foreign\">Attributes and foreign declarations</a>.</p>\n",
-		"summaryHtml": "The main Musi differentiator, shown with real syntax."
-	},
-	{
-		"locale": "en",
-		"id": "quote-and-syntax",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "Types and abstractions",
-		"path": "/learn/types-and-abstractions/quote-and-syntax",
-		"canonicalPath": "/learn/types-and-abstractions/quote-and-syntax",
-		"aliases": [
-			"/docs/types-and-abstractions/quote-and-syntax",
-			"/docs/quote-and-syntax"
-		],
-		"questions": [
-			{
-				"label": "How do <code>quote</code> and splice work in real Musi code?",
-				"href": "/learn/types-and-abstractions/quote-and-syntax"
-			}
-		],
-		"title": "Quote and syntax values",
-		"description": "Use quote and splice for reusable code templates and syntax-driven workflows.",
-		"group": "Abstractions",
-		"section": "Abstractions",
-		"order": 14,
-		"slug": "quote-and-syntax",
-		"summary": "Quoted expressions, splice forms, and practical metaprogramming patterns.",
-		"descriptionHtml": "Use quote and splice for reusable code templates and syntax-driven workflows.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "without-quote",
-				"text": "Without quote"
-			},
-			{
-				"depth": 2,
-				"id": "with-quote-and-splice",
-				"text": "With quote and splice"
-			},
-			{
-				"depth": 2,
-				"id": "small-forms",
-				"text": "Small forms"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Quote syntax lets you treat code as data, then splice values or sub-expressions into that code shape.</p>\n<h2 id=\"without-quote\"><a href=\"#without-quote\">Without quote</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> addOne</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> addTwo</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"with-quote-and-splice\"><a href=\"#with-quote-and-splice\">With quote and splice</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTemplate </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> #(delta));</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addOneSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTwoSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p>Use <code>quote</code> when code shape itself is data you want to build or transform.</p>\n<h2 id=\"small-forms\"><a href=\"#small-forms\">Small forms</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  x;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"quote-metaprogramming\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Build or transform code structure itself, not only runtime values.</p>\n<p class=\"code-tabs-note\">When a language lacks first-class quote/splice, the closest equivalent is usually macros, AST builders, or plain code generators.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTemplate </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> #(delta));</span></span></code></pre>\n</section>\n</div><p>Splice forms such as <code>#name</code> and <code>#(expr)</code> are only valid inside quote contexts.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Write one <code>quote</code> expression.</li><li>Splice one value into it.</li><li>Compare the quoted shape with duplicated handwritten code.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Take one duplicated helper pair, replace it with one quoted template, then continue to <a href=\"/docs/tooling/foundation-and-standard-library\">Foundation and standard library</a>.</p>\n",
-		"summaryHtml": "Quoted expressions, splice forms, and practical metaprogramming patterns."
-	},
-	{
-		"locale": "en",
-		"id": "attributes-and-foreign",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "Types and abstractions",
-		"path": "/learn/types-and-abstractions/attributes-and-foreign",
-		"canonicalPath": "/learn/types-and-abstractions/attributes-and-foreign",
-		"aliases": [
-			"/docs/types-and-abstractions/attributes-and-foreign",
-			"/docs/attributes-and-foreign"
-		],
-		"questions": [
-			{
-				"label": "How do I declare foreign functions and attributes?",
-				"href": "/learn/types-and-abstractions/attributes-and-foreign"
-			}
-		],
-		"title": "Attributes and foreign declarations",
-		"description": "Use stable public attributes, reserved compiler attributes, and foreign bindings.",
-		"group": "Abstractions",
-		"section": "Abstractions",
-		"order": 13,
-		"slug": "attributes-and-foreign",
-		"summary": "Stable public attrs, reserved compiler attrs, and foreign bindings.",
-		"descriptionHtml": "Use stable public attributes, reserved compiler attributes, and foreign bindings.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "foreign-binding",
-				"text": "Foreign binding"
-			},
-			{
-				"depth": 2,
-				"id": "public-attributes",
-				"text": "Public attributes"
-			},
-			{
-				"depth": 2,
-				"id": "reserved-compiler-attributes",
-				"text": "Reserved compiler attributes"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Attributes are plain metadata on declarations. Most are public. Two are compiler-owned: <code>@known</code> and <code>@intrinsic</code>.</p>\n<h2 id=\"foreign-binding\"><a href=\"#foreign-binding\">Foreign binding</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"public-attributes\"><a href=\"#public-attributes\">Public attributes</a></h2><p>Use these when a declaration needs explicit metadata:</p>\n<ul>\n<li><code>@link</code></li>\n<li><code>@when</code></li>\n<li><code>@repr</code></li>\n<li><code>@layout</code></li>\n<li><code>@frozen</code></li>\n<li><code>@hot</code></li>\n<li><code>@cold</code></li>\n<li><code>@deprecated</code></li>\n<li><code>@since</code></li>\n</ul>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">@</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">link</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><p><code>@frozen</code> is ABI/layout promise for exported non-opaque <code>data</code>. It does not mean immutability.</p>\n<p><code>@hot</code> and <code>@cold</code> are optimizer hints on callable declarations. They do not change semantics.</p>\n<h2 id=\"reserved-compiler-attributes\"><a href=\"#reserved-compiler-attributes\">Reserved compiler attributes</a></h2><p>Use reserved attrs only inside foundation/compiler-owned modules:</p>\n<ul>\n<li><code>@known(name := &quot;...&quot;)</code></li>\n<li><code>@intrinsic(name := &quot;...&quot;)</code></li>\n</ul>\n<p><code>@known</code> marks compiler-known bindings such as <code>Type</code> or <code>CString</code>.</p>\n<p><code>@intrinsic</code> marks compiler-owned runtime hooks in <code>musi:intrinsics</code>. It is not general user metadata.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Declare one <code>foreign</code> binding.</li><li>Add one attribute to it.</li><li>Keep the declaration minimal and explicit.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Read foreign examples first, then continue to <a href=\"/docs/types-and-abstractions/quote-and-syntax\">Quote and syntax values</a>.</p>\n",
-		"summaryHtml": "Stable public attrs, reserved compiler attrs, and foreign bindings."
-	},
-	{
-		"locale": "en",
-		"id": "foundation-and-standard-library",
-		"kind": "chapter",
-		"partId": "tooling",
-		"partTitle": "Tooling",
-		"path": "/learn/tooling/foundation-and-standard-library",
-		"canonicalPath": "/learn/tooling/foundation-and-standard-library",
-		"aliases": [
-			"/docs/tooling/foundation-and-standard-library",
-			"/docs/foundation-and-standard-library"
-		],
-		"questions": [
-			{
-				"label": "How do <code>@std</code> and <code>musi:*</code> differ?",
-				"href": "/learn/tooling/foundation-and-standard-library"
-			}
-		],
-		"title": "Foundation and standard library",
-		"description": "Know when to use <code>@std</code> and when you are looking at lower-level foundation names.",
-		"group": "Tooling",
-		"section": "Tooling",
-		"order": 15,
-		"slug": "foundation-and-standard-library",
-		"summary": "The standard library family and the lower-level foundation namespace.",
-		"descriptionHtml": "Know when to use <code>@std</code> and when you are looking at lower-level foundation names.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "default-split",
-				"text": "Default split"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Most user code starts in <code>@std</code>.\n<code>musi:*</code> is the lower-level family when you need foundation-level capabilities.</p>\n<h2 id=\"default-split\"><a href=\"#default-split\">Default split</a></h2><ul>\n<li><code>@std</code> for everyday work</li>\n<li><code>musi:*</code> for core-level operations</li>\n</ul>\n<p>Most code should stay in <code>@std</code>. Reach for <code>musi:*</code> when you are working near the language runtime boundary or lower-level compiler-facing tools.</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> configured </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](configured, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> parsed </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">ok</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](parsed, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Import one <code>@std</code> module.</li><li>Import one <code>musi:*</code> module.</li><li>Write down which one belongs in app code.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Move one project import to <code>@std</code>, then continue to <a href=\"/docs/tooling/testing-and-running\">Testing and running</a>.</p>\n",
-		"summaryHtml": "The standard library family and the lower-level foundation namespace."
-	},
-	{
-		"locale": "en",
-		"id": "testing-and-running",
-		"kind": "chapter",
-		"partId": "tooling",
-		"partTitle": "Tooling",
-		"path": "/learn/tooling/testing-and-running",
-		"canonicalPath": "/learn/tooling/testing-and-running",
-		"aliases": [
-			"/docs/tooling/testing-and-running",
-			"/docs/testing-and-running"
-		],
-		"questions": [
-			{
-				"label": "How do I run tests, packages, and direct files?",
-				"href": "/learn/tooling/testing-and-running"
-			}
-		],
-		"title": "Testing and running",
-		"description": "Run a package, run tests, and use the direct CLI when needed.",
-		"group": "Tooling",
-		"section": "Tooling",
-		"order": 16,
-		"slug": "testing-and-running",
-		"summary": "The main commands for package work and direct file work.",
-		"descriptionHtml": "Run a package, run tests, and use the direct CLI when needed.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "test-shape",
-				"text": "Test shape"
-			},
-			{
-				"depth": 2,
-				"id": "package-commands",
-				"text": "Package commands"
-			},
-			{
-				"depth": 2,
-				"id": "direct-commands",
-				"text": "Direct commands"
-			},
-			{
-				"depth": 2,
-				"id": "compare",
-				"text": "Compare"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			},
-			{
-				"depth": 2,
-				"id": "next-step",
-				"text": "Next step"
-			}
-		],
-		"html": "<p>Testing and execution are split by scope:</p>\n<ul>\n<li>package scope with <code>musi</code></li>\n<li>direct source/artifact scope with <code>music</code></li>\n</ul>\n<h2 id=\"test-shape\"><a href=\"#test-shape\">Test shape</a></h2><ul>\n<li>keep tests in <code>*.test.ms</code></li>\n<li>expose each test with exported <code>test</code></li>\n</ul>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">  Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre><h2 id=\"package-commands\"><a href=\"#package-commands\">Package commands</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> test</span></span></code></pre><h2 id=\"direct-commands\"><a href=\"#direct-commands\">Direct commands</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.seam</span></span></code></pre><h2 id=\"compare\"><a href=\"#compare\">Compare</a></h2><div class=\"code-tabs\" data-example-id=\"testing-entry\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">A small test entry should read like ordinary code. Musi uses <code>export let test ()</code> inside <code>*.test.ms</code> files.</p>\n<p class=\"code-tabs-note\">Think smoke detector checks: small, repeatable, and run regularly. Musi discovers these by file name and runs them with <code>musi test</code>.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre>\n</section>\n</div><p>Use <code>musi</code> for normal project work. Use <code>music</code> when you want to run or inspect one source file or built artifact directly.</p>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Create one <code>*.test.ms</code> file.</li><li>Export a <code>test</code> binding.</li><li>Run <code>musi test</code> and <code>music check index.ms</code>.</li></ol></div><h2 id=\"next-step\"><a href=\"#next-step\">Next step</a></h2><p>Run one package command and one direct command, then revisit any chapter where behavior is unclear.</p>\n<p>See <a href=\"/community\">Community</a> for project entry points and the public guestbook.</p>\n",
-		"summaryHtml": "The main commands for package work and direct file work."
-	},
-	{
-		"locale": "en",
-		"id": "common-questions",
-		"kind": "chapter",
-		"partId": "questions",
-		"partTitle": "Common questions",
-		"path": "/learn/questions/common-questions",
-		"canonicalPath": "/learn/questions/common-questions",
-		"aliases": [
-			"/docs/questions/common-questions",
-			"/docs/common-questions"
-		],
-		"questions": [],
-		"title": "Common questions",
-		"description": "Task-first links into the Musi book.",
-		"group": "Questions",
-		"section": "Questions",
-		"order": 6,
-		"slug": "common-questions",
-		"summary": "Task-first links for setup, imports, types, effects, and testing.",
-		"descriptionHtml": "Task-first links into the Musi book.",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "setup-and-files",
-				"text": "Setup and files"
-			},
-			{
-				"depth": 2,
-				"id": "syntax-and-data",
-				"text": "Syntax and data"
-			},
-			{
-				"depth": 2,
-				"id": "types-and-effects",
-				"text": "Types and effects"
-			},
-			{
-				"depth": 2,
-				"id": "tooling",
-				"text": "Tooling"
-			},
-			{
-				"depth": 2,
-				"id": "try-it",
-				"text": "Try it"
-			}
-		],
-		"html": "<p>Use this page when you know the task you need, but not where it lives in the book.</p>\n<h2 id=\"setup-and-files\"><a href=\"#setup-and-files\">Setup and files</a></h2><ul>\n<li>Install Musi and learn <code>music</code> versus <code>musi</code>: <a href=\"/docs/start/getting-started\">Getting started</a></li>\n<li>Run the smallest file: <a href=\"/docs/start/first-program\">First program</a></li>\n<li>Move into package work: <a href=\"/docs/start/files-packages-and-entry\">Files, packages, and entry</a></li>\n</ul>\n<h2 id=\"syntax-and-data\"><a href=\"#syntax-and-data\">Syntax and data</a></h2><ul>\n<li>Import from <code>@std</code> or <code>musi:*</code>: <a href=\"/docs/start/imports-and-packages\">Imports and packages</a></li>\n<li>Read files top to bottom: <a href=\"/docs/core-language/expressions-and-bindings\">Expressions and bindings</a></li>\n<li>Model variants and branch: <a href=\"/docs/core-language/data-and-pattern-matching\">Data and pattern matching</a></li>\n<li>Update records and arrays: <a href=\"/docs/core-language/records-arrays-and-mutation\">Records and arrays</a></li>\n</ul>\n<h2 id=\"types-and-effects\"><a href=\"#types-and-effects\">Types and effects</a></h2><ul>\n<li>Add type annotations and generics: <a href=\"/docs/types-and-abstractions/types\">Types and generics</a></li>\n<li>Define classes and instances: <a href=\"/docs/types-and-abstractions/classes-instances-and-laws\">Classes and instances</a></li>\n<li>Handle effects and use <code>resume</code>: <a href=\"/docs/types-and-abstractions/effects-and-handlers\">Effects and handlers</a></li>\n<li>Use <code>quote</code> and splice: <a href=\"/docs/types-and-abstractions/quote-and-syntax\">Quote and syntax values</a></li>\n<li>Declare foreign bindings: <a href=\"/docs/types-and-abstractions/attributes-and-foreign\">Attributes and foreign declarations</a></li>\n</ul>\n<h2 id=\"tooling\"><a href=\"#tooling\">Tooling</a></h2><ul>\n<li>Understand <code>@std</code> and <code>musi:*</code>: <a href=\"/docs/tooling/foundation-and-standard-library\">Foundation and standard library</a></li>\n<li>Run tests and packages: <a href=\"/docs/tooling/testing-and-running\">Testing and running</a></li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><div class=\"try-block\"><ol><li>Pick one question from this page.</li><li>Follow its linked chapter.</li><li>Add the shown syntax to a scratch file.</li></ol></div>\n",
-		"summaryHtml": "Task-first links for setup, imports, types, effects, and testing."
-	},
-	{
-		"locale": "ja",
-		"id": "start",
-		"kind": "part",
-		"partId": "start",
-		"partTitle": "start",
-		"path": "/ja/learn/start",
-		"canonicalPath": "/ja/learn/start",
-		"aliases": [],
-		"questions": [],
-		"title": "開始",
-		"description": "セットアップ、最初のファイル、パッケージ、インポート。",
-		"group": "開始",
-		"section": "開始",
-		"order": 1,
-		"slug": "start",
-		"summary": "Musi を動かし、1 ファイルからパッケージ作業へ進むときに読むパートです。",
-		"descriptionHtml": "セットアップ、最初のファイル、パッケージ、インポート。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "このパートの読み方",
-				"text": "このパートの読み方"
-			}
-		],
-		"html": "<p>Musi が初めてならここから始めます。これらの章では、セットアップ、最初のコード、パッケージの形、インポートを、多くの開発者が必要とする順で扱います。</p>\n<h2 id=\"このパートの読み方\"><a href=\"#このパートの読み方\">このパートの読み方</a></h2><p>導入、最初のプログラム、ファイルとパッケージ、インポートの順に進んでください。各章は小さな練習と次の一歩で終わります。</p>\n",
-		"summaryHtml": "Musi を動かし、1 ファイルからパッケージ作業へ進むときに読むパートです。"
-	},
-	{
-		"locale": "ja",
-		"id": "core-language",
-		"kind": "part",
-		"partId": "core-language",
-		"partTitle": "core-language",
-		"path": "/ja/learn/core-language",
-		"canonicalPath": "/ja/learn/core-language",
-		"aliases": [],
-		"questions": [],
-		"title": "言語の基本",
-		"description": "式、演算子、関数、data、更新。",
-		"group": "言語の基本",
-		"section": "言語の基本",
-		"order": 2,
-		"slug": "core-language",
-		"summary": "Musi のコードがどう流れ、data がどう形作られるかを学ぶパートです。",
-		"descriptionHtml": "式、演算子、関数、data、更新。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "このパートの読み方",
-				"text": "このパートの読み方"
-			}
-		],
-		"html": "<p>このパートでは、日常的に読む構文を扱います。式、呼び出し、data、レコード、配列、パターンマッチが中心です。</p>\n<h2 id=\"このパートの読み方\"><a href=\"#このパートの読み方\">このパートの読み方</a></h2><p>式と束縛から始め、演算子、関数、data、更新へ進みます。早い段階で構文の迷いを減らすことが目的です。</p>\n",
-		"summaryHtml": "Musi のコードがどう流れ、data がどう形作られるかを学ぶパートです。"
-	},
-	{
-		"locale": "ja",
-		"id": "types-and-abstractions",
-		"kind": "part",
-		"partId": "types-and-abstractions",
-		"partTitle": "types-and-abstractions",
-		"path": "/ja/learn/types-and-abstractions",
-		"canonicalPath": "/ja/learn/types-and-abstractions",
-		"aliases": [],
-		"questions": [],
-		"title": "型と抽象化",
-		"description": "型、制約、エフェクト、quote、foreign バインディング。",
-		"group": "型と抽象化",
-		"section": "型と抽象化",
-		"order": 3,
-		"slug": "types-and-abstractions",
-		"summary": "再利用できる API、制約、エフェクトを伴うコードが必要になったら読むパートです。",
-		"descriptionHtml": "型、制約、エフェクト、quote、foreign バインディング。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "このパートの読み方",
-				"text": "このパートの読み方"
-			}
-		],
-		"html": "<p>このパートでは、追加の疑問が出やすい機能をまとめます。型、クラス、エフェクト、quote、foreign 宣言を扱います。</p>\n<h2 id=\"このパートの読み方\"><a href=\"#このパートの読み方\">このパートの読み方</a></h2><p>型からクラスへ進み、その後エフェクト、quote、foreign 宣言へ進みます。各章では構文と実用を近い位置に置いています。</p>\n",
-		"summaryHtml": "再利用できる API、制約、エフェクトを伴うコードが必要になったら読むパートです。"
-	},
-	{
-		"locale": "ja",
-		"id": "tooling",
-		"kind": "part",
-		"partId": "tooling",
-		"partTitle": "tooling",
-		"path": "/ja/learn/tooling",
-		"canonicalPath": "/ja/learn/tooling",
-		"aliases": [],
-		"questions": [],
-		"title": "ツール",
-		"description": "標準ライブラリ、テスト、コマンドラインの流れ。",
-		"group": "ツール",
-		"section": "ツール",
-		"order": 4,
-		"slug": "tooling",
-		"summary": "パッケージコマンド、テスト、標準ライブラリの使い分けを学ぶパートです。",
-		"descriptionHtml": "標準ライブラリ、テスト、コマンドラインの流れ。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "このパートの読み方",
-				"text": "このパートの読み方"
-			}
-		],
-		"html": "<p>このパートでは、標準ライブラリ、基盤モジュール、テスト、そして <code>music</code> と <code>musi</code> のコマンドの流れを扱います。</p>\n<h2 id=\"このパートの読み方\"><a href=\"#このパートの読み方\">このパートの読み方</a></h2><p><code>@std</code> と <code>musi:*</code> の違いから始め、その後テストと実行・ビルドのコマンドへ進みます。</p>\n",
-		"summaryHtml": "パッケージコマンド、テスト、標準ライブラリの使い分けを学ぶパートです。"
-	},
-	{
-		"locale": "ja",
-		"id": "questions",
-		"kind": "part",
-		"partId": "questions",
-		"partTitle": "questions",
-		"path": "/ja/learn/questions",
-		"canonicalPath": "/ja/learn/questions",
-		"aliases": [],
-		"questions": [],
-		"title": "よくある質問",
-		"description": "Musi でよく出る作業への短い答え。",
-		"group": "よくある質問",
-		"section": "よくある質問",
 		"order": 5,
-		"slug": "questions",
-		"summary": "やりたい作業は分かっているが、章名が分からないときに使うパートです。",
-		"descriptionHtml": "Musi でよく出る作業への短い答え。",
+		"slug": "types",
+		"summary": "Introduce types gradually: explicit first, inferred second, generic third.",
+		"descriptionHtml": "Add type information, understand inference, and write small generic helpers.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "このパートの読み方",
-				"text": "このパートの読み方"
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
 			}
 		],
-		"html": "<p>このパートは task-first です。質問が「どうやって...する?」から始まるとき、最短で正しい章へ行くために使います。</p>\n<h2 id=\"このパートの読み方\"><a href=\"#このパートの読み方\">このパートの読み方</a></h2><p>下の task 一覧から選び、リンク先の章で構文、説明、練習を確認してください。</p>\n",
-		"summaryHtml": "やりたい作業は分かっているが、章名が分からないときに使うパートです。"
+		"html": "<p>This part keeps type learning incremental.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Annotations, inference, generics.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners should not meet all type ideas at once.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Use each chapter to stabilize one type concept.</p>\n",
+		"summaryHtml": "Introduce types gradually: explicit first, inferred second, generic third."
 	},
 	{
-		"locale": "ja",
+		"locale": "en",
+		"id": "abstractions",
+		"kind": "part",
+		"partId": "abstractions",
+		"partTitle": "abstractions",
+		"path": "/learn/language/abstractions",
+		"canonicalPath": "/learn/language/abstractions",
+		"aliases": [],
+		"questions": [],
+		"title": "Abstractions",
+		"description": "Learn classes, instances, and laws without object-model confusion.",
+		"group": "Abstractions",
+		"section": "Abstractions",
+		"order": 6,
+		"slug": "abstractions",
+		"summary": "Separate behavior shape, concrete implementation, and semantic law into distinct chapters.",
+		"descriptionHtml": "Learn classes, instances, and laws without object-model confusion.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			}
+		],
+		"html": "<p>This part explains shared behavior in small steps.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Classes, instances, laws.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Readers should not confuse contracts with implementations.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Learn class first, instance second, law third.</p>\n",
+		"summaryHtml": "Separate behavior shape, concrete implementation, and semantic law into distinct chapters."
+	},
+	{
+		"locale": "en",
+		"id": "effects-runtime",
+		"kind": "part",
+		"partId": "effects-runtime",
+		"partTitle": "effects-runtime",
+		"path": "/learn/language/effects-runtime",
+		"canonicalPath": "/learn/language/effects-runtime",
+		"aliases": [],
+		"questions": [],
+		"title": "Effects and runtime",
+		"description": "Understand effects, using, handlers, foundation, runtime, and stdlib layering.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 7,
+		"slug": "effects-runtime",
+		"summary": "Make effect flow explicit, then place runtime and stdlib on top of that model.",
+		"descriptionHtml": "Understand effects, using, handlers, foundation, runtime, and stdlib layering.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			}
+		],
+		"html": "<p>This part explains capability flow and library layering.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Effects, using, handlers, foundation, runtime, stdlib.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>These topics only stay readable when their boundaries stay clear.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Keep capability ideas separate from host-boundary ideas.</p>\n",
+		"summaryHtml": "Make effect flow explicit, then place runtime and stdlib on top of that model."
+	},
+	{
+		"locale": "en",
+		"id": "advanced",
+		"kind": "part",
+		"partId": "advanced",
+		"partTitle": "advanced",
+		"path": "/learn/language/advanced",
+		"canonicalPath": "/learn/language/advanced",
+		"aliases": [],
+		"questions": [],
+		"title": "Advanced and tooling",
+		"description": "Finish with attributes, foreign bindings, quote, testing, and tool workflow.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 8,
+		"slug": "advanced",
+		"summary": "Keep sharp or advanced topics late, after ordinary code already feels natural.",
+		"descriptionHtml": "Finish with attributes, foreign bindings, quote, testing, and tool workflow.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			}
+		],
+		"html": "<p>This part collects later-stage topics.</p>\n<h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Attributes, foreign, quote, testing, tooling.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>These ideas become easier once core code already feels stable.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><p>Treat them as boundary tools, not beginner syntax.</p>\n",
+		"summaryHtml": "Keep sharp or advanced topics late, after ordinary code already feels natural."
+	},
+	{
+		"locale": "en",
 		"id": "getting-started",
 		"kind": "chapter",
 		"partId": "start",
-		"partTitle": "開始",
-		"path": "/ja/learn/start/getting-started",
-		"canonicalPath": "/ja/learn/start/getting-started",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "Musi を導入して <code>music</code> と <code>musi</code> の違いを知るには?",
-				"href": "/ja/learn/start/getting-started"
-			}
+		"partTitle": "Start",
+		"path": "/learn/language/start/getting-started",
+		"canonicalPath": "/learn/language/start/getting-started",
+		"aliases": [
+			"/docs/language/start/getting-started"
 		],
-		"title": "はじめに",
-		"description": "必要なツールを導入し、役割を知り、最初のコマンドから始めます。",
-		"group": "開始",
-		"section": "開始",
+		"questions": [],
+		"title": "Getting started",
+		"description": "Install prerequisites, build Musi from source, and learn when to use music versus musi.",
+		"group": "Start",
+		"section": "Start",
 		"order": 1,
 		"slug": "getting-started",
-		"summary": "導入、PATH 設定、<code>musi</code> と <code>music</code> の違い。",
-		"descriptionHtml": "必要なツールを導入し、役割を知り、最初のコマンドから始めます。",
+		"summary": "Install tools, build Musi, and learn the two command lanes.",
+		"descriptionHtml": "Install prerequisites, build Musi from source, and learn when to use music versus musi.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "2-つのコマンド",
-				"text": "2 つのコマンド"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "最初のセットアップ",
-				"text": "最初のセットアップ"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>Musi には 2 つの CLI エントリポイントがあります。まずこの違いを押さえると、その後のツールチェーンが分かりやすくなります。</p>\n<h2 id=\"2-つのコマンド\"><a href=\"#2-つのコマンド\">2 つのコマンド</a></h2><ul>\n<li><code>musi</code> はパッケージ単位で動きます。<code>run</code>、<code>check</code>、<code>build</code>、<code>test</code> に使います。</li>\n<li><code>music</code> は 1 つのソースのまとまりや、ビルド済みの成果物を直接扱います。</li>\n</ul>\n<p><code>cargo</code>、<code>npm</code>、<code>dotnet</code> のようなツールを知っているなら、<code>musi</code> はそれに近い役割です。<code>music</code> はファイルを直接動かす実行用コマンドに近い位置づけです。</p>\n<h2 id=\"最初のセットアップ\"><a href=\"#最初のセットアップ\">最初のセットアップ</a></h2><p><a href=\"/ja/install\">導入ページ</a> から始め、次の順に進めます。</p>\n<ul>\n<li>実行ファイルを導入し PATH を通す</li>\n<li>パッケージを作る</li>\n<li>最初の式を書く</li>\n<li><code>musi check</code> と <code>musi run</code> を実行する</li>\n</ul>\n<p>最短で反応を見たいなら、まず 1 ファイルと <code>music</code> から始めます。パッケージコマンドや共有のプロジェクト構造が必要になったら <code>musi</code> へ移ります。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Install Rust and libffi.</li><li>Build Musi from source.</li><li>Run <code>music check index.ms</code> once <code>music</code> is on PATH.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p><a href=\"/ja/install\">導入</a> を開き、1 つコマンドを動かしてから <a href=\"/ja/learn/start/first-program\">最初のプログラム</a> へ進んでください。</p>\n",
-		"summaryHtml": "導入、PATH 設定、<code>musi</code> と <code>music</code> の違い。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">git</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> clone</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> https://github.com/musi-lang/musi.git</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">cd</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> musi</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">cargo</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> --release</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> PATH</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"/path/to/musi/target/release:</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">$PATH</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Musi is currently source-first. You build the repo, then put <code>music</code> and <code>musi</code> on <code>PATH</code>.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners need one reliable setup story before they learn anything else.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Build once.</li>\n<li>Add the release directory to <code>PATH</code>.</li>\n<li>Use <code>music</code> for direct file work.</li>\n<li>Use <code>musi</code> for package work.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Build the repository.</li>\n<li>Run one <code>music check index.ms</code>.</li>\n<li>Run one <code>musi new hello</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not treat <code>music</code> and <code>musi</code> as duplicates.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/start/first-program\">First program</a>.</p>\n",
+		"summaryHtml": "Install tools, build Musi, and learn the two command lanes."
 	},
 	{
-		"locale": "ja",
+		"locale": "en",
 		"id": "first-program",
 		"kind": "chapter",
 		"partId": "start",
-		"partTitle": "開始",
-		"path": "/ja/learn/start/first-program",
-		"canonicalPath": "/ja/learn/start/first-program",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "最小の Musi file を書いて実行するには?",
-				"href": "/ja/learn/start/first-program"
-			}
+		"partTitle": "Start",
+		"path": "/learn/language/start/first-program",
+		"canonicalPath": "/learn/language/start/first-program",
+		"aliases": [
+			"/docs/language/start/first-program"
 		],
-		"title": "最初のプログラム",
-		"description": "小さなファイルを書き、式として読みます。",
-		"group": "開始",
-		"section": "開始",
+		"questions": [],
+		"title": "First program",
+		"description": "Create the smallest useful Musi file and run it with the direct command lane.",
+		"group": "Start",
+		"section": "Start",
 		"order": 2,
 		"slug": "first-program",
-		"summary": "余計な定型なしで書く最初の Musi ファイル。",
-		"descriptionHtml": "小さなファイルを書き、式として読みます。",
+		"summary": "Write one file, bind one value, and run it end to end.",
+		"descriptionHtml": "Create the smallest useful Musi file and run it with the direct command lane.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "最小の実行可能ファイル",
-				"text": "最小の実行可能ファイル"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "1-つ関数を足す",
-				"text": "1 つ関数を足す"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>Musi のファイルは式として読まれます。\n上から下へ読み進めます。各式は次の式が使える結果を残します。</p>\n<h2 id=\"最小の実行可能ファイル\"><a href=\"#最小の実行可能ファイル\">最小の実行可能ファイル</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><p><code>let</code> は名前を束縛します。<code>;</code> は式を終えます。書き始めて実行するにはこれで十分です。</p>\n<h2 id=\"1-つ関数を足す\"><a href=\"#1-つ関数を足す\">1 つ関数を足す</a></h2><div class=\"code-tabs\" data-example-id=\"double-function\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Same small task across multiple languages. Musi keeps it as an expression-oriented <code>let</code> binding.</p>\n<p class=\"code-tabs-note\">Like doubling a recipe: same operation, different kitchens. Musi keeps the function as a normal binding so it reads like other definitions.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>関数も値と同じ <code>let</code> 形式で定義します。別の宣言構文へ切り替える必要はありません。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Create <code>index.ms</code>.</li><li>Bind one value with <code>let</code>.</li><li>Run it with <code>music check index.ms</code>.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>上のコード例を打ち込み、<code>music</code> で実行してから <a href=\"/ja/learn/start/files-packages-and-entry\">ファイル、パッケージ、エントリ</a> へ進んでください。</p>\n",
-		"summaryHtml": "余計な定型なしで書く最初の Musi ファイル。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A small Musi file can be just a few bindings and one final expression.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Scripting-language readers already know top-to-bottom file flow. Musi keeps that feel.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Bind one value with <code>let</code>.</li>\n<li>End the file with the result you want.</li>\n<li>Validate it with <code>music check index.ms</code>.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create <code>index.ms</code>.</li>\n<li>Bind one value.</li>\n<li>End the file with that value.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not look for a <code>main</code> function in a tiny scratch file.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/start/values-and-let\">Values and let</a>.</p>\n",
+		"summaryHtml": "Write one file, bind one value, and run it end to end."
 	},
 	{
-		"locale": "ja",
-		"id": "files-packages-and-entry",
+		"locale": "en",
+		"id": "values-and-let",
 		"kind": "chapter",
 		"partId": "start",
-		"partTitle": "開始",
-		"path": "/ja/learn/start/files-packages-and-entry",
-		"canonicalPath": "/ja/learn/start/files-packages-and-entry",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "1 file から package へ切り替えるには?",
-				"href": "/ja/learn/start/files-packages-and-entry"
-			}
+		"partTitle": "Start",
+		"path": "/learn/language/start/values-and-let",
+		"canonicalPath": "/learn/language/start/values-and-let",
+		"aliases": [
+			"/docs/language/start/values-and-let"
 		],
-		"title": "ファイル、パッケージ、エントリ",
-		"description": "<code>musi new</code> が何を作り、<code>musi run</code> が何を探すかを知ります。",
-		"group": "開始",
-		"section": "開始",
+		"questions": [],
+		"title": "Values and let",
+		"description": "Learn Musi’s core binding form before adding more syntax.",
+		"group": "Start",
+		"section": "Start",
 		"order": 3,
-		"slug": "files-packages-and-entry",
-		"summary": "パッケージ、<code>musi.json</code>、解決されるエントリファイル。",
-		"descriptionHtml": "<code>musi new</code> が何を作り、<code>musi run</code> が何を探すかを知ります。",
+		"slug": "values-and-let",
+		"summary": "Bind names with let and read the file top to bottom.",
+		"descriptionHtml": "Learn Musi’s core binding form before adding more syntax.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "パッケージの流れ",
-				"text": "パッケージの流れ"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "パッケージが役立つ理由",
-				"text": "パッケージが役立つ理由"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "直接実行モード",
-				"text": "直接実行モード"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>試す段階では素のファイルを使います。繰り返し使うコマンドと安定したプロジェクトルートが必要になったらパッケージを使います。</p>\n<h2 id=\"パッケージの流れ\"><a href=\"#パッケージの流れ\">パッケージの流れ</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> test</span></span></code></pre><ul>\n<li><code>musi</code> はパッケージ設定を読み、エントリファイルを解決し、プロジェクト用コマンドを実行します。</li>\n<li><code>music</code> は 1 つのソースファイルやビルド済みの成果物を直接調べるときにも使えます。</li>\n</ul>\n<h2 id=\"パッケージが役立つ理由\"><a href=\"#パッケージが役立つ理由\">パッケージが役立つ理由</a></h2><p>パッケージを使うとパス処理の重複が減ります。プロジェクト全体で同じコマンド体系を共有しやすくなります。</p>\n<h2 id=\"直接実行モード\"><a href=\"#直接実行モード\">直接実行モード</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.seam</span></span></code></pre><p>パッケージ用の設定がまだ要らない 1 回きりの実験、パーサの確認、小さな例では直接実行モードが向いています。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Create a package with <code>musi new hello</code>.</li><li>Open the generated entry file.</li><li>Run <code>musi run</code> from the package root.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>パッケージを作り、どのエントリファイルが使われるかを確認してから <a href=\"/ja/learn/start/imports-and-packages\">インポートとパッケージ</a> へ進んでください。</p>\n",
-		"summaryHtml": "パッケージ、<code>musi.json</code>、解決されるエントリファイル。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>let</code> introduces a name and a value.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Functions, methods, modules, and many other definitions also start from <code>let</code>, so one form matters a lot.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Read <code>let name := value;</code> as a value binding.</li>\n<li>Keep names close to where they are used.</li>\n<li>Prefer small bindings while learning.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Bind one number.</li>\n<li>Bind a second value from the first.</li>\n<li>End the file with the second value.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not assume <code>let</code> only means a top-level constant.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/start/blocks-and-expressions\">Blocks and expressions</a>.</p>\n",
+		"summaryHtml": "Bind names with let and read the file top to bottom."
 	},
 	{
-		"locale": "ja",
-		"id": "imports-and-packages",
+		"locale": "en",
+		"id": "blocks-and-expressions",
 		"kind": "chapter",
 		"partId": "start",
-		"partTitle": "開始",
-		"path": "/ja/learn/start/imports-and-packages",
-		"canonicalPath": "/ja/learn/start/imports-and-packages",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "<code>@std</code> module を import し、<code>musi:*</code> を使う場面を知るには?",
-				"href": "/ja/learn/start/imports-and-packages"
-			}
+		"partTitle": "Start",
+		"path": "/learn/language/start/blocks-and-expressions",
+		"canonicalPath": "/learn/language/start/blocks-and-expressions",
+		"aliases": [
+			"/docs/language/start/blocks-and-expressions"
 		],
-		"title": "インポートとパッケージ",
-		"description": "モジュールをインポートし、主な名前空間を使い分けます。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Blocks and expressions",
+		"description": "Learn block flow before adding mutation or larger control forms.",
+		"group": "Start",
+		"section": "Start",
 		"order": 4,
-		"slug": "imports-and-packages",
-		"summary": "インポート式、<code>@std</code>、<code>musi:*</code> の基盤名前空間。",
-		"descriptionHtml": "モジュールをインポートし、主な名前空間を使い分けます。",
+		"slug": "blocks-and-expressions",
+		"summary": "Understand how grouped expressions produce one final value.",
+		"descriptionHtml": "Learn block flow before adding mutation or larger control forms.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "基本ルール",
-				"text": "基本ルール"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "例",
-				"text": "例"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>インポートは式です。<code>let</code> で束縛し、その後は他の名前と同じように使います。</p>\n<h2 id=\"基本ルール\"><a href=\"#基本ルール\">基本ルール</a></h2><ul>\n<li>まず <code>@std</code> から始める</li>\n<li>より低い層の基盤モジュールが必要なときだけ <code>musi:*</code> を使う</li>\n</ul>\n<p>この方針にすると通常のコードは標準ライブラリ側に寄り、コンパイラ寄りの部品は明示的なまま保てます。</p>\n<h2 id=\"例\"><a href=\"#例\">例</a></h2><div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>インポートは式が置ける場所ならどこでも書けますが、ファイルの上の方に寄せるのが今でも最も読みやすい書き方です。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Import <code>@std/option</code> in one file.</li><li>Bind the module with <code>let</code>.</li><li>Call one exported function from it.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>重複したコードをインポートした名前へ置き換え、<a href=\"/ja/learn/core-language/expressions-and-bindings\">式と束縛</a> へ進んでください。</p>\n",
-		"summaryHtml": "インポート式、<code>@std</code>、<code>musi:*</code> の基盤名前空間。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 80</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A block groups expressions and yields one final result.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Expression-oriented code becomes much easier once you stop expecting every intermediate line to “return nothing”.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Put helper bindings first.</li>\n<li>Put the final value last.</li>\n<li>Read the whole block as one result-producing expression.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create a block.</li>\n<li>Add one helper binding.</li>\n<li>Return one arithmetic expression.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not treat every grouped form like JavaScript braces.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/start/mutation\">Mutation</a>.</p>\n",
+		"summaryHtml": "Understand how grouped expressions produce one final value."
 	},
 	{
-		"locale": "ja",
-		"id": "expressions-and-bindings",
+		"locale": "en",
+		"id": "mutation",
 		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "言語の基本",
-		"path": "/ja/learn/core-language/expressions-and-bindings",
-		"canonicalPath": "/ja/learn/core-language/expressions-and-bindings",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "Musi file を上から下へ読むには?",
-				"href": "/ja/learn/core-language/expressions-and-bindings"
-			}
+		"partId": "start",
+		"partTitle": "Start",
+		"path": "/learn/language/start/mutation",
+		"canonicalPath": "/learn/language/start/mutation",
+		"aliases": [
+			"/docs/language/start/mutation"
 		],
-		"title": "式と束縛",
-		"description": "<code>let</code>、連続した式、<code>case</code> で Musi を読みます。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Mutation",
+		"description": "Learn Musi’s explicit mutation surface without mixing it into every lesson.",
+		"group": "Start",
+		"section": "Start",
 		"order": 5,
-		"slug": "expressions-and-bindings",
-		"summary": "名前、連続した式、分岐を読むための基本モデル。",
-		"descriptionHtml": "<code>let</code>、連続した式、<code>case</code> で Musi を読みます。",
+		"slug": "mutation",
+		"summary": "Use mut only when changing a value helps more than rebuilding it.",
+		"descriptionHtml": "Learn Musi’s explicit mutation surface without mixing it into every lesson.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "連続した式",
-				"text": "連続した式"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "分岐",
-				"text": "分岐"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>式と束縛は Musi を読む中心です。名前を束縛し、そのまま下へ読み進めます。</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><h2 id=\"連続した式\"><a href=\"#連続した式\">連続した式</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  base </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 80</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p><code>;</code> は式を区切ります。括弧で 1 つの大きな式としてまとめることもできます。</p>\n<h2 id=\"分岐\"><a href=\"#分岐\">分岐</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Default</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(port) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Default</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p><code>case ... of</code> は分岐を扱います。形に応じて match し、各 branch から値を返します。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Write two <code>let</code> bindings.</li><li>Add a <code>case</code> expression under them.</li><li>Read the file top to bottom and check the final result.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>2 つのコード例を読み、次に <a href=\"/ja/learn/core-language/operators-and-literals\">演算子とリテラル</a> へ進んでください。</p>\n",
-		"summaryHtml": "名前、連続した式、分岐を読むための基本モデル。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> counter </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> mut</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">counter </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">counter;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Mutation is explicit. You mark a value as mutable, then assign a new value to it.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Visible mutation makes it easier to tell stable values from changing state.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start with <code>let x := mut 1;</code>.</li>\n<li>Reassign with <code>x := 2;</code>.</li>\n<li>Prefer rebuilding immutable values when that stays clearer.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create one mutable integer.</li>\n<li>Update it once.</li>\n<li>Compare it with an immutable rewrite.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not add <code>mut</code> by reflex.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/literals\">Literals</a>.</p>\n",
+		"summaryHtml": "Use mut only when changing a value helps more than rebuilding it."
 	},
 	{
-		"locale": "ja",
-		"id": "operators-and-literals",
+		"locale": "en",
+		"id": "literals",
 		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "言語の基本",
-		"path": "/ja/learn/core-language/operators-and-literals",
-		"canonicalPath": "/ja/learn/core-language/operators-and-literals",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "operator、record、array は通常の式の中でどう書く?",
-				"href": "/ja/learn/core-language/operators-and-literals"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/literals",
+		"canonicalPath": "/learn/language/core/literals",
+		"aliases": [
+			"/docs/language/core/literals"
 		],
-		"title": "演算子とリテラル",
-		"description": "数値、文字列、レコード、配列、演算子の連なりを同じ流れで読みます。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Literals",
+		"description": "Meet Musi’s everyday literal values before mixing them with operators.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 6,
-		"slug": "operators-and-literals",
-		"summary": "通常の式で使うリテラルと演算子の優先順位。",
-		"descriptionHtml": "数値、文字列、レコード、配列、演算子の連なりを同じ流れで読みます。",
+		"slug": "literals",
+		"summary": "Start with numbers, strings, booleans, and templates.",
+		"descriptionHtml": "Meet Musi’s everyday literal values before mixing them with operators.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "よく使う形",
-				"text": "よく使う形"
-			},
-			{
-				"depth": 3,
-				"id": "演算子の意図",
-				"text": "演算子の意図"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "例",
-				"text": "例"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>演算子とリテラルは初日のコードの大半を占めます。数値、文字列、配列、レコード、比較、小さな計算が中心です。</p>\n<h2 id=\"よく使う形\"><a href=\"#よく使う形\">よく使う形</a></h2><ul>\n<li><code>8080</code> のような数値リテラル</li>\n<li><code>&quot;ready&quot;</code> のような文字列リテラル</li>\n<li><code>+</code>、<code>-</code>、<code>*</code>、<code>/</code>、<code>=</code>、<code>&lt;=</code>、<code>&gt;=</code>、<code>/=</code> のような記号演算子</li>\n<li><code>and</code>、<code>or</code>、<code>not</code>、<code>shl</code>、<code>shr</code>、<code>xor</code> のような単語演算子</li>\n</ul>\n<h3 id=\"演算子の意図\"><a href=\"#演算子の意図\">演算子の意図</a></h3><ul>\n<li><code>and</code>、<code>or</code>、<code>not</code>、<code>xor</code> は、オペランドの型とスコープ内の演算子定義に応じて意味が決まる単語演算子です。</li>\n<li><code>shl</code> と <code>shr</code> はシフト演算子です。</li>\n<li><code>/=</code> は不一致を意味します。割って代入する演算子ではありません。</li>\n</ul>\n<p><code>/=</code> が割って代入する演算子を意味する言語に慣れているなら、割り算で再代入したいときは <code>x := x / y</code> を使います。</p>\n<h2 id=\"例\"><a href=\"#例\">例</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> label </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ready\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> same </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> capped </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">&#x3C;=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> masked </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> shl</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point3 </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">point, z </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 5</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> extended </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">values];</span></span></code></pre><h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Make one record literal and one array literal.</li><li>Apply one operator expression.</li><li>Create one spread-based update.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>1 ファイルの中でいくつかのリテラルと演算子を組み合わせてから <a href=\"/ja/learn/core-language/functions-and-calls\">関数と呼び出し</a> へ進んでください。</p>\n",
-		"summaryHtml": "通常の式で使うリテラルと演算子の優先順位。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> label </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ready\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> same </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> capped </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">&#x3C;=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> masked </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> shl</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Literals are values written directly in source.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>They give readers a stable base before more structural syntax arrives.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start with numbers and strings.</li>\n<li>Add booleans next.</li>\n<li>Treat templates as text-building expressions.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Bind one integer.</li>\n<li>Bind one string.</li>\n<li>Add one small template.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not learn literals, operators, and data shapes all at once.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/operators\">Operators</a>.</p>\n",
+		"summaryHtml": "Start with numbers, strings, booleans, and templates."
 	},
 	{
-		"locale": "ja",
-		"id": "functions-and-calls",
+		"locale": "en",
+		"id": "operators",
 		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "言語の基本",
-		"path": "/ja/learn/core-language/functions-and-calls",
-		"canonicalPath": "/ja/learn/core-language/functions-and-calls",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "<code>let</code> で function と recursion を定義するには?",
-				"href": "/ja/learn/core-language/functions-and-calls"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/operators",
+		"canonicalPath": "/learn/language/core/operators",
+		"aliases": [
+			"/docs/language/core/operators"
 		],
-		"title": "関数と呼び出し",
-		"description": "<code>let</code> で関数を定義し、普通に呼び出し、再帰には <code>let rec</code> を使います。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Operators",
+		"description": "Add operators after literals so expressions stay readable.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 7,
-		"slug": "functions-and-calls",
-		"summary": "余計な制御構文なしで書く関数、呼び出し、再帰。",
-		"descriptionHtml": "<code>let</code> で関数を定義し、普通に呼び出し、再帰には <code>let rec</code> を使います。",
+		"slug": "operators",
+		"summary": "Read arithmetic, comparison, and logic in ordinary expressions.",
+		"descriptionHtml": "Add operators after literals so expressions stay readable.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "基本の呼び出し",
-				"text": "基本の呼び出し"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "recursion",
-				"text": "recursion"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>関数は束縛でき、渡せて、呼び出せる値です。</p>\n<h2 id=\"基本の呼び出し\"><a href=\"#基本の呼び出し\">基本の呼び出し</a></h2><div class=\"code-tabs\" data-example-id=\"double-function\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Same small task across multiple languages. Musi keeps it as an expression-oriented <code>let</code> binding.</p>\n<p class=\"code-tabs-note\">Like doubling a recipe: same operation, different kitchens. Musi keeps the function as a normal binding so it reads like other definitions.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>呼び出しは普通に <code>name(args)</code> と書きます。関数定義も他の束縛と同じ <code>let</code> 構文を使います。</p>\n<h2 id=\"recursion\"><a href=\"#recursion\">recursion</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> rec</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> loop</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">_</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> loop</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">-</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  );</span></span></code></pre><p>関数が自分自身を参照する必要があるときは <code>let rec</code> を使います。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Write one function with <code>let</code>.</li><li>Call it with one argument.</li><li>Add <code>let rec</code> and check recursive flow.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>関数を束縛して呼び出し、再帰の形も足してから <a href=\"/ja/learn/core-language/data-and-pattern-matching\">data とパターンマッチ</a> へ進んでください。</p>\n",
-		"summaryHtml": "余計な制御構文なしで書く関数、呼び出し、再帰。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> label </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ready\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> same </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> capped </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">&#x3C;=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> masked </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> shl</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Operators combine values into larger expressions.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Small operator expressions are often the fastest way to read ordinary value flow.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start with arithmetic.</li>\n<li>Add comparison.</li>\n<li>Keep early examples small.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Compute one sum.</li>\n<li>Compare two values.</li>\n<li>Add one boolean result.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not stack too many operator families in one early example.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/ranges\">Ranges</a>.</p>\n",
+		"summaryHtml": "Read arithmetic, comparison, and logic in ordinary expressions."
 	},
 	{
-		"locale": "ja",
-		"id": "data-and-pattern-matching",
+		"locale": "en",
+		"id": "ranges",
 		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "言語の基本",
-		"path": "/ja/learn/core-language/data-and-pattern-matching",
-		"canonicalPath": "/ja/learn/core-language/data-and-pattern-matching",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "<code>case</code> で variant を表し分岐するには?",
-				"href": "/ja/learn/core-language/data-and-pattern-matching"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/ranges",
+		"canonicalPath": "/learn/language/core/ranges",
+		"aliases": [
+			"/docs/language/core/ranges"
 		],
-		"title": "data とパターンマッチ",
-		"description": "<code>data</code> で和型を定義し、バリアントを作り、<code>case</code> で読みます。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Ranges",
+		"description": "Learn Musi’s range operators in isolation before they appear inside larger code.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 8,
-		"slug": "data-and-pattern-matching",
-		"summary": "data 定義、コンストラクタ、パターンマッチ。",
-		"descriptionHtml": "<code>data</code> で和型を定義し、バリアントを作り、<code>case</code> で読みます。",
+		"slug": "ranges",
+		"summary": "Read open, closed, and spread-like range forms without guessing.",
+		"descriptionHtml": "Learn Musi’s range operators in isolation before they appear inside larger code.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "まず-match-する",
-				"text": "まず match する"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "定義して組み立てる",
-				"text": "定義して組み立てる"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "比較",
-				"text": "比較"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p><code>data</code> を使うと、範囲が限られた領域をコードの中で直接表せます。\n<code>case</code> は形ごとに読み進め、分岐を明示したまま保ちます。</p>\n<h2 id=\"まず-match-する\"><a href=\"#まず-match-する\">まず match する</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(value) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Default</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p>値が既知のいくつかの形のどれかになるなら <code>data</code> を使います。</p>\n<h2 id=\"定義して組み立てる\"><a href=\"#定義して組み立てる\">定義して組み立てる</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Default</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"data-named-record\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Use named fields directly in a <code>data</code> definition, then construct values from that shape.</p>\n<p class=\"code-tabs-note\">Like filling out a passport form: named boxes with known defaults. This form keeps field intent explicit in the type itself.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> User</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  name : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  age : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> user : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">User</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"Ada\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span></code></pre>\n</section>\n</div><h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Define a <code>data</code> type with two cases.</li><li>Construct one value.</li><li>Match it with <code>case ... of</code>.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>3 つのコード例を順に読んでから <a href=\"/ja/learn/core-language/records-arrays-and-mutation\">レコードと配列</a> へ進んでください。</p>\n",
-		"summaryHtml": "data 定義、コンストラクタ、パターンマッチ。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> closed </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">..</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">10</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> halfOpen </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">..&#x3C;</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">10</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">closed;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Ranges describe ordered spans such as <code>0..10</code> or <code>0..&lt;10</code>.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Dot-heavy syntax is easy to misread unless you learn range forms separately from spread forms.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Read <code>..</code> as a range form.</li>\n<li>Read <code>..&lt;</code> as a boundary-sensitive form.</li>\n<li>Keep <code>...</code> mentally separate.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one <code>0..10</code>.</li>\n<li>Write one <code>0..&lt;10</code>.</li>\n<li>Explain the difference to yourself.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not assume every dotted form is a range.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/functions\">Functions</a>.</p>\n",
+		"summaryHtml": "Read open, closed, and spread-like range forms without guessing."
 	},
 	{
-		"locale": "ja",
-		"id": "records-arrays-and-mutation",
+		"locale": "en",
+		"id": "functions",
 		"kind": "chapter",
-		"partId": "core-language",
-		"partTitle": "言語の基本",
-		"path": "/ja/learn/core-language/records-arrays-and-mutation",
-		"canonicalPath": "/ja/learn/core-language/records-arrays-and-mutation",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "record と array を構文で迷わず更新するには?",
-				"href": "/ja/learn/core-language/records-arrays-and-mutation"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/functions",
+		"canonicalPath": "/learn/language/core/functions",
+		"aliases": [
+			"/docs/language/core/functions"
 		],
-		"title": "レコードと配列",
-		"description": "レコードリテラル、配列、明示的な spread 形式を使います。",
-		"group": "言語の基本",
-		"section": "言語の基本",
+		"questions": [],
+		"title": "Functions",
+		"description": "Write one reusable function and read its shape without extra abstraction noise.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 9,
-		"slug": "records-arrays-and-mutation",
-		"summary": "構造化された値と、現在の書き換え可能な data の扱い方。",
-		"descriptionHtml": "レコードリテラル、配列、明示的な spread 形式を使います。",
+		"slug": "functions",
+		"summary": "Define plain functions with let before learning calls or methods.",
+		"descriptionHtml": "Write one reusable function and read its shape without extra abstraction noise.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "copy-して更新する",
-				"text": "copy して更新する"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "比較",
-				"text": "比較"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "musi-の補足",
-				"text": "Musi の補足"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>レコードと配列は、更新の仕方が予測しやすい普通の値です。</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><h2 id=\"copy-して更新する\"><a href=\"#copy-して更新する\">copy して更新する</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point3 </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">point, z </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 5</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> extended </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">values];</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"record-array-spread\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Build structured values, spread them, and update selected fields in one expression flow.</p>\n<p class=\"code-tabs-note\">Like copying a form and editing only one line instead of rewriting everything. Spread/update keeps the unchanged parts intact. Musi also has a nested record-update form inspired by F# and OCaml; the note below covers that separately.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> xs </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> ys </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">xs, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> p </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> q </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">p, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 9</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span></code></pre>\n</section>\n</div><h2 id=\"musi-の補足\"><a href=\"#musi-の補足\">Musi の補足</a></h2><p>Musi では <code>let r := p.{ x := 3 };</code> や <code>let r := p.{ ...q, y := 9 };</code> のような、入れ子になったレコード更新構文も使えます。\nこの形は上の比較例とは別で、F# や OCaml と同じ系統のレコード更新構文です。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Create one record value.</li><li>Create one array value.</li><li>Build a new value with spread syntax.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>元の値を 1 つ作り、spread を使った別形を 1 つ作ってから <a href=\"/ja/learn/types-and-abstractions/types\">型とジェネリック</a> へ進んでください。</p>\n",
-		"summaryHtml": "構造化された値と、現在の書き換え可能な data の扱い方。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A function is a <code>let</code> binding with parameters.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners learn faster when function syntax grows out of the same form as ordinary value bindings.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Name the function after <code>let</code>.</li>\n<li>Put parameters in parentheses.</li>\n<li>Add a result type when it helps.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one one-argument function.</li>\n<li>Call it once.</li>\n<li>Rename the parameter more clearly.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not jump to methods or classes before plain functions feel ordinary.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/calls\">Calls</a>.</p>\n",
+		"summaryHtml": "Define plain functions with let before learning calls or methods."
 	},
 	{
-		"locale": "ja",
-		"id": "types",
+		"locale": "en",
+		"id": "calls",
 		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "型と抽象化",
-		"path": "/ja/learn/types-and-abstractions/types",
-		"canonicalPath": "/ja/learn/types-and-abstractions/types",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "型注釈と generic を追加するには?",
-				"href": "/ja/learn/types-and-abstractions/types"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/calls",
+		"canonicalPath": "/learn/language/core/calls",
+		"aliases": [
+			"/docs/language/core/calls"
 		],
-		"title": "型とジェネリック",
-		"description": "値と同じ流れで型注釈とジェネリック引数を読みます。",
-		"group": "型",
-		"section": "型",
+		"questions": [],
+		"title": "Calls",
+		"description": "Learn call syntax as its own reading skill before adding dot calls.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 10,
-		"slug": "types",
-		"summary": "型注釈、ジェネリック引数、直接の型適用。",
-		"descriptionHtml": "値と同じ流れで型注釈とジェネリック引数を読みます。",
+		"slug": "calls",
+		"summary": "Call functions directly and follow argument flow left to right.",
+		"descriptionHtml": "Learn call syntax as its own reading skill before adding dot calls.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "ジェネリック",
-				"text": "ジェネリック"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "比較",
-				"text": "比較"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>Musi の型は値や関数の近くに現れます。\n別の宣言節へ切り替えずに読めます。</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> identityFn</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> input;</span></span></code></pre><h2 id=\"ジェネリック\"><a href=\"#ジェネリック\">ジェネリック</a></h2><p>まず値や関数に注釈を足し、再利用が必要になったらジェネリックを使います。\n最初は具体的な型から始めます。1 つの型で意味が通ってからジェネリックに進みます。</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">identityFn[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](port);</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"generic-constraint\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Constrain polymorphic code to capabilities that must exist at call sites.</p>\n<p class=\"code-tabs-note\">Like requiring a driving license before renting a car: callers must provide the needed capability. Musi writes that requirement with <code>where T : Eq</code> before the result type annotation.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> requireEq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">where</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span></code></pre>\n</section>\n</div><h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Add a type annotation to one binding.</li><li>Add a generic parameter to one function.</li><li>Apply that generic explicitly.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>2 つのコード例を試してから <a href=\"/ja/learn/types-and-abstractions/classes-instances-and-laws\">クラスとインスタンス</a> へ進んでください。</p>\n",
-		"summaryHtml": "型注釈、ジェネリック引数、直接の型適用。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x;</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">twice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">21</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A call passes arguments to a callable value.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Definitions and calls look different. Splitting them into separate chapters lowers mental load.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Read the callee first.</li>\n<li>Read the argument list second.</li>\n<li>Keep first call sites small.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Call one function.</li>\n<li>Feed its result into a second call.</li>\n<li>Compare the clearer version.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not read a call as text substitution.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/core/methods\">Methods</a>.</p>\n",
+		"summaryHtml": "Call functions directly and follow argument flow left to right."
 	},
 	{
-		"locale": "ja",
-		"id": "classes-instances-and-laws",
+		"locale": "en",
+		"id": "methods",
 		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "型と抽象化",
-		"path": "/ja/learn/types-and-abstractions/classes-instances-and-laws",
-		"canonicalPath": "/ja/learn/types-and-abstractions/classes-instances-and-laws",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "class を定義して instance を追加するには?",
-				"href": "/ja/learn/types-and-abstractions/classes-instances-and-laws"
-			}
+		"partId": "core",
+		"partTitle": "Core syntax",
+		"path": "/learn/language/core/methods",
+		"canonicalPath": "/learn/language/core/methods",
+		"aliases": [
+			"/docs/language/core/methods"
 		],
-		"title": "クラスとインスタンス",
-		"description": "クラスの書き方を読み、インスタンスを定義します。",
-		"group": "抽象化",
-		"section": "抽象化",
+		"questions": [],
+		"title": "Methods",
+		"description": "Learn Musi’s attached-method model after plain functions and calls.",
+		"group": "Core syntax",
+		"section": "Core syntax",
 		"order": 11,
-		"slug": "classes-instances-and-laws",
-		"summary": "クラス、メソッド、インスタンス宣言。",
-		"descriptionHtml": "クラスの書き方を読み、インスタンスを定義します。",
+		"slug": "methods",
+		"summary": "Use receiver-prefixed methods and dot calls without needing an impl block.",
+		"descriptionHtml": "Learn Musi’s attached-method model after plain functions and calls.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "クラス",
-				"text": "クラス"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "インスタンス",
-				"text": "インスタンス"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "比較",
-				"text": "比較"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>クラスは共有される振る舞いの名前を定義します。\nインスタンスはその振る舞いに具体的な実装を与えます。</p>\n<h2 id=\"クラス\"><a href=\"#クラス\">クラス</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  law</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> reflexive</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"インスタンス\"><a href=\"#インスタンス\">インスタンス</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> eqInt </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> instance</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"class-instance\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Define shared behavior once, then attach concrete implementations per type.</p>\n<p class=\"code-tabs-note\">Like one wall-socket standard with different appliance designs behind the plug. Declare one behavior shape, then implement it per type.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> eqInt </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> instance</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre>\n</section>\n</div><p>1 つの操作の形を複数の型で使いたいときはクラスを使います。1 つの具体型にその振る舞いを与えたいときはインスタンスを使います。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Define one class.</li><li>Add one instance for <code>Int</code>.</li><li>Call the behavior through the class surface.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>2 つのコード例を確認してから <a href=\"/ja/learn/types-and-abstractions/effects-and-handlers\">エフェクトとハンドラ</a> へ進んでください。</p>\n",
-		"summaryHtml": "クラス、メソッド、インスタンス宣言。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#E36209;--shiki-dark:#FFAB70\">self</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : Int).</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">abs</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> self;</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> one </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">one.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">abs</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">();</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Attached methods use receiver-prefixed declarations such as <code>let (self : Int).abs () := ...</code>.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>This keeps attachment explicit without adding an <code>impl</code> wrapper.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Declare the receiver first.</li>\n<li>Put the method name after the dot in the declaration head.</li>\n<li>Call it with dot syntax.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Define one attached method.</li>\n<li>Call it with dot syntax.</li>\n<li>Compare it with an equivalent free function.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not assume dot call falls back to a free function.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/data/records\">Records</a>.</p>\n",
+		"summaryHtml": "Use receiver-prefixed methods and dot calls without needing an impl block."
 	},
 	{
-		"locale": "ja",
-		"id": "effects-and-handlers",
+		"locale": "en",
+		"id": "records",
 		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "型と抽象化",
-		"path": "/ja/learn/types-and-abstractions/effects-and-handlers",
-		"canonicalPath": "/ja/learn/types-and-abstractions/effects-and-handlers",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "effect を定義し、handle し、<code>resume</code> を使うには?",
-				"href": "/ja/learn/types-and-abstractions/effects-and-handlers"
-			}
+		"partId": "data",
+		"partTitle": "Data",
+		"path": "/learn/language/data/records",
+		"canonicalPath": "/learn/language/data/records",
+		"aliases": [
+			"/docs/language/data/records"
 		],
-		"title": "エフェクトとハンドラ",
-		"description": "通常の Musi コードの中で <code>effect</code>、<code>perform</code>、<code>handle</code>、<code>resume</code> を使います。",
-		"group": "エフェクト",
-		"section": "エフェクト",
+		"questions": [],
+		"title": "Records",
+		"description": "Use records for labeled data before mixing in arrays or pattern matching.",
+		"group": "Data",
+		"section": "Data",
 		"order": 12,
-		"slug": "effects-and-handlers",
-		"summary": "Musi の大きな特徴を、実際の構文で示します。",
-		"descriptionHtml": "通常の Musi コードの中で <code>effect</code>、<code>perform</code>、<code>handle</code>、<code>resume</code> を使います。",
+		"slug": "records",
+		"summary": "Build named-field values and access fields directly.",
+		"descriptionHtml": "Use records for labeled data before mixing in arrays or pattern matching.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "まず-handle-する",
-				"text": "まず handle する"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "エフェクトを定義する",
-				"text": "エフェクトを定義する"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "操作を-perform-する",
-				"text": "操作を perform する"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "比較",
-				"text": "比較"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "common-mistake",
+				"text": "Common mistake"
 			},
 			{
 				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>エフェクトは普通の Musi コードの一部です。エフェクトを定義し、操作を <code>perform</code> し、境界で <code>handle</code> します。</p>\n<h2 id=\"まず-handle-する\"><a href=\"#まず-handle-する\">まず handle する</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">handle</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">() </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">using</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value;</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">  readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(k) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> resume</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ok\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><p>ハンドラは操作要求にどう応じるかを決めます。<code>resume</code> は値を渡して実行を続けます。</p>\n<h2 id=\"エフェクトを定義する\"><a href=\"#エフェクトを定義する\">エフェクトを定義する</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> effect</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"操作を-perform-する\"><a href=\"#操作を-perform-する\">操作を perform する</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">();</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"effect-handle\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Capture side-effect requests in one place, then resolve them through handlers.</p>\n<p class=\"code-tabs-note\">At small scale this can look like callback wiring, but at larger scale handlers keep policy at boundaries and reduce plumbing across call chains.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> effect</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">handle</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">() with console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(k) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> resume</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ok\"</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><p>直接呼び出しだと境界のロジックが多くの層ににじむような場面で、エフェクトは役立ちます。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Define one effect with one operation.</li><li>Perform that operation.</li><li>Handle it and use <code>resume</code> once.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>3 つのコード例を最初から最後まで読み、<a href=\"/ja/learn/types-and-abstractions/attributes-and-foreign\">属性と foreign 宣言</a> へ進んでください。</p>\n",
-		"summaryHtml": "Musi の大きな特徴を、実際の構文で示します。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point3 </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">point, z </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 5</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> extended </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">0</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">...</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">values];</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Records group named fields into one value.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Field names make structure visible without adding too much syntax at once.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Build a record with <code>{ field := value }</code>.</li>\n<li>Read fields with dot access.</li>\n<li>Use spread when building an updated copy helps.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Make one record with two fields.</li>\n<li>Read one field.</li>\n<li>Build a spread-updated copy.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not treat records as magical namespaces first.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/data/arrays-and-slices\">Arrays and slices</a>.</p>\n",
+		"summaryHtml": "Build named-field values and access fields directly."
 	},
 	{
-		"locale": "ja",
+		"locale": "en",
+		"id": "arrays-and-slices",
+		"kind": "chapter",
+		"partId": "data",
+		"partTitle": "Data",
+		"path": "/learn/language/data/arrays-and-slices",
+		"canonicalPath": "/learn/language/data/arrays-and-slices",
+		"aliases": [
+			"/docs/language/data/arrays-and-slices"
+		],
+		"questions": [],
+		"title": "Arrays and slices",
+		"description": "Read sequence-shaped data without mixing it into pattern syntax yet.",
+		"group": "Data",
+		"section": "Data",
+		"order": 13,
+		"slug": "arrays-and-slices",
+		"summary": "Store ordered values and learn where slices fit.",
+		"descriptionHtml": "Read sequence-shaped data without mixing it into pattern syntax yet.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> point </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, y </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> values </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">];</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Slice</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/slice\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Slice</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">concat</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">]([</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">], [</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">]);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Arrays hold ordered items. Slices describe sequence-oriented helper work and views.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Sequences are easier to learn when they are not mixed with records and patterns at the same time.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Build arrays with <code>[a, b, c]</code>.</li>\n<li>Use spread to build related arrays.</li>\n<li>Reach for <code>@std/slice</code> helpers when you need sequence operations.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create one array.</li>\n<li>Build a second array with spread.</li>\n<li>Call one <code>Slice</code> helper.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not assume arrays and slices are the same word for the same thing.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/data/patterns\">Patterns</a>.</p>\n",
+		"summaryHtml": "Store ordered values and learn where slices fit."
+	},
+	{
+		"locale": "en",
+		"id": "patterns",
+		"kind": "chapter",
+		"partId": "data",
+		"partTitle": "Data",
+		"path": "/learn/language/data/patterns",
+		"canonicalPath": "/learn/language/data/patterns",
+		"aliases": [
+			"/docs/language/data/patterns"
+		],
+		"questions": [],
+		"title": "Patterns",
+		"description": "Learn pattern matching after records and arrays, not before.",
+		"group": "Data",
+		"section": "Data",
+		"order": 14,
+		"slug": "patterns",
+		"summary": "Use case and destructuring to branch on data shape.",
+		"descriptionHtml": "Learn pattern matching after records and arrays, not before.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> data</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Default</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Port</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">case</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">of</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Configured</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(port) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">.Default</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> =></span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Patterns inspect structured values by shape.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Pattern matching lands much better once you already understand the shapes you are matching.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Define a small <code>data</code> type.</li>\n<li>Construct one value.</li>\n<li>Match it with <code>case ... of</code>.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Define a two-case <code>data</code> type.</li>\n<li>Construct each case once.</li>\n<li>Return different values from a <code>case</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not start with deeply nested patterns while simple constructor matching still feels new.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/organization/files\">Files</a>.</p>\n",
+		"summaryHtml": "Use case and destructuring to branch on data shape."
+	},
+	{
+		"locale": "en",
+		"id": "files",
+		"kind": "chapter",
+		"partId": "organization",
+		"partTitle": "Code organization",
+		"path": "/learn/language/organization/files",
+		"canonicalPath": "/learn/language/organization/files",
+		"aliases": [
+			"/docs/language/organization/files"
+		],
+		"questions": [],
+		"title": "Files",
+		"description": "Separate file reading from package structure to reduce beginner overload.",
+		"group": "Code organization",
+		"section": "Code organization",
+		"order": 15,
+		"slug": "files",
+		"summary": "Know what a single file means before building a package.",
+		"descriptionHtml": "Separate file reading from package structure to reduce beginner overload.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A Musi file is a direct unit of source.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Readers usually understand one file before they understand package manifests.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start with one <code>index.ms</code>.</li>\n<li>Keep related code close while learning.</li>\n<li>Move to package structure only when it helps.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create a scratch file.</li>\n<li>Rename it once.</li>\n<li>Run <code>music check</code> on it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not jump into manifest details before one-file flow feels ordinary.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/organization/packages\">Packages</a>.</p>\n",
+		"summaryHtml": "Know what a single file means before building a package."
+	},
+	{
+		"locale": "en",
+		"id": "packages",
+		"kind": "chapter",
+		"partId": "organization",
+		"partTitle": "Code organization",
+		"path": "/learn/language/organization/packages",
+		"canonicalPath": "/learn/language/organization/packages",
+		"aliases": [
+			"/docs/language/organization/packages"
+		],
+		"questions": [],
+		"title": "Packages",
+		"description": "Learn package roots and entry files after single-file work makes sense.",
+		"group": "Code organization",
+		"section": "Code organization",
+		"order": 16,
+		"slug": "packages",
+		"summary": "Move from one file to package-managed code without changing mental models.",
+		"descriptionHtml": "Learn package roots and entry files after single-file work makes sense.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> new</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> hello</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">cd</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> hello</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A package groups files, dependencies, and entry settings under <code>musi.json</code>.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Package structure matters once code grows, but it is too much ceremony for a first file.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Create a package with <code>musi new hello</code>.</li>\n<li>Inspect the generated structure.</li>\n<li>Use <code>musi run</code>, <code>musi check</code>, and <code>musi test</code>.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create one package.</li>\n<li>Open its entry file.</li>\n<li>Run <code>musi run</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not assume package work replaces direct file work.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/organization/imports-and-exports\">Imports and exports</a>.</p>\n",
+		"summaryHtml": "Move from one file to package-managed code without changing mental models."
+	},
+	{
+		"locale": "en",
+		"id": "imports-and-exports",
+		"kind": "chapter",
+		"partId": "organization",
+		"partTitle": "Code organization",
+		"path": "/learn/language/organization/imports-and-exports",
+		"canonicalPath": "/learn/language/organization/imports-and-exports",
+		"aliases": [
+			"/docs/language/organization/imports-and-exports"
+		],
+		"questions": [],
+		"title": "Imports and exports",
+		"description": "Use imports and exports after package shape is clear.",
+		"group": "Code organization",
+		"section": "Code organization",
+		"order": 17,
+		"slug": "imports-and-exports",
+		"summary": "Bring code in explicitly and expose only what other files need.",
+		"descriptionHtml": "Use imports and exports after package shape is clear.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Local</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"./index.ms\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Local</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">answer</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Imports bring values or modules into scope. Exports mark names other files may use.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Explicit module boundaries make dependency flow visible.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Import with <code>let Name := import &quot;spec&quot;;</code>.</li>\n<li>Export only names you want to publish.</li>\n<li>Prefer small public surfaces.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Import one <code>@std</code> module.</li>\n<li>Export one helper.</li>\n<li>Use it from a second file.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not use imports as a substitute for naming discipline.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/types/type-annotations\">Type annotations</a>.</p>\n",
+		"summaryHtml": "Bring code in explicitly and expose only what other files need."
+	},
+	{
+		"locale": "en",
+		"id": "type-annotations",
+		"kind": "chapter",
+		"partId": "types",
+		"partTitle": "Types",
+		"path": "/learn/language/types/type-annotations",
+		"canonicalPath": "/learn/language/types/type-annotations",
+		"aliases": [
+			"/docs/language/types/type-annotations"
+		],
+		"questions": [],
+		"title": "Type annotations",
+		"description": "Introduce type annotations before inference and generics.",
+		"group": "Types",
+		"section": "Types",
+		"order": 18,
+		"slug": "type-annotations",
+		"summary": "Add type information where it helps readers and tools.",
+		"descriptionHtml": "Introduce type annotations before inference and generics.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> identityFn</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> input;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Type annotations tell readers and the compiler what kind of value or result you expect.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>They provide anchors before inference and generic code enter the picture.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Annotate important bindings first.</li>\n<li>Annotate public helpers before tiny locals.</li>\n<li>Use annotations for clarity, not decoration.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Annotate one integer binding.</li>\n<li>Annotate one function result.</li>\n<li>Compare readability.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not annotate everything by habit.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/types/type-inference\">Type inference</a>.</p>\n",
+		"summaryHtml": "Add type information where it helps readers and tools."
+	},
+	{
+		"locale": "en",
+		"id": "type-inference",
+		"kind": "chapter",
+		"partId": "types",
+		"partTitle": "Types",
+		"path": "/learn/language/types/type-inference",
+		"canonicalPath": "/learn/language/types/type-inference",
+		"aliases": [
+			"/docs/language/types/type-inference"
+		],
+		"questions": [],
+		"title": "Type inference",
+		"description": "Learn how inference reduces repetition without hiding too much.",
+		"group": "Types",
+		"section": "Types",
+		"order": 19,
+		"slug": "type-inference",
+		"summary": "See what Musi can infer so you know when to write less.",
+		"descriptionHtml": "Learn how inference reduces repetition without hiding too much.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> next </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">next;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Inference fills in some type information from surrounding code.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Good inference keeps code shorter, but beginners need to know where convenience stops.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start from an annotated example.</li>\n<li>Remove one obvious annotation at a time.</li>\n<li>Add annotations back when clarity drops.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one annotated binding.</li>\n<li>Remove one obvious annotation.</li>\n<li>Keep one non-obvious annotation.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not guess what inference can do in a hard example.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/types/generics\">Generics</a>.</p>\n",
+		"summaryHtml": "See what Musi can infer so you know when to write less."
+	},
+	{
+		"locale": "en",
+		"id": "generics",
+		"kind": "chapter",
+		"partId": "types",
+		"partTitle": "Types",
+		"path": "/learn/language/types/generics",
+		"canonicalPath": "/learn/language/types/generics",
+		"aliases": [
+			"/docs/language/types/generics"
+		],
+		"questions": [],
+		"title": "Generics",
+		"description": "Introduce type parameters after annotations and inference make sense.",
+		"group": "Types",
+		"section": "Types",
+		"order": 20,
+		"slug": "generics",
+		"summary": "Write reusable functions over many types without losing clarity.",
+		"descriptionHtml": "Introduce type parameters after annotations and inference make sense.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> port : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> identityFn</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> input;</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">identityFn[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](port);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Generics let one definition work across many types by using type parameters such as <code>T</code>.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Without generics, reusable code quickly turns into copy-paste or overly concrete helpers.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Add a type parameter list like <code>[T]</code>.</li>\n<li>Use that parameter in inputs and outputs.</li>\n<li>Apply the generic explicitly when it helps reading.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one generic identity function.</li>\n<li>Call it with <code>Int</code>.</li>\n<li>Call it with another type.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not add several type parameters before one-parameter generic code feels natural.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/abstractions/classes\">Classes</a>.</p>\n",
+		"summaryHtml": "Write reusable functions over many types without losing clarity."
+	},
+	{
+		"locale": "en",
+		"id": "classes",
+		"kind": "chapter",
+		"partId": "abstractions",
+		"partTitle": "Abstractions",
+		"path": "/learn/language/abstractions/classes",
+		"canonicalPath": "/learn/language/abstractions/classes",
+		"aliases": [
+			"/docs/language/abstractions/classes"
+		],
+		"questions": [],
+		"title": "Classes",
+		"description": "Start abstraction work with class declarations alone before instances or laws.",
+		"group": "Abstractions",
+		"section": "Abstractions",
+		"order": 21,
+		"slug": "classes",
+		"summary": "Describe shared behavior with class declarations.",
+		"descriptionHtml": "Start abstraction work with class declarations alone before instances or laws.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  law</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> reflexive</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A class describes a behavior surface that different types can implement.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners need to separate “what behavior should exist” from “how a type implements it”.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Define one class with one operation.</li>\n<li>Read it as a contract shape.</li>\n<li>Keep the first class tiny.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Define one class member.</li>\n<li>Name the behavior clearly.</li>\n<li>List the types that should implement it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not read classes here as inheritance trees.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/abstractions/instances\">Instances</a>.</p>\n",
+		"summaryHtml": "Describe shared behavior with class declarations."
+	},
+	{
+		"locale": "en",
+		"id": "instances",
+		"kind": "chapter",
+		"partId": "abstractions",
+		"partTitle": "Abstractions",
+		"path": "/learn/language/abstractions/instances",
+		"canonicalPath": "/learn/language/abstractions/instances",
+		"aliases": [
+			"/docs/language/abstractions/instances"
+		],
+		"questions": [],
+		"title": "Instances",
+		"description": "Learn instance declarations only after classes make sense on their own.",
+		"group": "Abstractions",
+		"section": "Abstractions",
+		"order": 22,
+		"slug": "instances",
+		"summary": "Attach concrete behavior to concrete types.",
+		"descriptionHtml": "Learn instance declarations only after classes make sense on their own.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> eqInt </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> instance</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>An instance says how one specific type satisfies a class.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Splitting classes from instances reduces mental overload.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Choose one class.</li>\n<li>Choose one concrete type.</li>\n<li>Implement the required members in one instance block.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Take a tiny class.</li>\n<li>Add one instance for <code>Int</code>.</li>\n<li>Use it once.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not define several classes and instances at once during early practice.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/abstractions/laws\">Laws</a>.</p>\n",
+		"summaryHtml": "Attach concrete behavior to concrete types."
+	},
+	{
+		"locale": "en",
+		"id": "laws",
+		"kind": "chapter",
+		"partId": "abstractions",
+		"partTitle": "Abstractions",
+		"path": "/learn/language/abstractions/laws",
+		"canonicalPath": "/learn/language/abstractions/laws",
+		"aliases": [
+			"/docs/language/abstractions/laws"
+		],
+		"questions": [],
+		"title": "Laws",
+		"description": "Add semantic expectations after class and instance basics.",
+		"group": "Abstractions",
+		"section": "Abstractions",
+		"order": 23,
+		"slug": "laws",
+		"summary": "Use laws to document the meaning of an abstraction, not just its shape.",
+		"descriptionHtml": "Add semantic expectations after class and instance basics.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Eq</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> class</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) (a : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, b : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  law</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> reflexive</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">T</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> .True</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Laws express behavioral expectations for a class.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Signatures alone do not explain semantics.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Keep early laws small.</li>\n<li>Express one idea per law.</li>\n<li>Explain each law in plain language.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Read one class law.</li>\n<li>Restate it in plain English.</li>\n<li>Imagine a bad instance that breaks it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not write vague laws.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/effects\">Effects</a>.</p>\n",
+		"summaryHtml": "Use laws to document the meaning of an abstraction, not just its shape."
+	},
+	{
+		"locale": "en",
+		"id": "effects",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/effects",
+		"canonicalPath": "/learn/language/effects-runtime/effects",
+		"aliases": [
+			"/docs/language/effects-runtime/effects"
+		],
+		"questions": [],
+		"title": "Effects",
+		"description": "Introduce effect vocabulary before using clauses or handlers.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 24,
+		"slug": "effects",
+		"summary": "Understand effects as requests for work, not immediate hidden side effects.",
+		"descriptionHtml": "Introduce effect vocabulary before using clauses or handlers.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> effect</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">();</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>An effect describes operations that code may request.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Visible effect requests are easier to reason about than hidden ambient side effects.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Define a small effect.</li>\n<li>Perform one operation from it.</li>\n<li>Read the operation as a request, not magic global access.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Define one effect.</li>\n<li>Perform one operation.</li>\n<li>Describe what must now handle it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not try to learn full handlers before the request model is stable.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/using\">Using</a>.</p>\n",
+		"summaryHtml": "Understand effects as requests for work, not immediate hidden side effects."
+	},
+	{
+		"locale": "en",
+		"id": "using",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/using",
+		"canonicalPath": "/learn/language/effects-runtime/using",
+		"aliases": [
+			"/docs/language/effects-runtime/using"
+		],
+		"questions": [],
+		"title": "Using",
+		"description": "Learn using syntax before full handlers so capability requirements stay visible.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 25,
+		"slug": "using",
+		"summary": "Read and write using clauses as explicit capability flow.",
+		"descriptionHtml": "Learn using syntax before full handlers so capability requirements stay visible.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> readClosed</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> using</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Console</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> } </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">  perform</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> State</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">();</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>using</code> spells out effect requirements in declarations and types.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Capability flow stays readable only when requirements stay explicit.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Read <code>using { Console }</code> as a required capability set.</li>\n<li>Put <code>using</code> where the signature should expose that need.</li>\n<li>Keep early examples to one capability.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one signature with <code>using</code>.</li>\n<li>Read it aloud in plain English.</li>\n<li>Compare it with a hidden requirement.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not treat <code>using</code> as decoration.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/handlers\">Handlers</a>.</p>\n",
+		"summaryHtml": "Read and write using clauses as explicit capability flow."
+	},
+	{
+		"locale": "en",
+		"id": "handlers",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/handlers",
+		"canonicalPath": "/learn/language/effects-runtime/handlers",
+		"aliases": [
+			"/docs/language/effects-runtime/handlers"
+		],
+		"questions": [],
+		"title": "Handlers",
+		"description": "Handle effects after the effect and using model are already clear.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 26,
+		"slug": "handlers",
+		"summary": "Resolve performed effects at the boundary where policy belongs.",
+		"descriptionHtml": "Handle effects after the effect and using model are already clear.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">handle</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> perform</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">() </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">using</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> console {</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value;</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">  readln</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(k) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">=></span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> resume</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"ok\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>A handler decides what to do when effect operations are performed.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>This keeps core logic separate from boundary policy.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Wrap effectful work in <code>handle ... using ...</code>.</li>\n<li>Provide a value clause.</li>\n<li>Provide the effect clauses you need.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Perform one effect operation.</li>\n<li>Handle it once.</li>\n<li>Change the handled result.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not push all business logic into handlers.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/foundation\">Foundation</a>.</p>\n",
+		"summaryHtml": "Resolve performed effects at the boundary where policy belongs."
+	},
+	{
+		"locale": "en",
+		"id": "foundation",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/foundation",
+		"canonicalPath": "/learn/language/effects-runtime/foundation",
+		"aliases": [
+			"/docs/language/effects-runtime/foundation"
+		],
+		"questions": [],
+		"title": "Foundation",
+		"description": "Separate language foundation from runtime and stdlib layers.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 27,
+		"slug": "foundation",
+		"summary": "Understand what belongs to musi:core before reaching for stdlib modules.",
+		"descriptionHtml": "Separate language foundation from runtime and stdlib layers.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Core</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"musi:core\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Core</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>musi:core</code> holds foundation-level language concepts.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners need a clear answer to “what is built in” versus “what is library code”.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Treat <code>musi:core</code> as low-level foundation.</li>\n<li>Reach for it rarely in ordinary app code.</li>\n<li>Prefer <code>@std</code> for day-to-day helpers.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Import one foundation module.</li>\n<li>Name why it feels lower-level.</li>\n<li>Compare it with <code>@std</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not build ordinary app APIs directly on foundation modules when a clearer stdlib layer exists.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/runtime\">Runtime</a>.</p>\n",
+		"summaryHtml": "Understand what belongs to musi:core before reaching for stdlib modules."
+	},
+	{
+		"locale": "en",
+		"id": "runtime",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/runtime",
+		"canonicalPath": "/learn/language/effects-runtime/runtime",
+		"aliases": [
+			"/docs/language/effects-runtime/runtime"
+		],
+		"questions": [],
+		"title": "Runtime",
+		"description": "Learn what runtime-backed imports are for and why they are separate from stdlib helpers.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 28,
+		"slug": "runtime",
+		"summary": "Use musi:runtime for runtime-backed capabilities and host services.",
+		"descriptionHtml": "Learn what runtime-backed imports are for and why they are separate from stdlib helpers.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Runtime</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"musi:runtime\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Runtime</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">envGet</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"HOME\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>musi:runtime</code> is the boundary for runtime-backed services.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Host-powered behavior has different boundaries than pure helpers.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Read <code>musi:runtime</code> imports as lower-level capability surfaces.</li>\n<li>Prefer <code>@std</code> wrappers in ordinary code.</li>\n<li>Reach lower only when you are building boundaries.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Import <code>musi:runtime</code>.</li>\n<li>Call one helper.</li>\n<li>Compare it with <code>@std/env</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not confuse <code>musi:runtime</code> with general-purpose stdlib.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/effects-runtime/stdlib\">Stdlib</a>.</p>\n",
+		"summaryHtml": "Use musi:runtime for runtime-backed capabilities and host services."
+	},
+	{
+		"locale": "en",
+		"id": "stdlib",
+		"kind": "chapter",
+		"partId": "effects-runtime",
+		"partTitle": "Effects and runtime",
+		"path": "/learn/language/effects-runtime/stdlib",
+		"canonicalPath": "/learn/language/effects-runtime/stdlib",
+		"aliases": [
+			"/docs/language/effects-runtime/stdlib"
+		],
+		"questions": [],
+		"title": "Stdlib",
+		"description": "Place the standard library on top of foundation and runtime so the layering stays clear.",
+		"group": "Effects and runtime",
+		"section": "Effects and runtime",
+		"order": 29,
+		"slug": "stdlib",
+		"summary": "Reach for @std modules first in ordinary application code.",
+		"descriptionHtml": "Place the standard library on top of foundation and runtime so the layering stays clear.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">  Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>@std</code> is the user-facing standard library.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Most users should learn one clear library surface first.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Import focused stdlib packages directly.</li>\n<li>Prefer modules like <code>@std/option</code> and <code>@std/testing</code>.</li>\n<li>Use the root catalog only when it reads better.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Import one focused <code>@std</code> module.</li>\n<li>Call one helper.</li>\n<li>Add one test helper import.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not reach for low-level <code>musi:*</code> imports when a clear <code>@std</code> module already solves the job.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/advanced/attributes\">Attributes</a>.</p>\n",
+		"summaryHtml": "Reach for @std modules first in ordinary application code."
+	},
+	{
+		"locale": "en",
+		"id": "attributes",
+		"kind": "chapter",
+		"partId": "advanced",
+		"partTitle": "Advanced and tooling",
+		"path": "/learn/language/advanced/attributes",
+		"canonicalPath": "/learn/language/advanced/attributes",
+		"aliases": [
+			"/docs/language/advanced/attributes"
+		],
+		"questions": [],
+		"title": "Attributes",
+		"description": "Introduce attributes separately from foreign declarations so each concept stays narrow.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 30,
+		"slug": "attributes",
+		"summary": "Use attributes when the compiler or runtime needs explicit extra metadata.",
+		"descriptionHtml": "Introduce attributes separately from foreign declarations so each concept stays narrow.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">@</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">link</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Attributes attach structured metadata to declarations.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Readers should see attributes as explicit metadata, not mysterious decoration.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Put the attribute on the declaration it modifies.</li>\n<li>Keep first uses small.</li>\n<li>Use attributes only when plain syntax cannot say the same thing clearly.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Read one attributed declaration.</li>\n<li>Identify what the attribute changes.</li>\n<li>Decide whether plain syntax could have expressed it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not collect attributes casually.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/advanced/foreign\">Foreign</a>.</p>\n",
+		"summaryHtml": "Use attributes when the compiler or runtime needs explicit extra metadata."
+	},
+	{
+		"locale": "en",
+		"id": "foreign",
+		"kind": "chapter",
+		"partId": "advanced",
+		"partTitle": "Advanced and tooling",
+		"path": "/learn/language/advanced/foreign",
+		"canonicalPath": "/learn/language/advanced/foreign",
+		"aliases": [
+			"/docs/language/advanced/foreign"
+		],
+		"questions": [],
+		"title": "Foreign",
+		"description": "Keep foreign declarations separate from general attributes so boundary thinking stays clear.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 31,
+		"slug": "foreign",
+		"summary": "Declare foreign bindings at the runtime boundary, not inside ordinary domain code.",
+		"descriptionHtml": "Keep foreign declarations separate from general attributes so boundary thinking stays clear.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Foreign declarations bind Musi code to external symbols and ABIs.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Cross-language boundaries are powerful but sharp, so they belong at edges.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Declare the ABI explicitly.</li>\n<li>Keep the surface narrow.</li>\n<li>Wrap foreign calls behind cleaner helpers when possible.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Read one foreign declaration.</li>\n<li>List the boundary facts it exposes.</li>\n<li>Sketch the wrapper you would place around it.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not scatter foreign declarations through ordinary business code.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/advanced/quote-and-syntax\">Quote and syntax</a>.</p>\n",
+		"summaryHtml": "Declare foreign bindings at the runtime boundary, not inside ordinary domain code."
+	},
+	{
+		"locale": "en",
 		"id": "quote-and-syntax",
 		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "型と抽象化",
-		"path": "/ja/learn/types-and-abstractions/quote-and-syntax",
-		"canonicalPath": "/ja/learn/types-and-abstractions/quote-and-syntax",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "実際の Musi code で <code>quote</code> と splice はどう使う?",
-				"href": "/ja/learn/types-and-abstractions/quote-and-syntax"
-			}
+		"partId": "advanced",
+		"partTitle": "Advanced and tooling",
+		"path": "/learn/language/advanced/quote-and-syntax",
+		"canonicalPath": "/learn/language/advanced/quote-and-syntax",
+		"aliases": [
+			"/docs/language/advanced/quote-and-syntax"
 		],
-		"title": "quote と構文値",
-		"description": "再利用できるコードひな形と構文主導の作業に quote とスプライスを使います。",
-		"group": "抽象化",
-		"section": "抽象化",
-		"order": 14,
-		"slug": "quote-and-syntax",
-		"summary": "quote した式、スプライス形式、実用的なメタプログラミングの型。",
-		"descriptionHtml": "再利用できるコードひな形と構文主導の作業に quote とスプライスを使います。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "quote-を使わない場合",
-				"text": "quote を使わない場合"
-			},
-			{
-				"depth": 2,
-				"id": "quote-とスプライスを使う場合",
-				"text": "quote とスプライスを使う場合"
-			},
-			{
-				"depth": 2,
-				"id": "小さい形",
-				"text": "小さい形"
-			},
-			{
-				"depth": 2,
-				"id": "比較",
-				"text": "比較"
-			},
-			{
-				"depth": 2,
-				"id": "試す",
-				"text": "試す"
-			},
-			{
-				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
-			}
-		],
-		"html": "<p>quote 構文を使うと、コードを data として扱い、その形の中に値や部分式をスプライスできます。</p>\n<h2 id=\"quote-を使わない場合\"><a href=\"#quote-を使わない場合\">quote を使わない場合</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> addOne</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> addTwo</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (x : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"quote-とスプライスを使う場合\"><a href=\"#quote-とスプライスを使う場合\">quote とスプライスを使う場合</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTemplate </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> #(delta));</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addOneSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTwoSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p>コードの形そのものを組み立てたり変換したりしたいときは <code>quote</code> を使います。</p>\n<h2 id=\"小さい形\"><a href=\"#小さい形\">小さい形</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">  x;</span></span>\n<span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">};</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"quote-metaprogramming\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Build or transform code structure itself, not only runtime values.</p>\n<p class=\"code-tabs-note\">When a language lacks first-class quote/splice, the closest equivalent is usually macros, AST builders, or plain code generators.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTemplate </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> #(delta));</span></span></code></pre>\n</section>\n</div><p><code>#name</code> や <code>#(expr)</code> のようなスプライス形式は quote の文脈の中でだけ有効です。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Write one <code>quote</code> expression.</li><li>Splice one value into it.</li><li>Compare the quoted shape with duplicated handwritten code.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>重複した補助関数の組を 1 つ選び、1 つの quote 用ひな形に置き換えてから <a href=\"/ja/learn/tooling/foundation-and-standard-library\">基盤ライブラリと標準ライブラリ</a> へ進んでください。</p>\n",
-		"summaryHtml": "quote した式、スプライス形式、実用的なメタプログラミングの型。"
-	},
-	{
-		"locale": "ja",
-		"id": "attributes-and-foreign",
-		"kind": "chapter",
-		"partId": "types-and-abstractions",
-		"partTitle": "型と抽象化",
-		"path": "/ja/learn/types-and-abstractions/attributes-and-foreign",
-		"canonicalPath": "/ja/learn/types-and-abstractions/attributes-and-foreign",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "foreign function と attribute を宣言するには?",
-				"href": "/ja/learn/types-and-abstractions/attributes-and-foreign"
-			}
-		],
-		"title": "属性と foreign 宣言",
-		"description": "安定した公開属性、予約済みコンパイラ属性、foreign バインディングを使います。",
-		"group": "抽象化",
-		"section": "抽象化",
-		"order": 13,
-		"slug": "attributes-and-foreign",
-		"summary": "安定した公開属性、予約済みコンパイラ属性、foreign バインディング。",
-		"descriptionHtml": "安定した公開属性、予約済みコンパイラ属性、foreign バインディングを使います。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "foreign-バインディング",
-				"text": "Foreign バインディング"
-			},
-			{
-				"depth": 2,
-				"id": "公開属性",
-				"text": "公開属性"
-			},
-			{
-				"depth": 2,
-				"id": "予約済みコンパイラ属性",
-				"text": "予約済みコンパイラ属性"
-			},
-			{
-				"depth": 2,
-				"id": "試す",
-				"text": "試す"
-			},
-			{
-				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
-			}
-		],
-		"html": "<p>属性は宣言に付く単純なメタデータです。大半は公開用です。<code>@known</code> と <code>@intrinsic</code> の 2 つはコンパイラ側が持ちます。</p>\n<h2 id=\"foreign-バインディング\"><a href=\"#foreign-バインディング\">Foreign バインディング</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><h2 id=\"公開属性\"><a href=\"#公開属性\">公開属性</a></h2><p>宣言に明示的なメタデータが必要なときは次を使います。</p>\n<ul>\n<li><code>@link</code></li>\n<li><code>@when</code></li>\n<li><code>@repr</code></li>\n<li><code>@layout</code></li>\n<li><code>@frozen</code></li>\n<li><code>@hot</code></li>\n<li><code>@cold</code></li>\n<li><code>@deprecated</code></li>\n<li><code>@since</code></li>\n</ul>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">@</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">link</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(name </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">foreign</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> \"c\" </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> (msg : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span></code></pre><p><code>@frozen</code> は export される non-opaque <code>data</code> に対する ABI/layout の約束です。不変を意味するわけではありません。</p>\n<p><code>@hot</code> と <code>@cold</code> は callable 宣言に付く optimizer hint です。意味論は変えません。</p>\n<h2 id=\"予約済みコンパイラ属性\"><a href=\"#予約済みコンパイラ属性\">予約済みコンパイラ属性</a></h2><p>予約済み属性は基盤層やコンパイラ管理のモジュールの中でだけ使います。</p>\n<ul>\n<li><code>@known(name := &quot;...&quot;)</code></li>\n<li><code>@intrinsic(name := &quot;...&quot;)</code></li>\n</ul>\n<p><code>@known</code> は <code>Type</code> や <code>CString</code> のようなコンパイラ既知の束縛を示します。</p>\n<p><code>@intrinsic</code> は <code>musi:intrinsics</code> にあるコンパイラ管理のランタイムフックを示します。一般的な利用者向けメタデータではありません。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Declare one <code>foreign</code> binding.</li><li>Add one attribute to it.</li><li>Keep the declaration minimal and explicit.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>まず foreign の例を読み、その後 <a href=\"/ja/learn/types-and-abstractions/quote-and-syntax\">quote と構文値</a> へ進んでください。</p>\n",
-		"summaryHtml": "安定した公開属性、予約済みコンパイラ属性、foreign バインディング。"
-	},
-	{
-		"locale": "ja",
-		"id": "foundation-and-standard-library",
-		"kind": "chapter",
-		"partId": "tooling",
-		"partTitle": "ツール",
-		"path": "/ja/learn/tooling/foundation-and-standard-library",
-		"canonicalPath": "/ja/learn/tooling/foundation-and-standard-library",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "<code>@std</code> と <code>musi:*</code> はどう違う?",
-				"href": "/ja/learn/tooling/foundation-and-standard-library"
-			}
-		],
-		"title": "基盤ライブラリと標準ライブラリ",
-		"description": "<code>@std</code> を使う場面と、より低い層の基盤名を見ている場面を区別します。",
-		"group": "ツール",
-		"section": "ツール",
-		"order": 15,
-		"slug": "foundation-and-standard-library",
-		"summary": "標準ライブラリ群と、より低い層の基盤名前空間。",
-		"descriptionHtml": "<code>@std</code> を使う場面と、より低い層の基盤名を見ている場面を区別します。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "基本の分け方",
-				"text": "基本の分け方"
-			},
-			{
-				"depth": 2,
-				"id": "比較",
-				"text": "比較"
-			},
-			{
-				"depth": 2,
-				"id": "試す",
-				"text": "試す"
-			},
-			{
-				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
-			}
-		],
-		"html": "<p>多くのコードは <code>@std</code> から始まります。\n<code>musi:*</code> は基盤レベルの機能が必要なときに使う、より低い層の名前空間です。</p>\n<h2 id=\"基本の分け方\"><a href=\"#基本の分け方\">基本の分け方</a></h2><ul>\n<li>日常の作業には <code>@std</code></li>\n<li>低い層の操作には <code>musi:*</code></li>\n</ul>\n<p>ほとんどのコードは <code>@std</code> にとどめるべきです。言語ランタイムの境界や、より低い層のコンパイラ向けツールを扱うときに <code>musi:*</code> を使います。</p>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> configured </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](configured, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> parsed </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">ok</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">String</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">](parsed, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"import-stdlib\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">Import the standard library, then reach the family you need. Musi keeps stdlib access explicit through <code>@std</code>.</p>\n<p class=\"code-tabs-note\">Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> value </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">some</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre>\n</section>\n</div><h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Import one <code>@std</code> module.</li><li>Import one <code>musi:*</code> module.</li><li>Write down which one belongs in app code.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>プロジェクトのインポートを 1 つ <code>@std</code> に移し、その後 <a href=\"/ja/learn/tooling/testing-and-running\">テストと実行</a> へ進んでください。</p>\n",
-		"summaryHtml": "標準ライブラリ群と、より低い層の基盤名前空間。"
-	},
-	{
-		"locale": "ja",
-		"id": "testing-and-running",
-		"kind": "chapter",
-		"partId": "tooling",
-		"partTitle": "ツール",
-		"path": "/ja/learn/tooling/testing-and-running",
-		"canonicalPath": "/ja/learn/tooling/testing-and-running",
-		"aliases": [],
-		"questions": [
-			{
-				"label": "test、package、direct file を実行するには?",
-				"href": "/ja/learn/tooling/testing-and-running"
-			}
-		],
-		"title": "テストと実行",
-		"description": "パッケージを実行し、テストを走らせ、必要なときは直接実行の CLI を使います。",
-		"group": "ツール",
-		"section": "ツール",
-		"order": 16,
-		"slug": "testing-and-running",
-		"summary": "パッケージ作業と単体ファイル作業に使う主要なコマンド。",
-		"descriptionHtml": "パッケージを実行し、テストを走らせ、必要なときは直接実行の CLI を使います。",
-		"headings": [
-			{
-				"depth": 2,
-				"id": "テストの形",
-				"text": "テストの形"
-			},
-			{
-				"depth": 2,
-				"id": "パッケージコマンド",
-				"text": "パッケージコマンド"
-			},
-			{
-				"depth": 2,
-				"id": "直接実行コマンド",
-				"text": "直接実行コマンド"
-			},
-			{
-				"depth": 2,
-				"id": "比較",
-				"text": "比較"
-			},
-			{
-				"depth": 2,
-				"id": "試す",
-				"text": "試す"
-			},
-			{
-				"depth": 2,
-				"id": "次の一歩",
-				"text": "次の一歩"
-			}
-		],
-		"html": "<p>テストと実行は対象ごとに分かれています。</p>\n<ul>\n<li>パッケージ単位の作業は <code>musi</code></li>\n<li>ソースや成果物を直接扱う作業は <code>music</code></li>\n</ul>\n<h2 id=\"テストの形\"><a href=\"#テストの形\">テストの形</a></h2><ul>\n<li>テスト は <code>*.test.ms</code> に置く</li>\n<li>各 テスト は export した <code>test</code> で公開する</li>\n</ul>\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">  Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre><h2 id=\"パッケージコマンド\"><a href=\"#パッケージコマンド\">パッケージコマンド</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> test</span></span></code></pre><h2 id=\"直接実行コマンド\"><a href=\"#直接実行コマンド\">直接実行コマンド</a></h2><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.seam</span></span></code></pre><h2 id=\"比較\"><a href=\"#比較\">比較</a></h2><div class=\"code-tabs\" data-example-id=\"testing-entry\">\n<div class=\"code-tabs-meta\">\n<p class=\"code-tabs-caption\">A small test entry should read like ordinary code. Musi uses <code>export let test ()</code> inside <code>*.test.ms</code> files.</p>\n<p class=\"code-tabs-note\">Think smoke detector checks: small, repeatable, and run regularly. Musi discovers these by file name and runs them with <code>musi test</code>.</p>\n</div>\n<section role=\"tabpanel\" class=\"code-panel\">\n<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre>\n</section>\n</div><p>通常のプロジェクト作業には <code>musi</code> を使います。1 つのソースファイルやビルド済みの成果物を直接実行・確認したいときは <code>music</code> を使います。</p>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Create one <code>*.test.ms</code> file.</li><li>Export a <code>test</code> binding.</li><li>Run <code>musi test</code> and <code>music check index.ms</code>.</li></ol></div><h2 id=\"次の一歩\"><a href=\"#次の一歩\">次の一歩</a></h2><p>パッケージコマンドを 1 つ、直接実行コマンドを 1 つ実行し、分かりにくい挙動があれば該当する章へ戻ってください。</p>\n<p><a href=\"/ja/community\">コミュニティ</a> にはプロジェクトへの入口と公開ゲストブックがあります。</p>\n",
-		"summaryHtml": "パッケージ作業と単体ファイル作業に使う主要なコマンド。"
-	},
-	{
-		"locale": "ja",
-		"id": "common-questions",
-		"kind": "chapter",
-		"partId": "questions",
-		"partTitle": "よくある質問",
-		"path": "/ja/learn/questions/common-questions",
-		"canonicalPath": "/ja/learn/questions/common-questions",
-		"aliases": [],
 		"questions": [],
-		"title": "よくある質問",
-		"description": "Musi ブックへの作業別リンク集。",
-		"group": "よくある質問",
-		"section": "よくある質問",
-		"order": 6,
-		"slug": "common-questions",
-		"summary": "セットアップ、インポート、型、エフェクト、テストに関する作業別リンク集です。",
-		"descriptionHtml": "Musi ブックへの作業別リンク集。",
+		"title": "Quote and syntax",
+		"description": "Introduce quote and syntax work late so beginners are not overloaded too early.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 32,
+		"slug": "quote-and-syntax",
+		"summary": "Treat code as data only after ordinary code reading feels natural.",
+		"descriptionHtml": "Introduce quote and syntax work late so beginners are not overloaded too early.",
 		"headings": [
 			{
 				"depth": 2,
-				"id": "セットアップとファイル",
-				"text": "セットアップとファイル"
+				"id": "what",
+				"text": "What"
 			},
 			{
 				"depth": 2,
-				"id": "構文と-data",
-				"text": "構文と data"
+				"id": "why",
+				"text": "Why"
 			},
 			{
 				"depth": 2,
-				"id": "型とエフェクト",
-				"text": "型とエフェクト"
+				"id": "how",
+				"text": "How"
 			},
 			{
 				"depth": 2,
-				"id": "ツール",
-				"text": "ツール"
+				"id": "try-it",
+				"text": "Try it"
 			},
 			{
 				"depth": 2,
-				"id": "試す",
-				"text": "試す"
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
 			}
 		],
-		"html": "<p>必要な作業は分かっているが、本のどこにあるか分からないときはこのページを使います。</p>\n<h2 id=\"セットアップとファイル\"><a href=\"#セットアップとファイル\">セットアップとファイル</a></h2><ul>\n<li>Musi を導入し、<code>music</code> と <code>musi</code> の違いを知る: <a href=\"/ja/learn/start/getting-started\">はじめに</a></li>\n<li>最小のファイルを実行する: <a href=\"/ja/learn/start/first-program\">最初のプログラム</a></li>\n<li>パッケージ作業へ進む: <a href=\"/ja/learn/start/files-packages-and-entry\">ファイル、パッケージ、エントリ</a></li>\n</ul>\n<h2 id=\"構文と-data\"><a href=\"#構文と-data\">構文と data</a></h2><ul>\n<li><code>@std</code> や <code>musi:*</code> からインポートする: <a href=\"/ja/learn/start/imports-and-packages\">インポートとパッケージ</a></li>\n<li>ファイルを上から下へ読む: <a href=\"/ja/learn/core-language/expressions-and-bindings\">式と束縛</a></li>\n<li>バリアントを表し分岐する: <a href=\"/ja/learn/core-language/data-and-pattern-matching\">data とパターンマッチ</a></li>\n<li>レコードと配列を更新する: <a href=\"/ja/learn/core-language/records-arrays-and-mutation\">レコードと配列</a></li>\n</ul>\n<h2 id=\"型とエフェクト\"><a href=\"#型とエフェクト\">型とエフェクト</a></h2><ul>\n<li>型注釈とジェネリックを追加する: <a href=\"/ja/learn/types-and-abstractions/types\">型とジェネリック</a></li>\n<li>クラスとインスタンスを定義する: <a href=\"/ja/learn/types-and-abstractions/classes-instances-and-laws\">クラスとインスタンス</a></li>\n<li>エフェクトを処理し <code>resume</code> を使う: <a href=\"/ja/learn/types-and-abstractions/effects-and-handlers\">エフェクトとハンドラ</a></li>\n<li><code>quote</code> とスプライスを使う: <a href=\"/ja/learn/types-and-abstractions/quote-and-syntax\">quote と構文値</a></li>\n<li>foreign バインディングを宣言する: <a href=\"/ja/learn/types-and-abstractions/attributes-and-foreign\">属性と foreign 宣言</a></li>\n</ul>\n<h2 id=\"ツール\"><a href=\"#ツール\">ツール</a></h2><ul>\n<li><code>@std</code> と <code>musi:*</code> の違いを知る: <a href=\"/ja/learn/tooling/foundation-and-standard-library\">基盤ライブラリと標準ライブラリ</a></li>\n<li>テストとパッケージを実行する: <a href=\"/ja/learn/tooling/testing-and-running\">テストと実行</a></li>\n</ul>\n<h2 id=\"試す\"><a href=\"#試す\">試す</a></h2><div class=\"try-block\"><ol><li>Pick one question from this page.</li><li>Follow its linked chapter.</li><li>Add the shown syntax to a scratch file.</li></ol></div>\n",
-		"summaryHtml": "セットアップ、インポート、型、エフェクト、テストに関する作業別リンク集です。"
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTemplate </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(x </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> #(delta));</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addOneSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> addTwoSyntax </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> quote </span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(#(x) </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">+</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">);</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p><code>quote</code> lets you work with code shape as data.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Metaprogramming adds a second mental layer, so it belongs late in the learning path.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Start with one quoted expression.</li>\n<li>Add one splice.</li>\n<li>Compare it with duplicated handwritten code.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Write one quoted expression.</li>\n<li>Splice one value into it.</li>\n<li>Explain what stays syntax and what becomes runtime data.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not reach for quote just because duplication exists.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/advanced/testing\">Testing</a>.</p>\n",
+		"summaryHtml": "Treat code as data only after ordinary code reading feels natural."
+	},
+	{
+		"locale": "en",
+		"id": "testing",
+		"kind": "chapter",
+		"partId": "advanced",
+		"partTitle": "Advanced and tooling",
+		"path": "/learn/language/advanced/testing",
+		"canonicalPath": "/learn/language/advanced/testing",
+		"aliases": [
+			"/docs/language/advanced/testing"
+		],
+		"questions": [],
+		"title": "Testing",
+		"description": "Teach tests before the wider command surface so the workflow stays concrete.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 33,
+		"slug": "testing",
+		"summary": "Write small package tests that read like ordinary code.",
+		"descriptionHtml": "Teach tests before the wider command surface so the workflow stays concrete.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">let</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> :=</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> import</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#D73A49;--shiki-dark:#F97583\">export</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> let</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\"> test</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#D73A49;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">  Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">it</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\">\"adds values\"</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">1</span><span style=\"color:#D73A49;--shiki-dark:#F97583\"> +</span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\"> 2</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#005CC5;--shiki-dark:#79B8FF\">3</span><span style=\"color:#24292E;--shiki-dark:#E1E4E8\">));</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Musi tests live in <code>*.test.ms</code> files and usually export a <code>test</code> binding.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>Beginners should see that tests are ordinary code, not a second language.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Create a <code>*.test.ms</code> file.</li>\n<li>Import <code>@std/testing</code>.</li>\n<li>Export one small test binding.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Create one test file.</li>\n<li>Write one passing test.</li>\n<li>Run <code>musi test</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not wait for a large project before adding tests.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>Continue to <a href=\"/docs/language/advanced/running-and-tooling\">Running and tooling</a>.</p>\n",
+		"summaryHtml": "Write small package tests that read like ordinary code."
+	},
+	{
+		"locale": "en",
+		"id": "running-and-tooling",
+		"kind": "chapter",
+		"partId": "advanced",
+		"partTitle": "Advanced and tooling",
+		"path": "/learn/language/advanced/running-and-tooling",
+		"canonicalPath": "/learn/language/advanced/running-and-tooling",
+		"aliases": [
+			"/docs/language/advanced/running-and-tooling"
+		],
+		"questions": [],
+		"title": "Running and tooling",
+		"description": "Bring the learning path back to commands and workflow once language basics are in place.",
+		"group": "Advanced and tooling",
+		"section": "Advanced and tooling",
+		"order": 34,
+		"slug": "running-and-tooling",
+		"summary": "Finish with the everyday command flow for checking, running, and building code.",
+		"descriptionHtml": "Bring the learning path back to commands and workflow once language basics are in place.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "what",
+				"text": "What"
+			},
+			{
+				"depth": 2,
+				"id": "why",
+				"text": "Why"
+			},
+			{
+				"depth": 2,
+				"id": "how",
+				"text": "How"
+			},
+			{
+				"depth": 2,
+				"id": "try-it",
+				"text": "Try it"
+			},
+			{
+				"depth": 2,
+				"id": "common-mistake",
+				"text": "Common mistake"
+			},
+			{
+				"depth": 2,
+				"id": "next",
+				"text": "Next"
+			}
+		],
+		"html": "<pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">musi</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> test</span></span></code></pre><pre class=\"shiki shiki-themes github-light github-dark\" style=\"background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> check</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> build</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.ms</span></span>\n<span class=\"line\"><span style=\"color:#6F42C1;--shiki-dark:#B392F0\">music</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> run</span><span style=\"color:#032F62;--shiki-dark:#9ECBFF\"> index.seam</span></span></code></pre><h2 id=\"what\"><a href=\"#what\">What</a></h2><p>Musi’s tooling surface stays small on purpose.</p>\n<h2 id=\"why\"><a href=\"#why\">Why</a></h2><p>The book should end with a practical loop: edit, check, run, test.</p>\n<h2 id=\"how\"><a href=\"#how\">How</a></h2><ul>\n<li>Use <code>musi</code> inside package roots.</li>\n<li>Use <code>music</code> for direct file work.</li>\n<li>Run checks often.</li>\n</ul>\n<h2 id=\"try-it\"><a href=\"#try-it\">Try it</a></h2><ul>\n<li>Run <code>musi check</code>.</li>\n<li>Run <code>musi test</code>.</li>\n<li>Run <code>music check index.ms</code>.</li>\n</ul>\n<h2 id=\"common-mistake\"><a href=\"#common-mistake\">Common mistake</a></h2><p>Do not memorize commands without connecting them to context.</p>\n<h2 id=\"next\"><a href=\"#next\">Next</a></h2><p>You now have the full beginner path. Revisit earlier chapters, then move into deeper reference docs when needed.</p>\n",
+		"summaryHtml": "Finish with the everyday command flow for checking, running, and building code."
 	}
 ] satisfies GeneratedDoc[];
 

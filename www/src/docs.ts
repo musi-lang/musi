@@ -76,14 +76,13 @@ export const docGroups = docParts.map((part) => ({
 	locale: part.locale,
 }));
 
-export const docQuestionIndex = docsPages.flatMap((page) =>
-	page.questions.map((question) => ({
-		...question,
-		pageTitle: page.title,
-		partTitle: page.partTitle,
-		locale: page.locale,
-	})),
-);
+export const docQuestionIndex: Array<{
+	label: string;
+	href: string;
+	pageTitle: string;
+	partTitle: string;
+	locale: Locale;
+}> = [];
 
 export function docForPath(pathname: string) {
 	return docsByPath.get(pathname);

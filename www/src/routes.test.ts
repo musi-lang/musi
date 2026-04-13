@@ -11,18 +11,14 @@ describe("routes", () => {
 	});
 
 	it("resolves localized docs pages", () => {
-		expect(
-			routeForPath("/learn/types-and-abstractions/effects-and-handlers").kind,
-		).toBe("doc");
-		expect(
-			routeForPath("/ja/learn/types-and-abstractions/effects-and-handlers")
-				.kind,
-		).toBe("doc");
+		expect(routeForPath("/learn/language/effects-runtime/effects").kind).toBe(
+			"doc",
+		);
 	});
 
 	it("keeps learn landing separate from chapter slugs", () => {
 		expect(routeForPath("/learn").kind).toBe("docs-index");
-		expect(routeForPath("/learn/types-and-abstractions/types").kind).toBe(
+		expect(routeForPath("/learn/language/types/type-annotations").kind).toBe(
 			"doc",
 		);
 	});

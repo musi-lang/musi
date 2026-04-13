@@ -2,39 +2,32 @@ import { describe, expect, it } from "vitest";
 import { docForPath, docGroups, docNeighbors, docsPages } from "./docs";
 
 describe("docs", () => {
-	it("loads book chapters for both locales", () => {
+	it("loads english book chapters", () => {
 		expect(docsPages[0]?.id).toBe("getting-started");
-		expect(docsPages.length).toBeGreaterThan(30);
+		expect(docsPages.length).toBe(34);
 	});
 
 	it("returns neighbors for middle pages per locale", () => {
-		const neighbors = docNeighbors("imports-and-packages", "en");
-		expect(neighbors.previous?.slug).toBe("files-packages-and-entry");
-		expect(neighbors.next?.slug).toBe("expressions-and-bindings");
+		const neighbors = docNeighbors("packages", "en");
+		expect(neighbors.previous?.slug).toBe("files");
+		expect(neighbors.next?.slug).toBe("imports-and-exports");
 	});
 
-	it("finds docs by localized route path", () => {
-		expect(docForPath("/learn/types-and-abstractions/types")?.title).toBe(
-			"Types and generics",
+	it("finds docs by current route path", () => {
+		expect(docForPath("/learn/language/types/type-annotations")?.title).toBe(
+			"Type annotations",
 		);
-		expect(
-			docForPath("/ja/learn/core-language/operators-and-literals")?.title,
-		).toBe("演算子とリテラル");
+		expect(docForPath("/learn/language/core/methods")?.title).toBe("Methods");
 	});
 
 	it("groups docs for the sidebar and index", () => {
-		expect(docGroups.filter((group) => group.locale === "en")[0]?.group).toBe(
-			"Start",
-		);
-		expect(
-			docGroups.filter((group) => group.locale === "ja").at(-1)?.group,
-		).toBe("よくある質問");
+		expect(docGroups[0]?.group).toBe("Start");
+		expect(docGroups.at(-1)?.group).toBe("Advanced and tooling");
 	});
 
 	it("extracts headings for page toc", () => {
 		expect(
-			docForPath("/learn/types-and-abstractions/effects-and-handlers")?.headings
-				.length,
+			docForPath("/learn/language/effects-runtime/effects")?.headings.length,
 		).toBeGreaterThan(0);
 	});
 });

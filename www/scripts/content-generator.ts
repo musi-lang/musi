@@ -61,22 +61,7 @@ interface GeneratedDoc extends MarkdownDocumentAttributes {
 }
 
 const quotedValuePattern = /^"(.*)"$/;
-const contentRootPattern = /^src\/content\//;
 const docsRoutePattern = /^\/docs/;
-
-function localizedContentSourcePath(locale: Locale, sourcePath: string) {
-	if (locale === "en") {
-		return sourcePath;
-	}
-	const localizedPath = sourcePath.replace(
-		contentRootPattern,
-		"src/content/ja/",
-	);
-	if (localizedPath === sourcePath) {
-		throw new Error(`cannot localize content path: ${sourcePath}`);
-	}
-	return localizedPath;
-}
 
 const numberValuePattern = /^\d+$/;
 const rawMusiFencePattern = /```musi\b/;
@@ -95,7 +80,8 @@ const bannedDocsPatterns = [
 ];
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(scriptsDirectory, "..");
-const docsDirectory = join(appRoot, "src", "content", "docs");
+const repoRoot = join(appRoot, "..");
+const docsDirectory = join(repoRoot, "docs", "what", "language");
 const examplesDirectory = join(appRoot, "src", "content", "examples");
 const bookContentDirectory = join(appRoot, "src", "content", "book");
 const snippetRegistryPath = join(
@@ -394,7 +380,7 @@ function assertConsumerSafeDocs(source: string, path: string) {
 }
 
 function docSourcePath(path: string) {
-	return join(appRoot, path);
+	return join(repoRoot, path);
 }
 
 function renderSnippet(id: string) {
@@ -536,21 +522,11 @@ function rewriteDocLinks(source: string, rewrites: Map<string, string>) {
 	});
 }
 
-function localizeMarkdownLinks(locale: Locale, source: string) {
-	if (locale === "en") {
-		return source;
-	}
-	return source
-		.replaceAll("](/docs", "](/ja/learn")
-		.replaceAll("](/install)", "](/ja/install)")
-		.replaceAll("](/community)", "](/ja/community)")
-		.replaceAll("](/playground)", "](/ja/playground)");
+function localizeMarkdownLinks(_locale: Locale, source: string) {
+	return source;
 }
 
-function localizedDocRoute(locale: Locale, path: string) {
-	if (locale === "ja") {
-		return path.replace(docsRoutePattern, "/ja/learn");
-	}
+function localizedDocRoute(_locale: Locale, path: string) {
 	return path.replace(docsRoutePattern, "/learn");
 }
 
@@ -566,10 +542,7 @@ async function renderMarkdownDocument(input: {
 	questions: { label: string; href: string }[];
 	rewrites: Map<string, string>;
 }) {
-	const source = await readFile(
-		docSourcePath(localizedContentSourcePath(input.locale, input.sourcePath)),
-		"utf8",
-	);
+	const source = await readFile(docSourcePath(input.sourcePath), "utf8");
 	assertNoRawMusiFences(source, input.sourcePath);
 	assertConsumerSafeDocs(source, input.sourcePath);
 	const rewrittenSource = localizeMarkdownLinks(
@@ -611,7 +584,7 @@ export async function generateContent() {
 
 	const rewrites = buildDocLinkMap();
 	const renderedDocs: GeneratedDoc[] = [];
-	for (const locale of ["en", "ja"] as const) {
+	for (const locale of ["en"] as const) {
 		const localizedPartDocs = await Promise.all(
 			bookParts.map((part) =>
 				renderMarkdownDocument({
@@ -646,10 +619,7 @@ export async function generateContent() {
 					path: localizedDocRoute(locale, page.path),
 					aliases: locale === "en" ? [page.path, ...page.aliases] : [],
 					sourcePath: page.sourcePath,
-					questions: page.questions.map((question) => ({
-						label: question.labels[locale],
-						href: localizedDocRoute(locale, page.path),
-					})),
+					questions: [],
 					rewrites,
 				});
 			}),
@@ -664,7 +634,7 @@ export async function generateContent() {
 }
 
 export interface GeneratedDoc {
-\tlocale: "en" | "ja";
+\tlocale: "en";
 \tid: string;
 \tkind: "part" | "chapter";
 \tpartId: string;

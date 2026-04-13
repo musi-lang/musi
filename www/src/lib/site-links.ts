@@ -8,6 +8,9 @@ export function localizePath(locale: Locale, path: string) {
 	if (externalUrlPattern.test(path)) {
 		return path;
 	}
+	if (path === "/learn" || path.startsWith("/learn/")) {
+		return path;
+	}
 	if (locale === "en") {
 		if (path === "/") {
 			return "/";
@@ -27,10 +30,7 @@ export function localizeDocPath(locale: Locale, path: string) {
 
 export function localizeHtmlLinks(locale: Locale, html: string) {
 	return html
-		.replaceAll(
-			'href="/docs',
-			`href="${locale === "ja" ? "/ja/learn" : "/learn"}`,
-		)
+		.replaceAll('href="/docs', 'href="/learn')
 		.replaceAll('href="/install"', `href="${localizePath(locale, "/install")}"`)
 		.replaceAll(
 			'href="/community"',

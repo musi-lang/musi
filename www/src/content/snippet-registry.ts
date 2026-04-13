@@ -53,6 +53,17 @@ port;`,
 		},
 	},
 	{
+		id: "mutable-value",
+		language: "musi",
+		sourceText: `let counter := mut 1;
+counter := 2;
+counter;`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1212,
+		},
+	},
+	{
 		id: "sequence",
 		language: "musi",
 		sourceText: `(
@@ -193,6 +204,68 @@ let masked := 1 shl 3;`,
 		},
 	},
 	{
+		id: "ranges-basic",
+		language: "musi",
+		sourceText: `let closed := 0..10;
+let halfOpen := 0..<10;
+closed;`,
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 239,
+		},
+	},
+	{
+		id: "receiver-method",
+		language: "musi",
+		sourceText: "let (self : Int).abs () : Int := self;",
+		evidence: {
+			path: "crates/music_resolve/src/tests.rs",
+			line: 118,
+		},
+	},
+	{
+		id: "receiver-method-call",
+		language: "musi",
+		sourceText: `let one := 1;
+one.abs();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 510,
+		},
+	},
+	{
+		id: "slice-helpers",
+		language: "musi",
+		sourceText: `let Slice := import "@std/slice";
+Slice.concat[Int]([1], [2, 3]);`,
+		evidence: {
+			path: "packages/std/slice/index.test.ms",
+			line: 8,
+		},
+	},
+	{
+		id: "export-import",
+		language: "musi",
+		sourceText: `export let answer := 42;
+let Local := import "./index.ms";
+Local.answer;`,
+		evidence: {
+			path: "crates/music_sema/src/checker/surface_exports.rs",
+			line: 607,
+		},
+	},
+	{
+		id: "type-inference",
+		language: "musi",
+		sourceText: `let port : Int := 8080;
+let next := port + 1;
+next;`,
+		evidence: {
+			path: "docs/what/language/type-system.md",
+			line: 3,
+		},
+	},
+	{
 		id: "effect-console",
 		language: "musi",
 		sourceText: `let console := effect {
@@ -222,6 +295,16 @@ let masked := 1 shl 3;`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 331,
+		},
+	},
+	{
+		id: "using-signature",
+		language: "musi",
+		sourceText: `let readClosed (x : Int) : String using { Console } :=
+  perform State.readln();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1444,
 		},
 	},
 	{
@@ -317,6 +400,26 @@ export PATH="/path/to/musi/target/release:$PATH"`,
 		evidence: {
 			path: "README.md",
 			line: 1,
+		},
+	},
+	{
+		id: "foundation-import",
+		language: "musi",
+		sourceText: `let Core := import "musi:core";
+Core;`,
+		evidence: {
+			path: "crates/music_session/src/session/foundation.rs",
+			line: 1,
+		},
+	},
+	{
+		id: "runtime-import",
+		language: "musi",
+		sourceText: `let Runtime := import "musi:runtime";
+Runtime.envGet("HOME");`,
+		evidence: {
+			path: "packages/std/env/index.ms",
+			line: 2,
 		},
 	},
 	{

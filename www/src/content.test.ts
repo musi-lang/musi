@@ -15,6 +15,7 @@ const BANNED_SITE_COPY = [
 	"Friendly language. Real ideas. Small steps.",
 	"Friendly first-language path, real language ideas, and small command-line steps that stay readable as projects grow.",
 ];
+const repoRoot = join(import.meta.dirname, "..", "..");
 
 describe("content generation", () => {
 	it("cycles color scheme in the header order", () => {
@@ -52,10 +53,10 @@ describe("content generation", () => {
 	it("keeps docs markdown free of raw Musi fences", () => {
 		const docsSource = [
 			...bookPages.map((page) =>
-				readFileSync(join(import.meta.dirname, "..", page.sourcePath), "utf8"),
+				readFileSync(join(repoRoot, page.sourcePath), "utf8"),
 			),
 			...bookParts.map((part) =>
-				readFileSync(join(import.meta.dirname, "..", part.sourcePath), "utf8"),
+				readFileSync(join(repoRoot, part.sourcePath), "utf8"),
 			),
 		].join("\n");
 
@@ -66,11 +67,9 @@ describe("content generation", () => {
 	});
 
 	it("renders every manifest doc entry", () => {
-		expect(renderedDocs).toHaveLength(
-			(bookPages.length + bookParts.length) * 2,
-		);
+		expect(renderedDocs).toHaveLength(bookPages.length + bookParts.length);
 		expect(renderedDocs.filter((doc) => doc.kind === "chapter")).toHaveLength(
-			bookPages.length * 2,
+			bookPages.length,
 		);
 	});
 
@@ -81,16 +80,11 @@ describe("content generation", () => {
 		expect(docsHtml).not.toContain("{{try:");
 	});
 
-	it("keeps try blocks on chapter sources", () => {
+	it("keeps chapters on repo-level docs paths", () => {
 		for (const page of bookPages) {
-			if (page.id === "common-questions") {
-				continue;
-			}
-			const source = readFileSync(
-				join(import.meta.dirname, "..", page.sourcePath),
-				"utf8",
-			);
-			expect(source).toContain("{{try:");
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			expect(source).toContain("## Try it");
+			expect(page.sourcePath.startsWith("docs/what/language/")).toBe(true);
 		}
 	});
 

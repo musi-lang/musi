@@ -1,10 +1,4 @@
-import {
-	docForPath,
-	docGroups,
-	docNeighbors,
-	docQuestionIndex,
-	pagesForPart,
-} from "../../docs";
+import { docForPath, docGroups, docNeighbors, pagesForPart } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
 import { localizePath } from "../../lib/site-links";
 import type { AppRoute } from "../../routes";
@@ -53,28 +47,20 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 					<InlineAction
 						href={localizePath(
 							props.route.locale,
-							"/learn/start/getting-started",
+							"/learn/language/start/getting-started",
 						)}
 					>
 						{localeCopy.ui.openFirstChapter}
 					</InlineAction>
 				</Surface>
 				<Surface tone="panel" className="portal-card">
-					<div className="eyebrow">{localeCopy.ui.questions}</div>
-					<h2>{copy.questionsTitle}</h2>
+					<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+					<h2>{copy.partsTitle}</h2>
 					<p>
 						{props.route.locale === "ja"
-							? "やりたい作業は分かっていても、どの章を見るべきか分からないときに使います。"
-							: "Use the task-first index when you know the job but not the chapter."}
+							? "短い章を順番に読み進め、必要になった時だけ次の概念へ進みます。"
+							: "Read short chapters in order and move forward only when the current mental model feels stable."}
 					</p>
-					<InlineAction
-						href={localizePath(
-							props.route.locale,
-							"/learn/questions/common-questions",
-						)}
-					>
-						{localeCopy.ui.openQuestions}
-					</InlineAction>
 				</Surface>
 			</section>
 			<Surface tone="panel" className="section-panel">
@@ -101,24 +87,15 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 			<Surface tone="panel" className="section-panel">
 				<div className="section-heading-row">
 					<div>
-						<div className="eyebrow">{localeCopy.ui.questions}</div>
-						<h2>{copy.questionsTitle}</h2>
+						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<h2>{copy.startTitle}</h2>
 					</div>
 				</div>
-				<div className="question-grid">
-					{docQuestionIndex
-						.filter((question) => question.locale === props.route.locale)
-						.map((question) => (
-							<a
-								key={`${question.href}:${question.label}`}
-								href={question.href}
-								className="question-card"
-							>
-								<strong dangerouslySetInnerHTML={{ __html: question.label }} />
-								<span>{question.pageTitle}</span>
-							</a>
-						))}
-				</div>
+				<p className="muted">
+					{props.route.locale === "ja"
+						? "古い章ルートは残していません。今のブック構成だけを案内します。"
+						: "Old chapter routes are gone. This page only guides the current language book."}
+				</p>
 			</Surface>
 		</div>
 	);
