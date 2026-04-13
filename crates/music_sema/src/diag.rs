@@ -86,6 +86,8 @@ pub enum SemaDiagKind {
     InvalidIndexTarget,
     IndexRequiresArgument,
     UnknownField,
+    AmbiguousAttachedMethod,
+    AttachedMethodRequiresMutReceiver,
     InvalidFieldAccess,
     InvalidOptionalFieldAccess,
     InvalidRecordUpdateTarget,
@@ -579,6 +581,16 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         kind: SemaDiagKind::UnknownField,
         code: 3075,
         message: "unknown field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AmbiguousAttachedMethod,
+        code: 3099,
+        message: "ambiguous attached method match",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::AttachedMethodRequiresMutReceiver,
+        code: 3100,
+        message: "attached method requires mutable receiver",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidFieldAccess,

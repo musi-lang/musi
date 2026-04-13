@@ -485,8 +485,13 @@ import-expr           = kw-import expr
 
 let-modifier          = kw-rec
 
-let-expr              = kw-let [let-modifier] pattern [bracket-params] [params]
+let-expr              = kw-let [let-modifier] let-head [bracket-params] [params]
                         [type-annot] [where-clause] [using-clause] colon-eq expr
+
+let-head              = receiver-let-head
+                        / pattern
+
+receiver-let-head     = lparen [kw-mut] ident colon expr rparen dot ident
 
 bracket-params        = lbracket ident *(comma ident) [comma] rbracket
 

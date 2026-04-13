@@ -1,12 +1,24 @@
 use super::*;
 
+struct AttachedCallTarget {
+    base: HirExprId,
+    binding: Option<NameBindingId>,
+    name: Symbol,
+    module_target: Option<ModuleKey>,
+}
+
 pub(super) fn lower_call_expr(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
     args: &SliceRange<HirArg>,
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
+    let interner = ctx.interner;
     let arg_nodes = sema.module().store.args.get(args.clone());
+    if let Some(attached) = resolve_attached_call_target(sema, callee) {
+        return lower_attached_call_expr(ctx, callee, arg_nodes, &attached, interner);
+    }
+
     if !arg_nodes.iter().any(|arg| arg.spread) {
         return Ok(IrExprKind::Call {
             callee: Box::new(lower_expr(ctx, callee)),
@@ -63,6 +75,157 @@ pub(super) fn lower_call_expr(
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
     })
+}
+
+fn lower_attached_call_expr(
+    ctx: &mut LowerCtx<'_>,
+    callee: HirExprId,
+    arg_nodes: &[HirArg],
+    attached: &AttachedCallTarget,
+    interner: &Interner,
+) -> Result<IrExprKind, Box<str>> {
+    let origin = lower_origin(ctx.sema, callee);
+    let callee_expr = IrExpr::new(
+        origin,
+        IrExprKind::Name {
+            binding: attached.binding,
+            name: interner.resolve(attached.name).into(),
+            module_target: attached.module_target.clone(),
+        },
+    );
+
+    if !arg_nodes.iter().any(|arg| arg.spread) {
+        let mut lowered_args = Vec::with_capacity(arg_nodes.len().saturating_add(1));
+        lowered_args.push(IrArg::new(false, lower_expr(ctx, attached.base)));
+        lowered_args.extend(
+            arg_nodes
+                .iter()
+                .map(|arg| IrArg::new(false, lower_expr(ctx, arg.expr))),
+        );
+        return Ok(IrExprKind::Call {
+            callee: Box::new(callee_expr),
+            args: lowered_args.into_boxed_slice(),
+        });
+    }
+
+    let mut prelude = Vec::<IrExpr>::new();
+    let receiver_temp = fresh_temp(ctx);
+    prelude.push(IrExpr::new(
+        origin,
+        IrExprKind::TempLet {
+            temp: receiver_temp,
+            value: Box::new(lower_expr(ctx, attached.base)),
+        },
+    ));
+
+    let (arg_prelude, arg_parts, has_runtime_spread) =
+        lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call)?;
+    prelude.extend(arg_prelude);
+
+    let mut parts = Vec::with_capacity(arg_parts.len().saturating_add(1));
+    parts.push(IrSeqPart::Expr(IrExpr::new(
+        origin,
+        IrExprKind::Temp {
+            temp: receiver_temp,
+        },
+    )));
+    parts.extend(arg_parts);
+
+    prelude.push(IrExpr::new(
+        origin,
+        if has_runtime_spread {
+            IrExprKind::CallSeq {
+                callee: Box::new(callee_expr),
+                args: parts.into_boxed_slice(),
+            }
+        } else {
+            let args = parts
+                .into_iter()
+                .map(|part| match part {
+                    IrSeqPart::Expr(expr) => Some(IrArg::new(false, expr)),
+                    IrSeqPart::Spread(_) => None,
+                })
+                .collect::<Option<Vec<_>>>()
+                .map(Vec::into_boxed_slice);
+            let Some(args) = args else {
+                return Err("attached call spread lowering invariant".into());
+            };
+            IrExprKind::Call {
+                callee: Box::new(callee_expr),
+                args,
+            }
+        },
+    ));
+
+    Ok(IrExprKind::Sequence {
+        exprs: prelude.into_boxed_slice(),
+    })
+}
+
+fn resolve_attached_call_target(
+    sema: &SemaModule,
+    callee: HirExprId,
+) -> Option<AttachedCallTarget> {
+    let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
+        return None;
+    };
+    let binding = sema.expr_attached_binding(callee);
+    let base_ty = sema.try_expr_ty(base)?;
+    let base_ty = match sema.ty(base_ty).kind {
+        HirTyKind::Mut { inner } => inner,
+        _ => base_ty,
+    };
+    let callee_ty = sema.try_expr_ty(callee)?;
+    if !is_attached_call_candidate(&sema.ty(base_ty).kind, &sema.ty(callee_ty).kind) {
+        return None;
+    }
+
+    Some(AttachedCallTarget {
+        base,
+        binding,
+        name: name.name,
+        module_target: sema.expr_module_target(callee).cloned(),
+    })
+}
+
+const fn is_attached_call_candidate(base_kind: &HirTyKind, callee_kind: &HirTyKind) -> bool {
+    !matches!(base_kind, HirTyKind::Module) && matches!(callee_kind, HirTyKind::Arrow { .. })
+}
+
+#[cfg(test)]
+mod tests {
+    use music_arena::SliceRange;
+    use music_hir::HirTyKind;
+
+    use super::is_attached_call_candidate;
+
+    #[test]
+    fn attached_call_candidate_requires_non_module_base() {
+        assert!(!is_attached_call_candidate(
+            &HirTyKind::Module,
+            &HirTyKind::Arrow {
+                params: SliceRange::EMPTY,
+                ret: music_hir::HirTyId::from_raw(0),
+                is_effectful: false,
+            },
+        ));
+    }
+
+    #[test]
+    fn attached_call_candidate_requires_arrow_callee() {
+        assert!(!is_attached_call_candidate(
+            &HirTyKind::Int,
+            &HirTyKind::Int,
+        ));
+        assert!(is_attached_call_candidate(
+            &HirTyKind::Int,
+            &HirTyKind::Arrow {
+                params: SliceRange::EMPTY,
+                ret: music_hir::HirTyId::from_raw(0),
+                is_effectful: false,
+            },
+        ));
+    }
 }
 
 pub(super) fn lower_perform_expr(

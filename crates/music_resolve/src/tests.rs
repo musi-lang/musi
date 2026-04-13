@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use music_base::SourceId;
+use music_hir::HirExprKind;
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
 };
@@ -79,7 +80,10 @@ fn assert_name_binding(
         &module_key,
         parsed.tree(),
         &mut interner,
-        ResolveOptions::default(),
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
     );
     let site = find_nth_name_site(source_id, parsed.tree(), spelling, nth).expect("use site");
     let binding_id = resolved.names.refs.get(&site).copied().expect("binding");
@@ -108,6 +112,86 @@ fn resolves_rec_name_use_in_rhs() {
         0,
         NameBindingKind::Let,
     );
+}
+
+#[test]
+fn lowers_receiver_prefixed_let_into_hir_mods() {
+    let src = "let (self : Int).abs () : Int := self;";
+    let source_id = SourceId::from_raw(12);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
+    );
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_id = expr_ids[0];
+    let let_expr = resolved.module.store.exprs.get(let_id);
+    let receiver = match &let_expr.kind {
+        HirExprKind::Let { mods, .. } => mods.receiver.expect("receiver"),
+        other => panic!("unexpected root stmt kind: {other:?}"),
+    };
+
+    assert!(!receiver.is_mut);
+    assert_eq!(interner.resolve(receiver.binder.name), "self");
+    assert_eq!(interner.resolve(receiver.member.name), "abs");
+    match &resolved.module.store.exprs.get(receiver.ty).kind {
+        HirExprKind::Name { name } => assert_eq!(interner.resolve(name.name), "Int"),
+        other => panic!("unexpected receiver type kind: {other:?}"),
+    }
+}
+
+#[test]
+fn lowers_mut_receiver_prefixed_let_into_hir_mods() {
+    let src = "let (mut self : Int).push (value : Int) := self;";
+    let source_id = SourceId::from_raw(13);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
+    );
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_id = expr_ids[0];
+    let let_expr = resolved.module.store.exprs.get(let_id);
+    let receiver = match &let_expr.kind {
+        HirExprKind::Let { mods, .. } => mods.receiver.expect("receiver"),
+        other => panic!("unexpected root stmt kind: {other:?}"),
+    };
+
+    assert!(receiver.is_mut);
+    assert_eq!(interner.resolve(receiver.binder.name), "self");
+    assert_eq!(interner.resolve(receiver.member.name), "push");
 }
 
 #[test]

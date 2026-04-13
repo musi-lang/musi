@@ -8,7 +8,7 @@ use music_names::{Ident, NameBindingId, Symbol};
 use super::super::CheckPass;
 use super::super::DiagKind;
 use super::super::decls::check_foreign_let;
-use super::super::exprs::check_expr;
+use super::super::exprs::{check_expr, peel_mut_ty};
 use super::super::patterns::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::effects::require_declared_effects;
@@ -48,6 +48,7 @@ struct CallableLetCheckInput<'a> {
     exported: bool,
     mods: HirLetMods,
     pat: HirPatId,
+    is_module_stmt: bool,
     params: SliceRange<HirParam>,
     effects: Option<&'a HirEffectSet>,
     declared_ty: Option<HirTyId>,
@@ -289,6 +290,7 @@ impl CheckPass<'_, '_, '_> {
             exported,
             mods,
             pat,
+            is_module_stmt,
             params,
             effects,
             declared_ty,
@@ -332,10 +334,40 @@ impl CheckPass<'_, '_, '_> {
             declared_ty,
             value,
         );
+        let attached_receiver = self.attached_receiver_ty(is_module_stmt, mods, &param_types);
         if let Some(binding) = binding {
             self.insert_let_binding_scheme(binding, ty, callable_effects, type_params, constraints);
+            if let Some((receiver_ty, method_name, receiver_mut)) = attached_receiver {
+                self.insert_attached_method_binding(
+                    receiver_ty,
+                    method_name,
+                    binding,
+                    receiver_mut,
+                );
+            }
         }
         ty
+    }
+
+    fn attached_receiver_ty(
+        &self,
+        is_module_stmt: bool,
+        mods: HirLetMods,
+        param_types: &[HirTyId],
+    ) -> Option<(HirTyId, Symbol, bool)> {
+        if !is_module_stmt {
+            return None;
+        }
+        let receiver = mods.receiver?;
+        let receiver_ty = param_types.first().copied()?;
+        if receiver_ty == self.builtins().unknown {
+            return None;
+        }
+        Some((
+            peel_mut_ty(self, receiver_ty),
+            receiver.member.name,
+            receiver.is_mut,
+        ))
     }
 
     fn check_non_callable_let_expr(&mut self, input: NonCallableLetCheckInput) -> HirTyId {
@@ -418,6 +450,7 @@ impl CheckPass<'_, '_, '_> {
                 exported: expr_mods.export.is_some(),
                 mods,
                 pat,
+                is_module_stmt,
                 params,
                 effects: effects.as_ref(),
                 declared_ty,

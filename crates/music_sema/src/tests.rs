@@ -507,6 +507,94 @@ fn dynamic_module_field_access_is_not_callable_without_cast() {
 }
 
 #[test]
+fn dot_call_resolves_attached_receiver_let() {
+    let sema = check(
+        r"
+        let (self : Int).inc (by : Int) : Int := self + by;
+        let one : Int := 1;
+        one.inc(2);
+    ",
+    );
+    let call_id =
+        find_expr(&sema, |kind| matches!(kind, HirExprKind::Call { .. })).expect("call expr");
+    assert!(
+        matches!(
+            sema.ty(sema.try_expr_ty(call_id).expect("call expr type missing"))
+                .kind,
+            HirTyKind::Int
+        ),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn dot_call_does_not_fallback_to_free_function() {
+    let sema = check(
+        r"
+        let add (x : Int, y : Int) : Int := x + y;
+        let one : Int := 1;
+        one.add(2);
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn dot_call_still_supports_callable_record_fields() {
+    let sema = check(
+        r"
+        let add (x : Int, y : Int) : Int := x + y;
+        let Math := { add := add };
+        Math.add(1, 2);
+    ",
+    );
+    let call_id =
+        find_expr(&sema, |kind| matches!(kind, HirExprKind::Call { .. })).expect("call expr");
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(call_id).expect("call expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn duplicate_attached_receiver_lets_report_ambiguity() {
+    let sema = check(
+        r"
+        let (self : Int).dup () : Int := self;
+        let (self : Int).dup () : Int := self + 1;
+        let one : Int := 1;
+        one.dup();
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::AmbiguousAttachedMethod),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn imported_module_record_pattern_binds_exported_values() {
     let import_env = TestImportEnv::default().with_module("std/io", "std/io");
     let io = check_module_src(

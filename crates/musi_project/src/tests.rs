@@ -375,7 +375,7 @@ export let it (_name, _body) : Unit ~> Unit := _body();
     );
     write_file(
         temp.path(),
-        "packages/std/math/abs.test.ms",
+        "packages/std/math/index.test.ms",
         r"
 export let test () : Unit := 0;
 ",
@@ -388,7 +388,7 @@ export let test () : Unit := 0;
     assert!(tests.iter().any(|test| {
         test.module_key
             .as_str()
-            .contains("@@std@0.1.0/math/abs.test.ms")
+            .contains("@@std@0.1.0/math/index.test.ms")
     }));
 }
 
@@ -554,14 +554,14 @@ fn std_root_exports_keep_static_module_targets() {
     let surface = sema.surface();
 
     let bytes = surface
-        .exported_value("Bytes")
-        .expect("Bytes export should exist");
+        .exported_value("bytes")
+        .expect("bytes export should exist");
     let math = surface
-        .exported_value("Math")
-        .expect("Math export should exist");
+        .exported_value("math")
+        .expect("math export should exist");
     let option = surface
-        .exported_value("Option")
-        .expect("Option export should exist");
+        .exported_value("option")
+        .expect("option export should exist");
 
     assert_eq!(
         bytes.module_target.as_ref(),
@@ -617,7 +617,7 @@ fn std_root_member_alias_keeps_module_target() {
         "index.ms",
         r#"
 let Std := import "@std";
-export let Bytes := Std.Bytes;
+export let bytes := Std.bytes;
 "#,
     );
     write_file(
@@ -637,7 +637,7 @@ export let Bytes := Std.Bytes;
         temp.path(),
         "packages/std/index.ms",
         r#"
-export let Bytes := import "@std/bytes";
+export let bytes := import "@std/bytes";
 "#,
     );
     write_file(
@@ -656,8 +656,8 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         .expect("root sema should succeed");
     let bytes = sema
         .surface()
-        .exported_value("Bytes")
-        .expect("Bytes export should exist");
+        .exported_value("bytes")
+        .expect("bytes export should exist");
 
     assert_eq!(
         bytes.module_target.as_ref(),

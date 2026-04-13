@@ -308,11 +308,19 @@ impl CheckPass<'_, '_, '_> {
             }
         }
 
+        let base_is_mut = self.is_mut_ty(base_facts.ty);
         let base_ty = peel_mut_ty(self, base_facts.ty);
         let ty = self
             .record_like_field_ty(base_ty, self.resolve_symbol(name.name))
             .unwrap_or_else(|| {
-                self.check_non_record_field_expr(expr_id, origin, base, access, name)
+                self.check_non_record_field_expr(
+                    expr_id,
+                    origin,
+                    base,
+                    (base_ty, base_is_mut),
+                    access,
+                    name,
+                )
             });
         ExprFacts::new(ty, effects)
     }
@@ -703,53 +711,121 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
-        base: HirExprId,
+        base_expr: HirExprId,
+        base: (HirTyId, bool),
         access: HirAccessKind,
         name: Ident,
     ) -> HirTyId {
         let builtins = self.builtins();
-        let base_facts = super::exprs::check_expr(self, base);
-        let base_ty = peel_mut_ty(self, base_facts.ty);
-        match self.ty(base_ty).kind {
-            HirTyKind::Module => {
-                if let Some((surface, export)) = module_export_for_expr(self, base, name) {
-                    if let Some(target) = export.module_target.clone() {
-                        self.set_expr_module_target(expr_id, target);
-                    }
-                    let scheme = self.scheme_from_export(&surface, &export);
-                    if scheme.type_params.is_empty() {
-                        let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-                        if let Some(evidence) =
-                            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-                            && !evidence.is_empty()
-                        {
-                            self.set_expr_evidence(expr_id, evidence);
-                        }
-                    }
-                    self.set_expr_callable_effects(expr_id, scheme.effects.clone());
-                    scheme.ty
-                } else {
-                    builtins.any
+        let (base_ty, base_is_mut) = base;
+        if self.ty(base_ty).kind == HirTyKind::Module {
+            if let Some((surface, export)) = module_export_for_expr(self, base_expr, name) {
+                if let Some(target) = export.module_target.clone() {
+                    self.set_expr_module_target(expr_id, target);
                 }
-            }
-            HirTyKind::Record { .. } | HirTyKind::Range { .. } => {
-                let field_name = self.resolve_symbol(name.name).to_owned();
-                self.diag(
-                    origin.span,
-                    DiagKind::UnknownField,
-                    &format!("unknown field `{field_name}`"),
-                );
-                builtins.unknown
-            }
-            _ => {
-                if matches!(access, HirAccessKind::Direct) {
-                    self.diag(origin.span, DiagKind::InvalidFieldAccess, "");
-                } else {
-                    self.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+                let scheme = self.scheme_from_export(&surface, &export);
+                if scheme.type_params.is_empty() {
+                    let instantiated = self.instantiate_monomorphic_scheme(&scheme);
+                    if let Some(evidence) =
+                        self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                        && !evidence.is_empty()
+                    {
+                        self.set_expr_evidence(expr_id, evidence);
+                    }
                 }
-                builtins.unknown
+                self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+                return scheme.ty;
+            }
+            return builtins.any;
+        }
+
+        let method_name = name.name;
+        if let Some(method_ty) =
+            self.check_attached_method_field(expr_id, origin, base_ty, base_is_mut, method_name)
+        {
+            return method_ty;
+        }
+        if matches!(self.ty(base_ty).kind, HirTyKind::Record { .. })
+            || self.range_item_type(base_ty).is_some()
+        {
+            let field_name = self.resolve_symbol(name.name).to_owned();
+            self.diag(
+                origin.span,
+                DiagKind::UnknownField,
+                &format!("unknown field `{field_name}`"),
+            );
+            return builtins.unknown;
+        }
+        if matches!(access, HirAccessKind::Direct) {
+            self.diag(origin.span, DiagKind::InvalidFieldAccess, "");
+        } else {
+            self.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+        }
+        builtins.unknown
+    }
+
+    fn check_attached_method_field(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        receiver_ty: HirTyId,
+        receiver_is_mut: bool,
+        method_name: Symbol,
+    ) -> Option<HirTyId> {
+        let builtins = self.builtins();
+        let candidates = self
+            .attached_method_bindings(receiver_ty, method_name)
+            .to_vec();
+        if candidates.is_empty() {
+            return None;
+        }
+        if candidates.len() > 1 {
+            self.diag(origin.span, DiagKind::AmbiguousAttachedMethod, "");
+            return Some(builtins.unknown);
+        }
+        let binding = candidates[0];
+        if self.attached_method_requires_mut(binding) && !receiver_is_mut {
+            self.diag(origin.span, DiagKind::AttachedMethodRequiresMutReceiver, "");
+            return Some(builtins.unknown);
+        }
+        if let Some(target) = self.binding_module_target(binding).cloned() {
+            self.set_expr_module_target(expr_id, target);
+        }
+        self.set_expr_attached_binding(expr_id, binding);
+        let scheme = self.binding_scheme(binding).cloned()?;
+        if scheme.type_params.is_empty() {
+            let instantiated = self.instantiate_monomorphic_scheme(&scheme);
+            if let Some(evidence) =
+                self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                && !evidence.is_empty()
+            {
+                self.set_expr_evidence(expr_id, evidence);
             }
         }
+        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+        Some(
+            self.strip_attached_receiver_param(scheme.ty)
+                .unwrap_or(builtins.unknown),
+        )
+    }
+
+    fn strip_attached_receiver_param(&mut self, ty: HirTyId) -> Option<HirTyId> {
+        let HirTyKind::Arrow {
+            params,
+            ret,
+            is_effectful,
+        } = self.ty(ty).kind
+        else {
+            return None;
+        };
+        let params = self.ty_ids(params);
+        let tail = params.get(1..).unwrap_or(&[]);
+        let tail_params = self.alloc_ty_list(tail.iter().copied());
+        Some(self.alloc_ty(HirTyKind::Arrow {
+            params: tail_params,
+            ret,
+            is_effectful,
+        }))
     }
 
     fn rebuild_record_like_ty(

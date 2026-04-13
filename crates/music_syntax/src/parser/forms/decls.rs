@@ -9,7 +9,12 @@ impl Parser<'_> {
         if self.at(TokenKind::KwRec) {
             attrs.push(self.advance_element());
         }
-        attrs.push(SyntaxElementId::Node(self.parse_pattern()?));
+        self.parse_optional_type_params_clause(&mut attrs)?;
+        if self.is_receiver_prefixed_let_head() {
+            attrs.push(SyntaxElementId::Node(self.parse_receiver_let_head()?));
+        } else {
+            attrs.push(SyntaxElementId::Node(self.parse_pattern()?));
+        }
         self.parse_optional_type_params_clause(&mut attrs)?;
         self.parse_optional_param_clause(&mut attrs)?;
         self.parse_optional_typed_expr(&mut attrs)?;
@@ -20,6 +25,47 @@ impl Parser<'_> {
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::LetExpr, attrs))
+    }
+
+    fn is_receiver_prefixed_let_head(&self) -> bool {
+        if !self.at(TokenKind::LParen) {
+            return false;
+        }
+        let mut index = 1usize;
+        if self.nth_kind(index) == TokenKind::KwMut {
+            index += 1;
+        }
+        if self.nth_kind(index) != TokenKind::Ident {
+            return false;
+        }
+        if self.nth_kind(index + 1) != TokenKind::Colon {
+            return false;
+        }
+        let Some(close) = self.lparen_match.get(self.pos).copied().flatten() else {
+            return false;
+        };
+        matches!(
+            self.tokens.get(close + 1).map(|token| token.kind),
+            Some(TokenKind::Dot)
+        ) && matches!(
+            self.tokens.get(close + 2).map(|token| token.kind),
+            Some(TokenKind::Ident)
+        )
+    }
+
+    fn parse_receiver_let_head(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = vec![self.expect_token(TokenKind::LParen)?];
+        if self.at(TokenKind::KwMut) {
+            children.push(self.advance_element());
+        }
+        children.push(self.expect_ident_element()?);
+        self.parse_required_typed_expr(&mut children)?;
+        children.push(self.expect_token(TokenKind::RParen)?);
+        children.push(self.expect_token(TokenKind::Dot)?);
+        children.push(self.expect_ident_element()?);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::ReceiverSpec, children))
     }
 
     pub(crate) fn parse_data_expr(&mut self) -> ParseResult<SyntaxNodeId> {

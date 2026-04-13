@@ -353,12 +353,42 @@ impl HirParam {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirLetMods {
     pub is_rec: bool,
+    pub receiver: Option<HirLetReceiver>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirLetReceiver {
+    pub is_mut: bool,
+    pub binder: Ident,
+    pub ty: HirExprId,
+    pub member: Ident,
+}
+
+impl HirLetReceiver {
+    #[must_use]
+    pub const fn new(is_mut: bool, binder: Ident, ty: HirExprId, member: Ident) -> Self {
+        Self {
+            is_mut,
+            binder,
+            ty,
+            member,
+        }
+    }
 }
 
 impl HirLetMods {
     #[must_use]
     pub const fn new(is_rec: bool) -> Self {
-        Self { is_rec }
+        Self {
+            is_rec,
+            receiver: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_receiver(mut self, receiver: HirLetReceiver) -> Self {
+        self.receiver = Some(receiver);
+        self
     }
 }
 

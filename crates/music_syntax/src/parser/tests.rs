@@ -38,6 +38,26 @@ fn parses_simple_let_statement() {
 }
 
 #[test]
+fn parses_receiver_prefixed_let_statement() {
+    let parsed = parse(Lexer::new("let (self : Int).abs () : Int := self;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_mut_receiver_prefixed_let_statement() {
+    let parsed = parse(Lexer::new("let (mut self : Buffer).push (value : Int) := self;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
 fn parses_apply_and_index_chain() {
     let parsed = parse(Lexer::new("foo[Bar].[0];").lex());
     assert!(

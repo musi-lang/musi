@@ -168,8 +168,13 @@ import_expr: KW_IMPORT expr;
 let_modifier: KW_REC;
 
 let_expr:
-	KW_LET let_modifier? pattern bracket_params? params? type_annot? where_clause? using_clause?
+	KW_LET let_modifier? let_head bracket_params? params? type_annot? where_clause? using_clause?
 		COLON_EQ expr;
+
+let_head: receiver_let_head | pattern;
+
+receiver_let_head:
+	LPAREN KW_MUT? ident COLON expr RPAREN DOT ident;
 
 bracket_params: LBRACKET ident (COMMA ident)* COMMA? RBRACKET;
 

@@ -494,5 +494,15 @@ impl CheckPass<'_, '_, '_> {
             .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
         self.set_binding_evidence_keys(binding, evidence_keys);
+        if let Some(receiver_ty) = export.receiver_ty {
+            let imported_receiver = import_surface_ty(self, surface, receiver_ty);
+            let method_name = self.intern(&export.name);
+            self.insert_attached_method_binding(
+                imported_receiver,
+                method_name,
+                binding,
+                export.receiver_mut,
+            );
+        }
     }
 }

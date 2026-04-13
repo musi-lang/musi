@@ -1080,6 +1080,30 @@ fn lower_field_expr(
         };
     }
 
+    if let Some(binding) = sema.expr_attached_binding(expr_id) {
+        let binding_name = sema.resolved().names.bindings.get(binding).name;
+        return IrExprKind::ClosureNew {
+            callee: IrNameRef {
+                binding: Some(binding),
+                name: interner.resolve(binding_name).into(),
+                module_target: sema.expr_module_target(expr_id).cloned(),
+            },
+            captures: vec![lower_expr(ctx, base)].into_boxed_slice(),
+        };
+    }
+
+    if let Some(module_target) = sema.expr_module_target(expr_id).cloned() {
+        let expr_ty = sema
+            .try_expr_ty(expr_id)
+            .unwrap_or_else(|| invalid_lowering_path("expr type missing for attached field ref"));
+        if matches!(sema.ty(expr_ty).kind, HirTyKind::Arrow { .. }) {
+            return IrExprKind::ClosureNew {
+                callee: IrNameRef::new(interner.resolve(symbol)).with_module_target(module_target),
+                captures: vec![lower_expr(ctx, base)].into_boxed_slice(),
+            };
+        }
+    }
+
     invalid_lowering_path(format!("{kind:?}"))
 }
 

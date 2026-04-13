@@ -42,7 +42,6 @@ pub enum SyntaxNodeKind {
     SpliceExpr,
     AttributedExpr,
     ExportMod,
-
     WildcardPat,
     BindPat,
     LiteralPat,
@@ -70,6 +69,7 @@ pub enum SyntaxNodeKind {
     Arg,
     ParamList,
     Param,
+    ReceiverSpec,
     FieldList,
     Field,
     VariantList,

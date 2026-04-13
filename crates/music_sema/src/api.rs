@@ -324,6 +324,8 @@ impl SurfaceTyField {
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
+    pub receiver_ty: Option<SurfaceTyId>,
+    pub receiver_mut: bool,
     pub type_params: NameList,
     pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
@@ -345,6 +347,8 @@ impl ExportedValue {
         Self {
             name: name.into(),
             ty,
+            receiver_ty: None,
+            receiver_mut: false,
             type_params: Box::default(),
             constraints: Box::default(),
             effects: SurfaceEffectRow::default(),
@@ -361,6 +365,13 @@ impl ExportedValue {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub const fn with_receiver(mut self, receiver_ty: SurfaceTyId, receiver_mut: bool) -> Self {
+        self.receiver_ty = Some(receiver_ty);
+        self.receiver_mut = receiver_mut;
         self
     }
 
@@ -1373,6 +1384,7 @@ pub struct SemaModule {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -1396,6 +1408,7 @@ struct SemaFactTables {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
 }
 
 struct SemaDeclTables {
@@ -1407,35 +1420,45 @@ struct SemaDeclTables {
 
 impl From<SemaModuleBuild> for SemaModule {
     fn from(build: SemaModuleBuild) -> Self {
+        let crate::SemaModuleBuild {
+            resolved,
+            context: build_context,
+            facts: build_facts,
+            decls: build_decls,
+            surface,
+            diags,
+        } = build;
+        let crate::SemaFactsBuild {
+            expr_facts,
+            pat_facts,
+            expr_module_targets,
+            type_test_targets,
+            expr_evidence,
+            expr_attached_bindings,
+        } = build_facts;
         let context = SemaContextTables {
-            target: build.context.target,
-            gated_bindings: build.context.gated_bindings,
-            foreign_links: build.context.foreign_links,
-            binding_types: build.context.binding_types,
-            binding_schemes: build.context.binding_schemes,
-            binding_evidence_keys: build.context.binding_evidence_keys,
+            target: build_context.target,
+            gated_bindings: build_context.gated_bindings,
+            foreign_links: build_context.foreign_links,
+            binding_types: build_context.binding_types,
+            binding_schemes: build_context.binding_schemes,
+            binding_evidence_keys: build_context.binding_evidence_keys,
         };
         let facts = SemaFactTables {
-            expr_facts: build.facts.expr_facts,
-            pat_facts: build.facts.pat_facts,
-            expr_module_targets: build.facts.expr_module_targets,
-            type_test_targets: build.facts.type_test_targets,
-            expr_evidence: build.facts.expr_evidence,
+            expr_facts,
+            pat_facts,
+            expr_module_targets,
+            type_test_targets,
+            expr_evidence,
+            expr_attached_bindings,
         };
         let decls = SemaDeclTables {
-            effect_defs: build.decls.effect_defs,
-            data_defs: build.decls.data_defs,
-            class_facts: build.decls.class_facts,
-            instance_facts: build.decls.instance_facts,
+            effect_defs: build_decls.effect_defs,
+            data_defs: build_decls.data_defs,
+            class_facts: build_decls.class_facts,
+            instance_facts: build_decls.instance_facts,
         };
-        Self::from_parts(
-            build.resolved,
-            context,
-            facts,
-            decls,
-            build.surface,
-            build.diags,
-        )
+        Self::from_parts(resolved, context, facts, decls, surface, diags)
     }
 }
 
@@ -1485,6 +1508,11 @@ impl SemaModule {
     #[must_use]
     pub fn expr_evidence(&self, id: HirExprId) -> Option<&[ConstraintEvidence]> {
         self.expr_evidence.get(&id).map(Box::as_ref)
+    }
+
+    #[must_use]
+    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.expr_attached_bindings.get(&id).copied()
     }
 
     #[must_use]
@@ -1554,7 +1582,9 @@ impl SemaModule {
     pub const fn surface(&self) -> &ModuleSurface {
         &self.surface
     }
+}
 
+impl SemaModule {
     fn from_parts(
         resolved: ResolvedModule,
         context: SemaContextTables,
@@ -1576,6 +1606,7 @@ impl SemaModule {
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
+            expr_attached_bindings: facts.expr_attached_bindings,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             class_facts: decls.class_facts,

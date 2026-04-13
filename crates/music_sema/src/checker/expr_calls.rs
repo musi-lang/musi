@@ -1,5 +1,6 @@
 use music_arena::SliceRange;
 use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
+use music_names::NameBindingId;
 
 use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
@@ -282,6 +283,11 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn callable_scheme_for_expr(&mut self, expr: HirExprId) -> Option<BindingScheme> {
+        if let Some(binding) = self.expr_attached_binding(expr)
+            && let Some(scheme) = self.binding_scheme(binding).cloned()
+        {
+            return self.strip_attached_receiver_scheme(scheme);
+        }
         match self.expr(expr).kind {
             HirExprKind::Name { name } => self
                 .binding_id_for_use(name)
@@ -290,5 +296,43 @@ impl CheckPass<'_, '_, '_> {
                 .map(|(surface, export)| self.scheme_from_export(&surface, &export)),
             _ => None,
         }
+    }
+
+    fn strip_attached_receiver_scheme(
+        &mut self,
+        mut scheme: BindingScheme,
+    ) -> Option<BindingScheme> {
+        let HirTyKind::Arrow {
+            params,
+            ret,
+            is_effectful,
+        } = self.ty(scheme.ty).kind
+        else {
+            return None;
+        };
+        let params = self.ty_ids(params);
+        if params.is_empty() {
+            return None;
+        }
+        let tail_params = self.alloc_ty_list(params.into_iter().skip(1));
+        scheme.ty = self.alloc_ty(HirTyKind::Arrow {
+            params: tail_params,
+            ret,
+            is_effectful,
+        });
+        Some(scheme)
+    }
+
+    pub(super) fn attached_method_requires_mut(&self, binding: NameBindingId) -> bool {
+        let Some(scheme) = self.binding_scheme(binding) else {
+            return false;
+        };
+        let HirTyKind::Arrow { params, .. } = self.ty(scheme.ty).kind else {
+            return false;
+        };
+        self.ty_ids(params)
+            .first()
+            .copied()
+            .is_some_and(|ty| matches!(self.ty(ty).kind, HirTyKind::Mut { .. }))
     }
 }

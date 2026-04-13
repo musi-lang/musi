@@ -288,6 +288,9 @@ impl ExportSurfaceCollector<'_, '_> {
             {
                 value = value.with_data_key(data_key);
             }
+            if let Some(receiver) = typing.binding_attached_receiver(export.binding) {
+                value = value.with_receiver(this.tys.lower(receiver.receiver), receiver.is_mut);
+            }
             Some(value)
         })
     }

@@ -14,6 +14,7 @@ use music_term::SyntaxTerm;
 
 use crate::api::RuntimeOptions;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
+use crate::runtime_handlers::register_runtime_handlers;
 
 type ModuleTextMap = HashMap<Box<str>, String>;
 type ProgramMap = HashMap<Box<str>, Program>;
@@ -51,6 +52,7 @@ impl Runtime {
         }));
         let nested_host = host.downgrade();
         register_syntax_handlers(&mut host, Rc::clone(&store), &nested_host, &options.vm);
+        register_runtime_handlers(&mut host);
         Self {
             store,
             host,

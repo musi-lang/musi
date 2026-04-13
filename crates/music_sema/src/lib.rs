@@ -41,6 +41,7 @@ pub(crate) struct SemaFactsBuild {
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
     pub type_test_targets: HashMap<HirExprId, HirTyId>,
     pub expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    pub expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
 }
 
 pub(crate) struct SemaDeclsBuild {
