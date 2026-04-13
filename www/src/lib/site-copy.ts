@@ -56,7 +56,8 @@ export interface LocalizedSiteCopy {
 		title: string;
 		description: string;
 		prerequisitesLabel: string;
-		installSourceLabel: string;
+		installScriptsLabel: string;
+		cargoInstallLabel: string;
 		quickStartLabel: string;
 		commandMapLabel: string;
 		commandMapTitle: string;
@@ -202,11 +203,12 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 		},
 		install: {
 			eyebrow: "Install",
-			title: "Build Musi from source",
+			title: "Install Musi with script or Cargo",
 			description:
-				"Current public install flow is source-first: install Rust and libffi, build the repository, add music and musi to PATH, then run package and direct commands.",
+				"Install Rust and libffi first, then choose a script bootstrap or a local cargo install. Both paths install music and musi into Cargo's bin directory.",
 			prerequisitesLabel: "Prerequisites",
-			installSourceLabel: "Install from source",
+			installScriptsLabel: "Install script",
+			cargoInstallLabel: "Cargo install",
 			quickStartLabel: "Quick start",
 			commandMapLabel: "Command map",
 			commandMapTitle: "Current commands",
@@ -371,11 +373,12 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 		},
 		install: {
 			eyebrow: "導入",
-			title: "ソースから Musi をビルドする",
+			title: "script か Cargo で Musi を導入する",
 			description:
-				"現在の公開導入フローはソース起点です。Rust と libffi を導入し、リポジトリをビルドし、music と musi を PATH に追加してから、パッケージコマンドと直接実行コマンドを使います。",
+				"最初に Rust と libffi を導入し、その後 script bootstrap か local cargo install を選びます。どちらも music と musi を Cargo の bin directory に導入します。",
 			prerequisitesLabel: "前提条件",
-			installSourceLabel: "ソースから導入",
+			installScriptsLabel: "導入スクリプト",
+			cargoInstallLabel: "Cargo install",
 			quickStartLabel: "クイックスタート",
 			commandMapLabel: "コマンド一覧",
 			commandMapTitle: "現在のコマンド",

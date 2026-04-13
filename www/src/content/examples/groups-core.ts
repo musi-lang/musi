@@ -3,28 +3,19 @@ import type { ExampleGroup } from "./types";
 export const coreExampleGroups: readonly ExampleGroup[] = [
 	{
 		id: "home-intro",
-		title: "Musi basic example",
+		title: "Small Musi file",
 		caption:
-			"A real-world example: A function checking a JSON response and parsing coordinates.",
-		note: "Musi is expression-oriented. Types, bindings, and branches flow sequentially.",
-		sourceText: `let json := import "@std/json";
+			"Start with one value, one function, and one final result. This matches Musi's beginner path.",
+		note: "Musi reads top to bottom. Bind values with <code>let</code>, define small functions the same way, then end with the result you want.",
+		sourceText: `let base := 21;
 
-let Point := data {
-  x : Float;
-  y : Float;
-};
+let twice (x : Int) : Int := x + x;
 
-let parseLocation (payload : String) : Result[Point, String] :=
-  case json.parse(payload) of (
-  | .Ok(doc) =>
-      let x := doc.field("x").asFloat().unwrapOr(0.0);
-      let y := doc.field("y").asFloat().unwrapOr(0.0);
-      .Ok({ x := x, y := y })
-  | .Err(e) => .Err(e)
-  );`,
+let answer := twice(base);
+answer;`,
 		evidence: {
-			path: "www/src/content/examples/groups-core.ts",
-			line: 6,
+			path: "docs/what/language/start/first-program.md",
+			line: 11,
 		},
 	},
 	{

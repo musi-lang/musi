@@ -578,7 +578,9 @@ export async function generateContent() {
 
 	const renderedSnippets = {
 		homeSampleHtml: renderExample("home-intro"),
-		installSourceHtml: renderSnippet("install-source"),
+		installCurlHtml: renderSnippet("install-curl"),
+		installPowershellHtml: renderSnippet("install-powershell"),
+		installCargoHtml: renderSnippet("install-cargo"),
 		quickstartHtml: renderSnippet("quickstart"),
 	};
 

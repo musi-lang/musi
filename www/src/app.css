@@ -837,9 +837,16 @@ samp {
 .snippet-panel,
 .snippet-panel .docs-content,
 .snippet-panel .code-tabs,
-.snippet-panel .code-panel {
+.snippet-panel .code-panel,
+.snippet-panel .code-tabs-shell,
+.snippet-panel .code-tabs-stack,
+.snippet-panel .code-tab-panel {
 	min-width: 0;
 	max-width: 100%;
+}
+
+.snippet-panel {
+	overflow: hidden;
 }
 
 .snippet-panel .docs-content {
@@ -848,6 +855,8 @@ samp {
 
 .snippet-panel pre,
 .snippet-panel .shiki {
+	display: block;
+	box-sizing: border-box;
 	width: 100%;
 	max-width: 100%;
 }
@@ -985,6 +994,57 @@ samp {
 .code-tabs {
 	display: grid;
 	gap: 0.85rem;
+}
+
+.code-tabs-shell,
+.code-tabs-stack {
+	display: grid;
+	gap: 0.85rem;
+}
+
+.code-tab-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem;
+	max-width: 100%;
+	overflow-x: auto;
+	padding-bottom: 0.15rem;
+}
+
+.code-tab-trigger {
+	flex: 0 0 auto;
+	padding: 0.5rem 0.8rem;
+	border: 1px solid var(--site-border);
+	background: var(--site-bg-elevated);
+	color: var(--site-text-muted);
+	font: inherit;
+	max-width: 100%;
+	white-space: normal;
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease,
+		color 120ms ease;
+}
+
+.code-tab-trigger:hover,
+.code-tab-trigger:focus-visible {
+	border-color: var(--site-accent);
+	color: var(--site-text);
+	outline: none;
+}
+
+.code-tab-trigger.is-active {
+	background: var(--site-bg-accent);
+	border-color: var(--site-accent);
+	color: var(--site-text);
+}
+
+.code-tab-panel {
+	display: block;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 }
 
 .code-panel {

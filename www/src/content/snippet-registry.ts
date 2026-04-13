@@ -391,15 +391,35 @@ let addTwoSyntax := quote (#(x) + 2);`,
 		},
 	},
 	{
-		id: "install-source",
+		id: "install-curl",
+		language: "bash",
+		sourceText:
+			"curl -fsSL https://raw.githubusercontent.com/musi-lang/musi/main/install.sh | sh",
+		evidence: {
+			path: "README.md",
+			line: 61,
+		},
+	},
+	{
+		id: "install-powershell",
+		language: "powershell",
+		sourceText:
+			'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/musi-lang/musi/main/install.ps1 | iex"',
+		evidence: {
+			path: "README.md",
+			line: 67,
+		},
+	},
+	{
+		id: "install-cargo",
 		language: "bash",
 		sourceText: `git clone https://github.com/musi-lang/musi.git
 cd musi
-cargo build --release
-export PATH="/path/to/musi/target/release:$PATH"`,
+cargo install --locked --force --path crates/music
+cargo install --locked --force --path crates/musi`,
 		evidence: {
 			path: "README.md",
-			line: 1,
+			line: 84,
 		},
 	},
 	{

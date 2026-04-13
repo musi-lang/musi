@@ -1,13 +1,14 @@
 import {
 	commandRows,
+	installCommandGroup,
 	installPrerequisites,
-	installSourceHtml,
 	quickstartHtml,
 } from "../../content";
 import { siteCopy } from "../../lib/site-copy";
 import { localizePath } from "../../lib/site-links";
 import type { AppRoute } from "../../routes";
 import { InlineAction, SecondaryAction } from "../../ui/actions";
+import { CodeTabs } from "../../ui/code-tabs";
 import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
@@ -15,6 +16,8 @@ import { Surface } from "../../ui/surface";
 export function InstallPage(props: { route: AppRoute }) {
 	const localeCopy = siteCopy[props.route.locale];
 	const copy = localeCopy.install;
+	const scriptInstallGroup = installCommandGroup(props.route.locale, "script");
+	const cargoInstallGroup = installCommandGroup(props.route.locale, "cargo");
 	return (
 		<div className="page-stack">
 			<PageHeader
@@ -45,12 +48,34 @@ export function InstallPage(props: { route: AppRoute }) {
 
 			<section className="code-grid" aria-label={localeCopy.ui.installCommands}>
 				<Surface tone="code" className="snippet-panel">
-					<div className="eyebrow">{copy.installSourceLabel}</div>
-					<HtmlSnippet
-						className="docs-content"
-						html={installSourceHtml}
-						locale={props.route.locale}
-					/>
+					<div className="eyebrow">{copy.installScriptsLabel}</div>
+					{scriptInstallGroup ? (
+						<div className="code-tabs-stack">
+							<p className="muted">{scriptInstallGroup.copy}</p>
+							{scriptInstallGroup.tabs ? (
+								<CodeTabs
+									tabs={scriptInstallGroup.tabs}
+									locale={props.route.locale}
+									ariaLabel={copy.installScriptsLabel}
+								/>
+							) : null}
+						</div>
+					) : null}
+				</Surface>
+				<Surface tone="code" className="snippet-panel">
+					<div className="eyebrow">{copy.cargoInstallLabel}</div>
+					{cargoInstallGroup ? (
+						<div className="code-tabs-stack">
+							<p className="muted">{cargoInstallGroup.copy}</p>
+							{cargoInstallGroup.html ? (
+								<HtmlSnippet
+									className="docs-content"
+									html={cargoInstallGroup.html}
+									locale={props.route.locale}
+								/>
+							) : null}
+						</div>
+					) : null}
 				</Surface>
 				<Surface tone="code" className="snippet-panel">
 					<div className="eyebrow">{copy.quickStartLabel}</div>
