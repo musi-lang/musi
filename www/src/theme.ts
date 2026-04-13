@@ -1,15 +1,5 @@
 import { createTheme } from "@mantine/core";
 
-// IBM/Wong Colorblind-friendly Palette
-// Black: #000000
-// Orange: #E69F00
-// Sky Blue: #56B4E9
-// Bluish Green: #009E73
-// Yellow: #F0E442
-// Blue: #0072B2
-// Vermilion: #D55E00
-// Reddish Purple: #CC79A7
-
 export const theme = createTheme({
 	primaryColor: "wongBlue",
 	defaultRadius: 0, // "less soft curves and more rigid sharp squarish shapes"

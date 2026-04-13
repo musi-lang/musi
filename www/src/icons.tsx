@@ -42,19 +42,19 @@ export function MusiMarkIcon({ size, ...props }: IconProps) {
 		>
 			<path
 				d="M256 136v136h256S383.667 108 320 108c-32.042 0-52.031 15.922-64 28Z"
-				fill="#D44A3A"
+				fill="#ad6d62"
 			/>
 			<path
 				d="M256 272v176s75.942 9.815 168-72c71.902-63.902 88-104 88-104H256Z"
-				fill="#A52B24"
+				fill="#c98273"
 			/>
 			<path
 				d="M256 272v176s-75.942 9.815-168-72C16.098 312.098 0 272 0 272h256Z"
-				fill="#E15D48"
+				fill="#d38f7b"
 			/>
 			<path
 				d="M256 136v136H0S128.333 108 192 108c32.042 0 52.031 15.922 64 28Z"
-				fill="#EE8E74"
+				fill="#9e6663"
 			/>
 		</svg>
 	);
@@ -120,6 +120,132 @@ export function DesktopIcon({ size, ...props }: IconProps) {
 			<rect x="3" y="4" width="18" height="12" rx="2" />
 			<path d="M8 20h8" />
 			<path d="M12 16v4" />
+		</svg>
+	);
+}
+
+export function GlobeIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth="1.8"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<circle cx="12" cy="12" r="9" />
+			<path d="M3 12h18" />
+			<path d="M12 3a14.5 14.5 0 0 1 0 18" />
+			<path d="M12 3a14.5 14.5 0 0 0 0 18" />
+		</svg>
+	);
+}
+
+export function MenuIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth="1.8"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<path d="M4 7h16" />
+			<path d="M4 12h16" />
+			<path d="M4 17h16" />
+		</svg>
+	);
+}
+
+export function ChevronDownIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth="1.8"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<path d="m6 9 6 6 6-6" />
+		</svg>
+	);
+}
+
+export function UnitedStatesFlagIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<clipPath id="us-flag-clip">
+				<rect x="2" y="4" width="20" height="16" rx="2" />
+			</clipPath>
+			<g clipPath="url(#us-flag-clip)">
+				<rect x="2" y="4" width="20" height="16" fill="#fff" />
+				<rect x="2" y="4" width="20" height="2" fill="#b22234" />
+				<rect x="2" y="8" width="20" height="2" fill="#b22234" />
+				<rect x="2" y="12" width="20" height="2" fill="#b22234" />
+				<rect x="2" y="16" width="20" height="2" fill="#b22234" />
+				<rect x="2" y="20" width="20" height="2" fill="#b22234" />
+				<rect x="2" y="4" width="9" height="8" fill="#3c3b6e" />
+				<circle cx="4.2" cy="5.8" r="0.45" fill="#fff" />
+				<circle cx="6.2" cy="5.8" r="0.45" fill="#fff" />
+				<circle cx="8.2" cy="5.8" r="0.45" fill="#fff" />
+				<circle cx="5.2" cy="7.7" r="0.45" fill="#fff" />
+				<circle cx="7.2" cy="7.7" r="0.45" fill="#fff" />
+				<circle cx="9.2" cy="7.7" r="0.45" fill="#fff" />
+				<circle cx="4.2" cy="9.6" r="0.45" fill="#fff" />
+				<circle cx="6.2" cy="9.6" r="0.45" fill="#fff" />
+				<circle cx="8.2" cy="9.6" r="0.45" fill="#fff" />
+			</g>
+			<rect
+				x="2"
+				y="4"
+				width="20"
+				height="16"
+				rx="2"
+				stroke="currentColor"
+				strokeOpacity="0.16"
+			/>
+		</svg>
+	);
+}
+
+export function JapanFlagIcon({ size, ...props }: IconProps) {
+	return (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			aria-hidden="true"
+			style={baseStyle(size)}
+			{...props}
+		>
+			<rect x="2" y="4" width="20" height="16" rx="2" fill="#fff" />
+			<circle cx="12" cy="12" r="4.2" fill="#bc002d" />
+			<rect
+				x="2"
+				y="4"
+				width="20"
+				height="16"
+				rx="2"
+				stroke="currentColor"
+				strokeOpacity="0.16"
+			/>
 		</svg>
 	);
 }

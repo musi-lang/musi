@@ -1,30 +1,35 @@
-import {
-	createPolymorphicComponent,
-	Paper,
-	type PaperProps,
-} from "@mantine/core";
-import { forwardRef, type ReactNode } from "react";
+import { createElement, type ElementType, type ReactNode } from "react";
 
-type SurfaceTone = "base" | "panel" | "hero" | "code";
+type SurfaceTone =
+	| "base"
+	| "panel"
+	| "hero"
+	| "code"
+	| "accent"
+	| "well"
+	| "raised";
 
-interface SurfaceProps extends PaperProps {
+interface SurfaceProps {
 	children?: ReactNode;
+	className?: string;
+	component?: ElementType;
 	tone?: SurfaceTone;
 }
 
-export const Surface = createPolymorphicComponent<"div", SurfaceProps>(
-	forwardRef<HTMLDivElement, SurfaceProps>((props, ref) => {
-		const tone = props.tone ?? "panel";
-		return (
-			<Paper
-				{...props}
-				ref={ref}
-				radius={0}
-				withBorder={true}
-				className={`surface surface-${tone}${props.className ? ` ${props.className}` : ""}`}
-			>
-				{props.children}
-			</Paper>
-		);
-	}),
-);
+export function Surface(props: SurfaceProps & Record<string, unknown>) {
+	const {
+		children,
+		className,
+		component = "section",
+		tone = "panel",
+		...rest
+	} = props;
+	return createElement(
+		component,
+		{
+			...rest,
+			className: `surface surface-${tone}${className ? ` ${className}` : ""}`,
+		},
+		children,
+	);
+}

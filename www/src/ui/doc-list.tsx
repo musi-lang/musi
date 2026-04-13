@@ -1,4 +1,3 @@
-import { Anchor, Group, Stack, Text, Title } from "@mantine/core";
 import { Surface } from "./surface";
 
 interface DocListPage {
@@ -16,48 +15,35 @@ export function DocListGroup(props: {
 	pages: readonly DocListPage[];
 }) {
 	return (
-		<Surface p="md" tone="panel" className="doc-group">
-			<Stack gap="xs">
+		<Surface className="doc-group" tone="raised">
+			<div className="doc-group-header">
 				{props.path ? (
-					<Anchor href={props.path} underline="never">
-						<Text className="eyebrow">{props.group}</Text>
-					</Anchor>
+					<a href={props.path} className="eyebrow doc-group-link">
+						{props.group}
+					</a>
 				) : (
-					<Text className="eyebrow">{props.group}</Text>
+					<div className="eyebrow">{props.group}</div>
 				)}
 				{props.summaryHtml ? (
-					<Text
-						size="sm"
-						c="dimmed"
+					<p
+						className="muted doc-group-summary"
 						dangerouslySetInnerHTML={{ __html: props.summaryHtml }}
 					/>
 				) : null}
+			</div>
+			<div className="doc-list">
 				{props.pages.map((page) => (
-					<Anchor
-						key={page.slug}
-						href={page.path}
-						underline="never"
-						className="doc-row"
-					>
-						<Group justify="space-between" align="start" wrap="nowrap">
-							<div>
-								<Title order={3} size="h5">
-									{page.title}
-								</Title>
-								<Text
-									mt={4}
-									size="sm"
-									c="dimmed"
-									dangerouslySetInnerHTML={{ __html: page.summaryHtml }}
-								/>
-							</div>
-							<Text className="doc-row-arrow" aria-hidden="true">
-								&rarr;
-							</Text>
-						</Group>
-					</Anchor>
+					<a key={page.slug} href={page.path} className="doc-row">
+						<div>
+							<h3>{page.title}</h3>
+							<p dangerouslySetInnerHTML={{ __html: page.summaryHtml }} />
+						</div>
+						<span className="doc-row-arrow" aria-hidden="true">
+							&rarr;
+						</span>
+					</a>
 				))}
-			</Stack>
+			</div>
 		</Surface>
 	);
 }

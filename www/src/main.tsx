@@ -1,8 +1,5 @@
-import "@mantine/core/styles.css";
-import { MantineProvider } from "@mantine/core";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./pages";
-import { theme } from "./theme";
 import "./app.css";
 import { routeForPath } from "./routes";
 
@@ -13,11 +10,7 @@ if (!root) {
 }
 
 const route = routeForPath(window.location.pathname);
-const app = (
-	<MantineProvider theme={theme} defaultColorScheme="auto">
-		<App route={route} />
-	</MantineProvider>
-);
+const app = <App route={route} />;
 
 if (root.hasChildNodes()) {
 	hydrateRoot(root, app);

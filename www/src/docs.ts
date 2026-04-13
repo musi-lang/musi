@@ -1,4 +1,5 @@
 import { renderedDocs } from "./generated-content";
+import type { Locale } from "./lib/site-copy";
 import type { AppRoute } from "./routes";
 
 export interface DocHeading {
@@ -27,6 +28,7 @@ export interface DocPage {
 	partId: string;
 	partTitle: string;
 	questions: { label: string; href: string }[];
+	locale: Locale;
 }
 
 export interface DocPart {
@@ -35,35 +37,23 @@ export interface DocPart {
 	summaryHtml: string;
 	path: string;
 	pages: DocPage[];
+	locale: Locale;
 }
 
-const canonicalDocs = renderedDocs.map((document) => {
-	const partTitle =
-		document.kind === "part"
-			? document.title
-			: (renderedDocs.find(
-					(candidate) =>
-						candidate.kind === "part" && candidate.id === document.partId,
-				)?.title ?? document.partTitle);
-
-	return {
-		...document,
-		partTitle,
-	} satisfies DocPage;
-});
+const localizedDocs = renderedDocs satisfies DocPage[];
 
 const docsByPath = new Map<string, DocPage>();
-for (const page of canonicalDocs) {
+for (const page of localizedDocs) {
 	docsByPath.set(page.path, page);
 	for (const alias of page.aliases) {
 		docsByPath.set(alias, page);
 	}
 }
 
-export const docsPages = canonicalDocs.filter(
+export const docsPages = localizedDocs.filter(
 	(page) => page.kind === "chapter",
 );
-export const docLandingPages = canonicalDocs.filter(
+export const docLandingPages = localizedDocs.filter(
 	(page) => page.kind === "part",
 );
 
@@ -72,7 +62,10 @@ export const docParts = docLandingPages.map((part) => ({
 	title: part.title,
 	summaryHtml: part.summaryHtml,
 	path: part.path,
-	pages: docsPages.filter((page) => page.partId === part.id),
+	pages: docsPages.filter(
+		(page) => page.partId === part.id && page.locale === part.locale,
+	),
+	locale: part.locale,
 })) satisfies DocPart[];
 
 export const docGroups = docParts.map((part) => ({
@@ -80,6 +73,7 @@ export const docGroups = docParts.map((part) => ({
 	path: part.path,
 	summaryHtml: part.summaryHtml,
 	pages: part.pages,
+	locale: part.locale,
 }));
 
 export const docQuestionIndex = docsPages.flatMap((page) =>
@@ -87,6 +81,7 @@ export const docQuestionIndex = docsPages.flatMap((page) =>
 		...question,
 		pageTitle: page.title,
 		partTitle: page.partTitle,
+		locale: page.locale,
 	})),
 );
 
@@ -94,38 +89,42 @@ export function docForPath(pathname: string) {
 	return docsByPath.get(pathname);
 }
 
-export function docNeighbors(id: string) {
-	const index = docsPages.findIndex(
+export function docNeighbors(id: string, locale: Locale) {
+	const localizedPages = docsPages.filter((page) => page.locale === locale);
+	const index = localizedPages.findIndex(
 		(page) => page.id === id || page.slug === id,
 	);
 	if (index === -1) {
 		return {};
 	}
-
 	return {
-		previous: docsPages[index - 1],
-		next: docsPages[index + 1],
+		previous: localizedPages[index - 1],
+		next: localizedPages[index + 1],
 	};
 }
 
-export function pagesForPart(partId: string) {
-	return docsPages.filter((page) => page.partId === partId);
+export function pagesForPart(partId: string, locale: Locale) {
+	return docsPages.filter(
+		(page) => page.partId === partId && page.locale === locale,
+	);
 }
 
 export function docsRoutes(): AppRoute[] {
-	return canonicalDocs.flatMap((page) => [
+	return localizedDocs.flatMap((page) => [
 		{
-			id: `docs:${page.id}`,
+			id: `docs:${page.locale}:${page.id}`,
 			label: page.title,
 			path: page.path,
 			title: `${page.title} | Musi`,
 			description: page.description,
-			kind: "doc",
+			kind: "doc" as const,
 			docSlug: page.id,
 			canonicalPath: page.canonicalPath,
+			locale: page.locale,
+			section: "learn" as const,
 		},
 		...page.aliases.map((alias) => ({
-			id: `docs-alias:${page.id}:${alias}`,
+			id: `docs-alias:${page.locale}:${page.id}:${alias}`,
 			label: page.title,
 			path: alias,
 			title: `${page.title} | Musi`,
@@ -133,6 +132,8 @@ export function docsRoutes(): AppRoute[] {
 			kind: "doc" as const,
 			docSlug: page.id,
 			canonicalPath: page.canonicalPath,
+			locale: page.locale,
+			section: "learn" as const,
 		})),
 	]);
 }

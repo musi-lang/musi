@@ -41,4 +41,4 @@ Use `musi` for normal project work. Use `music` when you want to run or inspect 
 
 Run one package command and one direct command, then revisit any chapter where behavior is unclear.
 
-See [Reference](/reference) for source, grammar, extension, and issue links.
+See [Community](/community) for project entry points and the public guestbook.

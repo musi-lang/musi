@@ -1,49 +1,66 @@
-import { Anchor, type AnchorProps, Button, Group } from "@mantine/core";
-import type { ReactNode } from "react";
+import type {
+	AnchorHTMLAttributes,
+	ButtonHTMLAttributes,
+	ReactNode,
+} from "react";
 
-interface ActionProps {
-	children: ReactNode;
-	href: string;
-}
+type ButtonTone = "primary" | "secondary" | "ghost";
 
-export function PrimaryAction(props: ActionProps) {
+function ActionAnchor(
+	props: AnchorHTMLAttributes<HTMLAnchorElement> & {
+		children: ReactNode;
+		tone: ButtonTone;
+	},
+) {
+	const className = `button button-${props.tone}${props.className ? ` ${props.className}` : ""}`;
 	return (
-		<Button
-			component="a"
-			href={props.href}
-			variant="filled"
-			className="primary-action"
-		>
+		<a {...props} className={className}>
 			{props.children}
-		</Button>
+		</a>
 	);
 }
 
-export function SecondaryAction(props: ActionProps) {
+export function PrimaryAction(props: { children: ReactNode; href: string }) {
 	return (
-		<Button
-			component="a"
-			href={props.href}
-			variant="default"
-			className="secondary-action"
-		>
+		<ActionAnchor href={props.href} tone="primary">
 			{props.children}
-		</Button>
+		</ActionAnchor>
 	);
 }
 
-export function InlineAction(props: ActionProps & Omit<AnchorProps, "href">) {
+export function SecondaryAction(props: { children: ReactNode; href: string }) {
 	return (
-		<Anchor href={props.href} underline="never" className="inline-action">
+		<ActionAnchor href={props.href} tone="secondary">
 			{props.children}
-		</Anchor>
+		</ActionAnchor>
+	);
+}
+
+export function InlineAction(
+	props: AnchorHTMLAttributes<HTMLAnchorElement> & {
+		children: ReactNode;
+		href: string;
+	},
+) {
+	const className = `inline-action${props.className ? ` ${props.className}` : ""}`;
+	return (
+		<a {...props} className={className}>
+			{props.children}
+		</a>
+	);
+}
+
+export function ThemeToggleButton(
+	props: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode },
+) {
+	const className = `button button-ghost theme-toggle${props.className ? ` ${props.className}` : ""}`;
+	return (
+		<button type="button" {...props} className={className}>
+			{props.children}
+		</button>
 	);
 }
 
 export function ActionStrip(props: { children: ReactNode }) {
-	return (
-		<Group gap="sm" wrap="wrap">
-			{props.children}
-		</Group>
-	);
+	return <div className="action-strip">{props.children}</div>;
 }

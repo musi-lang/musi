@@ -1,95 +1,101 @@
-import { Group, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import {
 	commandRows,
 	installPrerequisites,
 	installSourceHtml,
 	quickstartHtml,
 } from "../../content";
+import { siteCopy } from "../../lib/site-copy";
+import { localizePath } from "../../lib/site-links";
+import type { AppRoute } from "../../routes";
 import { InlineAction, SecondaryAction } from "../../ui/actions";
 import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 
-export function InstallPage() {
+export function InstallPage(props: { route: AppRoute }) {
+	const localeCopy = siteCopy[props.route.locale];
+	const copy = localeCopy.install;
 	return (
-		<Stack gap="lg">
+		<div className="page-stack">
 			<PageHeader
-				eyebrow="Install"
-				title="Build Musi from source."
-				description="Current public install path is source-first: install Rust and libffi, build the repository, add `music` and `musi` to PATH, then run direct and package commands."
+				eyebrow={copy.eyebrow}
+				title={copy.title}
+				description={copy.description}
 				actions={
-					<Group gap="sm">
-						<SecondaryAction href="/docs/getting-started">
-							Start with docs
+					<div className="action-strip">
+						<SecondaryAction href={localizePath(props.route.locale, "/learn")}>
+							{siteCopy[props.route.locale].nav.learn}
 						</SecondaryAction>
-						<InlineAction href="/reference">Toolchain reference</InlineAction>
-					</Group>
+						<InlineAction href={localizePath(props.route.locale, "/community")}>
+							{siteCopy[props.route.locale].nav.community}
+						</InlineAction>
+					</div>
 				}
 			/>
-			<SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-				{installPrerequisites.map((item) => (
-					<Surface key={item.title} p="md" tone="panel" className="portal-card">
-						<Stack gap="sm">
-							<Text className="eyebrow">{item.title}</Text>
-							<Text fw={700}>{item.value}</Text>
-							<Text>{item.copy}</Text>
-						</Stack>
+
+			<section className="portal-grid" aria-label={copy.prerequisitesLabel}>
+				{installPrerequisites(props.route.locale).map((item) => (
+					<Surface key={item.title} tone="panel" className="portal-card">
+						<div className="eyebrow">{item.title}</div>
+						<h2>{item.value}</h2>
+						<p>{item.copy}</p>
 					</Surface>
 				))}
-			</SimpleGrid>
-			<SimpleGrid cols={{ base: 1, lg: 2 }} spacing="sm">
-				<Surface p="md" tone="code" className="snippet-panel">
-					<Text className="eyebrow" mb="sm">
-						Install from source
-					</Text>
-					<HtmlSnippet className="docs-content" html={installSourceHtml} />
+			</section>
+
+			<section className="code-grid" aria-label={localeCopy.ui.installCommands}>
+				<Surface tone="code" className="snippet-panel">
+					<div className="eyebrow">{copy.installSourceLabel}</div>
+					<HtmlSnippet
+						className="docs-content"
+						html={installSourceHtml}
+						locale={props.route.locale}
+					/>
 				</Surface>
-				<Surface p="md" tone="code" className="snippet-panel">
-					<Text className="eyebrow" mb="sm">
-						Quick start
-					</Text>
-					<HtmlSnippet className="docs-content" html={quickstartHtml} />
+				<Surface tone="code" className="snippet-panel">
+					<div className="eyebrow">{copy.quickStartLabel}</div>
+					<HtmlSnippet
+						className="docs-content"
+						html={quickstartHtml}
+						locale={props.route.locale}
+					/>
 				</Surface>
-			</SimpleGrid>
-			<Surface p="md" tone="panel">
-				<Stack gap="md">
+			</section>
+
+			<Surface tone="panel" className="section-panel">
+				<div className="section-heading-row">
 					<div>
-						<Text className="eyebrow" mb={8}>
-							Command map
-						</Text>
-						<Text component="h2" fw={700} fz="h3">
-							Current entry points
-						</Text>
-						<Text c="dimmed" mt={6}>
-							Use package commands most of the time. Use direct commands when
-							you want one file or one artifact.
-						</Text>
+						<div className="eyebrow">{copy.commandMapLabel}</div>
+						<h2>{copy.commandMapTitle}</h2>
+						<p className="muted">{copy.commandMapCopy}</p>
 					</div>
-					<Table
-						striped={true}
-						highlightOnHover={true}
-						withTableBorder={true}
-						className="table-dense"
-					>
-						<Table.Thead>
-							<Table.Tr>
-								<Table.Th>Command</Table.Th>
-								<Table.Th>Description</Table.Th>
-							</Table.Tr>
-						</Table.Thead>
-						<Table.Tbody>
-							{commandRows.map((row) => (
-								<Table.Tr key={row.command}>
-									<Table.Td>
-										<Text ff="monospace">{row.command}</Text>
-									</Table.Td>
-									<Table.Td>{row.description}</Table.Td>
-								</Table.Tr>
+				</div>
+				<div className="table-wrap">
+					<table className="data-table">
+						<caption className="sr-only">
+							{localeCopy.ui.commandReference}
+						</caption>
+						<thead>
+							<tr>
+								<th scope="col">{localeCopy.ui.lane}</th>
+								<th scope="col">{localeCopy.ui.command}</th>
+								<th scope="col">{localeCopy.ui.description}</th>
+							</tr>
+						</thead>
+						<tbody>
+							{commandRows(props.route.locale).map((row) => (
+								<tr key={row.command}>
+									<td>{row.audience}</td>
+									<td>
+										<code>{row.command}</code>
+									</td>
+									<td>{row.description}</td>
+								</tr>
 							))}
-						</Table.Tbody>
-					</Table>
-				</Stack>
+						</tbody>
+					</table>
+				</div>
 			</Surface>
-		</Stack>
+		</div>
 	);
 }

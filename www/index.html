@@ -3,14 +3,36 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light dark" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<script
+			src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+			async
+			defer
+		></script>
+		<script>
+			(() => {
+				const key = "musi-color-scheme";
+				const stored = window.localStorage.getItem(key);
+				const scheme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+				const resolved =
+					scheme === "system"
+						? window.matchMedia("(prefers-color-scheme: dark)").matches
+							? "dark"
+							: "light"
+						: scheme;
+				document.documentElement.dataset.colorScheme = scheme;
+				document.documentElement.dataset.mantineColorScheme = resolved;
+				document.documentElement.style.colorScheme = resolved;
+			})();
+		</script>
 		<!-- SEO_HEAD_START -->
 		<title>Musi</title>
 		<meta
 			name="description"
 			content="Programming language built around first-class resumable effects."
 		/>
-		<link rel="canonical" href="https://musi-lang.com/" />
+		<link rel="canonical" href="https://musi-lang.org/" />
 		<meta name="robots" content="index,follow" />
 		<meta property="og:type" content="website" />
 		<meta property="og:title" content="Musi" />
@@ -18,7 +40,7 @@
 			property="og:description"
 			content="Programming language built around first-class resumable effects."
 		/>
-		<meta property="og:url" content="https://musi-lang.com/" />
+		<meta property="og:url" content="https://musi-lang.org/" />
 		<meta name="twitter:card" content="summary" />
 		<meta name="twitter:title" content="Musi" />
 		<meta
@@ -26,7 +48,7 @@
 			content="Programming language built around first-class resumable effects."
 		/>
 		<script id="seo-structured-data" type="application/ld+json">
-			{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Musi","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://musi-lang.com","description":"Programming language built around first-class resumable effects."}
+			{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Musi","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://musi-lang.org","description":"Programming language built around first-class resumable effects."}
 		</script>
 		<!-- SEO_HEAD_END -->
 	</head>

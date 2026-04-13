@@ -7,6 +7,7 @@ import { bookPages, bookParts } from "../src/content/book/manifest";
 import { tryBlockById } from "../src/content/book/try-registry";
 import { exampleGroupById } from "../src/content/examples/groups";
 import { contentSnippets, snippetById } from "../src/content/snippet-registry";
+import type { Locale } from "../src/lib/site-copy";
 
 interface TextMateRule {
 	include?: string;
@@ -44,6 +45,7 @@ interface GeneratedHeading {
 }
 
 interface GeneratedDoc extends MarkdownDocumentAttributes {
+	locale: Locale;
 	id: string;
 	kind: "part" | "chapter";
 	partId: string;
@@ -59,6 +61,23 @@ interface GeneratedDoc extends MarkdownDocumentAttributes {
 }
 
 const quotedValuePattern = /^"(.*)"$/;
+const contentRootPattern = /^src\/content\//;
+const docsRoutePattern = /^\/docs/;
+
+function localizedContentSourcePath(locale: Locale, sourcePath: string) {
+	if (locale === "en") {
+		return sourcePath;
+	}
+	const localizedPath = sourcePath.replace(
+		contentRootPattern,
+		"src/content/ja/",
+	);
+	if (localizedPath === sourcePath) {
+		throw new Error(`cannot localize content path: ${sourcePath}`);
+	}
+	return localizedPath;
+}
+
 const numberValuePattern = /^\d+$/;
 const rawMusiFencePattern = /```musi\b/;
 const examplePattern = /\{\{example:([\w-]+)\}\}/g;
@@ -336,7 +355,7 @@ function slugifyHeading(text: string) {
 	return text
 		.toLowerCase()
 		.replace(/[`']/g, "")
-		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/[^\p{Letter}\p{Number}]+/gu, "-")
 		.replace(/^-+|-+$/g, "");
 }
 
@@ -517,7 +536,26 @@ function rewriteDocLinks(source: string, rewrites: Map<string, string>) {
 	});
 }
 
+function localizeMarkdownLinks(locale: Locale, source: string) {
+	if (locale === "en") {
+		return source;
+	}
+	return source
+		.replaceAll("](/docs", "](/ja/learn")
+		.replaceAll("](/install)", "](/ja/install)")
+		.replaceAll("](/community)", "](/ja/community)")
+		.replaceAll("](/playground)", "](/ja/playground)");
+}
+
+function localizedDocRoute(locale: Locale, path: string) {
+	if (locale === "ja") {
+		return path.replace(docsRoutePattern, "/ja/learn");
+	}
+	return path.replace(docsRoutePattern, "/learn");
+}
+
 async function renderMarkdownDocument(input: {
+	locale: Locale;
 	id: string;
 	kind: "part" | "chapter";
 	partId: string;
@@ -528,15 +566,22 @@ async function renderMarkdownDocument(input: {
 	questions: { label: string; href: string }[];
 	rewrites: Map<string, string>;
 }) {
-	const source = await readFile(docSourcePath(input.sourcePath), "utf8");
+	const source = await readFile(
+		docSourcePath(localizedContentSourcePath(input.locale, input.sourcePath)),
+		"utf8",
+	);
 	assertNoRawMusiFences(source, input.sourcePath);
 	assertConsumerSafeDocs(source, input.sourcePath);
-	const rewrittenSource = rewriteDocLinks(source, input.rewrites);
+	const rewrittenSource = localizeMarkdownLinks(
+		input.locale,
+		rewriteDocLinks(source, input.rewrites),
+	);
 	const parsed = parseFrontmatter(rewrittenSource);
 	const attributes = parsed.attributes as Partial<MarkdownDocumentAttributes>;
 	const rendered = renderMarkdown(rewrittenSource);
 
 	return {
+		locale: input.locale,
 		id: input.id,
 		kind: input.kind,
 		partId: input.partId,
@@ -564,43 +609,53 @@ export async function generateContent() {
 		quickstartHtml: renderSnippet("quickstart"),
 	};
 
-	const partById = new Map(bookParts.map((part) => [part.id, part] as const));
 	const rewrites = buildDocLinkMap();
-	const renderedDocs = await Promise.all([
-		...bookParts.map((part) =>
-			renderMarkdownDocument({
-				id: part.id,
-				kind: "part",
-				partId: part.id,
-				partTitle: part.id,
-				path: part.path,
-				aliases: [],
-				sourcePath: part.sourcePath,
-				questions: [],
-				rewrites,
+	const renderedDocs: GeneratedDoc[] = [];
+	for (const locale of ["en", "ja"] as const) {
+		const localizedPartDocs = await Promise.all(
+			bookParts.map((part) =>
+				renderMarkdownDocument({
+					locale,
+					id: part.id,
+					kind: "part",
+					partId: part.id,
+					partTitle: part.id,
+					path: localizedDocRoute(locale, part.path),
+					aliases: [],
+					sourcePath: part.sourcePath,
+					questions: [],
+					rewrites,
+				}),
+			),
+		);
+		const partById = new Map(
+			localizedPartDocs.map((part) => [part.id, part] as const),
+		);
+		const localizedPageDocs = await Promise.all(
+			bookPages.map((page) => {
+				const part = partById.get(page.partId);
+				if (!part) {
+					throw new Error(`missing part ${page.partId} for page ${page.id}`);
+				}
+				return renderMarkdownDocument({
+					locale,
+					id: page.id,
+					kind: "chapter",
+					partId: page.partId,
+					partTitle: part.title,
+					path: localizedDocRoute(locale, page.path),
+					aliases: locale === "en" ? [page.path, ...page.aliases] : [],
+					sourcePath: page.sourcePath,
+					questions: page.questions.map((question) => ({
+						label: question.labels[locale],
+						href: localizedDocRoute(locale, page.path),
+					})),
+					rewrites,
+				});
 			}),
-		),
-		...bookPages.map((page) => {
-			const part = partById.get(page.partId);
-			if (!part) {
-				throw new Error(`missing part ${page.partId} for page ${page.id}`);
-			}
-			return renderMarkdownDocument({
-				id: page.id,
-				kind: "chapter",
-				partId: page.partId,
-				partTitle: part.id,
-				path: page.path,
-				aliases: page.aliases,
-				sourcePath: page.sourcePath,
-				questions: page.questions.map((question) => ({
-					label: question.label,
-					href: page.path,
-				})),
-				rewrites,
-			});
-		}),
-	]);
+		);
+		renderedDocs.push(...localizedPartDocs, ...localizedPageDocs);
+	}
 
 	const generated = `export interface GeneratedHeading {
 \tdepth: number;
@@ -609,6 +664,7 @@ export async function generateContent() {
 }
 
 export interface GeneratedDoc {
+\tlocale: "en" | "ja";
 \tid: string;
 \tkind: "part" | "chapter";
 \tpartId: string;
@@ -633,6 +689,7 @@ export interface GeneratedDoc {
 export const renderedSnippets = ${JSON.stringify(renderedSnippets, null, "\t")} as const;
 
 export const renderedDocs = ${JSON.stringify(renderedDocs, null, "\t")} satisfies GeneratedDoc[];
+
 `;
 
 	await writeFile(generatedContentPath, generated, "utf8");

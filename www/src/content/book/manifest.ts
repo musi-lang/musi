@@ -1,3 +1,5 @@
+import type { Locale } from "../../lib/site-copy";
+
 export interface BookPartDefinition {
 	id: string;
 	path: string;
@@ -5,7 +7,7 @@ export interface BookPartDefinition {
 }
 
 export interface BookPageQuestion {
-	label: string;
+	labels: Record<Locale, string>;
 }
 
 export interface BookPageDefinition {
@@ -54,8 +56,10 @@ export const bookPages = [
 		sourcePath: "src/content/docs/getting-started.md",
 		questions: [
 			{
-				label:
-					"How do I install Musi and learn the <code>music</code> / <code>musi</code> split?",
+				labels: {
+					en: "How do I install Musi and learn the <code>music</code> / <code>musi</code> split?",
+					ja: "Musi を導入して <code>music</code> と <code>musi</code> の違いを知るには?",
+				},
 			},
 		],
 	},
@@ -65,7 +69,14 @@ export const bookPages = [
 		path: "/docs/start/first-program",
 		aliases: ["/docs/first-program"],
 		sourcePath: "src/content/docs/first-program.md",
-		questions: [{ label: "How do I write and run the smallest Musi file?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I write and run the smallest Musi file?",
+					ja: "最小の Musi file を書いて実行するには?",
+				},
+			},
+		],
 	},
 	{
 		id: "files-packages-and-entry",
@@ -73,7 +84,14 @@ export const bookPages = [
 		path: "/docs/start/files-packages-and-entry",
 		aliases: ["/docs/files-packages-and-entry"],
 		sourcePath: "src/content/docs/files-packages-and-entry.md",
-		questions: [{ label: "How do I switch from one file to a package?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I switch from one file to a package?",
+					ja: "1 file から package へ切り替えるには?",
+				},
+			},
+		],
 	},
 	{
 		id: "imports-and-packages",
@@ -83,8 +101,10 @@ export const bookPages = [
 		sourcePath: "src/content/docs/imports-and-packages.md",
 		questions: [
 			{
-				label:
-					"How do I import <code>@std</code> modules and when do I use <code>musi:*</code>?",
+				labels: {
+					en: "How do I import <code>@std</code> modules and when do I use <code>musi:*</code>?",
+					ja: "<code>@std</code> module を import し、<code>musi:*</code> を使う場面を知るには?",
+				},
 			},
 		],
 	},
@@ -94,7 +114,14 @@ export const bookPages = [
 		path: "/docs/core-language/expressions-and-bindings",
 		aliases: ["/docs/expressions-and-bindings"],
 		sourcePath: "src/content/docs/expressions-and-bindings.md",
-		questions: [{ label: "How do I read a Musi file top to bottom?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I read a Musi file top to bottom?",
+					ja: "Musi file を上から下へ読むには?",
+				},
+			},
+		],
 	},
 	{
 		id: "operators-and-literals",
@@ -104,8 +131,10 @@ export const bookPages = [
 		sourcePath: "src/content/docs/operators-and-literals.md",
 		questions: [
 			{
-				label:
-					"How do operators, records, and arrays fit in ordinary expressions?",
+				labels: {
+					en: "How do operators, records, and arrays fit in ordinary expressions?",
+					ja: "operator、record、array は通常の式の中でどう書く?",
+				},
 			},
 		],
 	},
@@ -117,7 +146,10 @@ export const bookPages = [
 		sourcePath: "src/content/docs/functions-and-calls.md",
 		questions: [
 			{
-				label: "How do I define functions and recursion with <code>let</code>?",
+				labels: {
+					en: "How do I define functions and recursion with <code>let</code>?",
+					ja: "<code>let</code> で function と recursion を定義するには?",
+				},
 			},
 		],
 	},
@@ -128,7 +160,12 @@ export const bookPages = [
 		aliases: ["/docs/data-and-pattern-matching"],
 		sourcePath: "src/content/docs/data-and-pattern-matching.md",
 		questions: [
-			{ label: "How do I model variants and branch with <code>case</code>?" },
+			{
+				labels: {
+					en: "How do I model variants and branch with <code>case</code>?",
+					ja: "<code>case</code> で variant を表し分岐するには?",
+				},
+			},
 		],
 	},
 	{
@@ -138,7 +175,12 @@ export const bookPages = [
 		aliases: ["/docs/records-arrays-and-mutation"],
 		sourcePath: "src/content/docs/records-arrays-and-mutation.md",
 		questions: [
-			{ label: "How do I update records and arrays without guessing syntax?" },
+			{
+				labels: {
+					en: "How do I update records and arrays without guessing syntax?",
+					ja: "record と array を構文で迷わず更新するには?",
+				},
+			},
 		],
 	},
 	{
@@ -147,7 +189,14 @@ export const bookPages = [
 		path: "/docs/types-and-abstractions/types",
 		aliases: ["/docs/types"],
 		sourcePath: "src/content/docs/types.md",
-		questions: [{ label: "How do I add type annotations and generics?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I add type annotations and generics?",
+					ja: "型注釈と generic を追加するには?",
+				},
+			},
+		],
 	},
 	{
 		id: "classes-instances-and-laws",
@@ -155,7 +204,14 @@ export const bookPages = [
 		path: "/docs/types-and-abstractions/classes-instances-and-laws",
 		aliases: ["/docs/classes-instances-and-laws"],
 		sourcePath: "src/content/docs/classes-instances-and-laws.md",
-		questions: [{ label: "How do I define a class and add an instance?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I define a class and add an instance?",
+					ja: "class を定義して instance を追加するには?",
+				},
+			},
+		],
 	},
 	{
 		id: "effects-and-handlers",
@@ -165,8 +221,10 @@ export const bookPages = [
 		sourcePath: "src/content/docs/effects-and-handlers.md",
 		questions: [
 			{
-				label:
-					"How do I define effects, handle them, and use <code>resume</code>?",
+				labels: {
+					en: "How do I define effects, handle them, and use <code>resume</code>?",
+					ja: "effect を定義し、handle し、<code>resume</code> を使うには?",
+				},
 			},
 		],
 	},
@@ -177,7 +235,12 @@ export const bookPages = [
 		aliases: ["/docs/quote-and-syntax"],
 		sourcePath: "src/content/docs/quote-and-syntax.md",
 		questions: [
-			{ label: "How do <code>quote</code> and splice work in real Musi code?" },
+			{
+				labels: {
+					en: "How do <code>quote</code> and splice work in real Musi code?",
+					ja: "実際の Musi code で <code>quote</code> と splice はどう使う?",
+				},
+			},
 		],
 	},
 	{
@@ -187,7 +250,12 @@ export const bookPages = [
 		aliases: ["/docs/attributes-and-foreign"],
 		sourcePath: "src/content/docs/attributes-and-foreign.md",
 		questions: [
-			{ label: "How do I declare foreign functions and attributes?" },
+			{
+				labels: {
+					en: "How do I declare foreign functions and attributes?",
+					ja: "foreign function と attribute を宣言するには?",
+				},
+			},
 		],
 	},
 	{
@@ -197,7 +265,12 @@ export const bookPages = [
 		aliases: ["/docs/foundation-and-standard-library"],
 		sourcePath: "src/content/docs/foundation-and-standard-library.md",
 		questions: [
-			{ label: "How do <code>@std</code> and <code>musi:*</code> differ?" },
+			{
+				labels: {
+					en: "How do <code>@std</code> and <code>musi:*</code> differ?",
+					ja: "<code>@std</code> と <code>musi:*</code> はどう違う?",
+				},
+			},
 		],
 	},
 	{
@@ -206,7 +279,14 @@ export const bookPages = [
 		path: "/docs/tooling/testing-and-running",
 		aliases: ["/docs/testing-and-running"],
 		sourcePath: "src/content/docs/testing-and-running.md",
-		questions: [{ label: "How do I run tests, packages, and direct files?" }],
+		questions: [
+			{
+				labels: {
+					en: "How do I run tests, packages, and direct files?",
+					ja: "test、package、direct file を実行するには?",
+				},
+			},
+		],
 	},
 	{
 		id: "common-questions",

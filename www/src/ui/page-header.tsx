@@ -1,4 +1,3 @@
-import { Stack, Text, Title, type TitleProps } from "@mantine/core";
 import type { ReactNode } from "react";
 
 export interface PageHeaderProps {
@@ -9,38 +8,31 @@ export interface PageHeaderProps {
 	actions?: ReactNode;
 	badge?: ReactNode;
 	meta?: ReactNode;
-	titleOrder?: TitleProps["order"];
-	titleSize?: TitleProps["size"];
+	titleAs?: "h1" | "h2";
+	titleSize?: "page" | "section";
 }
 
 export function PageHeader(props: PageHeaderProps) {
+	const TitleTag = props.titleAs ?? "h1";
+	const titleClassName = `page-header-title page-header-title-${props.titleSize ?? "page"}`;
+
 	return (
-		<Stack gap="md" className="page-header">
-			<div>
+		<div className="page-header">
+			<div className="page-header-body">
 				<div className="page-header-topline">
-					<Text className="eyebrow">{props.eyebrow}</Text>
+					<div className="eyebrow">{props.eyebrow}</div>
 					{props.badge ? (
 						<div className="page-header-badge">{props.badge}</div>
 					) : null}
 				</div>
-				<Title
-					order={props.titleOrder ?? 1}
-					size={props.titleSize ?? "h1"}
-					className="page-header-title"
-				>
-					{props.title}
-				</Title>
+				<TitleTag className={titleClassName}>{props.title}</TitleTag>
 				{props.descriptionHtml ? (
-					<Text
-						mt="md"
-						maw={760}
+					<div
 						className="page-copy page-header-copy"
 						dangerouslySetInnerHTML={{ __html: props.descriptionHtml }}
 					/>
 				) : props.description ? (
-					<Text mt="md" maw={760} className="page-copy page-header-copy">
-						{props.description}
-					</Text>
+					<div className="page-copy page-header-copy">{props.description}</div>
 				) : null}
 				{props.meta ? (
 					<div className="page-header-meta">{props.meta}</div>
@@ -49,6 +41,6 @@ export function PageHeader(props: PageHeaderProps) {
 			{props.actions ? (
 				<div className="page-header-actions">{props.actions}</div>
 			) : null}
-		</Stack>
+		</div>
 	);
 }

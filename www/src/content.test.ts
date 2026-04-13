@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { homeDescriptor } from "./content";
 import { bookPages, bookParts } from "./content/book/manifest";
 import { exampleGroups } from "./content/examples/groups";
 import { contentSnippets } from "./content/snippet-registry";
 import { renderedDocs, renderedSnippets } from "./generated-content";
 import { nextScheme } from "./layout/site-layout";
+import { siteCopy } from "./lib/site-copy";
 
 const BANNED_SNIPPET_PATTERNS = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
 const BANNED_SITE_COPY = [
@@ -19,8 +19,8 @@ const BANNED_SITE_COPY = [
 describe("content generation", () => {
 	it("cycles color scheme in the header order", () => {
 		expect(nextScheme("light")).toBe("dark");
-		expect(nextScheme("dark")).toBe("auto");
-		expect(nextScheme("auto")).toBe("light");
+		expect(nextScheme("dark")).toBe("system");
+		expect(nextScheme("system")).toBe("light");
 	});
 
 	it("emits dual-theme shiki markup", () => {
@@ -30,7 +30,7 @@ describe("content generation", () => {
 
 	it("keeps shared public copy free of old slogan text", () => {
 		const descriptorText = renderToStaticMarkup(
-			createElement(Fragment, null, homeDescriptor),
+			createElement(Fragment, null, siteCopy.en.home.description),
 		);
 
 		for (const phrase of BANNED_SITE_COPY) {
@@ -66,9 +66,11 @@ describe("content generation", () => {
 	});
 
 	it("renders every manifest doc entry", () => {
-		expect(renderedDocs).toHaveLength(bookPages.length + bookParts.length);
+		expect(renderedDocs).toHaveLength(
+			(bookPages.length + bookParts.length) * 2,
+		);
 		expect(renderedDocs.filter((doc) => doc.kind === "chapter")).toHaveLength(
-			bookPages.length,
+			bookPages.length * 2,
 		);
 	});
 

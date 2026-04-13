@@ -1,12 +1,8 @@
-import { Box, Divider, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import {
-	homeDescriptor,
-	homeSampleHtml,
-	homeSections,
-	learningTracks,
-	startHereLinks,
-} from "../../content";
+import { homeSampleHtml } from "../../content";
 import { docGroups } from "../../docs";
+import { siteCopy } from "../../lib/site-copy";
+import { localizePath } from "../../lib/site-links";
+import type { AppRoute } from "../../routes";
 import {
 	ActionStrip,
 	InlineAction,
@@ -18,124 +14,126 @@ import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 
-export function HomePage() {
+export function HomePage(props: { route: AppRoute }) {
+	const localeCopy = siteCopy[props.route.locale];
+	const copy = localeCopy.home;
 	return (
-		<Stack gap="lg">
-			<Surface p={{ base: "md", md: "lg" }} tone="hero">
-				<SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" verticalSpacing="md">
+		<div className="page-stack page-home">
+			<Surface tone="hero" className="hero-grid hero-shell">
+				<div className="hero-copy-column">
 					<PageHeader
-						eyebrow="Language"
-						title="Musi"
-						description={homeDescriptor}
+						eyebrow={copy.eyebrow}
+						title={copy.title}
+						description={copy.description}
 						meta={
-							<SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" mt="md">
-								{learningTracks.map((track) => (
-									<Surface
-										key={track.title}
-										component="a"
-										href={track.href}
-										p="sm"
-										tone="panel"
-										className="info-chip"
-									>
-										<Text className="eyebrow" mb={4}>
-											{track.title}
-										</Text>
-										<Text size="sm">{track.copy}</Text>
-									</Surface>
+							<ul className="hero-summary-list">
+								{copy.summary.map((item) => (
+									<li key={item} className="hero-summary-item">
+										{item}
+									</li>
 								))}
-							</SimpleGrid>
+							</ul>
 						}
 						actions={
 							<ActionStrip>
-								<PrimaryAction href="/docs">Docs</PrimaryAction>
-								<SecondaryAction href="/install">Install</SecondaryAction>
-								<InlineAction href="/reference">Reference</InlineAction>
+								<PrimaryAction
+									href={localizePath(props.route.locale, "/learn")}
+								>
+									{copy.primaryCta}
+								</PrimaryAction>
+								<SecondaryAction
+									href={localizePath(props.route.locale, "/install")}
+								>
+									{copy.secondaryCta}
+								</SecondaryAction>
+								<InlineAction
+									href={localizePath(props.route.locale, "/community")}
+								>
+									{copy.tertiaryCta}
+								</InlineAction>
 							</ActionStrip>
 						}
 					/>
-					<Surface p="md" tone="code" className="snippet-panel">
-						<Text className="eyebrow" mb="sm">
-							Sample
-						</Text>
-						<HtmlSnippet className="docs-content" html={homeSampleHtml} />
-					</Surface>
-				</SimpleGrid>
+				</div>
+				<Surface
+					tone="raised"
+					className="snippet-panel hero-code-panel hero-float-panel"
+				>
+					<div className="eyebrow">{localeCopy.ui.sample}</div>
+					<HtmlSnippet
+						className="docs-content"
+						html={homeSampleHtml}
+						locale={props.route.locale}
+					/>
+				</Surface>
 			</Surface>
-			<SimpleGrid cols={{ base: 1, md: 3 }} spacing="sm">
-				{startHereLinks.map((link, index) => (
-					<Surface key={link.title} p="md" tone="panel" className="portal-card">
-						<Stack gap="xs">
-							<Text className="eyebrow">Path {index + 1}</Text>
-							<Text component="h2" fw={700} fz="h4">
-								{link.title}
-							</Text>
-							<Text>{link.copy}</Text>
-							<InlineAction href={link.href}>Open</InlineAction>
-						</Stack>
-					</Surface>
-				))}
-			</SimpleGrid>
-			<SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-				{homeSections.map((section) => (
+
+			<section className="portal-grid" aria-label={localeCopy.ui.primaryPaths}>
+				{copy.paths.map((link) => (
 					<Surface
-						key={section.title}
-						p="md"
-						tone="panel"
-						className="portal-card"
+						key={link.title}
+						tone="raised"
+						className="portal-card portal-card-raised"
 					>
-						<Stack gap="sm">
-							<Text className="eyebrow">{section.title}</Text>
-							<Text>{section.copy}</Text>
-						</Stack>
+						<div className="eyebrow">{link.label}</div>
+						<h2>{link.title}</h2>
+						<p>{link.copy}</p>
+						<InlineAction href={link.href}>{localeCopy.ui.open}</InlineAction>
 					</Surface>
 				))}
-			</SimpleGrid>
-			<Surface p={{ base: "md", md: "lg" }} tone="panel">
-				<Stack gap="md">
-					<Group justify="space-between" align="end">
-						<Box>
-							<Text className="eyebrow" mb={6}>
-								Docs
-							</Text>
-							<Text component="h2" fw={700} fz="h3">
-								Read in order
-							</Text>
-							<Text c="dimmed" mt={6}>
-								Start at setup, then move through syntax, types, and tooling.
-								Jump by chapter group if you already know the topic you need.
-							</Text>
-						</Box>
-						<InlineAction href="/docs">All chapters</InlineAction>
-					</Group>
-					<Divider />
-					<SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-						{docGroups.map((group) => (
+			</section>
+
+			<Surface
+				tone="well"
+				className="section-panel section-panel-structured why-panel"
+			>
+				<div className="section-heading-row section-heading-bar">
+					<div>
+						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<h2>{copy.sectionsTitle}</h2>
+					</div>
+				</div>
+				<div className="feature-grid feature-grid-separated">
+					{copy.sections.map((section) => (
+						<Surface
+							key={section.title}
+							tone="raised"
+							className="feature-card feature-card-raised"
+						>
+							<div className="eyebrow">{section.title}</div>
+							<p>{section.copy}</p>
+						</Surface>
+					))}
+				</div>
+			</Surface>
+
+			<Surface
+				tone="well"
+				className="section-panel section-panel-structured learn-map-panel"
+			>
+				<div className="section-heading-row section-heading-bar">
+					<div>
+						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<h2>{localeCopy.learn.partsTitle}</h2>
+					</div>
+					<InlineAction href={localizePath(props.route.locale, "/learn")}>
+						{localeCopy.nav.learn}
+					</InlineAction>
+				</div>
+				<div className="doc-groups-grid doc-groups-grid-separated">
+					{docGroups
+						.filter((group) => group.locale === props.route.locale)
+						.map((group) => (
 							<DocListGroup
-								key={group.group}
+								key={`${group.locale}:${group.group}`}
 								group={group.group}
+								path={group.path}
+								summaryHtml={group.summaryHtml}
 								pages={group.pages}
 							/>
 						))}
-					</SimpleGrid>
-				</Stack>
-			</Surface>
-			<Surface p="md" tone="panel">
-				<div>
-					<Text className="eyebrow" mb={8}>
-						Project
-					</Text>
-					<Group gap="md">
-						<InlineAction href="https://github.com/musi-lang/musi">
-							GitHub
-						</InlineAction>
-						<InlineAction href="/install">Toolchain commands</InlineAction>
-						<InlineAction href="/reference">
-							Grammar and source links
-						</InlineAction>
-					</Group>
 				</div>
 			</Surface>
-		</Stack>
+		</div>
 	);
 }

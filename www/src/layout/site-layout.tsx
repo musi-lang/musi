@@ -1,283 +1,265 @@
-import {
-	ActionIcon,
-	Anchor,
-	AppShell,
-	Box,
-	Burger,
-	Container,
-	Divider,
-	Drawer,
-	Group,
-	NavLink,
-	ScrollArea,
-	Stack,
-	Text,
-	Tooltip,
-	useMantineColorScheme,
-} from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { docGroups } from "../docs";
 import {
+	ChevronDownIcon,
 	DesktopIcon,
 	GithubIcon,
+	JapanFlagIcon,
+	MenuIcon,
 	MoonIcon,
 	MusiMarkIcon,
 	SunIcon,
+	UnitedStatesFlagIcon,
 } from "../icons";
+import { type Locale, siteCopy } from "../lib/site-copy";
+import { localizePath } from "../lib/site-links";
 import type { AppRoute } from "../routes";
 import { isDocsRoute, primaryRoutes } from "../routes";
+import { ThemeToggleButton } from "../ui/actions";
+import { type ColorScheme, useTheme } from "../ui/theme";
 
-type ColorScheme = "light" | "dark" | "auto";
+const schemeOrder: readonly ColorScheme[] = [
+	"light",
+	"dark",
+	"system",
+] as const;
 
-const SCHEME_CYCLE: readonly ColorScheme[] = ["light", "dark", "auto"] as const;
-
-const schemeLabel: Record<ColorScheme, string> = {
-	light: "Switch to dark mode",
-	dark: "Switch to system mode",
-	auto: "Switch to light mode",
-};
-
-export function nextScheme(current: ColorScheme) {
-	const index = SCHEME_CYCLE.indexOf(current);
-	return SCHEME_CYCLE[(index + 1) % SCHEME_CYCLE.length];
+export function nextScheme(current: ColorScheme): ColorScheme {
+	const index = schemeOrder.indexOf(current);
+	return schemeOrder[(index + 1) % schemeOrder.length];
 }
 
-function ColorSchemeIcon(props: { scheme: ColorScheme }) {
-	switch (props.scheme) {
-		case "light":
-			return <SunIcon size={18} />;
-		case "dark":
-			return <MoonIcon size={18} />;
-		case "auto":
-			return <DesktopIcon size={18} />;
-		default:
-			return <DesktopIcon size={18} />;
+function themeLabel(locale: Locale, scheme: ColorScheme) {
+	const labels = siteCopy[locale].utilityLabels;
+	if (scheme === "light") {
+		return labels.themeLight;
 	}
+	if (scheme === "dark") {
+		return labels.themeDark;
+	}
+	return labels.themeSystem;
 }
 
 function HeaderLinks(props: { route: AppRoute; onNavigate?: () => void }) {
 	return (
 		<>
 			{primaryRoutes
-				.filter((route) => route.id !== "home")
+				.filter((route) => route.locale === props.route.locale)
 				.map((route) => (
-					<Anchor
+					<a
 						key={route.id}
-						href={route.disabled ? "#" : route.path}
-						onClick={
-							route.disabled ? (e) => e.preventDefault() : props.onNavigate
-						}
-						underline="never"
-						c={props.route.path === route.path ? "text" : "dimmed"}
-						fw={props.route.path === route.path ? 700 : 500}
-						size="sm"
-						className={`header-link ${props.route.path === route.path ? "header-link-active" : ""}`}
-						style={
-							route.disabled ? { opacity: 0.5, cursor: "not-allowed" } : {}
-						}
+						href={route.path}
+						onClick={props.onNavigate}
+						className={`header-link${props.route.section === route.section ? " is-active" : ""}`}
 					>
 						{route.label}
-					</Anchor>
+					</a>
 				))}
 		</>
 	);
 }
 
-function HeaderUtilities(props: { onNavigate?: () => void }) {
-	const { colorScheme, setColorScheme } = useMantineColorScheme();
-	const current = colorScheme as ColorScheme;
+function ThemeControl(props: { locale: Locale }) {
+	const { colorScheme, setColorScheme } = useTheme();
+	const Icon =
+		colorScheme === "light"
+			? SunIcon
+			: colorScheme === "dark"
+				? MoonIcon
+				: DesktopIcon;
+	return (
+		<ThemeToggleButton
+			aria-label={themeLabel(props.locale, colorScheme)}
+			title={themeLabel(props.locale, colorScheme)}
+			onClick={() => setColorScheme(nextScheme(colorScheme))}
+		>
+			<Icon size={18} />
+			<span className="sr-only">{themeLabel(props.locale, colorScheme)}</span>
+		</ThemeToggleButton>
+	);
+}
+
+function localeTargetPath(route: AppRoute, locale: Locale) {
+	const basePath =
+		route.path === "/ja"
+			? "/"
+			: route.path.startsWith("/ja/")
+				? route.path.slice(3)
+				: route.path;
+	return localizePath(locale, basePath);
+}
+
+function LocaleSwitch(props: { route: AppRoute }) {
+	const copy = siteCopy[props.route.locale];
+	const currentLocale = props.route.locale;
+	const CurrentFlag =
+		currentLocale === "en" ? UnitedStatesFlagIcon : JapanFlagIcon;
+	const menuRef = useRef<HTMLDetailsElement | null>(null);
+
+	function closeMenu() {
+		if (menuRef.current) {
+			menuRef.current.open = false;
+		}
+	}
 
 	return (
-		<Group gap="xs">
-			<Tooltip label="GitHub repository">
-				<ActionIcon
-					component="a"
-					href="https://github.com/musi-lang/musi"
-					target="_blank"
-					rel="noreferrer"
-					variant="subtle"
-					color="gray"
-					aria-label="GitHub repository"
-					onClick={props.onNavigate}
+		<details ref={menuRef} className="locale-menu">
+			<summary
+				className="header-utility-link locale-link locale-summary"
+				aria-label={copy.utilityLabels.locale}
+				title={copy.utilityLabels.locale}
+			>
+				<CurrentFlag size={18} />
+				<ChevronDownIcon size={14} />
+				<span className="sr-only">{copy.utilityLabels.locale}</span>
+			</summary>
+			<div className="locale-menu-panel">
+				<a
+					href={localeTargetPath(props.route, "en")}
+					onClick={closeMenu}
+					className={`locale-option${currentLocale === "en" ? " is-active" : ""}`}
+					lang="en-US"
 				>
-					<GithubIcon size={18} />
-				</ActionIcon>
-			</Tooltip>
-			<Tooltip label={schemeLabel[current]}>
-				<ActionIcon
-					variant="subtle"
-					color="gray"
-					aria-label={schemeLabel[current]}
-					onClick={() => setColorScheme(nextScheme(current))}
+					<UnitedStatesFlagIcon size={18} />
+					<span>English</span>
+				</a>
+				<a
+					href={localeTargetPath(props.route, "ja")}
+					onClick={closeMenu}
+					className={`locale-option${currentLocale === "ja" ? " is-active" : ""}`}
+					lang="ja"
 				>
-					<ColorSchemeIcon scheme={current} />
-				</ActionIcon>
-			</Tooltip>
-		</Group>
+					<JapanFlagIcon size={18} />
+					<span>日本語</span>
+				</a>
+			</div>
+		</details>
 	);
 }
 
 function DocsSidebar(props: { route: AppRoute; onNavigate?: () => void }) {
 	return (
-		<Stack gap="md">
-			{docGroups.map((group) => (
-				<Stack key={group.group} gap={4} className="docs-nav-group">
-					<Anchor
-						href={group.path}
-						onClick={props.onNavigate}
-						underline="never"
-						fw={700}
-						size="sm"
-						c={props.route.path === group.path ? "text" : "dimmed"}
+		<nav aria-label="Documentation" className="docs-sidebar-nav">
+			{docGroups
+				.filter((group) => group.locale === props.route.locale)
+				.map((group) => (
+					<section
+						key={`${group.locale}:${group.group}`}
+						className="docs-sidebar-group"
 					>
-						{group.group}
-					</Anchor>
-					{group.pages.map((page) => (
-						<NavLink
-							key={page.slug}
-							component="a"
-							href={page.path}
-							label={page.title}
-							active={props.route.path === page.path}
-							variant="light"
-							autoContrast={true}
-							styles={{
-								root: {
-									borderRadius: "var(--mantine-radius-xs)",
-									border: "1px solid var(--site-border)",
-								},
-							}}
-							{...(props.onNavigate ? { onClick: props.onNavigate } : {})}
-						/>
-					))}
-				</Stack>
-			))}
-		</Stack>
+						<a
+							href={group.path}
+							onClick={props.onNavigate}
+							className={`docs-sidebar-heading${props.route.path === group.path ? " is-active" : ""}`}
+						>
+							{group.group}
+						</a>
+						<div className="docs-sidebar-list">
+							{group.pages.map((page) => (
+								<a
+									key={`${page.locale}:${page.slug}`}
+									href={page.path}
+									onClick={props.onNavigate}
+									className={`docs-sidebar-link${props.route.path === page.path ? " is-active" : ""}`}
+								>
+									{page.title}
+								</a>
+							))}
+						</div>
+					</section>
+				))}
+		</nav>
 	);
 }
 
 export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
-	const [opened, handlers] = useDisclosure(false);
+	const [menuOpen, setMenuOpen] = useState(false);
 	const docsMode = isDocsRoute(props.route);
-
-	const headerContent = (
-		<Group h="100%" px={4} justify="space-between" wrap="nowrap">
-			<Group gap="xs" wrap="nowrap">
-				<Burger
-					opened={opened}
-					onClick={handlers.toggle}
-					hiddenFrom="lg"
-					size="sm"
-					aria-label={
-						docsMode ? "Toggle docs navigation" : "Toggle site navigation"
-					}
-				/>
-				<Anchor href="/" underline="never" className="site-logo">
-					<Group gap="xs" wrap="nowrap" align="center">
-						<Box className="site-logo-mark" aria-hidden="true">
-							<MusiMarkIcon size={26} />
-						</Box>
-						<div className="site-logo-copy">
-							<Text fw={700} size="lg" c="inherit" className="site-logo-title">
-								Musi
-							</Text>
-						</div>
-					</Group>
-				</Anchor>
-			</Group>
-			<Group gap="md" wrap="nowrap">
-				<Group gap="md" visibleFrom="lg">
-					<HeaderLinks route={props.route} />
-				</Group>
-				<HeaderUtilities />
-			</Group>
-		</Group>
-	);
+	const copy = siteCopy[props.route.locale];
+	const homeHref = props.route.locale === "ja" ? "/ja" : "/";
 
 	return (
-		<AppShell
-			header={{ height: 56 }}
-			padding={{ base: "sm", md: "md" }}
-			className="site-shell"
-			{...(docsMode
-				? {
-						navbar: {
-							width: 268,
-							breakpoint: "lg" as const,
-							collapsed: { mobile: !opened },
-						},
-					}
-				: {})}
-		>
-			<AppShell.Header className="site-header">
-				<Container size="lg" h="100%">
-					{headerContent}
-				</Container>
-			</AppShell.Header>
-			{docsMode ? (
-				<AppShell.Navbar p="md" className="docs-navbar">
-					<ScrollArea type="never" h="100%">
-						<DocsSidebar route={props.route} onNavigate={handlers.close} />
-					</ScrollArea>
-				</AppShell.Navbar>
-			) : null}
-			{docsMode ? null : (
-				<Drawer
-					opened={opened}
-					onClose={handlers.close}
-					size="xs"
-					title="Navigation"
-					hiddenFrom="lg"
-					padding="md"
-					zIndex={1000}
+		<div className={`site-shell${docsMode ? " site-shell-docs" : ""}`}>
+			<a href="#main-content" className="skip-link">
+				{copy.skipToContent}
+			</a>
+			<header className="site-header">
+				<div className="site-header-inner">
+					<div className="site-brand-row">
+						<button
+							type="button"
+							className="menu-toggle"
+							onClick={() => setMenuOpen((current) => !current)}
+							aria-label={copy.menu}
+							title={copy.menu}
+							aria-expanded={menuOpen}
+							aria-controls={
+								docsMode ? "docs-sidebar-drawer" : "site-nav-drawer"
+							}
+						>
+							<MenuIcon size={18} />
+							<span className="sr-only">{copy.menu}</span>
+						</button>
+						<a href={homeHref} className="site-logo">
+							<span className="site-logo-mark" aria-hidden="true">
+								<MusiMarkIcon size={28} />
+							</span>
+							<span className="site-logo-title">Musi</span>
+						</a>
+					</div>
+					<div className="site-header-actions">
+						<nav
+							aria-label="Primary"
+							className="site-header-nav site-header-nav-desktop"
+						>
+							<HeaderLinks route={props.route} />
+						</nav>
+						<a
+							href="https://github.com/musi-lang/musi"
+							target="_blank"
+							rel="noreferrer"
+							className="header-utility-link utility-icon"
+							aria-label={copy.utilityLabels.github}
+							title={copy.utilityLabels.github}
+						>
+							<GithubIcon size={18} />
+							<span className="sr-only">{copy.utilityLabels.github}</span>
+						</a>
+						<LocaleSwitch route={props.route} />
+						<ThemeControl locale={props.route.locale} />
+					</div>
+				</div>
+				<div
+					id={docsMode ? "docs-sidebar-drawer" : "site-nav-drawer"}
+					className={`site-drawer${menuOpen ? " is-open" : ""}`}
 				>
-					<Stack gap="md">
-						<Group gap="lg">
-							<HeaderLinks route={props.route} onNavigate={handlers.close} />
-						</Group>
-						<Divider />
-						<HeaderUtilities onNavigate={handlers.close} />
-					</Stack>
-				</Drawer>
-			)}
-			<AppShell.Main>
-				<Container size="lg">{props.children}</Container>
-			</AppShell.Main>
-		</AppShell>
-	);
-}
-
-export function PageFooter() {
-	return (
-		<Stack gap="lg" mt={56} mb={32}>
-			<Divider />
-			<Group justify="space-between" align="center" gap="md" wrap="wrap">
-				<Group gap="sm" wrap="nowrap" align="center">
-					<Box className="site-logo-mark" aria-hidden="true">
-						<MusiMarkIcon size={24} />
-					</Box>
-					<Text fw={700}>Musi</Text>
-				</Group>
-				<Group gap="lg" align="center" wrap="wrap">
-					<Anchor href="/docs" underline="never" c="dimmed">
-						Docs
-					</Anchor>
-					<Anchor href="/docs/reference" underline="never" c="dimmed">
-						Reference
-					</Anchor>
-					<Anchor href="/install" underline="never" c="dimmed">
-						Install
-					</Anchor>
-					<Anchor
-						href="https://github.com/musi-lang/musi"
-						underline="never"
-						c="dimmed"
-					>
-						GitHub
-					</Anchor>
-				</Group>
-			</Group>
-		</Stack>
+					<div className="site-drawer-panel">
+						{docsMode ? (
+							<DocsSidebar
+								route={props.route}
+								onNavigate={() => setMenuOpen(false)}
+							/>
+						) : (
+							<nav aria-label="Primary" className="site-header-nav">
+								<HeaderLinks
+									route={props.route}
+									onNavigate={() => setMenuOpen(false)}
+								/>
+							</nav>
+						)}
+					</div>
+				</div>
+			</header>
+			<div className="site-frame">
+				{docsMode ? (
+					<aside className="docs-sidebar" aria-label="Documentation sections">
+						<DocsSidebar route={props.route} />
+					</aside>
+				) : null}
+				<main id="main-content" className="site-main">
+					{props.children}
+				</main>
+			</div>
+		</div>
 	);
 }

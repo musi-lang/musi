@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+export {};
+
 declare module "*.md" {
 	export const attributes: Record<string, string | number>;
 	export const html: string;
@@ -15,4 +17,10 @@ declare module "*.md" {
 declare module "*.md?raw" {
 	const content: string;
 	export default content;
+}
+
+declare global {
+	interface Window {
+		turnstile?: import("./lib/turnstile").TurnstileInstance;
+	}
 }
