@@ -5,9 +5,9 @@ use std::slice::from_ref;
 
 use music_base::{SourceId, Span, diag::Diag};
 use music_ir::{
-    DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCaseArm, IrCasePattern, IrCaseRecordField,
-    IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit, IrModule, IrNameRef, IrOrigin, IrParam,
-    IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
+    DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCasePattern, IrCaseRecordField,
+    IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit, IrMatchArm, IrModule, IrNameRef, IrOrigin,
+    IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;

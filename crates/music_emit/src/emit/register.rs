@@ -435,7 +435,7 @@ fn collect_expr_types_binding_and_control(
             collect_expr_types(state, layout, base);
             true
         }
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             collect_case_expr_types(state, layout, scrutinee, arms);
             true
         }
@@ -457,11 +457,11 @@ fn collect_expr_types_call_and_effect(
             collect_call_seq_expr_types(state, layout, callee, args);
             true
         }
-        IrExprKind::Perform { args, .. } => {
+        IrExprKind::Request { args, .. } => {
             collect_expr_types_iter(state, layout, args);
             true
         }
-        IrExprKind::PerformSeq { args, .. } => {
+        IrExprKind::RequestSeq { args, .. } => {
             let _ = ensure_type(state, layout, "[]Any");
             collect_expr_types_seq_parts(state, layout, args);
             true
@@ -511,7 +511,7 @@ fn collect_case_expr_types(
     state: &mut ProgramState,
     layout: &mut ModuleLayout,
     scrutinee: &IrExpr,
-    arms: &[IrCaseArm],
+    arms: &[IrMatchArm],
 ) {
     collect_expr_types(state, layout, scrutinee);
     for arm in arms {

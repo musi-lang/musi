@@ -94,9 +94,9 @@ fn parses_all_atom_forms_smoke() {
 	let x := 1;
 	import "std/io";
 	resume x;
-	perform x;
+	request x;
 	handle x using h { x => x; };
-	case x of (| _ => 0);
+	match x (| _ => 0);
 	foreign "c" let puts (msg : CString) : Int;
 	export let y := 2;
 	let Option[T] := data { | Some : T | None };
@@ -225,7 +225,7 @@ fn error_non_associative_chain_with_in_is_reported() {
 #[test]
 fn parses_case_and_handle_with_trailing_pipe() {
     let parsed =
-        parse(Lexer::new("case x of (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
+        parse(Lexer::new("match x (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",

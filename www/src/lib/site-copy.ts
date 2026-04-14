@@ -19,6 +19,7 @@ export interface LocalizedSiteCopy {
 	ui: {
 		sample: string;
 		open: string;
+		openSection: string;
 		primaryPaths: string;
 		docsEntryPoints: string;
 		questions: string;
@@ -36,8 +37,6 @@ export interface LocalizedSiteCopy {
 		lane: string;
 		command: string;
 		description: string;
-		guestbookEntries: string;
-		guestbookForm: string;
 	};
 	home: {
 		eyebrow: string;
@@ -48,7 +47,13 @@ export interface LocalizedSiteCopy {
 		primaryCta: string;
 		secondaryCta: string;
 		tertiaryCta: string;
-		paths: Array<{ label: string; title: string; copy: string; href: string }>;
+		paths: Array<{
+			label: string;
+			title: string;
+			copy: string;
+			href: string;
+			actionLabel: string;
+		}>;
 		sections: Array<{ title: string; copy: string }>;
 	};
 	install: {
@@ -74,23 +79,6 @@ export interface LocalizedSiteCopy {
 		eyebrow: string;
 		title: string;
 		description: string;
-		guestbookEyebrow: string;
-		guestbookTitle: string;
-		guestbookDescription: string;
-		guestbookEmpty: string;
-		guestbookLoading: string;
-		guestbookSubmit: string;
-		guestbookSuccess: string;
-		guestbookError: string;
-		guestbookReadonly: string;
-		guestbookUnavailable: string;
-		guestbookNameLabel: string;
-		guestbookWebsiteLabel: string;
-		guestbookMessageLabel: string;
-		guestbookNamePlaceholder: string;
-		guestbookWebsitePlaceholder: string;
-		guestbookMessagePlaceholder: string;
-		guestbookPrivacyNote: string;
 		sections: Array<{
 			title: string;
 			copy: string;
@@ -128,6 +116,7 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 		ui: {
 			sample: "Sample",
 			open: "Open",
+			openSection: "Open section",
 			primaryPaths: "Primary paths",
 			docsEntryPoints: "Docs entry points",
 			questions: "Questions",
@@ -145,8 +134,6 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 			lane: "Lane",
 			command: "Command",
 			description: "Description",
-			guestbookEntries: "Guestbook entries",
-			guestbookForm: "Guestbook form",
 		},
 		home: {
 			eyebrow: "Home",
@@ -168,24 +155,27 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 					title: "Read the Musi book",
 					copy: "Start with setup, then move through syntax, types, effects, and tooling.",
 					href: "/learn",
+					actionLabel: "Read Learn docs",
 				},
 				{
 					label: "Install",
 					title: "Build from source",
 					copy: "Review prerequisites, build steps, PATH setup, and command lanes.",
 					href: "/install",
+					actionLabel: "Open install guide",
 				},
 				{
 					label: "Community",
 					title: "Join the project",
 					copy: "Find contribution notes, issue tracking, and discussion links.",
 					href: "/community",
+					actionLabel: "Open community links",
 				},
 			],
 			sections: [
 				{
 					title: "Expression-first",
-					copy: "Read files top to bottom with let, case, and ordinary expressions instead of hidden control machinery.",
+					copy: "Read files top to bottom with let, match, and ordinary expressions instead of hidden control machinery.",
 				},
 				{
 					title: "Effects stay readable",
@@ -227,27 +217,7 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 			eyebrow: "Community",
 			title: "Join the Musi project",
 			description:
-				"Community keeps contribution, discussion, issue tracking, repository links, and the guestbook in one place.",
-			guestbookEyebrow: "Guestbook",
-			guestbookTitle: "Leave a note",
-			guestbookDescription:
-				"Share a short note with the Musi team and other visitors. Keep it brief and public-safe.",
-			guestbookEmpty: "No entries yet. Be first to sign.",
-			guestbookLoading: "Loading entries...",
-			guestbookSubmit: "Post entry",
-			guestbookSuccess: "Entry posted.",
-			guestbookError: "Guestbook could not save your entry.",
-			guestbookReadonly: "Guestbook is in read-only mode on this deployment.",
-			guestbookUnavailable:
-				"Guestbook posting is not configured on this deployment yet.",
-			guestbookNameLabel: "Name",
-			guestbookWebsiteLabel: "Website",
-			guestbookMessageLabel: "Message",
-			guestbookNamePlaceholder: "Your name",
-			guestbookWebsitePlaceholder: "https://example.com",
-			guestbookMessagePlaceholder: "What brought you to Musi?",
-			guestbookPrivacyNote:
-				"Entries are public. Do not post private information.",
+				"Community keeps contribution, discussion, issue tracking, and repository links in one place.",
 			sections: [
 				{
 					title: "Repository",
@@ -298,6 +268,7 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 		ui: {
 			sample: "サンプル",
 			open: "開く",
+			openSection: "章一覧を開く",
 			primaryPaths: "主要な導線",
 			docsEntryPoints: "学習の入口",
 			questions: "よくある質問",
@@ -315,8 +286,6 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 			lane: "区分",
 			command: "コマンド",
 			description: "説明",
-			guestbookEntries: "ゲストブックの投稿",
-			guestbookForm: "ゲストブックの入力フォーム",
 		},
 		home: {
 			eyebrow: "学ぶ",
@@ -338,24 +307,27 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 					title: "Musi ブックを読む",
 					copy: "セットアップから始め、構文、型、エフェクト、ツールへ進みます。",
 					href: "/learn",
+					actionLabel: "学習ページを開く",
 				},
 				{
 					label: "導入",
 					title: "ソースからビルドする",
 					copy: "前提条件、ビルド手順、PATH 設定、コマンドの使い分けを確認します。",
 					href: "/ja/install",
+					actionLabel: "導入ガイドを開く",
 				},
 				{
 					label: "コミュニティ",
 					title: "プロジェクトに参加する",
 					copy: "貢献、Issue 管理、議論 の入口をまとめます。",
 					href: "/ja/community",
+					actionLabel: "コミュニティリンクを開く",
 				},
 			],
 			sections: [
 				{
 					title: "式中心の設計",
-					copy: "let、case、通常の式で上から下へ読み進められます。",
+					copy: "let、match、通常の式で上から下へ読み進められます。",
 				},
 				{
 					title: "エフェクトも読みやすい",
@@ -397,27 +369,7 @@ export const siteCopy: Record<Locale, LocalizedSiteCopy> = {
 			eyebrow: "コミュニティ",
 			title: "Musi プロジェクトに参加する",
 			description:
-				"コミュニティでは、貢献方法、議論の場、Issue 一覧、リポジトリへの入口とゲストブックを 1 か所にまとめます。",
-			guestbookEyebrow: "ゲストブック",
-			guestbookTitle: "ひとこと残す",
-			guestbookDescription:
-				"Musi に来た理由や短い感想を公開で残せます。短く、公開して問題ない内容にしてください。",
-			guestbookEmpty: "まだ投稿はありません。最初のひとことをどうぞ。",
-			guestbookLoading: "投稿を読み込んでいます...",
-			guestbookSubmit: "投稿する",
-			guestbookSuccess: "投稿を保存しました。",
-			guestbookError: "ゲストブックに投稿できませんでした。",
-			guestbookReadonly: "このデプロイではゲストブックは閲覧のみです。",
-			guestbookUnavailable:
-				"このデプロイではゲストブック投稿がまだ設定されていません。",
-			guestbookNameLabel: "名前",
-			guestbookWebsiteLabel: "Web サイト",
-			guestbookMessageLabel: "メッセージ",
-			guestbookNamePlaceholder: "お名前",
-			guestbookWebsitePlaceholder: "https://example.com",
-			guestbookMessagePlaceholder: "Musi を見に来た理由を書いてください",
-			guestbookPrivacyNote:
-				"投稿は公開されます。個人情報は書かないでください。",
+				"コミュニティでは、貢献方法、議論の場、Issue 一覧、リポジトリへの入口を 1 か所にまとめます。",
 			sections: [
 				{
 					title: "リポジトリ",

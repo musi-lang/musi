@@ -1,9 +1,3 @@
 name = "musi-www"
 compatibility_date = "2026-04-13"
 pages_build_output_dir = "./www/dist"
-
-[[d1_databases]]
-binding = "GUESTBOOK_DB"
-database_name = "musi-guestbook"
-database_id = "297af51a-6cf4-4e17-bacb-e4355b6b25fd"
-migrations_dir = "db/migrations"

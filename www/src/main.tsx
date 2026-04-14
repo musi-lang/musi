@@ -1,7 +1,7 @@
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./pages";
-import "./app.css";
 import { routeForPath } from "./routes";
+import { setupSiteInteractions } from "./static-main";
 
 const root = document.getElementById("root");
 
@@ -17,3 +17,7 @@ if (root.hasChildNodes()) {
 } else {
 	createRoot(root).render(app);
 }
+
+window.requestAnimationFrame(() => {
+	setupSiteInteractions();
+});

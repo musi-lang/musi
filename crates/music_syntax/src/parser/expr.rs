@@ -134,6 +134,9 @@ impl Parser<'_> {
 
     fn try_postfix(&mut self, left: SyntaxNodeId) -> ParseResult<Option<SyntaxNodeId>> {
         if self.at(TokenKind::LParen) {
+            if self.nth_kind(1) == TokenKind::Pipe {
+                return Ok(None);
+            }
             return self.parse_call_expr(left).map(Some);
         }
         if self.at(TokenKind::LBracket) {
@@ -141,9 +144,6 @@ impl Parser<'_> {
         }
         if self.at(TokenKind::DotLBracket) {
             return self.parse_index_expr(left).map(Some);
-        }
-        if self.at(TokenKind::DotLBrace) {
-            return self.parse_record_update_expr(left).map(Some);
         }
         if self.at(TokenKind::Dot) {
             return self.parse_field_expr(left).map(Some);
@@ -184,7 +184,7 @@ impl Parser<'_> {
                 | TokenKind::LBracket
                 | TokenKind::LBrace
                 | TokenKind::Dot
-                | TokenKind::KwCase
+                | TokenKind::KwMatch
                 | TokenKind::KwLet
                 | TokenKind::KwResume
                 | TokenKind::KwImport
@@ -192,7 +192,7 @@ impl Parser<'_> {
                 | TokenKind::KwEffect
                 | TokenKind::KwClass
                 | TokenKind::KwInstance
-                | TokenKind::KwPerform
+                | TokenKind::KwRequest
                 | TokenKind::KwUsing
                 | TokenKind::KwHandle
                 | TokenKind::KwForeign
@@ -261,22 +261,6 @@ impl Parser<'_> {
         children.extend(self.parse_separated_nodes(TokenKind::Comma, close_kind, parse_item)?);
         children.push(self.expect_token(close_kind)?);
         Ok(self.builder.push_node_from_children(kind, children))
-    }
-
-    fn parse_record_update_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
-        let open = self.expect_token(TokenKind::DotLBrace)?;
-        let mut children = vec![SyntaxElementId::Node(base), open];
-        while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
-            if let Some(comma) = self.eat(TokenKind::Comma) {
-                children.push(comma);
-                continue;
-            }
-            children.push(SyntaxElementId::Node(self.parse_record_item()?));
-        }
-        children.push(self.expect_token(TokenKind::RBrace)?);
-        Ok(self
-            .builder
-            .push_node_from_children(SyntaxNodeKind::RecordUpdateExpr, children))
     }
 
     fn parse_field_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {

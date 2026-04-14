@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::{VmIndexSpace, VmStackKind};
 use music_seam::{EffectId, Instruction, Opcode, Operand};
 
 use super::{
@@ -15,11 +16,11 @@ impl Vm {
                     return Err(Self::invalid_operand(instruction));
                 };
                 let handler = self.pop_value()?;
-                let frame_depth = self
-                    .frames
-                    .len()
-                    .checked_sub(1)
-                    .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+                let frame_depth = self.frames.len().checked_sub(1).ok_or_else(|| {
+                    VmError::new(VmErrorKind::StackEmpty {
+                        stack: VmStackKind::CallFrame,
+                    })
+                })?;
                 let stack_depth = self.frames.last().map_or(0, |frame| frame.stack.len());
                 let pop_ip = self.find_matching_handler_pop(frame_depth)?;
                 let handler_id = self.next_handler_id;
@@ -35,7 +36,9 @@ impl Vm {
             }
             Opcode::HdlPop => {
                 let Some(handler) = self.handlers.pop() else {
-                    return Err(VmError::new(VmErrorKind::EmptyHandlerStack));
+                    return Err(VmError::new(VmErrorKind::StackEmpty {
+                        stack: VmStackKind::Handler,
+                    }));
                 };
                 let body_result = self.pop_value()?;
                 self.restore_handler_stack_depth(&handler)?;
@@ -98,10 +101,11 @@ impl Vm {
         let descriptor = module.program.artifact().effects.get(effect);
         let effect_name: Box<str> = module.program.string_text(descriptor.name).into();
         let op_desc = descriptor.ops.get(usize::from(op)).ok_or_else(|| {
-            VmError::new(VmErrorKind::EffectOpOutOfBounds {
-                effect: effect_name.clone(),
-                op_index: op,
-                op_count: descriptor.ops.len(),
+            VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::EffectOp,
+                owner: Some(effect_name.clone()),
+                index: i64::from(op),
+                len: descriptor.ops.len(),
             })
         })?;
         if let Some(handler_index) = self
@@ -162,10 +166,11 @@ impl Vm {
             .string_text(descriptor.name)
             .into();
         let op_desc = descriptor.ops.get(usize::from(op)).ok_or_else(|| {
-            VmError::new(VmErrorKind::EffectOpOutOfBounds {
-                effect: effect_name,
-                op_index: op,
-                op_count: descriptor.ops.len(),
+            VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::EffectOp,
+                owner: Some(effect_name),
+                index: i64::from(op),
+                len: descriptor.ops.len(),
             })
         })?;
         self.pop_args(op_desc.param_tys.len())
@@ -251,10 +256,11 @@ impl Vm {
     }
 
     pub(crate) fn find_matching_handler_pop(&self, frame_depth: usize) -> VmResult<usize> {
-        let frame = self
-            .frames
-            .get(frame_depth)
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+        let frame = self.frames.get(frame_depth).ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
         let method = self
             .module(frame.module_slot)?
             .program

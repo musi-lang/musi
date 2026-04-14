@@ -79,7 +79,7 @@ export function HomePage(props: { route: AppRoute }) {
 						<div className="eyebrow">{link.label}</div>
 						<h2>{link.title}</h2>
 						<p>{link.copy}</p>
-						<InlineAction href={link.href}>{localeCopy.ui.open}</InlineAction>
+						<InlineAction href={link.href}>{link.actionLabel}</InlineAction>
 					</Surface>
 				))}
 			</section>
@@ -131,6 +131,7 @@ export function HomePage(props: { route: AppRoute }) {
 								path={group.path}
 								summaryHtml={group.summaryHtml}
 								pages={group.pages}
+								linkLabel={localeCopy.ui.openSection}
 							/>
 						))}
 				</div>

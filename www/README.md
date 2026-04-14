@@ -7,15 +7,24 @@ Public website for Musi. Stack stays **Bun + Vite + React**. Content stays stati
 Run from repository root:
 
 - `bun run dev`
+- `bun run dev:prod`
 - `bun run check`
 - `bun run test`
 - `bun run build`
+- `bun run build:prod`
+- `bun run verify:lang`
 
 `bun run build` does three things:
 
 1. generate site content from docs/snippet sources
 2. run Vite production build
 3. prerender every public route into static HTML
+
+`bun run dev:prod` builds the production bundle and serves `www/dist` through preview mode so local checks reflect production asset shape instead of Vite dev-server modules.
+
+`bun run verify:lang` rebuilds the prerendered site and verifies representative English and Japanese pages keep the expected top-level `<html lang="...">`.
+
+For Lighthouse accessibility audits, use a clean browser context. Browser extensions that inject shadow DOM can add nested `<html>` nodes and create a false `html[lang]` failure even when the shipped document already has the correct `lang` attribute.
 
 ## Structure
 
@@ -47,7 +56,6 @@ Primary public paths on home:
 2. Install
 3. Playground
 4. Community
-5. Community guestbook
 
 ## Accessibility baseline
 
@@ -96,37 +104,3 @@ Recommended Pages environment variables:
 
 - `BUN_VERSION=1.3.12`
 - `SKIP_DEPENDENCY_INSTALL=1`
-- `VITE_TURNSTILE_SITE_KEY`
-
-## Guestbook on Cloudflare Pages
-
-Guestbook runs through Pages Functions + D1.
-
-- Function entry: `functions/api/guestbook.ts`
-- D1 schema: `db/migrations/0001_guestbook.sql`
-- Wrangler config: `wrangler.toml`
-- Client env examples: `www/.env.example`
-- Wrangler secret example: `.dev.vars.example`
-
-Required setup:
-
-1. Copy `www/.env.example` to `www/.env.local` for local work.
-2. Copy `www/.env.example` to `www/.env.production` for production build defaults.
-3. Copy `.dev.vars.example` to `.dev.vars` for local Pages Functions secrets.
-4. Create D1 database with `wrangler d1 create musi-guestbook`.
-5. Paste returned `database_id` into `wrangler.toml`.
-6. Run migrations:
-   - `wrangler d1 migrations apply musi-guestbook --local`
-   - `wrangler d1 migrations apply musi-guestbook --remote`
-7. Set `TURNSTILE_SECRET` in `.dev.vars` and Cloudflare Pages project secrets.
-8. Set `VITE_TURNSTILE_SITE_KEY` in local env files and Cloudflare Pages build environment variables.
-
-Local guestbook dev:
-
-- build site: `bun run build`
-- run Pages locally: `wrangler pages dev www/dist`
-
-Behavior:
-
-- when D1 + Turnstile secret + site key are present, Community shows guestbook submission form
-- when submission config is incomplete, Community stays read-only and still shows entries

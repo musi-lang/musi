@@ -219,13 +219,13 @@ fn test_project(target: Option<&Path>) -> MusiResult {
     let mut failed = 0usize;
     for test in tests {
         let report = runtime.run_test_export(test.module_key.as_str(), &test.export_name)?;
-        for case in &report.cases {
-            let status = if case.passed { "pass" } else { "fail" };
+        for test_case in &report.cases {
+            let status = if test_case.passed { "pass" } else { "fail" };
             println!(
                 "{status} {} :: {} :: {}",
-                report.module, case.suite, case.name
+                report.module, test_case.suite, test_case.name
             );
-            if !case.passed {
+            if !test_case.passed {
                 failed += 1;
             }
         }

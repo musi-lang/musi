@@ -56,6 +56,28 @@ fn load_project_error(root: &Path) -> ProjectError {
     Project::load(root, ProjectOptions::default()).expect_err("project load should fail")
 }
 
+fn assert_session_error_report(
+    source: &str,
+    expected_phase: &str,
+    expected_message: &str,
+    expected_label: &str,
+    expected_hint: Option<&str>,
+) {
+    let mut session = Session::new(SessionOptions::default());
+    session
+        .set_module_text(&ModuleKey::new("main"), source)
+        .expect("module text should register");
+    let err = session
+        .check_module(&ModuleKey::new("main"))
+        .expect_err("session failure expected");
+    let report = session_error_report("music", "check", None, None, &session, &err);
+
+    assert_eq!(report.diagnostics[0].phase, expected_phase);
+    assert_eq!(report.diagnostics[0].message, expected_message);
+    assert_eq!(report.diagnostics[0].labels[0].message, expected_label);
+    assert_eq!(report.diagnostics[0].hint.as_deref(), expected_hint);
+}
+
 #[test]
 fn loads_direct_graph_with_relative_imports() {
     let temp = TempDir::new();
@@ -121,6 +143,28 @@ fn session_error_report_carries_file_and_phase() {
     assert_eq!(report.status, "error");
     assert_eq!(report.diagnostics[0].phase, "parse");
     assert!(report.diagnostics[0].file.is_some());
+}
+
+#[test]
+fn session_error_report_carries_resolve_label() {
+    assert_session_error_report(
+        "missing;",
+        "resolve",
+        "unbound name",
+        "unknown name `missing`",
+        None,
+    );
+}
+
+#[test]
+fn session_error_report_carries_sema_hint() {
+    assert_session_error_report(
+        "let x := 1; request x;",
+        "sema",
+        "invalid request target",
+        "request target must be effect operation call",
+        Some("write `request Effect.op(...)`"),
+    );
 }
 
 #[test]

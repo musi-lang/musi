@@ -6,37 +6,37 @@ export let passValue : Bool := pass;
 export let fail (message : String) : Bool := failBool(message);
 
 export let equal[T] (actual : T, expected : T) : Bool :=
-  case () of (
+  match () (
   | _ if actual = expected => pass
   | _ => fail("expected values to be equal")
   );
 
 export let notEqual[T] (actual : T, expected : T) : Bool :=
-  case () of (
+  match () (
   | _ if actual /= expected => pass
   | _ => fail("expected values to be different")
   );
 
 export let isTrue (actual : Bool) : Bool :=
-  case () of (
+  match () (
   | _ if actual => pass
   | _ => fail("expected condition to be true")
   );
 
 export let isFalse (actual : Bool) : Bool :=
-  case () of (
+  match () (
   | _ if actual => fail("expected condition to be false")
   | _ => pass
   );
 
 export let greaterThan (actual : Int, lowerBound : Int) : Bool :=
-  case () of (
+  match () (
   | _ if actual > lowerBound => pass
   | _ => fail("expected value to be greater than lower bound")
   );
 
 export let lessThan (actual : Int, upperBound : Int) : Bool :=
-  case () of (
+  match () (
   | _ if actual < upperBound => pass
   | _ => fail("expected value to be less than upper bound")
   );
@@ -46,7 +46,7 @@ export let betweenInclusive (
   lowerBound : Int,
   upperBound : Int,
 ) : Bool :=
-  case () of (
+  match () (
   | _ if actual < lowerBound => fail("expected value to be inside inclusive bounds")
   | _ if actual > upperBound => fail("expected value to be inside inclusive bounds")
   | _ => pass

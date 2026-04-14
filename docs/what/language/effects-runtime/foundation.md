@@ -8,32 +8,36 @@ slug: "foundation"
 summary: "Understand what belongs to musi:core before reaching for stdlib modules."
 ---
 
-{{snippet:foundation-import}}
+{{snippet:chapter-foundation}}
 
 ## What
 
-`musi:core` holds foundation-level language concepts.
+`musi:core` is language foundation layer.
+It names the lowest-level built-in surface that exists before you start reaching for runtime-backed modules or standard-library conveniences.
+This page matters because "what is built in?" and "what comes from libraries?" are different questions.
 
 ## Why
 
-Beginners need a clear answer to “what is built in” versus “what is library code”.
+Users get overwhelmed when docs mention effects, runtime, and stdlib as if they are one blurred toolbox.
+A foundation page prevents that blur by giving core layer its own place in the model.
+Once readers know what belongs to the base layer, later imports make more sense.
 
 ## How
 
-- Treat `musi:core` as low-level foundation.
-- Reach for it rarely in ordinary app code.
-- Prefer `@std` for day-to-day helpers.
+Read `let Core := import "musi:core";` as explicit access to foundational language surface.
+Then ask what kind of code needs this layer directly: mostly infrastructure, lower-level libraries, or explanation of system boundaries rather than ordinary app code.
+When teaching or writing app code, prefer clearer higher-level modules unless you specifically need the foundational layer.
 
 ## Try it
 
-- Import one foundation module.
-- Name why it feels lower-level.
-- Compare it with `@std`.
+- Import `musi:core` once.
+- Note what kind of code would reach for it directly.
+- Compare that role with a higher-level stdlib import.
 
 ## Common mistake
 
-Do not build ordinary app APIs directly on foundation modules when a clearer stdlib layer exists.
+Do not assume foundational modules are where everyday application code should start by default.
 
 ## Next
 
-Continue to [Runtime](/docs/language/effects-runtime/runtime).
+Continue to [Runtime](/docs/language/effects-runtime/runtime) to see where host-backed capabilities enter the picture.

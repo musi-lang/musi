@@ -35,12 +35,20 @@ impl CheckPass<'_, '_, '_> {
         {
             let dims = self.dims(dims);
             if !dims.is_empty() && dims.len() != arg_count {
-                self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::InvalidIndexArgCount,
+                    "index arg count does not match array dimensions",
+                );
             }
             item
         } else if let HirTyKind::Seq { item } = self.ty(peel_mut_ty(self, base_facts.ty)).kind {
             if arg_count != 1 {
-                self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::InvalidIndexArgCount,
+                    "index expression requires exactly one argument here",
+                );
             }
             item
         } else {
@@ -61,79 +69,21 @@ impl CheckPass<'_, '_, '_> {
         let items_vec = self.array_items(items);
         for array_item in &items_vec {
             if !array_item.spread {
-                self.push_expected_ty(item_ty);
-                let facts = super::exprs::check_expr(self, array_item.expr);
-                let _ = self.pop_expected_ty();
-                effects.union_with(&facts.effects);
-                if item_ty == builtins.unknown {
-                    item_ty = facts.ty;
-                } else {
-                    let origin = self.expr(array_item.expr).origin;
-                    self.type_mismatch(origin, item_ty, facts.ty);
-                }
-                known_len = known_len.saturating_add(1);
+                self.check_array_direct_item(
+                    array_item,
+                    &mut item_ty,
+                    &mut effects,
+                    &mut known_len,
+                );
                 continue;
             }
-
-            let spread_facts = super::exprs::check_expr(self, array_item.expr);
-            effects.union_with(&spread_facts.effects);
-            let spread_origin = self.expr(array_item.expr).origin;
-            let spread_ty = peel_mut_ty(self, spread_facts.ty);
-            match self.ty(spread_ty).kind {
-                HirTyKind::Tuple { items } => {
-                    let item_tys = self.ty_ids(items);
-                    for found in item_tys {
-                        self.merge_array_item_ty(spread_origin, &mut item_ty, found);
-                        known_len = known_len.saturating_add(1);
-                    }
-                }
-                HirTyKind::Array { dims, item } => {
-                    let dims_vec = self.dims(dims);
-                    if dims_vec.is_empty() {
-                        has_runtime_spread = true;
-                        self.merge_array_item_ty(spread_origin, &mut item_ty, item);
-                        continue;
-                    }
-                    if dims_vec.len() != 1 {
-                        self.diag(
-                            spread_origin.span,
-                            DiagKind::ArraySpreadRequiresOneDimensionalArray,
-                            "",
-                        );
-                        continue;
-                    }
-                    match dims_vec[0] {
-                        HirDim::Int(len) => {
-                            self.merge_array_item_ty(spread_origin, &mut item_ty, item);
-                            known_len = known_len.saturating_add(len);
-                        }
-                        HirDim::Unknown | HirDim::Name(_) => {
-                            has_runtime_spread = true;
-                            self.merge_array_item_ty(spread_origin, &mut item_ty, item);
-                        }
-                    }
-                }
-                HirTyKind::Seq { item }
-                | HirTyKind::Range { bound: item }
-                | HirTyKind::ClosedRange { bound: item }
-                | HirTyKind::PartialRangeFrom { bound: item }
-                | HirTyKind::PartialRangeUpTo { bound: item }
-                | HirTyKind::PartialRangeThru { bound: item } => {
-                    has_runtime_spread = true;
-                    self.merge_array_item_ty(spread_origin, &mut item_ty, item);
-                    if matches!(
-                        self.ty(spread_ty).kind,
-                        HirTyKind::Range { .. }
-                            | HirTyKind::ClosedRange { .. }
-                            | HirTyKind::PartialRangeFrom { .. }
-                            | HirTyKind::PartialRangeUpTo { .. }
-                            | HirTyKind::PartialRangeThru { .. }
-                    ) {
-                        self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
-                    }
-                }
-                _ => self.diag(spread_origin.span, DiagKind::InvalidArraySpreadSource, ""),
-            }
+            self.check_array_spread_item(
+                array_item,
+                &mut item_ty,
+                &mut effects,
+                &mut has_runtime_spread,
+                &mut known_len,
+            );
         }
 
         self.check_array_literal_expected_len(
@@ -153,6 +103,119 @@ impl CheckPass<'_, '_, '_> {
             })
         };
         ExprFacts::new(ty, effects)
+    }
+
+    fn check_array_direct_item(
+        &mut self,
+        array_item: &HirArrayItem,
+        item_ty: &mut HirTyId,
+        effects: &mut EffectRow,
+        known_len: &mut u32,
+    ) {
+        let builtins = self.builtins();
+        self.push_expected_ty(*item_ty);
+        let facts = super::exprs::check_expr(self, array_item.expr);
+        let _ = self.pop_expected_ty();
+        effects.union_with(&facts.effects);
+        if *item_ty == builtins.unknown {
+            *item_ty = facts.ty;
+        } else {
+            let origin = self.expr(array_item.expr).origin;
+            self.type_mismatch(origin, *item_ty, facts.ty);
+        }
+        *known_len = known_len.saturating_add(1);
+    }
+
+    fn check_array_spread_item(
+        &mut self,
+        array_item: &HirArrayItem,
+        item_ty: &mut HirTyId,
+        effects: &mut EffectRow,
+        has_runtime_spread: &mut bool,
+        known_len: &mut u32,
+    ) {
+        let spread_facts = super::exprs::check_expr(self, array_item.expr);
+        effects.union_with(&spread_facts.effects);
+        let spread_origin = self.expr(array_item.expr).origin;
+        let spread_ty = peel_mut_ty(self, spread_facts.ty);
+        match self.ty(spread_ty).kind {
+            HirTyKind::Tuple { items } => {
+                let item_tys = self.ty_ids(items);
+                for found in item_tys {
+                    self.merge_array_item_ty(spread_origin, item_ty, found);
+                    *known_len = known_len.saturating_add(1);
+                }
+            }
+            HirTyKind::Array { dims, item } => {
+                self.check_array_spread_array(
+                    spread_origin,
+                    dims,
+                    item,
+                    item_ty,
+                    has_runtime_spread,
+                    known_len,
+                );
+            }
+            HirTyKind::Seq { item }
+            | HirTyKind::Range { bound: item }
+            | HirTyKind::ClosedRange { bound: item }
+            | HirTyKind::PartialRangeFrom { bound: item }
+            | HirTyKind::PartialRangeUpTo { bound: item }
+            | HirTyKind::PartialRangeThru { bound: item } => {
+                *has_runtime_spread = true;
+                self.merge_array_item_ty(spread_origin, item_ty, item);
+                if matches!(
+                    self.ty(spread_ty).kind,
+                    HirTyKind::Range { .. }
+                        | HirTyKind::ClosedRange { .. }
+                        | HirTyKind::PartialRangeFrom { .. }
+                        | HirTyKind::PartialRangeUpTo { .. }
+                        | HirTyKind::PartialRangeThru { .. }
+                ) {
+                    self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
+                }
+            }
+            _ => self.diag(
+                spread_origin.span,
+                DiagKind::InvalidSpreadSource,
+                "array spread source must be array, tuple, or range-like value",
+            ),
+        }
+    }
+
+    fn check_array_spread_array(
+        &mut self,
+        spread_origin: HirOrigin,
+        dims: SliceRange<HirDim>,
+        item: HirTyId,
+        item_ty: &mut HirTyId,
+        has_runtime_spread: &mut bool,
+        known_len: &mut u32,
+    ) {
+        let dims_vec = self.dims(dims);
+        if dims_vec.is_empty() {
+            *has_runtime_spread = true;
+            self.merge_array_item_ty(spread_origin, item_ty, item);
+            return;
+        }
+        if dims_vec.len() != 1 {
+            self.diag(
+                spread_origin.span,
+                DiagKind::ArraySpreadRequiresOneDimensionalArray,
+                "",
+            );
+            return;
+        }
+        match dims_vec[0] {
+            HirDim::Int(len) => {
+                self.merge_array_item_ty(spread_origin, item_ty, item);
+                *known_len = known_len.saturating_add(len);
+            }
+            HirDim::Unknown | HirDim::Name(_) => {
+                *has_runtime_spread = true;
+                self.merge_array_item_ty(spread_origin, item_ty, item);
+            }
+        }
     }
 
     fn resolve_rangeable_evidence(
@@ -243,7 +306,11 @@ impl CheckPass<'_, '_, '_> {
                     fields: spread_fields,
                 } = self.ty(spread_ty).kind
                 else {
-                    self.diag(origin.span, DiagKind::InvalidRecordSpreadSource, "");
+                    self.diag(
+                        origin.span,
+                        DiagKind::InvalidSpreadSource,
+                        "record spread source must be record value",
+                    );
                     continue;
                 };
                 for spread_field in self.ty_fields(spread_fields) {
@@ -345,7 +412,11 @@ impl CheckPass<'_, '_, '_> {
                 let spread_origin = self.expr(record_item.value).origin;
                 let spread_ty = peel_mut_ty(self, facts.ty);
                 let Some(spread_fields) = self.record_like_fields(spread_ty) else {
-                    self.diag(spread_origin.span, DiagKind::InvalidRecordSpreadSource, "");
+                    self.diag(
+                        spread_origin.span,
+                        DiagKind::InvalidSpreadSource,
+                        "record spread source must be record value",
+                    );
                     continue;
                 };
                 for (field_name, field_ty) in spread_fields {
@@ -696,7 +767,11 @@ impl CheckPass<'_, '_, '_> {
         let builtins = self.builtins();
         let index_exprs = self.expr_ids(args);
         if index_exprs.is_empty() {
-            self.diag(origin.span, DiagKind::IndexRequiresArgument, "");
+            self.diag(
+                origin.span,
+                DiagKind::InvalidIndexArgCount,
+                "index expression requires at least one argument",
+            );
         }
         for index_expr in &index_exprs {
             let facts = super::exprs::check_expr(self, *index_expr);
@@ -757,9 +832,17 @@ impl CheckPass<'_, '_, '_> {
             return builtins.unknown;
         }
         if matches!(access, HirAccessKind::Direct) {
-            self.diag(origin.span, DiagKind::InvalidFieldAccess, "");
+            self.diag(
+                origin.span,
+                DiagKind::InvalidFieldTarget,
+                "field access target must be record, module, or attached method receiver",
+            );
         } else {
-            self.diag(origin.span, DiagKind::InvalidOptionalFieldAccess, "");
+            self.diag(
+                origin.span,
+                DiagKind::InvalidFieldTarget,
+                "optional field access target must be optional record-like value",
+            );
         }
         builtins.unknown
     }
@@ -910,7 +993,11 @@ impl CheckPass<'_, '_, '_> {
                 if self.is_mut_ty(ty) {
                     (peel_mut_ty(self, ty), EffectRow::empty())
                 } else {
-                    self.diag(origin.span, DiagKind::WriteRequiresMutValue, "");
+                    self.diag(
+                        origin.span,
+                        DiagKind::WriteTargetRequiresMut,
+                        "assignment target must be mutable",
+                    );
                     (builtins.unknown, EffectRow::empty())
                 }
             }
@@ -939,22 +1026,38 @@ impl CheckPass<'_, '_, '_> {
             HirTyKind::Array { dims, item } if self.is_mut_ty(base_facts.ty) => {
                 let dims = self.dims(dims);
                 if !dims.is_empty() && dims.len() != arg_count {
-                    self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                    self.diag(
+                        origin.span,
+                        DiagKind::InvalidIndexArgCount,
+                        "index arg count does not match array dimensions",
+                    );
                 }
                 item
             }
             HirTyKind::Array { .. } => {
-                self.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::WriteTargetRequiresMut,
+                    "indexed write target must be mutable array",
+                );
                 builtins.unknown
             }
             HirTyKind::Seq { item } => {
                 if arg_count != 1 {
-                    self.diag(origin.span, DiagKind::InvalidIndexArity, "");
+                    self.diag(
+                        origin.span,
+                        DiagKind::InvalidIndexArgCount,
+                        "index expression requires exactly one argument here",
+                    );
                 }
                 if self.is_mut_ty(base_facts.ty) {
                     item
                 } else {
-                    self.diag(origin.span, DiagKind::WriteRequiresMutArray, "");
+                    self.diag(
+                        origin.span,
+                        DiagKind::WriteTargetRequiresMut,
+                        "indexed write target must be mutable array",
+                    );
                     builtins.unknown
                 }
             }
@@ -993,11 +1096,19 @@ impl CheckPass<'_, '_, '_> {
                     |field| field.ty,
                 ),
             HirTyKind::Record { .. } => {
-                self.diag(origin.span, DiagKind::WriteRequiresMutRecord, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::WriteTargetRequiresMut,
+                    "field write target must be mutable record",
+                );
                 builtins.unknown
             }
             _ => {
-                self.diag(origin.span, DiagKind::InvalidFieldUpdateTarget, "");
+                self.diag(
+                    origin.span,
+                    DiagKind::InvalidFieldTarget,
+                    "field update target must support field assignment",
+                );
                 builtins.unknown
             }
         };

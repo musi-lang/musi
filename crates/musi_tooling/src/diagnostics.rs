@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use musi_project::{ProjectError, ProjectSourceDiagnostic};
-use music_base::diag::{emit, supports_color};
-use music_base::{Diag, SourceMap};
-use music_base::{DiagLabel, Source};
+use musi_project::ProjectError;
+use music_base::diag::{DiagLevel, emit, supports_color};
+use music_base::{Diag, OwnedSourceDiag, SourceMap};
+use music_base::{DiagLabel, Source, SourceId};
 use music_session::{Session, SessionError};
 use serde::Serialize;
 
@@ -446,18 +446,22 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
     )
 }
 
-fn project_source_diag(error: &ProjectSourceDiagnostic) -> CliDiagnostic {
+fn project_source_diag(error: &OwnedSourceDiag) -> CliDiagnostic {
     let mut sources = SourceMap::new();
     let Ok(source_id) = sources.add(error.path().to_path_buf(), error.text().to_owned()) else {
         return CliDiagnostic::error_with_file_and_hint(
             "project",
-            Some(error.code().to_string()),
-            error.message().to_owned(),
+            error.diag().code().map(|code| code.to_string()),
+            error.diag().message().to_owned(),
             Some(error.path().display().to_string()),
-            error.hint().map(str::to_owned),
+            error.diag().hint().map(str::to_owned),
         );
     };
-    cli_diag(&sources, "project", &error.to_diag(source_id))
+    cli_diag(
+        &sources,
+        "project",
+        &remap_owned_source_diag(error, source_id),
+    )
 }
 
 fn path_string(path: &Path) -> String {
@@ -471,15 +475,43 @@ fn render_simple_error_line(code: Option<String>, message: &str) -> String {
     )
 }
 
-fn render_project_source_error(error: &ProjectSourceDiagnostic) -> String {
+fn render_project_source_error(error: &OwnedSourceDiag) -> String {
     let mut sources = SourceMap::new();
     let Ok(source_id) = sources.add(error.path().to_path_buf(), error.text().to_owned()) else {
-        return render_simple_error_line(Some(error.code().to_string()), error.message());
+        return render_simple_error_line(
+            error.diag().code().map(|code| code.to_string()),
+            error.diag().message(),
+        );
     };
-    let diag = error.to_diag(source_id);
+    let diag = remap_owned_source_diag(error, source_id);
     let mut output = Vec::new();
     if emit(&mut output, &diag, &sources, supports_color()).is_err() {
-        return render_simple_error_line(Some(error.code().to_string()), error.message());
+        return render_simple_error_line(
+            error.diag().code().map(|code| code.to_string()),
+            error.diag().message(),
+        );
     }
     String::from_utf8_lossy(&output).into_owned()
+}
+
+fn remap_owned_source_diag(error: &OwnedSourceDiag, source_id: SourceId) -> Diag {
+    let mut diag = match error.diag().level() {
+        DiagLevel::Fatal => Diag::fatal(error.diag().message()),
+        DiagLevel::Error => Diag::error(error.diag().message()),
+        DiagLevel::Warning => Diag::warning(error.diag().message()),
+        DiagLevel::Note => Diag::note(error.diag().message()),
+    };
+    if let Some(code) = error.diag().code() {
+        diag = diag.with_code(code);
+    }
+    for label in error.diag().labels() {
+        diag = diag.with_label(label.span(), source_id, label.message());
+    }
+    for note in error.diag().notes() {
+        diag = diag.with_note(note.clone());
+    }
+    if let Some(hint) = error.diag().hint() {
+        diag = diag.with_hint(hint.to_owned());
+    }
+    diag
 }

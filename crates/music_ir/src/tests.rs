@@ -11,7 +11,7 @@ use music_sema::{ModuleSurface, SemaEnv, SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
 
 use crate::{
-    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm, IrCasePattern, IrExpr, IrExprKind,
+    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrExpr, IrExprKind, IrMatchArm,
     IrModule, IrSeqPart, lower_module,
 };
 
@@ -282,10 +282,10 @@ fn lowers_perform_seq_for_runtime_any_spread() {
           let op (a : Any, b : Any) : Unit;
         };
         let xs : []Any := [1, "x"];
-        export let y := perform E.op(...xs);
+        export let y := request E.op(...xs);
     "#,
         "y",
-        |kind| matches!(kind, IrExprKind::PerformSeq { .. }),
+        |kind| matches!(kind, IrExprKind::RequestSeq { .. }),
     );
 }
 
@@ -295,7 +295,7 @@ fn lowers_sum_constructors_as_synthetic_variants() {
         r#"
         export let x : Int + String := .Left(1);
         export let y : Int + String := .Right("x");
-        export let z (v : Int + String) : Int := case v of (
+        export let z (v : Int + String) : Int := match v (
           | .Left(n) => n
           | .Right(_) => 0
         );
@@ -325,7 +325,7 @@ fn lowers_sum_constructors_as_synthetic_variants() {
         .iter()
         .find(|callable| callable.name.as_ref() == "z")
         .expect("z callable");
-    let IrExprKind::Case { arms, .. } = &z.body.kind else {
+    let IrExprKind::Match { arms, .. } = &z.body.kind else {
         panic!("expected case");
     };
     let Some(arm) = arms.first() else {
@@ -451,9 +451,9 @@ fn lowers_record_case_and_capturing_rec() {
         r"
         export let answer (n : Int) : Int := (
           let base := 1;
-          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+          let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
-          let picked : Int := case point of (| { x } => x | _ => 0);
+          let picked : Int := match point (| { x } => x | _ => 0);
           picked + loop(n)
         );
     ",
@@ -549,7 +549,7 @@ fn contains_strcat(expr: &IrExpr) -> bool {
         IrExprKind::Call { callee, args } => {
             contains_strcat(callee) || args.iter().any(|arg| contains_strcat(&arg.expr))
         }
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             contains_strcat(scrutinee)
                 || arms.iter().any(|arm| {
                     arm.guard.as_ref().is_some_and(contains_strcat) || contains_strcat(&arm.expr)
@@ -594,7 +594,7 @@ fn contains_named_value_ref_kind(kind: &IrExprKind, expected: &str) -> bool {
         | IrExprKind::ClosureNew {
             captures: items, ..
         }
-        | IrExprKind::Perform { args: items, .. } => {
+        | IrExprKind::Request { args: items, .. } => {
             contains_named_value_ref_in_exprs(items, expected)
         }
         IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallSeq { args: parts, .. } => {
@@ -612,7 +612,7 @@ fn contains_named_value_ref_kind(kind: &IrExprKind, expected: &str) -> bool {
         IrExprKind::Binary { left, right, .. } => {
             contains_named_value_ref(left, expected) || contains_named_value_ref(right, expected)
         }
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             contains_named_value_ref_in_case(scrutinee, arms, expected)
         }
         IrExprKind::Call { callee, args } => {
@@ -621,7 +621,7 @@ fn contains_named_value_ref_kind(kind: &IrExprKind, expected: &str) -> bool {
         IrExprKind::VariantNew { args, .. } => args
             .iter()
             .any(|expr| contains_named_value_ref(expr, expected)),
-        IrExprKind::PerformSeq { args, .. } => {
+        IrExprKind::RequestSeq { args, .. } => {
             contains_named_value_ref_in_seq_parts(args, expected)
         }
         IrExprKind::HandlerLit { value, ops, .. } => {
@@ -687,7 +687,7 @@ fn contains_named_value_ref_in_seq_parts(parts: &[IrSeqPart], expected: &str) ->
 
 fn contains_named_value_ref_in_case(
     scrutinee: &IrExpr,
-    arms: &[IrCaseArm],
+    arms: &[IrMatchArm],
     expected: &str,
 ) -> bool {
     contains_named_value_ref(scrutinee, expected)
@@ -721,7 +721,7 @@ fn contains_named_value_ref_in_target(target: &IrAssignTarget, expected: &str) -
 
 fn contains_record_pattern(expr: &IrExpr) -> bool {
     match &expr.kind {
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             contains_record_pattern(scrutinee)
                 || arms.iter().any(|arm| {
                     matches!(arm.pattern, IrCasePattern::Record { .. })
@@ -745,7 +745,7 @@ fn contains_closure_callee(expr: &IrExpr) -> bool {
                 || args.iter().any(|arg| contains_closure_callee(&arg.expr))
         }
         IrExprKind::Sequence { exprs } => exprs.iter().any(contains_closure_callee),
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             contains_closure_callee(scrutinee)
                 || arms.iter().any(|arm| {
                     arm.guard.as_ref().is_some_and(contains_closure_callee)

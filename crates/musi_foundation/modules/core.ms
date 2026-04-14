@@ -65,19 +65,19 @@ export let some [T] (value : T) : Option[T] := .Some(value);
 export let none [T] () : Option[T] := .None;
 
 export let isSome [T] (value : Option[T]) : Bool :=
-  case value of (
+  match value (
   | .Some(item) => 0 = 0
   | .None => 0 = 1
   );
 
 export let isNone [T] (value : Option[T]) : Bool :=
-  case value of (
+  match value (
   | .Some(item) => 0 = 1
   | .None => 0 = 0
   );
 
 export let unwrapOr [T] (value : Option[T], fallback : T) : T :=
-  case value of (
+  match value (
   | .Some(item) => item
   | .None => fallback
   );
@@ -86,7 +86,7 @@ export opaque let Abort := effect {
   let abort () : Empty;
 };
 
-export let abort () : Empty := perform Abort.abort();
+export let abort () : Empty := request Abort.abort();
 
 export opaque let Rangeable[T] := class {
   let compare (left : T, right : T) : Int;

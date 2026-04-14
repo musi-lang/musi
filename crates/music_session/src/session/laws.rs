@@ -652,23 +652,23 @@ fn render_law_suite_module_source(
     out.push_str("let __musi_law_test := __musi_law_intrinsics.Test;\n\n");
     out.push_str("export let ");
     out.push_str(LAW_TEST_EXPORT_NAME);
-    out.push_str(" () : Unit :=\n    (\n      perform __musi_law_test.suiteStart(");
+    out.push_str(" () : Unit :=\n    (\n      request __musi_law_test.suiteStart(");
     out.push_str(&string_lit(&format!("{} laws", module_key.as_str())));
     out.push_str(");\n");
-    for case in cases {
-        out.push_str("      perform __musi_law_test.testCase(");
-        out.push_str(&string_lit(&case.name));
+    for test_case in cases {
+        out.push_str("      request __musi_law_test.testCase(");
+        out.push_str(&string_lit(&test_case.name));
         out.push_str(", (\n");
-        for binding in &case.bindings {
+        for binding in &test_case.bindings {
             out.push_str("        ");
             out.push_str(binding);
             out.push('\n');
         }
         out.push_str("        ");
-        out.push_str(case.body.trim());
+        out.push_str(test_case.body.trim());
         out.push_str("\n      ));\n");
     }
-    out.push_str("      perform __musi_law_test.suiteEnd()\n    );\n");
+    out.push_str("      request __musi_law_test.suiteEnd()\n    );\n");
     out
 }
 

@@ -1,6 +1,6 @@
 use music_arena::SliceRange;
 use music_hir::{
-    HirBinder, HirCaseArm, HirConstraint, HirExprId, HirExprKind, HirLitId, HirLitKind,
+    HirBinder, HirConstraint, HirExprId, HirExprKind, HirLitId, HirLitKind, HirMatchArm,
     HirMemberDef, HirOrigin, HirParam, HirPrefixOp, HirQuoteKind, HirSpliceKind, HirTemplatePart,
     HirTyId, HirTyKind,
 };
@@ -114,12 +114,12 @@ impl CheckPass<'_, '_, '_> {
                 invalid_expr_path(self, "nested let escaped primary dispatcher")
             }
             HirExprKind::Import { arg } => self.check_import_expr(id, arg),
-            HirExprKind::Case { scrutinee, arms } => self.check_case_expr(scrutinee, arms),
+            HirExprKind::Match { scrutinee, arms } => self.check_match_expr(scrutinee, arms),
             HirExprKind::Data { .. }
             | HirExprKind::Effect { .. }
             | HirExprKind::Class { .. }
             | HirExprKind::Instance { .. } => self.check_decl_value_expr(origin),
-            HirExprKind::Perform { .. }
+            HirExprKind::Request { .. }
             | HirExprKind::HandlerLit { .. }
             | HirExprKind::Handle { .. }
             | HirExprKind::Resume { .. } => self.check_control_expr(origin, kind),
@@ -197,7 +197,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn check_control_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> ExprFacts {
         match kind {
-            HirExprKind::Perform { expr } => self.check_perform_expr(origin, expr),
+            HirExprKind::Request { expr } => self.check_perform_expr(origin, expr),
             HirExprKind::HandlerLit { effect, clauses } => {
                 self.check_handler_literal_expr(origin, effect, clauses, None)
             }
@@ -477,13 +477,17 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(ty, inner_facts.effects)
     }
 
-    fn check_case_expr(&mut self, scrutinee: HirExprId, arms: SliceRange<HirCaseArm>) -> ExprFacts {
+    fn check_match_expr(
+        &mut self,
+        scrutinee: HirExprId,
+        arms: SliceRange<HirMatchArm>,
+    ) -> ExprFacts {
         let ctx = self;
         let builtins = ctx.builtins();
         let scrutinee_facts = check_expr(ctx, scrutinee);
         let mut effects = scrutinee_facts.effects.clone();
         let mut result_ty = builtins.unknown;
-        for arm in ctx.case_arms(arms) {
+        for arm in ctx.match_arms(arms) {
             bind_pat(ctx, arm.pat, scrutinee_facts.ty);
             if let Some(guard) = arm.guard {
                 let guard_facts = check_expr(ctx, guard);

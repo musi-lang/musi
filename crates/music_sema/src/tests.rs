@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use music_base::SourceId;
+use music_base::diag::Diag;
 use music_hir::{HirExprId, HirExprKind, HirTyKind};
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
@@ -98,6 +99,13 @@ fn has_diag(module: &SemaModule, kind: SemaDiagKind) -> bool {
         .any(|diag| sema_diag_kind(diag) == Some(kind))
 }
 
+fn find_diag(module: &SemaModule, kind: SemaDiagKind) -> Option<&Diag> {
+    module
+        .diags()
+        .iter()
+        .find(|diag| sema_diag_kind(diag) == Some(kind))
+}
+
 fn check_with_imported_surface(
     source_id_raw: u32,
     source_a: &str,
@@ -145,7 +153,7 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
             r#"
         let IO := import "std/io";
         {binding}
-        handle perform Console.readln() using Console {{
+        handle request Console.readln() using Console {{
           value => value;
           readln(k) => resume "ok";
         }};
@@ -203,19 +211,26 @@ fn opaque_imported_effect_hides_ops() {
         export opaque let Console := effect {
           let readln () : Int;
         };
-        export let readln () : Int := perform Console.readln();
+        export let readln () : Int := request Console.readln();
     ",
         r#"
         let A := import "a";
         let Console := A.Console;
-        let direct () : Int := perform Console.readln();
+        let direct () : Int := request Console.readln();
     "#,
     );
     assert!(
-        has_diag(&module_b, SemaDiagKind::InvalidPerformTarget),
+        has_diag(&module_b, SemaDiagKind::InvalidRequestTarget),
         "{:?}",
         module_b.diags()
     );
+    let diag = find_diag(&module_b, SemaDiagKind::InvalidRequestTarget)
+        .expect("invalid request target diagnostic expected");
+    assert_eq!(
+        diag.labels()[0].message(),
+        "request target must be effect operation call"
+    );
+    assert_eq!(diag.hint(), Some("write `request Effect.op(...)`"));
 }
 
 #[test]
@@ -527,7 +542,7 @@ fn dot_call_resolves_attached_receiver_let() {
         sema.diags()
     );
     assert!(
-        !has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        !has_diag(&sema, SemaDiagKind::InvalidFieldTarget),
         "{:?}",
         sema.diags()
     );
@@ -548,7 +563,7 @@ fn dot_call_does_not_fallback_to_free_function() {
     ",
     );
     assert!(
-        has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        has_diag(&sema, SemaDiagKind::InvalidFieldTarget),
         "{:?}",
         sema.diags()
     );
@@ -643,7 +658,7 @@ fn perform_effects_expose_textual_names() {
         let Console := effect {
           let readln () : String;
         };
-        perform Console.readln();
+        request Console.readln();
     ",
     );
     let root = sema.module().root;
@@ -784,13 +799,13 @@ fn effectful_laws_report_purity_diag() {
         r#"
         let Console := effect {
           let readln () : String;
-          law total () := perform Console.readln() == "";
+          law total () := request Console.readln() == "";
         };
 
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
           law noisy (x : T) := (
-            perform Console.readln();
+            request Console.readln();
             .True
           );
         };
@@ -811,7 +826,7 @@ fn duplicate_handler_clause_reports_diag() {
         let Console := effect {
           let readln () : String;
         };
-        handle perform Console.readln() using Console {
+        handle request Console.readln() using Console {
           value => value;
           readln(k) => resume "ok";
           readln(k) => resume "ok";
@@ -1204,14 +1219,14 @@ fn exported_polymorphic_constrained_callable_reports_diag() {
 fn assignment_requires_mut_location() {
     let sema = check("let x : Int := 1; x := 2;");
     assert!(
-        has_diag(&sema, SemaDiagKind::WriteRequiresMutValue),
+        has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
 
     let sema = check("let x := mut 1; x := 2;");
     assert!(
-        !has_diag(&sema, SemaDiagKind::WriteRequiresMutValue),
+        !has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
@@ -1226,7 +1241,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        has_diag(&sema, SemaDiagKind::WriteRequiresMutArray),
+        has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
@@ -1238,7 +1253,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        !has_diag(&sema, SemaDiagKind::WriteRequiresMutArray),
+        !has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
@@ -1250,7 +1265,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        has_diag(&sema, SemaDiagKind::WriteRequiresMutRecord),
+        has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
@@ -1262,7 +1277,7 @@ fn write_through_requires_mut_type() {
     ",
     );
     assert!(
-        !has_diag(&sema, SemaDiagKind::WriteRequiresMutRecord),
+        !has_diag(&sema, SemaDiagKind::WriteTargetRequiresMut),
         "{:?}",
         sema.diags()
     );
@@ -1310,7 +1325,7 @@ fn multi_index_arrays_check_expected_arity() {
     ",
     );
     assert!(
-        !has_diag(&sema, SemaDiagKind::InvalidIndexArity),
+        !has_diag(&sema, SemaDiagKind::InvalidIndexArgCount),
         "{:?}",
         sema.diags()
     );
@@ -1321,7 +1336,7 @@ fn multi_index_arrays_check_expected_arity() {
     ",
     );
     assert!(
-        has_diag(&sema, SemaDiagKind::InvalidIndexArity),
+        has_diag(&sema, SemaDiagKind::InvalidIndexArgCount),
         "{:?}",
         sema.diags()
     );
@@ -1357,7 +1372,7 @@ fn local_recursive_callable_let_typechecks() {
     let sema = check(
         r"
         export let answer (n : Int) : Int := (
-          let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+          let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
     ",
@@ -1373,7 +1388,7 @@ fn local_recursive_callable_let_typechecks() {
 fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
     let sema = check("let answer := 1.x;");
     assert!(
-        has_diag(&sema, SemaDiagKind::InvalidFieldAccess),
+        has_diag(&sema, SemaDiagKind::InvalidFieldTarget),
         "{:?}",
         sema.diags()
     );
@@ -1385,7 +1400,7 @@ fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
     ",
     );
     assert!(
-        has_diag(&sema, SemaDiagKind::IndexRequiresArgument),
+        has_diag(&sema, SemaDiagKind::InvalidIndexArgCount),
         "{:?}",
         sema.diags()
     );
@@ -1408,7 +1423,7 @@ fn open_effect_rows_absorb_extra_effects() {
         let State := effect {
           let readln () : String;
         };
-        let readOpen (x : Int) : String using { Console, ...r } := perform State.readln();
+        let readOpen (x : Int) : String using { Console, ...r } := request State.readln();
         readOpen(0);
     ",
     );
@@ -1441,7 +1456,7 @@ fn closed_effect_rows_reject_extra_effects() {
         let State := effect {
           let readln () : String;
         };
-        let readClosed (x : Int) : String using { Console } := perform State.readln();
+        let readClosed (x : Int) : String using { Console } := request State.readln();
         readClosed(0);
     ",
     );
@@ -1499,7 +1514,7 @@ fn array_and_record_spreads_typecheck() {
 
         let p := { x := 1, y := 2 };
         let q := { ...p, x := 3 };
-        let r := p.{ ...q, y := 9 };
+        let r := { ...p, ...q, y := 9 };
 
         ys;
         q;
@@ -1530,7 +1545,7 @@ fn sum_constructors_and_patterns_typecheck() {
     let sema = check(
         r"
         let x : Int + String := .Left(1);
-        case x of (
+        match x (
           | .Left(n) => n
           | .Right(_) => 0
         );

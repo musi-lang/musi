@@ -2,9 +2,9 @@ use super::*;
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirCaseArm,
-    HirConstraint, HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod, HirExprId,
-    HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirMemberDef, HirMemberKind, HirMods,
+    HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirConstraint,
+    HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod, HirExprId, HirFieldDef,
+    HirForeignMod, HirHandleClause, HirLetMods, HirMatchArm, HirMemberDef, HirMemberKind, HirMods,
     HirParam, HirPartialRangeKind, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem,
     HirSpliceKind, HirVariantDef,
 };
@@ -117,8 +117,8 @@ where
     fn try_lower_control_like_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> Option<HirExprId> {
         let kind = node.kind();
         Some(match kind {
-            SyntaxNodeKind::CaseExpr => self.lower_case_expr(node),
-            SyntaxNodeKind::PerformExpr => self.lower_perform_expr(node),
+            SyntaxNodeKind::MatchExpr => self.lower_match_expr(node),
+            SyntaxNodeKind::RequestExpr => self.lower_request_expr(node),
             SyntaxNodeKind::HandlerExpr => self.lower_handler_expr(node),
             SyntaxNodeKind::HandleExpr => self.lower_handle_expr(node),
             SyntaxNodeKind::ResumeExpr => self.lower_resume_expr(node),

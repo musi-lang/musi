@@ -11,7 +11,7 @@ export opaque let SyntaxOps := effect {
 };
 
 export let eval (body : Syntax, result : Type) : Any :=
-  perform SyntaxOps.eval(body, result);
+  request SyntaxOps.eval(body, result);
 
 export let registerModule (spec : String, body : Syntax) : Unit :=
-  perform SyntaxOps.registerModule(spec, body);
+  request SyntaxOps.registerModule(spec, body);

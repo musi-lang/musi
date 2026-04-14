@@ -228,14 +228,14 @@ mod tests {
     }
 }
 
-pub(super) fn lower_perform_expr(
+pub(super) fn lower_request_expr(
     ctx: &mut LowerCtx<'_>,
     expr: HirExprId,
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let (effect_key, op_index, args) =
-        resolve_perform_target(sema, interner, expr).map_err(Box::<str>::from)?;
+        resolve_request_target(sema, interner, expr).map_err(Box::<str>::from)?;
     let args_nodes = sema.module().store.args.get(args);
     if !args_nodes.iter().any(|arg| arg.spread) {
         let lowered_args = args_nodes
@@ -243,7 +243,7 @@ pub(super) fn lower_perform_expr(
             .map(|arg| lower_expr(ctx, arg.expr))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        return Ok(IrExprKind::Perform {
+        return Ok(IrExprKind::Request {
             effect_key,
             op_index,
             args: lowered_args,
@@ -252,12 +252,12 @@ pub(super) fn lower_perform_expr(
 
     let origin = lower_origin(sema, expr);
     let (prelude, parts, has_runtime_spread) =
-        lower_spread_args(ctx, origin, args_nodes, SpreadMode::Perform)?;
+        lower_spread_args(ctx, origin, args_nodes, SpreadMode::Request)?;
     let mut exprs = prelude;
     exprs.push(IrExpr::new(
         origin,
         if has_runtime_spread {
-            IrExprKind::PerformSeq {
+            IrExprKind::RequestSeq {
                 effect_key,
                 op_index,
                 args: parts.into_boxed_slice(),
@@ -272,9 +272,9 @@ pub(super) fn lower_perform_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("perform spread lowering invariant".into());
+                return Err("request spread lowering invariant".into());
             };
-            IrExprKind::Perform {
+            IrExprKind::Request {
                 effect_key,
                 op_index,
                 args,
@@ -289,28 +289,28 @@ pub(super) fn lower_perform_expr(
 #[derive(Clone, Copy)]
 enum SpreadMode {
     Call,
-    Perform,
+    Request,
 }
 
 impl SpreadMode {
     const fn runtime_any_message(self) -> &'static str {
         match self {
             Self::Call => "call runtime spread requires []Any",
-            Self::Perform => "perform runtime spread requires []Any",
+            Self::Request => "request runtime spread requires []Any",
         }
     }
 
     const fn dims_message(self) -> &'static str {
         match self {
             Self::Call => "call spread requires 1D array or tuple",
-            Self::Perform => "perform spread requires 1D array or tuple",
+            Self::Request => "request spread requires 1D array or tuple",
         }
     }
 
     const fn source_message(self) -> &'static str {
         match self {
             Self::Call => "call spread source is not tuple/array",
-            Self::Perform => "perform spread source is not tuple/array",
+            Self::Request => "request spread source is not tuple/array",
         }
     }
 }
@@ -320,28 +320,28 @@ fn lower_origin(sema: &SemaModule, expr: HirExprId) -> IrOrigin {
     IrOrigin::new(origin.source_id, origin.span)
 }
 
-fn resolve_perform_target(
+fn resolve_request_target(
     sema: &SemaModule,
     interner: &Interner,
     expr: HirExprId,
 ) -> Result<(DefinitionKey, u16, SliceRange<HirArg>), &'static str> {
     let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
-        return Err("perform without call");
+        return Err("request without call");
     };
     let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
-        return Err("perform without effect op field access");
+        return Err("request without effect op field access");
     };
     let HirExprKind::Name { name: effect_name } = sema.module().store.exprs.get(base).kind else {
-        return Err("perform without effect name");
+        return Err("request without effect name");
     };
     let effect_name = interner.resolve(effect_name.name);
     let op_name = interner.resolve(name.name);
     let Some(effect) = sema.effect_def(effect_name) else {
-        return Err("perform with unknown effect");
+        return Err("request with unknown effect");
     };
     let op_index = effect.op_index(op_name).unwrap_or(u16::MAX);
     if op_index == u16::MAX {
-        return Err("perform with unknown effect op");
+        return Err("request with unknown effect op");
     }
     Ok((effect.key().clone(), op_index, args.clone()))
 }

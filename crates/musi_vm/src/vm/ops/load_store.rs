@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::VmIndexSpace;
 use music_seam::{Instruction, Opcode, Operand};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
@@ -30,9 +31,10 @@ impl Vm {
                 let globals = &self.module(module_slot)?.globals;
                 let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
                 let value = globals.get(raw_slot).cloned().ok_or_else(|| {
-                    VmError::new(VmErrorKind::GlobalOutOfBounds {
-                        module: module_name,
-                        slot: raw_slot,
+                    VmError::new(VmErrorKind::IndexOutOfBounds {
+                        space: VmIndexSpace::Global,
+                        owner: Some(module_name),
+                        index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
                         len: globals.len(),
                     })
                 })?;
@@ -50,9 +52,10 @@ impl Vm {
                 let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
                 let len = globals.len();
                 let global = globals.get_mut(raw_slot).ok_or_else(|| {
-                    VmError::new(VmErrorKind::GlobalOutOfBounds {
-                        module: module_name,
-                        slot: raw_slot,
+                    VmError::new(VmErrorKind::IndexOutOfBounds {
+                        space: VmIndexSpace::Global,
+                        owner: Some(module_name),
+                        index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
                         len,
                     })
                 })?;

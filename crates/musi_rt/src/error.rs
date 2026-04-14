@@ -6,17 +6,42 @@ use thiserror::Error;
 
 pub type RuntimeResult<T = ()> = Result<T, RuntimeError>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeSessionPhase {
+    Setup,
+    Parse,
+    Resolve,
+    Sema,
+    Ir,
+    Emit,
+}
+
+impl Display for RuntimeSessionPhase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Setup => f.write_str("setup"),
+            Self::Parse => f.write_str("parse"),
+            Self::Resolve => f.write_str("resolve"),
+            Self::Sema => f.write_str("semantic check"),
+            Self::Ir => f.write_str("lowering"),
+            Self::Emit => f.write_str("emit"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeErrorKind {
     RootModuleRequired,
-    ModuleSourceMissing { spec: Box<str> },
-    InvalidSyntaxValue { found: VmValueKind },
-    SessionSetupFailed { detail: Box<str> },
-    SessionParseFailed { detail: Box<str> },
-    SessionResolveFailed { detail: Box<str> },
-    SessionSemanticCheckFailed { detail: Box<str> },
-    SessionLoweringFailed { detail: Box<str> },
-    SessionEmitFailed { detail: Box<str> },
+    ModuleSourceMissing {
+        spec: Box<str>,
+    },
+    InvalidSyntaxValue {
+        found: VmValueKind,
+    },
+    SessionFailed {
+        phase: RuntimeSessionPhase,
+        detail: Box<str>,
+    },
     VmExecutionFailed(VmError),
 }
 
@@ -48,23 +73,8 @@ impl Display for RuntimeErrorKind {
             Self::InvalidSyntaxValue { found } => {
                 write!(f, "syntax value required, found `{found}`")
             }
-            Self::SessionSetupFailed { detail } => {
-                write!(f, "session setup failed (`{detail}`)")
-            }
-            Self::SessionParseFailed { detail } => {
-                write!(f, "session parse failed (`{detail}`)")
-            }
-            Self::SessionResolveFailed { detail } => {
-                write!(f, "session resolve failed (`{detail}`)")
-            }
-            Self::SessionSemanticCheckFailed { detail } => {
-                write!(f, "session semantic check failed (`{detail}`)")
-            }
-            Self::SessionLoweringFailed { detail } => {
-                write!(f, "session lowering failed (`{detail}`)")
-            }
-            Self::SessionEmitFailed { detail } => {
-                write!(f, "session emit failed (`{detail}`)")
+            Self::SessionFailed { phase, detail } => {
+                write!(f, "session {phase} failed (`{detail}`)")
             }
             Self::VmExecutionFailed(err) => err.fmt(f),
         }
@@ -85,20 +95,15 @@ impl From<SessionError> for RuntimeError {
 
 fn session_error(value: &SessionError) -> RuntimeError {
     let detail = session_error_detail(value);
-    let kind = match value {
-        SessionError::ModuleParseFailed { .. } => RuntimeErrorKind::SessionParseFailed { detail },
-        SessionError::ModuleResolveFailed { .. } => {
-            RuntimeErrorKind::SessionResolveFailed { detail }
-        }
-        SessionError::ModuleSemanticCheckFailed { .. } => {
-            RuntimeErrorKind::SessionSemanticCheckFailed { detail }
-        }
-        SessionError::ModuleLoweringFailed { .. } => {
-            RuntimeErrorKind::SessionLoweringFailed { detail }
-        }
-        SessionError::ModuleEmissionFailed { .. } => RuntimeErrorKind::SessionEmitFailed { detail },
-        _ => RuntimeErrorKind::SessionSetupFailed { detail },
+    let phase = match value {
+        SessionError::ModuleParseFailed { .. } => RuntimeSessionPhase::Parse,
+        SessionError::ModuleResolveFailed { .. } => RuntimeSessionPhase::Resolve,
+        SessionError::ModuleSemanticCheckFailed { .. } => RuntimeSessionPhase::Sema,
+        SessionError::ModuleLoweringFailed { .. } => RuntimeSessionPhase::Ir,
+        SessionError::ModuleEmissionFailed { .. } => RuntimeSessionPhase::Emit,
+        _ => RuntimeSessionPhase::Setup,
     };
+    let kind = RuntimeErrorKind::SessionFailed { phase, detail };
     RuntimeError::new(kind)
 }
 

@@ -2,8 +2,8 @@
 
 use musi_foundation::{register_modules, test};
 use musi_vm::{
-    EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value, Vm, VmError,
-    VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, NativeFailureStage, Program, ProgramTypeAbiKind, RejectingLoader,
+    Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
 };
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
@@ -241,7 +241,10 @@ fn native_abi_symbol_failures_report_typed_errors() {
 
     assert!(matches!(
         err.kind(),
-        VmErrorKind::NativeSymbolLoadFailed { .. }
+        VmErrorKind::NativeCallFailed {
+            stage: NativeFailureStage::SymbolLoad,
+            ..
+        }
     ));
 }
 
@@ -273,7 +276,7 @@ fn dispatches_registered_effect_handler() {
         host,
         r#"
         let Console := effect { let readln (prompt : String) : Int; };
-        export let answer () : Int := perform Console.readln(">");
+        export let answer () : Int := request Console.readln(">");
         "#,
     )
     .expect("registered effect should succeed");
@@ -419,7 +422,7 @@ fn unsupported_targets_reject_runtime_effects() {
         NativeHost::new(),
         r#"
         let Console := effect { let readln (prompt : String) : Int; };
-        export let answer () : Int := perform Console.readln(">");
+        export let answer () : Int := request Console.readln(">");
         "#,
     )
     .expect_err("unsupported target should reject");

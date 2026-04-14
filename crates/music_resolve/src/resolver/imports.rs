@@ -25,7 +25,7 @@ impl Resolver<'_, '_, '_, '_> {
                             ImportErrorKind::SpecifierInvalid => "invalid module specifier",
                         };
                         self.diags.push(
-                            Diag::error(ResolveDiagKind::ImportResolveFailed.message())
+                            Diag::error(format!("import `{spec}` does not resolve"))
                                 .with_code(ResolveDiagKind::ImportResolveFailed.code())
                                 .with_label(site.span, self.source_id, format!("{label} `{spec}`")),
                         );
@@ -33,7 +33,7 @@ impl Resolver<'_, '_, '_, '_> {
                 },
                 ImportSiteKind::InvalidStringLit => {
                     self.diags.push(
-                        Diag::error(ResolveDiagKind::InvalidImportSpec.message())
+                        Diag::error("import spec is not string literal")
                             .with_code(ResolveDiagKind::InvalidImportSpec.code())
                             .with_label(
                                 site.span,

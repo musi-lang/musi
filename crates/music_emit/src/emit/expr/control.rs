@@ -49,7 +49,7 @@ impl MethodEmitter<'_, '_> {
     pub(super) fn compile_case(
         &mut self,
         scrutinee: &IrExpr,
-        arms: &[IrCaseArm],
+        arms: &[IrMatchArm],
         diags: &mut EmitDiagList,
     ) {
         let scrutinee_slot = Self::reserve_temp_slot(self);
@@ -67,7 +67,7 @@ impl MethodEmitter<'_, '_> {
                 .iter()
                 .all(|arm| pattern_variantish(&arm.pattern).is_some())
         {
-            self.emit_case_arms(
+            self.emit_match_arms(
                 scrutinee_slot,
                 &arms[0..variant_start],
                 Some(end_label),
@@ -85,14 +85,14 @@ impl MethodEmitter<'_, '_> {
             return;
         }
 
-        self.emit_case_arms(scrutinee_slot, arms, Some(end_label), diags);
+        self.emit_match_arms(scrutinee_slot, arms, Some(end_label), diags);
 
         emit_zero(self);
         self.code.push(CodeEntry::Label(Label { id: end_label }));
     }
 }
 
-fn variant_dispatch_span(arms: &[IrCaseArm]) -> (Option<usize>, Option<usize>) {
+fn variant_dispatch_span(arms: &[IrMatchArm]) -> (Option<usize>, Option<usize>) {
     let mut first = None::<usize>;
     let mut last = None::<usize>;
     for (idx, arm) in arms.iter().enumerate() {
@@ -151,8 +151,8 @@ impl MethodEmitter<'_, '_> {
     fn compile_case_variant_dispatch(
         &mut self,
         scrutinee_slot: u16,
-        arms: &[IrCaseArm],
-        tail: &[IrCaseArm],
+        arms: &[IrMatchArm],
+        tail: &[IrMatchArm],
         end_label: u16,
         diags: &mut EmitDiagList,
     ) {
@@ -204,12 +204,12 @@ impl MethodEmitter<'_, '_> {
 
         self.code
             .push(CodeEntry::Label(Label { id: default_label }));
-        self.emit_case_arms(scrutinee_slot, tail, Some(end_label), diags);
+        self.emit_match_arms(scrutinee_slot, tail, Some(end_label), diags);
         emit_zero(self);
     }
 }
 
-fn case_dispatch_origin(arms: &[IrCaseArm]) -> IrOrigin {
+fn case_dispatch_origin(arms: &[IrMatchArm]) -> IrOrigin {
     arms.first().map_or_else(
         || IrOrigin {
             source_id: SourceId::from_raw(0),
@@ -244,8 +244,8 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-fn group_variant_arms_by_tag(arms: &[IrCaseArm], variant_count: u16) -> Vec<Vec<&IrCaseArm>> {
-    let mut out = vec![Vec::<&IrCaseArm>::new(); usize::from(variant_count)];
+fn group_variant_arms_by_tag(arms: &[IrMatchArm], variant_count: u16) -> Vec<Vec<&IrMatchArm>> {
+    let mut out = vec![Vec::<&IrMatchArm>::new(); usize::from(variant_count)];
     for arm in arms {
         if let Some(info) = pattern_variantish(&arm.pattern) {
             let idx = usize::from(info.tag_index);
@@ -262,7 +262,7 @@ impl MethodEmitter<'_, '_> {
         &mut self,
         scrutinee_slot: u16,
         tag_labels: &[u16],
-        arms_by_tag: &[Vec<&IrCaseArm>],
+        arms_by_tag: &[Vec<&IrMatchArm>],
         default_label: u16,
         end_label: u16,
         diags: &mut EmitDiagList,
@@ -300,10 +300,10 @@ impl MethodEmitter<'_, '_> {
 }
 
 impl MethodEmitter<'_, '_> {
-    fn emit_case_arms(
+    fn emit_match_arms(
         &mut self,
         scrutinee_slot: u16,
-        arms: &[IrCaseArm],
+        arms: &[IrMatchArm],
         end_label: Option<u16>,
         diags: &mut EmitDiagList,
     ) {

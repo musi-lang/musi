@@ -159,20 +159,19 @@ impl Parser<'_> {
         self.parse_variant_like(SyntaxNodeKind::VariantExpr, Parser::parse_expr_node)
     }
 
-    pub(crate) fn parse_case_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let case_kw = self.expect_token(TokenKind::KwCase)?;
+    pub(crate) fn parse_match_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let match_kw = self.expect_token(TokenKind::KwMatch)?;
         let scrutinee = self.parse_expr(0)?;
-        let of_kw = self.expect_token(TokenKind::KwOf)?;
         let open = self.expect_token(TokenKind::LParen)?;
-        let mut children = vec![case_kw, SyntaxElementId::Node(scrutinee), of_kw, open];
-        children.extend(self.parse_piped_nodes(TokenKind::RParen, Parser::parse_case_arm)?);
+        let mut children = vec![match_kw, SyntaxElementId::Node(scrutinee), open];
+        children.extend(self.parse_piped_nodes(TokenKind::RParen, Parser::parse_match_arm)?);
         children.push(self.expect_token(TokenKind::RParen)?);
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::CaseExpr, children))
+            .push_node_from_children(SyntaxNodeKind::MatchExpr, children))
     }
 
-    fn parse_case_arm(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_match_arm(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = self.parse_attrs()?;
         children.push(SyntaxElementId::Node(self.parse_pattern()?));
         if let Some(if_kw) = self.eat(TokenKind::KwIf) {
@@ -183,7 +182,7 @@ impl Parser<'_> {
         children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::CaseArm, children))
+            .push_node_from_children(SyntaxNodeKind::MatchArm, children))
     }
 
     pub(crate) fn parse_resume_expr(&mut self) -> ParseResult<SyntaxNodeId> {

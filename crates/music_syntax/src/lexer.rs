@@ -230,7 +230,7 @@ impl<'src> Lexer<'src> {
         };
 
         match kind {
-            TokenKind::LBrace | TokenKind::DotLBrace => {
+            TokenKind::LBrace => {
                 ctx.brace_depth = ctx.brace_depth.saturating_add(1);
             }
             TokenKind::RBrace => {

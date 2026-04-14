@@ -1,4 +1,5 @@
 use std::fmt::{self, Display, Formatter};
+use std::path::{Path, PathBuf};
 
 use crate::{SourceId, Span};
 
@@ -61,6 +62,42 @@ pub struct DiagLabel {
     span: Span,
     source_id: SourceId,
     message: String,
+}
+
+/// A diagnostic paired with owned source-path and source-text data.
+#[derive(Debug, Clone)]
+pub struct OwnedSourceDiag {
+    path: PathBuf,
+    text: String,
+    diag: Diag,
+}
+
+impl OwnedSourceDiag {
+    #[must_use]
+    pub const fn new(path: PathBuf, text: String, diag: Diag) -> Self {
+        Self { path, text, diag }
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    #[must_use]
+    pub const fn diag(&self) -> &Diag {
+        &self.diag
+    }
+}
+
+impl Display for OwnedSourceDiag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.diag.message())
+    }
 }
 
 impl DiagLabel {

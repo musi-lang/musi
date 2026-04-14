@@ -5,9 +5,9 @@ use music_arena::{Idx, SliceRange};
 use music_base::diag::Diag;
 use music_base::{SourceId, Span};
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirDim,
-    HirEffectItem, HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause, HirLit,
-    HirLitId, HirLitKind, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
+    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirDim, HirEffectItem,
+    HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause, HirLit, HirLitId, HirLitKind,
+    HirMatchArm, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
     HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
 };
 use music_module::ModuleKey;
@@ -70,7 +70,7 @@ type AttrList = Vec<HirAttr>;
 type AttrArgList = Vec<HirAttrArg>;
 type MemberDefList = Vec<HirMemberDef>;
 type HandleClauseList = Vec<HirHandleClause>;
-type CaseArmList = Vec<HirCaseArm>;
+type MatchArmList = Vec<HirMatchArm>;
 type ConstraintList = Vec<HirConstraint>;
 type VariantDefList = Vec<HirVariantDef>;
 type FieldDefList = Vec<HirFieldDef>;
@@ -637,12 +637,12 @@ impl PassBase<'_, '_, '_> {
             .to_vec()
     }
 
-    pub fn case_arms(&self, range: SliceRange<HirCaseArm>) -> CaseArmList {
+    pub fn match_arms(&self, range: SliceRange<HirMatchArm>) -> MatchArmList {
         self.module
             .resolved
             .module
             .store
-            .case_arms
+            .match_arms
             .get(range)
             .to_vec()
     }
@@ -1038,17 +1038,27 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
-    pub fn diag(&mut self, span: Span, kind: DiagKind, label: &str) {
+    pub fn diag_builder(&self, span: Span, kind: DiagKind, label: &str) -> Diag {
         let label = if label.is_empty() {
             kind.label()
         } else {
             label
         };
-        self.facts.diags.push(
-            Diag::error(kind.message())
-                .with_code(kind.code())
-                .with_label(span, self.source_id(), label),
-        );
+        let mut diag = Diag::error(kind.message())
+            .with_code(kind.code())
+            .with_label(span, self.source_id(), label);
+        if let Some(hint) = kind.hint() {
+            diag = diag.with_hint(hint);
+        }
+        diag
+    }
+
+    pub fn push_diag(&mut self, diag: Diag) {
+        self.facts.diags.push(diag);
+    }
+
+    pub fn diag(&mut self, span: Span, kind: DiagKind, label: &str) {
+        self.push_diag(self.diag_builder(span, kind, label));
     }
 
     pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {

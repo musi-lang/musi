@@ -8,32 +8,36 @@ slug: "classes"
 summary: "Describe shared behavior with class declarations."
 ---
 
-{{snippet:class-eq}}
+{{snippet:chapter-classes}}
 
 ## What
 
-A class describes a behavior surface that different types can implement.
+A class describes a behavior surface for values of some type.
+In this example, `Eq[T]` says that values of type `T` can be compared for equality, and the law names one semantic expectation that should hold.
+The key idea is contract first: what operations and guarantees exist before any one concrete implementation appears.
 
 ## Why
 
-Beginners need to separate “what behavior should exist” from “how a type implements it”.
+Users coming from inheritance-heavy languages can misread classes immediately.
+This page should prevent that by showing classes as behavior descriptions, not object hierarchies.
+Once that distinction is clear, later instance and law pages feel like natural follow-ups instead of confusing add-ons.
 
 ## How
 
-- Define one class with one operation.
-- Read it as a contract shape.
-- Keep the first class tiny.
+Read `let Eq[T] := class { ... };` as definition of shared capability over some type parameter `T`.
+Inside it, focus first on operation shape `let (=) ... : Bool;`, then on the law as statement about meaning rather than syntax decoration.
+When writing your own first class, keep member count tiny and choose behavior that several concrete types could plausibly share.
 
 ## Try it
 
-- Define one class member.
-- Name the behavior clearly.
-- List the types that should implement it.
+- Define one class with one operation.
+- Name the behavior after what callers need.
+- List one or two concrete types that should satisfy it.
 
 ## Common mistake
 
-Do not read classes here as inheritance trees.
+Do not read Musi classes as inheritance trees with hidden fields or subclass state.
 
 ## Next
 
-Continue to [Instances](/docs/language/abstractions/instances).
+Continue to [Instances](/docs/language/abstractions/instances) to see how one concrete type fulfills that behavior contract.

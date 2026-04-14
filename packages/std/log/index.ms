@@ -6,7 +6,7 @@ export let warnLevel : Int := 30;
 export let errorLevel : Int := 40;
 
 export let levelName (level : Int) : String :=
-  case () of (
+  match () (
   | _ if level = debugLevel => "debug"
   | _ if level = infoLevel => "info"
   | _ if level = warnLevel => "warn"

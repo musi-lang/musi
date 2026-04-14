@@ -232,11 +232,11 @@ fn unresolved_static_import_carries_source_diag() {
     let diag = error.source_diag().expect("source diagnostic expected");
     assert!(diag.path().ends_with("index.ms"));
     assert_eq!(
-        diag.primary_label().message(),
+        diag.diag().labels()[0].message(),
         "import `missing` does not resolve"
     );
     assert_eq!(
-        diag.hint(),
+        diag.diag().hint(),
         Some("declare package/import map entry or fix import spec")
     );
 }

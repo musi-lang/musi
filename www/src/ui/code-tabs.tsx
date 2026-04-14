@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import type { Locale } from "../lib/site-copy";
 import { HtmlSnippet } from "./html-snippet";
@@ -15,15 +15,12 @@ export function CodeTabs(props: {
 	ariaLabel: string;
 }) {
 	const baseId = useId();
-	const [activeTabId, setActiveTabId] = useState(props.tabs[0]?.id ?? "");
-	const activeTab =
-		props.tabs.find((tab) => tab.id === activeTabId) ?? props.tabs[0];
-	if (!activeTab) {
+	if (props.tabs.length === 0) {
 		return null;
 	}
 
 	return (
-		<div className="code-tabs-shell">
+		<div className="code-tabs-shell" data-code-tabs={true}>
 			<div
 				role="tablist"
 				aria-label={props.ariaLabel}
@@ -32,7 +29,7 @@ export function CodeTabs(props: {
 				{props.tabs.map((tab) => {
 					const tabElementId = `${baseId}-${tab.id}-tab`;
 					const panelElementId = `${baseId}-${tab.id}-panel`;
-					const selected = tab.id === activeTab.id;
+					const selected = tab.id === props.tabs[0]?.id;
 					return (
 						<button
 							key={tab.id}
@@ -41,28 +38,37 @@ export function CodeTabs(props: {
 							role="tab"
 							aria-controls={panelElementId}
 							aria-selected={selected}
+							tabIndex={selected ? 0 : -1}
+							data-code-tab-trigger={tab.id}
 							className={
 								selected ? "code-tab-trigger is-active" : "code-tab-trigger"
 							}
-							onClick={() => setActiveTabId(tab.id)}
 						>
 							{tab.label}
 						</button>
 					);
 				})}
 			</div>
-			<div
-				id={`${baseId}-${activeTab.id}-panel`}
-				role="tabpanel"
-				aria-labelledby={`${baseId}-${activeTab.id}-tab`}
-				className="code-tab-panel"
-			>
-				<HtmlSnippet
-					className="docs-content"
-					html={activeTab.html}
-					locale={props.locale}
-				/>
-			</div>
+			{props.tabs.map((tab) => {
+				const selected = tab.id === props.tabs[0]?.id;
+				return (
+					<div
+						key={tab.id}
+						id={`${baseId}-${tab.id}-panel`}
+						role="tabpanel"
+						aria-labelledby={`${baseId}-${tab.id}-tab`}
+						data-code-tab-panel={tab.id}
+						className="code-tab-panel"
+						hidden={!selected}
+					>
+						<HtmlSnippet
+							className="docs-content"
+							html={tab.html}
+							locale={props.locale}
+						/>
+					</div>
+				);
+			})}
 		</div>
 	);
 }

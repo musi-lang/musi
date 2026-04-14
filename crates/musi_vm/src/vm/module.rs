@@ -1,3 +1,4 @@
+use crate::{VmIndexSpace, VmStackKind};
 use music_seam::descriptor::ExportTarget;
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
@@ -93,9 +94,10 @@ impl Vm {
                 let globals = &self.module(slot)?.globals;
                 let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);
                 globals.get(raw_slot).cloned().ok_or_else(|| {
-                    VmError::new(VmErrorKind::GlobalOutOfBounds {
-                        module: module_name,
-                        slot: raw_slot,
+                    VmError::new(VmErrorKind::IndexOutOfBounds {
+                        space: VmIndexSpace::Global,
+                        owner: Some(module_name),
+                        index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
                         len: globals.len(),
                     })
                 })
@@ -119,8 +121,10 @@ impl Vm {
 
     pub(crate) fn module(&self, slot: usize) -> VmResult<&LoadedModule> {
         self.loaded_modules.get(slot).ok_or_else(|| {
-            VmError::new(VmErrorKind::ModuleSlotOutOfBounds {
-                slot,
+            VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::ModuleSlot,
+                owner: None,
+                index: i64::try_from(slot).unwrap_or(i64::MAX),
                 len: self.loaded_modules.len(),
             })
         })
@@ -128,16 +132,25 @@ impl Vm {
 
     pub(crate) fn module_mut(&mut self, slot: usize) -> VmResult<&mut LoadedModule> {
         let len = self.loaded_modules.len();
-        self.loaded_modules
-            .get_mut(slot)
-            .ok_or_else(|| VmError::new(VmErrorKind::ModuleSlotOutOfBounds { slot, len }))
+        self.loaded_modules.get_mut(slot).ok_or_else(|| {
+            VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::ModuleSlot,
+                owner: None,
+                index: i64::try_from(slot).unwrap_or(i64::MAX),
+                len,
+            })
+        })
     }
 
     pub(crate) fn current_module_slot(&self) -> VmResult<usize> {
         self.frames
             .last()
             .map(|frame| frame.module_slot)
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::StackEmpty {
+                    stack: VmStackKind::CallFrame,
+                })
+            })
     }
 
     pub(crate) fn load_dynamic_module(&mut self, spec: &str) -> VmResult<usize> {

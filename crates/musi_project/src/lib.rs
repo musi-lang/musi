@@ -7,7 +7,7 @@ mod registry;
 mod testing;
 mod types;
 
-pub use errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
+pub use errors::ProjectError;
 pub use lock::{LockedPackage, LockedPackageSource, Lockfile};
 pub use manifest::PackageManifest;
 pub use project::{

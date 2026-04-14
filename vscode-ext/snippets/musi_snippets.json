@@ -13,15 +13,6 @@
 		],
 		"description": "Recursive callable binding"
 	},
-	"Case Expression": {
-		"prefix": "case",
-		"body": [
-			"case ${1:expr} of (",
-			"\t| ${2:pattern} => ${0:result}",
-			")"
-		],
-		"description": "Case analysis expression"
-	},
 	"Data Declaration": {
 		"prefix": "data",
 		"body": [
@@ -44,11 +35,12 @@
 	"Handle Expression": {
 		"prefix": "handle",
 		"body": [
-			"handle ${1:expr} with ${2:effect} of (",
-			"\t| ${3:op}(${4:value}) => ${0:result}",
-			")"
+			"handle request ${1:effect}.${2:op}(${3:value}) using ${4:effect} {",
+			"\tvalue => ${5:value};",
+			"\t${2}(${6:k}) => ${0:resume ${7:value};}",
+			"};"
 		],
-		"description": "Handler expression"
+		"description": "Handler expression with request syntax"
 	},
 	"Quote Expression": {
 		"prefix": "quote",
@@ -79,5 +71,14 @@
 			"forall (${1:T}: Type) -> ${0:T}"
 		],
 		"description": "Forall type expression"
+	},
+	"Match Expression": {
+		"prefix": "match",
+		"body": [
+			"match ${1:expr} (",
+			"\t| ${2:pattern} => ${0:result}",
+			")"
+		],
+		"description": "Match expression"
 	}
 }

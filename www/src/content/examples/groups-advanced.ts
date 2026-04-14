@@ -15,7 +15,7 @@ export const advancedExampleGroups: readonly ExampleGroup[] = [
 	},
 	{
 		id: "effect-handle",
-		title: "Define, perform, and handle effects",
+		title: "Define, request, and handle effects",
 		caption:
 			"Capture side-effect requests in one place, then resolve them through handlers.",
 		note: "At small scale this can look like callback wiring, but at larger scale handlers keep policy at boundaries and reduce plumbing across call chains.",
@@ -23,10 +23,10 @@ export const advancedExampleGroups: readonly ExampleGroup[] = [
   let readln () : String;
 };
 
-handle perform console.readln() with console of (
-| readln(k) => resume "ok"
-| value => value
-);`,
+handle request console.readln() using console {
+  value => value;
+  readln(k) => resume "ok";
+};`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 263,

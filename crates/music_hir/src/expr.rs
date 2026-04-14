@@ -230,9 +230,9 @@ pub enum HirExprKind {
         arg: HirExprId,
     },
 
-    Case {
+    Match {
         scrutinee: HirExprId,
-        arms: SliceRange<HirCaseArm>,
+        arms: SliceRange<HirMatchArm>,
     },
     Data {
         variants: SliceRange<HirVariantDef>,
@@ -251,7 +251,7 @@ pub enum HirExprKind {
         class: HirExprId,
         members: MemberDefRange,
     },
-    Perform {
+    Request {
         expr: HirExprId,
     },
     HandlerLit {
@@ -461,14 +461,14 @@ impl HirAttrArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirCaseArm {
+pub struct HirMatchArm {
     pub attrs: SliceRange<HirAttr>,
     pub pat: HirPatId,
     pub guard: Option<HirExprId>,
     pub expr: HirExprId,
 }
 
-impl HirCaseArm {
+impl HirMatchArm {
     #[must_use]
     pub const fn new(
         attrs: SliceRange<HirAttr>,

@@ -3,8 +3,8 @@ use music_base::SourceId;
 use music_names::Ident;
 
 use crate::expr::{
-    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirCaseArm, HirConstraint, HirEffectItem,
-    HirExpr, HirFieldDef, HirHandleClause, HirLit, HirMemberDef, HirParam, HirRecordItem,
+    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirEffectItem, HirExpr,
+    HirFieldDef, HirHandleClause, HirLit, HirMatchArm, HirMemberDef, HirParam, HirRecordItem,
     HirTemplatePart, HirVariantDef,
 };
 use crate::pat::{HirPat, HirRecordPatField};
@@ -36,7 +36,7 @@ pub struct HirStore {
     pub template_parts: SliceArena<HirTemplatePart>,
     pub attrs: SliceArena<HirAttr>,
     pub attr_args: SliceArena<HirAttrArg>,
-    pub case_arms: SliceArena<HirCaseArm>,
+    pub match_arms: SliceArena<HirMatchArm>,
     pub constraints: SliceArena<HirConstraint>,
     pub effect_items: SliceArena<HirEffectItem>,
     pub members: SliceArena<HirMemberDef>,
@@ -68,7 +68,7 @@ impl HirStore {
             template_parts: SliceArena::new(),
             attrs: SliceArena::new(),
             attr_args: SliceArena::new(),
-            case_arms: SliceArena::new(),
+            match_arms: SliceArena::new(),
             constraints: SliceArena::new(),
             effect_items: SliceArena::new(),
             members: SliceArena::new(),

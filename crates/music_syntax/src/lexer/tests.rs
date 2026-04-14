@@ -153,14 +153,13 @@ fn dot_start_float_is_float() {
 fn lex_reserved_compound_tokens() {
     let cases = [
         (
-            ":?> := = :? ... .{ .[ -> ~> => /= <= >= <: |>",
+            ":?> := = :? ... .[ -> ~> => /= <= >= <: |>",
             vec![
                 TokenKind::ColonQuestionGt,
                 TokenKind::ColonEq,
                 TokenKind::Eq,
                 TokenKind::ColonQuestion,
                 TokenKind::DotDotDot,
-                TokenKind::DotLBrace,
                 TokenKind::DotLBracket,
                 TokenKind::MinusGt,
                 TokenKind::TildeGt,

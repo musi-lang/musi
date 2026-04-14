@@ -4,7 +4,7 @@ let Runtime := import "musi:runtime";
 export let argsCount () : Int := Runtime.processArgCount();
 
 export let argAt (index : Int) :=
-  case Runtime.processArgAt(index) of (
+  match Runtime.processArgAt(index) (
   | value if value = "" => Option.none[String]()
   | value => Option.some[String](value)
   );

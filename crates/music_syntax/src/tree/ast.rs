@@ -32,7 +32,7 @@ pub enum ExprKind {
     TypeCast,
     Prefix,
     Binary,
-    Case,
+    Match,
     Attributed,
     Let,
     Resume,
@@ -41,7 +41,7 @@ pub enum ExprKind {
     Effect,
     Class,
     Instance,
-    Perform,
+    Request,
     Handler,
     Handle,
     Foreign,
@@ -55,7 +55,7 @@ pub enum Expr<'tree, 'src> {
     Array(ArrayExpr<'tree, 'src>),
     Binary(BinaryExpr<'tree, 'src>),
     Call(CallExpr<'tree, 'src>),
-    Case(CaseExpr<'tree, 'src>),
+    Match(MatchExpr<'tree, 'src>),
     Handle(HandleExpr<'tree, 'src>),
     Handler(HandlerExpr<'tree, 'src>),
     Import(ImportExpr<'tree, 'src>),
@@ -86,7 +86,7 @@ pub struct ArrayExpr<'tree, 'src> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct CaseExpr<'tree, 'src> {
+pub struct MatchExpr<'tree, 'src> {
     syntax: SyntaxNode<'tree, 'src>,
 }
 
@@ -155,7 +155,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::ArrayExpr => Some(Self::Array(ArrayExpr { syntax: node })),
             SyntaxNodeKind::BinaryExpr => Some(Self::Binary(BinaryExpr { syntax: node })),
             SyntaxNodeKind::CallExpr => Some(Self::Call(CallExpr { syntax: node })),
-            SyntaxNodeKind::CaseExpr => Some(Self::Case(CaseExpr { syntax: node })),
+            SyntaxNodeKind::MatchExpr => Some(Self::Match(MatchExpr { syntax: node })),
             SyntaxNodeKind::HandlerExpr => Some(Self::Handler(HandlerExpr { syntax: node })),
             SyntaxNodeKind::HandleExpr => Some(Self::Handle(HandleExpr { syntax: node })),
             SyntaxNodeKind::ImportExpr => Some(Self::Import(ImportExpr { syntax: node })),
@@ -173,7 +173,7 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             Self::Array(expr) => expr.syntax,
             Self::Binary(expr) => expr.syntax,
             Self::Call(expr) => expr.syntax,
-            Self::Case(expr) => expr.syntax,
+            Self::Match(expr) => expr.syntax,
             Self::Handler(expr) => expr.syntax,
             Self::Handle(expr) => expr.syntax,
             Self::Import(expr) => expr.syntax,
@@ -216,7 +216,7 @@ fn expr_kind_from_syntax(kind: SyntaxNodeKind) -> ExprKind {
         (SyntaxNodeKind::PrefixExpr, ExprKind::Prefix),
         (SyntaxNodeKind::PostfixExpr, ExprKind::Prefix),
         (SyntaxNodeKind::BinaryExpr, ExprKind::Binary),
-        (SyntaxNodeKind::CaseExpr, ExprKind::Case),
+        (SyntaxNodeKind::MatchExpr, ExprKind::Match),
         (SyntaxNodeKind::AttributedExpr, ExprKind::Attributed),
         (SyntaxNodeKind::LetExpr, ExprKind::Let),
         (SyntaxNodeKind::ResumeExpr, ExprKind::Resume),
@@ -225,7 +225,7 @@ fn expr_kind_from_syntax(kind: SyntaxNodeKind) -> ExprKind {
         (SyntaxNodeKind::EffectExpr, ExprKind::Effect),
         (SyntaxNodeKind::ClassExpr, ExprKind::Class),
         (SyntaxNodeKind::InstanceExpr, ExprKind::Instance),
-        (SyntaxNodeKind::PerformExpr, ExprKind::Perform),
+        (SyntaxNodeKind::RequestExpr, ExprKind::Request),
         (SyntaxNodeKind::HandlerExpr, ExprKind::Handler),
         (SyntaxNodeKind::HandleExpr, ExprKind::Handle),
         (SyntaxNodeKind::ForeignBlockExpr, ExprKind::Foreign),
@@ -267,7 +267,7 @@ impl<'tree, 'src> ArrayExpr<'tree, 'src> {
     }
 }
 
-impl<'tree, 'src> CaseExpr<'tree, 'src> {
+impl<'tree, 'src> MatchExpr<'tree, 'src> {
     #[must_use]
     pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
         self.syntax

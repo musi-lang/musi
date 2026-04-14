@@ -4,10 +4,10 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,
 {
-    pub(super) fn lower_perform_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_request_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let expr = self.lower_opt_expr(origin, node.child_nodes().next());
-        self.alloc_expr(origin, HirExprKind::Perform { expr })
+        self.alloc_expr(origin, HirExprKind::Request { expr })
     }
 
     pub(super) fn lower_handler_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

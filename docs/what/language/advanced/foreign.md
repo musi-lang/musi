@@ -8,32 +8,36 @@ slug: "foreign"
 summary: "Declare foreign bindings at the runtime boundary, not inside ordinary domain code."
 ---
 
-{{snippet:foreign-puts}}
+{{snippet:chapter-foreign}}
 
 ## What
 
-Foreign declarations bind Musi code to external symbols and ABIs.
+Foreign declarations describe bindings implemented outside Musi.
+The example names a C function and its Musi-facing type so code on Musi side can call across boundary with explicit contract.
+This is advanced because it is about integration, not about core language flow.
 
 ## Why
 
-Cross-language boundaries are powerful but sharp, so they belong at edges.
+Users working near system boundaries need to know how Musi reaches native code without pretending that boundary is ordinary function definition.
+If docs bury foreign declarations under attribute notes or runtime pages, the integration story stays fuzzy.
+A dedicated page keeps the riskier cross-language surface explicit.
 
 ## How
 
-- Declare the ABI explicitly.
-- Keep the surface narrow.
-- Wrap foreign calls behind cleaner helpers when possible.
+Read `foreign "c"` as declaration of external implementation source.
+Then read remainder of line as ordinary Musi-facing name and type surface that callers will see on Musi side.
+When adding foreign bindings, keep signatures minimal, verify types carefully, and isolate these declarations near integration boundaries instead of scattering them through domain code.
 
 ## Try it
 
-- Read one foreign declaration.
-- List the boundary facts it exposes.
-- Sketch the wrapper you would place around it.
+- Declare one foreign binding.
+- Identify language/runtime boundary it crosses.
+- Explain what Musi side promises about arguments and result.
 
 ## Common mistake
 
-Do not scatter foreign declarations through ordinary business code.
+Do not treat foreign declarations as casual shortcut for code that could stay inside normal Musi modules.
 
 ## Next
 
-Continue to [Quote and syntax](/docs/language/advanced/quote-and-syntax).
+Continue to [Quote and syntax](/docs/language/advanced/quote-and-syntax) to see how Musi can represent code itself as data.

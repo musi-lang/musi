@@ -21,7 +21,11 @@ where
             self.diags.push(
                 Diag::error(ResolveDiagKind::ExpectedName.message())
                     .with_code(ResolveDiagKind::ExpectedName.code())
-                    .with_label(node.span(), self.source_id, "name starts here"),
+                    .with_label(
+                        node.span(),
+                        self.source_id,
+                        ResolveDiagKind::ExpectedName.label(),
+                    ),
             );
             return self.error_expr(origin);
         };

@@ -46,7 +46,7 @@ export const tryBlocks = [
 		title: "Try it",
 		steps: [
 			"Write two `let` bindings.",
-			"Add a `case` expression under them.",
+			"Add a `match` expression under them.",
 			"Read the file top to bottom and check the final result.",
 		],
 	},
@@ -74,7 +74,7 @@ export const tryBlocks = [
 		steps: [
 			"Define a `data` type with two cases.",
 			"Construct one value.",
-			"Match it with `case ... of`.",
+			"Match it with `match ...`.",
 		],
 	},
 	{

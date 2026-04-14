@@ -8,7 +8,7 @@ use music_module::ImportMap;
 use music_session::SessionOptions;
 use music_term::{SyntaxShape, SyntaxTerm, SyntaxTermError};
 
-use crate::{Runtime, RuntimeErrorKind, RuntimeOptions};
+use crate::{Runtime, RuntimeErrorKind, RuntimeOptions, RuntimeSessionPhase};
 
 #[derive(Default)]
 struct TestHost;
@@ -188,7 +188,7 @@ fn routes_effect_calls_through_registered_handlers() {
             "main",
             r#"
             let Console := effect { let readln (prompt : String) : Int; };
-            export let answer () : Int := perform Console.readln(">");
+            export let answer () : Int := request Console.readln(">");
         "#,
         )
         .unwrap();
@@ -232,6 +232,23 @@ fn reports_missing_root_source() {
     assert!(matches!(
         err.kind(),
         RuntimeErrorKind::ModuleSourceMissing { .. }
+    ));
+}
+
+#[test]
+fn collapses_session_failures_into_runtime_phase_error() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text("main", "export let broken := ")
+        .unwrap();
+
+    let err = runtime.load_root("main").unwrap_err();
+    assert!(matches!(
+        err.kind(),
+        RuntimeErrorKind::SessionFailed {
+            phase: RuntimeSessionPhase::Parse,
+            ..
+        }
     ));
 }
 
@@ -378,6 +395,62 @@ fn handles_runtime_env_and_random_services() {
 }
 
 #[test]
+fn rejects_unsupported_runtime_env_mutation_services() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r#"
+            let Runtime := import "musi:runtime";
+            export let envSet (name : String, value : String) : Int := Runtime.envSet(name, value);
+            export let envRemove (name : String) : Int := Runtime.envRemove(name);
+        "#,
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    let set_error = runtime
+        .call_export(
+            "envSet",
+            &[Value::string("MUSI_RT_TEST"), Value::string("value")],
+        )
+        .unwrap_err();
+    let remove_error = runtime
+        .call_export("envRemove", &[Value::string("MUSI_RT_TEST")])
+        .unwrap_err();
+
+    assert!(matches!(
+        set_error.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
+    assert!(matches!(
+        remove_error.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
+}
+
+#[test]
+fn rejects_unsupported_runtime_process_exit_service() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r#"
+            let Runtime := import "musi:runtime";
+            export let quit (code : Int) : Unit := Runtime.processExit(code);
+        "#,
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    let error = runtime.call_export("quit", &[Value::Int(7)]).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+    ));
+}
+
+#[test]
 fn handles_runtime_fs_and_log_services() {
     let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
@@ -452,7 +525,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         "@std/math",
         r"
 export let clamp (value : Int, low : Int, high : Int) : Int :=
-    case () of (
+    match () (
         | _ if value < low => low
         | _ if value > high => high
         | _ => value
@@ -471,7 +544,7 @@ export opaque let Option[T] := data {
 export let none [T] () : Option[T] := .None;
 
 export let unwrapOr [T] (value : Option[T], fallback : T) : T :=
-    case value of (
+    match value (
         | .Some(item) => item
         | .None => fallback
     );

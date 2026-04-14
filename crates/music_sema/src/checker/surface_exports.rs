@@ -1,8 +1,8 @@
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirCaseArm, HirExprId, HirExprKind, HirFieldDef,
-    HirHandleClause, HirLitKind, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
+    HirArg, HirArrayItem, HirAttr, HirExprId, HirExprKind, HirFieldDef, HirHandleClause,
+    HirLitKind, HirMatchArm, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
     HirTemplatePart, HirVariantDef,
 };
 use music_module::ModuleKey;
@@ -678,7 +678,7 @@ fn collect_exports_from_kind(
         }
         HirExprKind::Lambda { body, .. }
         | HirExprKind::Import { arg: body }
-        | HirExprKind::Perform { expr: body } => {
+        | HirExprKind::Request { expr: body } => {
             collect_expr(module, interner, *body, exports, attr_stack);
         }
         HirExprKind::Call { callee, args } => {
@@ -702,8 +702,8 @@ fn collect_exports_from_kind(
         HirExprKind::Let { value, .. } => {
             collect_expr(module, interner, *value, exports, attr_stack);
         }
-        HirExprKind::Case { scrutinee, arms } => {
-            collect_case_exports(module, interner, *scrutinee, arms, exports, attr_stack);
+        HirExprKind::Match { scrutinee, arms } => {
+            collect_match_exports(module, interner, *scrutinee, arms, exports, attr_stack);
         }
         HirExprKind::Data { variants, fields } => {
             collect_data_exports(module, interner, variants, fields, exports, attr_stack);
@@ -890,16 +890,16 @@ fn collect_recordish_exprs(
     collect_optional_expr(module, interner, base, exports, attr_stack);
 }
 
-fn collect_case_exports(
+fn collect_match_exports(
     module: &ModuleState,
     interner: &Interner,
     scrutinee: HirExprId,
-    arms: &SliceRange<HirCaseArm>,
+    arms: &SliceRange<HirMatchArm>,
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
     collect_expr(module, interner, scrutinee, exports, attr_stack);
-    for arm in module.resolved.module.store.case_arms.get(arms.clone()) {
+    for arm in module.resolved.module.store.match_arms.get(arms.clone()) {
         collect_optional_expr(module, interner, arm.guard, exports, attr_stack);
         collect_expr(module, interner, arm.expr, exports, attr_stack);
     }

@@ -4,7 +4,7 @@ let Runtime := import "musi:runtime";
 export let has (key : String) : Bool := Runtime.envHas(key) > 0;
 
 export let get (key : String) :=
-  case has(key) of (
+  match has(key) (
   | ok if ok => Option.some[String](Runtime.envGet(key))
   | _ => Option.none[String]()
   );

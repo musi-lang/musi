@@ -1,7 +1,7 @@
 use super::*;
 
-pub(super) fn lower_perform_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> LoweringResult {
-    call::lower_perform_expr(ctx, expr)
+pub(super) fn lower_request_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> LoweringResult {
+    call::lower_request_expr(ctx, expr)
 }
 
 pub(super) fn lower_handler_literal_expr(

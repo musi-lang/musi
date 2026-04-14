@@ -47,7 +47,7 @@ impl Parser<'_> {
 
     fn parse_atom_keyword_expr(&mut self) -> Option<ParseResult<SyntaxNodeId>> {
         Some(match self.peek_kind() {
-            TokenKind::KwCase => self.parse_case_expr(),
+            TokenKind::KwMatch => self.parse_match_expr(),
             TokenKind::KwLet => self.parse_let_expr(Vec::new()),
             TokenKind::KwResume => self.parse_resume_expr(),
             TokenKind::KwImport => self.parse_import_expr(),
@@ -55,7 +55,7 @@ impl Parser<'_> {
             TokenKind::KwEffect => self.parse_effect_expr(),
             TokenKind::KwClass => self.parse_class_expr(),
             TokenKind::KwInstance => self.parse_instance_expr(Vec::new()),
-            TokenKind::KwPerform => self.parse_perform_expr(),
+            TokenKind::KwRequest => self.parse_request_expr(),
             TokenKind::KwUsing => self.parse_handler_expr(),
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),

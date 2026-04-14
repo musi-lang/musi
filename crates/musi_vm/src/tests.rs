@@ -152,7 +152,7 @@ fn executes_closure_and_recursive_callable() {
             let apply (f : Int -> Int, x : Int) : Int := f(x);
             export let answer (n : Int) : Int := (
               let base : Int := 1;
-              let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+              let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
               let add_base (y : Int) : Int := y + 41;
               apply(add_base, loop(n))
             );
@@ -178,7 +178,7 @@ fn executes_record_projection_and_update() {
             r"
             export let answer () : Int := (
               let point := { x := 1, y := 2 };
-              let updated := point.{ x := 40 };
+              let updated := { ...point, x := 40 };
               updated.x + point.y
             );
         ",
@@ -338,7 +338,7 @@ fn handles_effect_value_clause_and_resume() {
             r"
             let Console := effect { let readln () : Int; };
             export let answer () : Int :=
-              handle perform Console.readln() using Console {
+              handle request Console.readln() using Console {
                 value => value + 1;
                 readln(k) => resume 41;
               };
@@ -371,7 +371,7 @@ fn reuses_handler_value_and_executes_range_membership_and_spread() {
               value => value + 1;
               readln(k) => resume 41;
             };
-            export let handled () : Int := handle perform Console.readln() using ConsoleHandler;
+            export let handled () : Int := handle request Console.readln() using ConsoleHandler;
             export let contains () : Bool := (
               let span := 1 ..< 4;
               2 in span
@@ -417,7 +417,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
             );
             let Console := effect { let readln (prompt : String) : Int; };
             export let call_puts () : Int := puts(1);
-            export let call_readln () : Int := perform Console.readln(">");
+            export let call_readln () : Int := request Console.readln(">");
         "#,
         )],
         "main",
