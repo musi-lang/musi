@@ -80,6 +80,7 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 								path={group.path}
 								summaryHtml={group.summaryHtml}
 								pages={group.pages}
+								linkLabel={localeCopy.ui.openSection}
 							/>
 						))}
 				</div>

@@ -148,7 +148,7 @@ function createWebsiteMusiGrammar(
 	repository["website-function-call"] = {
 		name: "entity.name.function.call.musi",
 		match:
-			"(?<!\\.)\\b(?!and\\b|as\\b|case\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|mut\\b|not\\b|of\\b|opaque\\b|or\\b|perform\\b|quote\\b|rec\\b|resume\\b|shl\\b|shr\\b|where\\b|with\\b|xor\\b)[a-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
+			"(?<!\\.)\\b(?!and\\b|as\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|match\\b|mut\\b|not\\b|opaque\\b|or\\b|quote\\b|rec\\b|request\\b|resume\\b|shl\\b|shr\\b|where\\b|with\\b|xor\\b)[a-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
 	};
 
 	repository["website-type-identifier"] = {

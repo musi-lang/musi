@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,6 +13,68 @@ const functionNamePattern = /<span style="color:[^"]+">\s*identity_fn<\/span>/;
 const genericTypePattern = /<span style="color:[^"]+">T<\/span>/;
 const plainValueBindingPattern = /> port : <\/span>/;
 const splitCallLikeBindingPattern = />\s*port<\/span>/;
+const embedPattern = /\{\{(snippet|example):([\w-]+)\}\}/g;
+const removedSyntaxPatterns = [
+	/\bperform\b/,
+	/\bcase\s+[^\n]+\bof\b/,
+	/handle\s+request[^\n]+using[^\n]+\(/,
+	/\.\{/,
+] as const;
+const requestKeywordPattern = /> ?request<\/span>/;
+const matchKeywordPattern = /> ?match<\/span>/;
+const snippetPlaceholder = "${";
+const matchSnippetPattern = `match ${snippetPlaceholder}1:expr} (`;
+const handleRequestSnippetPattern = `handle request ${snippetPlaceholder}1:effect}.${snippetPlaceholder}2:op}(${snippetPlaceholder}3:value}) using ${snippetPlaceholder}4:effect} {`;
+const caseSnippetPattern = `case ${snippetPlaceholder}1:expr} of (`;
+const handleWithSnippetPattern = `handle ${snippetPlaceholder}1:expr} with ${snippetPlaceholder}2:effect} of (`;
+
+function chapterDocFiles(chaptersRoot: string) {
+	const chapterFiles: string[] = [];
+	for (const section of readdirSync(chaptersRoot)) {
+		if (section === "index.md" || section === "syntax.md") {
+			continue;
+		}
+		const sectionPath = join(chaptersRoot, section);
+		for (const file of readdirSync(sectionPath)) {
+			if (file === "index.md" || !file.endsWith(".md")) {
+				continue;
+			}
+			chapterFiles.push(join(sectionPath, file));
+		}
+	}
+	return chapterFiles;
+}
+
+function chapterSnippetUsage(file: string, used: Map<string, string>) {
+	const source = readFileSync(file, "utf8");
+	const embeds = [...source.matchAll(embedPattern)];
+	const id = embeds[0]?.[2];
+	const previous = used.get(String(id));
+	return { embeds, id, previous };
+}
+
+function removedSyntaxMatches(path: string) {
+	if (!(path.endsWith(".md") || path.endsWith(".ts"))) {
+		return [];
+	}
+	const source = readFileSync(path, "utf8");
+	return removedSyntaxPatterns.filter((pattern) => pattern.test(source));
+}
+
+function visitContentPath(target: string, visitFile: (path: string) => void) {
+	if (target.endsWith(".md") || target.endsWith(".ts")) {
+		visitFile(target);
+		return;
+	}
+	for (const entry of readdirSync(target, { withFileTypes: true })) {
+		const path = join(target, entry.name);
+		if (entry.isDirectory()) {
+			visitContentPath(path, visitFile);
+			continue;
+		}
+		visitFile(path);
+	}
+}
 
 describe("content watch paths", () => {
 	it("tracks docs, registries, grammar, and generator sources", () => {
@@ -99,5 +162,92 @@ let next := port + 1;`,
 		expect(bindingHtml).toMatch(plainValueBindingPattern);
 		expect(bindingHtml).toContain(".Configured");
 		expect(bindingHtml).not.toMatch(splitCallLikeBindingPattern);
+	});
+});
+
+describe("chapter docs", () => {
+	it("use one unique snippet each", () => {
+		const chaptersRoot = join(root, "..", "..", "docs", "what", "language");
+		const used = new Map<string, string>();
+		for (const file of chapterDocFiles(chaptersRoot)) {
+			const usage = chapterSnippetUsage(file, used);
+			expect(usage.embeds.length, file).toBe(1);
+			expect(usage.embeds[0]?.[1], file).toBe("snippet");
+			expect(usage.id, file).toBeTruthy();
+			expect(usage.previous, `${file} reuses ${usage.id}`).toBeUndefined();
+			used.set(String(usage.id), file);
+		}
+	});
+});
+
+describe("website learning syntax", () => {
+	it("avoid removed surface syntax in learning sources", () => {
+		const files = [
+			join(root, "..", "..", "docs", "what", "language"),
+			join(root, "..", "src", "content", "snippet-registry.ts"),
+			join(root, "..", "src", "content", "examples", "groups-core.ts"),
+			join(root, "..", "src", "content", "examples", "groups-advanced.ts"),
+		];
+		for (const file of files) {
+			visitContentPath(file, (path) => {
+				for (const pattern of removedSyntaxMatches(path)) {
+					expect(path, `${path} matches ${pattern}`).toBe("");
+				}
+			});
+		}
+	});
+});
+
+describe("website highlighting", () => {
+	it("highlights request and match as keywords", () => {
+		const html = renderHighlightedCodeForTest(
+			`match value (
+| .Left(x) => x
+| .Right(_) => request Console.readln()
+);`,
+			"musi",
+		);
+
+		expect(html).toContain("request");
+		expect(html).toContain("match");
+		expect(html).toMatch(requestKeywordPattern);
+		expect(html).toMatch(matchKeywordPattern);
+	});
+
+	it("keeps grammar and snippets on current syntax", () => {
+		const grammarSource = readFileSync(
+			join(root, "..", "..", "vscode-ext", "syntaxes", "musi.tmLanguage.json"),
+			"utf8",
+		);
+		const snippetSource = readFileSync(
+			join(root, "..", "..", "vscode-ext", "snippets", "musi_snippets.json"),
+			"utf8",
+		);
+		const websiteGeneratorSource = readFileSync(
+			join(root, "content-generator.ts"),
+			"utf8",
+		);
+
+		expect(grammarSource).toContain(
+			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|where)\\\\b",
+		);
+		expect(grammarSource).not.toContain(
+			"\\\\b(as|case|export|forall|handle|if|import|of|perform|quote|resume|where)\\\\b",
+		);
+		expect(grammarSource).toContain("match\\\\b");
+		expect(grammarSource).toContain("request\\\\b");
+		expect(grammarSource).not.toContain("case\\\\b");
+		expect(grammarSource).not.toContain("of\\\\b");
+		expect(grammarSource).not.toContain("perform\\\\b");
+		expect(snippetSource).toContain('"Match Expression"');
+		expect(snippetSource).toContain(matchSnippetPattern);
+		expect(snippetSource).toContain(handleRequestSnippetPattern);
+		expect(snippetSource).not.toContain(caseSnippetPattern);
+		expect(snippetSource).not.toContain(handleWithSnippetPattern);
+		expect(websiteGeneratorSource).toContain("match\\\\b");
+		expect(websiteGeneratorSource).toContain("request\\\\b");
+		expect(websiteGeneratorSource).not.toContain("case\\\\b");
+		expect(websiteGeneratorSource).not.toContain("of\\\\b");
+		expect(websiteGeneratorSource).not.toContain("perform\\\\b");
 	});
 });

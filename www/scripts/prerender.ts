@@ -8,6 +8,10 @@ const distDir = join(import.meta.dir, "..", "dist");
 const templatePath = join(distDir, "index.html");
 const seoMarkerPattern =
 	/<!-- SEO_HEAD_START -->([\s\S]*?)<!-- SEO_HEAD_END -->/;
+const htmlLangPattern = /<html lang="[^"]+">/;
+const stylesheetLinkPattern =
+	/\s*<link rel="stylesheet" crossorigin href="(?<href>[^"]+)">/;
+const leadingSlashPattern = /^\//;
 
 function outputPath(routePath: string) {
 	return routePath === "/"
@@ -28,10 +32,31 @@ function buildSitemap(paths: string[]) {
 
 async function main() {
 	const template = await readFile(templatePath, "utf8");
+	const stylesheetMatch = template.match(stylesheetLinkPattern);
+	const stylesheetGroups = stylesheetMatch?.groups as
+		| { href?: string }
+		| undefined;
+	const stylesheetHref = stylesheetGroups?.href;
+
+	if (!stylesheetHref) {
+		throw new Error("missing built stylesheet link in prerender template");
+	}
+
+	const stylesheetPath = join(
+		distDir,
+		stylesheetHref.replace(leadingSlashPattern, ""),
+	);
+	const stylesheet = await readFile(stylesheetPath, "utf8");
+	const inlineStyleTag = `\n\t\t<style data-site-critical>${stylesheet}</style>`;
+	const styledTemplate = template.replace(
+		stylesheetLinkPattern,
+		inlineStyleTag,
+	);
 	const paths = new Set<string>();
 
 	for (const route of appRoutes) {
-		const html = template
+		const html = styledTemplate
+			.replace(htmlLangPattern, `<html lang="${route.locale}">`)
 			.replace(
 				seoMarkerPattern,
 				`<!-- SEO_HEAD_START -->\n\t\t${buildHeadMarkup(route)}\n\t\t<!-- SEO_HEAD_END -->`,

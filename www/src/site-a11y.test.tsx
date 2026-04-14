@@ -27,6 +27,12 @@ describe("site accessibility scaffolding", () => {
 		const html = render("/learn/language/start/getting-started");
 		expect(html).toContain("Documentation sections");
 		expect(html).toContain("On this page");
+		expect(html).toContain("Chapter navigation");
+	});
+
+	it("renders descriptive docs section links on docs index", () => {
+		const html = render("/learn");
+		expect(html).toContain("Open section: Start");
 	});
 
 	it("renders icon utility controls with accessible labels", () => {
@@ -36,12 +42,17 @@ describe("site accessibility scaffolding", () => {
 		expect(html).toContain("Switch language");
 	});
 
-	it("renders community guestbook form landmarks", () => {
+	it("renders community links section", () => {
 		const html = render("/community");
-		expect(html).toContain("Guestbook entries");
-		expect(html).toContain(
-			"Guestbook is in read-only mode on this deployment.",
-		);
+		expect(html).toContain("Community links");
+		expect(html).toContain("Open GitHub");
+	});
+
+	it("renders descriptive home card links", () => {
+		const html = render("/");
+		expect(html).toContain("Read Learn docs");
+		expect(html).toContain("Open install guide");
+		expect(html).toContain("Open community links");
 	});
 
 	it("renders install command table headers", () => {

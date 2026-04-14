@@ -84,7 +84,7 @@ counter;`,
 };
 
 let port : Port := .Configured(8080);
-case port of (
+match port (
 | .Configured(port) => port
 | .Default => 3000
 );`,
@@ -97,7 +97,7 @@ case port of (
 		id: "recursive-case",
 		language: "musi",
 		sourceText: `let rec loop (x : Int) : Int :=
-  case x of (
+  match x (
   | 0 => 0
   | _ => loop(x - 1)
   );`,
@@ -160,7 +160,7 @@ let identityFn[T] (input : T) : T := input;`,
 	{
 		id: "data-port-case",
 		language: "musi",
-		sourceText: `case port of (
+		sourceText: `match port (
 | .Configured(value) => value
 | .Default => 3000
 );`,
@@ -277,9 +277,9 @@ next;`,
 		},
 	},
 	{
-		id: "perform-console",
+		id: "request-console",
 		language: "musi",
-		sourceText: "perform console.readln();",
+		sourceText: "request console.readln();",
 		evidence: {
 			path: "grammar/Musi.g4",
 			line: 205,
@@ -288,7 +288,7 @@ next;`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle perform console.readln() using console {
+		sourceText: `handle request console.readln() using console {
   value => value;
   readln(k) => resume "ok";
 };`,
@@ -301,7 +301,7 @@ next;`,
 		id: "using-signature",
 		language: "musi",
 		sourceText: `let readClosed (x : Int) : String using { Console } :=
-  perform State.readln();`,
+  request State.readln();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -495,6 +495,390 @@ export let test () :=
 		evidence: {
 			path: "packages/std/option/index.test.ms",
 			line: 4,
+		},
+	},
+	{
+		id: "chapter-getting-started",
+		language: "bash",
+		sourceText: `curl -fsSL https://raw.githubusercontent.com/musi-lang/musi/main/install.sh | sh
+music check index.ms
+musi new hello`,
+		evidence: {
+			path: "README.md",
+			line: 61,
+		},
+	},
+	{
+		id: "chapter-first-program",
+		language: "musi",
+		sourceText: `let answer := 42;
+answer;`,
+		evidence: {
+			path: "docs/what/language/syntax.md",
+			line: 3,
+		},
+	},
+	{
+		id: "chapter-values-and-let",
+		language: "musi",
+		sourceText: `let port := 8080;
+let nextPort := port + 1;
+nextPort;`,
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 24,
+		},
+	},
+	{
+		id: "chapter-blocks-and-expressions",
+		language: "musi",
+		sourceText: `(
+  let base := 8000;
+  let offset := 80;
+  base + offset
+);`,
+		evidence: {
+			path: "grammar/Musi.g4",
+			line: 137,
+		},
+	},
+	{
+		id: "chapter-mutation",
+		language: "musi",
+		sourceText: `let counter := mut 1;
+counter := counter + 1;
+counter;`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1212,
+		},
+	},
+	{
+		id: "chapter-literals",
+		language: "musi",
+		sourceText: `let port := 8080;
+let label := "ready";
+let enabled := .True;
+label;`,
+		evidence: {
+			path: "grammar/Musi.g4",
+			line: 380,
+		},
+	},
+	{
+		id: "chapter-operators",
+		language: "musi",
+		sourceText: `let port := 8080;
+let next := port + 1;
+let same := next = 8081;
+let capped := next <= 9000;`,
+		evidence: {
+			path: "grammar/Musi.g4",
+			line: 380,
+		},
+	},
+	{
+		id: "chapter-ranges",
+		language: "musi",
+		sourceText: `let closed := 0..10;
+let halfOpen := 0..<10;
+halfOpen;`,
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 239,
+		},
+	},
+	{
+		id: "chapter-functions",
+		language: "musi",
+		sourceText: `let twice (x : Int) : Int := x + x;
+let answer := twice(21);
+answer;`,
+		evidence: {
+			path: "docs/what/language/syntax.md",
+			line: 5,
+		},
+	},
+	{
+		id: "chapter-calls",
+		language: "musi",
+		sourceText: `let greet (name : String) : String := name;
+let message := greet("Musi");
+message;`,
+		evidence: {
+			path: "docs/what/language/syntax.md",
+			line: 5,
+		},
+	},
+	{
+		id: "chapter-methods",
+		language: "musi",
+		sourceText: `let (self : Int).abs () : Int := self;
+let one := 1;
+one.abs();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 510,
+		},
+	},
+	{
+		id: "chapter-records",
+		language: "musi",
+		sourceText: `let point := { x := 3, y := 4 };
+let moved := { ...point, y := 9 };
+moved;`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1192,
+		},
+	},
+	{
+		id: "chapter-arrays-and-slices",
+		language: "musi",
+		sourceText: `let Slice := import "@std/slice";
+let values := [1, 2, 3];
+Slice.concat[Int](values, [4]);`,
+		evidence: {
+			path: "packages/std/slice/index.test.ms",
+			line: 8,
+		},
+	},
+	{
+		id: "chapter-patterns",
+		language: "musi",
+		sourceText: `let Port := data {
+  | Configured : Int
+  | Default
+};
+
+let port : Port := .Configured(8080);
+match port (
+| .Configured(value) => value
+| .Default => 3000
+);`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1160,
+		},
+	},
+	{
+		id: "chapter-files",
+		language: "musi",
+		sourceText: `let answer := 42;
+answer;`,
+		evidence: {
+			path: "docs/what/language/syntax.md",
+			line: 3,
+		},
+	},
+	{
+		id: "chapter-packages",
+		language: "bash",
+		sourceText: `musi new hello
+cd hello
+musi run`,
+		evidence: {
+			path: "crates/musi/src/main.rs",
+			line: 1,
+		},
+	},
+	{
+		id: "chapter-imports-and-exports",
+		language: "musi",
+		sourceText: `export let answer := 42;
+let Option := import "@std/option";
+let Local := import "./index.ms";
+Local.answer;`,
+		evidence: {
+			path: "crates/music_sema/src/checker/surface_exports.rs",
+			line: 607,
+		},
+	},
+	{
+		id: "chapter-type-annotations",
+		language: "musi",
+		sourceText: `let port : Int := 8080;
+let twice (x : Int) : Int := x + x;
+twice(port);`,
+		evidence: {
+			path: "docs/what/language/type-system.md",
+			line: 3,
+		},
+	},
+	{
+		id: "chapter-type-inference",
+		language: "musi",
+		sourceText: `let port : Int := 8080;
+let next := port + 1;
+next;`,
+		evidence: {
+			path: "docs/what/language/type-system.md",
+			line: 3,
+		},
+	},
+	{
+		id: "chapter-generics",
+		language: "musi",
+		sourceText: `let identityFn[T] (input : T) : T := input;
+let port : Int := 8080;
+identityFn[Int](port);`,
+		evidence: {
+			path: "docs/what/language/type-system.md",
+			line: 3,
+		},
+	},
+	{
+		id: "chapter-classes",
+		language: "musi",
+		sourceText: `let Eq[T] := class {
+  let (=) (a : T, b : T) : Bool;
+  law reflexive (x : T) := .True;
+};`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 503,
+		},
+	},
+	{
+		id: "chapter-instances",
+		language: "musi",
+		sourceText: `let eqInt := instance Eq[Int] {
+  let (=) (a : Int, b : Int) : Bool := .True;
+};`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 506,
+		},
+	},
+	{
+		id: "chapter-laws",
+		language: "musi",
+		sourceText: `let Eq[T] := class {
+  let (=) (a : T, b : T) : Bool;
+  law reflexive (x : T) := .True;
+};`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 503,
+		},
+	},
+	{
+		id: "chapter-effects",
+		language: "musi",
+		sourceText: `let console := effect {
+  let readln () : String;
+};
+
+request console.readln();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 317,
+		},
+	},
+	{
+		id: "chapter-using",
+		language: "musi",
+		sourceText: `let readClosed (x : Int) : String using { Console } :=
+  request State.readln();`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 1444,
+		},
+	},
+	{
+		id: "chapter-handlers",
+		language: "musi",
+		sourceText: `handle request console.readln() using console {
+  value => value;
+  readln(k) => resume "ok";
+};`,
+		evidence: {
+			path: "crates/music_sema/src/tests.rs",
+			line: 331,
+		},
+	},
+	{
+		id: "chapter-foundation",
+		language: "musi",
+		sourceText: `let Core := import "musi:core";
+Core;`,
+		evidence: {
+			path: "crates/music_session/src/session/foundation.rs",
+			line: 1,
+		},
+	},
+	{
+		id: "chapter-runtime",
+		language: "musi",
+		sourceText: `let Runtime := import "musi:runtime";
+Runtime.envGet("HOME");`,
+		evidence: {
+			path: "packages/std/env/index.ms",
+			line: 2,
+		},
+	},
+	{
+		id: "chapter-stdlib",
+		language: "musi",
+		sourceText: `let Option := import "@std/option";
+let configured := Option.some[Int](8080);
+Option.unwrapOr[Int](configured, 3000);`,
+		evidence: {
+			path: "packages/std/option/index.ms",
+			line: 6,
+		},
+	},
+	{
+		id: "chapter-attributes",
+		language: "musi",
+		sourceText:
+			'@link(name := "c") foreign "c" let puts (msg : CString) : Int;',
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 78,
+		},
+	},
+	{
+		id: "chapter-foreign",
+		language: "musi",
+		sourceText: 'foreign "c" let puts (msg : CString) : Int;',
+		evidence: {
+			path: "crates/music_syntax/src/parser/tests.rs",
+			line: 70,
+		},
+	},
+	{
+		id: "chapter-quote-and-syntax",
+		language: "musi",
+		sourceText: `let addTemplate := quote (x + #(delta));
+let addOneSyntax := quote (#(x) + 1);
+addOneSyntax;`,
+		evidence: {
+			path: "docs/what/language/metaprogramming.md",
+			line: 8,
+		},
+	},
+	{
+		id: "chapter-testing",
+		language: "musi",
+		sourceText: `let Testing := import "@std/testing";
+
+export let test () :=
+  Testing.it("adds values", Testing.toBe(1 + 2, 3));`,
+		evidence: {
+			path: "packages/std/option/index.test.ms",
+			line: 4,
+		},
+	},
+	{
+		id: "chapter-running-and-tooling",
+		language: "bash",
+		sourceText: `music check index.ms
+musi run
+musi test`,
+		evidence: {
+			path: "vscode-ext/README.md",
+			line: 8,
 		},
 	},
 ] as const;

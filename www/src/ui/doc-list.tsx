@@ -13,13 +13,16 @@ export function DocListGroup(props: {
 	path?: string;
 	summaryHtml?: string;
 	pages: readonly DocListPage[];
+	linkLabel?: string;
 }) {
 	return (
 		<Surface className="doc-group" tone="raised">
 			<div className="doc-group-header">
 				{props.path ? (
 					<a href={props.path} className="eyebrow doc-group-link">
-						{props.group}
+						{props.linkLabel
+							? `${props.linkLabel}: ${props.group}`
+							: props.group}
 					</a>
 				) : (
 					<div className="eyebrow">{props.group}</div>

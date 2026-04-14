@@ -23,7 +23,7 @@ answer;`,
 		title: "Fallback value from an optional result",
 		caption:
 			"One value may be present or missing. Musi does this with the real stdlib <code>Option</code> family.",
-		note: "Think of a spare house key: if the usual key exists, use it; otherwise use the backup. Musi expresses that choice with explicit constructors and <code>case</code>.",
+		note: "Think of a spare house key: if the usual key exists, use it; otherwise use the backup. Musi expresses that choice with explicit constructors and <code>match</code>.",
 		sourceText: `let configured := Option.some[Int](8080);
 let port := Option.unwrapOr[Int](configured, 3000);`,
 		evidence: {
@@ -94,7 +94,7 @@ let user : User := { name := "Ada" };`,
 		title: "Record and array spread updates",
 		caption:
 			"Build structured values, spread them, and update selected fields in one expression flow.",
-		note: "Like copying a form and editing only one line instead of rewriting everything. Spread/update keeps the unchanged parts intact. Musi also has a nested record-update form inspired by F# and OCaml; the note below covers that separately.",
+		note: "Like copying a form and editing only one line instead of rewriting everything. Spread/update keeps the unchanged parts intact and keeps changed fields explicit.",
 		sourceText: `let xs := [1, 2];
 let ys := [0, ...xs, 3];
 
