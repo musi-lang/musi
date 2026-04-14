@@ -895,7 +895,11 @@ fn open_library(foreign: &ForeignCall, link: &str) -> VmResult<*mut c_void> {
             return Ok(handle);
         }
     }
-    Err(native_library_load_failed(foreign, link.into(), dlerror_text()))
+    Err(native_library_load_failed(
+        foreign,
+        link.into(),
+        dlerror_text(),
+    ))
 }
 
 fn library_candidates(link: &str) -> Vec<String> {
@@ -1116,11 +1120,7 @@ fn native_library_load_failed(
     )
 }
 
-fn native_arg_invalid(
-    foreign: &ForeignCall,
-    index: usize,
-    reason: NativeErrorText,
-) -> VmError {
+fn native_arg_invalid(foreign: &ForeignCall, index: usize, reason: NativeErrorText) -> VmError {
     native_call_failed(
         foreign.name().into(),
         NativeFailureStage::ArgInvalid,

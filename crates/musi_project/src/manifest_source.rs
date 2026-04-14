@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use music_base::SourceId;
 use music_base::Span;
 use music_base::diag::{Diag, DiagCode, OwnedSourceDiag};
-use music_base::SourceId;
 
 use crate::errors::ProjectError;
 
