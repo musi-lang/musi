@@ -1,5 +1,6 @@
 use std::iter::repeat_n;
 
+use crate::{VmIndexSpace, VmStackKind};
 use music_seam::{Instruction, MethodId};
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult};
@@ -10,23 +11,27 @@ use super::state::{CallFrame, StepOutcome};
 impl Vm {
     pub(crate) fn next_instruction(&mut self) -> VmResult<Instruction> {
         let (module_slot, method, ip) = {
-            let frame = self
-                .frames
-                .last()
-                .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+            let frame = self.frames.last().ok_or_else(|| {
+                VmError::new(VmErrorKind::StackEmpty {
+                    stack: VmStackKind::CallFrame,
+                })
+            })?;
             (frame.module_slot, frame.method, frame.ip)
         };
         let loaded_method = self.module(module_slot)?.program.loaded_method(method)?;
         let instruction = loaded_method.instructions.get(ip).cloned().ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidBranchTarget {
+            VmError::new(VmErrorKind::BranchTargetInvalid {
                 method: loaded_method.name.clone(),
-                label: u16::MAX,
+                label: Some(u16::MAX),
+                index: None,
+                len: None,
             })
         })?;
-        let frame = self
-            .frames
-            .last_mut()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
         frame.ip = frame.ip.saturating_add(1);
         Ok(instruction)
     }
@@ -87,30 +92,34 @@ impl Vm {
     }
 
     pub(crate) fn push_value(&mut self, value: Value) -> VmResult {
-        let frame = self
-            .frames
-            .last_mut()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
         frame.stack.push(value);
         Ok(())
     }
 
     pub(crate) fn pop_value(&mut self) -> VmResult<Value> {
-        let frame = self
-            .frames
-            .last_mut()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
-        frame
-            .stack
-            .pop()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyOperandStack))
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
+        frame.stack.pop().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::Operand,
+            })
+        })
     }
 
     pub(crate) fn pop_args(&mut self, len: usize) -> VmResult<ValueList> {
-        let frame = self
-            .frames
-            .last_mut()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
         if frame.stack.len() < len {
             return Err(VmError::new(VmErrorKind::OperandCountMismatch {
                 needed: len,
@@ -139,41 +148,58 @@ impl Vm {
             .collect()
     }
 
+    fn checked_local_slot(&self, slot: u16) -> VmResult<usize> {
+        let Some(frame) = self.frames.last() else {
+            return Err(VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            }));
+        };
+        let index = usize::from(slot);
+        if index < frame.locals.len() {
+            Ok(index)
+        } else {
+            Err(VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::Local,
+                owner: None,
+                index: i64::from(slot),
+                len: frame.locals.len(),
+            }))
+        }
+    }
+
     pub(crate) fn local(&self, slot: u16) -> VmResult<&Value> {
-        let len = self.frames.last().map_or(0, |frame| frame.locals.len());
-        self.frames
-            .last()
-            .and_then(|frame| frame.locals.get(usize::from(slot)))
-            .ok_or_else(|| VmError::new(VmErrorKind::LocalOutOfBounds { slot, len }))
+        let index = self.checked_local_slot(slot)?;
+        Ok(&self.frames.last().expect("checked local frame").locals[index])
     }
 
     pub(crate) fn local_mut(&mut self, slot: u16) -> VmResult<&mut Value> {
-        let len = self.frames.last().map_or(0, |frame| frame.locals.len());
-        self.frames
-            .last_mut()
-            .and_then(|frame| frame.locals.get_mut(usize::from(slot)))
-            .ok_or_else(|| VmError::new(VmErrorKind::LocalOutOfBounds { slot, len }))
+        let index = self.checked_local_slot(slot)?;
+        Ok(&mut self.frames.last_mut().expect("checked local frame").locals[index])
     }
 
     pub(crate) fn jump_to(&mut self, label: u16) -> VmResult {
         let (module_slot, method) = {
-            let frame = self
-                .frames
-                .last()
-                .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+            let frame = self.frames.last().ok_or_else(|| {
+                VmError::new(VmErrorKind::StackEmpty {
+                    stack: VmStackKind::CallFrame,
+                })
+            })?;
             (frame.module_slot, frame.method)
         };
         let loaded_method = self.module(module_slot)?.program.loaded_method(method)?;
         let ip = *loaded_method.labels.get(&label).ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidBranchTarget {
+            VmError::new(VmErrorKind::BranchTargetInvalid {
                 method: loaded_method.name.clone(),
-                label,
+                label: Some(label),
+                index: None,
+                len: None,
             })
         })?;
-        let frame = self
-            .frames
-            .last_mut()
-            .ok_or_else(|| VmError::new(VmErrorKind::EmptyCallFrameStack))?;
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
         frame.ip = ip;
         Ok(())
     }

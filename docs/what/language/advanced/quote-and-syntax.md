@@ -8,34 +8,36 @@ slug: "quote-and-syntax"
 summary: "Treat code as data only after ordinary code reading feels natural."
 ---
 
-{{snippet:quote-expr}}
-
-{{snippet:quote-with-meta}}
+{{snippet:chapter-quote-and-syntax}}
 
 ## What
 
-`quote` lets you work with code shape as data.
+`quote` turns code shape into syntax data you can inspect, build, or reuse.
+The first snippet shows simplest quoted expression, and the second shows interpolation with `#(...)` inside quoted form.
+This chapter belongs late because it asks you to reason about code as data rather than just running code.
 
 ## Why
 
-Metaprogramming adds a second mental layer, so it belongs late in the learning path.
+Metaprogramming questions show up after ordinary code already feels familiar.
+At that point users need examples that explain both power and boundary: quoting is useful, but it is not default way to write everyday logic.
+A focused page keeps this tool available without overwhelming readers who are still stabilizing basic syntax.
 
 ## How
 
-- Start with one quoted expression.
-- Add one splice.
-- Compare it with duplicated handwritten code.
+Read `quote (x + 1);` as syntax value representing expression shape.
+Then read `#(delta)` or `#(x)` inside quoted form as splice points where surrounding values contribute pieces to generated syntax.
+When experimenting, start with very small quoted expressions and ask what syntax object each quote should represent before building larger templates.
 
 ## Try it
 
-- Write one quoted expression.
-- Splice one value into it.
-- Explain what stays syntax and what becomes runtime data.
+- Quote one simple expression.
+- Add one splice inside a quoted template.
+- Compare quoted template with handwritten equivalent shape.
 
 ## Common mistake
 
-Do not reach for quote just because duplication exists.
+Do not reach for quote when an ordinary function or data value already solves the problem more directly.
 
 ## Next
 
-Continue to [Testing](/docs/language/advanced/testing).
+Continue to [Testing](/docs/language/advanced/testing) to come back from metaprogramming into practical project workflow.

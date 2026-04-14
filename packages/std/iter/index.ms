@@ -15,13 +15,13 @@ export let collect[T] (iter : []T) : []T := [...iter];
 export let equalsInt (left : []Int, right : []Int) : Bool := left = right;
 
 export let isEmpty[T] (iter : []T) : Bool :=
-  case iter of (
+  match iter (
   | [] => 0 = 0
   | _ => 0 = 1
   );
 
 export let nonEmpty[T] (iter : []T) : Bool :=
-  case iter of (
+  match iter (
   | [] => 0 = 1
   | _ => 0 = 0
   );

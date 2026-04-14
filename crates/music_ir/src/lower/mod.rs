@@ -5,8 +5,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use music_arena::SliceRange;
 use music_base::diag::Diag;
 use music_hir::{
-    HirArg, HirArrayItem, HirBinaryOp, HirCaseArm, HirDim, HirExprId, HirExprKind, HirHandleClause,
-    HirLetMods, HirLitId, HirLitKind, HirParam, HirPartialRangeKind, HirPatId, HirPatKind,
+    HirArg, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirHandleClause, HirLetMods,
+    HirLitId, HirLitKind, HirMatchArm, HirParam, HirPartialRangeKind, HirPatId, HirPatKind,
     HirPrefixOp, HirQuoteKind, HirRecordItem, HirRecordPatField, HirSpliceKind, HirTemplatePart,
     HirTyField, HirTyId, HirTyKind,
 };
@@ -16,9 +16,9 @@ use music_sema::{ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue
 
 use crate::IrDiagKind;
 use crate::api::{
-    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCaseArm as IrLoweredCaseArm, IrCasePattern,
-    IrCaseRecordField, IrClassDef, IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef,
-    IrEffectOpDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit,
+    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrClassDef,
+    IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind,
+    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrMatchArm as IrLoweredMatchArm,
     IrModule, IrNameRef, IrOrigin, IrParam, IrRangeKind, IrRecordField, IrRecordLayoutField,
     IrSeqPart, IrTempId,
 };
@@ -31,6 +31,7 @@ mod closures;
 mod collect;
 mod destructure;
 mod effects;
+mod evidence;
 mod foreign;
 mod meta;
 mod patterns;
@@ -45,9 +46,13 @@ use closures::{
     ClosureCallableInput, lower_closure_callable, lower_lambda_expr, lower_local_callable_let,
     lower_named_params,
 };
-use effects::{lower_handle_expr, lower_handler_literal_expr, lower_perform_expr};
+use effects::{lower_handle_expr, lower_handler_literal_expr, lower_request_expr};
+use evidence::{
+    bind_expr_evidence, hidden_evidence_params_for_binding, hidden_evidence_params_for_keys,
+    lower_evidence_expr, pop_evidence_bindings, push_evidence_bindings,
+};
 use foreign::lower_foreign_let;
-use patterns::{collect_pattern_bindings, lower_case_expr};
+use patterns::{collect_pattern_bindings, lower_match_expr};
 use range::{lower_in_expr, lower_partial_range_expr, lower_range_expr};
 use rewrite::rewrite_recursive_binding_refs;
 use types::{
@@ -76,7 +81,7 @@ type RecordLayout = (BTreeMap<Box<str>, u16>, Box<[IrRecordLayoutField]>, u16);
 type HirParamRange = SliceRange<HirParam>;
 type HirRecordItemRange = SliceRange<HirRecordItem>;
 type BoundNameSet = HashSet<NameBindingId>;
-type LoweredCaseArmList = Box<[IrLoweredCaseArm]>;
+type LoweredMatchArmList = Box<[IrLoweredMatchArm]>;
 type EvidenceBindingMap = HashMap<ConstraintKey, Box<str>>;
 type EvidenceBindingStack = Vec<EvidenceBindingMap>;
 
@@ -312,10 +317,10 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         | HirExprKind::RecordUpdate { .. } => {
             lower_operation_expr(ctx, expr_id, origin, &expr.kind)
         }
-        HirExprKind::Case { .. }
+        HirExprKind::Match { .. }
         | HirExprKind::Variant { .. }
         | HirExprKind::Lambda { .. }
-        | HirExprKind::Perform { .. }
+        | HirExprKind::Request { .. }
         | HirExprKind::HandlerLit { .. }
         | HirExprKind::Handle { .. } => lower_control_expr(ctx, expr_id, origin, &expr.kind),
         HirExprKind::TypeTest { .. }
@@ -394,10 +399,10 @@ fn lower_control_expr(
     kind: &HirExprKind,
 ) -> IrExprKind {
     match kind {
-        HirExprKind::Case { scrutinee, arms } => lower_case_expr(ctx, *scrutinee, arms),
+        HirExprKind::Match { scrutinee, arms } => lower_match_expr(ctx, *scrutinee, arms),
         HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, *args),
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
-        HirExprKind::Perform { expr } => lower_perform_expr(ctx, *expr)
+        HirExprKind::Request { expr } => lower_request_expr(ctx, *expr)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
         HirExprKind::HandlerLit { effect, clauses } => {
             lower_handler_literal_expr(ctx, expr_id, *effect, clauses.clone())
@@ -836,165 +841,6 @@ const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
     let raw = ctx.next_temp_id;
     ctx.next_temp_id = ctx.next_temp_id.saturating_add(1);
     IrTempId::from_raw(raw)
-}
-
-fn hidden_evidence_name(owner: &str, index: usize) -> Box<str> {
-    format!("__ev::{owner}::{index}").into_boxed_str()
-}
-
-fn hidden_evidence_params_for_keys(
-    owner: &str,
-    keys: &[ConstraintKey],
-) -> (Vec<IrParam>, EvidenceBindingMap) {
-    let mut params = Vec::new();
-    let mut bindings = HashMap::new();
-    for (index, key) in keys.iter().cloned().enumerate() {
-        let name = hidden_evidence_name(owner, index);
-        let _ = bindings.insert(key, name.clone());
-        params.push(IrParam::synthetic(name));
-    }
-    (params, bindings)
-}
-
-fn hidden_evidence_params_for_binding(
-    sema: &SemaModule,
-    owner: &str,
-    binding: Option<NameBindingId>,
-) -> (Vec<IrParam>, EvidenceBindingMap) {
-    let keys = binding
-        .and_then(|binding| sema.binding_evidence_keys(binding))
-        .unwrap_or(&[]);
-    hidden_evidence_params_for_keys(owner, keys)
-}
-
-fn push_evidence_bindings(ctx: &mut LowerCtx<'_>, bindings: EvidenceBindingMap) {
-    ctx.evidence_bindings.push(bindings);
-}
-
-fn pop_evidence_bindings(ctx: &mut LowerCtx<'_>) {
-    let _ = ctx.evidence_bindings.pop();
-}
-
-fn lower_evidence_expr(
-    ctx: &mut LowerCtx<'_>,
-    origin: IrOrigin,
-    evidence: &ConstraintEvidence,
-) -> IrExpr {
-    match evidence {
-        ConstraintEvidence::Param { key } => {
-            let Some(name) = resolve_evidence_binding_name(ctx, key) else {
-                invalid_lowering_path("missing evidence binding for constraint");
-            };
-            IrExpr::new(
-                origin,
-                IrExprKind::Name {
-                    binding: None,
-                    name,
-                    module_target: None,
-                },
-            )
-        }
-        ConstraintEvidence::Provider { module, name, args } => IrExpr::new(
-            origin,
-            IrExprKind::Call {
-                callee: Box::new(IrExpr::new(
-                    origin,
-                    IrExprKind::Name {
-                        binding: None,
-                        name: name.clone(),
-                        module_target: Some(module.clone()),
-                    },
-                )),
-                args: args
-                    .iter()
-                    .map(|arg| IrArg::new(false, lower_evidence_expr(ctx, origin, arg)))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            },
-        ),
-    }
-}
-
-fn resolve_evidence_binding_name(ctx: &LowerCtx<'_>, key: &ConstraintKey) -> Option<Box<str>> {
-    ctx.evidence_bindings.iter().rev().find_map(|bindings| {
-        bindings.get(key).cloned().or_else(|| {
-            bindings.iter().find_map(|(candidate, name)| {
-                evidence_keys_equiv(ctx, key, candidate).then(|| name.clone())
-            })
-        })
-    })
-}
-
-fn evidence_keys_equiv(ctx: &LowerCtx<'_>, left: &ConstraintKey, right: &ConstraintKey) -> bool {
-    left.kind == right.kind
-        && left.class_key == right.class_key
-        && render_ty_name(ctx.sema, left.subject, ctx.interner)
-            == render_ty_name(ctx.sema, right.subject, ctx.interner)
-        && render_ty_name(ctx.sema, left.value, ctx.interner)
-            == render_ty_name(ctx.sema, right.value, ctx.interner)
-}
-
-fn bind_expr_evidence(
-    ctx: &mut LowerCtx<'_>,
-    expr_id: HirExprId,
-    origin: IrOrigin,
-    lowered: IrExpr,
-) -> IrExpr {
-    let Some(evidence) = ctx.sema.expr_evidence(expr_id) else {
-        return lowered;
-    };
-    if evidence.is_empty() {
-        return lowered;
-    }
-    let IrExprKind::Name {
-        binding,
-        name,
-        module_target,
-    } = lowered.kind
-    else {
-        return lowered;
-    };
-    let is_callable = ctx
-        .sema
-        .try_expr_ty(expr_id)
-        .is_some_and(|ty| matches!(ctx.sema.ty(ty).kind, HirTyKind::Arrow { .. }));
-    if !is_callable {
-        return IrExpr::new(
-            origin,
-            IrExprKind::Name {
-                binding,
-                name,
-                module_target,
-            },
-        );
-    }
-    if module_target.is_none()
-        && binding.is_some_and(|binding| !ctx.module_level_bindings.contains(&binding))
-    {
-        return IrExpr::new(
-            origin,
-            IrExprKind::Name {
-                binding,
-                name,
-                module_target,
-            },
-        );
-    }
-    IrExpr::new(
-        origin,
-        IrExprKind::ClosureNew {
-            callee: IrNameRef {
-                binding,
-                name,
-                module_target,
-            },
-            captures: evidence
-                .iter()
-                .map(|item| lower_evidence_expr(ctx, origin, item))
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-        },
-    )
 }
 
 fn lower_call_expr(

@@ -11,19 +11,19 @@ export let equalOrder () : Ordering := .Equal;
 export let greater () : Ordering := .Greater;
 
 export let isLess (ordering : Ordering) : Bool :=
-  case ordering of (
+  match ordering (
   | .Less => 0 = 0
   | _ => 0 = 1
   );
 
 export let isEqual (ordering : Ordering) : Bool :=
-  case ordering of (
+  match ordering (
   | .Equal => 0 = 0
   | _ => 0 = 1
   );
 
 export let isGreater (ordering : Ordering) : Bool :=
-  case ordering of (
+  match ordering (
   | .Greater => 0 = 0
   | _ => 0 = 1
   );
@@ -33,27 +33,27 @@ export let eq[T] (left : T, right : T) : Bool := left = right;
 export let notEq[T] (left : T, right : T) : Bool := left /= right;
 
 export let compareInt (left : Int, right : Int) : Ordering :=
-  case () of (
+  match () (
   | _ if left < right => less()
   | _ if left > right => greater()
   | _ => equalOrder()
   );
 
 export let compareFloat (left : Float, right : Float) : Ordering :=
-  case () of (
+  match () (
   | _ if left < right => less()
   | _ if left > right => greater()
   | _ => equalOrder()
   );
 
 export let minInt (left : Int, right : Int) : Int :=
-  case compareInt(left, right) of (
+  match compareInt(left, right) (
   | .Greater => right
   | _ => left
   );
 
 export let maxInt (left : Int, right : Int) : Int :=
-  case compareInt(left, right) of (
+  match compareInt(left, right) (
   | .Less => right
   | _ => left
   );

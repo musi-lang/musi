@@ -19,8 +19,8 @@ export opaque let Test := effect {
   let testCase (name : String, passed : Bool) : Unit;
 };
 
-export let suiteStart (name : String) : Unit := perform Test.suiteStart(name);
+export let suiteStart (name : String) : Unit := request Test.suiteStart(name);
 
-export let suiteEnd () : Unit := perform Test.suiteEnd();
+export let suiteEnd () : Unit := request Test.suiteEnd();
 
-export let testCase (name : String, passed : Bool) : Unit := perform Test.testCase(name, passed);
+export let testCase (name : String, passed : Bool) : Unit := request Test.testCase(name, passed);

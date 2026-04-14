@@ -4,22 +4,22 @@ impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
     'tree: 'src,
 {
-    pub(super) fn lower_case_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_match_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let scrutinee = self.lower_opt_expr(origin, node.child_nodes().next());
 
-        let mut arms = Vec::<HirCaseArm>::new();
+        let mut arms = Vec::<HirMatchArm>::new();
         for arm in node
             .child_nodes()
-            .filter(|n| n.kind() == SyntaxNodeKind::CaseArm)
+            .filter(|n| n.kind() == SyntaxNodeKind::MatchArm)
         {
-            arms.push(self.lower_case_arm(arm));
+            arms.push(self.lower_match_arm(arm));
         }
-        let arms = self.store.case_arms.alloc_from_iter(arms);
-        self.alloc_expr(origin, HirExprKind::Case { scrutinee, arms })
+        let arms = self.store.match_arms.alloc_from_iter(arms);
+        self.alloc_expr(origin, HirExprKind::Match { scrutinee, arms })
     }
 
-    pub(super) fn lower_case_arm(&mut self, node: SyntaxNode<'tree, 'src>) -> HirCaseArm {
+    pub(super) fn lower_match_arm(&mut self, node: SyntaxNode<'tree, 'src>) -> HirMatchArm {
         self.push_scope();
 
         let attrs = self.lower_attrs(node);
@@ -48,6 +48,6 @@ where
         };
 
         self.pop_scope();
-        HirCaseArm::new(attrs, pat, guard, expr)
+        HirMatchArm::new(attrs, pat, guard, expr)
     }
 }

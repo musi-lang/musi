@@ -216,7 +216,11 @@ impl CheckPass<'_, '_, '_> {
                     self.set_expr_evidence(spread_expr, evidence);
                 }
             }
-            _ => self.diag(origin.span, DiagKind::InvalidCallSpreadSource, ""),
+            _ => self.diag(
+                origin.span,
+                DiagKind::InvalidSpreadSource,
+                "call spread source must expand to arguments",
+            ),
         }
     }
 

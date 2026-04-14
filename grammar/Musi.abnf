@@ -90,7 +90,7 @@ kw-and      = %x61.6E.64
 
 kw-as       = %x61.73
 
-kw-case     = %x63.61.73.65
+kw-match    = %x6D.61.74.63.68
 
 kw-class    = %x63.6C.61.73.73
 
@@ -130,13 +130,11 @@ kw-rec      = %x72.65.63
 
 kw-not      = %x6E.6F.74
 
-kw-of       = %x6F.66
-
 kw-opaque   = %x6F.70.61.71.75.65
 
 kw-or       = %x6F.72
 
-kw-perform  = %x70.65.72.66.6F.72.6D
+kw-request  = %x72.65.71.75.65.73.74
 
 kw-quote    = %x71.75.6F.74.65
 
@@ -157,8 +155,6 @@ colon-eq          = ":="
 colon-question-gt = ":?>"
 
 dot-dot-dot       = "..."
-
-dot-lbrace        = ".{"
 
 dot-lbracket      = ".["
 
@@ -395,7 +391,6 @@ postfix-expr     = atom *(postfix-op)
 postfix-op       = call-op
                    / bracket-apply-op
                    / index-op
-                   / record-update-op
                    / field-access-op
                    / type-test-op
                    / type-cast-op
@@ -405,8 +400,6 @@ call-op          = lparen [arg-list] rparen
 bracket-apply-op = lbracket [expr-list] rbracket
 
 index-op         = dot-lbracket [expr-list] rbracket
-
-record-update-op = dot-lbrace [record-fields] rbrace
 
 field-access-op  = dot field-target
 
@@ -428,7 +421,7 @@ atom                  = literal
                         / array-expr
                         / record-literal-expr
                         / dot-prefix-expr
-                        / case-expr
+                        / match-expr
                         / let-expr
                         / resume-expr
                         / import-expr
@@ -436,7 +429,7 @@ atom                  = literal
                         / effect-expr
                         / class-expr
                         / instance-expr
-                        / perform-expr
+                        / request-expr
                         / handle-expr
                         / quote-expr
                         / with-mods-expr
@@ -456,10 +449,10 @@ grouped-or-tuple-body = expr [comma [expr-list] [comma]]
 
 sequence-body         = expr *(semicolon expr) [semicolon]
 
-case-expr             = kw-case expr kw-of lparen [pipe] case-arm *(pipe
-                        case-arm) [pipe] rparen
+match-expr            = kw-match expr lparen [pipe] match-arm *(pipe match-arm)
+                        [pipe] rparen
 
-case-arm              = [attrs] pattern [kw-if expr] eq-gt expr
+match-arm             = [attrs] pattern [kw-if expr] eq-gt expr
 
 array-expr            = lbracket comma-pad [array-items] comma-pad rbracket
 
@@ -526,7 +519,7 @@ class-member          = (fn-decl / law-decl) [semicolon]
 instance-expr         = kw-instance [bracket-params] expr [where-clause]
                         instance-body
 
-perform-expr          = kw-perform expr
+request-expr          = kw-request expr
 
 handle-expr           = kw-handle expr (handler-expr / (kw-using prefix-expr))
 

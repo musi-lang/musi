@@ -79,19 +79,19 @@ impl<'a> SyntheticNameSetMut<'a> {
             | IrExprKind::Tuple { items: exprs, .. }
             | IrExprKind::Array { items: exprs, .. }
             | IrExprKind::VariantNew { args: exprs, .. }
-            | IrExprKind::Perform { args: exprs, .. }
+            | IrExprKind::Request { args: exprs, .. }
             | IrExprKind::ClosureNew {
                 captures: exprs, ..
             } => self.collect_expr_slice(exprs),
             IrExprKind::ArrayCat { parts, .. }
             | IrExprKind::CallSeq { args: parts, .. }
-            | IrExprKind::PerformSeq { args: parts, .. } => self.collect_seq_part_exprs(parts),
+            | IrExprKind::RequestSeq { args: parts, .. } => self.collect_seq_part_exprs(parts),
             IrExprKind::Record { fields, .. } => self.collect_record_field_exprs(fields),
             IrExprKind::RecordUpdate { base, updates, .. } => {
                 self.collect_used(base);
                 self.collect_record_field_exprs(updates);
             }
-            IrExprKind::Case { scrutinee, arms } => {
+            IrExprKind::Match { scrutinee, arms } => {
                 self.collect_used(scrutinee);
                 for arm in arms {
                     if let Some(guard) = &arm.guard {
@@ -243,13 +243,13 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }
         | IrExprKind::VariantNew { args: exprs, .. }
-        | IrExprKind::Perform { args: exprs, .. }
+        | IrExprKind::Request { args: exprs, .. }
         | IrExprKind::ClosureNew {
             captures: exprs, ..
         } => collect_expr_slice(exprs, out, collect_used_bindings),
         IrExprKind::ArrayCat { parts, .. }
         | IrExprKind::CallSeq { args: parts, .. }
-        | IrExprKind::PerformSeq { args: parts, .. } => {
+        | IrExprKind::RequestSeq { args: parts, .. } => {
             collect_seq_part_exprs(parts, out, collect_used_bindings);
         }
         IrExprKind::Record { fields, .. } => {
@@ -259,9 +259,9 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_used_bindings(base, out);
             collect_record_field_exprs(updates, out, collect_used_bindings);
         }
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             collect_used_bindings(scrutinee, out);
-            collect_used_in_case_arms(arms, out);
+            collect_used_in_match_arms(arms, out);
         }
         IrExprKind::Call { callee, args } => {
             collect_used_bindings(callee, out);
@@ -332,7 +332,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }
         | IrExprKind::VariantNew { args: exprs, .. }
-        | IrExprKind::Perform { args: exprs, .. }
+        | IrExprKind::Request { args: exprs, .. }
         | IrExprKind::ClosureNew {
             captures: exprs, ..
         } => {
@@ -340,7 +340,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::ArrayCat { parts, .. }
         | IrExprKind::CallSeq { args: parts, .. }
-        | IrExprKind::PerformSeq { args: parts, .. } => {
+        | IrExprKind::RequestSeq { args: parts, .. } => {
             collect_seq_part_exprs(parts, out, collect_local_decl_bindings);
         }
         IrExprKind::Record { fields, .. } => {
@@ -350,7 +350,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_local_decl_bindings(base, out);
             collect_record_field_exprs(updates, out, collect_local_decl_bindings);
         }
-        IrExprKind::Case { scrutinee, arms } => {
+        IrExprKind::Match { scrutinee, arms } => {
             collect_local_case_arm_bindings(scrutinee, arms, out);
         }
         IrExprKind::Call { callee, args } => {
@@ -383,7 +383,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
 
 fn collect_local_case_arm_bindings(
     scrutinee: &IrExpr,
-    arms: &[IrLoweredCaseArm],
+    arms: &[IrLoweredMatchArm],
     out: BoundNameSetMut<'_>,
 ) {
     collect_local_decl_bindings(scrutinee, out);
@@ -450,7 +450,7 @@ fn collect_call_arg_exprs(args: &[IrArg], out: BoundNameSetMut<'_>, collect: Bin
     }
 }
 
-fn collect_used_in_case_arms(arms: &[IrLoweredCaseArm], out: BoundNameSetMut<'_>) {
+fn collect_used_in_match_arms(arms: &[IrLoweredMatchArm], out: BoundNameSetMut<'_>) {
     for arm in arms {
         if let Some(guard) = &arm.guard {
             collect_used_bindings(guard, out);

@@ -40,7 +40,7 @@ pub enum SemaDiagKind {
     CollectDuplicateClassMember,
     CollectDuplicateClassLaw,
     UnknownExport,
-    InvalidPerformTarget,
+    InvalidRequestTarget,
     UnknownEffect,
     DuplicateHandlerClause,
     UnknownEffectOp,
@@ -63,8 +63,7 @@ pub enum SemaDiagKind {
     RecordDestructuringRequiresRecordOrModule,
     CallableLetRequiresSimpleBindingPattern,
     ArraySpreadRequiresOneDimensionalArray,
-    InvalidArraySpreadSource,
-    InvalidRecordSpreadSource,
+    InvalidSpreadSource,
     DuplicateRecordField,
     VariantMissingDataContext,
     VariantConstructorArityMismatch,
@@ -74,29 +73,23 @@ pub enum SemaDiagKind {
     ArrayLiteralLengthUnknownFromRuntimeSpread,
     ArrayLiteralLengthMismatch,
     SumConstructorArityMismatch,
-    InvalidIndexArity,
+    InvalidIndexArgCount,
     InvalidCallTarget,
     CallArityMismatch,
     InvalidTypeApplication,
-    InvalidCallSpreadSource,
     CallRuntimeSpreadRequiresArrayAny,
     CallSpreadRequiresTupleOrArray,
     DeclarationUsedAsValue,
     TargetGateRejected,
     InvalidIndexTarget,
-    IndexRequiresArgument,
     UnknownField,
     AmbiguousAttachedMethod,
     AttachedMethodRequiresMutReceiver,
-    InvalidFieldAccess,
-    InvalidOptionalFieldAccess,
+    InvalidFieldTarget,
     InvalidRecordUpdateTarget,
     MutForbiddenInTypeTestTarget,
     MutForbiddenInTypeCastTarget,
-    WriteRequiresMutValue,
-    WriteRequiresMutArray,
-    WriteRequiresMutRecord,
-    InvalidFieldUpdateTarget,
+    WriteTargetRequiresMut,
     UnsupportedAssignmentTarget,
     NumericOperandRequired,
     BinaryOperatorHasNoExecutableLowering,
@@ -126,7 +119,53 @@ impl SemaDiagKind {
 
     #[must_use]
     pub fn label(self) -> &'static str {
-        self.message()
+        match self {
+            Self::InvalidRequestTarget => "request target must be effect operation call",
+            Self::DuplicateHandlerClause => "duplicate handler clause here",
+            Self::HandlerClauseArityMismatch => "handler clause params do not match operation",
+            Self::HandleRequiresSingleValueClause => {
+                "handler literal requires exactly one `value` clause"
+            }
+            Self::HandlerMissingOperationClause => {
+                "handler literal is missing handled operation clause"
+            }
+            Self::ResumeOutsideHandlerClause => {
+                "`resume` is only valid inside handler operation clause"
+            }
+            Self::EffectNotDeclared => "effect must appear in surrounding `using` set",
+            Self::InvalidSpreadSource => "spread source is not valid here",
+            Self::InvalidIndexArgCount => "index expression has invalid argument count",
+            Self::InvalidIndexTarget => "index target must support indexing",
+            Self::InvalidCallTarget => "callee must be callable",
+            Self::CallArityMismatch => "call argument count does not match callee",
+            Self::CallRuntimeSpreadRequiresArrayAny => "runtime call spread requires `[]Any`",
+            Self::CallSpreadRequiresTupleOrArray => {
+                "call spread requires tuple or one-dimensional array"
+            }
+            Self::InvalidFieldTarget => "field target is not valid here",
+            Self::InvalidRecordUpdateTarget => "record update target must be record value",
+            Self::WriteTargetRequiresMut => "assignment target must be mutable",
+            Self::UnsupportedAssignmentTarget => "assignment target is not writable",
+            Self::AmbiguousVariantTag => "variant tag needs type context",
+            _ => self.message(),
+        }
+    }
+
+    #[must_use]
+    pub const fn hint(self) -> Option<&'static str> {
+        match self {
+            Self::InvalidRequestTarget => Some("write `request Effect.op(...)`"),
+            Self::HandleRequiresSingleValueClause => Some("add exactly one `value => ...` clause"),
+            Self::HandlerMissingOperationClause => Some("add clause for each handled operation"),
+            Self::ResumeOutsideHandlerClause => Some("move `resume` into handler operation clause"),
+            Self::EffectNotDeclared => Some("declare effect in `using` clause or remove request"),
+            Self::CallRuntimeSpreadRequiresArrayAny => Some("use `[]Any` for runtime-sized spread"),
+            Self::CallSpreadRequiresTupleOrArray => {
+                Some("spread tuple or one-dimensional array instead")
+            }
+            Self::AmbiguousVariantTag => Some("add type annotation"),
+            _ => None,
+        }
     }
 
     fn info(self) -> &'static SemaDiagInfo {
@@ -353,9 +392,9 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "unknown export",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::InvalidPerformTarget,
+        kind: SemaDiagKind::InvalidRequestTarget,
         code: 3030,
-        message: "invalid perform target",
+        message: "invalid request target",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::UnknownEffect,
@@ -468,14 +507,9 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "array spread requires one-dimensional array",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::InvalidArraySpreadSource,
+        kind: SemaDiagKind::InvalidSpreadSource,
         code: 3053,
-        message: "invalid array spread source",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::InvalidRecordSpreadSource,
-        code: 3054,
-        message: "invalid record spread source",
+        message: "invalid spread source",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::DuplicateRecordField,
@@ -523,9 +557,9 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "sum constructor arity mismatch",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::InvalidIndexArity,
+        kind: SemaDiagKind::InvalidIndexArgCount,
         code: 3064,
-        message: "invalid index arity",
+        message: "invalid index arg count",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidCallTarget,
@@ -541,11 +575,6 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         kind: SemaDiagKind::InvalidTypeApplication,
         code: 3067,
         message: "invalid type application",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::InvalidCallSpreadSource,
-        code: 3068,
-        message: "invalid call spread source",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::CallRuntimeSpreadRequiresArrayAny,
@@ -573,11 +602,6 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "invalid index target",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::IndexRequiresArgument,
-        code: 3074,
-        message: "index requires one or more args",
-    },
-    SemaDiagInfo {
         kind: SemaDiagKind::UnknownField,
         code: 3075,
         message: "unknown field",
@@ -593,14 +617,9 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "attached method requires mutable receiver",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::InvalidFieldAccess,
+        kind: SemaDiagKind::InvalidFieldTarget,
         code: 3076,
-        message: "invalid field access",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::InvalidOptionalFieldAccess,
-        code: 3077,
-        message: "invalid optional field access",
+        message: "invalid field target",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidRecordUpdateTarget,
@@ -618,24 +637,9 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "`mut` not allowed in type cast target",
     },
     SemaDiagInfo {
-        kind: SemaDiagKind::WriteRequiresMutValue,
+        kind: SemaDiagKind::WriteTargetRequiresMut,
         code: 3081,
-        message: "write requires `mut T`",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::WriteRequiresMutArray,
-        code: 3082,
-        message: "write requires `mut []T`",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::WriteRequiresMutRecord,
-        code: 3083,
-        message: "write requires `mut { ... }`",
-    },
-    SemaDiagInfo {
-        kind: SemaDiagKind::InvalidFieldUpdateTarget,
-        code: 3084,
-        message: "invalid field update target",
+        message: "write target requires `mut`",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::UnsupportedAssignmentTarget,
@@ -670,7 +674,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::ArrayTypeRequiresItem,
         code: 3091,
-        message: "Array requires at least one arg",
+        message: "array type requires item type",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AmbiguousVariantTag,

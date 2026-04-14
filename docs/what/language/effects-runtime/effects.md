@@ -8,34 +8,36 @@ slug: "effects"
 summary: "Understand effects as requests for work, not immediate hidden side effects."
 ---
 
-{{snippet:effect-console}}
-
-{{snippet:perform-console}}
+{{snippet:chapter-effects}}
 
 ## What
 
-An effect describes operations that code may request.
+An effect describes operations code may request, and `request` issues one of those requests.
+This pair of snippets keeps model intentionally small: first define console capability, then request one read operation from it.
+That is core effect story before handlers, runtime imports, or stdlib layering enter scene.
 
 ## Why
 
-Visible effect requests are easier to reason about than hidden ambient side effects.
+Users often know hidden side effects from other languages, but Musi wants capability flow to stay visible.
+If docs jump straight to handlers, the basic question "what is an effect?" never gets a clean answer.
+This page should make one thing obvious: effectful code is asking for work that something else must eventually provide.
 
 ## How
 
-- Define a small effect.
-- Perform one operation from it.
-- Read the operation as a request, not magic global access.
+Read effect block as declaration of available operations, not as immediate implementation.
+Then read `request console.readln();` as explicit request made from code that depends on that capability.
+When writing your own examples, keep one effect and one operation at first so the request model stays sharper than the surrounding syntax.
 
 ## Try it
 
-- Define one effect.
-- Perform one operation.
-- Describe what must now handle it.
+- Define one effect with one operation.
+- Request that operation once.
+- Explain in words what still needs to handle the request.
 
 ## Common mistake
 
-Do not try to learn full handlers before the request model is stable.
+Do not skip straight to full handlers before the "request for work" model feels stable.
 
 ## Next
 
-Continue to [Using](/docs/language/effects-runtime/using).
+Continue to [Using](/docs/language/effects-runtime/using) to make required capabilities visible in function signatures.

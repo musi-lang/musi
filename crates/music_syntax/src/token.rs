@@ -26,7 +26,7 @@ pub enum TokenKind {
     // Keywords (grammar/Musi.abnf)
     KwAnd,
     KwAs,
-    KwCase,
+    KwMatch,
     KwClass,
     KwData,
     KwEffect,
@@ -44,9 +44,8 @@ pub enum TokenKind {
     KwLaw,
     KwLet,
     KwMut,
-    KwPerform,
+    KwRequest,
     KwNot,
-    KwOf,
     KwOpaque,
     KwOr,
     KwQuote,
@@ -100,7 +99,6 @@ pub enum TokenKind {
     DotDot,          // ..
     DotDotLt,        // ..<
     DotDotDot,       // ...
-    DotLBrace,       // .{
     DotLBracket,     // .[
     ColonQuestion,   // :?
     ColonQuestionGt, // :?>
@@ -117,7 +115,6 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b":=", TokenKind::ColonEq),
     (b"...", TokenKind::DotDotDot),
     (b"..", TokenKind::DotDot),
-    (b".{", TokenKind::DotLBrace),
     (b".[", TokenKind::DotLBracket),
     (b"=>", TokenKind::EqGt),
     (b"->", TokenKind::MinusGt),
@@ -153,10 +150,10 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 33] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 32] = [
     ("and", TokenKind::KwAnd, "`and`"),
     ("as", TokenKind::KwAs, "`as`"),
-    ("case", TokenKind::KwCase, "`case`"),
+    ("match", TokenKind::KwMatch, "`match`"),
     ("class", TokenKind::KwClass, "`class`"),
     ("data", TokenKind::KwData, "`data`"),
     ("effect", TokenKind::KwEffect, "`effect`"),
@@ -174,9 +171,8 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 33] = [
     ("law", TokenKind::KwLaw, "`law`"),
     ("let", TokenKind::KwLet, "`let`"),
     ("mut", TokenKind::KwMut, "`mut`"),
-    ("perform", TokenKind::KwPerform, "`perform`"),
+    ("request", TokenKind::KwRequest, "`request`"),
     ("not", TokenKind::KwNot, "`not`"),
-    ("of", TokenKind::KwOf, "`of`"),
     ("opaque", TokenKind::KwOpaque, "`opaque`"),
     ("or", TokenKind::KwOr, "`or`"),
     ("quote", TokenKind::KwQuote, "`quote`"),
@@ -189,7 +185,7 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 33] = [
     ("xor", TokenKind::KwXor, "`xor`"),
 ];
 
-const PUNCT_DISPLAY: [(TokenKind, &str); 39] = [
+const PUNCT_DISPLAY: [(TokenKind, &str); 38] = [
     (TokenKind::At, "`@`"),
     (TokenKind::Hash, "`#`"),
     (TokenKind::Backslash, "`\\\\`"),
@@ -224,7 +220,6 @@ const PUNCT_DISPLAY: [(TokenKind, &str); 39] = [
     (TokenKind::DotDot, "`..`"),
     (TokenKind::DotDotLt, "`..<`"),
     (TokenKind::DotDotDot, "`...`"),
-    (TokenKind::DotLBrace, "`.{`"),
     (TokenKind::DotLBracket, "`.[`"),
     (TokenKind::ColonQuestion, "`:?`"),
     (TokenKind::ColonQuestionGt, "`:?>`"),

@@ -43,6 +43,31 @@ pub enum VmValueKind {
     Class,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmStackKind {
+    CallFrame,
+    Operand,
+    Handler,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmIndexSpace {
+    Local,
+    Global,
+    Method,
+    ModuleSlot,
+    EffectOp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeFailureStage {
+    LibraryLoad,
+    SymbolLoad,
+    AbiUnsupported,
+    ArgInvalid,
+    ResultInvalid,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VmErrorKind {
     SeamDecodeFailed {
@@ -76,38 +101,24 @@ pub enum VmErrorKind {
     MissingEntryMethod {
         module: Box<str>,
     },
-    EmptyCallFrameStack,
-    EmptyOperandStack,
-    EmptyHandlerStack,
+    StackEmpty {
+        stack: VmStackKind,
+    },
     OperandCountMismatch {
         needed: usize,
         available: usize,
     },
-    LocalOutOfBounds {
-        slot: u16,
-        len: usize,
-    },
-    GlobalOutOfBounds {
-        module: Box<str>,
-        slot: usize,
-        len: usize,
-    },
-    MethodOutOfBounds {
-        method: u32,
-        len: usize,
-    },
-    ModuleSlotOutOfBounds {
-        slot: usize,
-        len: usize,
-    },
-    InvalidBranchTarget {
-        method: Box<str>,
-        label: u16,
-    },
-    InvalidBranchIndex {
-        method: Box<str>,
+    IndexOutOfBounds {
+        space: VmIndexSpace,
+        owner: Option<Box<str>>,
         index: i64,
         len: usize,
+    },
+    BranchTargetInvalid {
+        method: Box<str>,
+        label: Option<u16>,
+        index: Option<i64>,
+        len: Option<usize>,
     },
     InvalidOperandForOpcode {
         opcode: Opcode,
@@ -150,28 +161,12 @@ pub enum VmErrorKind {
     ForeignCallRejected {
         foreign: Box<str>,
     },
-    NativeLibraryLoadFailed {
+    NativeCallFailed {
         foreign: Box<str>,
-        library: Box<str>,
+        stage: NativeFailureStage,
+        subject: Option<Box<str>>,
+        index: Option<usize>,
         detail: Box<str>,
-    },
-    NativeSymbolLoadFailed {
-        foreign: Box<str>,
-        symbol: Box<str>,
-        detail: Box<str>,
-    },
-    NativeAbiUnsupported {
-        foreign: Box<str>,
-        reason: Box<str>,
-    },
-    NativeArgInvalid {
-        foreign: Box<str>,
-        index: usize,
-        reason: Box<str>,
-    },
-    NativeResultInvalid {
-        foreign: Box<str>,
-        reason: Box<str>,
     },
     EffectRejected {
         effect: Box<str>,
@@ -193,11 +188,6 @@ pub enum VmErrorKind {
     },
     MatchingHandlerPopMissing {
         method: Box<str>,
-    },
-    EffectOpOutOfBounds {
-        effect: Box<str>,
-        op_index: u16,
-        op_count: usize,
     },
 }
 
@@ -233,7 +223,7 @@ impl From<AssemblyError> for VmError {
 }
 
 impl VmErrorKind {
-    fn fmt_decode_and_lookup(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt_decode(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::SeamDecodeFailed { detail } => {
                 write!(f, "SEAM decode failed (`{detail}`)")
@@ -272,38 +262,45 @@ impl VmErrorKind {
 
     fn fmt_stack_and_bounds(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyCallFrameStack => f.write_str("empty call frame stack"),
-            Self::EmptyOperandStack => f.write_str("empty operand stack"),
-            Self::EmptyHandlerStack => f.write_str("empty handler stack"),
+            Self::StackEmpty { stack } => write!(f, "empty {stack} stack"),
             Self::OperandCountMismatch { needed, available } => {
                 write!(
                     f,
                     "operand stack needs `{needed}` values, only `{available}` are available"
                 )
             }
-            Self::LocalOutOfBounds { slot, len } => {
-                write!(f, "local slot `{slot}` out of bounds for `{len}` locals")
-            }
-            Self::GlobalOutOfBounds { module, slot, len } => {
-                write!(
-                    f,
-                    "global slot `{slot}` out of bounds for `{module}` with `{len}` globals"
-                )
-            }
-            Self::MethodOutOfBounds { method, len } => {
-                write!(f, "method id `{method}` out of bounds for `{len}` methods")
-            }
-            Self::ModuleSlotOutOfBounds { slot, len } => {
-                write!(f, "module slot `{slot}` out of bounds for `{len}` modules")
-            }
-            Self::InvalidBranchTarget { method, label } => {
-                write!(f, "branch label `{label}` missing in `{method}`")
-            }
-            Self::InvalidBranchIndex { method, index, len } => {
+            Self::IndexOutOfBounds {
+                space,
+                owner,
+                index,
+                len,
+            } => match owner {
+                Some(owner) => {
+                    write!(
+                        f,
+                        "{space} `{index}` out of bounds for `{owner}` with `{len}` entries"
+                    )
+                }
+                None => write!(f, "{space} `{index}` out of bounds for `{len}` entries"),
+            },
+            Self::BranchTargetInvalid {
+                method,
+                label: Some(label),
+                ..
+            } => write!(f, "branch label `{label}` missing in `{method}`"),
+            Self::BranchTargetInvalid {
+                method,
+                index: Some(index),
+                len: Some(len),
+                ..
+            } => {
                 write!(
                     f,
                     "branch index `{index}` invalid for `{method}` with `{len}` labels"
                 )
+            }
+            Self::BranchTargetInvalid { method, .. } => {
+                write!(f, "branch target invalid in `{method}`")
             }
             Self::InvalidOperandForOpcode { opcode, found } => {
                 write!(
@@ -312,105 +309,11 @@ impl VmErrorKind {
                     opcode.mnemonic()
                 )
             }
-            _ => self.fmt_value_and_runtime(f),
+            _ => self.fmt_value_and_types(f),
         }
     }
 
-    fn fmt_native_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NativeLibraryLoadFailed {
-                foreign,
-                library,
-                detail,
-            } => {
-                write!(
-                    f,
-                    "native library load failed for `{foreign}` from `{library}` (`{detail}`)"
-                )
-            }
-            Self::NativeSymbolLoadFailed {
-                foreign,
-                symbol,
-                detail,
-            } => {
-                write!(
-                    f,
-                    "native symbol load failed for `{foreign}` symbol `{symbol}` (`{detail}`)"
-                )
-            }
-            Self::NativeAbiUnsupported { foreign, reason } => {
-                write!(f, "native abi unsupported for `{foreign}` (`{reason}`)")
-            }
-            Self::NativeArgInvalid {
-                foreign,
-                index,
-                reason,
-            } => {
-                write!(
-                    f,
-                    "native argument `{index}` invalid for `{foreign}` (`{reason}`)"
-                )
-            }
-            Self::NativeResultInvalid { foreign, reason } => {
-                write!(f, "native result invalid for `{foreign}` (`{reason}`)")
-            }
-            _ => self.fmt_effect_and_runtime(f),
-        }
-    }
-
-    fn fmt_effect_and_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::EffectRejected { effect, op, reason } => {
-                if let Some(op) = op {
-                    write!(
-                        f,
-                        "rejected effect `{effect}` operation `{op}` (`{reason}`)"
-                    )
-                } else {
-                    write!(f, "rejected effect `{effect}` (`{reason}`)")
-                }
-            }
-            Self::RootModuleRequired => f.write_str("root module required"),
-            Self::ModuleSourceMissing { spec } => {
-                write!(f, "module source missing for `{spec}`")
-            }
-            Self::CallArityMismatch {
-                callee,
-                expected,
-                found,
-            } => {
-                write!(
-                    f,
-                    "call arity mismatch for `{callee}` expects `{expected}`, found `{found}`"
-                )
-            }
-            Self::HandlerFrameMissing {
-                handler_id,
-                frame_depth,
-            } => {
-                write!(
-                    f,
-                    "handler `{handler_id}` frame depth `{frame_depth}` missing"
-                )
-            }
-            Self::MatchingHandlerPopMissing { method } => {
-                write!(f, "matching `hdl.pop` missing in `{method}`")
-            }
-            Self::EffectOpOutOfBounds {
-                effect,
-                op_index,
-                op_count,
-            } => {
-                write!(
-                    f,
-                    "effect `{effect}` operation index `{op_index}` out of bounds for `{op_count}` operations"
-                )
-            }
-            _ => self.fmt_decode_and_lookup(f),
-        }
-    }
-
-    fn fmt_value_and_runtime(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt_value_and_types(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidValueKind { expected, found } => {
                 write!(
@@ -449,52 +352,109 @@ impl VmErrorKind {
                     "type cast to `{expected}` failed for value kind `{found}`"
                 )
             }
+            _ => self.fmt_module_and_call(f),
+        }
+    }
+
+    fn fmt_module_and_call(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
             Self::ModuleLoadRejected { spec } => {
                 write!(f, "module load rejected for `{spec}`")
             }
             Self::ForeignCallRejected { foreign } => {
                 write!(f, "foreign call rejected for `{foreign}`")
             }
-            Self::NativeLibraryLoadFailed { .. }
-            | Self::NativeSymbolLoadFailed { .. }
-            | Self::NativeAbiUnsupported { .. }
-            | Self::NativeArgInvalid { .. }
-            | Self::NativeResultInvalid { .. }
-            | Self::EffectRejected { .. }
-            | Self::RootModuleRequired
-            | Self::ModuleSourceMissing { .. }
-            | Self::CallArityMismatch { .. }
-            | Self::HandlerFrameMissing { .. }
-            | Self::MatchingHandlerPopMissing { .. }
-            | Self::EffectOpOutOfBounds { .. } => self.fmt_native_runtime(f),
-            Self::SeamDecodeFailed { .. }
-            | Self::ProgramShapeInvalid { .. }
-            | Self::TypeTermInvalid { .. }
-            | Self::SyntaxConstantInvalid { .. }
-            | Self::VmInitializationRequired
-            | Self::ModuleInitCycle { .. }
-            | Self::ExportNotFound { .. }
-            | Self::OpaqueExport { .. }
-            | Self::NonCallableValue { .. }
-            | Self::MissingEntryMethod { .. }
-            | Self::EmptyCallFrameStack
-            | Self::EmptyOperandStack
-            | Self::EmptyHandlerStack
-            | Self::OperandCountMismatch { .. }
-            | Self::LocalOutOfBounds { .. }
-            | Self::GlobalOutOfBounds { .. }
-            | Self::MethodOutOfBounds { .. }
-            | Self::ModuleSlotOutOfBounds { .. }
-            | Self::InvalidBranchTarget { .. }
-            | Self::InvalidBranchIndex { .. }
-            | Self::InvalidOperandForOpcode { .. } => self.fmt_decode_and_lookup(f),
+            Self::CallArityMismatch {
+                callee,
+                expected,
+                found,
+            } => {
+                write!(
+                    f,
+                    "call arity mismatch for `{callee}` expects `{expected}`, found `{found}`"
+                )
+            }
+            _ => self.fmt_native_and_effects(f),
+        }
+    }
+
+    fn fmt_native_and_effects(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NativeCallFailed {
+                foreign,
+                stage,
+                subject,
+                index,
+                detail,
+            } => match stage {
+                NativeFailureStage::LibraryLoad => {
+                    let library = subject.as_deref().unwrap_or("<unknown>");
+                    write!(
+                        f,
+                        "native library load failed for `{foreign}` from `{library}` (`{detail}`)"
+                    )
+                }
+                NativeFailureStage::SymbolLoad => {
+                    let symbol = subject.as_deref().unwrap_or("<unknown>");
+                    write!(
+                        f,
+                        "native symbol load failed for `{foreign}` symbol `{symbol}` (`{detail}`)"
+                    )
+                }
+                NativeFailureStage::AbiUnsupported => {
+                    write!(f, "native abi unsupported for `{foreign}` (`{detail}`)")
+                }
+                NativeFailureStage::ArgInvalid => {
+                    let index = index.unwrap_or(usize::MAX);
+                    write!(
+                        f,
+                        "native argument `{index}` invalid for `{foreign}` (`{detail}`)"
+                    )
+                }
+                NativeFailureStage::ResultInvalid => {
+                    write!(f, "native result invalid for `{foreign}` (`{detail}`)")
+                }
+            },
+            Self::EffectRejected { effect, op, reason } => {
+                if let Some(op) = op {
+                    write!(
+                        f,
+                        "rejected effect `{effect}` operation `{op}` (`{reason}`)"
+                    )
+                } else {
+                    write!(f, "rejected effect `{effect}` (`{reason}`)")
+                }
+            }
+            Self::RootModuleRequired => f.write_str("root module required"),
+            Self::ModuleSourceMissing { spec } => {
+                write!(f, "module source missing for `{spec}`")
+            }
+            _ => self.fmt_runtime_state(f),
+        }
+    }
+
+    fn fmt_runtime_state(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::HandlerFrameMissing {
+                handler_id,
+                frame_depth,
+            } => {
+                write!(
+                    f,
+                    "handler `{handler_id}` frame depth `{frame_depth}` missing"
+                )
+            }
+            Self::MatchingHandlerPopMissing { method } => {
+                write!(f, "matching `hdl.pop` missing in `{method}`")
+            }
+            _ => self.fmt_decode(f),
         }
     }
 }
 
 impl Display for VmErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.fmt_decode_and_lookup(f)
+        self.fmt_decode(f)
     }
 }
 
@@ -507,6 +467,28 @@ impl Display for OperandShape {
 impl Display for VmValueKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+impl Display for VmStackKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CallFrame => f.write_str("call frame"),
+            Self::Operand => f.write_str("operand"),
+            Self::Handler => f.write_str("handler"),
+        }
+    }
+}
+
+impl Display for VmIndexSpace {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Local => f.write_str("local slot"),
+            Self::Global => f.write_str("global slot"),
+            Self::Method => f.write_str("method id"),
+            Self::ModuleSlot => f.write_str("module slot"),
+            Self::EffectOp => f.write_str("effect operation index"),
+        }
     }
 }
 

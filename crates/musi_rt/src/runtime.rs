@@ -223,7 +223,7 @@ impl Runtime {
         self.root_spec.as_deref()
     }
 
-    /// Runs one registered test module and returns structured case results.
+    /// Runs one registered test module and returns structured match results.
     ///
     /// # Errors
     ///
@@ -232,7 +232,7 @@ impl Runtime {
         self.run_test_export(spec, "test")
     }
 
-    /// Runs one registered test export and returns structured case results.
+    /// Runs one registered test export and returns structured match results.
     ///
     /// # Errors
     ///
@@ -468,12 +468,7 @@ fn invalid_syntax_effect(effect: &EffectCall, reason: &'static str) -> VmError {
 
 fn vm_runtime_error(err: &RuntimeError) -> VmError {
     match err.kind() {
-        RuntimeErrorKind::SessionSetupFailed { detail }
-        | RuntimeErrorKind::SessionParseFailed { detail }
-        | RuntimeErrorKind::SessionResolveFailed { detail }
-        | RuntimeErrorKind::SessionSemanticCheckFailed { detail }
-        | RuntimeErrorKind::SessionLoweringFailed { detail }
-        | RuntimeErrorKind::SessionEmitFailed { detail } => {
+        RuntimeErrorKind::SessionFailed { detail, .. } => {
             VmError::new(VmErrorKind::EffectRejected {
                 effect: syntax::EFFECT.into(),
                 op: Some(syntax::EVAL_OP.into()),

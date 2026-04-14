@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirBinder, HirCaseArm, HirConstraint, HirExprId, HirExprKind,
-    HirFieldDef, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind,
+    HirArg, HirArrayItem, HirAttr, HirBinder, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
+    HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind,
     HirVariantDef,
 };
 use music_names::Ident;
@@ -80,7 +80,7 @@ impl CollectPass<'_, '_, '_> {
             }
             HirExprKind::Lambda { body, .. }
             | HirExprKind::Import { arg: body }
-            | HirExprKind::Perform { expr: body } => self.visit_expr(body),
+            | HirExprKind::Request { expr: body } => self.visit_expr(body),
             HirExprKind::Call { callee, args } => self.visit_call(callee, args),
             HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
                 self.visit_expr(callee);
@@ -144,7 +144,7 @@ impl CollectPass<'_, '_, '_> {
 
     fn visit_expr_control(&mut self, id: HirExprId) -> bool {
         match self.expr(id).kind {
-            HirExprKind::Case { scrutinee, arms } => self.visit_case(scrutinee, arms),
+            HirExprKind::Match { scrutinee, arms } => self.visit_match(scrutinee, arms),
             HirExprKind::HandlerLit { clauses, .. } => {
                 for clause in self.handle_clauses(clauses) {
                     self.visit_expr(clause.body);
@@ -191,9 +191,9 @@ impl CollectPass<'_, '_, '_> {
         }
     }
 
-    fn visit_case(&mut self, scrutinee: HirExprId, arms: SliceRange<HirCaseArm>) {
+    fn visit_match(&mut self, scrutinee: HirExprId, arms: SliceRange<HirMatchArm>) {
         self.visit_expr(scrutinee);
-        for arm in self.case_arms(arms) {
+        for arm in self.match_arms(arms) {
             if let Some(guard) = arm.guard {
                 self.visit_expr(guard);
             }

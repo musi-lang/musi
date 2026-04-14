@@ -22,7 +22,11 @@ where
                 self.diags.push(
                     Diag::error(ResolveDiagKind::InvalidStmt.message())
                         .with_code(ResolveDiagKind::InvalidStmt.code())
-                        .with_label(child.span(), self.source_id, "stmt is not valid here"),
+                        .with_label(
+                            child.span(),
+                            self.source_id,
+                            ResolveDiagKind::InvalidStmt.label(),
+                        ),
                 );
                 continue;
             };

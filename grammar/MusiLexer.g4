@@ -10,7 +10,7 @@ lexer grammar MusiLexer;
 // Keywords.
 KW_AND: 'and';
 KW_AS: 'as';
-KW_CASE: 'case';
+KW_MATCH: 'match';
 KW_CLASS: 'class';
 KW_DATA: 'data';
 KW_EFFECT: 'effect';
@@ -30,10 +30,9 @@ KW_LET: 'let';
 KW_MUT: 'mut';
 KW_REC: 'rec';
 KW_NOT: 'not';
-KW_OF: 'of';
 KW_OPAQUE: 'opaque';
 KW_OR: 'or';
-KW_PERFORM: 'perform';
+KW_REQUEST: 'request';
 KW_QUOTE: 'quote';
 KW_RESUME: 'resume';
 KW_SHL: 'shl';
@@ -46,7 +45,6 @@ KW_XOR: 'xor';
 COLON_EQ: ':=';
 COLON_QUESTION_GT: ':?>';
 DOT_DOT_DOT: '...';
-DOT_LBRACE: '.{';
 DOT_LBRACKET: '.[';
 EQ_GT: '=>';
 MINUS_GT: '->';
@@ -146,15 +144,12 @@ INTERP_TEMPLATE_NO_SUBST:
 INTERP_TEMPLATE_HEAD:
 	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${' -> type(TEMPLATE_HEAD), pushMode(INTERP_TOP);
 
-INTERP_DOT_LBRACE:
-	'.{' -> type(DOT_LBRACE), pushMode(INTERP_NESTED);
-
 INTERP_LBRACE: '{' -> type(LBRACE), pushMode(INTERP_NESTED);
 
 // Keywords.
 I_KW_AND: 'and' -> type(KW_AND);
 I_KW_AS: 'as' -> type(KW_AS);
-I_KW_CASE: 'case' -> type(KW_CASE);
+I_KW_MATCH: 'match' -> type(KW_MATCH);
 I_KW_CLASS: 'class' -> type(KW_CLASS);
 I_KW_DATA: 'data' -> type(KW_DATA);
 I_KW_EFFECT: 'effect' -> type(KW_EFFECT);
@@ -174,10 +169,9 @@ I_KW_LET: 'let' -> type(KW_LET);
 I_KW_MUT: 'mut' -> type(KW_MUT);
 I_KW_REC: 'rec' -> type(KW_REC);
 I_KW_NOT: 'not' -> type(KW_NOT);
-I_KW_OF: 'of' -> type(KW_OF);
 I_KW_OPAQUE: 'opaque' -> type(KW_OPAQUE);
 I_KW_OR: 'or' -> type(KW_OR);
-I_KW_PERFORM: 'perform' -> type(KW_PERFORM);
+I_KW_REQUEST: 'request' -> type(KW_REQUEST);
 I_KW_QUOTE: 'quote' -> type(KW_QUOTE);
 I_KW_RESUME: 'resume' -> type(KW_RESUME);
 I_KW_SHL: 'shl' -> type(KW_SHL);
@@ -281,9 +275,6 @@ N_INTERP_TEMPLATE_NO_SUBST:
 N_INTERP_TEMPLATE_HEAD:
 	'`' (TEMPLATE_CHUNK_CHAR | '$' ~'{')* '${' -> type(TEMPLATE_HEAD), pushMode(INTERP_TOP);
 
-N_INTERP_DOT_LBRACE:
-	'.{' -> type(DOT_LBRACE), pushMode(INTERP_NESTED);
-
 N_INTERP_LBRACE:
 	'{' -> type(LBRACE), pushMode(INTERP_NESTED);
 
@@ -292,7 +283,7 @@ N_INTERP_RBRACE: '}' -> type(RBRACE), popMode;
 // Keywords.
 N_KW_AND: 'and' -> type(KW_AND);
 N_KW_AS: 'as' -> type(KW_AS);
-N_KW_CASE: 'case' -> type(KW_CASE);
+N_KW_MATCH: 'match' -> type(KW_MATCH);
 N_KW_CLASS: 'class' -> type(KW_CLASS);
 N_KW_DATA: 'data' -> type(KW_DATA);
 N_KW_EFFECT: 'effect' -> type(KW_EFFECT);
@@ -312,10 +303,9 @@ N_KW_LET: 'let' -> type(KW_LET);
 N_KW_MUT: 'mut' -> type(KW_MUT);
 N_KW_REC: 'rec' -> type(KW_REC);
 N_KW_NOT: 'not' -> type(KW_NOT);
-N_KW_OF: 'of' -> type(KW_OF);
 N_KW_OPAQUE: 'opaque' -> type(KW_OPAQUE);
 N_KW_OR: 'or' -> type(KW_OR);
-N_KW_PERFORM: 'perform' -> type(KW_PERFORM);
+N_KW_REQUEST: 'request' -> type(KW_REQUEST);
 N_KW_QUOTE: 'quote' -> type(KW_QUOTE);
 N_KW_RESUME: 'resume' -> type(KW_RESUME);
 N_KW_SHL: 'shl' -> type(KW_SHL);

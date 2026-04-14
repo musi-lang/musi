@@ -59,7 +59,6 @@ postfix_op:
 	call_op
 	| bracket_apply_op
 	| index_op
-	| record_update_op
 	| field_access_op
 	| type_test_op
 	| type_cast_op;
@@ -69,8 +68,6 @@ call_op: LPAREN arg_list? RPAREN;
 bracket_apply_op: LBRACKET expr_list? RBRACKET;
 
 index_op: DOT_LBRACKET expr_list? RBRACKET;
-
-record_update_op: DOT_LBRACE record_fields RBRACE;
 
 field_access_op: DOT field_target;
 
@@ -94,7 +91,7 @@ atom:
 	| array_lit_expr
 	| record_literal_expr
 	| dot_prefix_expr
-	| case_expr
+	| match_expr
 	| let_expr
 	| resume_expr
 	| import_expr
@@ -102,7 +99,7 @@ atom:
 	| effect_expr
 	| class_expr
 	| instance_expr
-	| perform_expr
+	| request_expr
 	| handle_expr
 	| quote_expr
 	| with_mods_expr;
@@ -138,10 +135,10 @@ grouped_or_tuple_body: expr (COMMA expr_list? COMMA?)?;
 
 sequence_body: expr (SEMICOLON expr)* SEMICOLON?;
 
-case_expr:
-	KW_CASE expr KW_OF LPAREN PIPE? case_arm (PIPE case_arm)* PIPE? RPAREN;
+match_expr:
+	KW_MATCH expr LPAREN PIPE? match_arm (PIPE match_arm)* PIPE? RPAREN;
 
-case_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
+match_arm: attrs? pattern (KW_IF expr)? EQ_GT expr;
 
 array_lit_expr:
 	LBRACKET comma_pad array_items? comma_pad RBRACKET;
@@ -205,7 +202,7 @@ class_member: (fn_decl | law_decl) SEMICOLON?;
 instance_expr:
 	KW_INSTANCE bracket_params? expr where_clause? instance_body;
 
-perform_expr: KW_PERFORM expr;
+request_expr: KW_REQUEST expr;
 
 handle_expr:
 	KW_HANDLE expr (handler_expr | KW_USING prefix_expr);

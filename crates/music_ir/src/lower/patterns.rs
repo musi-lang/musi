@@ -28,32 +28,32 @@ pub(super) fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut BoundN
     }
 }
 
-pub(super) fn lower_case_expr(
+pub(super) fn lower_match_expr(
     ctx: &mut LowerCtx<'_>,
     scrutinee: HirExprId,
-    arms: &SliceRange<HirCaseArm>,
+    arms: &SliceRange<HirMatchArm>,
 ) -> IrExprKind {
     let sema = ctx.sema;
-    let mut lowered = Vec::<IrLoweredCaseArm>::new();
-    for arm in sema.module().store.case_arms.get(arms.clone()) {
-        lowered.extend(lower_case_arm(ctx, arm));
+    let mut lowered = Vec::<IrLoweredMatchArm>::new();
+    for arm in sema.module().store.match_arms.get(arms.clone()) {
+        lowered.extend(lower_match_arm(ctx, arm));
     }
     if lowered.is_empty() {
         invalid_lowering_path("case without emit-compatible arms");
     }
-    IrExprKind::Case {
+    IrExprKind::Match {
         scrutinee: Box::new(lower_expr(ctx, scrutinee)),
         arms: lowered.into_boxed_slice(),
     }
 }
 
-fn lower_case_arm(ctx: &mut LowerCtx<'_>, arm: &HirCaseArm) -> Vec<IrLoweredCaseArm> {
+fn lower_match_arm(ctx: &mut LowerCtx<'_>, arm: &HirMatchArm) -> Vec<IrLoweredMatchArm> {
     let sema = ctx.sema;
     let interner = ctx.interner;
     let patterns = lower_case_patterns(sema, arm.pat, interner);
     patterns
         .into_iter()
-        .map(|pattern| IrLoweredCaseArm {
+        .map(|pattern| IrLoweredMatchArm {
             pattern,
             guard: arm.guard.map(|guard| lower_expr(ctx, guard)),
             expr: lower_expr(ctx, arm.expr),

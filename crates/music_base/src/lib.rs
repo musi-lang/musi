@@ -9,6 +9,6 @@ pub mod diag;
 pub mod source;
 pub mod span;
 
-pub use diag::{Diag, DiagCode, DiagLabel, DiagLevel};
+pub use diag::{Diag, DiagCode, DiagLabel, DiagLevel, OwnedSourceDiag};
 pub use source::{Source, SourceId, SourceMap, SourceMapError};
 pub use span::{Span, Spanned};

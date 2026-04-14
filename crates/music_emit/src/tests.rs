@@ -141,7 +141,7 @@ fn emits_globals_locals_assignment_index_and_case() {
         export let answer (x : Int) : Int := (
           let items := mut [1, 2, 3];
           items.[0] := base;
-          case x of (| 0 => items.[0] | value => value + base);
+          match x (| 0 => items.[0] | value => value + base);
         );
     ",
         &[
@@ -188,8 +188,8 @@ fn emits_case_tuple_and_array_patterns() {
         export let answer () : Int := (
           let pair := (1, 2);
           let items := [3, 4];
-          let p : Int := case pair of (| (1, b) => b | _ => 0);
-          let q : Int := case items of (| [3, b] => b | _ => 0);
+          let p : Int := match pair (| (1, b) => b | _ => 0);
+          let q : Int := match items (| [3, b] => b | _ => 0);
           p + q
         );
     ",
@@ -252,7 +252,7 @@ fn emits_records_with_projection_and_update() {
         export let answer () : Int := (
           let r := { y := 2, x := 1 };
           let a : Int := r.x;
-          let s := r.{ x := 3 };
+          let s := { ...r, x := 3 };
           a + s.x
         );
     ",
@@ -332,7 +332,7 @@ fn emits_local_recursive_callable_lets() {
     let ir = lower_ir(
         r"
         export let answer (n : Int) : Int := (
-          let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+          let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
     ",
@@ -371,9 +371,9 @@ fn emits_type_values_record_patterns_and_capturing_recursion() {
         r"
         export let answer (n : Int) : Int := (
           let base := 1;
-          let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+          let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
-          let picked : Int := case point of (| { x } => x | _ => 0);
+          let picked : Int := match point (| { x } => x | _ => 0);
           picked + loop(n)
         );
     ",

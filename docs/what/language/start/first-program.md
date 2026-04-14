@@ -8,32 +8,36 @@ slug: "first-program"
 summary: "Write one file, bind one value, and run it end to end."
 ---
 
-{{snippet:first-file}}
+{{snippet:chapter-first-program}}
 
 ## What
 
-A small Musi file can be just a few bindings and one final expression.
+A first Musi program can be only a binding and a final expression.
+There is no extra ceremony here: no wrapper function, no package manifest, and no boilerplate runtime setup.
+The file reads top to bottom, and the last expression is the result you are asking Musi to evaluate.
 
 ## Why
 
-Scripting-language readers already know top-to-bottom file flow. Musi keeps that feel.
+This is first meaningful win for new readers.
+If the first page immediately adds packages, imports, or larger syntax, beginners stop learning the language and start fighting setup detail.
+A two-line program proves the core reading model first: bind a value, then use it.
 
 ## How
 
-- Bind one value with `let`.
-- End the file with the result you want.
-- Validate it with `music check index.ms`.
+Read `let answer := 42;` as "introduce a name for a value I care about."
+Read the final `answer;` line as "this is the result of the file."
+Once that shape feels normal, you can change the value, add one more binding above it, or swap the final line for a larger expression without changing the mental model.
 
 ## Try it
 
-- Create `index.ms`.
-- Bind one value.
-- End the file with that value.
+- Create `index.ms` with one `let` binding.
+- End the file with the bound name.
+- Run `music check index.ms` to confirm the file shape.
 
 ## Common mistake
 
-Do not look for a `main` function in a tiny scratch file.
+Do not go hunting for a mandatory `main` just because other languages require one.
 
 ## Next
 
-Continue to [Values and let](/docs/language/start/values-and-let).
+Continue to [Values and let](/docs/language/start/values-and-let) to make that first binding pattern do real work.

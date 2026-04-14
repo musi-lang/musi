@@ -1,147 +1,10 @@
 use std::borrow::Cow;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Error as IoError;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use music_base::diag::{Diag, DiagCode};
-use music_base::{SourceId, Span};
+use music_base::diag::{Diag, DiagCode, OwnedSourceDiag};
 use music_session::SessionError;
 use thiserror::Error;
-
-#[derive(Debug, Clone)]
-pub struct ProjectSourceLabel {
-    span: Span,
-    message: String,
-}
-
-impl ProjectSourceLabel {
-    #[must_use]
-    pub fn new(span: Span, message: impl Into<String>) -> Self {
-        Self {
-            span,
-            message: message.into(),
-        }
-    }
-
-    #[must_use]
-    pub const fn span(&self) -> Span {
-        self.span
-    }
-
-    #[must_use]
-    pub const fn message(&self) -> &str {
-        self.message.as_str()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ProjectSourceDiagnostic {
-    path: PathBuf,
-    text: String,
-    code: DiagCode,
-    message: String,
-    primary_label: ProjectSourceLabel,
-    secondary_labels: Vec<ProjectSourceLabel>,
-    notes: Vec<String>,
-    hint: Option<String>,
-}
-
-impl ProjectSourceDiagnostic {
-    #[must_use]
-    pub fn new(
-        path: PathBuf,
-        text: String,
-        code: DiagCode,
-        message: impl Into<String>,
-        primary_label: ProjectSourceLabel,
-    ) -> Self {
-        Self {
-            path,
-            text,
-            code,
-            message: message.into(),
-            primary_label,
-            secondary_labels: Vec::new(),
-            notes: Vec::new(),
-            hint: None,
-        }
-    }
-
-    #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    #[must_use]
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
-    #[must_use]
-    pub const fn code(&self) -> DiagCode {
-        self.code
-    }
-
-    #[must_use]
-    pub const fn message(&self) -> &str {
-        self.message.as_str()
-    }
-
-    #[must_use]
-    pub const fn primary_label(&self) -> &ProjectSourceLabel {
-        &self.primary_label
-    }
-
-    #[must_use]
-    pub const fn secondary_labels(&self) -> &[ProjectSourceLabel] {
-        self.secondary_labels.as_slice()
-    }
-
-    #[must_use]
-    pub const fn notes(&self) -> &[String] {
-        self.notes.as_slice()
-    }
-
-    pub fn push_note(&mut self, note: impl Into<String>) {
-        self.notes.push(note.into());
-    }
-
-    #[must_use]
-    pub fn hint(&self) -> Option<&str> {
-        self.hint.as_deref()
-    }
-
-    pub fn set_hint(&mut self, hint: impl Into<String>) {
-        self.hint = Some(hint.into());
-    }
-
-    #[must_use]
-    pub fn to_diag(&self, source_id: SourceId) -> Diag {
-        let mut diag = Diag::error(self.message.clone())
-            .with_code(self.code)
-            .with_label(
-                self.primary_label.span(),
-                source_id,
-                self.primary_label.message(),
-            );
-        for label in &self.secondary_labels {
-            diag = diag.with_label(label.span(), source_id, label.message());
-        }
-        for note in &self.notes {
-            diag = diag.with_note(note.clone());
-        }
-        if let Some(hint) = &self.hint {
-            diag = diag.with_hint(hint.clone());
-        }
-        diag
-    }
-}
-
-impl Display for ProjectSourceDiagnostic {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.write_str(self.message())
-    }
-}
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -160,7 +23,7 @@ pub enum ProjectError {
         source: serde_json::Error,
     },
     #[error("{0}")]
-    SourceDiagnostic(Box<ProjectSourceDiagnostic>),
+    SourceDiagnostic(Box<OwnedSourceDiag>),
     #[error("project I/O failed at `{path}`")]
     ProjectIoFailed {
         path: PathBuf,
@@ -373,7 +236,7 @@ impl ProjectError {
     }
 
     #[must_use]
-    pub const fn source_diag(&self) -> Option<&ProjectSourceDiagnostic> {
+    pub const fn source_diag(&self) -> Option<&OwnedSourceDiag> {
         match self {
             Self::SourceDiagnostic(diag) => Some(diag),
             _ => None,
@@ -381,9 +244,14 @@ impl ProjectError {
     }
 
     #[must_use]
-    pub const fn diag_code(&self) -> Option<DiagCode> {
+    pub fn source_diag_rendered(&self) -> Option<&Diag> {
+        self.source_diag().map(OwnedSourceDiag::diag)
+    }
+
+    #[must_use]
+    pub fn diag_code(&self) -> Option<DiagCode> {
         match self {
-            Self::SourceDiagnostic(diag) => Some(diag.code()),
+            Self::SourceDiagnostic(diag) => diag.diag().code(),
             _ => self.builtin_diag_code(),
         }
     }
@@ -391,7 +259,7 @@ impl ProjectError {
     #[must_use]
     pub fn diag_message(&self) -> Option<Cow<'static, str>> {
         match self {
-            Self::SourceDiagnostic(diag) => Some(Cow::Owned(diag.message().to_owned())),
+            Self::SourceDiagnostic(diag) => Some(Cow::Owned(diag.diag().message().to_owned())),
             _ => self.builtin_diag_message(),
         }
     }

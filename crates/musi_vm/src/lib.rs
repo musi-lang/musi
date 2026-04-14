@@ -13,7 +13,9 @@ pub use api::{
     ProgramTypeAbiKind, RecordView, RejectingHost, RejectingLoader, SeqView, StringView, Value,
     ValueView, Vm, VmHost, VmLoader, VmOptions, render_value_view,
 };
-pub use error::{OperandShape, VmError, VmErrorKind, VmValueKind};
+pub use error::{
+    NativeFailureStage, OperandShape, VmError, VmErrorKind, VmIndexSpace, VmStackKind, VmValueKind,
+};
 pub use host::{EffectCall, ForeignCall};
 pub use types::VmResult;
 

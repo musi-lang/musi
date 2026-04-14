@@ -6,7 +6,7 @@ export let encode (source : String) : String := source;
 export let isValid (source : String) : Bool := 0 = 0;
 
 export let decode (source : String) : Option[String] :=
-  case isValid(source) of (
+  match isValid(source) (
   | valid if valid => OptionModule.some[String](source)
   | _ => OptionModule.none[String]()
   );

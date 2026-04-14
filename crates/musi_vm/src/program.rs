@@ -9,7 +9,7 @@ use music_seam::{
 use music_term::{TypeTerm, TypeTermKind};
 
 use super::opcode::classify_opcode;
-use super::{VmError, VmErrorKind, VmResult};
+use super::{VmError, VmErrorKind, VmIndexSpace, VmResult};
 
 type InstructionList = Box<[Instruction]>;
 type LabelIndexMap = HashMap<LabelId, usize>;
@@ -362,8 +362,10 @@ impl Program {
             .methods
             .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
             .ok_or_else(|| {
-                VmError::new(VmErrorKind::MethodOutOfBounds {
-                    method: id.raw(),
+                VmError::new(VmErrorKind::IndexOutOfBounds {
+                    space: VmIndexSpace::Method,
+                    owner: None,
+                    index: i64::from(id.raw()),
                     len,
                 })
             })

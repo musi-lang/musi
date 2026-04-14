@@ -415,7 +415,7 @@ fn compiles_local_recursive_callable_let() {
     let _ = assert_main_entry_compiles_with!(
         r"
             export let answer (n : Int) : Int := (
-              let rec loop (x : Int) : Int := case x of (| 0 => 0 | _ => loop(x - 1));
+              let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
               loop(n)
             );
         ",
@@ -430,8 +430,8 @@ fn compiles_case_tuple_and_array_patterns() {
             export let answer () : Int := (
               let pair := (1, 2);
               let items := [3, 4];
-              let p : Int := case pair of (| (1, b) => b | _ => 0);
-              let q : Int := case items of (| [3, b] => b | _ => 0);
+              let p : Int := match pair (| (1, b) => b | _ => 0);
+              let q : Int := match items (| [3, b] => b | _ => 0);
               p + q
             );
         ",
@@ -446,7 +446,7 @@ fn compiles_records_with_projection_and_update() {
             export let answer () : Int := (
               let r := { y := 2, x := 1 };
               let a : Int := r.x;
-              let s := r.{ x := 3 };
+              let s := { ...r, x := 3 };
               a + s.x
             );
         ",
@@ -505,9 +505,9 @@ fn compiles_capturing_recursion_record_patterns_and_type_values() {
         r"
             export let answer (n : Int) : Int := (
               let base := 1;
-              let rec loop (x : Int) : Int := case x of (| 0 => base | _ => loop(x - 1));
+              let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
               let point := { x := 1, y := 2 };
-              let picked : Int := case point of (| { x } => x | _ => 0);
+              let picked : Int := match point (| { x } => x | _ => 0);
               picked + loop(n)
             );
         ",
@@ -522,7 +522,7 @@ fn compiles_variants_with_case_patterns() {
             let Maybe := data { | Some : Int | None };
             export let answer () : Int := (
               let x : Maybe := .Some(1);
-              case x of (
+              match x (
               | .Some(y) => y
               | .None => 0
               )
@@ -545,7 +545,7 @@ fn compiles_variants_without_type_context_when_tag_unique() {
             let Maybe := data { | Some : Int | None };
             export let answer () : Int := (
               let x := .Some(1);
-              case x of (
+              match x (
               | .Some(y) => y
               | .None => 0
               )
@@ -561,7 +561,7 @@ fn compiles_effects_with_perform_handle_resume() {
         r#"
             let Console := effect { let readln () : String; };
             export let answer () : String :=
-              handle perform Console.readln() using Console {
+              handle request Console.readln() using Console {
                 value => value;
                 readln(k) => resume "ok";
               };

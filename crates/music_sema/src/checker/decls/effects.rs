@@ -21,7 +21,7 @@ impl CheckPass<'_, '_, '_> {
         let inner = check_expr(self, expr);
         let mut effects = inner.effects;
         let Some((effect_name, op_def)) = effect_op_call(self, expr) else {
-            self.diag(origin.span, DiagKind::InvalidPerformTarget, "");
+            self.diag(origin.span, DiagKind::InvalidRequestTarget, "");
             return ExprFacts::new(builtins.unknown, effects);
         };
         effects.add(EffectKey {

@@ -5,35 +5,39 @@ group: "Data"
 section: "Data"
 order: 14
 slug: "patterns"
-summary: "Use case and destructuring to branch on data shape."
+summary: "Use match and destructuring to branch on data shape."
 ---
 
-{{snippet:case-port}}
+{{snippet:chapter-patterns}}
 
 ## What
 
-Patterns inspect structured values by shape.
+Patterns let code react to value shape instead of only to raw scalar comparisons.
+This example defines a small `Port` data type, constructs one value, and then uses `match` to branch on whether a configured value exists.
+It is first complete example where data definition, construction, and branching all line up around one real decision.
 
 ## Why
 
-Pattern matching lands much better once you already understand the shapes you are matching.
+Users ask "how do I handle different cases?" as soon as data can vary.
+If docs rush into nested destructuring or advanced matching too early, readers get lost before simple constructor matching is stable.
+This page should teach the core win: pattern matching keeps data-dependent branching explicit and readable.
 
 ## How
 
-- Define a small `data` type.
-- Construct one value.
-- Match it with `case ... of`.
+Read `.Configured(8080)` and `.Default` as two possible shapes of same type.
+Then read each `match` arm as answer for one shape, with extracted values such as `port` made available only in arm that matches.
+When writing your own patterns, start with two or three clear cases and ask what value each branch should produce.
 
 ## Try it
 
-- Define a two-case `data` type.
-- Construct each case once.
-- Return different values from a `case`.
+- Define one data type with two cases.
+- Construct one variant value.
+- Write `match` expression that returns different result for each shape.
 
 ## Common mistake
 
-Do not start with deeply nested patterns while simple constructor matching still feels new.
+Do not begin with deeply nested pattern trees before constructor-level branching feels easy.
 
 ## Next
 
-Continue to [Files](/docs/language/organization/files).
+Continue to [Files](/docs/language/organization/files) to see how these language forms live inside ordinary source files.

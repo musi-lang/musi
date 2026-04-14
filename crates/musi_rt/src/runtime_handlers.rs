@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::env::{args_os, current_dir, var, var_os};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -7,8 +6,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::str::from_utf8;
 use std::sync::OnceLock;
-use std::thread::sleep;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -18,220 +16,20 @@ use musi_vm::{EffectCall, Value, VmError, VmErrorKind};
 
 type RandomStateCell = Rc<RefCell<u64>>;
 
+mod env;
+mod process;
+mod time_random;
+
 pub fn register_runtime_handlers(host: &mut NativeHost) {
-    register_env_handlers(host);
-    register_process_handlers(host);
-    register_time_random_handlers(host);
+    env::register(host);
+    process::register(host);
+    time_random::register(host);
     register_log_io_handlers(host);
     register_fs_handlers(host);
     register_text_handlers(host);
     register_path_handlers(host);
     register_json_handlers(host);
     register_encoding_handlers(host);
-}
-
-fn register_env_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_GET_OP,
-        |effect, args| {
-            let [Value::String(name)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envGet args"));
-            };
-            Ok(Value::string(var(name.as_ref()).unwrap_or_default()))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_HAS_OP,
-        |effect, args| {
-            let [Value::String(name)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envHas args"));
-            };
-            Ok(Value::Int(i64::from(var_os(name.as_ref()).is_some())))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_SET_OP,
-        |_effect, _args| Ok(Value::Int(0)),
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_REMOVE_OP,
-        |_effect, _args| Ok(Value::Int(0)),
-    );
-}
-
-fn register_process_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_ARG_COUNT_OP,
-        |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid processArgCount args",
-                ));
-            }
-            Ok(Value::Int(saturating_usize_to_i64(args_os().count())))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_ARG_AT_OP,
-        |effect, args| {
-            let [Value::Int(index)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid processArgAt args"));
-            };
-            let value = usize::try_from(*index).map_or_else(
-                |_| String::new(),
-                |index| {
-                    args_os()
-                        .nth(index)
-                        .map(|arg| arg.to_string_lossy().into_owned())
-                        .unwrap_or_default()
-                },
-            );
-            Ok(Value::string(value))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_CWD_OP,
-        |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid processCwd args"));
-            }
-            let cwd = current_dir().map_err(|error| {
-                invalid_runtime_effect(effect, format!("processCwd failed (`{error}`)"))
-            })?;
-            Ok(Value::string(cwd.to_string_lossy().into_owned()))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_RUN_OP,
-        |effect, args| {
-            let [Value::String(command)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid processRun args"));
-            };
-            Ok(Value::Int(run_shell_command(command.as_ref(), effect)?))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_EXIT_OP,
-        |_effect, _args| Ok(Value::Unit),
-    );
-}
-
-fn register_time_random_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_NOW_UNIX_MS_OP,
-        |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid timeNowUnixMs args"));
-            }
-            Ok(Value::Int(current_unix_millis(effect)?))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_MONOTONIC_MS_OP,
-        |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid timeMonotonicMs args",
-                ));
-            }
-            let millis =
-                i64::try_from(monotonic_origin().elapsed().as_millis()).unwrap_or(i64::MAX);
-            Ok(Value::Int(millis))
-        },
-    );
-
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_SLEEP_MS_OP,
-        |effect, args| {
-            let [Value::Int(ms)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid timeSleepMs args"));
-            };
-            sleep(Duration::from_millis(u64::try_from(*ms).unwrap_or(0)));
-            Ok(Value::Unit)
-        },
-    );
-
-    let random_state = Rc::new(RefCell::new(random_seed()));
-    register_random_handlers(host, &random_state);
-}
-
-fn register_random_handlers(host: &mut NativeHost, random_state: &RandomStateCell) {
-    let int_random_state = Rc::clone(random_state);
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_INT_OP,
-        move |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid randomInt args"));
-            }
-            Ok(Value::Int(next_random_int(&int_random_state)))
-        },
-    );
-
-    let ranged_random_state = Rc::clone(random_state);
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_INT_IN_RANGE_OP,
-        move |effect, args| {
-            let [Value::Int(lower_bound), Value::Int(upper_bound)] = args else {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid randomIntInRange args",
-                ));
-            };
-            Ok(Value::Int(random_int_in_range(
-                &ranged_random_state,
-                *lower_bound,
-                *upper_bound,
-            )))
-        },
-    );
-
-    let bool_random_state = Rc::clone(random_state);
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_BOOL_OP,
-        move |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid randomBool args"));
-            }
-            Ok(Value::Int(next_random_int(&bool_random_state) & 1))
-        },
-    );
-
-    let float_random_state = Rc::clone(random_state);
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_FLOAT_01_OP,
-        move |effect, args| {
-            if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid randomFloat01 args"));
-            }
-            Ok(Value::Float(random_float01(&float_random_state)))
-        },
-    );
 }
 
 fn register_log_io_handlers(host: &mut NativeHost) {

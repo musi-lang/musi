@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use music_base::Span;
-use music_base::diag::DiagCode;
+use music_base::diag::{Diag, DiagCode, OwnedSourceDiag};
+use music_base::SourceId;
 
-use crate::errors::{ProjectError, ProjectSourceDiagnostic, ProjectSourceLabel};
+use crate::errors::ProjectError;
 
 type ManifestSpanMap = BTreeMap<String, Span>;
 
@@ -78,12 +79,15 @@ impl ManifestSource {
         span: Span,
         label: impl Into<String>,
     ) -> ProjectError {
-        ProjectError::SourceDiagnostic(Box::new(ProjectSourceDiagnostic::new(
+        let diag = Diag::error(message.into()).with_code(code).with_label(
+            span,
+            SourceId::from_raw(0),
+            label,
+        );
+        ProjectError::SourceDiagnostic(Box::new(OwnedSourceDiag::new(
             self.path.clone(),
             self.text.clone(),
-            code,
-            message,
-            ProjectSourceLabel::new(span, label),
+            diag,
         )))
     }
 
@@ -95,15 +99,15 @@ impl ManifestSource {
         label: impl Into<String>,
         hint: impl Into<String>,
     ) -> ProjectError {
-        let mut diag = ProjectSourceDiagnostic::new(
+        let diag = Diag::error(message.into())
+            .with_code(code)
+            .with_label(span, SourceId::from_raw(0), label)
+            .with_hint(hint.into());
+        ProjectError::SourceDiagnostic(Box::new(OwnedSourceDiag::new(
             self.path.clone(),
             self.text.clone(),
-            code,
-            message,
-            ProjectSourceLabel::new(span, label),
-        );
-        diag.set_hint(hint);
-        ProjectError::SourceDiagnostic(Box::new(diag))
+            diag,
+        )))
     }
 }
 

@@ -196,7 +196,7 @@ fn lowers_mut_receiver_prefixed_let_into_hir_mods() {
 
 #[test]
 fn resolves_case_pat_binder_in_arm() {
-    let src = "let x := 0; case x of (| .Some(y) => y | _ => x);";
+    let src = "let x := 0; match x (| .Some(y) => y | _ => x);";
     let source_id = SourceId::from_raw(3);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
@@ -423,12 +423,14 @@ fn unresolved_static_imports_emit_diag() {
     );
 
     assert!(resolved.imports.is_empty());
-    assert!(
-        resolved
-            .diags
-            .iter()
-            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::ImportResolveFailed))
-    );
+    let diag = resolved
+        .diags
+        .iter()
+        .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::ImportResolveFailed))
+        .expect("expected import resolve diag");
+    assert_eq!(diag.message(), "import `std/missing` does not resolve");
+    assert_eq!(diag.labels()[0].message(), "module not found `std/missing`");
+    assert_eq!(diag.hint(), None);
 }
 
 #[test]
@@ -458,12 +460,17 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
     );
 
     assert!(resolved.imports.is_empty());
-    assert!(
-        resolved
-            .diags
-            .iter()
-            .any(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
+    let diag = resolved
+        .diags
+        .iter()
+        .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
+        .expect("expected invalid import spec diag");
+    assert_eq!(diag.message(), "import spec is not string literal");
+    assert_eq!(
+        diag.labels()[0].message(),
+        "import spec is not string literal"
     );
+    assert_eq!(diag.hint(), None);
 }
 
 #[test]

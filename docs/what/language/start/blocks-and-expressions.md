@@ -8,32 +8,36 @@ slug: "blocks-and-expressions"
 summary: "Understand how grouped expressions produce one final value."
 ---
 
-{{snippet:sequence}}
+{{snippet:chapter-blocks-and-expressions}}
 
 ## What
 
-A block groups expressions and yields one final result.
+A block groups several steps and still counts as one expression.
+Inside the block you can introduce helper bindings, and the last line becomes the value the whole block produces.
+That makes Musi feel expression-first even when the code has multiple stages.
 
 ## Why
 
-Expression-oriented code becomes much easier once you stop expecting every intermediate line to “return nothing”.
+Beginners often expect grouped code to behave like statement braces from JavaScript or C-family languages.
+That expectation causes confusion about "where does this return from?" or "why is last line not ignored?"
+Learning block result flow early prevents that confusion before you meet `match`, handlers, or larger definitions built from same idea.
 
 ## How
 
-- Put helper bindings first.
-- Put the final value last.
-- Read the whole block as one result-producing expression.
+Read the block from top to bottom.
+`let base := 8000;` is local setup. `base + 80` is not a random trailing line; it is result of whole block.
+When you write your own block, put setup first, keep one clear final expression last, and ask what value the whole group should produce.
 
 ## Try it
 
-- Create a block.
-- Add one helper binding.
-- Return one arithmetic expression.
+- Create one block with a helper binding.
+- Put arithmetic expression last.
+- Replace last line and see how block result changes.
 
 ## Common mistake
 
-Do not treat every grouped form like JavaScript braces.
+Do not read grouped Musi code as if only explicit `return` can produce a value.
 
 ## Next
 
-Continue to [Mutation](/docs/language/start/mutation).
+Continue to [Mutation](/docs/language/start/mutation) to see what changes when a value is meant to vary over time.

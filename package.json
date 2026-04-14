@@ -8,12 +8,16 @@
 	"scripts": {
 		"generate:content": "bun run --cwd www generate:content",
 		"dev": "bun run --cwd www dev",
+		"dev:prod": "bun run build:prod && bun run preview:prod",
 		"build": "bun run --cwd www build",
+		"build:prod": "bun run build",
+		"verify:lang": "bun run --cwd www verify:lang",
 		"check": "bun run generate:content && bun run typecheck && bun run biome:check",
 		"test": "bun run generate:content && bun run test:run",
 		"test:run": "bunx vitest run www/src www/scripts",
 		"typecheck": "bunx tsc -p www/tsconfig.json --noEmit",
 		"preview": "bun run --cwd www preview",
+		"preview:prod": "bun run --cwd www preview --host 0.0.0.0",
 		"biome:check": "bun run --cwd www biome:check",
 		"biome:format": "bun run --cwd www biome:format",
 		"biome:lint": "bun run --cwd www biome:lint"

@@ -271,7 +271,7 @@ impl MethodEmitter<'_, '_> {
                 )));
                 true
             }
-            IrExprKind::Case { scrutinee, arms } => {
+            IrExprKind::Match { scrutinee, arms } => {
                 self.compile_case(scrutinee, arms, diags);
                 true
             }
@@ -289,7 +289,7 @@ impl MethodEmitter<'_, '_> {
 
     fn compile_expr_effect_ops(&mut self, expr: &IrExpr, diags: &mut EmitDiagList) -> bool {
         match &expr.kind {
-            IrExprKind::Perform {
+            IrExprKind::Request {
                 effect_key,
                 op_index,
                 args,
@@ -297,7 +297,7 @@ impl MethodEmitter<'_, '_> {
                 self.compile_perform(effect_key, *op_index, args, diags);
                 true
             }
-            IrExprKind::PerformSeq {
+            IrExprKind::RequestSeq {
                 effect_key,
                 op_index,
                 args,

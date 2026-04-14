@@ -196,7 +196,7 @@ impl RecursiveBindingInput<'_, '_> {
                 self.callable_name,
                 self.captures,
             ),
-            IrExprKind::Case { scrutinee, arms } => rewrite_case_kind(
+            IrExprKind::Match { scrutinee, arms } => rewrite_case_kind(
                 self.ctx,
                 self.origin,
                 *scrutinee,
@@ -235,12 +235,12 @@ impl RecursiveBindingInput<'_, '_> {
 
     fn rewrite_effect_kind(&self, kind: IrExprKind) -> IrExprKind {
         match kind {
-            IrExprKind::Perform {
+            IrExprKind::Request {
                 effect_key,
                 op_index,
                 args,
             } => self.rewrite_perform_kind(effect_key, op_index, args),
-            IrExprKind::PerformSeq {
+            IrExprKind::RequestSeq {
                 effect_key,
                 op_index,
                 args,
@@ -477,7 +477,7 @@ impl RecursiveBindingInput<'_, '_> {
         op_index: u16,
         args: Box<[IrExpr]>,
     ) -> IrExprKind {
-        IrExprKind::Perform {
+        IrExprKind::Request {
             effect_key,
             op_index,
             args: rewrite_expr_slice(
@@ -497,7 +497,7 @@ impl RecursiveBindingInput<'_, '_> {
         op_index: u16,
         args: Box<[IrSeqPart]>,
     ) -> IrExprKind {
-        IrExprKind::PerformSeq {
+        IrExprKind::RequestSeq {
             effect_key,
             op_index,
             args: rewrite_seq_parts(
@@ -896,12 +896,12 @@ fn rewrite_case_kind(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
     scrutinee: IrExpr,
-    arms: LoweredCaseArmList,
+    arms: LoweredMatchArmList,
     binding: NameBindingId,
     callable_name: &str,
     captures: &[NameBindingId],
 ) -> IrExprKind {
-    IrExprKind::Case {
+    IrExprKind::Match {
         scrutinee: Box::new(rewrite_recursive_binding_refs(
             ctx,
             origin,
@@ -910,7 +910,7 @@ fn rewrite_case_kind(
             callable_name,
             captures,
         )),
-        arms: rewrite_case_arms(ctx, origin, arms, binding, callable_name, captures),
+        arms: rewrite_match_arms(ctx, origin, arms, binding, callable_name, captures),
     }
 }
 
@@ -1036,17 +1036,17 @@ fn rewrite_call_args(
         .into_boxed_slice()
 }
 
-fn rewrite_case_arms(
+fn rewrite_match_arms(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
-    arms: LoweredCaseArmList,
+    arms: LoweredMatchArmList,
     binding: NameBindingId,
     callable_name: &str,
     captures: &[NameBindingId],
-) -> LoweredCaseArmList {
+) -> LoweredMatchArmList {
     arms.into_vec()
         .into_iter()
-        .map(|arm| IrLoweredCaseArm {
+        .map(|arm| IrLoweredMatchArm {
             guard: arm.guard.map(|guard| {
                 rewrite_recursive_binding_refs(ctx, origin, guard, binding, callable_name, captures)
             }),

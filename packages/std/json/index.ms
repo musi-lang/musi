@@ -5,7 +5,7 @@ export opaque let Json := data {
 export let fromString (source : String) : Json := .Json(source);
 
 export let toString (value : Json) : String :=
-  case value of (
+  match value (
   | .Json(source) => source
   );
 

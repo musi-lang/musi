@@ -461,13 +461,13 @@ pub enum IrCasePattern {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrCaseArm {
+pub struct IrMatchArm {
     pub pattern: IrCasePattern,
     pub guard: Option<IrExpr>,
     pub expr: IrExpr,
 }
 
-impl IrCaseArm {
+impl IrMatchArm {
     #[must_use]
     pub const fn new(pattern: IrCasePattern, expr: IrExpr) -> Self {
         Self {
@@ -610,9 +610,9 @@ pub enum IrExprKind {
         base: Box<IrExpr>,
         ty_name: Box<str>,
     },
-    Case {
+    Match {
         scrutinee: Box<IrExpr>,
-        arms: Box<[IrCaseArm]>,
+        arms: Box<[IrMatchArm]>,
     },
     VariantNew {
         data_key: DefinitionKey,
@@ -628,12 +628,12 @@ pub enum IrExprKind {
         callee: Box<IrExpr>,
         args: Box<[IrSeqPart]>,
     },
-    Perform {
+    Request {
         effect_key: DefinitionKey,
         op_index: u16,
         args: Box<[IrExpr]>,
     },
-    PerformSeq {
+    RequestSeq {
         effect_key: DefinitionKey,
         op_index: u16,
         args: Box<[IrSeqPart]>,

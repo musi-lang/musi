@@ -197,12 +197,12 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::InstanceExpr, attrs))
     }
 
-    pub(crate) fn parse_perform_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let perform = self.expect_token(TokenKind::KwPerform)?;
+    pub(crate) fn parse_request_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let request = self.expect_token(TokenKind::KwRequest)?;
         let expr = self.parse_expr(PREFIX_BP)?;
         Ok(self.builder.push_node_from_children(
-            SyntaxNodeKind::PerformExpr,
-            vec![perform, SyntaxElementId::Node(expr)],
+            SyntaxNodeKind::RequestExpr,
+            vec![request, SyntaxElementId::Node(expr)],
         ))
     }
 
