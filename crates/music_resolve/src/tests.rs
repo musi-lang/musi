@@ -240,7 +240,7 @@ fn resolves_case_pat_binder_in_arm() {
 
 #[test]
 fn lowers_pipe_into_call_and_prepends_left_value() {
-    let src = "let add := (left, right) => left + right; let value := 1 |> add(2);";
+    let src = r"let add := \(left, right) => left + right; let value := 1 |> add(2);";
     let source_id = SourceId::from_raw(33);
     let module_key = ModuleKey::new("main");
     let parsed = parse(Lexer::new(src).lex());
@@ -331,7 +331,7 @@ fn lowers_named_call_arguments_into_hir_args() {
 #[test]
 fn resolves_lambda_param_in_body() {
     assert_name_binding(
-        "(x: Int) => x;",
+        r"\(x : Int) => x;",
         SourceId::from_raw(4),
         "x",
         0,

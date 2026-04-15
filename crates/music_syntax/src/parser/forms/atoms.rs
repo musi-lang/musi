@@ -64,11 +64,12 @@ impl Parser<'_> {
     }
 
     pub(crate) fn parse_lambda_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let backslash = self.expect_token(TokenKind::Backslash)?;
         let open = self.expect_token(TokenKind::LParen)?;
         let params = self.parse_param_list_contents(TokenKind::RParen)?;
         let close = self.expect_token(TokenKind::RParen)?;
         let param_list = self.wrap_list(SyntaxNodeKind::ParamList, open, params, close);
-        let mut children = vec![SyntaxElementId::Node(param_list)];
+        let mut children = vec![backslash, SyntaxElementId::Node(param_list)];
         if let Some(colon) = self.eat(TokenKind::Colon) {
             children.push(colon);
             children.push(SyntaxElementId::Node(self.parse_expr(0)?));

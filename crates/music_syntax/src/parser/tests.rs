@@ -118,6 +118,19 @@ fn parses_all_atom_forms_smoke() {
 }
 
 #[test]
+fn parses_backslash_lambda_expr() {
+    let kinds = parse_kinds(r"\(x : Int) : Int => x;");
+    assert_eq!(kinds, vec![SyntaxNodeKind::LambdaExpr]);
+}
+
+#[test]
+fn rejects_bare_paren_lambda_expr() {
+    assert_has_parse_error("(x : Int) => x;", |kind| {
+        matches!(kind, ParseErrorKind::ExpectedToken { .. })
+    });
+}
+
+#[test]
 fn parses_named_variant_payload_definitions_and_uses() {
     let parsed = parse(
         Lexer::new(

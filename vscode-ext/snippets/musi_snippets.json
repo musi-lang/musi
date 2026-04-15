@@ -13,6 +13,13 @@
 		],
 		"description": "Recursive callable binding"
 	},
+	"Lambda Expression": {
+		"prefix": "lambda",
+		"body": [
+			"\\(${1:x}) => ${0:body}"
+		],
+		"description": "Lambda expression"
+	},
 	"Data Declaration": {
 		"prefix": "data",
 		"body": [

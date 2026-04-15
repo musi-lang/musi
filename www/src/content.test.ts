@@ -12,6 +12,7 @@ import { nextScheme } from "./layout/site-layout";
 import { siteCopy } from "./lib/site-copy";
 
 const BANNED_SNIPPET_PATTERNS = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
+const BARE_MUSI_LAMBDA_PATTERN = /(?<![\\A-Za-z0-9_.])\([^()\n]*\)\s*=>/;
 const BANNED_SITE_COPY = [
 	"Friendly language. Real ideas. Small steps.",
 	"Friendly first-language path, real language ideas, and small command-line steps that stay readable as projects grow.",
@@ -33,6 +34,9 @@ const BANNED_DEVELOPER_GUIDE_FAKE_STDIN_PATTERN =
 	/Console\.readLine|console\.readLine/;
 const repoRoot = join(import.meta.dirname, "..", "..");
 const snippetEmbedPattern = /\{\{snippet:([\w-]+)\}\}/g;
+const cFencePattern = /```c\n/;
+const cppFencePattern = /```cpp\n/;
+const javaFencePattern = /```java\n/;
 const topLevelLetPattern = /^let\s/;
 
 function snippetIdsInMarkdown(source: string) {
@@ -109,13 +113,20 @@ describe("content generation", () => {
 	});
 
 	it("keeps invalid syntax out of Musi snippets", () => {
-		const musiSnippetSource = contentSnippets
-			.filter((snippet) => snippet.language === "musi")
+		const musiSnippets = contentSnippets.filter(
+			(snippet) => snippet.language === "musi",
+		);
+		const musiSnippetSource = musiSnippets
 			.map((snippet) => snippet.sourceText)
 			.join("\n");
 
 		for (const banned of BANNED_SNIPPET_PATTERNS) {
 			expect(musiSnippetSource).not.toMatch(banned);
+		}
+		for (const snippet of musiSnippets) {
+			expect(snippet.sourceText, snippet.id).not.toMatch(
+				BARE_MUSI_LAMBDA_PATTERN,
+			);
 		}
 	});
 
@@ -204,6 +215,33 @@ describe("content generation", () => {
 		).toBe(false);
 	});
 
+	it("keeps C/C++ guide examples paired with C/C++ snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/c-cpp")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("c-cpp-")),
+				page.sourcePath,
+			).toBe(true);
+			expect(cFencePattern.test(source), page.sourcePath).toBe(true);
+			expect(cppFencePattern.test(source), page.sourcePath).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/c-cpp/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("C23");
+		expect(overviewSource).toContain("C++23");
+	});
+
 	it("keeps C# guide examples paired with C# snippets", () => {
 		for (const page of bookPages) {
 			if (!page.sourcePath.startsWith("docs/what/language/developers/csharp")) {
@@ -227,6 +265,31 @@ describe("content generation", () => {
 
 		expect(overviewSource).toContain(".NET 8.0");
 		expect(overviewSource).toContain("C# 12.0");
+	});
+
+	it("keeps Java guide examples paired with Java snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/java/")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("java-")),
+				page.sourcePath,
+			).toBe(true);
+			expect(javaFencePattern.test(source), page.sourcePath).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/java/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("Java 17");
 	});
 
 	it("keeps Python guide examples paired with Python snippets", () => {

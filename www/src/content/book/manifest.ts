@@ -273,6 +273,43 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Comparative guides for teams moving from other language ecosystems.",
 	},
 	{
+		id: "developers-c-cpp",
+		partId: "developers",
+		parentId: "developers-guides",
+		path: "/docs/book/developers/guides/c-cpp",
+		aliases: [
+			"/docs/book/developers/guides/c",
+			"/learn/book/developers/guides/c",
+			"/docs/book/developers/guides/cpp",
+			"/learn/book/developers/guides/cpp",
+			"/docs/book/developers/guides/c-plus-plus",
+			"/learn/book/developers/guides/c-plus-plus",
+			"/docs/book/developers/c",
+			"/learn/book/developers/c",
+			"/docs/book/developers/cpp",
+			"/learn/book/developers/cpp",
+			"/docs/book/developers/c-plus-plus",
+			"/learn/book/developers/c-plus-plus",
+			"/docs/book/developers/c-and-cpp",
+			"/learn/book/developers/c-and-cpp",
+			"/docs/language/developers/c",
+			"/learn/language/developers/c",
+			"/docs/language/developers/cpp",
+			"/learn/language/developers/cpp",
+			"/docs/language/developers/c-plus-plus",
+			"/learn/language/developers/c-plus-plus",
+		],
+		title: "Musi for C/C++ Developers",
+		description:
+			"Translate C23 and C++23 habits into Musi's expression, data, effect, and FFI model.",
+		group: "Musi for Developers",
+		section: "C/C++ Developers",
+		order: 1,
+		slug: "c-cpp",
+		summary:
+			"C/C++-specific contrasts for functions, structs, arrays, pointers, errors, templates, packages, tests, and native boundaries.",
+	},
+	{
 		id: "developers-rust",
 		partId: "developers",
 		parentId: "developers-guides",
@@ -287,7 +324,7 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Translate Rust habits into Musi's expression, data, abstraction, and mutation model.",
 		group: "Musi for Developers",
 		section: "Rust Developers",
-		order: 1,
+		order: 6,
 		slug: "rust",
 		summary:
 			"Rust-specific contrasts for mutation, data, traits, effects, and native boundaries.",
@@ -313,7 +350,7 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Translate .NET 8.0 and C# 12.0 habits into Musi's expression, data, effect, and package model.",
 		group: "Musi for Developers",
 		section: "C# Developers",
-		order: 1,
+		order: 2,
 		slug: "csharp",
 		summary:
 			"C#-specific contrasts for methods, records, collections, nullability, exceptions, interfaces, packages, tests, and native boundaries.",
@@ -338,10 +375,31 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Translate JavaScript runtime habits and TypeScript 6.0.2 type habits into Musi.",
 		group: "Musi for Developers",
 		section: "JavaScript and TypeScript Developers",
-		order: 1,
+		order: 4,
 		slug: "javascript-typescript",
 		summary:
 			"Side-by-side contrasts for objects, functions, unions, generics, promises, modules, and tests.",
+	},
+	{
+		id: "developers-java",
+		partId: "developers",
+		parentId: "developers-guides",
+		path: "/docs/book/developers/guides/java",
+		aliases: [
+			"/docs/book/developers/java",
+			"/learn/book/developers/java",
+			"/docs/language/developers/java",
+			"/learn/language/developers/java",
+		],
+		title: "Musi for Java Developers",
+		description:
+			"Translate Java 17 habits into Musi's expression, data, effect, and package model.",
+		group: "Musi for Developers",
+		section: "Java Developers",
+		order: 3,
+		slug: "java",
+		summary:
+			"Java-specific contrasts for methods, records, collections, nullability, exceptions, sealed types, interfaces, packages, tests, and native boundaries.",
 	},
 	{
 		id: "developers-python",
@@ -358,7 +416,7 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Translate Python 3.14 habits into Musi's expression, data, effect, and package model.",
 		group: "Musi for Developers",
 		section: "Python Developers",
-		order: 1,
+		order: 5,
 		slug: "python",
 		summary:
 			"Python-specific contrasts for functions, blocks, objects, collections, errors, protocols, modules, tests, and native boundaries.",
@@ -876,6 +934,227 @@ const rawBookPages = [
 		questions: [],
 	},
 	{
+		id: "c-cpp-overview",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/overview",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/overview",
+			"/docs/book/developers/c/overview",
+			"/docs/book/developers/cpp/overview",
+			"/docs/book/developers/c-plus-plus/overview",
+			"/docs/language/developers/c-cpp/overview",
+			"/learn/language/developers/c-cpp/overview",
+			"/docs/language/developers/c/overview",
+			"/learn/language/developers/c/overview",
+			"/docs/language/developers/cpp/overview",
+			"/learn/language/developers/cpp/overview",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/overview.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-values-functions-expressions",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/values-functions-expressions",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/values-functions-expressions",
+			"/docs/book/developers/c/values-functions-expressions",
+			"/docs/book/developers/cpp/values-functions-expressions",
+			"/docs/book/developers/c-plus-plus/values-functions-expressions",
+			"/docs/language/developers/c-cpp/values-functions-expressions",
+			"/learn/language/developers/c-cpp/values-functions-expressions",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/values-functions-expressions.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-blocks-control-flow",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/blocks-control-flow",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/blocks-control-flow",
+			"/docs/book/developers/c/blocks-control-flow",
+			"/docs/book/developers/cpp/blocks-control-flow",
+			"/docs/book/developers/c-plus-plus/blocks-control-flow",
+			"/docs/language/developers/c-cpp/blocks-control-flow",
+			"/learn/language/developers/c-cpp/blocks-control-flow",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/blocks-control-flow.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-variables-mutation",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/variables-mutation",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/variables-mutation",
+			"/docs/book/developers/c/variables-mutation",
+			"/docs/book/developers/cpp/variables-mutation",
+			"/docs/book/developers/c-plus-plus/variables-mutation",
+			"/docs/language/developers/c-cpp/variables-mutation",
+			"/learn/language/developers/c-cpp/variables-mutation",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/variables-mutation.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-structs-classes-records",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/structs-classes-records",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/structs-classes-records",
+			"/docs/book/developers/c/structs-classes-records",
+			"/docs/book/developers/cpp/structs-classes-records",
+			"/docs/book/developers/c-plus-plus/structs-classes-records",
+			"/docs/language/developers/c-cpp/structs-classes-records",
+			"/learn/language/developers/c-cpp/structs-classes-records",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/structs-classes-records.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-arrays-pointers-slices",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/arrays-pointers-slices",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/arrays-pointers-slices",
+			"/docs/book/developers/c/arrays-pointers-slices",
+			"/docs/book/developers/cpp/arrays-pointers-slices",
+			"/docs/book/developers/c-plus-plus/arrays-pointers-slices",
+			"/docs/language/developers/c-cpp/arrays-pointers-slices",
+			"/learn/language/developers/c-cpp/arrays-pointers-slices",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/arrays-pointers-slices.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-null-option-result",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/null-option-result",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/null-option-result",
+			"/docs/book/developers/c/null-option-result",
+			"/docs/book/developers/cpp/null-option-result",
+			"/docs/book/developers/c-plus-plus/null-option-result",
+			"/docs/language/developers/c-cpp/null-option-result",
+			"/learn/language/developers/c-cpp/null-option-result",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/null-option-result.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-errors-results-effects",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/errors-results-effects",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/errors-results-effects",
+			"/docs/book/developers/c/errors-results-effects",
+			"/docs/book/developers/cpp/errors-results-effects",
+			"/docs/book/developers/c-plus-plus/errors-results-effects",
+			"/docs/language/developers/c-cpp/errors-results-effects",
+			"/learn/language/developers/c-cpp/errors-results-effects",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/errors-results-effects.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-enums-variants-patterns",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/enums-variants-patterns",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/enums-variants-patterns",
+			"/docs/book/developers/c/enums-variants-patterns",
+			"/docs/book/developers/cpp/enums-variants-patterns",
+			"/docs/book/developers/c-plus-plus/enums-variants-patterns",
+			"/docs/language/developers/c-cpp/enums-variants-patterns",
+			"/learn/language/developers/c-cpp/enums-variants-patterns",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/enums-variants-patterns.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-templates-concepts-classes-laws",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/templates-concepts-classes-laws",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/templates-concepts-classes-laws",
+			"/docs/book/developers/c/templates-concepts-classes-laws",
+			"/docs/book/developers/cpp/templates-concepts-classes-laws",
+			"/docs/book/developers/c-plus-plus/templates-concepts-classes-laws",
+			"/docs/language/developers/c-cpp/templates-concepts-classes-laws",
+			"/learn/language/developers/c-cpp/templates-concepts-classes-laws",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/templates-concepts-classes-laws.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-methods-and-receiver-calls",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/methods-and-receiver-calls",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/methods-and-receiver-calls",
+			"/docs/book/developers/c/methods-and-receiver-calls",
+			"/docs/book/developers/cpp/methods-and-receiver-calls",
+			"/docs/book/developers/c-plus-plus/methods-and-receiver-calls",
+			"/docs/language/developers/c-cpp/methods-and-receiver-calls",
+			"/learn/language/developers/c-cpp/methods-and-receiver-calls",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/methods-and-receiver-calls.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-headers-modules-packages",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/headers-modules-packages",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/headers-modules-packages",
+			"/docs/book/developers/c/headers-modules-packages",
+			"/docs/book/developers/cpp/headers-modules-packages",
+			"/docs/book/developers/c-plus-plus/headers-modules-packages",
+			"/docs/language/developers/c-cpp/headers-modules-packages",
+			"/learn/language/developers/c-cpp/headers-modules-packages",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/headers-modules-packages.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-testing-tooling",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/testing-tooling",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/testing-tooling",
+			"/docs/book/developers/c/testing-tooling",
+			"/docs/book/developers/cpp/testing-tooling",
+			"/docs/book/developers/c-plus-plus/testing-tooling",
+			"/docs/language/developers/c-cpp/testing-tooling",
+			"/learn/language/developers/c-cpp/testing-tooling",
+		],
+		sourcePath: "docs/what/language/developers/c-cpp/testing-tooling.md",
+		questions: [],
+	},
+	{
+		id: "c-cpp-unsafe-ffi-native-boundaries",
+		partId: "developers",
+		path: "/docs/book/developers/c-cpp/unsafe-ffi-native-boundaries",
+		aliases: [
+			"/docs/book/developers/guides/c-cpp/unsafe-ffi-native-boundaries",
+			"/docs/book/developers/c/unsafe-ffi-native-boundaries",
+			"/docs/book/developers/cpp/unsafe-ffi-native-boundaries",
+			"/docs/book/developers/c-plus-plus/unsafe-ffi-native-boundaries",
+			"/docs/language/developers/c-cpp/unsafe-ffi-native-boundaries",
+			"/learn/language/developers/c-cpp/unsafe-ffi-native-boundaries",
+		],
+		sourcePath:
+			"docs/what/language/developers/c-cpp/unsafe-ffi-native-boundaries.md",
+		questions: [],
+	},
+	{
 		id: "csharp-overview",
 		partId: "developers",
 		path: "/docs/book/developers/csharp/overview",
@@ -1076,6 +1355,178 @@ const rawBookPages = [
 			"/learn/language/developers/c-sharp/unsafe-interop-ffi",
 		],
 		sourcePath: "docs/what/language/developers/csharp/unsafe-interop-ffi.md",
+		questions: [],
+	},
+	{
+		id: "java-overview",
+		partId: "developers",
+		path: "/docs/book/developers/java/overview",
+		aliases: [
+			"/docs/book/developers/guides/java/overview",
+			"/docs/language/developers/java/overview",
+			"/learn/language/developers/java/overview",
+		],
+		sourcePath: "docs/what/language/developers/java/overview.md",
+		questions: [],
+	},
+	{
+		id: "java-values-methods-expressions",
+		partId: "developers",
+		path: "/docs/book/developers/java/values-methods-expressions",
+		aliases: [
+			"/docs/book/developers/guides/java/values-methods-expressions",
+			"/docs/language/developers/java/values-methods-expressions",
+			"/learn/language/developers/java/values-methods-expressions",
+		],
+		sourcePath:
+			"docs/what/language/developers/java/values-methods-expressions.md",
+		questions: [],
+	},
+	{
+		id: "java-blocks-control-flow",
+		partId: "developers",
+		path: "/docs/book/developers/java/blocks-control-flow",
+		aliases: [
+			"/docs/book/developers/guides/java/blocks-control-flow",
+			"/docs/language/developers/java/blocks-control-flow",
+			"/learn/language/developers/java/blocks-control-flow",
+		],
+		sourcePath: "docs/what/language/developers/java/blocks-control-flow.md",
+		questions: [],
+	},
+	{
+		id: "java-variables-mutation",
+		partId: "developers",
+		path: "/docs/book/developers/java/variables-mutation",
+		aliases: [
+			"/docs/book/developers/guides/java/variables-mutation",
+			"/docs/language/developers/java/variables-mutation",
+			"/learn/language/developers/java/variables-mutation",
+		],
+		sourcePath: "docs/what/language/developers/java/variables-mutation.md",
+		questions: [],
+	},
+	{
+		id: "java-records-classes-objects",
+		partId: "developers",
+		path: "/docs/book/developers/java/records-classes-objects",
+		aliases: [
+			"/docs/book/developers/guides/java/records-classes-objects",
+			"/docs/language/developers/java/records-classes-objects",
+			"/learn/language/developers/java/records-classes-objects",
+		],
+		sourcePath: "docs/what/language/developers/java/records-classes-objects.md",
+		questions: [],
+	},
+	{
+		id: "java-collections-streams-pipelines",
+		partId: "developers",
+		path: "/docs/book/developers/java/collections-streams-pipelines",
+		aliases: [
+			"/docs/book/developers/guides/java/collections-streams-pipelines",
+			"/docs/language/developers/java/collections-streams-pipelines",
+			"/learn/language/developers/java/collections-streams-pipelines",
+		],
+		sourcePath:
+			"docs/what/language/developers/java/collections-streams-pipelines.md",
+		questions: [],
+	},
+	{
+		id: "java-null-option-result",
+		partId: "developers",
+		path: "/docs/book/developers/java/null-option-result",
+		aliases: [
+			"/docs/book/developers/guides/java/null-option-result",
+			"/docs/language/developers/java/null-option-result",
+			"/learn/language/developers/java/null-option-result",
+		],
+		sourcePath: "docs/what/language/developers/java/null-option-result.md",
+		questions: [],
+	},
+	{
+		id: "java-exceptions-effects",
+		partId: "developers",
+		path: "/docs/book/developers/java/exceptions-effects",
+		aliases: [
+			"/docs/book/developers/guides/java/exceptions-effects",
+			"/docs/language/developers/java/exceptions-effects",
+			"/learn/language/developers/java/exceptions-effects",
+		],
+		sourcePath: "docs/what/language/developers/java/exceptions-effects.md",
+		questions: [],
+	},
+	{
+		id: "java-sealed-types-patterns",
+		partId: "developers",
+		path: "/docs/book/developers/java/sealed-types-patterns",
+		aliases: [
+			"/docs/book/developers/guides/java/sealed-types-patterns",
+			"/docs/language/developers/java/sealed-types-patterns",
+			"/learn/language/developers/java/sealed-types-patterns",
+		],
+		sourcePath: "docs/what/language/developers/java/sealed-types-patterns.md",
+		questions: [],
+	},
+	{
+		id: "java-generics-interfaces-laws",
+		partId: "developers",
+		path: "/docs/book/developers/java/generics-interfaces-laws",
+		aliases: [
+			"/docs/book/developers/guides/java/generics-interfaces-laws",
+			"/docs/language/developers/java/generics-interfaces-laws",
+			"/learn/language/developers/java/generics-interfaces-laws",
+		],
+		sourcePath:
+			"docs/what/language/developers/java/generics-interfaces-laws.md",
+		questions: [],
+	},
+	{
+		id: "java-methods-and-receiver-calls",
+		partId: "developers",
+		path: "/docs/book/developers/java/methods-and-receiver-calls",
+		aliases: [
+			"/docs/book/developers/guides/java/methods-and-receiver-calls",
+			"/docs/language/developers/java/methods-and-receiver-calls",
+			"/learn/language/developers/java/methods-and-receiver-calls",
+		],
+		sourcePath:
+			"docs/what/language/developers/java/methods-and-receiver-calls.md",
+		questions: [],
+	},
+	{
+		id: "java-packages-modules",
+		partId: "developers",
+		path: "/docs/book/developers/java/packages-modules",
+		aliases: [
+			"/docs/book/developers/guides/java/packages-modules",
+			"/docs/language/developers/java/packages-modules",
+			"/learn/language/developers/java/packages-modules",
+		],
+		sourcePath: "docs/what/language/developers/java/packages-modules.md",
+		questions: [],
+	},
+	{
+		id: "java-testing-tooling",
+		partId: "developers",
+		path: "/docs/book/developers/java/testing-tooling",
+		aliases: [
+			"/docs/book/developers/guides/java/testing-tooling",
+			"/docs/language/developers/java/testing-tooling",
+			"/learn/language/developers/java/testing-tooling",
+		],
+		sourcePath: "docs/what/language/developers/java/testing-tooling.md",
+		questions: [],
+	},
+	{
+		id: "java-native-unsafe-ffi",
+		partId: "developers",
+		path: "/docs/book/developers/java/native-unsafe-ffi",
+		aliases: [
+			"/docs/book/developers/guides/java/native-unsafe-ffi",
+			"/docs/language/developers/java/native-unsafe-ffi",
+			"/learn/language/developers/java/native-unsafe-ffi",
+		],
+		sourcePath: "docs/what/language/developers/java/native-unsafe-ffi.md",
 		questions: [],
 	},
 	{
@@ -1555,8 +2006,14 @@ function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 	if (page.id === "musi-for-rust-developers" || page.id.startsWith("rust-")) {
 		return "developers-rust";
 	}
+	if (page.id.startsWith("c-cpp-")) {
+		return "developers-c-cpp";
+	}
 	if (page.id.startsWith("csharp-")) {
 		return "developers-csharp";
+	}
+	if (page.id.startsWith("java-")) {
+		return "developers-java";
 	}
 	if (page.id.startsWith("js-ts-")) {
 		return "developers-javascript-typescript";

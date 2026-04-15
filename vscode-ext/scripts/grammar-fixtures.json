@@ -66,6 +66,7 @@
 		"keyword.operator.function.effect.musi",
 		"keyword.operator.pipe.musi",
 		"keyword.operator.match.arm.musi",
+		"keyword.operator.lambda.musi",
 		"punctuation.definition.type.arguments.begin.musi",
 		"punctuation.definition.type.arguments.end.musi",
 		"string.quoted.double.musi",
@@ -99,6 +100,7 @@
 	"requiredSnippetPrefixes": [
 		"let",
 		"letrec",
+		"lambda",
 		"match",
 		"data",
 		"effect",
@@ -128,6 +130,22 @@
 					"line": 0,
 					"lexeme": "push",
 					"scope": "entity.name.function.method.musi"
+				}
+			]
+		},
+		{
+			"name": "lambda expression",
+			"source": "let plusOne := \\(x : Int) => x + 1;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "\\",
+					"scope": "keyword.operator.lambda.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "=>",
+					"scope": "keyword.operator.match.arm.musi"
 				}
 			]
 		},

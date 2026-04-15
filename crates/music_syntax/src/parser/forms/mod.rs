@@ -31,12 +31,11 @@ impl Parser<'_> {
             TokenKind::LParen => {
                 if self.is_pi_paren() {
                     self.parse_pi_expr()
-                } else if self.is_lambda_paren() {
-                    self.parse_lambda_expr()
                 } else {
                     self.parse_paren_expr()
                 }
             }
+            TokenKind::Backslash => self.parse_lambda_expr(),
             TokenKind::LBracket => self.parse_array_expr(),
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),

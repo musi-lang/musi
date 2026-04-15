@@ -52,6 +52,15 @@ describe("docs", () => {
 			docForPath("/learn/book/developers/guides/javascript-typescript/overview")
 				?.kind,
 		).toBe("chapter");
+		expect(docForPath("/learn/book/developers/guides/c-cpp")?.kind).toBe(
+			"section",
+		);
+		expect(
+			docForPath("/learn/book/developers/guides/c-cpp/overview")?.kind,
+		).toBe("chapter");
+		expect(
+			docForPath("/learn/book/developers/c/null-option-result")?.title,
+		).toBe("Null, Option, and Result");
 		expect(docForPath("/learn/book/developers/guides/csharp")?.kind).toBe(
 			"section",
 		);
@@ -60,6 +69,15 @@ describe("docs", () => {
 		).toBe("chapter");
 		expect(
 			docForPath("/learn/book/developers/csharp/null-option-result")?.title,
+		).toBe("Null, Option, and Result");
+		expect(docForPath("/learn/book/developers/guides/java")?.kind).toBe(
+			"section",
+		);
+		expect(
+			docForPath("/learn/book/developers/guides/java/overview")?.kind,
+		).toBe("chapter");
+		expect(
+			docForPath("/learn/book/developers/java/null-option-result")?.title,
 		).toBe("Null, Option, and Result");
 		expect(docForPath("/learn/book/developers/guides/python")?.kind).toBe(
 			"section",
@@ -90,7 +108,9 @@ describe("docs", () => {
 	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
 		const titles = docChildren("developers-guides").map((page) => page.title);
 		expect(titles).toEqual([
+			"Musi for C/C++ Developers",
 			"Musi for C# Developers",
+			"Musi for Java Developers",
 			"Musi for JavaScript and TypeScript Developers",
 			"Musi for Python Developers",
 			"Musi for Rust Developers",

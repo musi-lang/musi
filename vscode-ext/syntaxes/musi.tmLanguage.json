@@ -922,6 +922,10 @@
 					"match": "\\|"
 				},
 				{
+					"name": "keyword.operator.lambda.musi",
+					"match": "\\\\(?=\\s*\\()"
+				},
+				{
 					"name": "punctuation.section.block.begin.musi",
 					"match": "\\{"
 				},

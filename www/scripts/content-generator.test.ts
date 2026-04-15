@@ -28,6 +28,7 @@ const pureFunctionOperatorPattern = /<span style="color:[^"]+">\s*-><\/span>/;
 const payloadLabelPattern = /<span style="color:[^"]+">value<\/span>/;
 const foreignAbiStringPattern = /<span style="color:[^"]+">\s*"c"<\/span>/;
 const foreignLetKeywordPattern = /<span style="color:[^"]+">\s*let<\/span>/;
+const lambdaPunctuationPattern = /<span style="color:[^"]+">\s*\\<\/span>/;
 const snippetPlaceholder = "${";
 const matchSnippetPattern = `match ${snippetPlaceholder}1:expr} (`;
 const handleRequestSnippetPattern = `handle ${snippetPlaceholder}1:effect}.${snippetPlaceholder}2:op}(${snippetPlaceholder}3:value}) using ${snippetPlaceholder}4:effect} {`;
@@ -255,6 +256,15 @@ let proof := left ~= right;`,
 		expect(html).toMatch(payloadLabelPattern);
 	});
 
+	it("highlights lambda introducers", () => {
+		const html = renderHighlightedCodeForTest(
+			"let plusOne := \\(x : Int) => x + 1;",
+			"musi",
+		);
+
+		expect(html).toMatch(lambdaPunctuationPattern);
+	});
+
 	it("keeps grammar and snippets on current syntax", () => {
 		const grammarSource = readFileSync(
 			join(root, "..", "..", "vscode-ext", "syntaxes", "musi.tmLanguage.json"),
@@ -279,10 +289,12 @@ let proof := left ~= right;`,
 		expect(grammarSource).toContain("partial");
 		expect(grammarSource).toContain("request\\\\b");
 		expect(grammarSource).toContain("~=");
+		expect(grammarSource).toContain("keyword.operator.lambda.musi");
 		expect(grammarSource).not.toContain("case\\\\b");
 		expect(grammarSource).not.toContain("of\\\\b");
 		expect(grammarSource).not.toContain("perform\\\\b");
 		expect(snippetSource).toContain('"Match Expression"');
+		expect(snippetSource).toContain('"Lambda Expression"');
 		expect(snippetSource).toContain(matchSnippetPattern);
 		expect(snippetSource).toContain(handleRequestSnippetPattern);
 		expect(snippetSource).not.toContain(caseSnippetPattern);
