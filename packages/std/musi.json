@@ -3,7 +3,7 @@
     "name": "@std",
     "version": "0.1.0",
     "description": "The Musi standard library.",
-    "main": "./index.ms",
+    "entry": "./index.ms",
     "exports": {
         ".": "./index.ms",
         "./assert": "./assert/index.ms",
@@ -29,6 +29,7 @@
         "./slice": "./slice/index.ms",
         "./text": "./text/index.ms",
         "./time": "./time/index.ms",
-        "./testing": "./testing/index.ms"
+        "./testing": "./testing/index.ms",
+        "./ffi": "./ffi/index.ms"
     }
 }
