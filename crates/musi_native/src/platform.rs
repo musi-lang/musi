@@ -105,6 +105,9 @@ impl PlatformHost {
 
     #[must_use]
     pub fn call_foreign(self, foreign: &ForeignCall, args: &[Value]) -> Option<VmResult<Value>> {
+        if let Some(result) = musi_native_ffi::call_musi_pointer_intrinsic(foreign, args) {
+            return Some(result);
+        }
         match self.native_abi_support(foreign) {
             NativeAbiCallSupport::Supported => Some(musi_native_ffi::call_foreign(foreign, args)),
             NativeAbiCallSupport::UnsupportedTarget

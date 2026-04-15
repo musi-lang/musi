@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DiagnosticsFormatArg {
@@ -15,10 +15,16 @@ pub struct Cli {
     pub command: Command,
 }
 
+#[derive(Debug, Args)]
+pub struct ReservedCommandArgs {
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    New {
-        name: String,
+    Init {
+        path: Option<PathBuf>,
     },
     Check {
         target: Option<PathBuf>,
@@ -44,4 +50,25 @@ pub enum Command {
         name: String,
         target: Option<PathBuf>,
     },
+    Info {
+        target: Option<PathBuf>,
+    },
+    Lsp,
+    Compile(ReservedCommandArgs),
+    Fmt(ReservedCommandArgs),
+    Lint(ReservedCommandArgs),
+    Bench(ReservedCommandArgs),
+    Doc(ReservedCommandArgs),
+    Coverage(ReservedCommandArgs),
+    Serve(ReservedCommandArgs),
+    Repl(ReservedCommandArgs),
+    Eval(ReservedCommandArgs),
+    Install(ReservedCommandArgs),
+    Add(ReservedCommandArgs),
+    Remove(ReservedCommandArgs),
+    Update(ReservedCommandArgs),
+    Outdated(ReservedCommandArgs),
+    Audit(ReservedCommandArgs),
+    Publish(ReservedCommandArgs),
+    Clean(ReservedCommandArgs),
 }

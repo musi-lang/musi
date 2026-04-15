@@ -1,0 +1,25 @@
+---
+import { siteMeta } from "../lib/site-meta";
+import "../app.css";
+---
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light dark" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<title>Page Not Found | {siteMeta.title}</title>
+		<meta name="robots" content="noindex" />
+	</head>
+	<body>
+		<main class="site-main page-stack not-found-page">
+			<section class="surface surface-panel section-panel">
+				<div class="eyebrow">404</div>
+				<h1>Page Not Found</h1>
+				<p class="muted">This page does not exist.</p>
+				<a class="inline-action" href="/">Return Home</a>
+			</section>
+		</main>
+	</body>
+</html>

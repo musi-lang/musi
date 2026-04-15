@@ -10,8 +10,9 @@ pub use expr::{
     HirExprKind, HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirLetReceiver, HirLit,
     HirLitKind, HirMatchArm, HirMemberDef, HirMemberKind, HirMods, HirParam, HirPartialRangeKind,
     HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
+    HirVariantFieldDef,
 };
 pub use module::{HirExprId, HirLitId, HirModule, HirPatId, HirStore, HirTyId};
 pub use origin::HirOrigin;
-pub use pat::{HirPat, HirPatKind, HirRecordPatField};
+pub use pat::{HirPat, HirPatKind, HirRecordPatField, HirVariantPatArg};
 pub use ty::{HirDim, HirTy, HirTyField, HirTyKind};

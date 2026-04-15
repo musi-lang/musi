@@ -139,7 +139,7 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
         "std/io",
         r"
         export let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
     ",
         Some(&import_env),
@@ -153,9 +153,9 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
             r#"
         let IO := import "std/io";
         {binding}
-        handle request Console.readln() using Console {{
+        handle request Console.readLine() using Console {{
           value => value;
-          readln(k) => resume "ok";
+          readLine(k) => resume "ok";
         }};
     "#
         ),
@@ -188,7 +188,7 @@ fn opaque_imported_data_stays_abstract() {
         40,
         r"
         export opaque let Token := data {
-          | Token : Int
+          | Token(Int)
         };
         export let makeToken (value : Int) : Token := .Token(value);
     ",
@@ -209,14 +209,14 @@ fn opaque_imported_effect_hides_ops() {
         42,
         r"
         export opaque let Console := effect {
-          let readln () : Int;
+          let readLine () : Int;
         };
-        export let readln () : Int := request Console.readln();
+        export let readLine () : Int := request Console.readLine();
     ",
         r#"
         let A := import "a";
         let Console := A.Console;
-        let direct () : Int := request Console.readln();
+        let direct () : Int := request Console.readLine();
     "#,
     );
     assert!(
@@ -273,7 +273,7 @@ fn frozen_attr_requires_exported_non_opaque_data() {
         r"
         @frozen
         let Token := data {
-          | Token : Int
+          | Token(Int)
         };
     ",
     );
@@ -316,7 +316,7 @@ fn opaque_local_data_alias_stays_abstract() {
         45,
         r"
         let TokenBase := data {
-          | Token : Int
+          | Token(Int)
         };
         let TokenAlias := TokenBase;
         export opaque let Token := TokenAlias;
@@ -344,7 +344,7 @@ fn opaque_chained_local_data_alias_stays_abstract() {
         47,
         r"
         let TokenBase := data {
-          | Token : Int
+          | Token(Int)
         };
         let TokenMid := TokenBase;
         let TokenTop := TokenMid;
@@ -554,6 +554,55 @@ fn dot_call_resolves_attached_receiver_let() {
 }
 
 #[test]
+fn named_call_arguments_reorder_by_parameter_name() {
+    let sema = check(
+        r"
+        let render (port : Int, secure : Bool) : Int := port;
+        render(secure := 0 = 0, port := 8080);
+    ",
+    );
+    let call_id =
+        find_expr(&sema, |kind| matches!(kind, HirExprKind::Call { .. })).expect("call expr");
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(call_id).expect("call expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallArityMismatch),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallNamedArgumentUnknown),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn request_named_arguments_follow_effect_op_parameter_names() {
+    let sema = check(
+        r#"
+        let Console := effect {
+          let readLine (prompt : String) : String;
+        };
+        request Console.readLine(prompt := ">");
+    "#,
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidRequestTarget),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallNamedArgumentUnknown),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn dot_call_does_not_fallback_to_free_function() {
     let sema = check(
         r"
@@ -656,9 +705,9 @@ fn perform_effects_expose_textual_names() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        request Console.readln();
+        request Console.readLine();
     ",
     );
     let root = sema.module().root;
@@ -753,7 +802,7 @@ fn exported_class_and_effect_laws_keep_structured_params() {
           law reflexive (x : T) := .True;
         };
         export let Console := effect {
-          let readln () : String;
+          let readLine () : String;
           law total (attempts : Int) := .True;
         };
     ",
@@ -798,14 +847,14 @@ fn effectful_laws_report_purity_diag() {
     let sema = check(
         r#"
         let Console := effect {
-          let readln () : String;
-          law total () := request Console.readln() == "";
+          let readLine () : String;
+          law total () := request Console.readLine() == "";
         };
 
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
           law noisy (x : T) := (
-            request Console.readln();
+            request Console.readLine();
             .True
           );
         };
@@ -824,12 +873,12 @@ fn duplicate_handler_clause_reports_diag() {
     let sema = check(
         r#"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        handle request Console.readln() using Console {
+        handle request Console.readLine() using Console {
           value => value;
-          readln(k) => resume "ok";
-          readln(k) => resume "ok";
+          readLine(k) => resume "ok";
+          readLine(k) => resume "ok";
         };
     "#,
     );
@@ -1066,6 +1115,24 @@ fn explicit_type_apply_instantiates_local_generic_lets() {
     assert!(matches!(sema.ty(items[0]).kind, HirTyKind::Int));
     assert!(matches!(sema.ty(items[1]).kind, HirTyKind::String));
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn type_apply_instantiates_generic_values_stored_in_records() {
+    let sema = check(
+        r"
+        let id[T] (x : T) : T := x;
+        let tools := { id := id };
+        tools.id[Int](1);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    let root = sema.module().root;
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
 }
 
 #[test]
@@ -1385,6 +1452,31 @@ fn local_recursive_callable_let_typechecks() {
 }
 
 #[test]
+fn piped_calls_typecheck_without_binary_lowering_diag() {
+    let sema = check(
+        r"
+        export let add (left : Int, right : Int) : Int := left + right;
+        export let answer : Int := 1 |> add(2);
+    ",
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::TypeMismatch),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
     let sema = check("let answer := 1.x;");
     assert!(
@@ -1418,12 +1510,12 @@ fn open_effect_rows_absorb_extra_effects() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
         let State := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        let readOpen (x : Int) : String using { Console, ...r } := request State.readln();
+        let readOpen (x : Int) : String using { Console, ...r } := request State.readLine();
         readOpen(0);
     ",
     );
@@ -1451,12 +1543,12 @@ fn closed_effect_rows_reject_extra_effects() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
         let State := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        let readClosed (x : Int) : String using { Console } := request State.readln();
+        let readClosed (x : Int) : String using { Console } := request State.readLine();
         readClosed(0);
     ",
     );
@@ -1482,11 +1574,11 @@ fn handler_type_annotations_typecheck() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : Int;
+          let readLine () : Int;
         };
         let h : using Console (Int -> Int) := using Console {
           value => value;
-          readln(k) => resume 41;
+          readLine(k) => resume 41;
         };
         h;
     ",
@@ -1554,10 +1646,200 @@ fn sum_constructors_and_patterns_typecheck() {
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
 
+#[test]
+fn named_variant_fields_support_named_construction_and_shorthand_patterns() {
+    let sema = check(
+        r"
+        let Port := data {
+          | Configured(port : Int, secure : Bool)
+          | Default
+        };
+        let port : Port := .Configured(secure := 0 = 0, port := 8080);
+        let value : Int := match port (
+          | .Configured(port, secure := _) => port
+          | .Default => 0
+        );
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn mixed_variant_payload_style_reports_diag() {
+    let sema = check(
+        r"
+        let Port := data {
+          | Configured(Int, secure : Bool)
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::MixedVariantPayloadStyle),
+        "{:?}",
+        sema.diags()
+    );
+}
+
 fn find_expr(sema: &SemaModule, predicate: impl Fn(&HirExprKind) -> bool) -> Option<HirExprId> {
     sema.module()
         .store
         .exprs
         .iter()
         .find_map(|(id, expr)| predicate(&expr.kind).then_some(id))
+}
+
+#[test]
+fn foreign_call_requires_unsafe_block() {
+    let module = check(
+        r#"
+        foreign "c" let clock () : Int;
+        let value := clock();
+    "#,
+    );
+    assert!(has_diag(
+        &module,
+        SemaDiagKind::UnsafeCallRequiresUnsafeBlock
+    ));
+}
+
+#[test]
+fn foreign_call_inside_unsafe_block_passes_unsafe_check() {
+    let module = check(
+        r#"
+        foreign "c" let clock () : Int;
+        let value := unsafe { clock(); };
+    "#,
+    );
+    assert!(!has_diag(
+        &module,
+        SemaDiagKind::UnsafeCallRequiresUnsafeBlock
+    ));
+}
+
+#[test]
+fn higher_kinded_class_accepts_unary_data_constructor() {
+    let sema = check(
+        r"
+        let Option[T] := data {
+          | Some(T)
+          | None
+        };
+        let Functor[F : Type -> Type] := class {
+          let keep(value : F[Int]) : F[Int];
+        };
+        let optionFunctor := instance Functor[Option] {
+          let keep(value : Option[Int]) : Option[Int] := value;
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn higher_kinded_class_accepts_partial_type_application() {
+    let sema = check(
+        r"
+        let Box2[A, B] := data {
+          | Box2(A, B)
+        };
+        let Uses[F : Type -> Type] := class {
+          let keep(value : F[Int]) : F[Int];
+        };
+        let boxStringUses := instance Uses[Box2[String]] {
+          let keep(value : Box2[String, Int]) : Box2[String, Int] := value;
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn partial_let_is_accepted_as_totality_modifier() {
+    let sema = check("partial let parseInt(text : String) : Int := 0;");
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidPartialModifier),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::PartialForeignConflict),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn partial_non_let_reports_invalid_modifier() {
+    let sema = check("partial 1;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidPartialModifier),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn partial_foreign_reports_modifier_conflict() {
+    let sema = check("partial foreign \"c\" let clock () : Int;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::PartialForeignConflict),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn indexed_variant_result_clause_is_recorded() {
+    let sema = check(
+        r"
+        let Vec[T, n] := data {
+          | Nil() -> Vec[T, 0]
+          | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1]
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    let vec = sema.data_def("Vec").expect("Vec data definition");
+    assert!(
+        vec.variant("Nil")
+            .and_then(super::api::SemaDataVariantDef::result)
+            .is_some()
+    );
+    assert!(
+        vec.variant("Cons")
+            .and_then(super::api::SemaDataVariantDef::result)
+            .is_some()
+    );
+}
+
+#[test]
+fn type_equality_constraint_accepts_matching_type_application() {
+    let sema = check(
+        r"
+        let same[A, B] (value : A) : A where A ~= B := value;
+        let answer := same[Int, Int](42);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn type_equality_constraint_rejects_mismatched_type_application() {
+    let sema = check(
+        r"
+        let same[A, B] (value : A) : A where A ~= B := value;
+        let answer := same[Int, String](42);
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn type_universe_names_accept_numeric_levels() {
+    let sema = check("let id[T : Type0] (value : T) : T := value;");
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }

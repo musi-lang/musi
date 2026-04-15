@@ -1,12 +1,14 @@
 mod cli;
 
 use std::env::current_dir;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
 
 use clap::Parser;
 use cli::{Cli, Command, DiagnosticsFormatArg};
+use musi_lsp::run_stdio_server;
 use musi_native::NativeHost;
 use musi_project::{
     Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
@@ -42,12 +44,21 @@ enum MusiError {
     TaskFailed { name: String },
     #[error("run arguments unsupported")]
     RunArgsUnsupported,
-    #[error("package `{name}` already exists")]
-    PackageExists { name: String },
+    #[error("package path `{path}` already initialized")]
+    PackageAlreadyInitialized { path: PathBuf },
+    #[error("package name unavailable for `{path}`")]
+    MissingPackageName { path: PathBuf },
     #[error("target `{target}` not found in project")]
     UnknownTarget { target: PathBuf },
     #[error("check command failed")]
     CheckCommandFailed,
+    #[error("command `{command}` unavailable: {feature} not implemented")]
+    CommandUnavailable {
+        command: &'static str,
+        feature: &'static str,
+    },
+    #[error("lsp server failed: {message}")]
+    LspServerFailed { message: String },
 }
 
 fn main() -> ExitCode {
@@ -63,8 +74,9 @@ fn main() -> ExitCode {
 
 fn run() -> MusiResult {
     let cli = Cli::parse();
-    match cli.command {
-        Command::New { name } => new_package(&name),
+    let command = cli.command;
+    match command {
+        Command::Init { path } => init_package(path.as_deref()),
         Command::Check {
             target,
             diagnostics_format,
@@ -77,17 +89,38 @@ fn run() -> MusiResult {
         Command::Run { target, args } => run_project(target.as_deref(), &args),
         Command::Test { target } => test_project(target.as_deref()),
         Command::Task { name, target } => run_task(&name, target.as_deref()),
+        Command::Info { target } => print_project_metadata(target.as_deref()),
+        Command::Lsp => run_stdio_server().map_err(|source| MusiError::LspServerFailed {
+            message: source.to_string(),
+        }),
+        Command::Compile(_)
+        | Command::Fmt(_)
+        | Command::Lint(_)
+        | Command::Bench(_)
+        | Command::Doc(_)
+        | Command::Coverage(_)
+        | Command::Serve(_)
+        | Command::Repl(_)
+        | Command::Eval(_)
+        | Command::Install(_)
+        | Command::Add(_)
+        | Command::Remove(_)
+        | Command::Update(_)
+        | Command::Outdated(_)
+        | Command::Audit(_)
+        | Command::Publish(_)
+        | Command::Clean(_) => reserved_command_for(command),
     }
 }
 
-fn new_package(name: &str) -> MusiResult {
-    let root = current_dir()
-        .map_err(|_| MusiError::MissingCurrentDirectory)?
-        .join(name);
-    if root.exists() {
-        return Err(MusiError::PackageExists {
-            name: name.to_owned(),
-        });
+fn init_package(target: Option<&Path>) -> MusiResult {
+    let root = match target {
+        Some(path) => path.to_path_buf(),
+        None => current_dir().map_err(|_| MusiError::MissingCurrentDirectory)?,
+    };
+    let name = package_name_for_path(&root)?;
+    if package_marker_exists(&root) {
+        return Err(MusiError::PackageAlreadyInitialized { path: root });
     }
     fs::create_dir_all(&root).map_err(|source| ToolingError::ToolingIoFailed {
         path: root.clone(),
@@ -109,14 +142,39 @@ fn new_package(name: &str) -> MusiResult {
             source,
         }
     })?;
-    fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
-        ToolingError::ToolingIoFailed {
-            path: root.join(".gitignore"),
-            source,
-        }
-    })?;
+    if !root.join(".gitignore").exists() {
+        fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
+            ToolingError::ToolingIoFailed {
+                path: root.join(".gitignore"),
+                source,
+            }
+        })?;
+    }
     println!("{}", root.display());
     Ok(())
+}
+
+fn package_name_for_path(root: &Path) -> MusiResult<String> {
+    let canonical_root = root.canonicalize().ok();
+    let name_source = if root.file_name().is_some() {
+        root
+    } else {
+        canonical_root.as_deref().unwrap_or(root)
+    };
+    name_source
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| OsStr::new(""))
+        .to_str()
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| MusiError::MissingPackageName {
+            path: root.to_path_buf(),
+        })
+}
+
+fn package_marker_exists(root: &Path) -> bool {
+    root.join("musi.json").exists() || root.join("index.ms").exists()
 }
 
 fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiResult {
@@ -246,6 +304,47 @@ fn run_task(name: &str, target: Option<&Path>) -> MusiResult {
         run_task_command(&project, &task)?;
     }
     Ok(())
+}
+
+fn print_project_metadata(target: Option<&Path>) -> MusiResult {
+    let anchor = project_anchor(target)?;
+    let project = load_project_ancestor(anchor, ProjectOptions::default())?;
+    let entry = resolve_project_entry(&project, target)?;
+    let workspace = project.workspace();
+    println!("package: {}", entry.package.name);
+    println!("manifest: {}", project.root_manifest_path().display());
+    println!("entry: {}", entry.path.display());
+    println!("module: {}", entry.module_key.as_str());
+    println!("workspacePackages: {}", workspace.packages.len());
+    println!("workspaceMembers: {}", workspace.members.len());
+    println!("modules: {}", project.module_texts().count());
+    println!("lockfile: {}", project.lockfile_path().display());
+    Ok(())
+}
+
+fn reserved_command_for(command: Command) -> MusiResult {
+    let (command, feature, args) = match command {
+        Command::Compile(args) => ("compile", "native executable output", args.args),
+        Command::Fmt(args) => ("fmt", "formatter", args.args),
+        Command::Lint(args) => ("lint", "linter", args.args),
+        Command::Bench(args) => ("bench", "benchmark runner", args.args),
+        Command::Doc(args) => ("doc", "documentation generator", args.args),
+        Command::Coverage(args) => ("coverage", "coverage reporter", args.args),
+        Command::Serve(args) => ("serve", "HTTP server runtime", args.args),
+        Command::Repl(args) => ("repl", "interactive runtime", args.args),
+        Command::Eval(args) => ("eval", "inline evaluator", args.args),
+        Command::Install(args) => ("install", "package installer", args.args),
+        Command::Add(args) => ("add", "package dependency writer", args.args),
+        Command::Remove(args) => ("remove", "package dependency remover", args.args),
+        Command::Update(args) => ("update", "package updater", args.args),
+        Command::Outdated(args) => ("outdated", "package version reporter", args.args),
+        Command::Audit(args) => ("audit", "package audit", args.args),
+        Command::Publish(args) => ("publish", "registry publisher", args.args),
+        Command::Clean(args) => ("clean", "artifact cleaner", args.args),
+        _ => return Ok(()),
+    };
+    let _argument_count = args.len();
+    Err(MusiError::CommandUnavailable { command, feature })
 }
 
 fn run_task_command(project: &Project, task: &TaskSpec) -> MusiResult {

@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::iter::repeat;
 
 use music_arena::SliceRange;
 use music_hir::{HirDim, HirOrigin, HirTyField, HirTyId, HirTyKind};
@@ -20,6 +21,8 @@ type TypeSubstMap = HashMap<Symbol, HirTyId>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingScheme {
     pub type_params: Box<[Symbol]>,
+    pub type_param_kinds: Box<[HirTyId]>,
+    pub param_names: Box<[Symbol]>,
     pub constraints: Box<[ConstraintFacts]>,
     pub ty: HirTyId,
     pub effects: EffectRow,
@@ -57,6 +60,19 @@ impl PassBase<'_, '_, '_> {
         BindingScheme {
             type_params: export
                 .type_params
+                .iter()
+                .map(|name| ctx.intern(name))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            type_param_kinds: export
+                .type_param_kinds
+                .iter()
+                .copied()
+                .map(|ty| import_surface_ty(ctx, surface, ty))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            param_names: export
+                .param_names
                 .iter()
                 .map(|name| ctx.intern(name))
                 .collect::<Vec<_>>()
@@ -101,6 +117,15 @@ impl PassBase<'_, '_, '_> {
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         )
+        .with_type_param_kinds(
+            instance
+                .type_param_kinds
+                .iter()
+                .copied()
+                .map(|ty| import_surface_ty(ctx, surface, ty))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        )
         .with_constraints(
             instance
                 .constraints
@@ -113,6 +138,62 @@ impl PassBase<'_, '_, '_> {
 }
 
 impl CheckPass<'_, '_, '_> {
+    pub fn scheme_value_ty(&mut self, scheme: &BindingScheme) -> HirTyId {
+        if !matches!(self.ty(scheme.ty).kind, HirTyKind::Arrow { .. }) {
+            return scheme.ty;
+        }
+        let mut ty = scheme.ty;
+        let type_ty = self.builtins().type_;
+        let kinds = scheme
+            .type_param_kinds
+            .iter()
+            .copied()
+            .chain(repeat(type_ty))
+            .take(scheme.type_params.len())
+            .collect::<Vec<_>>();
+        for (binder, binder_ty) in scheme.type_params.iter().copied().zip(kinds).rev() {
+            ty = self.alloc_ty(HirTyKind::Pi {
+                binder,
+                binder_ty,
+                body: ty,
+                is_effectful: false,
+            });
+        }
+        ty
+    }
+
+    pub fn instantiate_pi_ty(
+        &mut self,
+        origin: HirOrigin,
+        ty: HirTyId,
+        args: &[HirTyId],
+    ) -> Option<InstantiatedBinding> {
+        let mut binders = Vec::new();
+        let mut body = ty;
+        while let HirTyKind::Pi {
+            binder,
+            binder_ty: _,
+            body: next,
+            is_effectful: _,
+        } = self.ty(body).kind
+        {
+            binders.push(binder);
+            body = next;
+        }
+        if binders.is_empty() {
+            return None;
+        }
+        let scheme = BindingScheme {
+            type_param_kinds: Box::default(),
+            type_params: binders.into_boxed_slice(),
+            param_names: Box::default(),
+            constraints: Box::default(),
+            ty: body,
+            effects: EffectRow::empty(),
+        };
+        self.instantiate_binding_scheme(origin, &scheme, args)
+    }
+
     pub fn instantiate_binding_scheme(
         &mut self,
         origin: HirOrigin,
@@ -246,15 +327,7 @@ impl PassBase<'_, '_, '_> {
             | HirTyKind::CPtr
             | HirTyKind::Module
             | HirTyKind::NatLit(_) => ty,
-            HirTyKind::Named { name, args } => {
-                if ctx.ty_ids(args).is_empty()
-                    && let Some(found) = subst.get(&name).copied()
-                {
-                    return found;
-                }
-                let args = ctx.substitute_ty_list(args, subst);
-                ctx.alloc_ty(HirTyKind::Named { name, args })
-            }
+            HirTyKind::Named { name, args } => ctx.substitute_named_ty(name, args, subst),
             HirTyKind::Pi {
                 binder,
                 binder_ty,
@@ -328,6 +401,23 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
+    fn substitute_named_ty(
+        &mut self,
+        name: Symbol,
+        args: SliceRange<HirTyId>,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        if let Some(found) = subst.get(&name).copied() {
+            if self.ty_ids(args).is_empty() {
+                return found;
+            }
+            let args = self.substitute_ty_list(args, subst);
+            return self.apply_substituted_type_constructor(found, args);
+        }
+        let args = self.substitute_ty_list(args, subst);
+        self.alloc_ty(HirTyKind::Named { name, args })
+    }
+
     fn substitute_tuple_ty(&mut self, items: SliceRange<HirTyId>, subst: &TypeSubstMap) -> HirTyId {
         let items = self.substitute_ty_list(items, subst);
         self.alloc_ty(HirTyKind::Tuple { items })
@@ -387,6 +477,26 @@ impl PassBase<'_, '_, '_> {
             .map(|ty| ctx.substitute_ty(ty, subst))
             .collect::<Vec<_>>();
         ctx.alloc_ty_list(tys)
+    }
+
+    fn apply_substituted_type_constructor(
+        &mut self,
+        constructor: HirTyId,
+        args: SliceRange<HirTyId>,
+    ) -> HirTyId {
+        match self.ty(constructor).kind {
+            HirTyKind::Named {
+                name,
+                args: existing_args,
+            } => {
+                let mut combined = self.ty_ids(existing_args);
+                combined.extend(self.ty_ids(args));
+                let args = self.alloc_ty_list(combined);
+                self.alloc_ty(HirTyKind::Named { name, args })
+            }
+            _ if self.ty_ids(args).is_empty() => constructor,
+            _ => constructor,
+        }
     }
 
     pub fn substitute_effect_row(&mut self, row: &EffectRow, subst: &TypeSubstMap) -> EffectRow {
@@ -462,6 +572,15 @@ impl CheckPass<'_, '_, '_> {
                 ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
                 false
             }
+            ConstraintKind::TypeEq => {
+                if ctx.ty_matches(obligation.subject, obligation.value)
+                    && ctx.ty_matches(obligation.value, obligation.subject)
+                {
+                    return true;
+                }
+                ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+                false
+            }
             ConstraintKind::Implements => ctx.solve_implements(origin, obligation, stack),
         }
     }
@@ -473,11 +592,11 @@ impl CheckPass<'_, '_, '_> {
         stack: &mut Vec<String>,
     ) -> Option<ConstraintEvidence> {
         match obligation.kind {
-            ConstraintKind::Subtype => self.solve_obligation(origin, obligation, stack).then_some(
-                ConstraintEvidence::Param {
+            ConstraintKind::Subtype | ConstraintKind::TypeEq => self
+                .solve_obligation(origin, obligation, stack)
+                .then_some(ConstraintEvidence::Param {
                     key: obligation.key(),
-                },
-            ),
+                }),
             ConstraintKind::Implements => {
                 self.resolve_implements_evidence(origin, obligation, stack)
             }
@@ -762,10 +881,8 @@ impl CheckPass<'_, '_, '_> {
     ) -> bool {
         let ctx = self;
         match ctx.ty(pattern).kind {
-            HirTyKind::Named { name, args }
-                if ctx.ty_ids(args).is_empty() && type_params.contains(&name) =>
-            {
-                ctx.unify_type_param(name, actual, subst)
+            HirTyKind::Named { name, args } if type_params.contains(&name) => {
+                ctx.unify_type_constructor_param(type_params, name, args, actual, subst)
             }
             HirTyKind::Named {
                 name: left_name,
@@ -835,6 +952,44 @@ impl CheckPass<'_, '_, '_> {
         }
         let _prev = subst.insert(name, actual);
         true
+    }
+
+    fn unify_type_constructor_param(
+        &mut self,
+        type_params: &[Symbol],
+        name: Symbol,
+        args: SliceRange<HirTyId>,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let pattern_args = self.ty_ids(args);
+        if pattern_args.is_empty() {
+            return self.unify_type_param(name, actual, subst);
+        }
+        let HirTyKind::Named {
+            name: actual_name,
+            args: actual_args,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        let actual_args = self.ty_ids(actual_args);
+        if actual_args.len() < pattern_args.len() {
+            return false;
+        }
+        let prefix_len = actual_args.len() - pattern_args.len();
+        let constructor_args = self.alloc_ty_list(actual_args[..prefix_len].iter().copied());
+        let constructor = self.alloc_ty(HirTyKind::Named {
+            name: actual_name,
+            args: constructor_args,
+        });
+        if !self.unify_type_param(name, constructor, subst) {
+            return false;
+        }
+        pattern_args
+            .into_iter()
+            .zip(actual_args[prefix_len..].iter().copied())
+            .all(|(pattern, actual)| self.unify_ty(type_params, pattern, actual, subst))
     }
 
     fn unify_named_ty(

@@ -32,11 +32,3 @@ export let endDescribe () :=
   Intrinsics.suiteEnd();
 export let it (name : String, passed : Bool) :=
   Intrinsics.testCase(name, passed);
-
-export let beforeAll (body : Unit -> Unit) : Unit := endDescribe();
-
-export let afterAll (body : Unit -> Unit) : Unit := endDescribe();
-
-export let beforeEach (body : Unit -> Unit) : Unit := endDescribe();
-
-export let afterEach (body : Unit -> Unit) : Unit := endDescribe();

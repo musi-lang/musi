@@ -33,6 +33,7 @@ pub(crate) struct SemaContextBuild {
     pub binding_types: HashMap<NameBindingId, HirTyId>,
     pub binding_schemes: HashMap<NameBindingId, BindingScheme>,
     pub binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
+    pub binding_module_targets: HashMap<NameBindingId, ModuleKey>,
 }
 
 pub(crate) struct SemaFactsBuild {

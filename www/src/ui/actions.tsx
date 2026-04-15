@@ -2,7 +2,7 @@ import type {
 	AnchorHTMLAttributes,
 	ButtonHTMLAttributes,
 	ReactNode,
-} from "react";
+} from "preact/compat";
 
 type ButtonTone = "primary" | "secondary" | "ghost";
 

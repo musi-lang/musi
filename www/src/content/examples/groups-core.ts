@@ -24,8 +24,8 @@ answer;`,
 		caption:
 			"One value may be present or missing. Musi does this with the real stdlib <code>Option</code> family.",
 		note: "Think of a spare house key: if the usual key exists, use it; otherwise use the backup. Musi expresses that choice with explicit constructors and <code>match</code>.",
-		sourceText: `let configured := Option.some[Int](8080);
-let port := Option.unwrapOr[Int](configured, 3000);`,
+		sourceText: `let port := Option.some[Int](8080)
+  |> Option.unwrapOr[Int](3000);`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 6,
@@ -53,7 +53,7 @@ let answer := twice(21);`,
 		note: "Like checking out a toolbox before work: import once, then use the tools by name. In Musi, imports are values you can pass around.",
 		sourceText: `let Option := import "@std/option";
 
-let value := Option.some(1);`,
+let value := 1 |> Option.some;`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 2,
@@ -79,14 +79,14 @@ export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));`,
 			"Use named fields directly in a <code>data</code> definition, then construct values from that shape.",
 		note: "Like filling out a passport form: named boxes with known defaults. This form keeps field intent explicit in the type itself.",
 		sourceText: `let User := data {
-  name : String;
-  age : Int := 0;
-};
+	  name : String;
+	  age : Int := 0;
+	};
 
-let user : User := { name := "Ada" };`,
+	let user : User := { name := "Ada" };`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 157,
+			path: "www/src/content/examples/groups-core.ts",
+			line: 76,
 		},
 	},
 	{

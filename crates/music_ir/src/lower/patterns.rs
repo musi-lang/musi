@@ -1,4 +1,5 @@
 use super::*;
+use music_hir::HirVariantPatArg;
 
 pub(super) fn collect_pattern_bindings(pattern: &IrCasePattern, out: &mut BoundNameSet) {
     match pattern {
@@ -91,7 +92,7 @@ fn lower_case_patterns(
         ),
         HirPatKind::Record { fields } => lower_record_case_patterns(sema, pat, fields, interner),
         HirPatKind::Variant { tag, args } => {
-            lower_variant_patterns(sema, pat, *tag, *args, interner)
+            lower_variant_patterns(sema, pat, *tag, args.clone(), interner)
         }
         HirPatKind::Or { left, right } => {
             let mut out = lower_case_patterns(sema, *left, interner);
@@ -200,7 +201,7 @@ fn lower_variant_patterns(
     sema: &SemaModule,
     pat: HirPatId,
     tag: Ident,
-    args: SliceRange<HirPatId>,
+    args: SliceRange<HirVariantPatArg>,
     interner: &Interner,
 ) -> Vec<IrCasePattern> {
     let ty = sema
@@ -227,18 +228,72 @@ fn lower_variant_patterns(
     let Some(variant_count) = u16::try_from(data.variant_count()).ok() else {
         return Vec::new();
     };
+    let Some(variant) = data.variant(tag_name) else {
+        return Vec::new();
+    };
+    let pat_args = ordered_variant_pat_args(sema, variant, args, interner);
 
-    lower_product_patterns(
-        sema,
-        sema.module().store.pat_ids.get(args),
-        interner,
-        |items| IrCasePattern::Variant {
-            data_key: data.key().clone(),
-            variant_count,
-            tag_index,
-            args: items,
-        },
-    )
+    lower_product_patterns(sema, &pat_args, interner, |items| IrCasePattern::Variant {
+        data_key: data.key().clone(),
+        variant_count,
+        tag_index,
+        args: items,
+    })
+}
+
+fn ordered_variant_pat_args(
+    sema: &SemaModule,
+    variant: &SemaDataVariantDef,
+    args: SliceRange<HirVariantPatArg>,
+    interner: &Interner,
+) -> Vec<HirPatId> {
+    let arg_nodes = sema.module().store.variant_pat_args.get(args);
+    if !variant.field_names().iter().any(Option::is_some) {
+        return arg_nodes.iter().map(|arg| arg.pat).collect();
+    }
+    let mut ordered = vec![None; variant.field_names().len()];
+    for arg in arg_nodes {
+        let Some(name) = variant_pat_arg_name(sema, variant, arg, interner) else {
+            invalid_lowering_path("named variant pattern missing field name after sema");
+        };
+        let Some(index) = variant
+            .field_names()
+            .iter()
+            .position(|field| field.as_deref() == Some(name.as_ref()))
+        else {
+            invalid_lowering_path("unknown named variant pattern field after sema");
+        };
+        ordered[index] = Some(arg.pat);
+    }
+    ordered
+        .into_iter()
+        .map(|pat| {
+            pat.unwrap_or_else(|| {
+                invalid_lowering_path("missing named variant pattern field after sema")
+            })
+        })
+        .collect()
+}
+
+fn variant_pat_arg_name(
+    sema: &SemaModule,
+    variant: &SemaDataVariantDef,
+    arg: &HirVariantPatArg,
+    interner: &Interner,
+) -> Option<Box<str>> {
+    if let Some(name) = arg.name {
+        return Some(interner.resolve(name.name).into());
+    }
+    let HirPatKind::Bind { name } = sema.module().store.pats.get(arg.pat).kind else {
+        return None;
+    };
+    let binder_name = interner.resolve(name.name);
+    variant
+        .field_names()
+        .iter()
+        .flatten()
+        .any(|field_name| field_name.as_ref() == binder_name)
+        .then(|| binder_name.into())
 }
 
 fn lower_lit_pattern(sema: &SemaModule, expr: HirExprId) -> Option<IrCasePattern> {

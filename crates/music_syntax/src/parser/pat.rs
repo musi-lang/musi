@@ -64,7 +64,7 @@ impl Parser<'_> {
     }
 
     fn parse_variant_pattern(&mut self) -> SyntaxNodeParseResult {
-        self.parse_variant_like(SyntaxNodeKind::VariantPat, Parser::parse_pattern)
+        self.parse_variant_pat_like()
     }
 
     fn parse_record_pattern(&mut self) -> SyntaxNodeParseResult {

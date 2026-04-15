@@ -161,6 +161,10 @@ pub enum VmErrorKind {
     ForeignCallRejected {
         foreign: Box<str>,
     },
+    PointerIntrinsicFailed {
+        intrinsic: Box<str>,
+        detail: Box<str>,
+    },
     NativeCallFailed {
         foreign: Box<str>,
         stage: NativeFailureStage,
@@ -363,6 +367,9 @@ impl VmErrorKind {
             }
             Self::ForeignCallRejected { foreign } => {
                 write!(f, "foreign call rejected for `{foreign}`")
+            }
+            Self::PointerIntrinsicFailed { intrinsic, detail } => {
+                write!(f, "pointer intrinsic `{intrinsic}` failed (`{detail}`)")
             }
             Self::CallArityMismatch {
                 callee,

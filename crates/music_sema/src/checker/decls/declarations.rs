@@ -3,12 +3,14 @@ use std::collections::BTreeMap;
 use music_arena::SliceRange;
 use music_hir::{
     HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirMemberKind,
-    HirPatKind, HirTyId, HirTyKind, HirVariantDef,
+    HirPatKind, HirTyId, HirTyKind, HirVariantDef, HirVariantFieldDef,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::exprs::check_expr;
+use super::super::schemes::BindingScheme;
 use super::super::surface::surface_key;
+use super::super::variant_payload::lower_variant_payload;
 use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
@@ -80,17 +82,19 @@ pub(in super::super) fn member_law_facts(
 pub(in super::super) fn check_foreign_let(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
+    type_params: Box<[Symbol]>,
+    type_param_kinds: Box<[HirTyId]>,
 ) -> Option<HirTyId> {
-    ctx.check_foreign_let(expr_id)
+    ctx.check_foreign_let(expr_id, type_params, type_param_kinds)
 }
 
 impl CheckPass<'_, '_, '_> {
     fn check_data_expr(&mut self, variants: VariantDefRange, fields: FieldDefRange) -> ExprFacts {
         let builtins = self.builtins();
         for variant in self.variants(variants) {
-            if let Some(arg) = variant.arg {
-                let origin = self.expr(arg).origin;
-                let _ = self.lower_type_expr(arg, origin);
+            for field in self.variant_fields(variant.fields) {
+                let origin = self.expr(field.ty).origin;
+                let _ = self.lower_type_expr(field.ty, origin);
             }
             if let Some(value) = variant.value {
                 let _ = check_expr(self, value);
@@ -138,7 +142,12 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(self.builtins().type_, EffectRow::empty())
     }
 
-    fn check_foreign_let(&mut self, expr_id: HirExprId) -> Option<HirTyId> {
+    fn check_foreign_let(
+        &mut self,
+        expr_id: HirExprId,
+        type_params: Box<[Symbol]>,
+        type_param_kinds: Box<[HirTyId]>,
+    ) -> Option<HirTyId> {
         let builtins = self.builtins();
         let abi: Box<str> = self
             .expr(expr_id)
@@ -163,6 +172,7 @@ impl CheckPass<'_, '_, '_> {
             return None;
         }
         if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+            self.mark_unsafe_binding(binding);
             let link = self.link_info_from_attrs(&attrs);
             if link.name.is_some() || link.symbol.is_some() {
                 self.set_foreign_link(binding, link);
@@ -173,6 +183,12 @@ impl CheckPass<'_, '_, '_> {
             self.diag(origin.span, DiagKind::ForeignSignatureRequired, "");
             return None;
         };
+        let param_names = self
+            .params(params.clone())
+            .into_iter()
+            .map(|param| param.name.name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let params = self.lower_params(params);
         let result = sig.map_or(builtins.unknown, |sig| {
             let origin = self.expr(sig).origin;
@@ -185,7 +201,20 @@ impl CheckPass<'_, '_, '_> {
             is_effectful: false,
         });
         if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
-            self.insert_binding_type(binding, ty);
+            let scheme = BindingScheme {
+                type_params,
+                type_param_kinds,
+                param_names,
+                constraints: Box::default(),
+                ty,
+                effects: EffectRow::empty(),
+            };
+            let value_ty = self.scheme_value_ty(&scheme);
+            self.insert_binding_type(binding, value_ty);
+            self.insert_binding_effects(binding, EffectRow::empty());
+            self.insert_binding_scheme(binding, scheme);
+            self.validate_foreign_let(expr_id, abi.as_ref());
+            return Some(value_ty);
         }
         self.validate_foreign_let(expr_id, abi.as_ref());
         Some(ty)
@@ -334,14 +363,19 @@ impl CheckPass<'_, '_, '_> {
             let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
             for variant in self.variants(variants.clone()) {
                 let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
-                let payload = variant.arg.map(|expr| {
-                    let origin = self.expr(expr).origin;
-                    self.lower_type_expr(expr, origin)
-                });
-                let field_tys =
-                    payload.map_or_else(Box::<[_]>::default, |ty| flatten_data_field_tys(self, ty));
-                let prev =
-                    variant_map.insert(tag, super::super::DataVariantDef::new(payload, field_tys));
+                let variant_fields = self.variant_fields(variant.fields);
+                if variant_payload_style_is_mixed(&variant_fields) {
+                    self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
+                }
+                let (payload, field_tys, field_names) =
+                    lower_variant_payload(self, &variant_fields);
+                let result = variant
+                    .result
+                    .map(|expr| self.lower_type_expr(expr, variant.origin));
+                let prev = variant_map.insert(
+                    tag,
+                    super::super::DataVariantDef::new(payload, result, field_tys, field_names),
+                );
                 if prev.is_some() {
                     self.diag(
                         variant.origin.span,
@@ -363,7 +397,7 @@ impl CheckPass<'_, '_, '_> {
                 if !field_tys.is_empty() {
                     let _ = variant_map.insert(
                         data_name.clone(),
-                        super::super::DataVariantDef::new(None, field_tys),
+                        super::super::DataVariantDef::new(None, None, field_tys, Box::default()),
                     );
                 }
             }
@@ -393,7 +427,15 @@ impl CheckPass<'_, '_, '_> {
                     let facts = member_signature(self, member, false);
                     (
                         Box::<str>::from(self.resolve_symbol(member.name.name)),
-                        EffectOpDef::new(facts.params.clone(), facts.result),
+                        EffectOpDef::new(
+                            facts.params.clone(),
+                            self.params(member.params.clone())
+                                .into_iter()
+                                .map(|param| param.name.name)
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                            facts.result,
+                        ),
                     )
                 })
                 .collect::<BTreeMap<_, _>>();
@@ -470,11 +512,10 @@ impl CheckPass<'_, '_, '_> {
     }
 }
 
-fn flatten_data_field_tys(ctx: &CheckPass<'_, '_, '_>, ty: HirTyId) -> Box<[HirTyId]> {
-    match &ctx.ty(ty).kind {
-        HirTyKind::Tuple { items } => ctx.ty_ids(*items).into_boxed_slice(),
-        _ => vec![ty].into_boxed_slice(),
-    }
+fn variant_payload_style_is_mixed(fields: &[HirVariantFieldDef]) -> bool {
+    let has_named = fields.iter().any(|field| field.name.is_some());
+    let has_positional = fields.iter().any(|field| field.name.is_none());
+    has_named && has_positional
 }
 
 // Attribute and export wrappers live in `HirExpr.mods`, not `HirExprKind`.

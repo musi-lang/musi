@@ -68,6 +68,7 @@ pub enum Opcode {
     TyChk,
     TyCast,
     TyId,
+    TyApply,
     HdlPush,
     HdlPop,
     EffInvk,
@@ -75,6 +76,7 @@ pub enum Opcode {
     EffResume,
     FfiCall,
     FfiCallSeq,
+    FfiRef,
     ModLoad,
     ModGet,
 }
@@ -506,6 +508,13 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         wire_code: 0x0703,
     },
     OpcodeInfo {
+        opcode: Opcode::TyApply,
+        family: OpcodeFamily::Ty,
+        mnemonic: "ty.apply",
+        operand_shape: OperandShape::I16,
+        wire_code: 0x0704,
+    },
+    OpcodeInfo {
         opcode: Opcode::HdlPush,
         family: OpcodeFamily::Eff,
         mnemonic: "hdl.push",
@@ -553,6 +562,13 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         mnemonic: "ffi.call.seq",
         operand_shape: OperandShape::Foreign,
         wire_code: 0x0902,
+    },
+    OpcodeInfo {
+        opcode: Opcode::FfiRef,
+        family: OpcodeFamily::Ffi,
+        mnemonic: "ffi.ref",
+        operand_shape: OperandShape::Foreign,
+        wire_code: 0x0903,
     },
     OpcodeInfo {
         opcode: Opcode::ModLoad,

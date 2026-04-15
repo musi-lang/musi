@@ -2,9 +2,7 @@ export let empty[T] () : []T := [];
 
 export let once[T] (value : T) : []T := [value];
 
-export let fromArray[T] (values : []T) : []T := [...values];
-
-export let chain[T] (left : []T, right : []T) : []T := [...left, ...right];
+export let concat[T] (left : []T, right : []T) : []T := [...left, ...right];
 
 export let append[T] (iter : []T, value : T) : []T := [...iter, value];
 
@@ -20,8 +18,10 @@ export let isEmpty[T] (iter : []T) : Bool :=
   | _ => 0 = 1
   );
 
-export let nonEmpty[T] (iter : []T) : Bool :=
-  match iter (
-  | [] => 0 = 1
+export let invert (value : Bool) : Bool :=
+  match value (
+  | _ if value => 0 = 1
   | _ => 0 = 0
   );
+
+export let nonEmpty[T] (iter : []T) : Bool := invert(isEmpty[T](iter));

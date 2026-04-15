@@ -1,31 +1,52 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const distDir = join(import.meta.dir, "..", "dist");
 
-const routeChecks = [
-	{ path: "index.html", lang: "en" },
-	{ path: join("community", "index.html"), lang: "en" },
-	{ path: join("ja", "index.html"), lang: "ja" },
-	{ path: join("ja", "community", "index.html"), lang: "ja" },
-] as const;
+const rootHtmlPattern = /<html\b(?<attributes>[^>]*)>/i;
+const langAttributePattern = /\blang\s*=\s*(?<quote>["'])en\k<quote>/i;
 
-const htmlLangPattern = /<html lang="(?<lang>[^"]+)"/;
+async function htmlFiles(directory: string): Promise<string[]> {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const paths: string[] = [];
+	for (const entry of entries) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			paths.push(...(await htmlFiles(path)));
+			continue;
+		}
+		if (entry.name.endsWith(".html")) {
+			paths.push(path);
+		}
+	}
+	return paths;
+}
 
 async function main() {
-	for (const route of routeChecks) {
-		const html = await readFile(join(distDir, route.path), "utf8");
-		const match = html.match(htmlLangPattern);
-		const lang = match?.groups?.["lang"];
+	const files = await htmlFiles(distDir);
+	if (files.length === 0) {
+		throw new Error("no html files found in dist");
+	}
 
-		if (lang !== route.lang) {
+	for (const file of files) {
+		const html = await readFile(file, "utf8");
+		const routePath = file.slice(distDir.length + 1);
+		const match = html.match(rootHtmlPattern);
+		const groups = match?.groups as { attributes?: string } | undefined;
+		const attributes = groups?.attributes;
+
+		if (!attributes) {
+			throw new Error(`missing root html tag for ${routePath}`);
+		}
+
+		if (!langAttributePattern.test(attributes)) {
 			throw new Error(
-				`lang mismatch for ${route.path}: expected ${route.lang}, got ${lang ?? "missing"}`,
+				`lang mismatch for ${routePath}: expected root lang="en"`,
 			);
 		}
 	}
 
-	console.log("lang verified for representative prerendered routes");
+	console.log(`lang verified for ${files.length} html files`);
 }
 
 main().catch((error) => {

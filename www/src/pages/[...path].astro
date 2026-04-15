@@ -1,0 +1,16 @@
+---
+import SiteDocument from "../layout/site-document.astro";
+import { appRoutes } from "../routes";
+
+export function getStaticPaths() {
+	return appRoutes
+		.filter((route) => route.path !== "/")
+		.map((route) => ({
+			params: { path: route.path.slice(1) },
+			props: { route },
+		}));
+}
+
+const { route } = Astro.props;
+---
+<SiteDocument route={route} />

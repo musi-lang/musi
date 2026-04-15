@@ -142,7 +142,7 @@ impl Parser<'_> {
 
     fn parse_constraint(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
-        let op = if self.at_any(&[TokenKind::LtColon, TokenKind::Colon]) {
+        let op = if self.at_any(&[TokenKind::LtColon, TokenKind::Colon, TokenKind::TildeEq]) {
             self.advance_element()
         } else {
             return Err(self.expected_constraint_operator());
@@ -246,7 +246,10 @@ impl Parser<'_> {
     }
 
     pub(crate) fn parse_type_param(&mut self) -> ParseResult<SyntaxNodeId> {
-        let ident = self.expect_ident_element()?;
-        Ok(self.node1(SyntaxNodeKind::TypeParam, ident))
+        let mut children = vec![self.expect_ident_element()?];
+        self.parse_optional_typed_expr(&mut children)?;
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::TypeParam, children))
     }
 }

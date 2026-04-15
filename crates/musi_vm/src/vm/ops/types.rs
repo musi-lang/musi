@@ -1,5 +1,7 @@
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
+use crate::VmValueKind;
+
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
@@ -31,6 +33,31 @@ impl Vm {
                     return Err(Self::invalid_operand(instruction));
                 };
                 self.push_value(Value::Type(ty))?;
+                Ok(StepOutcome::Continue)
+            }
+            Opcode::TyApply => {
+                let Operand::I16(count) = instruction.operand else {
+                    return Err(Self::invalid_operand(instruction));
+                };
+                let count =
+                    usize::try_from(count).map_err(|_| Self::invalid_operand(instruction))?;
+                let mut type_args = Vec::with_capacity(count);
+                for _ in 0..count {
+                    let value = self.pop_value()?;
+                    let Value::Type(ty) = value else {
+                        return Err(Self::invalid_value_kind(VmValueKind::Type, &value));
+                    };
+                    type_args.push(ty);
+                }
+                type_args.reverse();
+                let value = self.pop_value()?;
+                let applied = match value {
+                    Value::Foreign(foreign) => {
+                        Value::Foreign(foreign.with_type_args(type_args.into_boxed_slice()))
+                    }
+                    other => other,
+                };
+                self.push_value(applied)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::TyChk => {

@@ -1,43 +1,23 @@
 ---
-title: "Blocks and expressions"
-description: "Learn block flow before adding mutation or larger control forms."
+title: "Blocks and Expressions"
+description: "Learn how blocks produce results, why Musi does not need `return`, and how to model repetition without loop statements."
 group: "Start"
 section: "Start"
 order: 4
 slug: "blocks-and-expressions"
-summary: "Understand how grouped expressions produce one final value."
+summary: "Treat a block as one expression with setup at the top and the result at the bottom."
 ---
+
+A block groups several steps and produces one value. That makes blocks useful anywhere Musi expects an expression.
 
 {{snippet:chapter-blocks-and-expressions}}
 
-## What
+Read the block like a small workbench. `base` and `offset` are tools laid out inside the bench. `base + offset` is the item that leaves the bench. The surrounding code sees only the final value.
 
-A block groups several steps and still counts as one expression.
-Inside the block you can introduce helper bindings, and the last line becomes the value the whole block produces.
-That makes Musi feel expression-first even when the code has multiple stages.
+This matters because the same block shape appears in function bodies, match arms, handlers, and unsafe scopes. Once "last expression wins" feels natural, many later features become smaller.
 
-## Why
+## Local Names
 
-Beginners often expect grouped code to behave like statement braces from JavaScript or C-family languages.
-That expectation causes confusion about "where does this return from?" or "why is last line not ignored?"
-Learning block result flow early prevents that confusion before you meet `match`, handlers, or larger definitions built from same idea.
+Names introduced inside a block stay inside that block. Use a block when a calculation needs helper names but outside code should only see the result.
 
-## How
-
-Read the block from top to bottom.
-`let base := 8000;` is local setup. `base + 80` is not a random trailing line; it is result of whole block.
-When you write your own block, put setup first, keep one clear final expression last, and ask what value the whole group should produce.
-
-## Try it
-
-- Create one block with a helper binding.
-- Put arithmetic expression last.
-- Replace last line and see how block result changes.
-
-## Common mistake
-
-Do not read grouped Musi code as if only explicit `return` can produce a value.
-
-## Next
-
-Continue to [Mutation](/docs/language/start/mutation) to see what changes when a value is meant to vary over time.
+Continue to [Mutation](/learn/book/start/foundations/mutation).

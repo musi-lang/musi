@@ -58,7 +58,10 @@ fn foreign_signature_tys(
     _params: HirParamRange,
 ) -> (Box<[Box<str>]>, Box<str>) {
     if let Some(binding) = binding
-        && let Some(ty) = sema.binding_type(binding)
+        && let Some(ty) = sema
+            .binding_scheme(binding)
+            .map(|scheme| scheme.ty)
+            .or_else(|| sema.binding_type(binding))
         && let HirTyKind::Arrow { params, ret, .. } = &sema.ty(ty).kind
     {
         let param_tys = sema

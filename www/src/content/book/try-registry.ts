@@ -27,7 +27,7 @@ export const tryBlocks = [
 		id: "files-packages-and-entry",
 		title: "Try it",
 		steps: [
-			"Create a package with `musi new hello`.",
+			"Create a package with `musi init hello`.",
 			"Open the generated entry file.",
 			"Run `musi run` from the package root.",
 		],

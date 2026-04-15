@@ -12,6 +12,17 @@ where
         self.alloc_expr(origin, HirExprKind::Sequence { exprs })
     }
 
+    pub(super) fn lower_unsafe_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let exprs = node
+            .child_nodes()
+            .map(|child| self.lower_sequence_or_stmt_expr(child))
+            .collect::<Vec<_>>();
+        let exprs = self.store.alloc_expr_list(exprs);
+        let body = self.alloc_expr(origin, HirExprKind::Sequence { exprs });
+        self.alloc_expr(origin, HirExprKind::Unsafe { body })
+    }
+
     pub(super) fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let Some(tok) = node

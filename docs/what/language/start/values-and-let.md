@@ -1,43 +1,27 @@
 ---
-title: "Values and let"
-description: "Learn Musi's core binding form before adding more syntax."
+title: "Values and Let"
+description: "Learn what `let` means in Musi, how names are introduced, and when `let rec` matters."
 group: "Start"
 section: "Start"
 order: 3
 slug: "values-and-let"
-summary: "Bind names with let and read the file top to bottom."
+summary: "Use `let` to name values, define callables, and understand when recursion needs `let rec`."
 ---
+
+`let` introduces a name. That one idea carries plain values, functions, data definitions, effects, classes, and many other declarations.
 
 {{snippet:chapter-values-and-let}}
 
-## What
+Read `let port := 8080;` as "bind the name `port` to this value." The later binding can use it because the first binding is already in scope. Nothing here mutates `port`; a new name receives the next value.
 
-`let` is Musi's everyday binding form.
-You use it for plain values, and later you will see same starting shape again for functions, methods, modules, and other definitions.
-That makes `let` worth learning deeply instead of treating it as throwaway beginner syntax.
+A spreadsheet analogy helps: one cell names an input, another cell derives from it, and the formula tells you which value depends on which.
 
-## Why
+## Recursive Names
 
-Users ask "how do I name a value and reuse it?" before they ask bigger questions.
-A good answer is not only syntax shape, but also why the shape stays important as the language grows.
-Once `let` feels ordinary, many later chapters stop looking like brand-new grammar and start looking like familiar definitions with more detail attached.
+Use `let rec` when a definition must refer to itself while being defined. That is how repeated work can be expressed without making loops the first tool.
 
-## How
+{{snippet:recursive-case}}
 
-Read `let port := 8080;` as one stable binding between a name and a value.
-Keep the name close to where you will use it so the file stays readable without scrolling around for context.
-Then end with `port;` or derive one more binding from it so you can feel the difference between introducing a value and using one.
+`loop` can call itself because the definition starts with `let rec`. Read the match arms as the two roads through the calculation: stop at zero, or call `loop` again with a smaller number.
 
-## Try it
-
-- Bind one number with `let`.
-- Add a second binding derived from first.
-- End the file with derived value.
-
-## Common mistake
-
-Do not assume `let` is only for top-level constants and not for the rest of language surface.
-
-## Next
-
-Continue to [Blocks and expressions](/docs/language/start/blocks-and-expressions) to see how several bindings can still produce one final value.
+Continue to [Blocks and Expressions](/learn/book/start/foundations/blocks-and-expressions).

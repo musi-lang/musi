@@ -269,14 +269,14 @@ fn rejects_opaque_exports_from_root_and_dynamic_modules() {
     let dep = compile_program(
         &[(
             "dep",
-            "export opaque let Hidden := data { | Hidden : Int }; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
         )],
         "dep",
     );
     let main = compile_program(
         &[(
             "main",
-            "export opaque let Secret := data { | Secret : Int }; export let root () : Int := 0;",
+            "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
         )],
         "main",
     );
@@ -336,11 +336,11 @@ fn handles_effect_value_clause_and_resume() {
         &[(
             "main",
             r"
-            let Console := effect { let readln () : Int; };
+            let Console := effect { let readLine () : Int; };
             export let answer () : Int :=
-              handle request Console.readln() using Console {
+              handle request Console.readLine() using Console {
                 value => value + 1;
-                readln(k) => resume 41;
+                readLine(k) => resume 41;
               };
         ",
         )],
@@ -366,12 +366,12 @@ fn reuses_handler_value_and_executes_range_membership_and_spread() {
             let Bool := Core.Bool;
             let Int := Core.Int;
             let Rangeable := Core.Rangeable;
-            let Console := effect { let readln () : Int; };
+            let Console := effect { let readLine () : Int; };
             let ConsoleHandler := using Console {
               value => value + 1;
-              readln(k) => resume 41;
+              readLine(k) => resume 41;
             };
-            export let handled () : Int := handle request Console.readln() using ConsoleHandler;
+            export let handled () : Int := handle request Console.readLine() using ConsoleHandler;
             export let contains () : Bool := (
               let span := 1 ..< 4;
               2 in span
@@ -415,9 +415,9 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
             foreign "c" (
               let puts (value : Int) : Int;
             );
-            let Console := effect { let readln (prompt : String) : Int; };
-            export let call_puts () : Int := puts(1);
-            export let call_readln () : Int := request Console.readln(">");
+            let Console := effect { let readLine (prompt : String) : Int; };
+            export let call_puts () : Int := unsafe { puts(1); };
+            export let call_readLine () : Int := request Console.readLine(">");
         "#,
         )],
         "main",
@@ -434,7 +434,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
         .call_export("call_puts", &[])
         .expect("foreign call should succeed");
     let effect_value = vm
-        .call_export("call_readln", &[])
+        .call_export("call_readLine", &[])
         .expect("effect call should succeed");
 
     assert_eq!(foreign_value, Value::Int(7));
@@ -447,7 +447,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
     assert_eq!(log.foreign_calls[0].2.as_ref(), "Int");
     assert_eq!(log.effect_calls.len(), 1);
     assert_eq!(log.effect_calls[0].0.as_ref(), "main::Console");
-    assert_eq!(log.effect_calls[0].1.as_ref(), "readln");
+    assert_eq!(log.effect_calls[0].1.as_ref(), "readLine");
     assert_eq!(log.effect_calls[0].2.len(), 1);
     assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
     assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
@@ -480,7 +480,7 @@ fn exposes_data_layout_descriptors_for_named_types() {
         &[(
             "main",
             r"
-            let Maybe := data { | Some : Int | None };
+            let Maybe := data { | Some(Int) | None };
             export let answer () : Int := 0;
         ",
         )],

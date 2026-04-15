@@ -102,6 +102,8 @@ kw-export   = %x65.78.70.6F.72.74
 
 kw-foreign  = %x66.6F.72.65.69.67.6E
 
+kw-partial  = %x70.61.72.74.69.61.6C
+
 kw-forall   = %x66.6F.72.61.6C.6C
 
 kw-handle   = %x68.61.6E.64.6C.65
@@ -135,6 +137,8 @@ kw-opaque   = %x6F.70.61.71.75.65
 kw-or       = %x6F.72
 
 kw-request  = %x72.65.71.75.65.73.74
+
+kw-unsafe   = %x75.6E.73.61.66.65
 
 kw-quote    = %x71.75.6F.74.65
 
@@ -173,6 +177,8 @@ gt-eq             = ">="
 pipe-gt           = "|>"
 
 tilde-gt          = "~>"
+
+tilde-eq          = "~="
 
 colon-question    = ":?"
 ; --- Prefixes ---
@@ -358,6 +364,7 @@ infix-op         = colon-eq
                    / pipe-gt
                    / minus-gt
                    / tilde-gt
+                   / tilde-eq
                    / kw-or
                    / kw-xor
                    / kw-and
@@ -430,6 +437,7 @@ atom                  = literal
                         / class-expr
                         / instance-expr
                         / request-expr
+                        / unsafe-expr
                         / handle-expr
                         / quote-expr
                         / with-mods-expr
@@ -470,7 +478,12 @@ record-field          = ident [colon-eq expr]
 
 spread                = dot-dot-dot expr
 
-dot-prefix-expr       = dot ident [lparen [expr-list] rparen]
+dot-prefix-expr       = dot ident [lparen [variant-arg-list] rparen]
+
+variant-arg-list      = variant-arg *(comma variant-arg) [comma]
+
+variant-arg           = ident colon-eq expr
+                        / expr
 
 resume-expr           = kw-resume [expr]
 
@@ -486,7 +499,8 @@ let-head              = receiver-let-head
 
 receiver-let-head     = lparen [kw-mut] ident colon expr rparen dot ident
 
-bracket-params        = lbracket ident *(comma ident) [comma] rbracket
+bracket-params        = lbracket bracket-param *(comma bracket-param) [comma] rbracket
+bracket-param         = ident [type-annot]
 
 using-clause          = kw-using effect-set
 
@@ -499,7 +513,13 @@ data-body             = variant-list
 
 variant-list          = [pipe] variant *(pipe variant) [pipe]
 
-variant               = [attrs] ident [colon expr] [colon-eq expr]
+variant               = [attrs] ident [variant-payload-defs] [minus-gt expr] [colon-eq expr]
+
+variant-payload-defs  = lparen variant-payload-def *(comma variant-payload-def)
+                        [comma] rparen
+
+variant-payload-def   = ident colon expr
+                        / expr
 
 rec-def-fields        = [semicolon] rec-def-field *(semicolon rec-def-field)
                         [semicolon]
@@ -520,6 +540,8 @@ instance-expr         = kw-instance [bracket-params] expr [where-clause]
                         instance-body
 
 request-expr          = kw-request expr
+
+unsafe-expr           = kw-unsafe lbrace *stmt rbrace
 
 handle-expr           = kw-handle expr (handler-expr / (kw-using prefix-expr))
 
@@ -543,16 +565,14 @@ with-attrs-expr       = with-mods-expr
 export-mod      = kw-export [kw-opaque]
 
 foreign-mod     = kw-foreign [string-lit]
+partial-mod     = kw-partial
 
 modifier        = attr
                   / export-mod
                   / foreign-mod
+                  / partial-mod
 
-with-mods-expr  = attrs [export-mod] [foreign-mod] (expr / foreign-let-group /
-                  let-expr)
-                  / export-mod [foreign-mod] (expr / foreign-let-group /
-                    let-expr)
-                  / foreign-mod (foreign-let-group / let-expr)
+with-mods-expr  = 1*modifier (expr / foreign-let-group / let-expr)
 
 let-rest        = [let-modifier] pattern [bracket-params] [params] [type-annot]
                   [where-clause] [using-clause] [colon-eq expr]
@@ -586,6 +606,7 @@ where-clause   = kw-where constraint *(comma constraint) [comma]
 
 constraint     = ident lt-colon expr
                  / ident colon expr
+                 / ident tilde-eq expr
 ; --- Patterns ---
 pattern         = pattern-as *(kw-or pattern-as)
 
@@ -594,10 +615,15 @@ pattern-as      = pattern-primary [kw-as ident]
 pattern-primary = underscore
                   / literal
                   / ident
-                  / dot ident [lparen [pat-list] rparen]
+                  / dot ident [lparen [variant-pat-arg-list] rparen]
                   / lbrace [rec-pat-fields] rbrace
                   / lparen [pat-list] rparen
                   / lbracket [pat-list] rbracket
+
+variant-pat-arg-list = variant-pat-arg *(comma variant-pat-arg) [comma]
+
+variant-pat-arg      = ident colon-eq pattern
+                       / pattern
 
 rec-pat-fields  = rec-pat-field *(comma rec-pat-field)
 

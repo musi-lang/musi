@@ -316,6 +316,16 @@ pub enum IrRangeKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrIntrinsicKind {
+    FfiPtrNull,
+    FfiPtrIsNull,
+    FfiPtrOffset,
+    FfiPtrSize,
+    FfiPtrRead,
+    FfiPtrWrite,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrExpr {
     pub origin: IrOrigin,
     pub kind: IrExprKind,
@@ -571,6 +581,10 @@ pub enum IrExprKind {
     TypeValue {
         ty_name: Box<str>,
     },
+    TypeApply {
+        callee: Box<IrExpr>,
+        type_args: Box<[Box<str>]>,
+    },
     SyntaxValue {
         raw: Box<str>,
     },
@@ -622,6 +636,13 @@ pub enum IrExprKind {
     },
     Call {
         callee: Box<IrExpr>,
+        args: Box<[IrArg]>,
+    },
+    IntrinsicCall {
+        kind: IrIntrinsicKind,
+        symbol: Box<str>,
+        param_tys: Box<[Box<str>]>,
+        result_ty: Box<str>,
         args: Box<[IrArg]>,
     },
     CallSeq {

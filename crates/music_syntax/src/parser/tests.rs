@@ -99,7 +99,7 @@ fn parses_all_atom_forms_smoke() {
 	match x (| _ => 0);
 	foreign "c" let puts (msg : CString) : Int;
 	export let y := 2;
-	let Option[T] := data { | Some : T | None };
+	let Option[T] := data { | Some(T) | None };
 	let Console := effect { let write (text : String) : Unit; };
 	let Eq[T] := class { let (=) (a : T, b : T) : Bool; };
 	instance Eq[Int] { };
@@ -115,6 +115,62 @@ fn parses_all_atom_forms_smoke() {
 	"#,
     );
     assert!(!kinds.is_empty());
+}
+
+#[test]
+fn parses_backslash_lambda_expr() {
+    let kinds = parse_kinds(r"\(x : Int) : Int => x;");
+    assert_eq!(kinds, vec![SyntaxNodeKind::LambdaExpr]);
+}
+
+#[test]
+fn rejects_bare_paren_lambda_expr() {
+    assert_has_parse_error("(x : Int) => x;", |kind| {
+        matches!(kind, ParseErrorKind::ExpectedToken { .. })
+    });
+}
+
+#[test]
+fn parses_named_variant_payload_definitions_and_uses() {
+    let parsed = parse(
+        Lexer::new(
+            r"
+            let Port := data {
+              | Configured(port : Int, secure : Bool)
+              | Default
+            };
+            let port : Port := .Configured(secure := 0 = 0, port := 8080);
+            match port (
+              | .Configured(port, secure := _) => port
+              | .Default => 0
+            );
+        ",
+        )
+        .lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_named_call_arguments() {
+    let parsed = parse(
+        Lexer::new(
+            r"
+            let render (port : Int, secure : Bool) : Int := port;
+            render(port := 8080, secure := 0 = 0);
+        ",
+        )
+        .lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
 }
 
 #[test]
@@ -265,8 +321,8 @@ fn parses_handler_type_annotation() {
     let parsed = parse(
         Lexer::new(
             r"
-            let Console := effect { let readln () : Int; };
-            let h : using Console (Int -> Int) := using Console { value => value; readln(k) => resume 41; };
+            let Console := effect { let readLine () : Int; };
+            let h : using Console (Int -> Int) := using Console { value => value; readLine(k) => resume 41; };
         ",
         )
         .lex(),
@@ -292,6 +348,68 @@ fn parses_attr_values_and_patterns_with_trailing_commas() {
 #[test]
 fn parses_attr_record_with_repeated_trailing_commas() {
     let parsed = parse(Lexer::new("@a({x := 1,,}) let y := z;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_unsafe_block_expr() {
+    let parsed = parse(
+        Lexer::new(
+            r#"
+            foreign "c" let clock () : Int;
+            let value := unsafe { clock(); };
+        "#,
+        )
+        .lex(),
+    );
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_partial_modifier_on_let() {
+    let parsed = parse(Lexer::new("partial let parseInt(text : String) : Int := 0;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+    assert_eq!(
+        parse_kinds("partial let x := 1;"),
+        vec![SyntaxNodeKind::AttributedExpr]
+    );
+}
+
+#[test]
+fn parses_type_equality_operator() {
+    let parsed = parse(Lexer::new("let ok : Bool := T ~= U;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_indexed_variant_result_clause() {
+    let parsed = parse(Lexer::new("let Vec[T, n] := data { | Nil() -> Vec[T, 0] | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1] };").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_type_equality_constraint() {
+    let parsed = parse(Lexer::new("let same[A, B] (value : A) : A where A ~= B := value;").lex());
     assert!(
         parsed.errors().is_empty(),
         "unexpected errors: {:?}",

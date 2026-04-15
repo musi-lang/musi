@@ -93,7 +93,7 @@ cargo install --locked --force --path crates/musi
 Create a package:
 
 ```bash
-musi new hello
+musi init hello
 cd hello
 musi run
 ```
@@ -136,6 +136,38 @@ music run index.seam
 
 Use `musi` inside package roots. Use `music` when you want one file or one artifact.
 
+## Current syntax landmarks
+
+Musi now uses current surface consistently:
+
+- `match value (| ... )` for pattern matching
+- `request Effect.op(...)` for effect requests
+- `{ ...record, field := value }` for record updates
+- `T -> U` for pure function types and `T ~> U` for effectful function types
+- `value |> f(...)` for left-to-right call pipelines
+- `| Variant(payloads...)` for data variants, with named payloads available when shape clarity matters
+
+```musi
+let Option := import "@std/option";
+
+let port := Option.some[Int](8080)
+  |> Option.unwrapOr[Int](3000);
+
+let Port := data {
+  | Configured(port : Int)
+  | Default
+};
+
+let describe (value : Option[Int]) : String :=
+  match value (
+  | .Some(port) => "configured"
+  | .None => "default"
+  );
+
+let current : Port := .Configured(port := port);
+current;
+```
+
 ## Imports and stdlib
 
 Prefer focused stdlib imports:
@@ -153,16 +185,23 @@ let Option := Std.option;
 let Testing := Std.testing;
 ```
 
-Small current example:
+Foundation and runtime stay separate from stdlib:
 
 ```musi
-let Option := import "@std/option";
-
-let configured := Option.some[Int](8080);
-let port := Option.unwrapOr[Int](configured, 3000);
-
-port;
+let Core := import "musi:core";
+let Runtime := import "musi:runtime";
 ```
+
+Reach for `@std` first in ordinary application code. Reach for `musi:*` only when you are working at language, runtime, or integration boundaries.
+
+## Attributes and boundaries
+
+Musi attributes are explicit metadata, not hidden behavior. Current built-in families include:
+
+- `@known` and `@intrinsic` for compiler-owned foundation and intrinsics declarations
+- `@link` and `@when` for foreign and target-gated bindings
+- `@repr`, `@layout`, and `@frozen` for representation and data-shape control
+- `@hot`, `@cold`, `@deprecated`, and `@since` for codegen and lifecycle metadata
 
 ## Read next
 
@@ -172,6 +211,9 @@ Good entry points:
 
 - `docs/what/language/index.md`
 - `docs/what/language/start/getting-started.md`
+- `docs/what/language/types/type-annotations.md`
+- `docs/what/language/effects-runtime/effects.md`
+- `docs/what/language/advanced/attributes.md`
 - `docs/what/language/advanced/running-and-tooling.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`
@@ -182,6 +224,8 @@ Website source and extension source live here too:
 - `www/`
 - `vscode-ext/`
 
+Website, docs-site, and local docs editing operations live in [`www/README.md`](www/README.md).
+
 ## Testing and validation
 
 Common commands:
@@ -191,7 +235,6 @@ make lint
 make check
 cargo test -p music_syntax
 cargo test -p music_sema
-rtk bun run --cwd www build
 ```
 
 Prefer targeted crate tests over `cargo test --workspace` on lower-memory machines.

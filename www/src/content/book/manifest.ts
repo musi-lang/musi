@@ -1,338 +1,97 @@
-import type { Locale } from "../../lib/site-copy";
+import { rawBookPages } from "./registry/pages";
+import { bookParts } from "./registry/parts";
+import { bookSections } from "./registry/sections";
+import type {
+	BookPageDefinition,
+	RawBookPageDefinition,
+} from "./registry/types";
 
-export interface BookPartDefinition {
-	id: string;
-	path: string;
-	sourcePath: string;
+export type {
+	BookPageDefinition,
+	BookPageQuestion,
+	BookPartDefinition,
+	BookSectionDefinition,
+} from "./registry/types";
+export { bookParts, bookSections };
+
+type BookSectionId = (typeof bookSections)[number]["id"];
+
+function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
+	if (page.id === "musi-for-rust-developers" || page.id.startsWith("rust-")) {
+		return "developers-rust";
+	}
+	if (page.id.startsWith("c-cpp-")) {
+		return "developers-c-cpp";
+	}
+	if (page.id.startsWith("csharp-")) {
+		return "developers-csharp";
+	}
+	if (page.id.startsWith("go-")) {
+		return "developers-go";
+	}
+	if (page.id.startsWith("java-")) {
+		return "developers-java";
+	}
+	if (page.id.startsWith("js-ts-")) {
+		return "developers-javascript-typescript";
+	}
+	if (page.id.startsWith("lua-")) {
+		return "developers-lua";
+	}
+	if (page.id.startsWith("python-")) {
+		return "developers-python";
+	}
+	return "developers-guides";
 }
 
-export interface BookPageQuestion {
-	labels: Record<Locale, string>;
+function sectionIdForPage(page: RawBookPageDefinition): BookSectionId {
+	switch (page.partId) {
+		case "start":
+			return "start-foundations";
+		case "core":
+			if (
+				page.id === "functions" ||
+				page.id === "lambdas" ||
+				page.id === "calls" ||
+				page.id === "methods"
+			) {
+				return "core-functions";
+			}
+			return "core-expressions";
+		case "data":
+			return "data-modeling";
+		case "organization":
+			return "organization-modules";
+		case "types":
+			return "types-foundations";
+		case "abstractions":
+			return "abstractions-laws";
+		case "effects-runtime":
+			if (
+				page.id === "foundation" ||
+				page.id === "runtime" ||
+				page.id === "stdlib"
+			) {
+				return "effects-runtime-model";
+			}
+			return "effects-handling";
+		case "developers":
+			return developerSectionIdForPage(page);
+		case "advanced":
+			if (
+				page.id === "attributes" ||
+				page.id === "foreign" ||
+				page.id === "unsafe-and-ffi"
+			) {
+				return "advanced-interop";
+			}
+			return "advanced-meta-tooling";
+		default:
+			throw new Error(`unknown part ${page.partId} for page ${page.id}`);
+	}
 }
 
-export interface BookPageDefinition {
-	id: string;
-	partId: string;
-	path: string;
-	aliases: string[];
-	sourcePath: string;
-	questions: BookPageQuestion[];
-}
-
-export const bookParts = [
-	{
-		id: "start",
-		path: "/docs/language/start",
-		sourcePath: "www/src/content/book/language/start/index.md",
-	},
-	{
-		id: "core",
-		path: "/docs/language/core",
-		sourcePath: "www/src/content/book/language/core/index.md",
-	},
-	{
-		id: "data",
-		path: "/docs/language/data",
-		sourcePath: "www/src/content/book/language/data/index.md",
-	},
-	{
-		id: "organization",
-		path: "/docs/language/organization",
-		sourcePath: "www/src/content/book/language/organization/index.md",
-	},
-	{
-		id: "types",
-		path: "/docs/language/types",
-		sourcePath: "www/src/content/book/language/types/index.md",
-	},
-	{
-		id: "abstractions",
-		path: "/docs/language/abstractions",
-		sourcePath: "www/src/content/book/language/abstractions/index.md",
-	},
-	{
-		id: "effects-runtime",
-		path: "/docs/language/effects-runtime",
-		sourcePath: "www/src/content/book/language/effects-runtime/index.md",
-	},
-	{
-		id: "advanced",
-		path: "/docs/language/advanced",
-		sourcePath: "www/src/content/book/language/advanced/index.md",
-	},
-] satisfies readonly BookPartDefinition[];
-
-export const bookPages = [
-	{
-		id: "getting-started",
-		partId: "start",
-		path: "/docs/language/start/getting-started",
-		aliases: [],
-		sourcePath: "docs/what/language/start/getting-started.md",
-		questions: [],
-	},
-	{
-		id: "first-program",
-		partId: "start",
-		path: "/docs/language/start/first-program",
-		aliases: [],
-		sourcePath: "docs/what/language/start/first-program.md",
-		questions: [],
-	},
-	{
-		id: "values-and-let",
-		partId: "start",
-		path: "/docs/language/start/values-and-let",
-		aliases: [],
-		sourcePath: "docs/what/language/start/values-and-let.md",
-		questions: [],
-	},
-	{
-		id: "blocks-and-expressions",
-		partId: "start",
-		path: "/docs/language/start/blocks-and-expressions",
-		aliases: [],
-		sourcePath: "docs/what/language/start/blocks-and-expressions.md",
-		questions: [],
-	},
-	{
-		id: "mutation",
-		partId: "start",
-		path: "/docs/language/start/mutation",
-		aliases: [],
-		sourcePath: "docs/what/language/start/mutation.md",
-		questions: [],
-	},
-	{
-		id: "literals",
-		partId: "core",
-		path: "/docs/language/core/literals",
-		aliases: [],
-		sourcePath: "docs/what/language/core/literals.md",
-		questions: [],
-	},
-	{
-		id: "operators",
-		partId: "core",
-		path: "/docs/language/core/operators",
-		aliases: [],
-		sourcePath: "docs/what/language/core/operators.md",
-		questions: [],
-	},
-	{
-		id: "ranges",
-		partId: "core",
-		path: "/docs/language/core/ranges",
-		aliases: [],
-		sourcePath: "docs/what/language/core/ranges.md",
-		questions: [],
-	},
-	{
-		id: "functions",
-		partId: "core",
-		path: "/docs/language/core/functions",
-		aliases: [],
-		sourcePath: "docs/what/language/core/functions.md",
-		questions: [],
-	},
-	{
-		id: "calls",
-		partId: "core",
-		path: "/docs/language/core/calls",
-		aliases: [],
-		sourcePath: "docs/what/language/core/calls.md",
-		questions: [],
-	},
-	{
-		id: "methods",
-		partId: "core",
-		path: "/docs/language/core/methods",
-		aliases: [],
-		sourcePath: "docs/what/language/core/methods.md",
-		questions: [],
-	},
-	{
-		id: "records",
-		partId: "data",
-		path: "/docs/language/data/records",
-		aliases: [],
-		sourcePath: "docs/what/language/data/records.md",
-		questions: [],
-	},
-	{
-		id: "arrays-and-slices",
-		partId: "data",
-		path: "/docs/language/data/arrays-and-slices",
-		aliases: [],
-		sourcePath: "docs/what/language/data/arrays-and-slices.md",
-		questions: [],
-	},
-	{
-		id: "patterns",
-		partId: "data",
-		path: "/docs/language/data/patterns",
-		aliases: [],
-		sourcePath: "docs/what/language/data/patterns.md",
-		questions: [],
-	},
-	{
-		id: "files",
-		partId: "organization",
-		path: "/docs/language/organization/files",
-		aliases: [],
-		sourcePath: "docs/what/language/organization/files.md",
-		questions: [],
-	},
-	{
-		id: "packages",
-		partId: "organization",
-		path: "/docs/language/organization/packages",
-		aliases: [],
-		sourcePath: "docs/what/language/organization/packages.md",
-		questions: [],
-	},
-	{
-		id: "imports-and-exports",
-		partId: "organization",
-		path: "/docs/language/organization/imports-and-exports",
-		aliases: [],
-		sourcePath: "docs/what/language/organization/imports-and-exports.md",
-		questions: [],
-	},
-	{
-		id: "type-annotations",
-		partId: "types",
-		path: "/docs/language/types/type-annotations",
-		aliases: [],
-		sourcePath: "docs/what/language/types/type-annotations.md",
-		questions: [],
-	},
-	{
-		id: "type-inference",
-		partId: "types",
-		path: "/docs/language/types/type-inference",
-		aliases: [],
-		sourcePath: "docs/what/language/types/type-inference.md",
-		questions: [],
-	},
-	{
-		id: "generics",
-		partId: "types",
-		path: "/docs/language/types/generics",
-		aliases: [],
-		sourcePath: "docs/what/language/types/generics.md",
-		questions: [],
-	},
-	{
-		id: "classes",
-		partId: "abstractions",
-		path: "/docs/language/abstractions/classes",
-		aliases: [],
-		sourcePath: "docs/what/language/abstractions/classes.md",
-		questions: [],
-	},
-	{
-		id: "instances",
-		partId: "abstractions",
-		path: "/docs/language/abstractions/instances",
-		aliases: [],
-		sourcePath: "docs/what/language/abstractions/instances.md",
-		questions: [],
-	},
-	{
-		id: "laws",
-		partId: "abstractions",
-		path: "/docs/language/abstractions/laws",
-		aliases: [],
-		sourcePath: "docs/what/language/abstractions/laws.md",
-		questions: [],
-	},
-	{
-		id: "effects",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/effects",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/effects.md",
-		questions: [],
-	},
-	{
-		id: "using",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/using",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/using.md",
-		questions: [],
-	},
-	{
-		id: "handlers",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/handlers",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/handlers.md",
-		questions: [],
-	},
-	{
-		id: "foundation",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/foundation",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/foundation.md",
-		questions: [],
-	},
-	{
-		id: "runtime",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/runtime",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/runtime.md",
-		questions: [],
-	},
-	{
-		id: "stdlib",
-		partId: "effects-runtime",
-		path: "/docs/language/effects-runtime/stdlib",
-		aliases: [],
-		sourcePath: "docs/what/language/effects-runtime/stdlib.md",
-		questions: [],
-	},
-	{
-		id: "attributes",
-		partId: "advanced",
-		path: "/docs/language/advanced/attributes",
-		aliases: [],
-		sourcePath: "docs/what/language/advanced/attributes.md",
-		questions: [],
-	},
-	{
-		id: "foreign",
-		partId: "advanced",
-		path: "/docs/language/advanced/foreign",
-		aliases: [],
-		sourcePath: "docs/what/language/advanced/foreign.md",
-		questions: [],
-	},
-	{
-		id: "quote-and-syntax",
-		partId: "advanced",
-		path: "/docs/language/advanced/quote-and-syntax",
-		aliases: [],
-		sourcePath: "docs/what/language/advanced/quote-and-syntax.md",
-		questions: [],
-	},
-	{
-		id: "testing",
-		partId: "advanced",
-		path: "/docs/language/advanced/testing",
-		aliases: [],
-		sourcePath: "docs/what/language/advanced/testing.md",
-		questions: [],
-	},
-	{
-		id: "running-and-tooling",
-		partId: "advanced",
-		path: "/docs/language/advanced/running-and-tooling",
-		aliases: [],
-		sourcePath: "docs/what/language/advanced/running-and-tooling.md",
-		questions: [],
-	},
-] satisfies readonly BookPageDefinition[];
+export const bookPages = rawBookPages.map((page) => ({
+	...page,
+	sectionId: sectionIdForPage(page),
+})) satisfies readonly BookPageDefinition[];

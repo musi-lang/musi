@@ -1,7 +1,7 @@
 import { docsRoutes } from "./docs";
 import type { Locale } from "./lib/site-copy";
-import { isLocale, siteCopy } from "./lib/site-copy";
-import { localizePath } from "./lib/site-links";
+import { siteCopy } from "./lib/site-copy";
+import { pageTitle, siteMeta } from "./lib/site-meta";
 
 export type AppRouteKind = "page" | "docs-index" | "doc";
 
@@ -26,83 +26,81 @@ export interface AppRoute {
 	disabled?: boolean;
 }
 
-function localizedPrimaryRoutes(locale: Locale): AppRoute[] {
-	const copy = siteCopy[locale];
-	return [
-		{
-			id: `learn:${locale}`,
-			path: localizePath(locale, "/learn"),
-			label: copy.nav.learn,
-			title: `${copy.learn.title} | Musi`,
-			description: copy.learn.description,
-			kind: "docs-index",
-			locale,
-			section: "learn",
-		},
-		{
-			id: `install:${locale}`,
-			path: localizePath(locale, "/install"),
-			label: copy.nav.install,
-			title: `${copy.install.title} | Musi`,
-			description: copy.install.description,
-			kind: "page",
-			locale,
-			section: "install",
-		},
-		{
-			id: `playground:${locale}`,
-			path: localizePath(locale, "/playground"),
-			label: copy.nav.playground,
-			title: `${copy.playground.title} | Musi`,
-			description: copy.playground.copy,
-			kind: "page",
-			locale,
-			section: "playground",
-		},
-		{
-			id: `community:${locale}`,
-			path: localizePath(locale, "/community"),
-			label: copy.nav.community,
-			title: `${copy.community.title} | Musi`,
-			description: copy.community.description,
-			kind: "page",
-			locale,
-			section: "community",
-		},
-	];
-}
-
 export const homeRoutes: AppRoute[] = [
 	{
 		id: "home:en",
 		path: "/",
 		label: "Musi",
-		title: "Musi",
-		description: siteCopy.en.home.description,
+		title: siteMeta.title,
+		description: siteCopy.home.description,
 		kind: "page",
 		locale: "en",
-		section: "home",
-	},
-	{
-		id: "home:ja",
-		path: "/ja",
-		label: "Musi",
-		title: "Musi",
-		description: siteCopy.ja.home.description,
-		kind: "page",
-		locale: "ja",
 		section: "home",
 	},
 ];
 
 export const primaryRoutes: AppRoute[] = [
-	...localizedPrimaryRoutes("en"),
-	...localizedPrimaryRoutes("ja"),
+	{
+		id: "learn:en",
+		path: "/learn",
+		label: siteCopy.nav.learn,
+		title: pageTitle(siteCopy.learn.title),
+		description: siteCopy.learn.description,
+		kind: "docs-index",
+		locale: "en",
+		section: "learn",
+		canonicalPath: "/learn/book",
+	},
+	{
+		id: "install:en",
+		path: "/install",
+		label: siteCopy.nav.install,
+		title: pageTitle(siteCopy.install.title),
+		description: siteCopy.install.description,
+		kind: "page",
+		locale: "en",
+		section: "install",
+	},
+	{
+		id: "playground:en",
+		path: "/playground",
+		label: siteCopy.nav.playground,
+		title: pageTitle(siteCopy.playground.title),
+		description: siteCopy.playground.copy,
+		kind: "page",
+		locale: "en",
+		section: "playground",
+	},
+	{
+		id: "community:en",
+		path: "/community",
+		label: siteCopy.nav.community,
+		title: pageTitle(siteCopy.community.title),
+		description: siteCopy.community.description,
+		kind: "page",
+		locale: "en",
+		section: "community",
+	},
+];
+
+export const bookRoutes: AppRoute[] = [
+	{
+		id: "learn-book:en",
+		path: "/learn/book",
+		label: siteCopy.learn.title,
+		title: pageTitle(siteCopy.learn.title),
+		description: siteCopy.learn.description,
+		kind: "docs-index",
+		locale: "en",
+		section: "learn",
+		canonicalPath: "/learn/book",
+	},
 ];
 
 export const appRoutes: AppRoute[] = [
 	...homeRoutes,
 	...primaryRoutes,
+	...bookRoutes,
 	...docsRoutes(),
 ];
 
@@ -121,10 +119,8 @@ export function routeForPath(pathname: string) {
 	return appRoutes.find((route) => route.path === normalized) ?? homeRoutes[0];
 }
 
-export function localeForPath(pathname: string): Locale {
-	const normalized = normalizePath(pathname);
-	const firstSegment = normalized.split("/")[1];
-	return isLocale(firstSegment) ? firstSegment : "en";
+export function localeForPath(_pathname: string): Locale {
+	return "en";
 }
 
 export function isDocsRoute(route: AppRoute) {

@@ -44,3 +44,8 @@ fn as_and_or_patterns_preserve_source_order() {
         ["x", "y", "z"]
     );
 }
+
+#[test]
+fn variant_patterns_yield_payload_binders() {
+    assert_eq!(binders_in("let .Some(x) := value;"), ["x"]);
+}

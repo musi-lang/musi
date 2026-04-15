@@ -13,6 +13,13 @@
 		],
 		"description": "Recursive callable binding"
 	},
+	"Lambda Expression": {
+		"prefix": "lambda",
+		"body": [
+			"\\(${1:x}) => ${0:body}"
+		],
+		"description": "Lambda expression"
+	},
 	"Data Declaration": {
 		"prefix": "data",
 		"body": [
@@ -35,7 +42,7 @@
 	"Handle Expression": {
 		"prefix": "handle",
 		"body": [
-			"handle request ${1:effect}.${2:op}(${3:value}) using ${4:effect} {",
+			"handle ${1:effect}.${2:op}(${3:value}) using ${4:effect} {",
 			"\tvalue => ${5:value};",
 			"\t${2}(${6:k}) => ${0:resume ${7:value};}",
 			"};"

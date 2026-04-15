@@ -1,18 +1,14 @@
-import type { ReactNode } from "react";
-import { docGroups } from "../docs";
+import type { ReactNode } from "preact/compat";
+import { type DocPage, docChildren, docForPath, docParts } from "../docs";
 import {
-	ChevronDownIcon,
 	DesktopIcon,
 	GithubIcon,
-	JapanFlagIcon,
 	MenuIcon,
 	MoonIcon,
 	MusiMarkIcon,
 	SunIcon,
-	UnitedStatesFlagIcon,
 } from "../icons";
-import { type Locale, siteCopy } from "../lib/site-copy";
-import { localizePath } from "../lib/site-links";
+import { siteCopy } from "../lib/site-copy";
 import type { AppRoute } from "../routes";
 import { isDocsRoute, primaryRoutes } from "../routes";
 import { ThemeToggleButton } from "../ui/actions";
@@ -29,23 +25,21 @@ export function nextScheme(current: ColorScheme): ColorScheme {
 function HeaderLinks(props: { route: AppRoute }) {
 	return (
 		<>
-			{primaryRoutes
-				.filter((route) => route.locale === props.route.locale)
-				.map((route) => (
-					<a
-						key={route.id}
-						href={route.path}
-						className={`header-link${props.route.section === route.section ? " is-active" : ""}`}
-					>
-						{route.label}
-					</a>
-				))}
+			{primaryRoutes.map((route) => (
+				<a
+					key={route.id}
+					href={route.path}
+					className={`header-link${props.route.section === route.section ? " is-active" : ""}`}
+				>
+					{route.label}
+				</a>
+			))}
 		</>
 	);
 }
 
-function ThemeControl(props: { locale: Locale }) {
-	const labels = siteCopy[props.locale].utilityLabels;
+function ThemeControl() {
+	const labels = siteCopy.utilityLabels;
 	return (
 		<ThemeToggleButton
 			aria-label={labels.themeSystem}
@@ -70,98 +64,60 @@ function ThemeControl(props: { locale: Locale }) {
 	);
 }
 
-function localeTargetPath(route: AppRoute, locale: Locale) {
-	const basePath =
-		route.path === "/ja"
-			? "/"
-			: route.path.startsWith("/ja/")
-				? route.path.slice(3)
-				: route.path;
-	return localizePath(locale, basePath);
-}
-
-function LocaleSwitch(props: { route: AppRoute }) {
-	const copy = siteCopy[props.route.locale];
-	const currentLocale = props.route.locale;
-	const CurrentFlag =
-		currentLocale === "en" ? UnitedStatesFlagIcon : JapanFlagIcon;
-
-	return (
-		<details className="locale-menu">
-			<summary
-				className="header-utility-link locale-link locale-summary"
-				aria-label={copy.utilityLabels.locale}
-				title={copy.utilityLabels.locale}
-			>
-				<CurrentFlag size={18} />
-				<ChevronDownIcon size={14} />
-				<span className="sr-only">{copy.utilityLabels.locale}</span>
-			</summary>
-			<div className="locale-menu-panel">
-				<a
-					href={localeTargetPath(props.route, "en")}
-					className={`locale-option${currentLocale === "en" ? " is-active" : ""}`}
-					lang="en-US"
-				>
-					<UnitedStatesFlagIcon size={18} />
-					<span>English</span>
-				</a>
-				<a
-					href={localeTargetPath(props.route, "ja")}
-					className={`locale-option${currentLocale === "ja" ? " is-active" : ""}`}
-					lang="ja"
-				>
-					<JapanFlagIcon size={18} />
-					<span>日本語</span>
-				</a>
-			</div>
-		</details>
-	);
-}
-
 function DocsSidebar(props: { route: AppRoute }) {
+	const activeDoc = docForPath(props.route.path);
+	const activeTreePath = new Set(activeDoc?.treePath ?? []);
+	const renderSidebarNode = (node: DocPage, depth: number) => {
+		const children = docChildren(node.id);
+		const levelClass =
+			node.kind === "section"
+				? "docs-sidebar-link-section"
+				: "docs-sidebar-link-chapter";
+		return (
+			<div key={node.id} className="docs-sidebar-node">
+				<a
+					href={node.path}
+					className={`docs-sidebar-link ${levelClass}${activeTreePath.has(node.id) ? " is-active" : ""}`}
+					data-depth={depth}
+				>
+					{node.title}
+				</a>
+				{children.length > 0 ? (
+					<div className="docs-sidebar-children">
+						{children.map((child) => renderSidebarNode(child, depth + 1))}
+					</div>
+				) : null}
+			</div>
+		);
+	};
+
 	return (
 		<nav aria-label="Documentation" className="docs-sidebar-nav">
-			{docGroups
-				.filter((group) => group.locale === props.route.locale)
-				.map((group) => (
-					<section
-						key={`${group.locale}:${group.group}`}
-						className="docs-sidebar-group"
+			{docParts.map((part) => (
+				<section key={part.id} className="docs-sidebar-group">
+					<a
+						href={part.path}
+						className={`docs-sidebar-heading${activeTreePath.has(part.id) ? " is-active" : ""}`}
 					>
-						<a
-							href={group.path}
-							className={`docs-sidebar-heading${props.route.path === group.path ? " is-active" : ""}`}
-						>
-							{group.group}
-						</a>
-						<div className="docs-sidebar-list">
-							{group.pages.map((page) => (
-								<a
-									key={`${page.locale}:${page.slug}`}
-									href={page.path}
-									className={`docs-sidebar-link${props.route.path === page.path ? " is-active" : ""}`}
-								>
-									{page.title}
-								</a>
-							))}
-						</div>
-					</section>
-				))}
+						{part.title}
+					</a>
+					<div className="docs-sidebar-list">
+						{docChildren(part.id).map((node) => renderSidebarNode(node, 0))}
+					</div>
+				</section>
+			))}
 		</nav>
 	);
 }
 
 export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 	const docsMode = isDocsRoute(props.route);
-	const copy = siteCopy[props.route.locale];
-	const homeHref = props.route.locale === "ja" ? "/ja" : "/";
 	const drawerId = docsMode ? "docs-sidebar-drawer" : "site-nav-drawer";
 
 	return (
 		<div className={`site-shell${docsMode ? " site-shell-docs" : ""}`}>
 			<a href="#main-content" className="skip-link">
-				{copy.skipToContent}
+				{siteCopy.skipToContent}
 			</a>
 			<header className="site-header">
 				<div className="site-header-inner">
@@ -169,16 +125,16 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 						<button
 							type="button"
 							className="menu-toggle"
-							aria-label={copy.menu}
-							title={copy.menu}
+							aria-label={siteCopy.menu}
+							title={siteCopy.menu}
 							aria-expanded="false"
 							aria-controls={drawerId}
 							data-menu-toggle={true}
 						>
 							<MenuIcon size={18} />
-							<span className="sr-only">{copy.menu}</span>
+							<span className="sr-only">{siteCopy.menu}</span>
 						</button>
-						<a href={homeHref} className="site-logo">
+						<a href="/" className="site-logo">
 							<span className="site-logo-mark" aria-hidden="true">
 								<MusiMarkIcon size={28} />
 							</span>
@@ -197,14 +153,13 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 							target="_blank"
 							rel="noreferrer"
 							className="header-utility-link utility-icon"
-							aria-label={copy.utilityLabels.github}
-							title={copy.utilityLabels.github}
+							aria-label={siteCopy.utilityLabels.github}
+							title={siteCopy.utilityLabels.github}
 						>
 							<GithubIcon size={18} />
-							<span className="sr-only">{copy.utilityLabels.github}</span>
+							<span className="sr-only">{siteCopy.utilityLabels.github}</span>
 						</a>
-						<LocaleSwitch route={props.route} />
-						<ThemeControl locale={props.route.locale} />
+						<ThemeControl />
 					</div>
 				</div>
 				<div id={drawerId} className="site-drawer">

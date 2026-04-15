@@ -1,5 +1,5 @@
 ---
-title: "First program"
+title: "First Program"
 description: "Create the smallest useful Musi file and run it with the direct command lane."
 group: "Start"
 section: "Start"
@@ -8,36 +8,16 @@ slug: "first-program"
 summary: "Write one file, bind one value, and run it end to end."
 ---
 
+A Musi program can be small enough to read in one breath: bind a value, end with a value, and let the tool check the file.
+
 {{snippet:chapter-first-program}}
 
-## What
+Read the semicolon after `let answer := 42;` as "this statement is done." Read the final `answer;` as the value the file leaves behind. That final-expression habit appears everywhere in Musi.
 
-A first Musi program can be only a binding and a final expression.
-There is no extra ceremony here: no wrapper function, no package manifest, and no boilerplate runtime setup.
-The file reads top to bottom, and the last expression is the result you are asking Musi to evaluate.
+C-like languages often teach a program as a function that returns. Musi starts smaller: an expression can already be the result. Functions come next, once naming a reusable action matters.
 
-## Why
+## Reading a File
 
-This is first meaningful win for new readers.
-If the first page immediately adds packages, imports, or larger syntax, beginners stop learning the language and start fighting setup detail.
-A two-line program proves the core reading model first: bind a value, then use it.
+Read top to bottom. Names become available after their `let`. Later expressions use earlier names. There is no hidden global setup in this example, and there is no ordinary `return` keyword at the end.
 
-## How
-
-Read `let answer := 42;` as "introduce a name for a value I care about."
-Read the final `answer;` line as "this is the result of the file."
-Once that shape feels normal, you can change the value, add one more binding above it, or swap the final line for a larger expression without changing the mental model.
-
-## Try it
-
-- Create `index.ms` with one `let` binding.
-- End the file with the bound name.
-- Run `music check index.ms` to confirm the file shape.
-
-## Common mistake
-
-Do not go hunting for a mandatory `main` just because other languages require one.
-
-## Next
-
-Continue to [Values and let](/docs/language/start/values-and-let) to make that first binding pattern do real work.
+Continue to [Values and Let](/learn/book/start/foundations/values-and-let).

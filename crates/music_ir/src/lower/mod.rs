@@ -12,15 +12,17 @@ use music_hir::{
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
-use music_sema::{ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, SemaModule};
+use music_sema::{
+    ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, SemaDataVariantDef, SemaModule,
+};
 
 use crate::IrDiagKind;
 use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrClassDef,
     IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind,
-    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrLit, IrMatchArm as IrLoweredMatchArm,
-    IrModule, IrNameRef, IrOrigin, IrParam, IrRangeKind, IrRecordField, IrRecordLayoutField,
-    IrSeqPart, IrTempId,
+    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrIntrinsicKind, IrLit,
+    IrMatchArm as IrLoweredMatchArm, IrModule, IrNameRef, IrOrigin, IrParam, IrRangeKind,
+    IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 
 mod array;
@@ -295,8 +297,29 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
             },
         );
     }
-    if let HirExprKind::Apply { callee, .. } = &expr.kind {
-        let lowered = lower_expr_with_origin(ctx, *callee, origin);
+    if let HirExprKind::Apply { callee, args } = &expr.kind {
+        let type_args = ctx
+            .sema
+            .module()
+            .store
+            .expr_ids
+            .get(*args)
+            .iter()
+            .copied()
+            .map(|arg| render_type_value_expr_name(ctx.sema, arg, ctx.interner))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let lowered = IrExpr::new(
+            origin,
+            IrExprKind::TypeApply {
+                callee: Box::new(lower_expr(ctx, *callee)),
+                type_args,
+            },
+        );
+        return bind_expr_evidence(ctx, expr_id, origin, lowered);
+    }
+    if let HirExprKind::Unsafe { body } = &expr.kind {
+        let lowered = lower_expr_with_origin(ctx, *body, origin);
         return bind_expr_evidence(ctx, expr_id, origin, lowered);
     }
     let kind = match &expr.kind {
@@ -400,7 +423,7 @@ fn lower_control_expr(
 ) -> IrExprKind {
     match kind {
         HirExprKind::Match { scrutinee, arms } => lower_match_expr(ctx, *scrutinee, arms),
-        HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, *args),
+        HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, args.clone()),
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
         HirExprKind::Request { expr } => lower_request_expr(ctx, *expr)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
@@ -758,7 +781,7 @@ fn lower_variant_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     tag: Ident,
-    args: SliceRange<HirExprId>,
+    args: SliceRange<HirArg>,
 ) -> IrExprKind {
     let sema = ctx.sema;
     let interner = ctx.interner;
@@ -786,10 +809,12 @@ fn lower_variant_expr(
         invalid_lowering_path("unknown variant tag");
     }
 
-    let arg_exprs = sema.module().store.expr_ids.get(args);
+    let Some(variant) = data.variant(tag_name) else {
+        invalid_lowering_path("unknown variant payload metadata");
+    };
+    let arg_exprs = ordered_variant_arg_exprs(sema, variant, args, interner);
     let lowered_args = arg_exprs
-        .iter()
-        .copied()
+        .into_iter()
         .map(|expr| lower_expr(ctx, expr))
         .collect::<Vec<_>>()
         .into_boxed_slice();
@@ -801,6 +826,39 @@ fn lower_variant_expr(
         field_count,
         args: lowered_args,
     }
+}
+
+fn ordered_variant_arg_exprs(
+    sema: &SemaModule,
+    variant: &SemaDataVariantDef,
+    args: SliceRange<HirArg>,
+    interner: &Interner,
+) -> Vec<HirExprId> {
+    let arg_nodes = sema.module().store.args.get(args);
+    if !variant.field_names().iter().any(Option::is_some) {
+        return arg_nodes.iter().map(|arg| arg.expr).collect();
+    }
+    let mut ordered = vec![None; variant.field_names().len()];
+    for arg in arg_nodes {
+        let Some(name) = arg.name else {
+            invalid_lowering_path("named variant arg missing field name after sema");
+        };
+        let name = interner.resolve(name.name);
+        let Some(index) = variant
+            .field_names()
+            .iter()
+            .position(|field| field.as_deref() == Some(name))
+        else {
+            invalid_lowering_path("unknown named variant field after sema");
+        };
+        ordered[index] = Some(arg.expr);
+    }
+    ordered
+        .into_iter()
+        .map(|expr| {
+            expr.unwrap_or_else(|| invalid_lowering_path("missing named variant field after sema"))
+        })
+        .collect()
 }
 
 fn lower_let_expr(

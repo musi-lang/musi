@@ -61,14 +61,16 @@ pub const fn classify_opcode(opcode: Opcode) -> VmOpcodeFamily {
         Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
             VmOpcodeFamily::Data
         }
-        Opcode::TyId | Opcode::TyChk | Opcode::TyCast => VmOpcodeFamily::Types,
+        Opcode::TyId | Opcode::TyApply | Opcode::TyChk | Opcode::TyCast => VmOpcodeFamily::Types,
         Opcode::HdlPush
         | Opcode::HdlPop
         | Opcode::EffInvk
         | Opcode::EffInvkSeq
         | Opcode::EffResume => VmOpcodeFamily::Effects,
-        Opcode::FfiCall | Opcode::FfiCallSeq | Opcode::ModLoad | Opcode::ModGet => {
-            VmOpcodeFamily::Host
-        }
+        Opcode::FfiCall
+        | Opcode::FfiCallSeq
+        | Opcode::FfiRef
+        | Opcode::ModLoad
+        | Opcode::ModGet => VmOpcodeFamily::Host,
     }
 }

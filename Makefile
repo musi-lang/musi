@@ -9,7 +9,7 @@ rscheck:
 		RSCHECK_BIN="$$HOME/.cargo/bin/rscheck"; \
 	fi; \
 	if [ -z "$$RSCHECK_BIN" ] || [ ! -x "$$RSCHECK_BIN" ]; then \
-		echo "rscheck not installed; run: cargo install --git https://github.com/xsyetopz/rscheck --locked rscheck-cli"; \
+		echo "rscheck not installed; run: cargo install rscheck-cli --locked"; \
 		exit 1; \
 	fi; \
 	"$$RSCHECK_BIN" check; code=$$?; test $$code -le 1

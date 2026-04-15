@@ -4,33 +4,29 @@
 	"type": "module",
 	"scripts": {
 		"generate:content": "bun run scripts/generate-content.ts",
-		"dev": "bun run generate:content && vite",
+		"dev": "bun run generate:content && ASTRO_TELEMETRY_DISABLED=1 astro dev",
 		"dev:prod": "bun run build:prod && bun run preview:prod",
-		"build": "bun run generate:content && vite build && bun run scripts/prerender.ts",
+		"build": "bun run generate:content && ASTRO_TELEMETRY_DISABLED=1 astro build",
 		"build:prod": "bun run build",
+		"docs:studio": "bun run scripts/docs-studio.ts",
 		"verify:lang": "bun run build:prod && bun run scripts/verify-lang.ts",
-		"preview": "vite preview",
-		"preview:prod": "vite preview --host 0.0.0.0",
+		"preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+		"preview:prod": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0",
 		"biome:check": "bunx biome check . --max-diagnostics 16384",
 		"biome:format": "bunx biome format . --write --max-diagnostics 16384",
 		"biome:lint": "bunx biome lint . --max-diagnostics 16384"
 	},
 	"dependencies": {
-		"@mantine/core": "^9.0.2",
-		"@mantine/hooks": "^9.0.2",
-		"i18next": "^26.0.4",
-		"i18next-browser-languagedetector": "^8.2.1",
-		"react": "^19.2.5",
-		"react-dom": "^19.2.5",
-		"react-i18next": "^17.0.2",
-		"react-router-dom": "^7.14.1"
+		"@astrojs/preact": "^5.1.1",
+		"astro": "^6.1.6",
+		"preact": "^10.29.1",
+		"preact-render-to-string": "^6.6.7"
 	},
 	"devDependencies": {
-		"@vitejs/plugin-react": "^6.0.1",
 		"marked": "^18.0.0",
 		"shiki": "^4.0.2",
 		"vite": "^8.0.8",
 		"vitest": "^4.1.4",
-		"wrangler": "^4.82.2"
+		"wrangler": "^4.83.0"
 	}
 }

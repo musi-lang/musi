@@ -1,43 +1,25 @@
 ---
 title: "Functions"
-description: "Write one reusable function and read its shape without extra abstraction noise."
-group: "Core syntax"
-section: "Core syntax"
+description: "Define reusable functions, learn named arguments, and understand why parameter names matter."
+group: "Core Syntax"
+section: "Core Syntax"
 order: 9
 slug: "functions"
-summary: "Define plain functions with let before learning calls or methods."
+summary: "Functions are ordinary `let` bindings with parameters, result types, and expression bodies."
 ---
+
+A function is a named calculation. It receives parameters, uses them in a body, and produces the final expression. Named arguments keep calls readable when values could be confused.
 
 {{snippet:chapter-functions}}
 
-## What
+{{snippet:named-callable-values}}
 
-A function in Musi is still a `let` binding, but now the bound thing takes inputs and returns a result.
-That continuity matters: you are not leaving basic syntax behind, only adding parameters and usually a result type.
-The page's example stays tiny on purpose so the function shape is easier to see than the arithmetic.
+## Reading Model
 
-## Why
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-People ask "how do I reuse logic?" almost immediately after first successful file.
-A helpful answer should show that functions are ordinary named values with a clearer shape, not a new top-level declaration family to memorize.
-That keeps the learning curve flatter when later chapters add calls, methods, or recursion.
+## Practical Rule
 
-## How
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-Read `let twice (x : Int) : Int := x + x;` as three pieces: function name, parameter list, and result expression.
-Then read `twice(21);` as proof that function definition and use stay close together.
-When writing your own first functions, keep one parameter, one small body, and one obvious return value until the shape feels automatic.
-
-## Try it
-
-- Write one one-argument function.
-- Call it once with literal input.
-- Rename function or parameter to make intent clearer.
-
-## Common mistake
-
-Do not jump to methods, classes, or generic helpers before plain function flow feels normal.
-
-## Next
-
-Continue to [Calls](/docs/language/core/calls) to focus on what function application looks like in everyday code.
+Continue to [Lambdas](/learn/book/core/functions-and-calls/lambdas).

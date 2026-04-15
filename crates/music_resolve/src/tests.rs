@@ -208,7 +208,10 @@ fn resolves_case_pat_binder_in_arm() {
         &module_key,
         parsed.tree(),
         &mut interner,
-        ResolveOptions::default(),
+        ResolveOptions {
+            inject_compiler_prelude: true,
+            ..ResolveOptions::default()
+        },
     );
     let y_site = find_nth_name_site(source_id, parsed.tree(), "y", 0).expect("y use site");
     let y_binding = resolved
@@ -236,9 +239,99 @@ fn resolves_case_pat_binder_in_arm() {
 }
 
 #[test]
+fn lowers_pipe_into_call_and_prepends_left_value() {
+    let src = r"let add := \(left, right) => left + right; let value := 1 |> add(2);";
+    let source_id = SourceId::from_raw(33);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions::default(),
+    );
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_expr = resolved.module.store.exprs.get(expr_ids[1]);
+    let body = match &let_expr.kind {
+        HirExprKind::Let { value, .. } => *value,
+        other => panic!("unexpected let kind: {other:?}"),
+    };
+    let body_expr = resolved.module.store.exprs.get(body);
+    let (callee, args) = match &body_expr.kind {
+        HirExprKind::Call { callee, args } => {
+            (*callee, resolved.module.store.args.get(args.clone()))
+        }
+        other => panic!("unexpected body kind: {other:?}"),
+    };
+    assert_eq!(args.len(), 2);
+    match &resolved.module.store.exprs.get(callee).kind {
+        HirExprKind::Name { name } => assert_eq!(interner.resolve(name.name), "add"),
+        other => panic!("unexpected callee kind: {other:?}"),
+    }
+    assert!(matches!(
+        resolved.module.store.exprs.get(args[0].expr).kind,
+        HirExprKind::Lit { .. }
+    ));
+    assert!(matches!(
+        resolved.module.store.exprs.get(args[1].expr).kind,
+        HirExprKind::Lit { .. }
+    ));
+}
+
+#[test]
+fn lowers_named_call_arguments_into_hir_args() {
+    let src = r"
+        let render (port, secure) := port;
+        let value := render(port := 8080, secure := 0 = 0);
+    ";
+    let source_id = SourceId::from_raw(44);
+    let module_key = ModuleKey::new("main");
+    let parsed = parse(Lexer::new(src).lex());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let mut interner = Interner::new();
+    let resolved = resolve_module(
+        source_id,
+        &module_key,
+        parsed.tree(),
+        &mut interner,
+        ResolveOptions::default(),
+    );
+    assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+
+    let root_expr = resolved.module.store.exprs.get(resolved.module.root);
+    let expr_ids = match &root_expr.kind {
+        HirExprKind::Sequence { exprs } => resolved.module.store.expr_ids.get(*exprs),
+        other => panic!("unexpected root kind: {other:?}"),
+    };
+    let let_expr = resolved.module.store.exprs.get(expr_ids[1]);
+    let call = match &let_expr.kind {
+        HirExprKind::Let { value, .. } => *value,
+        other => panic!("unexpected let kind: {other:?}"),
+    };
+    let HirExprKind::Call { args, .. } = &resolved.module.store.exprs.get(call).kind else {
+        panic!("call expr expected");
+    };
+    let args = resolved.module.store.args.get(args.clone());
+    assert_eq!(args.len(), 2);
+    assert_eq!(interner.resolve(args[0].name.expect("name").name), "port");
+    assert_eq!(interner.resolve(args[1].name.expect("name").name), "secure");
+}
+
+#[test]
 fn resolves_lambda_param_in_body() {
     assert_name_binding(
-        "(x: Int) => x;",
+        r"\(x : Int) => x;",
         SourceId::from_raw(4),
         "x",
         0,
@@ -260,7 +353,7 @@ fn resolves_pi_binder_in_ret() {
 #[test]
 fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
     let src = r"
-        let Option[T] := data { | Some : T | None | };
+        let Option[T] := data { | Some(T) | None | };
         let Pair[T] := data { left : T; right : T; };
     ";
     let source_id = SourceId::from_raw(6);

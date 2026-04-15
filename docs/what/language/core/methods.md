@@ -1,43 +1,23 @@
 ---
 title: "Methods"
 description: "Learn Musi's attached-method model after plain functions and calls."
-group: "Core syntax"
-section: "Core syntax"
+group: "Core Syntax"
+section: "Core Syntax"
 order: 11
 slug: "methods"
 summary: "Use receiver-prefixed methods and dot calls without needing an impl block."
 ---
 
+Methods are functions attached to a receiver shape. The receiver comes before the dot, which makes the main subject visible first.
+
 {{snippet:chapter-methods}}
 
-## What
+## Reading Model
 
-Methods in Musi are receiver-prefixed function definitions.
-Instead of inventing a separate `impl` block or class body, the receiver appears right in the definition, and the call site uses dot syntax on the value.
-That keeps method behavior close to ordinary function behavior while making receiver visible.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why
+## Practical Rule
 
-Users coming from object-heavy languages expect one model; users coming from functional languages expect another.
-This chapter should show that Musi's method surface is simpler than both expectations: define behavior with a receiver parameter, then call it from the value you already have.
-That answers "how do I write `x.abs()`?" without dragging in more abstraction machinery.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## How
-
-Read `let (self : Int).abs () : Int := self;` as a function whose first visible role is receiver.
-Then read `one.abs();` as method call on value `one`, not as magical property lookup.
-When deciding between plain function and method, prefer method when receiver-led reading is clearer at call site.
-
-## Try it
-
-- Define one receiver method for a simple type.
-- Call it from a named value.
-- Compare that call with equivalent plain function style.
-
-## Common mistake
-
-Do not assume methods require a separate container type declaration before they can exist.
-
-## Next
-
-Continue to [Records](/docs/language/data/records) to move from scalar values into labeled data.
+Continue to [Records](/learn/book/data/modeling/records).

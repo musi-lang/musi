@@ -183,7 +183,8 @@ where
         let attrs = self.merge_attrs(current.attrs, mods.attrs);
         let export = current.export.or(mods.export);
         let foreign = current.foreign.or(mods.foreign);
-        self.store.exprs.get_mut(expr).mods = HirMods::new(attrs, export, foreign);
+        let partial = current.partial || mods.partial;
+        self.store.exprs.get_mut(expr).mods = HirMods::new(attrs, export, foreign, partial);
     }
 
     fn lower_opt_expr(

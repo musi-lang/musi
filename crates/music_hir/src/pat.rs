@@ -38,7 +38,7 @@ pub enum HirPatKind {
     },
     Variant {
         tag: Ident,
-        args: SliceRange<HirPatId>,
+        args: SliceRange<HirVariantPatArg>,
     },
     Or {
         left: HirPatId,
@@ -60,5 +60,18 @@ impl HirRecordPatField {
     #[must_use]
     pub const fn new(name: Ident, value: Option<HirPatId>) -> Self {
         Self { name, value }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirVariantPatArg {
+    pub name: Option<Ident>,
+    pub pat: HirPatId,
+}
+
+impl HirVariantPatArg {
+    #[must_use]
+    pub const fn new(name: Option<Ident>, pat: HirPatId) -> Self {
+        Self { name, pat }
     }
 }

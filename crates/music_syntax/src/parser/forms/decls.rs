@@ -66,7 +66,9 @@ impl Parser<'_> {
             .builder
             .push_node_from_children(SyntaxNodeKind::ReceiverSpec, children))
     }
+}
 
+impl Parser<'_> {
     pub(crate) fn parse_data_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let data = self.expect_token(TokenKind::KwData)?;
         let open = self.expect_token(TokenKind::LBrace)?;
@@ -140,11 +142,31 @@ impl Parser<'_> {
     fn parse_variant_def(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = self.parse_attrs()?;
         children.push(self.expect_ident_element()?);
-        self.parse_optional_typed_expr(&mut children)?;
+        if self.at(TokenKind::LParen) {
+            children.push(SyntaxElementId::Node(
+                self.parse_variant_payload_list(Parser::parse_variant_payload_def_item)?,
+            ));
+        }
+        if let Some(arrow) = self.eat(TokenKind::MinusGt) {
+            children.push(arrow);
+            children.push(SyntaxElementId::Node(self.parse_type_expr(0)?));
+        }
         self.parse_optional_bound_expr(&mut children)?;
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::Variant, children))
+    }
+
+    fn parse_variant_payload_def_item(&mut self) -> ParseResult<SyntaxNodeId> {
+        if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::Colon {
+            let ident = self.expect_ident_element()?;
+            let mut children = vec![ident];
+            self.parse_required_typed_expr(&mut children)?;
+            return Ok(self
+                .builder
+                .push_node_from_children(SyntaxNodeKind::VariantFieldDef, children));
+        }
+        self.parse_expr_node()
     }
 
     fn parse_field_list(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -165,7 +187,9 @@ impl Parser<'_> {
             .builder
             .push_node_from_children(SyntaxNodeKind::Field, children))
     }
+}
 
+impl Parser<'_> {
     pub(crate) fn parse_effect_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         self.parse_member_body_expr(SyntaxNodeKind::EffectExpr, TokenKind::KwEffect)
     }
@@ -240,7 +264,9 @@ impl Parser<'_> {
             .builder
             .push_node_from_children(SyntaxNodeKind::HandleExpr, children))
     }
+}
 
+impl Parser<'_> {
     fn parse_handle_clause(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = vec![self.expect_ident_element()?];
         if self.at(TokenKind::LParen) {
@@ -315,9 +341,14 @@ impl Parser<'_> {
     pub(crate) fn parse_with_mods_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
         let mut has_export_mod = false;
-        while self.at(TokenKind::At) || self.at(TokenKind::KwExport) {
+        while self.at(TokenKind::At)
+            || self.at(TokenKind::KwExport)
+            || self.at(TokenKind::KwPartial)
+        {
             if self.at(TokenKind::At) {
                 children.push(SyntaxElementId::Node(self.parse_attr()?));
+            } else if self.at(TokenKind::KwPartial) {
+                children.push(self.advance_element());
             } else {
                 children.push(SyntaxElementId::Node(self.parse_export_mod()?));
                 has_export_mod = true;
@@ -353,7 +384,9 @@ impl Parser<'_> {
             .builder
             .push_node_from_children(SyntaxNodeKind::ExportMod, children))
     }
+}
 
+impl Parser<'_> {
     fn parse_member_body_expr(
         &mut self,
         kind: SyntaxNodeKind,

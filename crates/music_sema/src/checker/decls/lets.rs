@@ -40,6 +40,7 @@ struct RecCallableSeed<'a> {
     effects: Option<&'a HirEffectSet>,
     declared_ty: Option<HirTyId>,
     type_params: &'a [Symbol],
+    type_param_kinds: &'a [HirTyId],
     constraints: &'a [ConstraintFacts],
 }
 
@@ -55,6 +56,7 @@ struct CallableLetCheckInput<'a> {
     value: HirExprId,
     binding: Option<NameBindingId>,
     type_params: Box<[Symbol]>,
+    type_param_kinds: Box<[HirTyId]>,
     constraints: ConstraintFactsList,
 }
 
@@ -69,6 +71,7 @@ struct NonCallableLetCheckInput {
     is_module_stmt: bool,
     bound_name: Option<Ident>,
     type_params: Box<[Symbol]>,
+    type_param_kinds: Box<[HirTyId]>,
     constraints: ConstraintFactsList,
 }
 
@@ -80,12 +83,22 @@ pub(in super::super) fn check_let_expr(
 }
 
 impl CheckPass<'_, '_, '_> {
-    fn lower_let_type_params(&self, type_params: SliceRange<HirBinder>) -> Box<[Symbol]> {
-        self.binders(type_params)
-            .into_iter()
-            .map(|binder| binder.name.name)
+    fn lower_let_type_params(
+        &mut self,
+        type_params: SliceRange<HirBinder>,
+    ) -> (Box<[Symbol]>, Box<[HirTyId]>) {
+        let kinds = self.lower_type_param_kinds(type_params);
+        let names = kinds
+            .iter()
+            .map(|(name, _)| *name)
             .collect::<Vec<_>>()
-            .into_boxed_slice()
+            .into_boxed_slice();
+        let kind_tys = kinds
+            .iter()
+            .map(|(_, kind)| *kind)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        (names, kind_tys)
     }
 
     fn validate_non_callable_let_pattern(
@@ -131,25 +144,27 @@ impl CheckPass<'_, '_, '_> {
         binding: NameBindingId,
         ty: HirTyId,
         effects: EffectRow,
-        type_params: Box<[Symbol]>,
+        type_params: (Box<[Symbol]>, Box<[HirTyId]>),
+        param_names: Box<[Symbol]>,
         constraints: ConstraintFactsList,
     ) {
-        self.insert_binding_type(binding, ty);
-        self.insert_binding_effects(binding, effects.clone());
+        let scheme = BindingScheme {
+            type_params: type_params.0,
+            type_param_kinds: type_params.1,
+            param_names,
+            constraints,
+            ty,
+            effects: effects.clone(),
+        };
+        let value_ty = self.scheme_value_ty(&scheme);
+        self.insert_binding_type(binding, value_ty);
+        self.insert_binding_effects(binding, effects);
         let evidence_keys = self
-            .evidence_scope_for_constraints(&constraints)
+            .evidence_scope_for_constraints(&scheme.constraints)
             .into_keys()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        self.insert_binding_scheme(
-            binding,
-            BindingScheme {
-                type_params,
-                constraints,
-                ty,
-                effects,
-            },
-        );
+        self.insert_binding_scheme(binding, scheme);
         self.set_binding_evidence_keys(binding, evidence_keys);
     }
 
@@ -213,7 +228,11 @@ impl CheckPass<'_, '_, '_> {
             binding,
             provisional_ty,
             provisional_effects,
-            seed.type_params.to_vec().into_boxed_slice(),
+            (
+                seed.type_params.to_vec().into_boxed_slice(),
+                seed.type_param_kinds.to_vec().into_boxed_slice(),
+            ),
+            Box::default(),
             seed.constraints.to_vec().into_boxed_slice(),
         );
     }
@@ -297,6 +316,7 @@ impl CheckPass<'_, '_, '_> {
             value,
             binding,
             type_params,
+            type_param_kinds,
             constraints,
         } = input;
         if !matches!(
@@ -316,6 +336,12 @@ impl CheckPass<'_, '_, '_> {
                 "",
             );
         }
+        let param_names = self
+            .params(params.clone())
+            .into_iter()
+            .map(|param| param.name.name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let param_types = self.lower_params(params);
         self.seed_recursive_callable_scheme(&RecCallableSeed {
             binding,
@@ -324,6 +350,7 @@ impl CheckPass<'_, '_, '_> {
             effects,
             declared_ty,
             type_params: &type_params,
+            type_param_kinds: &type_param_kinds,
             constraints: &constraints,
         });
         let (ty, callable_effects) = self.check_callable_let_binding(
@@ -335,8 +362,15 @@ impl CheckPass<'_, '_, '_> {
             value,
         );
         let attached_receiver = self.attached_receiver_ty(is_module_stmt, mods, &param_types);
-        if let Some(binding) = binding {
-            self.insert_let_binding_scheme(binding, ty, callable_effects, type_params, constraints);
+        binding.map_or(ty, |binding| {
+            self.insert_let_binding_scheme(
+                binding,
+                ty,
+                callable_effects,
+                (type_params, type_param_kinds),
+                param_names,
+                constraints,
+            );
             if let Some((receiver_ty, method_name, receiver_mut)) = attached_receiver {
                 self.insert_attached_method_binding(
                     receiver_ty,
@@ -345,8 +379,8 @@ impl CheckPass<'_, '_, '_> {
                     receiver_mut,
                 );
             }
-        }
-        ty
+            self.binding_type(binding).unwrap_or(ty)
+        })
     }
 
     fn attached_receiver_ty(
@@ -382,6 +416,7 @@ impl CheckPass<'_, '_, '_> {
             is_module_stmt,
             bound_name,
             type_params,
+            type_param_kinds,
             constraints,
         } = input;
         let builtins = self.builtins();
@@ -409,7 +444,8 @@ impl CheckPass<'_, '_, '_> {
                 binding,
                 ty,
                 EffectRow::empty(),
-                type_params,
+                (type_params, type_param_kinds),
+                Box::default(),
                 constraints,
             );
         }
@@ -433,9 +469,18 @@ impl CheckPass<'_, '_, '_> {
             sig,
             value,
         } = input;
+        if expr_mods.partial && expr_mods.foreign.is_some() {
+            self.diag(origin.span, DiagKind::PartialForeignConflict, "");
+        }
         let bound_name = bound_name_from_pat(self, pat);
         let binding = bound_name.and_then(|ident| self.binding_id_for_decl(ident));
-        let type_params = self.lower_let_type_params(type_params);
+        let (type_params, type_param_kinds) = self.lower_let_type_params(type_params);
+        let type_param_scope = type_params
+            .iter()
+            .copied()
+            .zip(type_param_kinds.iter().copied())
+            .collect::<Vec<_>>();
+        self.push_type_param_kinds(&type_param_scope);
         let constraints = self.lower_constraints(constraints);
         let declared_ty = sig.map(|expr| {
             let origin = self.expr(expr).origin;
@@ -443,7 +488,8 @@ impl CheckPass<'_, '_, '_> {
         });
 
         let final_ty = if is_module_stmt && expr_mods.foreign.is_some() {
-            check_foreign_let(self, expr_id).unwrap_or(builtins.unknown)
+            check_foreign_let(self, expr_id, type_params, type_param_kinds)
+                .unwrap_or(builtins.unknown)
         } else if has_param_clause {
             self.check_callable_let_expr(CallableLetCheckInput {
                 origin,
@@ -457,6 +503,7 @@ impl CheckPass<'_, '_, '_> {
                 value,
                 binding,
                 type_params,
+                type_param_kinds,
                 constraints,
             })
         } else {
@@ -471,10 +518,12 @@ impl CheckPass<'_, '_, '_> {
                 is_module_stmt,
                 bound_name,
                 type_params,
+                type_param_kinds,
                 constraints,
             })
         };
 
+        self.pop_type_param_kinds();
         if !bind_module_pattern(self, pat, value) {
             bind_pat(self, pat, final_ty);
         }
@@ -483,9 +532,23 @@ impl CheckPass<'_, '_, '_> {
         {
             self.insert_binding_module_target(binding, target);
         }
+        if let Some(binding) = binding
+            && let Some(name) = bound_name
+            && is_std_ffi_unsafe_public_pointer_op(
+                self.module_key().as_str(),
+                self.resolve_symbol(name.name),
+            )
+        {
+            self.mark_unsafe_binding(binding);
+        }
         if let Some(name) = bound_name {
             bind_structural_alias(self, name, value);
         }
         ExprFacts::new(builtins.unit, EffectRow::empty())
     }
+}
+
+fn is_std_ffi_unsafe_public_pointer_op(module_key: &str, name: &str) -> bool {
+    (module_key == "@std/ffi" || module_key.ends_with("ffi/index.ms"))
+        && matches!(name, "offset" | "read" | "write")
 }

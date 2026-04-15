@@ -62,6 +62,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn help_lists_info_not_inspect() {
+        let output = run_music(&["--help"]);
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("info"));
+        assert!(!stdout.contains("inspect"));
+    }
+
+    #[test]
+    fn info_prints_built_artifact_metadata() {
+        let temp = TempDir::new();
+        let source_path = temp.path().join("main.ms");
+        let artifact_path = temp.path().join("main.seam");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let build_output = run_music(&[
+            "build",
+            source_path.to_str().expect("utf-8 source path"),
+            "--out",
+            artifact_path.to_str().expect("utf-8 artifact path"),
+        ]);
+        assert!(build_output.status.success());
+
+        let output = run_music(&["info", artifact_path.to_str().expect("utf-8 artifact path")]);
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("binaryVersion:"));
+        assert!(stdout.contains("exports:"));
+    }
+
+    #[test]
     fn json_check_success_writes_only_json_to_stdout() {
         let temp = TempDir::new();
         write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");

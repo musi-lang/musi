@@ -48,9 +48,11 @@ pub enum TokenKind {
     KwNot,
     KwOpaque,
     KwOr,
+    KwPartial,
     KwQuote,
     KwRec,
     KwResume,
+    KwUnsafe,
     KwShl,
     KwShr,
     KwUsing,
@@ -91,6 +93,7 @@ pub enum TokenKind {
     ColonEq,         // :=
     MinusGt,         // ->
     TildeGt,         // ~>
+    TildeEq,         // ~=
     EqGt,            // =>
     SlashEq,         // /=
     LtEq,            // <=
@@ -124,6 +127,7 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b">=", TokenKind::GtEq),
     (b"|>", TokenKind::PipeGt),
     (b"~>", TokenKind::TildeGt),
+    (b"~=", TokenKind::TildeEq),
     (b":?", TokenKind::ColonQuestion),
     (b"#", TokenKind::Hash),
     (b"\\", TokenKind::Backslash),
@@ -150,7 +154,7 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 32] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 34] = [
     ("and", TokenKind::KwAnd, "`and`"),
     ("as", TokenKind::KwAs, "`as`"),
     ("match", TokenKind::KwMatch, "`match`"),
@@ -175,9 +179,11 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 32] = [
     ("not", TokenKind::KwNot, "`not`"),
     ("opaque", TokenKind::KwOpaque, "`opaque`"),
     ("or", TokenKind::KwOr, "`or`"),
+    ("partial", TokenKind::KwPartial, "`partial`"),
     ("quote", TokenKind::KwQuote, "`quote`"),
     ("rec", TokenKind::KwRec, "`rec`"),
     ("resume", TokenKind::KwResume, "`resume`"),
+    ("unsafe", TokenKind::KwUnsafe, "`unsafe`"),
     ("shl", TokenKind::KwShl, "`shl`"),
     ("shr", TokenKind::KwShr, "`shr`"),
     ("using", TokenKind::KwUsing, "`using`"),
@@ -185,7 +191,7 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 32] = [
     ("xor", TokenKind::KwXor, "`xor`"),
 ];
 
-const PUNCT_DISPLAY: [(TokenKind, &str); 38] = [
+const PUNCT_DISPLAY: [(TokenKind, &str); 39] = [
     (TokenKind::At, "`@`"),
     (TokenKind::Hash, "`#`"),
     (TokenKind::Backslash, "`\\\\`"),
@@ -212,6 +218,7 @@ const PUNCT_DISPLAY: [(TokenKind, &str); 38] = [
     (TokenKind::ColonEq, "`:=`"),
     (TokenKind::MinusGt, "`->`"),
     (TokenKind::TildeGt, "`~>`"),
+    (TokenKind::TildeEq, "`~=`"),
     (TokenKind::EqGt, "`=>`"),
     (TokenKind::SlashEq, "`/=`"),
     (TokenKind::LtEq, "`<=`"),

@@ -2,6 +2,62 @@ use super::super::*;
 use crate::EmitDiagKind;
 
 impl MethodEmitter<'_, '_> {
+    pub(super) fn compile_intrinsic_call(
+        &mut self,
+        symbol: &str,
+        param_tys: &[Box<str>],
+        result_ty: &str,
+        args: &[IrArg],
+        diags: &mut EmitDiagList,
+    ) {
+        for arg in args {
+            self.compile_expr(&arg.expr, true, diags);
+        }
+        let Some(foreign) = self.intern_intrinsic_foreign(symbol, param_tys, result_ty) else {
+            let fallback_origin = IrOrigin {
+                source_id: SourceId::from_raw(0),
+                span: Span::new(0, 0),
+            };
+            let origin = args
+                .first()
+                .map_or(&fallback_origin, |arg| &arg.expr.origin);
+            super::support::push_expr_diag(
+                diags,
+                self.module_key,
+                origin,
+                EmitDiagKind::UnknownTypeNameForOp,
+                format!("unknown intrinsic foreign type for `{symbol}`"),
+            );
+            emit_zero(self);
+            return;
+        };
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::FfiCall,
+            Operand::Foreign(foreign),
+        )));
+    }
+
+    fn intern_intrinsic_foreign(
+        &mut self,
+        symbol: &str,
+        param_tys: &[Box<str>],
+        result_ty: &str,
+    ) -> Option<ForeignId> {
+        let name = format!("{}::{symbol}", self.module_key.as_str());
+        let name_id = self.artifact.intern_string(&name);
+        let abi_id = self.artifact.intern_string("musi");
+        let symbol_id = self.artifact.intern_string(symbol);
+        let param_tys = param_tys
+            .iter()
+            .map(|ty| self.layout.types.get(ty.as_ref()).copied())
+            .collect::<Option<Vec<_>>>()?
+            .into_boxed_slice();
+        let result_ty = self.layout.types.get(result_ty).copied()?;
+        Some(self.artifact.foreigns.alloc(ForeignDescriptor::new(
+            name_id, param_tys, result_ty, abi_id, symbol_id,
+        )))
+    }
+
     pub(super) fn compile_variant_new(
         &mut self,
         data_key: &DefinitionKey,

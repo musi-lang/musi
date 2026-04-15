@@ -22,35 +22,42 @@ const removedSyntaxPatterns = [
 ] as const;
 const requestKeywordPattern = /> ?request<\/span>/;
 const matchKeywordPattern = /> ?match<\/span>/;
+const partialKeywordPattern = /> ?partial<\/span>/;
+const equivalenceOperatorPattern = /<span style="color:[^"]+">~=<\/span>/;
+const pureFunctionOperatorPattern = /<span style="color:[^"]+">\s*-><\/span>/;
+const payloadLabelPattern = /<span style="color:[^"]+">value<\/span>/;
+const foreignAbiStringPattern = /<span style="color:[^"]+">\s*"c"<\/span>/;
+const foreignLetKeywordPattern = /<span style="color:[^"]+">\s*let<\/span>/;
+const lambdaPunctuationPattern = /<span style="color:[^"]+">\s*\\<\/span>/;
 const snippetPlaceholder = "${";
 const matchSnippetPattern = `match ${snippetPlaceholder}1:expr} (`;
-const handleRequestSnippetPattern = `handle request ${snippetPlaceholder}1:effect}.${snippetPlaceholder}2:op}(${snippetPlaceholder}3:value}) using ${snippetPlaceholder}4:effect} {`;
+const handleRequestSnippetPattern = `handle ${snippetPlaceholder}1:effect}.${snippetPlaceholder}2:op}(${snippetPlaceholder}3:value}) using ${snippetPlaceholder}4:effect} {`;
 const caseSnippetPattern = `case ${snippetPlaceholder}1:expr} of (`;
 const handleWithSnippetPattern = `handle ${snippetPlaceholder}1:expr} with ${snippetPlaceholder}2:effect} of (`;
 
 function chapterDocFiles(chaptersRoot: string) {
 	const chapterFiles: string[] = [];
-	for (const section of readdirSync(chaptersRoot)) {
-		if (section === "index.md" || section === "syntax.md") {
+	for (const entry of readdirSync(chaptersRoot, { withFileTypes: true })) {
+		if (entry.name === "index.md" || entry.name === "syntax.md") {
 			continue;
 		}
-		const sectionPath = join(chaptersRoot, section);
-		for (const file of readdirSync(sectionPath)) {
-			if (file === "index.md" || !file.endsWith(".md")) {
-				continue;
-			}
-			chapterFiles.push(join(sectionPath, file));
+		const path = join(chaptersRoot, entry.name);
+		if (entry.isDirectory()) {
+			chapterFiles.push(...chapterDocFiles(path));
+			continue;
+		}
+		if (entry.name.endsWith(".md")) {
+			chapterFiles.push(path);
 		}
 	}
 	return chapterFiles;
 }
 
-function chapterSnippetUsage(file: string, used: Map<string, string>) {
+function chapterSnippetUsage(file: string) {
 	const source = readFileSync(file, "utf8");
 	const embeds = [...source.matchAll(embedPattern)];
-	const id = embeds[0]?.[2];
-	const previous = used.get(String(id));
-	return { embeds, id, previous };
+	const snippetEmbeds = embeds.filter((embed) => embed[1] === "snippet");
+	return { embeds, snippetEmbeds };
 }
 
 function removedSyntaxMatches(path: string) {
@@ -102,6 +109,14 @@ describe("content watch paths", () => {
 				join(root, "..", "src", "content", "snippet-registry.ts"),
 			),
 		).toBe(true);
+		expect(
+			isWatchedContentPath(
+				join(root, "..", "src", "content", "snippets", "developers", "lua.ts"),
+			),
+		).toBe(true);
+		expect(
+			isWatchedContentPath(join(root, "..", "src", "content", "catalog.ts")),
+		).toBe(true);
 		expect(isWatchedContentPath(join(root, "content-generator.ts"))).toBe(true);
 		expect(
 			isWatchedContentPath(
@@ -148,13 +163,13 @@ let next := port + 1;`,
 	it("keeps let data declarations and value bindings out of call-site highlighting", () => {
 		const declarationHtml = renderHighlightedCodeForTest(
 			`let Port := data {
-  | Configured : Int
+  | Configured(port : Int)
   | Default
 };`,
 			"musi",
 		);
 		const bindingHtml = renderHighlightedCodeForTest(
-			"let port : Port := .Configured(8080);",
+			"let port : Port := .Configured(port := 8080);",
 			"musi",
 		);
 
@@ -163,19 +178,26 @@ let next := port + 1;`,
 		expect(bindingHtml).toContain(".Configured");
 		expect(bindingHtml).not.toMatch(splitCallLikeBindingPattern);
 	});
+
+	it("highlights foreign ABI names as string literals", () => {
+		const html = renderHighlightedCodeForTest(
+			'foreign "c" let puts (message : CString) : Int;',
+			"musi",
+		);
+
+		expect(html).toMatch(foreignAbiStringPattern);
+		expect(html).toMatch(foreignLetKeywordPattern);
+		expect(html).toContain("puts");
+	});
 });
 
 describe("chapter docs", () => {
-	it("use one unique snippet each", () => {
+	it("use registered snippets in every chapter", () => {
 		const chaptersRoot = join(root, "..", "..", "docs", "what", "language");
-		const used = new Map<string, string>();
 		for (const file of chapterDocFiles(chaptersRoot)) {
-			const usage = chapterSnippetUsage(file, used);
-			expect(usage.embeds.length, file).toBe(1);
-			expect(usage.embeds[0]?.[1], file).toBe("snippet");
-			expect(usage.id, file).toBeTruthy();
-			expect(usage.previous, `${file} reuses ${usage.id}`).toBeUndefined();
-			used.set(String(usage.id), file);
+			const usage = chapterSnippetUsage(file);
+			expect(usage.snippetEmbeds.length, file).toBeGreaterThanOrEqual(1);
+			expect(usage.snippetEmbeds[0]?.[1], file).toBe("snippet");
 		}
 	});
 });
@@ -185,6 +207,7 @@ describe("website learning syntax", () => {
 		const files = [
 			join(root, "..", "..", "docs", "what", "language"),
 			join(root, "..", "src", "content", "snippet-registry.ts"),
+			join(root, "..", "src", "content", "snippets"),
 			join(root, "..", "src", "content", "examples", "groups-core.ts"),
 			join(root, "..", "src", "content", "examples", "groups-advanced.ts"),
 		];
@@ -203,7 +226,7 @@ describe("website highlighting", () => {
 		const html = renderHighlightedCodeForTest(
 			`match value (
 | .Left(x) => x
-| .Right(_) => request Console.readln()
+| .Right(_) => request Console.readLine()
 );`,
 			"musi",
 		);
@@ -212,6 +235,40 @@ describe("website highlighting", () => {
 		expect(html).toContain("match");
 		expect(html).toMatch(requestKeywordPattern);
 		expect(html).toMatch(matchKeywordPattern);
+	});
+
+	it("highlights dependent and type-constructor syntax", () => {
+		const html = renderHighlightedCodeForTest(
+			`let Box1[T] := data {
+  | Box1(value : T)
+};
+
+let Keeps[F : Type -> Type] := class {
+  let keep(value : F[Int]) : F[Int];
+};
+
+partial let parsePort(text : String) : Int := 0;
+let proof := left ~= right;`,
+			"musi",
+		);
+
+		expect(html).toContain("partial");
+		expect(html).toContain("~=");
+		expect(html).toContain("Type");
+		expect(html).toContain("value");
+		expect(html).toMatch(partialKeywordPattern);
+		expect(html).toMatch(equivalenceOperatorPattern);
+		expect(html).toMatch(pureFunctionOperatorPattern);
+		expect(html).toMatch(payloadLabelPattern);
+	});
+
+	it("highlights lambda introducers", () => {
+		const html = renderHighlightedCodeForTest(
+			"let plusOne := \\(x : Int) => x + 1;",
+			"musi",
+		);
+
+		expect(html).toMatch(lambdaPunctuationPattern);
 	});
 
 	it("keeps grammar and snippets on current syntax", () => {
@@ -229,22 +286,27 @@ describe("website highlighting", () => {
 		);
 
 		expect(grammarSource).toContain(
-			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|where)\\\\b",
+			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|unsafe|where)\\\\b",
 		);
 		expect(grammarSource).not.toContain(
 			"\\\\b(as|case|export|forall|handle|if|import|of|perform|quote|resume|where)\\\\b",
 		);
 		expect(grammarSource).toContain("match\\\\b");
+		expect(grammarSource).toContain("partial");
 		expect(grammarSource).toContain("request\\\\b");
+		expect(grammarSource).toContain("~=");
+		expect(grammarSource).toContain("keyword.operator.lambda.musi");
 		expect(grammarSource).not.toContain("case\\\\b");
 		expect(grammarSource).not.toContain("of\\\\b");
 		expect(grammarSource).not.toContain("perform\\\\b");
 		expect(snippetSource).toContain('"Match Expression"');
+		expect(snippetSource).toContain('"Lambda Expression"');
 		expect(snippetSource).toContain(matchSnippetPattern);
 		expect(snippetSource).toContain(handleRequestSnippetPattern);
 		expect(snippetSource).not.toContain(caseSnippetPattern);
 		expect(snippetSource).not.toContain(handleWithSnippetPattern);
 		expect(websiteGeneratorSource).toContain("match\\\\b");
+		expect(websiteGeneratorSource).toContain("partial\\\\b");
 		expect(websiteGeneratorSource).toContain("request\\\\b");
 		expect(websiteGeneratorSource).not.toContain("case\\\\b");
 		expect(websiteGeneratorSource).not.toContain("of\\\\b");

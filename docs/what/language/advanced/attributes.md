@@ -1,43 +1,77 @@
 ---
 title: "Attributes"
-description: "Introduce attributes separately from foreign declarations so each concept stays narrow."
-group: "Advanced and tooling"
-section: "Advanced and tooling"
+description: "Use attributes to attach metadata for compiler-known items, layout, foreign links, diagnostics, and lifecycle information."
+group: "Advanced and Tooling"
+section: "Advanced and Tooling"
 order: 30
 slug: "attributes"
-summary: "Use attributes when the compiler or runtime needs explicit extra metadata."
+summary: "Attributes describe metadata, boundaries, and build-time intent without changing Musi into a macro language."
 ---
 
 {{snippet:chapter-attributes}}
 
-## What
+Attributes let you attach structured metadata to declarations.
+They are not a replacement for ordinary language design, and they are not a free-form escape hatch for every feature.
+They exist to carry information that matters at compile time, runtime boundaries, layout, tooling, or documentation.
 
-Attributes attach explicit metadata to declarations.
-This example keeps that concrete by placing `@link(...)` on a foreign declaration, where the extra metadata clearly changes how surrounding system should treat the declaration.
-Attributes are not everyday syntax, but they are important when code must talk to tooling, compiler, or runtime machinery.
+## Boundary Tool
 
-## Why
+The built-in attribute families you will see most often are:
 
-Users eventually ask how to express non-local facts such as linkage, platform detail, or compiler-facing metadata.
-Those questions should not clutter beginner chapters, but they still need a clean answer.
-An attribute chapter gives those answers without pretending attributes are part of normal domain modeling.
+- compiler and foundation identity: `@known`, `@intrinsic`
+- foreign boundary: `@link`, `@when`
+- data layout and freezing: `@repr`, `@layout`, `@frozen`
+- hotness and optimization hints: `@hot`, `@cold`
+- lifecycle metadata: `@deprecated`, `@since`
 
-## How
+There can also be non-reserved metadata attributes that survive as inert data for tooling or documentation.
 
-Read the attribute as metadata attached to declaration that follows it.
-Then read the foreign declaration itself and separate two concerns: the declaration says what binding exists, the attribute says extra information needed for that binding to work correctly in broader system.
-When using attributes, keep them narrow, explicit, and close to declarations that truly require them.
+## When to Reach for It
 
-## Try it
+If the docs only say "attributes exist", users still do not know which ones are ordinary metadata, which ones affect code generation, and which ones are only valid in special places.
+This chapter should answer three practical questions:
 
-- Add one attribute to a boundary-facing declaration.
-- State what behavior the attribute is trying to influence.
-- Remove it mentally and decide what information would then be missing.
+1. what family is this attribute in?
+2. what kind of declaration can it attach to?
+3. what does the compiler or runtime do with it?
 
-## Common mistake
+## Read the Boundary
 
-Do not use attributes to hide core business logic that should be visible in ordinary code structure.
+Read attributes from the outside in:
 
-## Next
+- the path, such as `@link` or `@layout`
+- the named arguments, such as `name := "c"`
+- the declaration the attribute is attached to
 
-Continue to [Foreign](/docs/language/advanced/foreign) to focus on declarations that cross out of Musi entirely.
+A short catalog of common meanings:
+
+- `@known(name := "Bool")`: this exported item is one canonical built-in surface
+- `@intrinsic(name := "ptr.load")`: implementation comes from compiler/runtime intrinsic machinery
+- `@link(name := "c")`: foreign declaration links against host symbol provider
+- `@when(...)`: gate declaration by target or environment facts
+- `@repr(...)`, `@layout(...)`: influence data representation details
+- `@frozen`: exported data layout should not drift casually
+- `@hot`, `@cold`: codegen-facing temperature hint
+- `@deprecated`, `@since`: consumer-facing lifecycle metadata
+
+## What Musi does not do here
+
+Musi attributes are not a full macro system.
+They do not replace normal functions, data definitions, or effects.
+If you need ordinary behavior, write ordinary Musi code first.
+Reach for attributes when the information really is metadata.
+
+## Small Exercise
+
+- Read one `@link` declaration and identify every named argument.
+- Compare one layout-related attribute with one lifecycle attribute.
+- Ask whether the information belongs in ordinary code or in metadata.
+
+## Mistake to Avoid
+
+Do not treat attributes as a generic place to hide behavior.
+If a concept changes how code runs, it usually deserves a language or library construct first.
+
+## Next Page
+
+Continue to [Foreign](/learn/book/advanced/foreign) to see how the FFI-related attributes fit into real declarations.

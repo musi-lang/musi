@@ -8,6 +8,7 @@
 	"scripts": {
 		"generate:content": "bun run --cwd www generate:content",
 		"dev": "bun run --cwd www dev",
+		"docs:studio": "bun run --cwd www docs:studio",
 		"dev:prod": "bun run build:prod && bun run preview:prod",
 		"build": "bun run --cwd www build",
 		"build:prod": "bun run build",
@@ -23,20 +24,15 @@
 		"biome:lint": "bun run --cwd www biome:lint"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.11",
+		"@biomejs/biome": "2.4.12",
 		"@types/bun": "1.3.12",
 		"@types/node": "25.6.0",
-		"@types/react": "^19.2.14",
-		"@types/react-dom": "^19.2.3",
 		"bun-types": "1.3.12",
 		"jsdom": "29.0.2",
 		"typescript": "6.0.2",
 		"vitest": "4.1.4"
 	},
 	"dependencies": {
-		"i18next": "^26.0.4",
-		"i18next-browser-languagedetector": "^8.2.1",
-		"react-i18next": "^17.0.2",
 		"ts-morph": "^28.0.0"
 	}
 }

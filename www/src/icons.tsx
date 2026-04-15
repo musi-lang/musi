@@ -1,4 +1,4 @@
-import type { CSSProperties, SVGProps } from "react";
+import type { CSSProperties, SVGProps } from "preact/compat";
 
 type IconProps = SVGProps<SVGSVGElement> & {
 	size?: number;

@@ -172,9 +172,12 @@ impl Vm {
                 let ForeignValue {
                     module_slot,
                     foreign,
+                    type_args,
                 } = foreign_value;
                 let call = self.foreign_call(module_slot, foreign);
-                self.host.call_foreign(&call, args)
+                let call = Self::specialize_foreign_call(call, &type_args);
+                self.call_musi_intrinsic(module_slot, &call, args)
+                    .unwrap_or_else(|| self.host.call_foreign(&call, args))
             }
             _ => Err(VmError::new(VmErrorKind::NonCallableValue {
                 found: value.kind(),

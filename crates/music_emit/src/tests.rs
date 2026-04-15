@@ -70,7 +70,7 @@ fn assert_module_opcodes(src: &str, expected: &[Opcode]) {
 fn emits_artifact_for_literal_exports_and_metadata() {
     let ir = lower_ir(
         r#"
-        let Option := data { | Some : Int | None };
+        let Option := data { | Some(Int) | None };
         foreign "c" (
           let puts (value : CString) : Int;
         );
@@ -271,7 +271,7 @@ fn emits_foreign_calls() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(1);
+        export let answer () : Int := unsafe { puts(1); };
     "#,
     )
     .expect("emit should succeed");

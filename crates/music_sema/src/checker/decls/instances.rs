@@ -166,13 +166,20 @@ impl CheckPass<'_, '_, '_> {
         let members_vec = self.members((*members).clone());
         let expected_members = self.class_member_map(class_name, &class_args);
         let member_names = self.check_instance_member_set(origin, &members_vec, &expected_members);
-        let type_params = self
-            .binders(type_params)
-            .into_iter()
-            .map(|binder| binder.name.name)
+        let type_param_kinds = self.lower_type_param_kinds(type_params);
+        self.push_type_param_kinds(&type_param_kinds);
+        let type_params = type_param_kinds
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let type_param_kind_tys = type_param_kinds
+            .iter()
+            .map(|(_, kind)| *kind)
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let constraints = self.lower_constraints(constraints);
+        self.pop_type_param_kinds();
         let evidence_keys = constraints
             .iter()
             .filter_map(|constraint| self.constraint_key_for_facts(constraint))
@@ -182,6 +189,7 @@ impl CheckPass<'_, '_, '_> {
             expr_id,
             InstanceFacts::new(origin, class_key, class_name, class_args, member_names)
                 .with_type_params(type_params)
+                .with_type_param_kinds(type_param_kind_tys)
                 .with_constraints(constraints)
                 .with_evidence_keys(evidence_keys),
         );

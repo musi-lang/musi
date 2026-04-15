@@ -1,0 +1,49 @@
+---
+import { App } from "../site-app";
+import { buildStructuredData, canonicalUrl } from "../seo";
+import siteInteractionsScript from "../static-main.inline.js?raw";
+import type { AppRoute } from "../routes";
+import "../app.css";
+
+interface Props {
+	route: AppRoute;
+}
+
+const { route } = Astro.props;
+---
+<!doctype html>
+<html lang={route.locale}>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light dark" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<script is:inline>
+			(() => {
+				const key = "musi-color-scheme";
+				const stored = window.localStorage.getItem(key);
+				const scheme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+				const resolved = scheme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : scheme;
+				document.documentElement.dataset.colorScheme = scheme;
+				document.documentElement.dataset.mantineColorScheme = resolved;
+				document.documentElement.style.colorScheme = resolved;
+			})();
+		</script>
+		<title>{route.title}</title>
+		<meta name="description" content={route.description} />
+		<link rel="canonical" href={canonicalUrl(route)} />
+		<meta name="robots" content="index,follow" />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={route.title} />
+		<meta property="og:description" content={route.description} />
+		<meta property="og:url" content={canonicalUrl(route)} />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content={route.title} />
+		<meta name="twitter:description" content={route.description} />
+		<script id="seo-structured-data" type="application/ld+json" set:html={buildStructuredData(route)} />
+	</head>
+	<body>
+		<App route={route} />
+		<script is:inline set:html={siteInteractionsScript} />
+	</body>
+</html>

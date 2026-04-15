@@ -6,14 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
 jobs:
   check:
     name: Check (fmt + clippy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -39,7 +43,7 @@ jobs:
   test:
     name: Test
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -63,7 +67,7 @@ jobs:
     name: Build (release)
     needs: check
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 

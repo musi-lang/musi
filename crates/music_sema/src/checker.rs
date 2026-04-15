@@ -16,6 +16,7 @@ mod state;
 mod surface;
 mod surface_exports;
 mod surface_types;
+mod variant_payload;
 
 use state::{
     CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, EffectDef, EffectOpDef, FactState,

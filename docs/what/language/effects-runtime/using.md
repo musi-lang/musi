@@ -1,43 +1,19 @@
 ---
 title: "Using"
-description: "Learn using syntax before full handlers so capability requirements stay visible."
-group: "Effects and runtime"
-section: "Effects and runtime"
+description: "Track required effects with `using`, understand capability flow, and keep effectful code readable."
+group: "Effects and Runtime"
+section: "Effects and Runtime"
 order: 25
 slug: "using"
-summary: "Read and write using clauses as explicit capability flow."
+summary: "`using` tells readers and the compiler which effects a callable may request."
 ---
+
+`using` lists the capabilities a function may request. It belongs in the function surface so callers can see the boundary before reading the body.
 
 {{snippet:chapter-using}}
 
-## What
+Read `using { Clock }` as a permit list. The body requests clock work, and the signature tells that story before the body starts.
 
-`using` clauses make capability requirements visible in the type-level surface of a definition.
-A function that requests effectful work can say so directly instead of leaving the dependency ambient or hidden.
-That makes effect requirements part of the signature a reader sees first.
+Callable types show the same idea: `T -> U` is pure shape, while `T ~> U` can require effects. Musi does not let effectful work blend into ordinary pure code without a marker.
 
-## Why
-
-Once users understand effect requests, the next question is "how do I know this function needs that capability?"
-A signature-level answer scales better than relying on comments or hidden convention.
-This page should show that effectful code advertises its needs instead of surprising the caller later.
-
-## How
-
-Read `using { Console }` as requirement attached to the function, not as runtime argument list.
-Even if the example is small, the lesson is practical: signatures can tell you what must be available before the body can request certain operations.
-When designing APIs, add `using` where capability dependence is real and useful for callers to know up front.
-
-## Try it
-
-- Write one function signature with `using` clause.
-- Add one requested effect inside body.
-- Compare signature with equivalent hidden-dependency story.
-
-## Common mistake
-
-Do not treat `using` as optional decoration when function genuinely depends on capability availability.
-
-## Next
-
-Continue to [Handlers](/docs/language/effects-runtime/handlers) to resolve those requests at a boundary that can choose policy.
+Continue to [Handlers](/learn/book/effects-runtime/handling/handlers).
