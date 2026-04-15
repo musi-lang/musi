@@ -32,7 +32,7 @@ pub enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    Inspect {
+    Info {
         path: PathBuf,
     },
     Disasm {

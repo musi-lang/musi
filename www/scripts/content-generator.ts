@@ -8,6 +8,7 @@ import {
 	bookParts,
 	bookSections,
 } from "../src/content/book/manifest";
+import type { BookSectionDefinition } from "../src/content/book/registry/types";
 import { tryBlockById } from "../src/content/book/try-registry";
 import { exampleGroupById } from "../src/content/examples/groups";
 import { contentSnippets, snippetById } from "../src/content/snippet-registry";
@@ -690,6 +691,10 @@ async function renderMarkdownDocument(input: {
 type ManifestSection = (typeof bookSections)[number];
 type ManifestPage = (typeof bookPages)[number];
 
+function optionalSectionSourcePath(section: BookSectionDefinition) {
+	return section.sourcePath;
+}
+
 function compareByOrderThenTitle(
 	left: { order: number; title: string },
 	right: { order: number; title: string },
@@ -835,8 +840,8 @@ function renderLocalizedSectionDoc(input: {
 						...(input.section.aliases ?? []),
 					])
 				: [],
-		...(input.section.sourcePath
-			? { sourcePath: input.section.sourcePath }
+		...(optionalSectionSourcePath(input.section)
+			? { sourcePath: optionalSectionSourcePath(input.section) }
 			: {}),
 		staticAttributes: {
 			title: input.section.title,

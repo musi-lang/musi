@@ -63,6 +63,107 @@ mod tests {
     use super::*;
 
     #[test]
+    fn help_lists_init_and_reserved_commands() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["--help"], temp.path());
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("init"));
+        assert!(stdout.contains("compile"));
+        assert!(stdout.contains("fmt"));
+        assert!(!stdout.contains("new"));
+    }
+
+    #[test]
+    fn init_creates_package_in_named_directory() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["init", "sample"], temp.path());
+
+        assert!(output.status.success());
+        assert!(temp.path().join("sample/musi.json").exists());
+        assert!(temp.path().join("sample/index.ms").exists());
+        assert!(temp.path().join("sample/.gitignore").exists());
+        let manifest = fs::read_to_string(temp.path().join("sample/musi.json"))
+            .expect("manifest should be readable");
+        assert!(manifest.contains("\"name\""));
+        assert!(manifest.contains("sample"));
+    }
+
+    #[test]
+    fn init_creates_package_in_current_directory() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["init"], temp.path());
+
+        assert!(output.status.success());
+        assert!(temp.path().join("musi.json").exists());
+        assert!(temp.path().join("index.ms").exists());
+    }
+
+    #[test]
+    fn init_dot_uses_current_directory_name() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["init", "."], temp.path());
+
+        assert!(output.status.success());
+        let manifest =
+            fs::read_to_string(temp.path().join("musi.json")).expect("manifest should be readable");
+        let expected_name = temp
+            .path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("temp dir should have utf-8 name");
+        assert!(manifest.contains(expected_name));
+    }
+
+    #[test]
+    fn init_refuses_existing_package_markers() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", "{}\n");
+
+        let output = run_musi(&["init"], temp.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("already initialized"));
+    }
+
+    #[test]
+    fn reserved_command_reports_unavailable_feature() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["fmt", "--check"], temp.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("command `fmt` unavailable"));
+        assert!(stderr.contains("formatter not implemented"));
+    }
+
+    #[test]
+    fn project_info_prints_manifest_metadata() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
+
+        let output = run_musi(&["info"], temp.path());
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("package: app"));
+        assert!(stdout.contains("manifest:"));
+        assert!(stdout.contains("modules:"));
+    }
+
+    #[test]
     fn json_check_success_writes_only_json_to_stdout() {
         let temp = TempDir::new();
         write_file(

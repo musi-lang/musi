@@ -612,7 +612,9 @@ impl PassBase<'_, '_, '_> {
             .get(range)
             .to_vec()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn params(&self, range: SliceRange<HirParam>) -> ParamList {
         self.module.resolved.module.store.params.get(range).to_vec()
     }
@@ -704,7 +706,9 @@ impl PassBase<'_, '_, '_> {
             .get(set.items.clone())
             .to_vec()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> PatIdList {
         self.module
             .resolved
@@ -748,7 +752,9 @@ impl PassBase<'_, '_, '_> {
             .get(range)
             .to_vec()
     }
+}
 
+impl PassBase<'_, '_, '_> {
     pub fn lower_type_param_kinds(&mut self, range: SliceRange<HirBinder>) -> TypeParamKindList {
         let builtins = self.builtins();
         self.binders(range)

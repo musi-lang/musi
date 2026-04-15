@@ -24,7 +24,7 @@ Create `index.ms` with one exported `main` when you want to run it later, or one
 
 ## Package Start
 
-Use `musi new hello` when the code needs a manifest. From that point, prefer `musi check`, `musi run`, and `musi test` inside the package.
+Use `musi init hello` when the code needs a manifest. From that point, prefer `musi check`, `musi run`, and `musi test` inside the package.
 
 ## Mistake to Avoid
 

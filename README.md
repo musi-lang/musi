@@ -93,7 +93,7 @@ cargo install --locked --force --path crates/musi
 Create a package:
 
 ```bash
-musi new hello
+musi init hello
 cd hello
 musi run
 ```

@@ -373,7 +373,10 @@ impl ExportedValue {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<SurfaceTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }
@@ -528,7 +531,10 @@ impl DataSurface {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<SurfaceTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }
@@ -745,7 +751,10 @@ impl ClassSurface {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<SurfaceTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }
@@ -878,7 +887,10 @@ impl InstanceSurface {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<SurfaceTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }
@@ -1199,11 +1211,15 @@ impl SemaDataDef {
     }
 
     #[must_use]
-    pub(crate) fn with_type_params(
+    pub(crate) fn with_type_params<TypeParams, TypeParamKinds>(
         mut self,
-        type_params: impl Into<Box<[Symbol]>>,
-        type_param_kinds: impl Into<HirTyIdList>,
-    ) -> Self {
+        type_params: TypeParams,
+        type_param_kinds: TypeParamKinds,
+    ) -> Self
+    where
+        TypeParams: Into<Box<[Symbol]>>,
+        TypeParamKinds: Into<HirTyIdList>,
+    {
         self.type_params = type_params.into();
         self.type_param_kinds = type_param_kinds.into();
         self
@@ -1436,7 +1452,10 @@ impl ClassFacts {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<HirTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<HirTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }
@@ -1493,7 +1512,10 @@ impl InstanceFacts {
     }
 
     #[must_use]
-    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<HirTyIdList>) -> Self {
+    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
+    where
+        TypeParamKinds: Into<HirTyIdList>,
+    {
         self.type_param_kinds = type_param_kinds.into();
         self
     }

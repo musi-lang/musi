@@ -80,7 +80,7 @@ fn run() -> MusicResult {
         } => check(&path, diagnostics_format.into()),
         Command::Build { path, out } => build(&path, out.as_deref()),
         Command::Run { path, args } => run_target(&path, &args),
-        Command::Inspect { path } => inspect(&path),
+        Command::Info { path } => print_artifact_metadata(&path),
         Command::Disasm { path } => disasm(&path),
     }
 }
@@ -137,7 +137,7 @@ fn run_program(program: Program) -> MusicResult {
     Ok(())
 }
 
-fn inspect(path: &Path) -> MusicResult {
+fn print_artifact_metadata(path: &Path) -> MusicResult {
     let bytes = read_artifact_bytes(path)?;
     let artifact = decode_binary(&bytes)?;
 

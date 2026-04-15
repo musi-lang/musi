@@ -435,7 +435,7 @@ Runtime.envGet("HOME");`,
 	{
 		id: "quickstart",
 		language: "bash",
-		sourceText: `musi new hello
+		sourceText: `musi init hello
 cd hello
 musi run`,
 		evidence: {
@@ -492,7 +492,7 @@ export let test () :=
 		language: "bash",
 		sourceText: `curl -fsSL https://raw.githubusercontent.com/musi-lang/musi/main/install.sh | sh
 music check index.ms
-musi new hello`,
+musi init hello`,
 		evidence: {
 			path: "README.md",
 			line: 61,
@@ -683,7 +683,7 @@ answer;`,
 	{
 		id: "chapter-packages",
 		language: "bash",
-		sourceText: `musi new hello
+		sourceText: `musi init hello
 cd hello
 musi run`,
 		evidence: {

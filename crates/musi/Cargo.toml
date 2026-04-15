@@ -17,6 +17,7 @@ clap = { workspace = true }
 music_session = { path = "../music_session" }
 musi_tooling = { path = "../musi_tooling" }
 musi_native = { path = "../musi_native" }
+musi_lsp = { path = "../musi_lsp" }
 musi_project = { path = "../musi_project" }
 musi_rt = { path = "../musi_rt" }
 musi_vm = { path = "../musi_vm" }

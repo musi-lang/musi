@@ -609,6 +609,7 @@ name = "musi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
+ "musi_lsp",
  "musi_native",
  "musi_project",
  "musi_rt",

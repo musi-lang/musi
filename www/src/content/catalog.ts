@@ -1,4 +1,5 @@
 import { bookPages, bookParts, bookSections } from "./book/manifest";
+import type { BookSectionDefinition } from "./book/registry/types";
 
 export type ContentCollectionId = "book" | "guides" | "reference";
 export type ContentAudience = "beginner" | "language-transition" | "reference";
@@ -22,6 +23,10 @@ export interface ContentEntry {
 
 function collectionForPart(partId: string): ContentCollectionId {
 	return partId === "developers" ? "guides" : "book";
+}
+
+function sectionSourcePath(section: BookSectionDefinition) {
+	return section.sourcePath ?? `generated://book-sections/${section.id}.md`;
 }
 
 export const contentCollections = [
@@ -59,8 +64,7 @@ export const contentEntries = [
 		collection: collectionForPart(section.partId),
 		path: section.path,
 		aliases: section.aliases ?? [],
-		sourcePath:
-			section.sourcePath ?? `generated://book-sections/${section.id}.md`,
+		sourcePath: sectionSourcePath(section),
 		partId: section.partId,
 		sectionId: section.id,
 	})),
