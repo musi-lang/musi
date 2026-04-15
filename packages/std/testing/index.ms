@@ -7,28 +7,36 @@ let Unit := Core.Unit;
 
 export let pass : Bool := Assert.passValue;
 
-export let fail := Assert.fail;
+export let fail (message : String) : Bool := Assert.fail(message);
 
-export let equal := Assert.equal;
-export let notEqual := Assert.notEqual;
-export let isTrue := Assert.isTrue;
-export let isFalse := Assert.isFalse;
-export let greaterThan := Assert.greaterThan;
-export let lessThan := Assert.lessThan;
-export let betweenInclusive := Assert.betweenInclusive;
-export let expectInt := Assert.expectInt;
+export let equal[T] (actual : T, expected : T) : Bool := Assert.equal[T](actual, expected);
+export let notEqual[T] (actual : T, expected : T) : Bool := Assert.notEqual[T](actual, expected);
+export let isTrue (actual : Bool) : Bool := Assert.isTrue(actual);
+export let isFalse (actual : Bool) : Bool := Assert.isFalse(actual);
+export let greaterThan (actual : Int, lowerBound : Int) : Bool :=
+  Assert.greaterThan(actual, lowerBound);
+export let lessThan (actual : Int, upperBound : Int) : Bool :=
+  Assert.lessThan(actual, upperBound);
+export let betweenInclusive (
+  actual : Int,
+  lowerBound : Int,
+  upperBound : Int,
+) : Bool := Assert.betweenInclusive(actual, lowerBound, upperBound);
+export let expectInt (actual : Int) := Assert.expectInt(actual);
 
-export let toBe := Assert.toBe;
-export let toEqual := Assert.toEqual;
-export let toBeTruthy := Assert.toBeTruthy;
-export let toBeFalsy := Assert.toBeFalsy;
-export let toBeGreaterThan := Assert.toBeGreaterThan;
-export let toBeLessThan := Assert.toBeLessThan;
-export let expect := Assert.expect;
+export let toBe (actual : Int, expected : Int) : Bool := Assert.toBe(actual, expected);
+export let toEqual (actual : Int, expected : Int) : Bool := Assert.toEqual(actual, expected);
+export let toBeTruthy (actual : Bool) : Bool := Assert.toBeTruthy(actual);
+export let toBeFalsy (actual : Bool) : Bool := Assert.toBeFalsy(actual);
+export let toBeGreaterThan (actual : Int, bound : Int) : Bool :=
+  Assert.toBeGreaterThan(actual, bound);
+export let toBeLessThan (actual : Int, bound : Int) : Bool :=
+  Assert.toBeLessThan(actual, bound);
+export let expect (actual : Int) := Assert.expect(actual);
 
-export let describe (name : String) :=
+export let describe (name : String) : Unit :=
   Intrinsics.suiteStart(name);
-export let endDescribe () :=
+export let endDescribe () : Unit :=
   Intrinsics.suiteEnd();
-export let it (name : String, passed : Bool) :=
+export let it (name : String, passed : Bool) : Unit :=
   Intrinsics.testCase(name, passed);
