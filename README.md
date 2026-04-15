@@ -1,18 +1,18 @@
 # Musi
 
-Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, and a standard library built on `musi:` and `@std`.
+Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, and package tooling built around `.ms` source files.
 
 > [!WARNING]
 > Musi is `v0.1.0-alpha.1`. Language, tooling, and stdlib shape will still change.
 
-## What Musi ships
+## Overview
 
-Musi source files use the `.ms` extension. The repo currently ships two user-facing binaries:
+The repo ships two user-facing binaries:
 
-| Binary  | What it does                                  |
-| ------- | --------------------------------------------- |
-| `music` | direct `.ms` and `.seam` work                 |
-| `musi`  | package-aware manifest and workspace workflow |
+| Binary  | Lane    | What it does                                   |
+| ------- | ------- | ---------------------------------------------- |
+| `musi`  | package | manifest, workspace, run, build, and test flow |
+| `music` | direct  | single-file `.ms` and `.seam` artifact work    |
 
 Core surface:
 
@@ -96,6 +96,17 @@ Create a package:
 musi init hello
 cd hello
 musi run
+musi test
+```
+
+`musi init` creates a small project:
+
+```text
+hello/
+  musi.json
+  index.ms
+  add.test.ms
+  .gitignore
 ```
 
 Create a direct scratch file:
@@ -115,7 +126,7 @@ Check it:
 music check index.ms
 ```
 
-## Command lanes
+## Commands
 
 Package lane:
 
@@ -131,42 +142,12 @@ Direct lane:
 ```bash
 music check index.ms
 music build index.ms
+music info index
+music disasm index
 music run index.seam
 ```
 
-Use `musi` inside package roots. Use `music` when you want one file or one artifact.
-
-## Current syntax landmarks
-
-Musi now uses current surface consistently:
-
-- `match value (| ... )` for pattern matching
-- `request Effect.op(...)` for effect requests
-- `{ ...record, field := value }` for record updates
-- `T -> U` for pure function types and `T ~> U` for effectful function types
-- `value |> f(...)` for left-to-right call pipelines
-- `| Variant(payloads...)` for data variants, with named payloads available when shape clarity matters
-
-```musi
-let Option := import "@std/option";
-
-let port := Option.some[Int](8080)
-  |> Option.unwrapOr[Int](3000);
-
-let Port := data {
-  | Configured(port : Int)
-  | Default
-};
-
-let describe (value : Option[Int]) : String :=
-  match value (
-  | .Some(port) => "configured"
-  | .None => "default"
-  );
-
-let current : Port := .Configured(port := port);
-current;
-```
+Use `musi` inside package roots. Use `music` when you want one source graph or one artifact.
 
 ## Imports and stdlib
 
@@ -194,18 +175,16 @@ let Runtime := import "musi:runtime";
 
 Reach for `@std` first in ordinary application code. Reach for `musi:*` only when you are working at language, runtime, or integration boundaries.
 
-## Attributes and boundaries
+## Project layout
 
-Musi attributes are explicit metadata, not hidden behavior. Current built-in families include:
+Key repo areas:
 
-- `@known` and `@intrinsic` for compiler-owned foundation and intrinsics declarations
-- `@link` and `@when` for foreign and target-gated bindings
-- `@repr`, `@layout`, and `@frozen` for representation and data-shape control
-- `@hot`, `@cold`, `@deprecated`, and `@since` for codegen and lifecycle metadata
-
-## Read next
-
-Repo-canonical language docs live under `docs/what/language/`.
+- `crates/` — Rust compiler, runtime, tooling, package, and CLI crates
+- `packages/` — first-party Musi packages, including `@std`
+- `docs/what/language/` — repo-canonical language docs
+- `grammar/` — grammar sources
+- `www/` — docs website source
+- `vscode-ext/` — VS Code syntax extension
 
 Good entry points:
 
@@ -215,14 +194,11 @@ Good entry points:
 - `docs/what/language/effects-runtime/effects.md`
 - `docs/what/language/advanced/attributes.md`
 - `docs/what/language/advanced/running-and-tooling.md`
+- `docs/where/workspace-map.md`
+- `docs/reference/public-api.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`
 - `grammar/Musi.abnf`
-
-Website source and extension source live here too:
-
-- `www/`
-- `vscode-ext/`
 
 Website, docs-site, and local docs editing operations live in [`www/README.md`](www/README.md).
 
@@ -243,9 +219,17 @@ Prefer targeted crate tests over `cargo test --workspace` on lower-memory machin
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, validation, and website/doc guidance.
 
-## Code of Conduct
-
 All contributors must follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=musi-lang%2Fmusi&type=date&logscale=&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&theme=dark&logscale&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
