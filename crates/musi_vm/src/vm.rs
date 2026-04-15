@@ -4,8 +4,8 @@ pub use super::host::{EffectCall, ForeignCall};
 pub use super::loader::{RejectingLoader, VmLoader};
 use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
-    ClosureValuePtr, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr,
-    ForeignValue, SeqValuePtr, SyntaxView, ValueList,
+    ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr, ForeignValue,
+    SeqValuePtr, SyntaxView, ValueList,
 };
 pub use super::{
     OperandShape, Program, RecordView, RejectingHost, SeqView, StringView, Value, ValueView,

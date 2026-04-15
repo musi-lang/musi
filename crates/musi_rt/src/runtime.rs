@@ -8,7 +8,7 @@ use musi_vm::{
     EffectCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmLoader, VmOptions, VmResult,
     VmValueKind,
 };
-use music_module::ModuleKey;
+use music_module::{ModuleKey, ModuleSpecifier};
 use music_session::{Session, SessionError, SessionOptions};
 use music_term::SyntaxTerm;
 
@@ -263,20 +263,26 @@ impl Runtime {
     }
 
     fn compile_registered_program(&self, spec: &str) -> RuntimeProgramResult {
-        if let Some(program) = self.store.borrow().programs.get(spec).cloned() {
+        let spec = self.resolve_registered_spec(spec);
+        if let Some(program) = self.store.borrow().programs.get(spec.as_ref()).cloned() {
             return Ok(program);
         }
-        let Some(program) = self.compile_registered_program_uncached(spec)? else {
+        let Some(program) = self.compile_registered_program_uncached(spec.as_ref())? else {
             return Err(RuntimeError::new(RuntimeErrorKind::ModuleSourceMissing {
-                spec: spec.into(),
+                spec,
             }));
         };
         let _ = self
             .store
             .borrow_mut()
             .programs
-            .insert(spec.into(), program.clone());
+            .insert(spec, program.clone());
         Ok(program)
+    }
+
+    fn resolve_registered_spec(&self, spec: &str) -> Box<str> {
+        let store = self.store.borrow();
+        resolve_store_spec(&store, spec)
     }
 
     fn compile_registered_program_uncached(&self, spec: &str) -> RuntimeResult<Option<Program>> {
@@ -324,14 +330,16 @@ impl Runtime {
 
 impl VmLoader for SessionLoader {
     fn load_program(&mut self, spec: &str) -> VmResult<Program> {
-        if let Some(program) = self.store.borrow().programs.get(spec).cloned() {
+        let spec = {
+            let store = self.store.borrow();
+            resolve_store_spec(&store, spec)
+        };
+        if let Some(program) = self.store.borrow().programs.get(spec.as_ref()).cloned() {
             return Ok(program);
         }
 
-        if !self.store.borrow().module_texts.contains_key(spec) {
-            return Err(VmError::new(VmErrorKind::ModuleSourceMissing {
-                spec: spec.into(),
-            }));
+        if !self.store.borrow().module_texts.contains_key(spec.as_ref()) {
+            return Err(VmError::new(VmErrorKind::ModuleSourceMissing { spec }));
         }
 
         let store = self.store.borrow();
@@ -343,7 +351,7 @@ impl VmLoader for SessionLoader {
                 .map_err(|err| vm_session_error(&err))?;
         }
         let output = session
-            .compile_entry(&ModuleKey::new(spec))
+            .compile_entry(&ModuleKey::new(spec.as_ref()))
             .map_err(|err| vm_session_error(&err))?;
         drop(store);
 
@@ -352,9 +360,55 @@ impl VmLoader for SessionLoader {
             .store
             .borrow_mut()
             .programs
-            .insert(spec.into(), program.clone());
+            .insert(spec, program.clone());
         Ok(program)
     }
+}
+
+fn resolve_store_spec(store: &RuntimeStore, spec: &str) -> Box<str> {
+    if store.module_texts.contains_key(spec) || store.programs.contains_key(spec) {
+        return spec.into();
+    }
+    let import_map = &store.session_options.import_map;
+    if let Some(mapped) = import_map
+        .resolve(&ModuleKey::new(spec), &ModuleSpecifier::new(spec))
+        .filter(|mapped| {
+            store.module_texts.contains_key(mapped.as_str())
+                || store.programs.contains_key(mapped.as_str())
+        })
+    {
+        return mapped.as_str().into();
+    }
+    for scope in import_map.scopes.values() {
+        if let Some(mapped) = resolve_runtime_map_spec(scope, spec)
+            && (store.module_texts.contains_key(mapped.as_ref())
+                || store.programs.contains_key(mapped.as_ref()))
+        {
+            return mapped;
+        }
+    }
+    spec.into()
+}
+
+fn resolve_runtime_map_spec(
+    map: &std::collections::BTreeMap<String, String>,
+    spec: &str,
+) -> Option<Box<str>> {
+    if let Some(target) = map.get(spec) {
+        return Some(target.as_str().into());
+    }
+    let mut best_key = None::<&str>;
+    let mut best_len = 0usize;
+    for key in map.keys().map(String::as_str) {
+        if key.ends_with('/') && spec.starts_with(key) && key.len() >= best_len {
+            best_key = Some(key);
+            best_len = key.len();
+        }
+    }
+    let prefix = best_key?;
+    let target = map.get(prefix)?;
+    let rest = spec.strip_prefix(prefix).unwrap_or("");
+    Some(format!("{target}{rest}").into_boxed_str())
 }
 
 fn runtime_session_error(err: SessionError) -> RuntimeError {

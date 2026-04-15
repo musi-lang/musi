@@ -386,14 +386,9 @@ impl MethodEmitter<'_, '_> {
             IrCasePattern::Lit(lit) => {
                 self.compile_case_lit(scrutinee_slot, lit, next_label, diags)
             }
-            IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => self
-                .compile_projected_patterns(
-                    scrutinee_slot,
-                    items,
-                    Opcode::SeqGet,
-                    next_label,
-                    diags,
-                ),
+            IrCasePattern::Tuple { items } | IrCasePattern::Array { items } => {
+                self.compile_sequence_patterns(scrutinee_slot, items, next_label, diags)
+            }
             IrCasePattern::Record { fields } => {
                 self.compile_record_patterns(scrutinee_slot, fields, next_label, diags)
             }
@@ -495,6 +490,35 @@ impl MethodEmitter<'_, '_> {
             Operand::Local(item_slot),
         )));
         item_slot
+    }
+}
+
+impl MethodEmitter<'_, '_> {
+    fn compile_sequence_patterns(
+        &mut self,
+        scrutinee_slot: u16,
+        items: &[IrCasePattern],
+        next_label: u16,
+        diags: &mut EmitDiagList,
+    ) -> bool {
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(scrutinee_slot),
+        )));
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::SeqLen,
+            Operand::None,
+        )));
+        self.compile_i64(i64::try_from(items.len()).unwrap_or(i64::MAX));
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::CmpEq,
+            Operand::None,
+        )));
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::BrFalse,
+            Operand::Label(next_label),
+        )));
+        self.compile_projected_patterns(scrutinee_slot, items, Opcode::SeqGet, next_label, diags)
     }
 }
 

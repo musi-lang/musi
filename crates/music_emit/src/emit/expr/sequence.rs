@@ -133,7 +133,11 @@ impl MethodEmitter<'_, '_> {
             return;
         };
 
-        for (index, part) in parts.iter().enumerate() {
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::SeqNew,
+            Operand::TypeLen { ty, len: 0 },
+        )));
+        for part in parts {
             match part {
                 IrSeqPart::Expr(expr) => {
                     self.compile_expr(expr, true, diags);
@@ -146,12 +150,10 @@ impl MethodEmitter<'_, '_> {
                     self.compile_expr(expr, true, diags);
                 }
             }
-            if index != 0 {
-                self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::SeqCat,
-                    Operand::None,
-                )));
-            }
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::SeqCat,
+                Operand::None,
+            )));
         }
     }
 

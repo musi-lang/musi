@@ -28,6 +28,7 @@ impl Vm {
             Opcode::SeqSet => self.exec_seq_set(),
             Opcode::SeqSetN => self.exec_seq_set_n(instruction),
             Opcode::SeqCat => self.exec_seq_cat(),
+            Opcode::SeqLen => self.exec_seq_len(),
             Opcode::RangeNew => self.exec_range_new(instruction),
             Opcode::RangeContains => self.exec_range_contains(),
             Opcode::RangeMaterialize => self.exec_range_materialize(),
@@ -117,6 +118,14 @@ impl Vm {
         let mut items = left.items.clone();
         items.extend(right_items);
         self.push_value(Value::sequence(left.ty, items))?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_seq_len(&mut self) -> VmResult<StepOutcome> {
+        let seq_value = self.pop_value()?;
+        let seq = Self::expect_seq(seq_value)?;
+        let len = i64::try_from(seq.borrow().items.len()).unwrap_or(i64::MAX);
+        self.push_value(Value::Int(len))?;
         Ok(StepOutcome::Continue)
     }
 

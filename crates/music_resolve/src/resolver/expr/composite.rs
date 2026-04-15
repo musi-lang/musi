@@ -12,13 +12,7 @@ where
     }
 
     pub(super) fn lower_array_expr_or_ty(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        if node
-            .child_nodes()
-            .any(|n| n.kind() == SyntaxNodeKind::ArrayItem)
-        {
-            return self.lower_array_expr(node);
-        }
-        self.lower_array_ty_expr(node)
+        self.lower_array_expr(node)
     }
 
     pub(super) fn lower_array_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

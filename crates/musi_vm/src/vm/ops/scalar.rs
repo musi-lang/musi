@@ -28,13 +28,24 @@ impl Vm {
         self.push_value(self.bool_value(module_slot, op(&left, &right))?)
     }
 
-    pub(crate) fn compare_ord(&mut self, op: impl FnOnce(i64, i64) -> bool) -> VmResult {
+    pub(crate) fn compare_ord<OpInt, OpFloat>(
+        &mut self,
+        op_int: OpInt,
+        op_float: OpFloat,
+    ) -> VmResult
+    where
+        OpInt: FnOnce(i64, i64) -> bool,
+        OpFloat: FnOnce(f64, f64) -> bool,
+    {
         let right_value = self.pop_value()?;
-        let right = Self::expect_int(&right_value)?;
         let left_value = self.pop_value()?;
-        let left = Self::expect_int(&left_value)?;
+        let value = match (&left_value, &right_value) {
+            (Value::Int(left), Value::Int(right)) => op_int(*left, *right),
+            (Value::Float(left), Value::Float(right)) => op_float(*left, *right),
+            _ => return Err(Self::invalid_value_kind(left_value.kind(), &right_value)),
+        };
         let module_slot = self.current_module_slot()?;
-        self.push_value(self.bool_value(module_slot, op(left, right))?)
+        self.push_value(self.bool_value(module_slot, value)?)
     }
 
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
@@ -97,19 +108,19 @@ impl Vm {
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpLt => {
-                self.compare_ord(|left, right| left < right)?;
+                self.compare_ord(|left, right| left < right, |left, right| left < right)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGt => {
-                self.compare_ord(|left, right| left > right)?;
+                self.compare_ord(|left, right| left > right, |left, right| left > right)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpLe => {
-                self.compare_ord(|left, right| left <= right)?;
+                self.compare_ord(|left, right| left <= right, |left, right| left <= right)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGe => {
-                self.compare_ord(|left, right| left >= right)?;
+                self.compare_ord(|left, right| left >= right, |left, right| left >= right)?;
                 Ok(StepOutcome::Continue)
             }
             _ => Err(Self::invalid_dispatch(instruction, "scalar")),

@@ -475,7 +475,7 @@ impl PartialEq for Value {
             (Self::Seq(left), Self::Seq(right)) => {
                 let left = left.borrow();
                 let right = right.borrow();
-                left.ty == right.ty && left.items == right.items
+                left.items == right.items
             }
             (Self::Data(left), Self::Data(right)) => {
                 let left = left.borrow();

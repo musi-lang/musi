@@ -1,4 +1,4 @@
-use std::env::{var, var_os};
+use std::env::{remove_var, set_var, var, var_os};
 
 use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
@@ -33,13 +33,18 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_SET_OP,
         |effect, args| {
-            let [Value::String(_name), Value::String(_value)] = args else {
+            let [Value::String(name), Value::String(value)] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid envSet args"));
             };
-            Err(invalid_runtime_effect(
-                effect,
-                "envSet unsupported in current runtime",
-            ))
+            if !valid_env_key(name) || value.contains('\0') {
+                return Ok(Value::Int(0));
+            }
+            // SAFETY: Musi's runtime executes on one VM thread; no concurrent Rust env access exists here.
+            #[allow(unsafe_code)]
+            unsafe {
+                set_var(name.as_ref(), value.as_ref());
+            }
+            Ok(Value::Int(1))
         },
     );
 
@@ -47,13 +52,22 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_REMOVE_OP,
         |effect, args| {
-            let [Value::String(_name)] = args else {
+            let [Value::String(name)] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid envRemove args"));
             };
-            Err(invalid_runtime_effect(
-                effect,
-                "envRemove unsupported in current runtime",
-            ))
+            if !valid_env_key(name) {
+                return Ok(Value::Int(0));
+            }
+            // SAFETY: Musi's runtime executes on one VM thread; no concurrent Rust env access exists here.
+            #[allow(unsafe_code)]
+            unsafe {
+                remove_var(name.as_ref());
+            }
+            Ok(Value::Int(1))
         },
     );
+}
+
+fn valid_env_key(name: &str) -> bool {
+    !name.is_empty() && !name.contains('=') && !name.contains('\0')
 }
