@@ -9,6 +9,7 @@ use music_base::diag::DiagCode;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
+use crate::manifest::{License, LicenseFile, PackageManifest, PublishConfig};
 use crate::{
     PackageSource, Project, ProjectError, ProjectOptions, ProjectTestTargetKind,
     ProjectTestTargetSource,
@@ -202,6 +203,103 @@ fn validation_error_carries_typed_diag_identity() {
     assert_eq!(
         error.diag_message().as_deref(),
         Some("manifest validation failed (`name is required`)")
+    );
+}
+
+#[test]
+fn manifest_accepts_single_license_field_shapes() {
+    let spdx: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "license": "MIT"
+}"#,
+    )
+    .expect("SPDX license manifest should parse");
+    assert_eq!(spdx.license, Some(License::Spdx("MIT".into())));
+
+    let file: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "license": { "file": "LICENSE" }
+}"#,
+    )
+    .expect("license file manifest should parse");
+    assert_eq!(
+        file.license,
+        Some(License::File(LicenseFile {
+            file: "LICENSE".into()
+        }))
+    );
+}
+
+#[test]
+fn manifest_rejects_legacy_private_field() {
+    let error = serde_json::from_str::<PackageManifest>(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "private": true
+}"#,
+    )
+    .expect_err("private should not be accepted");
+
+    assert!(error.to_string().contains("unknown field `private`"));
+}
+
+#[test]
+fn manifest_accepts_publish_false_and_object() {
+    let disabled: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "publish": false
+}"#,
+    )
+    .expect("publish false should parse");
+    assert_eq!(disabled.publish, Some(PublishConfig::Disabled(false)));
+
+    let settings: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "publish": {
+    "registry": "main",
+    "include": ["src/**"],
+    "exclude": ["target/**"]
+  }
+}"#,
+    )
+    .expect("publish settings should parse");
+    let Some(PublishConfig::Settings(settings)) = settings.publish else {
+        panic!("publish settings should deserialize as object");
+    };
+    assert_eq!(settings.registry.as_deref(), Some("main"));
+    assert_eq!(settings.include, ["src/**"]);
+    assert_eq!(settings.exclude, ["target/**"]);
+}
+
+#[test]
+fn publish_true_is_invalid() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "publish": true
+}"#,
+    );
+    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("publish value invalid")
     );
 }
 
@@ -411,7 +509,7 @@ foreign let musi_true () : Bool;
 
 export let Console := effect {
   let readln () : String;
-  law total () := musi_true();
+  law total () := unsafe { musi_true(); };
 };
 ",
     );
@@ -496,7 +594,7 @@ export let answer () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
         r#"{
   "name": "hub",
   "version": "0.1.0",
-  "main": "./index.ms",
+  "entry": "./index.ms",
   "exports": {
     ".": "./index.ms"
   }
@@ -515,7 +613,7 @@ export let Dep := import "dep";
         r#"{
   "name": "dep",
   "version": "0.1.0",
-  "main": "./index.ms",
+  "entry": "./index.ms",
   "exports": {
     ".": "./index.ms"
   }
@@ -626,7 +724,7 @@ export let bytes := Std.bytes;
         r#"{
   "name": "@std",
   "version": "0.1.0",
-  "main": "./index.ms",
+  "entry": "./index.ms",
   "exports": {
     ".": "./index.ms",
     "./bytes": "./bytes/index.ms"
@@ -691,7 +789,7 @@ export let answer () : Option[Int] := some[Int](1);
         r#"{
   "name": "@std",
   "version": "0.1.0",
-  "main": "./index.ms",
+  "entry": "./index.ms",
   "exports": {
     ".": "./index.ms",
     "./prelude": "./prelude/index.ms",
@@ -723,7 +821,7 @@ export let none := OptionPkg.none;
         "packages/std/option/index.ms",
         r"
 export opaque let Option[T] := data {
-  | Some : T
+  | Some(T)
   | None
 };
 export let some[T] (value : T) : Option[T] := .Some(value);

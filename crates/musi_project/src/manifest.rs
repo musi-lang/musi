@@ -4,23 +4,29 @@ use serde::Deserialize;
 
 pub type ManifestStringMap = BTreeMap<String, String>;
 pub type ManifestScopeMap = BTreeMap<String, ManifestStringMap>;
+pub type ManifestMetadata = BTreeMap<String, serde_json::Value>;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct PackageManifest {
+    #[serde(rename = "$schema")]
+    pub schema: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
     pub description: Option<String>,
-    pub main: Option<String>,
+    pub docs: Option<String>,
+    pub readme: Option<Readme>,
+    pub entry: Option<String>,
     pub exports: Option<Exports>,
-    pub license: Option<String>,
+    pub license: Option<License>,
     pub author: Option<Author>,
     pub contributors: Vec<Author>,
-    pub private: Option<bool>,
     pub repository: Option<Repository>,
     pub homepage: Option<String>,
     pub bugs: Option<Bugs>,
     pub keywords: Vec<String>,
+    pub categories: Vec<String>,
+    pub metadata: ManifestMetadata,
     pub imports: ManifestStringMap,
     pub scopes: ManifestScopeMap,
     pub dependencies: ManifestStringMap,
@@ -36,6 +42,7 @@ pub struct PackageManifest {
     pub tasks: BTreeMap<String, TaskDefinition>,
     pub fmt: Option<FmtConfig>,
     pub lint: Option<LintConfig>,
+    pub lints: ManifestStringMap,
     pub test: Option<TestConfig>,
     pub bench: Option<BenchConfig>,
     pub compile: Option<CompileConfig>,
@@ -48,8 +55,28 @@ pub struct PackageManifest {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Exports {
-    Main(String),
+    Entry(String),
     Map(ManifestStringMap),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum License {
+    Spdx(String),
+    File(LicenseFile),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Readme {
+    Path(String),
+    Enabled(bool),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LicenseFile {
+    pub file: String,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -60,6 +87,7 @@ pub enum Author {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct AuthorObject {
     pub name: String,
     pub email: Option<String>,
@@ -74,6 +102,7 @@ pub enum Repository {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RepositoryObject {
     #[serde(rename = "type")]
     pub kind: String,
@@ -89,20 +118,18 @@ pub enum Bugs {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct BugsObject {
     pub url: Option<String>,
     pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct CompilerOptions {
     pub strict: Option<bool>,
-    pub no_implicit_any: Option<bool>,
     pub no_unused_locals: Option<bool>,
     pub no_unused_parameters: Option<bool>,
-    pub no_implicit_returns: Option<bool>,
-    pub allow_unreachable_code: Option<bool>,
     pub no_error_truncation: Option<bool>,
     pub base_url: Option<String>,
     pub paths: BTreeMap<String, Vec<String>>,
@@ -116,7 +143,7 @@ pub enum TaskDefinition {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TaskDefinitionObject {
     pub description: Option<String>,
     pub command: String,
@@ -168,7 +195,7 @@ impl TaskConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct FmtConfig {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
@@ -181,21 +208,21 @@ pub struct FmtConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TestConfig {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BenchConfig {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct LintConfig {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
@@ -204,7 +231,7 @@ pub struct LintConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct LintRules {
     pub tags: Vec<String>,
     pub exclude: Vec<String>,
@@ -212,7 +239,7 @@ pub struct LintRules {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CompileConfig {
     pub target: Option<String>,
     pub output: Option<String>,
@@ -226,8 +253,9 @@ pub enum PublishConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PublishSettings {
+    pub registry: Option<String>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
 }
@@ -241,7 +269,7 @@ pub enum LockConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct LockConfigObject {
     pub path: Option<String>,
     pub frozen: Option<bool>,
@@ -255,7 +283,7 @@ pub enum WorkspaceConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct WorkspaceMembersObject {
     pub members: Vec<String>,
 }
@@ -267,8 +295,8 @@ impl PackageManifest {
     }
 
     #[must_use]
-    pub fn main_entry(&self) -> &str {
-        self.main.as_deref().unwrap_or("index.ms")
+    pub fn entry_path(&self) -> &str {
+        self.entry.as_deref().unwrap_or("index.ms")
     }
 
     #[must_use]
@@ -308,7 +336,7 @@ impl PackageManifest {
     #[must_use]
     pub fn export_map(&self) -> ManifestStringMap {
         match &self.exports {
-            Some(Exports::Main(path)) => {
+            Some(Exports::Entry(path)) => {
                 let mut map = ManifestStringMap::new();
                 let _ = map.insert(".".into(), path.clone());
                 map
@@ -316,7 +344,7 @@ impl PackageManifest {
             Some(Exports::Map(map)) => map.clone(),
             None => {
                 let mut map = ManifestStringMap::new();
-                let _ = map.insert(".".into(), format!("./{}", self.main_entry()));
+                let _ = map.insert(".".into(), format!("./{}", self.entry_path()));
                 map
             }
         }

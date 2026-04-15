@@ -15,7 +15,7 @@ use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use crate::ProjectResult;
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackageSource, Lockfile};
-use crate::manifest::{PackageManifest, TaskConfig};
+use crate::manifest::{PackageManifest, PublishConfig, TaskConfig};
 use crate::manifest_source::ManifestSource;
 use crate::project::module_graph::{
     build_import_map, build_lockfile, discover_modules, normalize_lookup_path,
@@ -829,6 +829,17 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             ));
         }
     }
+    if matches!(manifest.publish, Some(PublishConfig::Disabled(true))) {
+        let span = source
+            .value_span(&json_pointer(&["publish"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "publish value invalid",
+            span,
+            "`publish` boolean must be false",
+        ));
+    }
     for (export_name, export_path) in manifest.export_map() {
         if export_name != "." && !export_name.starts_with("./") {
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
@@ -1255,12 +1266,12 @@ fn load_package_record(
         .map(|module| (module.key.clone(), module.path.clone()))
         .collect::<BTreeMap<_, _>>();
     let entry_key =
-        resolve_module_target(&root_dir, &relative_modules, None, manifest.main_entry())
+        resolve_module_target(&root_dir, &relative_modules, None, manifest.entry_path())
             .ok_or_else(|| {
-                package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
+                package_entry_missing(manifest_source, &id.name, manifest.entry.as_deref())
             })?;
     let entry_path = module_keys.get(&entry_key).cloned().ok_or_else(|| {
-        package_entry_missing(manifest_source, &id.name, manifest.main.as_deref())
+        package_entry_missing(manifest_source, &id.name, manifest.entry.as_deref())
     })?;
     let entry = ProjectEntry::new(id.clone(), entry_key, entry_path);
 
@@ -1285,18 +1296,18 @@ fn load_package_record(
 fn package_entry_missing(
     manifest_source: &ManifestSource,
     package_name: &str,
-    main_target: Option<&str>,
+    entry_target: Option<&str>,
 ) -> ProjectError {
-    let span = main_target
-        .and_then(|_| manifest_source.value_span(&json_pointer(&["main"])))
+    let span = entry_target
+        .and_then(|_| manifest_source.value_span(&json_pointer(&["entry"])))
         .unwrap_or_else(|| manifest_source.insertion_span());
-    let label = main_target.map_or_else(
-        || "`main` field missing and `index.ms` was not found".into(),
+    let label = entry_target.map_or_else(
+        || "`entry` field missing and `index.ms` not found".into(),
         |target| format!("entry target `{target}` does not resolve"),
     );
-    let hint = match main_target {
-        Some(_) => "update `main` to an existing module path",
-        None => "add `main`, or create `index.ms` at package root",
+    let hint = match entry_target {
+        Some(_) => "update `entry` to existing module path",
+        None => "add `entry`, or create `index.ms` at package root",
     };
     manifest_source.error_with_hint(
         DiagCode::new(3611),
