@@ -17,7 +17,6 @@ enum Port {
 }
 
 let selected = Port::Configured { port: 8080 };
-
 match selected {
     Port::Configured { port } => port,
     Port::Default => 3000,
