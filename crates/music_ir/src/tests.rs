@@ -154,7 +154,7 @@ fn lowers_exports_and_semantic_metadata() {
         r"
         export let id[T] (x : T) : T := x;
         export let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
         export let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;

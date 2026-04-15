@@ -14,7 +14,7 @@ An effect describes operations code may request from an outside capability. A re
 
 ## Request Model
 
-Read the `effect` block as a menu of operations. Read `request console.readln();` as code asking for one operation from that menu. Something else must eventually provide the answer.
+Read the `effect` block as a menu of operations. Read `request console.readLine();` as code asking for one operation from that menu. Something else must eventually provide the answer.
 
 ## Service Boundary
 

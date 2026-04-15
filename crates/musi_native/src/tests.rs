@@ -25,7 +25,7 @@ impl VmHost for FallbackHost {
     }
 
     fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
-        if effect.effect_name() == "main::Console" && effect.op_name() == "readln" {
+        if effect.effect_name() == "main::Console" && effect.op_name() == "readLine" {
             return Ok(Value::Int(9));
         }
         Err(VmError::new(VmErrorKind::EffectRejected {
@@ -267,7 +267,7 @@ fn native_abi_cstring_results_roundtrip() {
 #[test]
 fn dispatches_registered_effect_handler() {
     let mut host = NativeHost::new();
-    host.register_effect_handler("main::Console", "readln", |_effect, args| {
+    host.register_effect_handler("main::Console", "readLine", |_effect, args| {
         assert_eq!(args, &[Value::string(">")]);
         Ok(Value::Int(5))
     });
@@ -275,8 +275,8 @@ fn dispatches_registered_effect_handler() {
     let value = call_export_with_host(
         host,
         r#"
-        let Console := effect { let readln (prompt : String) : Int; };
-        export let answer () : Int := request Console.readln(">");
+        let Console := effect { let readLine (prompt : String) : Int; };
+        export let answer () : Int := request Console.readLine(">");
         "#,
     )
     .expect("registered effect should succeed");
@@ -421,8 +421,8 @@ fn unsupported_targets_reject_runtime_effects() {
     let err = call_export_with_host(
         NativeHost::new(),
         r#"
-        let Console := effect { let readln (prompt : String) : Int; };
-        export let answer () : Int := request Console.readln(">");
+        let Console := effect { let readLine (prompt : String) : Int; };
+        export let answer () : Int := request Console.readLine(">");
         "#,
     )
     .expect_err("unsupported target should reject");

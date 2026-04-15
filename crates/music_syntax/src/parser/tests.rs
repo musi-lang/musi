@@ -308,8 +308,8 @@ fn parses_handler_type_annotation() {
     let parsed = parse(
         Lexer::new(
             r"
-            let Console := effect { let readln () : Int; };
-            let h : using Console (Int -> Int) := using Console { value => value; readln(k) => resume 41; };
+            let Console := effect { let readLine () : Int; };
+            let h : using Console (Int -> Int) := using Console { value => value; readLine(k) => resume 41; };
         ",
         )
         .lex(),

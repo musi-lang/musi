@@ -12,7 +12,7 @@ A handler interprets requested operations. It decides what a request means at a 
 
 {{snippet:chapter-handlers}}
 
-Read `handle console.readln() using console { ... }` as running an expression while interpreting console requests with this handler. `value => value;` covers normal completion. `readln(k) => resume "ok";` answers one requested operation and continues the suspended computation.
+Read `handle console.readLine() using console { ... }` as running an expression while interpreting console requests with this handler. `value => value;` covers normal completion. `readLine(k) => resume "ok";` answers one requested operation and continues the suspended computation.
 
 A handler is a local policy desk: request asks for help; handler says what help means here.
 

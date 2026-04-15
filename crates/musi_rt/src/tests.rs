@@ -178,7 +178,7 @@ fn routes_foreign_calls_through_registered_handlers() {
 #[test]
 fn routes_effect_calls_through_registered_handlers() {
     let mut host = NativeHost::new();
-    host.register_effect_handler("main::Console", "readln", |_effect, args| {
+    host.register_effect_handler("main::Console", "readLine", |_effect, args| {
         assert_eq!(args, &[Value::string(">")]);
         Ok(Value::Int(42))
     });
@@ -187,8 +187,8 @@ fn routes_effect_calls_through_registered_handlers() {
         .register_module_text(
             "main",
             r#"
-            let Console := effect { let readln (prompt : String) : Int; };
-            export let answer () : Int := request Console.readln(">");
+            let Console := effect { let readLine (prompt : String) : Int; };
+            export let answer () : Int := request Console.readLine(">");
         "#,
         )
         .unwrap();

@@ -206,7 +206,7 @@ describe("website highlighting", () => {
 		const html = renderHighlightedCodeForTest(
 			`match value (
 | .Left(x) => x
-| .Right(_) => request Console.readln()
+| .Right(_) => request Console.readLine()
 );`,
 			"musi",
 		);

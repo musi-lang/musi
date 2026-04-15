@@ -139,7 +139,7 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
         "std/io",
         r"
         export let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
     ",
         Some(&import_env),
@@ -153,9 +153,9 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
             r#"
         let IO := import "std/io";
         {binding}
-        handle request Console.readln() using Console {{
+        handle request Console.readLine() using Console {{
           value => value;
-          readln(k) => resume "ok";
+          readLine(k) => resume "ok";
         }};
     "#
         ),
@@ -209,14 +209,14 @@ fn opaque_imported_effect_hides_ops() {
         42,
         r"
         export opaque let Console := effect {
-          let readln () : Int;
+          let readLine () : Int;
         };
-        export let readln () : Int := request Console.readln();
+        export let readLine () : Int := request Console.readLine();
     ",
         r#"
         let A := import "a";
         let Console := A.Console;
-        let direct () : Int := request Console.readln();
+        let direct () : Int := request Console.readLine();
     "#,
     );
     assert!(
@@ -585,9 +585,9 @@ fn request_named_arguments_follow_effect_op_parameter_names() {
     let sema = check(
         r#"
         let Console := effect {
-          let readln (prompt : String) : String;
+          let readLine (prompt : String) : String;
         };
-        request Console.readln(prompt := ">");
+        request Console.readLine(prompt := ">");
     "#,
     );
     assert!(
@@ -705,9 +705,9 @@ fn perform_effects_expose_textual_names() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        request Console.readln();
+        request Console.readLine();
     ",
     );
     let root = sema.module().root;
@@ -802,7 +802,7 @@ fn exported_class_and_effect_laws_keep_structured_params() {
           law reflexive (x : T) := .True;
         };
         export let Console := effect {
-          let readln () : String;
+          let readLine () : String;
           law total (attempts : Int) := .True;
         };
     ",
@@ -847,14 +847,14 @@ fn effectful_laws_report_purity_diag() {
     let sema = check(
         r#"
         let Console := effect {
-          let readln () : String;
-          law total () := request Console.readln() == "";
+          let readLine () : String;
+          law total () := request Console.readLine() == "";
         };
 
         let Eq[T] := class {
           let (=) (a : T, b : T) : Bool;
           law noisy (x : T) := (
-            request Console.readln();
+            request Console.readLine();
             .True
           );
         };
@@ -873,12 +873,12 @@ fn duplicate_handler_clause_reports_diag() {
     let sema = check(
         r#"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        handle request Console.readln() using Console {
+        handle request Console.readLine() using Console {
           value => value;
-          readln(k) => resume "ok";
-          readln(k) => resume "ok";
+          readLine(k) => resume "ok";
+          readLine(k) => resume "ok";
         };
     "#,
     );
@@ -1510,12 +1510,12 @@ fn open_effect_rows_absorb_extra_effects() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
         let State := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        let readOpen (x : Int) : String using { Console, ...r } := request State.readln();
+        let readOpen (x : Int) : String using { Console, ...r } := request State.readLine();
         readOpen(0);
     ",
     );
@@ -1543,12 +1543,12 @@ fn closed_effect_rows_reject_extra_effects() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : String;
+          let readLine () : String;
         };
         let State := effect {
-          let readln () : String;
+          let readLine () : String;
         };
-        let readClosed (x : Int) : String using { Console } := request State.readln();
+        let readClosed (x : Int) : String using { Console } := request State.readLine();
         readClosed(0);
     ",
     );
@@ -1574,11 +1574,11 @@ fn handler_type_annotations_typecheck() {
     let sema = check(
         r"
         let Console := effect {
-          let readln () : Int;
+          let readLine () : Int;
         };
         let h : using Console (Int -> Int) := using Console {
           value => value;
-          readln(k) => resume 41;
+          readLine(k) => resume 41;
         };
         h;
     ",

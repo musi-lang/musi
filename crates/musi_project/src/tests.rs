@@ -508,7 +508,7 @@ fn merges_synthetic_law_suites_into_project_test_targets() {
 foreign let musi_true () : Bool;
 
 export let Console := effect {
-  let readln () : String;
+  let readLine () : String;
   law total () := unsafe { musi_true(); };
 };
 ",

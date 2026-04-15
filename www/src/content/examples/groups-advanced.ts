@@ -39,12 +39,12 @@ foreign let clock_gettime (id : Int, out : CPtr) : Int;`,
 			"Capture side-effect requests in one place, then resolve them through handlers.",
 		note: "At small scale this can look like callback wiring, but at larger scale handlers keep policy at boundaries and reduce plumbing across call chains.",
 		sourceText: `let console := effect {
-  let readln () : String;
+  let readLine () : String;
 };
 
-handle console.readln() using console {
+handle console.readLine() using console {
   value => value;
-  readln(k) => resume "ok";
+  readLine(k) => resume "ok";
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",

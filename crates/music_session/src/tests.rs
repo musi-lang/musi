@@ -352,14 +352,14 @@ fn compiles_named_call_arguments_and_named_requests() {
     let _ = assert_main_module_compiles_with(
         r#"
         export let Console := effect {
-          let readln (prompt : String) : String;
+          let readLine (prompt : String) : String;
         };
 
         let render (port : Int, secure : Bool) : Int := port;
-        export let read () : String using { Console } := request Console.readln(prompt := ">");
+        export let read () : String using { Console } := request Console.readLine(prompt := ">");
         export let main () : Int := render(secure := 0 = 0, port := 8080);
         "#,
-        &["call $main::render", "eff.invk $main::Console $readln"],
+        &["call $main::render", "eff.invk $main::Console $readLine"],
     );
 }
 
@@ -597,11 +597,11 @@ fn compiles_variants_without_type_context_when_tag_unique() {
 fn compiles_effects_with_perform_handle_resume() {
     let _ = assert_main_entry_compiles_with!(
         r#"
-            let Console := effect { let readln () : String; };
+            let Console := effect { let readLine () : String; };
             export let answer () : String :=
-              handle request Console.readln() using Console {
+              handle request Console.readLine() using Console {
                 value => value;
-                readln(k) => resume "ok";
+                readLine(k) => resume "ok";
               };
         "#,
         &["hdl.push", "hdl.pop", "eff.invk", "eff.resume"],
@@ -690,7 +690,7 @@ fn emits_meta_records_for_laws_and_attrs() {
             };
 
             export let Console := effect {
-              let readln () : String;
+              let readLine () : String;
               law total () := unsafe { musi_true(); };
             };
         "#,
@@ -747,7 +747,7 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
             };
 
             export let Console := effect {
-              let readln () : String;
+              let readLine () : String;
               law total () := unsafe { musi_true(); };
             };
         ",
@@ -899,7 +899,7 @@ fn emits_meta_records_for_exported_signatures() {
             let Eq[T] := class { };
             let eqInt := instance Eq[Int] { };
 
-            let Console := effect { let readln () : String; };
+            let Console := effect { let readLine () : String; };
 
             export let f (x : Int) : Int where Int : Eq using { Console } := x;
             export let sumId (x : Int + String) : Int + String := x;

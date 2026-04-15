@@ -269,7 +269,7 @@ next;`,
 		id: "effect-console",
 		language: "musi",
 		sourceText: `let console := effect {
-  let readln () : String;
+  let readLine () : String;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -279,7 +279,7 @@ next;`,
 	{
 		id: "request-console",
 		language: "musi",
-		sourceText: "request console.readln();",
+		sourceText: "request console.readLine();",
 		evidence: {
 			path: "www/src/content/snippet-registry.ts",
 			line: 280,
@@ -288,9 +288,9 @@ next;`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle console.readln() using console {
+		sourceText: `handle console.readLine() using console {
   value => value;
-  readln(k) => resume "ok";
+  readLine(k) => resume "ok";
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -301,7 +301,7 @@ next;`,
 		id: "using-signature",
 		language: "musi",
 		sourceText: `let readClosed () : String using { Console } :=
-  request Console.readln();`,
+  request Console.readLine();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -813,10 +813,10 @@ let carLaw := instance Vehicle[Car] {
 		id: "chapter-effects",
 		language: "musi",
 		sourceText: `let console := effect {
-  let readln () : String;
+  let readLine () : String;
 };
 
-request console.readln();`,
+request console.readLine();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 317,
@@ -826,7 +826,7 @@ request console.readln();`,
 		id: "chapter-using",
 		language: "musi",
 		sourceText: `let readClosed () : String using { Console } :=
-  request Console.readln();`,
+  request Console.readLine();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -835,9 +835,9 @@ request console.readln();`,
 	{
 		id: "chapter-handlers",
 		language: "musi",
-		sourceText: `handle console.readln() using console {
+		sourceText: `handle console.readLine() using console {
   value => value;
-  readln(k) => resume "ok";
+  readLine(k) => resume "ok";
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -1318,7 +1318,6 @@ secure.port;`,
 };
 
 let selected : Port := .Configured(port := 8080);
-
 match selected (
 | .Configured(port) => port
 | .Default => 3000
@@ -1414,11 +1413,11 @@ parsed;`,
 		id: "rust-effect-request",
 		language: "musi",
 		sourceText: `let Console := effect {
-  let readln () : String;
+  let readLine () : String;
 };
 
 let readLine () : String using { Console } :=
-  request Console.readln();`,
+  request Console.readLine();`,
 		evidence: {
 			path: "docs/what/language/developers/rust/results-effects.md",
 			line: 1,
