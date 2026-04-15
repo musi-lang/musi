@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { docGroups } from "../docs";
+import type { ReactNode } from "preact/compat";
+import { type DocPage, docChildren, docForPath, docParts } from "../docs";
 import {
 	DesktopIcon,
 	GithubIcon,
@@ -65,26 +65,44 @@ function ThemeControl() {
 }
 
 function DocsSidebar(props: { route: AppRoute }) {
+	const activeDoc = docForPath(props.route.path);
+	const activeTreePath = new Set(activeDoc?.treePath ?? []);
+	const renderSidebarNode = (node: DocPage, depth: number) => {
+		const children = docChildren(node.id);
+		const levelClass =
+			node.kind === "section"
+				? "docs-sidebar-link-section"
+				: "docs-sidebar-link-chapter";
+		return (
+			<div key={node.id} className="docs-sidebar-node">
+				<a
+					href={node.path}
+					className={`docs-sidebar-link ${levelClass}${activeTreePath.has(node.id) ? " is-active" : ""}`}
+					data-depth={depth}
+				>
+					{node.title}
+				</a>
+				{children.length > 0 ? (
+					<div className="docs-sidebar-children">
+						{children.map((child) => renderSidebarNode(child, depth + 1))}
+					</div>
+				) : null}
+			</div>
+		);
+	};
+
 	return (
 		<nav aria-label="Documentation" className="docs-sidebar-nav">
-			{docGroups.map((group) => (
-				<section key={group.group} className="docs-sidebar-group">
+			{docParts.map((part) => (
+				<section key={part.id} className="docs-sidebar-group">
 					<a
-						href={group.path}
-						className={`docs-sidebar-heading${props.route.path === group.path ? " is-active" : ""}`}
+						href={part.path}
+						className={`docs-sidebar-heading${activeTreePath.has(part.id) ? " is-active" : ""}`}
 					>
-						{group.group}
+						{part.title}
 					</a>
 					<div className="docs-sidebar-list">
-						{group.pages.map((page) => (
-							<a
-								key={page.slug}
-								href={page.path}
-								className={`docs-sidebar-link${props.route.path === page.path ? " is-active" : ""}`}
-							>
-								{page.title}
-							</a>
-						))}
+						{docChildren(part.id).map((node) => renderSidebarNode(node, 0))}
 					</div>
 				</section>
 			))}

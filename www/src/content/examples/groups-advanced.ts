@@ -42,7 +42,7 @@ foreign let clock_gettime (id : Int, out : CPtr) : Int;`,
   let readln () : String;
 };
 
-handle request console.readln() using console {
+handle console.readln() using console {
   value => value;
   readln(k) => resume "ok";
 };`,

@@ -1,5 +1,5 @@
 ---
-title: "Musi language book"
+title: "Musi Book"
 description: "Learn Musi through a chaptered guide that starts with simple expressions and climbs toward data, types, effects, and tooling."
 group: "Language"
 section: "Language"
@@ -8,58 +8,30 @@ slug: "language"
 summary: "A consumer-facing Musi guide that starts small, explains syntax, and keeps building toward real programs."
 ---
 
-Musi is easiest to learn as a guided climb, not as a grammar dump.
-The chapters in this book start with plain values and `let`, then keep widening the picture: blocks, functions, data, files, types, abstractions, effects, foreign boundaries, and tooling.
+Musi Book teaches the language in reader order: run a small file, name values, combine expressions, model data, organize packages, then add types, abstractions, effects, and native boundaries.
 
-## How to read this book
+The guide assumes many readers come from C-family languages, Python, JavaScript, TypeScript, or Rust. It does not assume ML-family language experience. When Musi uses a functional idea, the page names the practical reason first, then shows syntax.
 
-Read it like a language guide, not a reference.
-Most chapters center on one compilable code example, then explain how to read it, when to use the construct, and what Musi does differently from many C-like languages.
+## Reading Path
 
-If you already write C, Rust, Java, JavaScript, TypeScript, or Python, keep these translation rules in mind from the start:
+Start with the first file and keep moving forward. Later chapters revisit the same ideas with more detail, like a spiral staircase: a block is first a way to group steps, then later becomes the basis for match arms, handlers, unsafe scopes, and generated syntax.
 
-- Musi is expression-first. Blocks produce values.
-- There is no `return` keyword for ordinary function flow. The last expression is the result.
-- There are no loop statements. Repetition usually comes from recursion, ranges, higher-order helpers, or effect-driven iteration.
-- Mutation is explicit with `mut`.
-- Algebraic data and pattern matching are ordinary language features, not add-ons.
+Use code examples as source of truth for how examples should look. Every Musi example shown through a snippet is kept in the website registry so syntax highlighting and stale syntax checks run in one place.
 
-## What you will learn
+## Musi Shape
 
-The path is a spiral staircase.
-Early chapters teach just enough syntax to read and run code.
-Later chapters revisit the same ideas with more power:
+Musi code reads as values flowing through expressions. A `let` introduces a name. A block produces its last expression. A `match` chooses by data shape. Effects make outside work visible through `request` and handlers. Unsafe native work stays in `unsafe { ... }`.
 
-- `let`, blocks, and expression flow
-- functions, calls, methods, pipelines, and operators
-- arrays, records, variants, and patterns
-- imports, files, and packages
-- type annotations, inference, generics, and constraints
-- classes, instances, laws, effects, handlers, and runtime boundaries
-- attributes, FFI, testing, and tool workflow
+This means Musi has no ordinary `return` keyword, no baseline loop construct, no hidden effect marker, and no pointer sigil model in user code. The language favors named forms where the operation would otherwise be easy to miss.
 
-## What Musi does not have
+## What You Will Learn
 
-Musi does not try to look like every mainstream language.
-That means some expected features are intentionally replaced by simpler rules:
+- Read one Musi file from top to bottom.
+- Use bindings, blocks, functions, lambdas, and methods.
+- Model data with records, arrays, variants, payloads, and patterns.
+- Use annotations, inference, generics, callable types, and dependent-style parameters.
+- Describe behavior with classes, instances, and laws.
+- Keep capabilities visible with effects and handlers.
+- Keep raw native work small with attributes, foreign declarations, unsafe blocks, and FFI.
 
-- No statement-only function body model. A function body is an expression.
-- No `return` keyword as normal control flow.
-- No `for`, `while`, `break`, or `continue` statements.
-- No class-based object model. Reuse comes from functions, methods, data, classes, and instances.
-- No hidden ambient mutation. If state changes, `mut` and assignment make it visible.
-
-Those choices show up gradually through the chapters instead of all at once.
-
-## Start here
-
-If Musi is new, read the parts in order:
-
-1. Start
-2. Core syntax
-3. Data
-4. Organization
-5. Types
-6. Abstractions
-7. Effects and runtime
-8. Advanced and tooling
+Continue to [Getting Started](/learn/book/start/foundations/getting-started).

@@ -1,4 +1,4 @@
-import { createElement, type ElementType, type ReactNode } from "react";
+import { createElement, type ElementType, type ReactNode } from "preact/compat";
 
 type SurfaceTone =
 	| "base"

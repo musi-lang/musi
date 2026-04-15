@@ -1,4 +1,10 @@
-import { docForPath, docGroups, docNeighbors, pagesForPart } from "../../docs";
+import {
+	docBreadcrumb,
+	docChildren,
+	docForPath,
+	docGroups,
+	docNeighbors,
+} from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
 import { InlineAction, PrimaryAction, SecondaryAction } from "../../ui/actions";
@@ -7,8 +13,6 @@ import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 import { OnThisPage } from "../../ui/toc";
-
-const PART_REGEXP = /\/[^/]+$/;
 
 export function DocsIndexPage(props: { route: AppRoute }) {
 	const copy = siteCopy.learn;
@@ -37,7 +41,7 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 					<div className="eyebrow">{copy.eyebrow}</div>
 					<h2>{copy.startTitle}</h2>
 					<p>{copy.description}</p>
-					<InlineAction href="/learn/language/start/getting-started">
+					<InlineAction href="/learn/book/start/getting-started">
 						{siteCopy.ui.openFirstChapter}
 					</InlineAction>
 				</Surface>
@@ -78,8 +82,9 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 					</div>
 				</div>
 				<p className="muted">
-					Old chapter routes are gone. This page only guides the current
-					language book.
+					Musi Book is the main reading path. Use the chapter list when you want
+					structure, or jump into a developer guide when you are mapping from
+					another language.
 				</p>
 			</Surface>
 		</div>
@@ -120,21 +125,25 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 		return null;
 	}
 	const neighbors = page.kind === "chapter" ? docNeighbors(page.id) : {};
-	const childPages = page.kind === "part" ? pagesForPart(page.id) : [];
+	const childPages =
+		page.kind === "part" || page.kind === "section" ? docChildren(page.id) : [];
+	const breadcrumb = docBreadcrumb(page.id);
 	return (
 		<div className="page-stack docs-page">
 			<PageHeader
 				eyebrow={
 					<span className="crumbs">
 						<a href="/learn">{siteCopy.nav.learn}</a>
-						<span aria-hidden="true">/</span>
-						{page.kind === "part" ? (
-							<span>{page.title}</span>
-						) : (
-							<a href={page.canonicalPath.replace(PART_REGEXP, "")}>
-								{page.partTitle}
-							</a>
-						)}
+						{breadcrumb.map((node, index) => (
+							<span key={node.id} className="crumb-node">
+								<span aria-hidden="true">/</span>
+								{index === breadcrumb.length - 1 ? (
+									<span>{node.title}</span>
+								) : (
+									<a href={node.path}>{node.title}</a>
+								)}
+							</span>
+						))}
 					</span>
 				}
 				title={page.title}
@@ -149,7 +158,7 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 				<Surface tone="base" className="doc-article-surface">
 					<article className="docs-article">
 						<HtmlSnippet className="docs-content" html={page.html} />
-						{page.kind === "part" && childPages.length > 0 ? (
+						{childPages.length > 0 ? (
 							<div className="part-children-block">
 								<div className="eyebrow">{siteCopy.ui.chapters}</div>
 								<DocListGroup group={page.title} pages={childPages} />

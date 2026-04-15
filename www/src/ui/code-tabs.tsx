@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId } from "preact/compat";
 
 import { HtmlSnippet } from "./html-snippet";
 

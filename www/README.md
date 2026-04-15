@@ -1,98 +1,143 @@
-# Musi website
+# Musi Website
 
-Public website for Musi. Stack stays **Bun + Vite + React**. Content stays static-first, prerendered into `www/dist`, and English-only.
+Public website for Musi. The website is a static-first Bun + Astro + Vite + Preact app that builds into `www/dist`.
 
-## Local workflow
+This README is the operations guide for local website contributors, docs authors, and the people publishing the main Musi website.
 
-Run from repository root:
+## Local Contributor
 
-- `bun run dev`
-- `bun run dev:prod`
-- `bun run check`
-- `bun run test`
-- `bun run build`
-- `bun run build:prod`
-- `bun run verify:lang`
+Run commands from the repository root unless a command says otherwise.
 
-`bun run build` does three things:
+Install dependencies:
 
-1. generate site content from docs/snippet sources
-2. run Vite production build
-3. prerender every public route into static HTML
+```bash
+bun install
+```
 
-`bun run dev:prod` builds the production bundle and serves `www/dist` through preview mode so local checks reflect production asset shape instead of Vite dev-server modules.
+Start the local website:
 
-`bun run verify:lang` rebuilds the prerendered site and verifies representative English pages keep the expected top-level `<html lang="en">`.
+```bash
+bun run dev
+```
 
-For Lighthouse accessibility audits, use a clean browser context. Browser extensions that inject shadow DOM can add nested `<html>` nodes and create a false `html[lang]` failure even when the shipped document already has the correct `lang` attribute.
+Build and preview the production output:
 
-## Structure
+```bash
+bun run dev:prod
+```
 
-- `src/pages/` - route surfaces for home, learn, install, community, and playground
-- `src/layout/` - shared shell, header, and docs sidebar
-- `src/ui/` - site-owned primitives: actions, surfaces, page headers, TOC, theme
-- `src/content.tsx` - shared generated snippets and install data
-- `src/docs.ts` + `src/generated-content.ts` - generated docs route inventory and rendered HTML
-- `scripts/generate-content.ts` - content generation entry
-- `scripts/prerender.ts` - static HTML output and sitemap generation
+Validate before sending website or docs changes:
 
-## Design direction
+```bash
+bun run check
+bun run test
+bun run verify:lang
+```
 
-Design target: **calm institutional explicitness**.
+What those commands cover:
+
+- `bun run check`: regenerate docs content, typecheck, and run Biome checks.
+- `bun run test`: regenerate docs content and run Vitest tests for website code and content generation.
+- `bun run verify:lang`: build the static site and verify every generated HTML page has `<html lang="en">`.
+
+For Lighthouse accessibility audits, use a clean browser profile or incognito window with extensions disabled. Browser automation extensions can inject nodes such as `browser-mcp-container` or `data-mcp-root`; if DevTools shows those nodes, `html[lang]` warnings are audit-context noise, not shipped site markup.
+
+## Docs Author
+
+Human-facing language docs live under `docs/what/language`.
+Website maintainer docs live under `docs/what/website`.
+Book section landing pages live under `www/src/content/book/language`.
+
+Docs content is repo-backed. Markdown carries authored prose, TypeScript files carry structure, and generated content is committed for the static site:
+
+- Markdown files hold page copy.
+- `www/src/content/book/manifest.ts` controls routing, grouping, aliases, and order.
+- `www/src/content/snippet-registry.ts` and `www/src/content/examples/` provide code examples used by Markdown placeholders.
+- `www/scripts/generate-content.ts` renders docs into `www/src/generated-content.ts`.
+
+Rules for language docs:
+
+- Teach current Musi syntax only.
+- Do not describe syntax as old, new, former, or transitional.
+- Do not use raw ````musi` fences in learning docs.
+- Use snippet or example placeholders so examples are highlighted and checked by generation.
+- Keep consumer-facing docs educational; compiler-internal notes belong under maintainer docs or crate docs.
+
+## Local Docs Studio
+
+Docs Studio is a local-only Markdown editor for the repository docs.
+It is not deployed and does not need a database, external auth app, email provider, or hosted admin service.
+
+Start it from the repository root:
+
+```bash
+bun run docs:studio
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4322
+```
+
+Editable roots:
+
+- `docs/what/language`
+- `docs/what/website`
+- `www/src/content/book/language`
+
+Docs Studio edits the same repository files that authors review in Git.
+Review changes before committing.
+The editor rejects paths outside the allowed docs roots.
+
+## Website Structure
+
+- `src/pages/`: Astro routes for static pages, docs aliases, robots, sitemap, and 404.
+- `src/site-pages/`: route surfaces for home, learn, install, community, and playground.
+- `src/layout/`: shared shell, header, and docs sidebar.
+- `src/ui/`: site-owned primitives such as actions, surfaces, page headers, TOC, and theme controls.
+- `src/docs.ts` and `src/generated-content.ts`: generated docs route inventory and rendered HTML.
+- `scripts/generate-content.ts`: content generation entrypoint.
+
+Astro owns document HTML, metadata, static routing, sitemap, robots, and 404 output. Preact is reserved for static-compatible components and small local islands when interaction needs state.
+
+## Design And Accessibility
+
+Design target: calm institutional explicitness.
 
 Rules:
 
 - calm, not blank
 - explicit, not verbose
-- denser guidance where users need reassurance
-- strong signifiers for links, buttons, nav, and current location
-- warm clay/copper brand family derived from Musi icon
-- similar colors allowed when they improve contrast or hierarchy
+- strong signifiers for links, buttons, navigation, and current location
+- warm clay/copper brand family from the Musi icon
+- supporting colors allowed when they improve contrast or hierarchy
 - no glass, glow, fake metrics, oversized radius, or decorative dashboard tropes
 
-Primary public paths on home:
-
-1. Learn
-2. Install
-3. Playground
-4. Community
-
-## Accessibility baseline
-
-Target: **WCAG 2.2 AA**.
+Target WCAG 2.2 AA.
 
 Contributor checklist:
 
-- keep semantic landmarks: skip link, header, nav, main, and aside where needed
-- keep heading order valid per page
-- every interactive control must be keyboard reachable and visibly focused
-- do not rely on color alone for meaning
-- keep contrast compliant in both light and dark themes
-- buttons must look interactive; links must look like links
-- support reduced motion
-- preserve readable zoomed layouts and horizontal overflow handling for code/tables
-- label icon-only or stateful controls with accessible names
+- Keep semantic landmarks: skip link, header, nav, main, and aside where needed.
+- Keep heading order valid per page.
+- Make every interactive control keyboard reachable and visibly focused.
+- Do not rely on color alone for meaning.
+- Keep contrast compliant in light and dark themes.
+- Make buttons look interactive and links look like links.
+- Support reduced motion.
+- Preserve readable zoomed layouts and horizontal overflow handling for code and tables.
+- Label icon-only or stateful controls with accessible names.
 
-## Theme and palette
+## Publisher Maintainer
 
-Theme modes:
+The public website deploys as a static Cloudflare Pages site from this repository.
 
-- `light`
-- `dark`
-- `system`
+Docs editing is local-only contributor tooling.
+The public site must not depend on an admin service being live.
 
-Brand anchors come from favicon/file icon family:
+### Cloudflare Pages
 
-- upper-left: `#9E6663`
-- upper-right: `#AD6D62`
-- lower-left: `#D38F7B`
-- lower-right: `#C98273`
-
-Nearby colors are allowed if they fit the family and improve WCAG compliance.
-
-## Cloudflare Pages
-
-Cloudflare Pages should build this site from repository root.
+Build this site from the repository root.
 
 Use these settings:
 
@@ -107,11 +152,14 @@ Recommended Pages environment variables:
 
 Recommended Cloudflare dashboard settings:
 
-- disable any managed `robots.txt` augmentation that injects extra directives such as `Content-Signal`
-- disable Web Analytics / Browser Insights if you want Lighthouse free of Cloudflare beacon warnings
+- disable managed `robots.txt` augmentation that injects directives such as `Content-Signal`
+- disable Web Analytics / Browser Insights if Lighthouse should stay free of Cloudflare beacon warnings
 
-Deploy verification after each production rollout:
+Deploy verification:
 
-- `curl -s https://musi-lang.org/ | head`
-- `curl -s https://musi-lang.org/robots.txt`
-- confirm live HTML matches current `www/dist` structure and `robots.txt` contains only repo-generated directives
+```bash
+curl -s https://musi-lang.org/ | head
+curl -s https://musi-lang.org/robots.txt
+```
+
+Confirm live HTML matches `www/dist` and `robots.txt` contains only repo-generated directives.

@@ -1,5 +1,5 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {},
-	"include": ["vite.config.ts"]
+	"include": ["astro.config.ts"]
 }

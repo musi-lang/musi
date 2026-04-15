@@ -115,18 +115,18 @@ export const siteCopy = {
 		open: "Open",
 		openSection: "Open section",
 		primaryPaths: "Primary paths",
-		docsEntryPoints: "Docs entry points",
+		docsEntryPoints: "Docs Entry Points",
 		questions: "Questions",
-		openFirstChapter: "Open first chapter",
+		openFirstChapter: "Open First Chapter",
 		openQuestions: "Open questions",
 		learnSection: "Learn",
 		chapters: "Chapters",
 		onThisPage: "On this page",
-		chapterNavigation: "Chapter navigation",
-		previousChapter: "Previous chapter",
-		nextChapter: "Next chapter",
-		communityLinks: "Community links",
-		installCommands: "Install commands",
+		chapterNavigation: "Chapter Navigation",
+		previousChapter: "Previous Chapter",
+		nextChapter: "Next Chapter",
+		communityLinks: "Community Links",
+		installCommands: "Install Commands",
 		commandReference: "Musi command reference",
 		lane: "Lane",
 		command: "Command",
@@ -134,7 +134,7 @@ export const siteCopy = {
 	},
 	home: {
 		eyebrow: "Home",
-		title: "What is Musi?",
+		title: "The Musi Programming Language",
 		description:
 			"Musi is an expression-first programming language with pattern matching, effects, and a small command surface. Learn the language, install it from source, check playground status, and find community links from one site.",
 		sectionsTitle: "Why Musi",
@@ -149,10 +149,10 @@ export const siteCopy = {
 		paths: [
 			{
 				label: "Learn",
-				title: "Read the Musi book",
+				title: "Read Musi Book",
 				copy: "Start with setup, then move through syntax, types, effects, and tooling.",
-				href: "/learn",
-				actionLabel: "Read Learn docs",
+				href: "/learn/book",
+				actionLabel: "Read Musi Book",
 			},
 			{
 				label: "Install",
@@ -190,29 +190,29 @@ export const siteCopy = {
 	},
 	install: {
 		eyebrow: "Install",
-		title: "Install Musi with script or Cargo",
+		title: "Install Musi with Script or Cargo",
 		description:
 			"Install Rust and libffi first, then choose a script bootstrap or a local cargo install. Both paths install music and musi into Cargo's bin directory.",
 		prerequisitesLabel: "Prerequisites",
-		installScriptsLabel: "Install script",
-		cargoInstallLabel: "Cargo install",
-		quickStartLabel: "Quick start",
-		commandMapLabel: "Command map",
-		commandMapTitle: "Current commands",
+		installScriptsLabel: "Install Script",
+		cargoInstallLabel: "Cargo Install",
+		quickStartLabel: "Quick Start",
+		commandMapLabel: "Command Map",
+		commandMapTitle: "Current Commands",
 		commandMapCopy:
 			"Use package commands most of the time. Use direct commands when you want one file or one artifact.",
 	},
 	playground: {
 		eyebrow: "Playground",
-		title: "Playground status",
+		title: "Playground Status",
 		copy: "Browser execution support is planned but not public yet.",
-		statusTitle: "WASM playground is not public yet",
+		statusTitle: "WASM Playground Is Not Public Yet",
 		statusCopy:
 			"This page shows browser tooling status and points back to install and community work.",
 	},
 	community: {
 		eyebrow: "Community",
-		title: "Join the Musi project",
+		title: "Join the Musi Project",
 		description:
 			"Community keeps contribution, discussion, issue tracking, and repository links in one place.",
 		sections: [
@@ -229,7 +229,7 @@ export const siteCopy = {
 				label: "Read contributing guide",
 			},
 			{
-				title: "Issue tracking",
+				title: "Issue Tracking",
 				copy: "See active bugs, language work, and open tasks.",
 				href: "https://github.com/musi-lang/musi/issues",
 				label: "Open issues",
@@ -238,11 +238,11 @@ export const siteCopy = {
 	},
 	learn: {
 		eyebrow: "Learn",
-		title: "Musi book",
+		title: "Musi Book",
 		description:
 			"Read Musi in chapter order through small beginner-first language chapters. Learning pages stay close to install steps and current commands.",
-		startTitle: "Start at the beginning and keep moving",
-		questionsTitle: "Follow the chapter sequence",
-		partsTitle: "Parts and chapters",
+		startTitle: "Start at the Beginning",
+		questionsTitle: "Follow the Chapter Sequence",
+		partsTitle: "Parts and Chapters",
 	},
 } satisfies SiteCopy;

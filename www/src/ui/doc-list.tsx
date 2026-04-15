@@ -1,6 +1,9 @@
 import { Surface } from "./surface";
 
 interface DocListPage {
+	id: string;
+	kind: "part" | "section" | "chapter";
+	childIds: string[];
 	path: string;
 	slug: string;
 	summaryHtml: string;
@@ -36,8 +39,18 @@ export function DocListGroup(props: {
 			</div>
 			<div className="doc-list">
 				{props.pages.map((page) => (
-					<a key={page.slug} href={page.path} className="doc-row">
+					<a key={page.id} href={page.path} className="doc-row">
 						<div>
+							<div className="doc-row-meta">
+								{page.kind === "section"
+									? "Section"
+									: page.kind === "part"
+										? "Part"
+										: "Chapter"}
+								{page.childIds.length > 0
+									? ` · ${page.childIds.length} items`
+									: ""}
+							</div>
 							<h3>{page.title}</h3>
 							<p dangerouslySetInnerHTML={{ __html: page.summaryHtml }} />
 						</div>

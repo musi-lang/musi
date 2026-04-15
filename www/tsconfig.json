@@ -2,9 +2,10 @@
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
 		"baseUrl": ".",
+		"jsxImportSource": "preact",
 		"paths": {
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src", "scripts", "vite.config.ts"]
+	"include": ["src", "scripts", "astro.config.ts"]
 }

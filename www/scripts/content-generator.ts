@@ -3,7 +3,11 @@ import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { createHighlighter } from "shiki";
-import { bookPages, bookParts } from "../src/content/book/manifest";
+import {
+	bookPages,
+	bookParts,
+	bookSections,
+} from "../src/content/book/manifest";
 import { tryBlockById } from "../src/content/book/try-registry";
 import { exampleGroupById } from "../src/content/examples/groups";
 import { contentSnippets, snippetById } from "../src/content/snippet-registry";
@@ -47,9 +51,15 @@ interface GeneratedHeading {
 interface GeneratedDoc extends MarkdownDocumentAttributes {
 	locale: Locale;
 	id: string;
-	kind: "part" | "chapter";
+	kind: "part" | "section" | "chapter";
+	parentId: string | null;
+	depth: number;
+	treePath: string[];
+	childIds: string[];
 	partId: string;
 	partTitle: string;
+	sectionId: string | null;
+	sectionTitle: string | null;
 	path: string;
 	canonicalPath: string;
 	aliases: string[];
@@ -65,6 +75,7 @@ const docsRoutePattern = /^\/docs/;
 
 const numberValuePattern = /^\d+$/;
 const rawMusiFencePattern = /```musi\b/;
+const nonAsciiQuotePattern = /[‘’“”]/;
 const examplePattern = /\{\{example:([\w-]+)\}\}/g;
 const snippetPattern = /\{\{snippet:([\w-]+)\}\}/g;
 const tryPattern = /\{\{try:([\w-]+)\}\}/g;
@@ -84,6 +95,10 @@ const bannedDocsPatterns = [
 	/used to/i,
 	/current surface/i,
 	/current shape/i,
+	/in this chapter/i,
+	/why it matters/i,
+	/walk through it/i,
+	/try it next/i,
 ];
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(scriptsDirectory, "..");
@@ -98,6 +113,7 @@ const snippetRegistryPath = join(
 	"snippet-registry.ts",
 );
 const bookManifestPath = join(appRoot, "src", "content", "book", "manifest.ts");
+const contentCatalogPath = join(appRoot, "src", "content", "catalog.ts");
 const tryRegistryPath = join(
 	appRoot,
 	"src",
@@ -155,7 +171,7 @@ function createWebsiteMusiGrammar(
 	repository["website-function-call"] = {
 		name: "entity.name.function.call.musi",
 		match:
-			"(?<!\\.)\\b(?!and\\b|as\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|match\\b|mut\\b|not\\b|opaque\\b|or\\b|quote\\b|rec\\b|request\\b|resume\\b|shl\\b|shr\\b|where\\b|with\\b|xor\\b)[a-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
+			"(?<!\\.)\\b(?!and\\b|as\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|match\\b|mut\\b|not\\b|opaque\\b|or\\b|partial\\b|quote\\b|rec\\b|request\\b|resume\\b|shl\\b|shr\\b|unsafe\\b|using\\b|where\\b|with\\b|xor\\b)[a-z_][A-Za-z0-9_]*\\b(?=\\s*\\()",
 	};
 
 	repository["website-type-identifier"] = {
@@ -202,6 +218,7 @@ export const watchedContentPaths = [
 	bookContentDirectory,
 	snippetRegistryPath,
 	bookManifestPath,
+	contentCatalogPath,
 	tryRegistryPath,
 	generatorModulePath,
 	generatorEntrypointPath,
@@ -220,6 +237,7 @@ export function isWatchedContentPath(path: string) {
 		normalized.startsWith(pathWithTrailingSeparator(bookContentDirectory)) ||
 		normalized === normalize(snippetRegistryPath) ||
 		normalized === normalize(bookManifestPath) ||
+		normalized === normalize(contentCatalogPath) ||
 		normalized === normalize(tryRegistryPath) ||
 		normalized === normalize(generatorModulePath) ||
 		normalized === normalize(generatorEntrypointPath) ||
@@ -228,7 +246,7 @@ export function isWatchedContentPath(path: string) {
 }
 
 const highlighter = await createHighlighter({
-	themes: ["github-light", "github-dark"],
+	themes: ["github-light-high-contrast", "github-dark"],
 	langs: [
 		"bash",
 		"c",
@@ -318,7 +336,7 @@ function renderHighlightedCode(sourceText: string, language: string) {
 		return highlighter.codeToHtml(sourceText, {
 			lang: normalizedLanguage,
 			themes: {
-				light: "github-light",
+				light: "github-light-high-contrast",
 				dark: "github-dark",
 			},
 		});
@@ -330,7 +348,7 @@ function renderHighlightedCode(sourceText: string, language: string) {
 		return highlighter.codeToHtml(sourceText, {
 			lang: "plaintext",
 			themes: {
-				light: "github-light",
+				light: "github-light-high-contrast",
 				dark: "github-dark",
 			},
 		});
@@ -379,6 +397,10 @@ function assertNoRawMusiFences(source: string, path: string) {
 }
 
 function assertConsumerSafeDocs(source: string, path: string) {
+	if (nonAsciiQuotePattern.test(source)) {
+		throw new Error(`${path} contains non-ASCII quote punctuation`);
+	}
+
 	for (const pattern of bannedDocsPatterns) {
 		if (pattern.test(source)) {
 			throw new Error(`${path} contains banned docs content: ${pattern}`);
@@ -505,21 +527,56 @@ function renderMarkdown(source: string) {
 	};
 }
 
+function setDocRewrite(
+	rewrites: Map<string, string>,
+	from: string,
+	to: string,
+) {
+	const localizedFrom = localizedDocRoute("en", from);
+	const localizedTo = localizedDocRoute("en", to);
+	rewrites.set(from, localizedTo);
+	rewrites.set(localizedFrom, localizedTo);
+}
+
 function buildDocLinkMap() {
 	const rewrites = new Map<string, string>();
+	const sectionById = new Map(
+		bookSections.map((section) => [section.id, section]),
+	);
+	for (const part of bookParts) {
+		setDocRewrite(rewrites, part.path, part.path);
+		for (const alias of part.aliases ?? []) {
+			setDocRewrite(rewrites, alias, part.path);
+		}
+	}
+	for (const section of bookSections) {
+		setDocRewrite(rewrites, section.path, section.path);
+		for (const alias of section.aliases ?? []) {
+			setDocRewrite(rewrites, alias, section.path);
+		}
+	}
 	for (const page of bookPages) {
+		const section = sectionById.get(page.sectionId);
+		if (!section) {
+			throw new Error(`missing section ${page.sectionId} for page ${page.id}`);
+		}
+		const chapterPath = chapterPathForSection(section.path, page.path);
+		setDocRewrite(rewrites, page.path, chapterPath);
 		for (const alias of page.aliases) {
-			rewrites.set(alias, page.path);
+			setDocRewrite(rewrites, alias, chapterPath);
 		}
 	}
 	return rewrites;
 }
 
 function rewriteDocLinks(source: string, rewrites: Map<string, string>) {
-	return source.replaceAll(/\]\((\/docs\/[^)#\s]+)\)/g, (matched, path) => {
-		const replacement = rewrites.get(path);
-		return replacement ? matched.replace(path, replacement) : matched;
-	});
+	return source.replaceAll(
+		/\]\(((?:\/docs|\/learn)\/[^)#\s]+)\)/g,
+		(matched, path) => {
+			const replacement = rewrites.get(path);
+			return replacement ? matched.replace(path, replacement) : matched;
+		},
+	);
 }
 
 function localizeMarkdownLinks(_locale: Locale, source: string) {
@@ -530,35 +587,82 @@ function localizedDocRoute(_locale: Locale, path: string) {
 	return path.replace(docsRoutePattern, "/learn");
 }
 
+function lastPathSegment(path: string) {
+	const segments = path.split("/").filter(Boolean);
+	const last = segments.at(-1);
+	if (!last) {
+		throw new Error(`missing path segment for ${path}`);
+	}
+	return last;
+}
+
+function chapterPathForSection(sectionPath: string, chapterPath: string) {
+	return `${sectionPath}/${lastPathSegment(chapterPath)}`;
+}
+
 async function renderMarkdownDocument(input: {
 	locale: Locale;
 	id: string;
-	kind: "part" | "chapter";
+	kind: "part" | "section" | "chapter";
+	parentId: string | null;
+	depth: number;
+	treePath: string[];
+	childIds: string[];
 	partId: string;
 	partTitle: string;
+	sectionId: string | null;
+	sectionTitle: string | null;
 	path: string;
 	aliases: string[];
-	sourcePath: string;
+	sourcePath?: string;
+	staticAttributes?: MarkdownDocumentAttributes;
 	questions: { label: string; href: string }[];
 	rewrites: Map<string, string>;
 }) {
-	const source = await readFile(docSourcePath(input.sourcePath), "utf8");
-	assertNoRawMusiFences(source, input.sourcePath);
-	assertConsumerSafeDocs(source, input.sourcePath);
-	const rewrittenSource = localizeMarkdownLinks(
-		input.locale,
-		rewriteDocLinks(source, input.rewrites),
-	);
-	const parsed = parseFrontmatter(rewrittenSource);
-	const attributes = parsed.attributes as Partial<MarkdownDocumentAttributes>;
-	const rendered = renderMarkdown(rewrittenSource);
+	let attributes: Partial<MarkdownDocumentAttributes> =
+		input.staticAttributes ?? {};
+	let rendered: { html: string; headings: GeneratedHeading[] };
+
+	if (input.sourcePath) {
+		const source = await readFile(docSourcePath(input.sourcePath), "utf8");
+		assertNoRawMusiFences(source, input.sourcePath);
+		assertConsumerSafeDocs(source, input.sourcePath);
+		const rewrittenSource = localizeMarkdownLinks(
+			input.locale,
+			rewriteDocLinks(source, input.rewrites),
+		);
+		const parsed = parseFrontmatter(rewrittenSource);
+		attributes = {
+			...attributes,
+			...(parsed.attributes as Partial<MarkdownDocumentAttributes>),
+		};
+		rendered = renderMarkdown(rewrittenSource);
+	} else {
+		const description = String(attributes?.description ?? "");
+		const summary = String(attributes?.summary ?? "");
+		rendered = {
+			html: `<p>${renderInlineHtml(description)}</p>`,
+			headings: [],
+		};
+		attributes = {
+			...attributes,
+			description,
+			summary,
+		};
+	}
 
 	return {
 		locale: input.locale,
 		id: input.id,
 		kind: input.kind,
+		parentId: input.parentId,
+		depth: input.depth,
+		treePath: input.treePath,
+		childIds: input.childIds,
 		partId: input.partId,
 		partTitle: input.partTitle,
+		sectionId: input.sectionId,
+		sectionTitle: input.sectionTitle,
 		path: input.path,
 		canonicalPath: input.path,
 		aliases: input.aliases,
@@ -569,6 +673,275 @@ async function renderMarkdownDocument(input: {
 		html: rendered.html,
 		summaryHtml: renderInlineHtml(String(attributes.summary ?? "")),
 	} satisfies GeneratedDoc;
+}
+
+type ManifestSection = (typeof bookSections)[number];
+type ManifestPage = (typeof bookPages)[number];
+
+function compareByOrderThenTitle(
+	left: { order: number; title: string },
+	right: { order: number; title: string },
+) {
+	if (left.order !== right.order) {
+		return left.order - right.order;
+	}
+	return left.title.localeCompare(right.title);
+}
+
+function buildSectionChildrenByParentId(
+	sectionById: Map<string, ManifestSection>,
+) {
+	const sectionChildrenByParentId = new Map<string, ManifestSection[]>();
+	for (const section of bookSections) {
+		if (section.parentId) {
+			const parentSection = sectionById.get(section.parentId);
+			if (!parentSection) {
+				throw new Error(
+					`missing parent section ${section.parentId} for section ${section.id}`,
+				);
+			}
+			if (parentSection.partId !== section.partId) {
+				throw new Error(
+					`mismatched part ${section.partId} for parent section ${parentSection.id} on section ${section.id}`,
+				);
+			}
+		}
+		const parentId = section.parentId ?? section.partId;
+		const siblings = sectionChildrenByParentId.get(parentId) ?? [];
+		siblings.push(section);
+		sectionChildrenByParentId.set(parentId, siblings);
+	}
+	for (const sections of sectionChildrenByParentId.values()) {
+		sections.sort(compareByOrderThenTitle);
+	}
+	return sectionChildrenByParentId;
+}
+
+function buildPagesBySectionId() {
+	const pagesBySectionId = new Map<string, ManifestPage[]>();
+	for (const page of bookPages) {
+		const pages = pagesBySectionId.get(page.sectionId) ?? [];
+		pages.push(page);
+		pagesBySectionId.set(page.sectionId, pages);
+	}
+	return pagesBySectionId;
+}
+
+function partForSection(
+	partById: Map<string, GeneratedDoc>,
+	section: ManifestSection,
+) {
+	const part = partById.get(section.partId);
+	if (!part) {
+		throw new Error(`missing part ${section.partId} for section ${section.id}`);
+	}
+	return part;
+}
+
+function parentForSection(
+	section: ManifestSection,
+	part: GeneratedDoc,
+	localizedSectionById: Map<string, GeneratedDoc>,
+) {
+	if (!section.parentId) {
+		return part;
+	}
+	const parent = localizedSectionById.get(section.parentId);
+	if (!parent) {
+		throw new Error(
+			`missing rendered parent ${section.parentId} for section ${section.id}`,
+		);
+	}
+	return parent;
+}
+
+function sectionIdsForParent(
+	sectionChildrenByParentId: Map<string, ManifestSection[]>,
+	parentId: string,
+) {
+	return (sectionChildrenByParentId.get(parentId) ?? []).map(
+		(section) => section.id,
+	);
+}
+
+function pageIdsForSection(
+	pagesBySectionId: Map<string, ManifestPage[]>,
+	sectionId: string,
+) {
+	return (pagesBySectionId.get(sectionId) ?? []).map((page) => page.id);
+}
+
+function queueRootSections(
+	localizedPartDocs: GeneratedDoc[],
+	sectionChildrenByParentId: Map<string, ManifestSection[]>,
+) {
+	const queuedSections: ManifestSection[] = [];
+	for (const part of localizedPartDocs) {
+		for (const section of sectionChildrenByParentId.get(part.id) ?? []) {
+			queuedSections.push(section);
+		}
+	}
+	return queuedSections;
+}
+
+function queueChildSections(
+	queuedSections: ManifestSection[],
+	sectionChildrenByParentId: Map<string, ManifestSection[]>,
+	sectionId: string,
+) {
+	for (const child of sectionChildrenByParentId.get(sectionId) ?? []) {
+		queuedSections.push(child);
+	}
+}
+
+function renderLocalizedSectionDoc(input: {
+	locale: Locale;
+	localizedAliases: (paths: string[]) => string[];
+	rewrites: Map<string, string>;
+	section: ManifestSection;
+	part: GeneratedDoc;
+	parent: GeneratedDoc;
+	childIds: string[];
+}) {
+	return renderMarkdownDocument({
+		locale: input.locale,
+		id: input.section.id,
+		kind: "section",
+		parentId: input.parent.id,
+		depth: input.parent.depth + 1,
+		treePath: [...input.parent.treePath, input.section.id],
+		childIds: input.childIds,
+		partId: input.part.id,
+		partTitle: input.part.title,
+		sectionId: input.section.id,
+		sectionTitle: input.section.title,
+		path: localizedDocRoute(input.locale, input.section.path),
+		aliases:
+			input.locale === "en"
+				? input.localizedAliases([
+						input.section.path,
+						...(input.section.aliases ?? []),
+					])
+				: [],
+		...(input.section.sourcePath
+			? { sourcePath: input.section.sourcePath }
+			: {}),
+		staticAttributes: {
+			title: input.section.title,
+			description: input.section.description,
+			group: input.section.group,
+			section: input.section.section,
+			order: input.section.order,
+			slug: input.section.slug,
+			summary: input.section.summary,
+		},
+		questions: [],
+		rewrites: input.rewrites,
+	});
+}
+
+async function renderLocalizedSectionDocs(input: {
+	locale: Locale;
+	localizedAliases: (paths: string[]) => string[];
+	rewrites: Map<string, string>;
+	localizedPartDocs: GeneratedDoc[];
+	partById: Map<string, GeneratedDoc>;
+	sectionChildrenByParentId: Map<string, ManifestSection[]>;
+	pagesBySectionId: Map<string, ManifestPage[]>;
+}) {
+	for (const part of input.localizedPartDocs) {
+		part.childIds = (input.sectionChildrenByParentId.get(part.id) ?? []).map(
+			(section) => section.id,
+		);
+	}
+	const localizedSectionDocs: GeneratedDoc[] = [];
+	const localizedSectionById = new Map<string, GeneratedDoc>();
+	const queuedSections = queueRootSections(
+		input.localizedPartDocs,
+		input.sectionChildrenByParentId,
+	);
+
+	while (queuedSections.length > 0) {
+		const section = queuedSections.shift() as ManifestSection;
+		const part = partForSection(input.partById, section);
+		const parent = parentForSection(section, part, localizedSectionById);
+		const sectionDoc = await renderLocalizedSectionDoc({
+			locale: input.locale,
+			localizedAliases: input.localizedAliases,
+			rewrites: input.rewrites,
+			section,
+			part,
+			parent,
+			childIds: [
+				...sectionIdsForParent(input.sectionChildrenByParentId, section.id),
+				...pageIdsForSection(input.pagesBySectionId, section.id),
+			],
+		});
+		localizedSectionDocs.push(sectionDoc);
+		localizedSectionById.set(section.id, sectionDoc);
+		queueChildSections(
+			queuedSections,
+			input.sectionChildrenByParentId,
+			section.id,
+		);
+	}
+
+	return { localizedSectionDocs, localizedSectionById };
+}
+
+function renderLocalizedPageDocs(input: {
+	locale: Locale;
+	localizedAliases: (paths: string[]) => string[];
+	rewrites: Map<string, string>;
+	partById: Map<string, GeneratedDoc>;
+	sectionById: Map<string, ManifestSection>;
+	localizedSectionById: Map<string, GeneratedDoc>;
+}) {
+	return Promise.all(
+		bookPages.map((page) => {
+			const part = input.partById.get(page.partId);
+			if (!part) {
+				throw new Error(`missing part ${page.partId} for page ${page.id}`);
+			}
+			const section = input.sectionById.get(page.sectionId);
+			if (!section) {
+				throw new Error(
+					`missing section ${page.sectionId} for page ${page.id}`,
+				);
+			}
+			if (section.partId !== page.partId) {
+				throw new Error(
+					`mismatched part ${page.partId} for section ${section.id} on page ${page.id}`,
+				);
+			}
+			const localizedSection = input.localizedSectionById.get(section.id);
+			if (!localizedSection) {
+				throw new Error(`missing localized section ${section.id}`);
+			}
+			const chapterPath = chapterPathForSection(section.path, page.path);
+			return renderMarkdownDocument({
+				locale: input.locale,
+				id: page.id,
+				kind: "chapter",
+				parentId: section.id,
+				depth: localizedSection.depth + 1,
+				treePath: [...localizedSection.treePath, page.id],
+				childIds: [],
+				partId: page.partId,
+				partTitle: part.title,
+				sectionId: section.id,
+				sectionTitle: localizedSection.title,
+				path: localizedDocRoute(input.locale, chapterPath),
+				aliases:
+					input.locale === "en"
+						? input.localizedAliases([chapterPath, page.path, ...page.aliases])
+						: [],
+				sourcePath: page.sourcePath,
+				questions: [],
+				rewrites: input.rewrites,
+			});
+		}),
+	);
 }
 
 export async function generateContent() {
@@ -587,16 +960,31 @@ export async function generateContent() {
 	const rewrites = buildDocLinkMap();
 	const renderedDocs: GeneratedDoc[] = [];
 	for (const locale of ["en"] as const) {
+		const dedupePaths = (paths: string[]) => [...new Set(paths)];
+		const localizedAliases = (paths: string[]) =>
+			dedupePaths(
+				paths.flatMap((path) => [path, localizedDocRoute(locale, path)]),
+			);
+
 		const localizedPartDocs = await Promise.all(
 			bookParts.map((part) =>
 				renderMarkdownDocument({
 					locale,
 					id: part.id,
 					kind: "part",
+					parentId: null,
+					depth: 0,
+					treePath: [part.id],
+					childIds: [],
 					partId: part.id,
 					partTitle: part.id,
+					sectionId: null,
+					sectionTitle: null,
 					path: localizedDocRoute(locale, part.path),
-					aliases: [],
+					aliases:
+						locale === "en"
+							? localizedAliases([part.path, ...(part.aliases ?? [])])
+							: [],
 					sourcePath: part.sourcePath,
 					questions: [],
 					rewrites,
@@ -606,27 +994,35 @@ export async function generateContent() {
 		const partById = new Map(
 			localizedPartDocs.map((part) => [part.id, part] as const),
 		);
-		const localizedPageDocs = await Promise.all(
-			bookPages.map((page) => {
-				const part = partById.get(page.partId);
-				if (!part) {
-					throw new Error(`missing part ${page.partId} for page ${page.id}`);
-				}
-				return renderMarkdownDocument({
-					locale,
-					id: page.id,
-					kind: "chapter",
-					partId: page.partId,
-					partTitle: part.title,
-					path: localizedDocRoute(locale, page.path),
-					aliases: locale === "en" ? [page.path, ...page.aliases] : [],
-					sourcePath: page.sourcePath,
-					questions: [],
-					rewrites,
-				});
-			}),
+		const sectionById = new Map(
+			bookSections.map((section) => [section.id, section] as const),
 		);
-		renderedDocs.push(...localizedPartDocs, ...localizedPageDocs);
+		const sectionChildrenByParentId =
+			buildSectionChildrenByParentId(sectionById);
+		const pagesBySectionId = buildPagesBySectionId();
+		const { localizedSectionDocs, localizedSectionById } =
+			await renderLocalizedSectionDocs({
+				locale,
+				localizedAliases,
+				rewrites,
+				localizedPartDocs,
+				partById,
+				sectionChildrenByParentId,
+				pagesBySectionId,
+			});
+		const localizedPageDocs = await renderLocalizedPageDocs({
+			locale,
+			localizedAliases,
+			rewrites,
+			partById,
+			sectionById,
+			localizedSectionById,
+		});
+		renderedDocs.push(
+			...localizedPartDocs,
+			...localizedSectionDocs,
+			...localizedPageDocs,
+		);
 	}
 
 	const generated = `export interface GeneratedHeading {
@@ -638,9 +1034,15 @@ export async function generateContent() {
 export interface GeneratedDoc {
 \tlocale: "en";
 \tid: string;
-\tkind: "part" | "chapter";
+\tkind: "part" | "section" | "chapter";
+\tparentId: string | null;
+\tdepth: number;
+\ttreePath: string[];
+\tchildIds: string[];
 \tpartId: string;
 \tpartTitle: string;
+\tsectionId: string | null;
+\tsectionTitle: string | null;
 \tpath: string;
 \tcanonicalPath: string;
 \taliases: string[];

@@ -1,44 +1,23 @@
 ---
-title: "Imports and exports"
+title: "Imports and Exports"
 description: "Use imports and exports after package shape is clear."
-group: "Code organization"
-section: "Code organization"
+group: "Code Organization"
+section: "Code Organization"
 order: 17
 slug: "imports-and-exports"
 summary: "Bring code in explicitly and expose only what other files need."
 ---
 
+Imports bring another module exported names into reach. Exports decide which names leave the current module.
+
 {{snippet:chapter-imports-and-exports}}
 
-## In this chapter
+## Reading Model
 
-Imports bring code or modules into scope, and exports decide which names other files may use.
-This page pairs a standard-library import with a local export/import cycle so the boundary is visible from both directions.
-That makes module flow concrete instead of abstract.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-As soon as code crosses file boundaries, users ask two questions: "how do I bring this in?" and "how do I expose that out?"
-If docs only answer one of them, people still end up guessing about module ownership.
-Clear import/export examples help keep dependencies explicit and public surfaces small.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read `let Option := import "@std/option";` as binding imported module to a local name you can call through.
-Then read `export let answer := 42;` as deliberate publication of one binding, not automatic exposure of whole file.
-Use `export opaque` when callers should see the exported name but not rely on representation details.
-When organizing code, import only what you need, export only what other files truly depend on, and keep local helpers unexported by default.
-
-## Try it next
-
-- Import one `@std` module into a file.
-- Export one helper from another file.
-- Use exported name through local import.
-
-## Common mistake
-
-Do not use imports and exports as substitute for deciding which names should stay local.
-
-## Next
-
-Continue to [Type annotations](/docs/language/types/type-annotations) to make important value shapes explicit once code spans more than one toy file.
+Continue to [Type Annotations](/learn/book/types/foundations/type-annotations).

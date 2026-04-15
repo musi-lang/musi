@@ -1,4 +1,5 @@
 import { siteOrigin } from "./content";
+import { siteMeta } from "./lib/site-meta";
 import type { AppRoute } from "./routes";
 
 const scriptCloseTagPattern = /<\/script/gi;
@@ -21,7 +22,7 @@ export function buildStructuredData(route: AppRoute) {
 		JSON.stringify({
 			"@context": "https://schema.org",
 			"@type": "SoftwareApplication",
-			name: "Musi",
+			name: siteMeta.name,
 			applicationCategory: "DeveloperApplication",
 			operatingSystem: "macOS, Linux, Windows",
 			url: canonicalUrl(route),

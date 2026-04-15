@@ -1,8 +1,8 @@
 ---
 title: "Attributes"
 description: "Use attributes to attach metadata for compiler-known items, layout, foreign links, diagnostics, and lifecycle information."
-group: "Advanced and tooling"
-section: "Advanced and tooling"
+group: "Advanced and Tooling"
+section: "Advanced and Tooling"
 order: 30
 slug: "attributes"
 summary: "Attributes describe metadata, boundaries, and build-time intent without changing Musi into a macro language."
@@ -14,7 +14,7 @@ Attributes let you attach structured metadata to declarations.
 They are not a replacement for ordinary language design, and they are not a free-form escape hatch for every feature.
 They exist to carry information that matters at compile time, runtime boundaries, layout, tooling, or documentation.
 
-## In this chapter
+## Boundary Tool
 
 The built-in attribute families you will see most often are:
 
@@ -26,7 +26,7 @@ The built-in attribute families you will see most often are:
 
 There can also be non-reserved metadata attributes that survive as inert data for tooling or documentation.
 
-## Why it matters
+## When to Reach for It
 
 If the docs only say "attributes exist", users still do not know which ones are ordinary metadata, which ones affect code generation, and which ones are only valid in special places.
 This chapter should answer three practical questions:
@@ -35,7 +35,7 @@ This chapter should answer three practical questions:
 2. what kind of declaration can it attach to?
 3. what does the compiler or runtime do with it?
 
-## Walk through it
+## Read the Boundary
 
 Read attributes from the outside in:
 
@@ -61,17 +61,17 @@ They do not replace normal functions, data definitions, or effects.
 If you need ordinary behavior, write ordinary Musi code first.
 Reach for attributes when the information really is metadata.
 
-## Try it next
+## Small Exercise
 
 - Read one `@link` declaration and identify every named argument.
 - Compare one layout-related attribute with one lifecycle attribute.
 - Ask whether the information belongs in ordinary code or in metadata.
 
-## Common mistake
+## Mistake to Avoid
 
 Do not treat attributes as a generic place to hide behavior.
 If a concept changes how code runs, it usually deserves a language or library construct first.
 
-## Next
+## Next Page
 
-Continue to [Foreign](/docs/language/advanced/foreign) to see how the FFI-related attributes fit into real declarations.
+Continue to [Foreign](/learn/book/advanced/foreign) to see how the FFI-related attributes fit into real declarations.

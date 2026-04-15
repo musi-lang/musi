@@ -1,43 +1,23 @@
 ---
 title: "Packages"
 description: "Learn package roots and entry files after single-file work makes sense."
-group: "Code organization"
-section: "Code organization"
+group: "Code Organization"
+section: "Code Organization"
 order: 16
 slug: "packages"
 summary: "Move from one file to package-managed code without changing mental models."
 ---
 
+A package is a project boundary. It gives source files a root, gives tools a manifest, and gives other packages a stable name to import.
+
 {{snippet:chapter-packages}}
 
-## In this chapter
+## Reading Model
 
-A package groups source files, manifest data, and package-level commands under one project root.
-The `musi new hello` flow shows what package work looks like when you are no longer just checking one scratch file.
-This is about project shape, not new language semantics.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-Users need a clear moment where they switch from "I am learning syntax in one file" to "I am building a project I will rerun, test, and grow."
-Without that transition, `musi run`, `musi test`, and manifest concepts feel arbitrary.
-A practical package example gives those commands a home.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read the command sequence as package lifecycle: create project, move into root, then run package entry point.
-After that, inspect generated structure and connect it back to earlier file model: package entry is still just Musi source, now managed by project tooling.
-Use package workflow when code needs multiple files, dependency tracking, or repeatable commands.
-
-## Try it next
-
-- Create one package with `musi new`.
-- Open generated entry file.
-- Run `musi run` from package root.
-
-## Common mistake
-
-Do not assume package workflow makes direct `music` file work obsolete.
-
-## Next
-
-Continue to [Imports and exports](/docs/language/organization/imports-and-exports) to connect files without turning everything public.
+Continue to [Imports and Exports](/learn/book/organization/modules/imports-and-exports).

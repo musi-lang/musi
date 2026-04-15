@@ -288,7 +288,7 @@ next;`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle request console.readln() using console {
+		sourceText: `handle console.readln() using console {
   value => value;
   readln(k) => resume "ok";
 };`,
@@ -739,18 +739,27 @@ next;`,
 		id: "chapter-generics",
 		language: "musi",
 		sourceText: `let identityFn[T] (input : T) : T := input;
-let tools := { identity := identityFn };
-let Box1[T] := data {
-  | Box1(T)
+let port := identityFn[Int](8080);
+
+let tools := {
+  identity := identityFn
 };
+
+let copiedPort := tools.identity[Int](port);
+
+let Box1[T] := data {
+  | Box1(value : T)
+};
+
 let Keeps[F : Type -> Type] := class {
   let keep(value : F[Int]) : F[Int];
 };
+
 let boxKeeps := instance Keeps[Box1] {
   let keep(value : Box1[Int]) : Box1[Int] := value;
 };
 
-tools.identity[Int](8080);`,
+copiedPort;`,
 		evidence: {
 			path: "www/src/content/snippet-registry.ts",
 			line: 720,
@@ -782,9 +791,18 @@ tools.identity[Int](8080);`,
 	{
 		id: "chapter-laws",
 		language: "musi",
-		sourceText: `let Eq[T] := class {
-  let (=) (a : T, b : T) : Bool;
-  law reflexive (x : T) := .True;
+		sourceText: `let Vehicle[T] := class {
+  let wheels(self : T) : Int;
+  law atLeastFourWheels(vehicle : T) := vehicle.wheels() >= 4;
+};
+
+let Car := data {
+  | Sport
+  | Family
+};
+
+let carLaw := instance Vehicle[Car] {
+  let wheels(self : Car) : Int := 4;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -817,7 +835,7 @@ request console.readln();`,
 	{
 		id: "chapter-handlers",
 		language: "musi",
-		sourceText: `handle request console.readln() using console {
+		sourceText: `handle console.readln() using console {
   value => value;
   readln(k) => resume "ok";
 };`,
@@ -1112,6 +1130,352 @@ label;`,
 		evidence: {
 			path: "docs/what/language/advanced/templates-and-splices.md",
 			line: 11,
+		},
+	},
+
+	{
+		id: "guide-python-developers",
+		language: "musi",
+		sourceText: `let User := data {
+  name : String;
+  visits : Int := 0;
+};
+
+let greet (user : User) : String := user.name;`,
+		evidence: {
+			path: "docs/what/language/developers/python.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-java-developers",
+		language: "musi",
+		sourceText: `let Show[T] := class {
+  let show(value : T) : String;
+};
+
+let showInt := instance Show[Int] {
+  let show(value : Int) : String := "int";
+};`,
+		evidence: {
+			path: "docs/what/language/developers/java.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-javascript-developers",
+		language: "musi",
+		sourceText: `let makeUser (name : String) := {
+  name := name,
+  active := .True,
+};
+
+makeUser("Musi");`,
+		evidence: {
+			path: "docs/what/language/developers/javascript.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-typescript-developers",
+		language: "musi",
+		sourceText: `let LoadResult[T] := data {
+  | Loaded(value : T)
+  | Missing(reason : String)
+};
+
+let port : LoadResult[Int] := .Loaded(value := 8080);`,
+		evidence: {
+			path: "docs/what/language/developers/typescript.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-c-developers",
+		language: "musi",
+		sourceText: `let Ffi := import "@std/ffi";
+
+foreign "c" let get_counter () : CPtr;
+
+let counter := unsafe {
+  Ffi.ptr.cast[Int](get_counter());
+};`,
+		evidence: {
+			path: "docs/what/language/developers/c.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-cpp-developers",
+		language: "musi",
+		sourceText: `let identityFn[T] (input : T) : T := input;
+let port := identityFn[Int](8080);
+port;`,
+		evidence: {
+			path: "docs/what/language/developers/cpp.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-csharp-developers",
+		language: "musi",
+		sourceText: `let Pipeline := import "@std/iter";
+let values := [1, 2, 3];
+values;`,
+		evidence: {
+			path: "docs/what/language/developers/csharp.md",
+			line: 1,
+		},
+	},
+	{
+		id: "guide-go-developers",
+		language: "musi",
+		sourceText: `let ParseResult := data {
+  | Ok(port : Int)
+  | Error(message : String)
+};
+
+let parsed := .Ok(port := 8080);`,
+		evidence: {
+			path: "docs/what/language/developers/go.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-values-functions",
+		language: "musi",
+		sourceText: `let total (base : Int, fee : Int) : Int := base + fee;
+
+let answer := total(1200, 45);
+answer;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/values-functions.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-named-arguments",
+		language: "musi",
+		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+
+let selected := render(port := 8080, secure := 0 = 0);
+selected;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/values-functions.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-mutation-counter",
+		language: "musi",
+		sourceText: `let visits := mut 0;
+visits := visits + 1;
+visits;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/mutation.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-fresh-value",
+		language: "musi",
+		sourceText: `let base := 1200;
+let total := base + 45;
+total;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/mutation.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-struct-record",
+		language: "musi",
+		sourceText: `let Endpoint := data {
+  host : String;
+  port : Int;
+  secure : Bool;
+};
+
+let local := {
+  host := "localhost",
+  port := 8080,
+  secure := 0 = 1
+};
+
+let secure := { ...local, secure := 0 = 0 };
+secure.port;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/records-structs.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-enum-data-match",
+		language: "musi",
+		sourceText: `let Port := data {
+  | Configured(port : Int)
+  | Default
+};
+
+let selected : Port := .Configured(port := 8080);
+
+match selected (
+| .Configured(port) => port
+| .Default => 3000
+);`,
+		evidence: {
+			path: "docs/what/language/developers/rust/enums-data.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-trait-class-law",
+		language: "musi",
+		sourceText: `let Vehicle[T] := class {
+  let wheels(self : T) : Int;
+  law atLeastFourWheels(vehicle : T) := vehicle.wheels() >= 4;
+};
+
+let Car := data {
+  | Car
+};
+
+let carVehicle := instance Vehicle[Car] {
+  let wheels(self : Car) : Int := 4;
+};`,
+		evidence: {
+			path: "docs/what/language/developers/rust/traits-classes-laws.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-generic-function",
+		language: "musi",
+		sourceText: `let identity[T] (input : T) : T := input;
+
+let port := identity[Int](8080);
+port;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/generics.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-generic-data",
+		language: "musi",
+		sourceText: `let Box1[T] := data {
+  | Box1(value : T)
+};
+
+let boxed := .Box1(value := 8080);
+match boxed (
+| .Box1(value) => value
+);`,
+		evidence: {
+			path: "docs/what/language/developers/rust/generics.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-type-constructor-class",
+		language: "musi",
+		sourceText: `let Box1[T] := data {
+  | Box1(value : T)
+};
+
+let Keeps[F : Type -> Type] := class {
+  let keep(value : F[Int]) : F[Int];
+};
+
+let boxKeeps := instance Keeps[Box1] {
+  let keep(value : Box1[Int]) : Box1[Int] := value;
+};`,
+		evidence: {
+			path: "docs/what/language/developers/rust/generics.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-result-data",
+		language: "musi",
+		sourceText: `let RustResult[T, E] := data {
+  | Ok(value : T)
+  | Error(error : E)
+};
+
+let parsed := .Ok(value := 8080);
+parsed;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/results-effects.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-effect-request",
+		language: "musi",
+		sourceText: `let Console := effect {
+  let readln () : String;
+};
+
+let readLine () : String using { Console } :=
+  request Console.readln();`,
+		evidence: {
+			path: "docs/what/language/developers/rust/results-effects.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-module-export",
+		language: "musi",
+		sourceText: "export let defaultPort () : Int := 8080;",
+		evidence: {
+			path: "docs/what/language/developers/rust/modules-packages.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-module-import",
+		language: "musi",
+		sourceText: `let Ports := import "./ports";
+
+let port := Ports.defaultPort();
+port;`,
+		evidence: {
+			path: "docs/what/language/developers/rust/modules-packages.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-unsafe-ffi",
+		language: "musi",
+		sourceText: `let Ffi := import "@std/ffi";
+
+foreign "c" let get_counter () : CPtr;
+
+let counter := unsafe {
+  Ffi.ptr.cast[Int](get_counter());
+};`,
+		evidence: {
+			path: "docs/what/language/developers/rust/unsafe-ffi.md",
+			line: 1,
+		},
+	},
+	{
+		id: "rust-testing-tooling",
+		language: "musi",
+		sourceText: `let Testing := import "@std/testing";
+
+let defaultPort () : Int := 8080;
+
+export let test () :=
+  (
+    Testing.describe("ports");
+    Testing.it("default port is http alt", Testing.toBe(defaultPort(), 8080));
+    Testing.endDescribe()
+  );`,
+		evidence: {
+			path: "docs/what/language/developers/rust/testing-tooling.md",
+			line: 1,
 		},
 	},
 ] as const;

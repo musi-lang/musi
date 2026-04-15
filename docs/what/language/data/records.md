@@ -8,36 +8,16 @@ slug: "records"
 summary: "Build named-field values and access fields directly."
 ---
 
+Records group named fields. Use them when names matter more than position. Spread updates start from an existing record and replace the named fields shown.
+
 {{snippet:chapter-records}}
 
-## In this chapter
+## Reading Model
 
-Records let you store related values under field names.
-The first snippet shows record construction with named fields, and the second shows how to build a new record from an existing one with spread update.
-Together they cover the two questions beginners actually ask: how to make one, and how to change one without losing everything else.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-Plain numbers and strings stop being enough as soon as data has roles such as `x`, `y`, `name`, or `port`.
-If docs only mention record syntax once and move on, users still need to ask how to update one field while keeping rest intact.
-Records are where labeled data starts feeling practical instead of theoretical.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read `{ x := 3, y := 4 }` as one value with two named fields.
-Then read `{ ...point, z := 5 }` as "copy existing record shape, then override or add selected fields."
-When writing your own records, choose field names that make access obvious and use spread when you want a new value that mostly keeps old data.
-
-## Try it next
-
-- Create one record with two named fields.
-- Build a second record with spread update.
-- Change one field name or value to reflect a real domain example.
-
-## Common mistake
-
-Do not rebuild an entire record by hand when only one or two fields need to change.
-
-## Next
-
-Continue to [Indexing and fields](/docs/language/data/indexing-and-fields) to read data back out of values.
+Continue to [Indexing and Fields](/learn/book/data/modeling/indexing-and-fields).

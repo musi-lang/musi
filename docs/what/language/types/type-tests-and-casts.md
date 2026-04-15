@@ -1,5 +1,5 @@
 ---
-title: "Type tests and casts"
+title: "Type Tests and Casts"
 description: "Check and narrow values with explicit type-facing expressions."
 group: "Types"
 section: "Types"
@@ -8,36 +8,16 @@ slug: "type-tests-and-casts"
 summary: "Use `:?` to test a value against a type and `:?>` for an explicit cast."
 ---
 
+Type tests ask whether a value has a shape. Casts state that code wants to treat a value as that shape and deserve attention near dynamic or native boundaries.
+
 {{snippet:chapter-type-tests-and-casts}}
 
-## In this chapter
+## Reading Model
 
-Type-facing expressions keep runtime checks visible.
-`value :? Type` asks whether a value fits a type.
-`value :?> Type` asks for an explicit cast to that type.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-Dynamic boundaries, foreign data, and broad APIs sometimes need a visible check before code continues.
-Hiding that check inside a helper name can make the risky part disappear.
-The `:?` and `:?>` forms keep the type question attached to the value being checked.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read `value :? Int` as a question.
-Read `value :?> Int` as a conversion request that should only appear where the cast is justified.
-When possible, prefer earlier precise types so casts stay rare.
-
-## Try it next
-
-- Write one type test for a value.
-- Write one cast near a boundary.
-- Move the cast closer to the boundary if it drifts into ordinary domain code.
-
-## Common mistake
-
-Do not use casts to avoid modeling data precisely. Casts should explain a boundary, not erase one.
-
-## Next
-
-Continue to [Forall types](/docs/language/types/forall-types) for explicit universal type forms.
+Continue to [Forall Types](/learn/book/types/foundations/forall-types).

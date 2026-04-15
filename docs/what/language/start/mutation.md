@@ -8,36 +8,16 @@ slug: "mutation"
 summary: "Use mut only when changing a value helps more than rebuilding it."
 ---
 
+Mutation is explicit and value-based. A binding can hold a mutable value, but ordinary `let` still means "name this value."
+
 {{snippet:chapter-mutation}}
 
-## In this chapter
+Read `let counter := mut 1;` as "counter starts with a mutable value." Read `counter := counter + 1;` as "replace the current value with the next value." The update is visible at the assignment site.
 
-Mutation in Musi is explicit.
-A value becomes mutable only when you mark it with `mut`, and reassignment uses same `:=` surface in a clearly state-changing position.
-That keeps changing state visible instead of quietly blending it into ordinary bindings.
+A real-world counter works the same way. The clicker is the same object in your hand, but its displayed number changes.
 
-## Why it matters
+## Use It Sparingly
 
-New users need to know both that mutation exists and that Musi does not want it everywhere.
-If docs only show immutable examples, people ask how to update counters or accumulators.
-If docs present mutation as default, readers miss one of the language's clarity wins: stable values stay stable unless you opt into change.
+Mutation is useful for counters, cursors, buffers, and small accumulators. Prefer fresh names when the next value is just another step in a pipeline.
 
-## Walk through it
-
-Read `let counter := mut 1;` as creation of one mutable cell with initial value `1`.
-Read `counter := 2;` as reassignment of existing mutable value, not creation of a second binding.
-When writing real code, start by asking whether a new immutable value would read better; choose `mut` when step-by-step updates make the intent clearer.
-
-## Try it next
-
-- Create one mutable counter.
-- Reassign it once.
-- Rewrite same tiny task with immutable bindings and compare readability.
-
-## Common mistake
-
-Do not add `mut` automatically just because value changes in other languages.
-
-## Next
-
-Continue to [Literals](/docs/language/core/literals) to build up the everyday values you will bind, transform, and compare.
+Continue to [Literals](/learn/book/core/expressions/literals).

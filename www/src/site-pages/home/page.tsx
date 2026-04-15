@@ -34,7 +34,9 @@ export function HomePage(_props: { route: AppRoute }) {
 						}
 						actions={
 							<ActionStrip>
-								<PrimaryAction href="/learn">{copy.primaryCta}</PrimaryAction>
+								<PrimaryAction href="/learn/book">
+									{copy.primaryCta}
+								</PrimaryAction>
 								<SecondaryAction href="/install">
 									{copy.secondaryCta}
 								</SecondaryAction>
@@ -102,7 +104,7 @@ export function HomePage(_props: { route: AppRoute }) {
 						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 						<h2>{siteCopy.learn.partsTitle}</h2>
 					</div>
-					<InlineAction href="/learn">{siteCopy.nav.learn}</InlineAction>
+					<InlineAction href="/learn/book">{siteCopy.nav.learn}</InlineAction>
 				</div>
 				<div className="doc-groups-grid doc-groups-grid-separated">
 					{docGroups.map((group) => (

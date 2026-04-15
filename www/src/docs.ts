@@ -1,5 +1,6 @@
 import { renderedDocs } from "./generated-content";
 import type { Locale } from "./lib/site-copy";
+import { pageTitle } from "./lib/site-meta";
 import type { AppRoute } from "./routes";
 
 export interface DocHeading {
@@ -10,7 +11,11 @@ export interface DocHeading {
 
 export interface DocPage {
 	id: string;
-	kind: "part" | "chapter";
+	kind: "part" | "section" | "chapter";
+	parentId: string | null;
+	depth: number;
+	treePath: string[];
+	childIds: string[];
 	title: string;
 	description: string;
 	descriptionHtml: string;
@@ -27,6 +32,8 @@ export interface DocPage {
 	aliases: string[];
 	partId: string;
 	partTitle: string;
+	sectionId: string | null;
+	sectionTitle: string | null;
 	questions: { label: string; href: string }[];
 	locale: Locale;
 }
@@ -36,43 +43,104 @@ export interface DocPart {
 	title: string;
 	summaryHtml: string;
 	path: string;
+	sections: DocPage[];
+	chapters: DocPage[];
+	locale: Locale;
+}
+
+interface DocGroup {
+	group: string;
+	path: string;
+	summaryHtml: string;
 	pages: DocPage[];
 	locale: Locale;
 }
 
-const localizedDocs = renderedDocs satisfies DocPage[];
+const localizedDocs = renderedDocs as DocPage[];
 
+const docsById = new Map<string, DocPage>();
 const docsByPath = new Map<string, DocPage>();
 for (const page of localizedDocs) {
+	docsById.set(page.id, page);
 	docsByPath.set(page.path, page);
 	for (const alias of page.aliases) {
 		docsByPath.set(alias, page);
 	}
 }
 
-export const docsPages = localizedDocs.filter(
-	(page) => page.kind === "chapter",
-);
+function compareDocs(left: DocPage, right: DocPage) {
+	if (left.order !== right.order) {
+		return left.order - right.order;
+	}
+	return left.title.localeCompare(right.title);
+}
+
+const childrenByParentId = new Map<string, DocPage[]>();
+for (const page of localizedDocs) {
+	if (!page.parentId) {
+		continue;
+	}
+	const children = childrenByParentId.get(page.parentId) ?? [];
+	children.push(page);
+	childrenByParentId.set(page.parentId, children);
+}
+for (const children of childrenByParentId.values()) {
+	children.sort(compareDocs);
+}
+
+const partDocs = localizedDocs
+	.filter((page) => page.kind === "part")
+	.sort(compareDocs);
+const sectionDocs = localizedDocs
+	.filter((page) => page.kind === "section")
+	.sort(compareDocs);
+const chapterDocs = localizedDocs
+	.filter((page) => page.kind === "chapter")
+	.sort(compareDocs);
+
+export const docsPages = chapterDocs;
 export const docLandingPages = localizedDocs.filter(
-	(page) => page.kind === "part",
+	(page) => page.kind === "part" || page.kind === "section",
 );
 
-export const docParts = docLandingPages.map((part) => ({
-	id: part.id,
-	title: part.title,
-	summaryHtml: part.summaryHtml,
-	path: part.path,
-	pages: docsPages.filter((page) => page.partId === part.id),
-	locale: part.locale,
-})) satisfies DocPart[];
+function descendantChapters(rootId: string): DocPage[] {
+	const chapters: DocPage[] = [];
+	const walk = (id: string) => {
+		for (const child of childrenByParentId.get(id) ?? []) {
+			if (child.kind === "chapter") {
+				chapters.push(child);
+				continue;
+			}
+			walk(child.id);
+		}
+	};
+	walk(rootId);
+	return chapters;
+}
 
-export const docGroups = docParts.map((part) => ({
-	group: part.title,
-	path: part.path,
-	summaryHtml: part.summaryHtml,
-	pages: part.pages,
-	locale: part.locale,
-}));
+export const docParts = partDocs.map((part) => {
+	const children = childrenByParentId.get(part.id) ?? [];
+	return {
+		id: part.id,
+		title: part.title,
+		summaryHtml: part.summaryHtml,
+		path: part.path,
+		sections: children.filter((child) => child.kind === "section"),
+		chapters: descendantChapters(part.id),
+		locale: part.locale,
+	} satisfies DocPart;
+});
+
+export const docGroups = docParts.map((part) => {
+	const pages = childrenByParentId.get(part.id) ?? [];
+	return {
+		group: part.title,
+		path: part.path,
+		summaryHtml: part.summaryHtml,
+		pages,
+		locale: part.locale,
+	} satisfies DocGroup;
+});
 
 export const docQuestionIndex: Array<{
 	label: string;
@@ -82,52 +150,104 @@ export const docQuestionIndex: Array<{
 	locale: Locale;
 }> = [];
 
+for (const page of chapterDocs) {
+	for (const question of page.questions) {
+		docQuestionIndex.push({
+			label: question.label,
+			href: question.href,
+			pageTitle: page.title,
+			partTitle: page.partTitle,
+			locale: page.locale,
+		});
+	}
+}
+
 export function docForPath(pathname: string) {
 	return docsByPath.get(pathname);
 }
 
+export function docChildren(id: string) {
+	return [...(childrenByParentId.get(id) ?? [])];
+}
+
+export function docBreadcrumb(id: string) {
+	const page = docsById.get(id);
+	if (!page) {
+		return [];
+	}
+	const chain = page.treePath
+		.map((nodeId) => docsById.get(nodeId))
+		.filter((node): node is DocPage => Boolean(node));
+	return chain;
+}
+
+const chapterTraversal: DocPage[] = [];
+const chapterIndexById = new Map<string, number>();
+
+function walkChapterTraversal(rootId: string) {
+	for (const child of childrenByParentId.get(rootId) ?? []) {
+		if (child.kind === "chapter") {
+			chapterIndexById.set(child.id, chapterTraversal.length);
+			chapterTraversal.push(child);
+			continue;
+		}
+		walkChapterTraversal(child.id);
+	}
+}
+
+for (const part of partDocs) {
+	walkChapterTraversal(part.id);
+}
+
 export function docNeighbors(id: string) {
-	const index = docsPages.findIndex(
-		(page) => page.id === id || page.slug === id,
-	);
-	if (index === -1) {
+	const index = chapterIndexById.get(id);
+	if (index === undefined) {
 		return {};
 	}
 	return {
-		previous: docsPages[index - 1],
-		next: docsPages[index + 1],
+		previous: chapterTraversal[index - 1],
+		next: chapterTraversal[index + 1],
 	};
 }
 
 export function pagesForPart(partId: string) {
-	return docsPages.filter((page) => page.partId === partId);
+	return descendantChapters(partId);
 }
 
 export function docsRoutes(): AppRoute[] {
-	return localizedDocs.flatMap((page) => [
-		{
+	const routes: AppRoute[] = [];
+	for (const page of localizedDocs) {
+		routes.push({
 			id: `docs:${page.id}`,
 			label: page.title,
 			path: page.path,
-			title: `${page.title} | Musi`,
+			title: pageTitle(page.title),
 			description: page.description,
-			kind: "doc" as const,
+			kind: "doc",
 			docSlug: page.id,
 			canonicalPath: page.canonicalPath,
 			locale: page.locale,
-			section: "learn" as const,
-		},
-		...page.aliases.map((alias) => ({
-			id: `docs-alias:${page.id}:${alias}`,
-			label: page.title,
-			path: alias,
-			title: `${page.title} | Musi`,
-			description: page.description,
-			kind: "doc" as const,
-			docSlug: page.id,
-			canonicalPath: page.canonicalPath,
-			locale: page.locale,
-			section: "learn" as const,
-		})),
-	]);
+			section: "learn",
+		});
+		for (const alias of [...new Set(page.aliases)]) {
+			if (alias === page.path) {
+				continue;
+			}
+			routes.push({
+				id: `docs-alias:${page.id}:${alias}`,
+				label: page.title,
+				path: alias,
+				title: pageTitle(page.title),
+				description: page.description,
+				kind: "doc",
+				docSlug: page.id,
+				canonicalPath: page.canonicalPath,
+				locale: page.locale,
+				section: "learn",
+			});
+		}
+	}
+	return routes;
 }
+
+export const docSections = sectionDocs;

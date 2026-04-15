@@ -1,5 +1,5 @@
 ---
-title: "Indexing and fields"
+title: "Indexing and Fields"
 description: "Read field access and indexed access without mixing up their roles."
 group: "Data"
 section: "Data"
@@ -8,37 +8,16 @@ slug: "indexing-and-fields"
 summary: "Use `.field` for named data and `.[index]` for positional access."
 ---
 
+Field access reads named record data. Indexing reads position-based data. Use the form that matches how a reader should find the value.
+
 {{snippet:chapter-indexing-and-fields}}
 
-## In this chapter
+## Reading Model
 
-Musi uses dot syntax for two common data reads.
-A named field uses `.field` after the value.
-Indexed access uses `.[...]` so it stays visually separate from field names and method calls.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-Records and arrays answer different questions.
-A field says "read this named part."
-An index says "read this position."
-Keeping the punctuation distinct helps readers understand whether the code depends on a name or on an order.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read `point.x` as field access on a record-like value.
-Read `values.[0]` as indexed access into ordered data.
-If code starts using many numeric indexes, consider naming intermediate values or changing the data shape.
-
-## Try it next
-
-- Build one record and read one field.
-- Build one array and read one index.
-- Replace a confusing index read with a named field when the domain has a clear label.
-
-## Common mistake
-
-Do not use positional access when a field name would carry the meaning better.
-
-## Next
-
-Continue to [Data definitions](/docs/language/data/data-definitions) to define reusable data shapes.
+Continue to [Data Definitions](/learn/book/data/modeling/data-definitions).

@@ -224,6 +224,8 @@ Website source and extension source live here too:
 - `www/`
 - `vscode-ext/`
 
+Website, docs-site, and local docs editing operations live in [`www/README.md`](www/README.md).
+
 ## Testing and validation
 
 Common commands:
@@ -233,7 +235,6 @@ make lint
 make check
 cargo test -p music_syntax
 cargo test -p music_sema
-rtk bun run --cwd www build
 ```
 
 Prefer targeted crate tests over `cargo test --workspace` on lower-memory machines.

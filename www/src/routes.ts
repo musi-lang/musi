@@ -1,6 +1,7 @@
 import { docsRoutes } from "./docs";
 import type { Locale } from "./lib/site-copy";
 import { siteCopy } from "./lib/site-copy";
+import { pageTitle, siteMeta } from "./lib/site-meta";
 
 export type AppRouteKind = "page" | "docs-index" | "doc";
 
@@ -30,7 +31,7 @@ export const homeRoutes: AppRoute[] = [
 		id: "home:en",
 		path: "/",
 		label: "Musi",
-		title: "Musi",
+		title: siteMeta.title,
 		description: siteCopy.home.description,
 		kind: "page",
 		locale: "en",
@@ -43,17 +44,18 @@ export const primaryRoutes: AppRoute[] = [
 		id: "learn:en",
 		path: "/learn",
 		label: siteCopy.nav.learn,
-		title: `${siteCopy.learn.title} | Musi`,
+		title: pageTitle(siteCopy.learn.title),
 		description: siteCopy.learn.description,
 		kind: "docs-index",
 		locale: "en",
 		section: "learn",
+		canonicalPath: "/learn/book",
 	},
 	{
 		id: "install:en",
 		path: "/install",
 		label: siteCopy.nav.install,
-		title: `${siteCopy.install.title} | Musi`,
+		title: pageTitle(siteCopy.install.title),
 		description: siteCopy.install.description,
 		kind: "page",
 		locale: "en",
@@ -63,7 +65,7 @@ export const primaryRoutes: AppRoute[] = [
 		id: "playground:en",
 		path: "/playground",
 		label: siteCopy.nav.playground,
-		title: `${siteCopy.playground.title} | Musi`,
+		title: pageTitle(siteCopy.playground.title),
 		description: siteCopy.playground.copy,
 		kind: "page",
 		locale: "en",
@@ -73,7 +75,7 @@ export const primaryRoutes: AppRoute[] = [
 		id: "community:en",
 		path: "/community",
 		label: siteCopy.nav.community,
-		title: `${siteCopy.community.title} | Musi`,
+		title: pageTitle(siteCopy.community.title),
 		description: siteCopy.community.description,
 		kind: "page",
 		locale: "en",
@@ -81,9 +83,24 @@ export const primaryRoutes: AppRoute[] = [
 	},
 ];
 
+export const bookRoutes: AppRoute[] = [
+	{
+		id: "learn-book:en",
+		path: "/learn/book",
+		label: siteCopy.learn.title,
+		title: pageTitle(siteCopy.learn.title),
+		description: siteCopy.learn.description,
+		kind: "docs-index",
+		locale: "en",
+		section: "learn",
+		canonicalPath: "/learn/book",
+	},
+];
+
 export const appRoutes: AppRoute[] = [
 	...homeRoutes,
 	...primaryRoutes,
+	...bookRoutes,
 	...docsRoutes(),
 ];
 

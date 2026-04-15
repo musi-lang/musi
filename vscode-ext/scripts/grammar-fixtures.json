@@ -15,7 +15,8 @@
 		"quote",
 		"forall",
 		"where",
-		"using"
+		"using",
+		"partial"
 	],
 	"requiredOperatorPatterns": [
 		":=",
@@ -28,7 +29,8 @@
 		"<:",
 		"\\.\\.<",
 		"\\.\\.",
-		"\\.\\.\\."
+		"\\.\\.\\.",
+		"~="
 	],
 	"requiredScopePatterns": [
 		"comment.line.documentation.musi",
@@ -66,7 +68,9 @@
 		"keyword.operator.match.arm.musi",
 		"punctuation.definition.type.arguments.begin.musi",
 		"punctuation.definition.type.arguments.end.musi",
-		"variable.other.member.musi"
+		"variable.other.member.musi",
+		"keyword.operator.equivalence.musi",
+		"meta.type.parameters.musi"
 	],
 	"requiredDocumentationPatterns": [
 		"@(param(?:eter)?|arg(?:ument)?|property|var)",
@@ -372,6 +376,103 @@
 					"line": 0,
 					"lexeme": "U",
 					"occurrence": 1,
+					"scope": "entity.name.type.parameter.musi"
+				}
+			]
+		},
+		{
+			"name": "partial modifier declaration",
+			"source": "partial let parsePort(text : String) : Int := 0;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "partial",
+					"scope": "keyword.modifier.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "let",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "parsePort",
+					"scope": "entity.name.function.musi"
+				}
+			]
+		},
+		{
+			"name": "dependent equivalence operator",
+			"source": "let proof := left ~= right;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "~=",
+					"scope": "keyword.operator.equivalence.musi"
+				}
+			]
+		},
+		{
+			"name": "type constructor parameter declaration",
+			"source": "let Keeps[F : Type -> Type] := class { let keep(value : F[Int]) : F[Int]; };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "Keeps",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "[",
+					"scope": "punctuation.definition.type.arguments.begin.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "F",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Type",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "->",
+					"scope": "keyword.operator.function.pure.musi"
+				}
+			]
+		},
+		{
+			"name": "generic data declaration and named payload",
+			"source": "let Box1[T] := data { | Box1(value : T) };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "Box1",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "T",
+					"occurrence": 1,
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Box1",
+					"occurrence": 2,
+					"scope": "entity.name.type.constructor.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "value",
+					"scope": "variable.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "T",
+					"occurrence": 2,
 					"scope": "entity.name.type.parameter.musi"
 				}
 			]

@@ -35,7 +35,7 @@
 	"Handle Expression": {
 		"prefix": "handle",
 		"body": [
-			"handle request ${1:effect}.${2:op}(${3:value}) using ${4:effect} {",
+			"handle ${1:effect}.${2:op}(${3:value}) using ${4:effect} {",
 			"\tvalue => ${5:value};",
 			"\t${2}(${6:k}) => ${0:resume ${7:value};}",
 			"};"

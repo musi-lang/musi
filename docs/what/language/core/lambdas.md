@@ -1,43 +1,23 @@
 ---
 title: "Lambdas"
 description: "Write a small function value directly inside an expression."
-group: "Core syntax"
-section: "Core syntax"
+group: "Core Syntax"
+section: "Core Syntax"
 order: 12
 slug: "lambdas"
 summary: "Use lambda expressions when a short function value reads better in place."
 ---
 
+A lambda is an unnamed function value. Use it when the calculation is small and travels directly to another value or helper.
+
 {{snippet:chapter-lambdas}}
 
-## In this chapter
+## Reading Model
 
-A lambda is an unnamed function value.
-It uses `\` before the parameter list and `=>` before the body.
-That makes it useful where a helper is small enough that naming it separately would interrupt the reading flow.
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-## Why it matters
+## Practical Rule
 
-Higher-order helpers, callbacks, adapters, and small transformations all need function values.
-A named `let` function is clearer for reused behavior.
-A lambda is clearer when the behavior belongs right where it is passed or bound.
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-## Walk through it
-
-Read `\(x : Int) : Int => x + x` as "given `x`, produce `x + x`."
-The optional result annotation works the same way as a named function result annotation.
-If the body grows beyond one direct idea, give the function a name.
-
-## Try it next
-
-- Bind one lambda to a name and call it.
-- Rewrite the same code as a named function.
-- Choose the version where the reader does less jumping around.
-
-## Common mistake
-
-Do not hide multi-step behavior inside a lambda when a named helper would explain the intent.
-
-## Next
-
-Continue to [Calls](/docs/language/core/calls) to follow arguments through functions.
+Continue to [Calls](/learn/book/core/functions-and-calls/calls).

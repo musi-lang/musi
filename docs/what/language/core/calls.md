@@ -1,43 +1,25 @@
 ---
 title: "Calls"
 description: "Learn call syntax as its own reading skill before adding dot calls."
-group: "Core syntax"
-section: "Core syntax"
+group: "Core Syntax"
+section: "Core Syntax"
 order: 10
 slug: "calls"
 summary: "Call functions directly and follow argument flow left to right."
 ---
 
+A call applies a callable value to arguments. Positional calls are compact; named calls are clearer when labels carry meaning.
+
 {{snippet:chapter-calls}}
 
-## In this chapter
+{{snippet:chapter-functions}}
 
-A call applies a function to arguments.
-This page reuses a tiny function example because the point is not more syntax surface; the point is learning to read `twice(21)` as value flow from argument into function and back out as result.
-Calls show up everywhere, so this reading habit must become boring fast.
+## Reading Model
 
-## Why it matters
+Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
 
-Many beginner questions are really call-reading questions: "where does this value go?", "what is input here?", or "why are parentheses here but not there?"
-If call syntax is only mentioned in passing, those questions keep interrupting later chapters.
-A short focused chapter pays off because functions, constructors, stdlib helpers, and methods all build on same habit of tracking inputs and outputs.
+## Practical Rule
 
-## Walk through it
+Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-Look at definition first, then read call left to right.
-`twice` names the function, `(21)` supplies one argument, and the whole expression evaluates to returned result.
-When calls get larger, keep naming intermediate values so you are still reading one input step at a time rather than decoding a pile of nested punctuation.
-
-## Try it next
-
-- Write one small function.
-- Call it with one literal argument.
-- Bind call result to a name before doing anything larger.
-
-## Common mistake
-
-Do not confuse function definition syntax with function call syntax just because both sit near same name.
-
-## Next
-
-Continue to [Methods](/docs/language/core/methods) to see how Musi attaches behavior to a receiver and calls it with dot syntax.
+Continue to [Methods](/learn/book/core/functions-and-calls/methods).
