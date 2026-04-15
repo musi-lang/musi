@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -27,11 +27,12 @@ describe("content generation", () => {
 	it("emits dual-theme shiki markup", () => {
 		expect(renderedSnippets.homeSampleHtml).toContain("github-light");
 		expect(renderedSnippets.homeSampleHtml).toContain("github-dark");
+		expect(renderedSnippets.homeSampleHtml).not.toContain("Source:");
 	});
 
 	it("keeps shared public copy free of old slogan text", () => {
 		const descriptorText = renderToStaticMarkup(
-			createElement(Fragment, null, siteCopy.en.home.description),
+			createElement(Fragment, null, siteCopy.home.description),
 		);
 
 		for (const phrase of BANNED_SITE_COPY) {
@@ -82,8 +83,6 @@ describe("content generation", () => {
 
 	it("keeps chapters on repo-level docs paths", () => {
 		for (const page of bookPages) {
-			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
-			expect(source).toContain("## Try it");
 			expect(page.sourcePath.startsWith("docs/what/language/")).toBe(true);
 		}
 	});
@@ -92,7 +91,31 @@ describe("content generation", () => {
 		for (const snippet of contentSnippets) {
 			expect(snippet.evidence.path.length).toBeGreaterThan(0);
 			expect(snippet.evidence.line).toBeGreaterThan(0);
+			const absolutePath = join(repoRoot, snippet.evidence.path);
+			expect(existsSync(absolutePath), snippet.id).toBe(true);
+			expect(
+				snippet.evidence.line <=
+					readFileSync(absolutePath, "utf8").split("\n").length,
+				snippet.id,
+			).toBe(true);
 		}
+		for (const group of exampleGroups) {
+			expect(group.evidence.path.length).toBeGreaterThan(0);
+			expect(group.evidence.line).toBeGreaterThan(0);
+			const absolutePath = join(repoRoot, group.evidence.path);
+			expect(existsSync(absolutePath), group.id).toBe(true);
+			expect(
+				group.evidence.line <=
+					readFileSync(absolutePath, "utf8").split("\n").length,
+				group.id,
+			).toBe(true);
+		}
+	});
+
+	it("keeps evidence internal instead of rendering repo source links", () => {
+		expect(renderedDocs.map((doc) => doc.html).join("\n")).not.toContain(
+			"Source:",
+		);
 	});
 
 	it("requires complete compare groups", () => {

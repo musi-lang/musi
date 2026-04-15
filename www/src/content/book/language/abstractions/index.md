@@ -12,19 +12,19 @@ This part moves from plain functions into reusable behavior contracts.
 Classes describe shared behavior, instances provide concrete implementations, and laws explain what those abstractions are supposed to mean.
 The section works only if each layer stays distinct.
 
-## What
+## In this chapter
 
 This section teaches three abstraction layers: contract, implementation, and semantic expectation.
 Those layers are connected, but they are not interchangeable.
 Understanding the separation is more important than memorizing every keyword.
 
-## Why
+## Why it matters
 
 Abstraction chapters become overwhelming when readers cannot tell whether they are looking at behavior shape, specific implementation, or mathematical expectation.
 Too little explanation here leads straight to "what is class for?" or "where does real behavior live?"
 This section should answer those questions with small examples before complexity grows.
 
-## How
+## Walk through it
 
 Read class page first, then instance page, then law page.
 For each example, ask what stays generic, what becomes concrete, and what property should hold across all correct implementations.

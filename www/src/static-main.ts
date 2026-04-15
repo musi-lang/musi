@@ -200,7 +200,3 @@ export function setupSiteInteractions() {
 	setupMenuToggle();
 	setupCodeTabs();
 }
-
-if (import.meta.env.PROD) {
-	setupSiteInteractions();
-}

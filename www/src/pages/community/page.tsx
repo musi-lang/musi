@@ -4,8 +4,8 @@ import { InlineAction } from "../../ui/actions";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 
-export function CommunityPage(props: { route: AppRoute }) {
-	const copy = siteCopy[props.route.locale].community;
+export function CommunityPage(_props: { route: AppRoute }) {
+	const copy = siteCopy.community;
 	return (
 		<div className="page-stack">
 			<PageHeader
@@ -17,12 +17,12 @@ export function CommunityPage(props: { route: AppRoute }) {
 				<div className="section-heading-row section-heading-bar">
 					<div>
 						<div className="eyebrow">{copy.eyebrow}</div>
-						<h2>{siteCopy[props.route.locale].ui.communityLinks}</h2>
+						<h2>{siteCopy.ui.communityLinks}</h2>
 					</div>
 				</div>
 				<section
 					className="portal-grid portal-grid-compact"
-					aria-label={siteCopy[props.route.locale].ui.communityLinks}
+					aria-label={siteCopy.ui.communityLinks}
 				>
 					{copy.sections.map((section) => (
 						<Surface

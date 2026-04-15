@@ -77,6 +77,13 @@ const bannedDocsPatterns = [
 	/compiler architecture/i,
 	/current design/i,
 	/@std\/io/,
+	/old syntax/i,
+	/new syntax/i,
+	/important cleanup/i,
+	/formerly/i,
+	/used to/i,
+	/current surface/i,
+	/current shape/i,
 ];
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(scriptsDirectory, "..");
@@ -390,7 +397,8 @@ function renderSnippet(id: string) {
 	}
 
 	validateSnippetSyntax(snippet.id, snippet.sourceText, snippet.language);
-	return renderHighlightedCode(snippet.sourceText, snippet.language);
+	const html = renderHighlightedCode(snippet.sourceText, snippet.language);
+	return `<div class="snippet-block"><section class="code-panel">${html}</section></div>`;
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -428,15 +436,7 @@ function renderExample(id: string) {
 
 	const html = renderHighlightedCode(group.sourceText, "musi");
 
-	return `<div class="code-tabs" data-example-id="${escapeHtmlAttribute(id)}">
-<div class="code-tabs-meta">
-<p class="code-tabs-caption">${renderInlineHtml(group.caption)}</p>
-<p class="code-tabs-note">${renderInlineHtml(group.note)}</p>
-</div>
-<section role="tabpanel" class="code-panel">
-${html}
-</section>
-</div>`;
+	return `<div class="code-tabs" data-example-id="${escapeHtmlAttribute(id)}"><div class="code-tabs-meta"><p class="code-tabs-caption">${renderInlineHtml(group.caption)}</p><p class="code-tabs-note">${renderInlineHtml(group.note)}</p></div><section role="tabpanel" class="code-panel">${html}</section></div>`;
 }
 
 function replaceContentPlaceholders(source: string) {

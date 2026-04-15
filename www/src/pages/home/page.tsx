@@ -1,7 +1,6 @@
 import { homeSampleHtml } from "../../content";
 import { docGroups } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
-import { localizePath } from "../../lib/site-links";
 import type { AppRoute } from "../../routes";
 import {
 	ActionStrip,
@@ -14,10 +13,8 @@ import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 
-export function HomePage(props: { route: AppRoute }) {
-	const localeCopy = siteCopy[props.route.locale];
-	const copy = localeCopy.home;
-	const docsLocale = "en";
+export function HomePage(_props: { route: AppRoute }) {
+	const copy = siteCopy.home;
 	return (
 		<div className="page-stack page-home">
 			<Surface tone="hero" className="hero-grid hero-shell">
@@ -37,19 +34,11 @@ export function HomePage(props: { route: AppRoute }) {
 						}
 						actions={
 							<ActionStrip>
-								<PrimaryAction
-									href={localizePath(props.route.locale, "/learn")}
-								>
-									{copy.primaryCta}
-								</PrimaryAction>
-								<SecondaryAction
-									href={localizePath(props.route.locale, "/install")}
-								>
+								<PrimaryAction href="/learn">{copy.primaryCta}</PrimaryAction>
+								<SecondaryAction href="/install">
 									{copy.secondaryCta}
 								</SecondaryAction>
-								<InlineAction
-									href={localizePath(props.route.locale, "/community")}
-								>
+								<InlineAction href="/community">
 									{copy.tertiaryCta}
 								</InlineAction>
 							</ActionStrip>
@@ -60,16 +49,12 @@ export function HomePage(props: { route: AppRoute }) {
 					tone="raised"
 					className="snippet-panel hero-code-panel hero-float-panel"
 				>
-					<div className="eyebrow">{localeCopy.ui.sample}</div>
-					<HtmlSnippet
-						className="docs-content"
-						html={homeSampleHtml}
-						locale={props.route.locale}
-					/>
+					<div className="eyebrow">{siteCopy.ui.sample}</div>
+					<HtmlSnippet className="docs-content" html={homeSampleHtml} />
 				</Surface>
 			</Surface>
 
-			<section className="portal-grid" aria-label={localeCopy.ui.primaryPaths}>
+			<section className="portal-grid" aria-label={siteCopy.ui.primaryPaths}>
 				{copy.paths.map((link) => (
 					<Surface
 						key={link.title}
@@ -90,7 +75,7 @@ export function HomePage(props: { route: AppRoute }) {
 			>
 				<div className="section-heading-row section-heading-bar">
 					<div>
-						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 						<h2>{copy.sectionsTitle}</h2>
 					</div>
 				</div>
@@ -114,26 +99,22 @@ export function HomePage(props: { route: AppRoute }) {
 			>
 				<div className="section-heading-row section-heading-bar">
 					<div>
-						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
-						<h2>{localeCopy.learn.partsTitle}</h2>
+						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
+						<h2>{siteCopy.learn.partsTitle}</h2>
 					</div>
-					<InlineAction href={localizePath(props.route.locale, "/learn")}>
-						{localeCopy.nav.learn}
-					</InlineAction>
+					<InlineAction href="/learn">{siteCopy.nav.learn}</InlineAction>
 				</div>
 				<div className="doc-groups-grid doc-groups-grid-separated">
-					{docGroups
-						.filter((group) => group.locale === docsLocale)
-						.map((group) => (
-							<DocListGroup
-								key={`${group.locale}:${group.group}`}
-								group={group.group}
-								path={group.path}
-								summaryHtml={group.summaryHtml}
-								pages={group.pages}
-								linkLabel={localeCopy.ui.openSection}
-							/>
-						))}
+					{docGroups.map((group) => (
+						<DocListGroup
+							key={group.group}
+							group={group.group}
+							path={group.path}
+							summaryHtml={group.summaryHtml}
+							pages={group.pages}
+							linkLabel={siteCopy.ui.openSection}
+						/>
+					))}
 				</div>
 			</Surface>
 		</div>

@@ -39,7 +39,6 @@ describe("site accessibility scaffolding", () => {
 		const html = render("/");
 		expect(html).toContain("GitHub repository");
 		expect(html).toContain("Switch from system theme to light theme");
-		expect(html).toContain("Switch language");
 	});
 
 	it("renders community links section", () => {

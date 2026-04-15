@@ -1,10 +1,11 @@
-*,
-*::before,
-*::after {
+html {
 	box-sizing: border-box;
 }
 
-* {
+*,
+*::before,
+*::after {
+	box-sizing: inherit;
 	margin: 0;
 }
 
@@ -326,58 +327,6 @@ samp {
 	padding: 0;
 }
 
-.locale-link {
-	min-height: 2.75rem;
-	padding-inline: 0.6rem;
-}
-
-.locale-menu {
-	position: relative;
-}
-
-.locale-menu summary {
-	list-style: none;
-}
-
-.locale-menu summary::-webkit-details-marker {
-	display: none;
-}
-
-.locale-summary {
-	min-width: 2.75rem;
-}
-
-.locale-menu-panel {
-	position: absolute;
-	right: 0;
-	top: calc(100% + 0.4rem);
-	min-width: 10rem;
-	display: grid;
-	gap: 0.25rem;
-	padding: 0.35rem;
-	border: 1px solid var(--site-border);
-	background: var(--site-panel);
-	box-shadow: var(--site-shadow);
-}
-
-.locale-option {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.6rem;
-	padding: 0.6rem 0.7rem;
-	text-decoration: none;
-	color: var(--site-text);
-}
-
-.locale-option:hover,
-.locale-option.is-active {
-	background: var(--site-bg-accent);
-}
-
-.locale-option.is-active {
-	font-weight: 700;
-}
-
 .menu-toggle {
 	min-width: 3rem;
 	min-height: 3rem;
@@ -629,16 +578,6 @@ samp {
 }
 
 .page-header-copy p + p,
-.docs-content p + p,
-.docs-content ul + p,
-.docs-content ol + p,
-.docs-content p + ul,
-.docs-content p + ol,
-.docs-content pre + p,
-.docs-content p + pre,
-.docs-content h2,
-.docs-content h3,
-.docs-content h4,
 .doc-article-surface .doc-group,
 .part-children-block {
 	margin-top: 1rem;
@@ -924,6 +863,8 @@ samp {
 
 .docs-content {
 	font-size: 1.02rem;
+	line-height: 1.7;
+	color: var(--site-text);
 }
 
 .docs-content h2,
@@ -933,23 +874,132 @@ samp {
 }
 
 .docs-content h2 {
+	margin-top: 2.25rem;
+	margin-bottom: 0.75rem;
 	font-size: 1.7rem;
 }
 
 .docs-content h3 {
+	margin-top: 1.75rem;
+	margin-bottom: 0.6rem;
 	font-size: 1.3rem;
+}
+
+.docs-content h4 {
+	margin-top: 1.45rem;
+	margin-bottom: 0.5rem;
+}
+
+.docs-content h2:first-child,
+.docs-content h3:first-child,
+.docs-content h4:first-child {
+	margin-top: 0;
+}
+
+.docs-content p,
+.docs-content ul,
+.docs-content ol {
+	max-width: 68ch;
+}
+
+.docs-content p + p,
+.docs-content p + ul,
+.docs-content p + ol,
+.docs-content ul + p,
+.docs-content ol + p,
+.docs-content ul + ul,
+.docs-content ol + ol,
+.docs-content ul + ol,
+.docs-content ol + ul {
+	margin-top: 0.95rem;
+}
+
+.docs-content li + li {
+	margin-top: 0.4rem;
+}
+
+.docs-content ul,
+.docs-content ol {
+	padding-left: 1.3rem;
 }
 
 .docs-content a {
 	font-weight: 600;
 }
 
+.docs-content :not(pre) > code {
+	padding: 0.08rem 0.28rem;
+	border: 1px solid var(--site-border-soft);
+	background: var(--site-bg-code);
+	font-size: 0.92em;
+}
+
+.snippet-block,
+.code-tabs {
+	display: grid;
+	gap: 0.85rem;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	margin-block: 1.35rem;
+}
+
+.docs-content h2 + .snippet-block,
+.docs-content h3 + .snippet-block,
+.docs-content h4 + .snippet-block,
+.docs-content h2 + .code-tabs,
+.docs-content h3 + .code-tabs,
+.docs-content h4 + .code-tabs {
+	margin-top: 0.9rem;
+}
+
+.snippet-block:first-child,
+.code-tabs:first-child {
+	margin-top: 0;
+}
+
+.snippet-block + p,
+.code-tabs + p,
+.snippet-block + ul,
+.code-tabs + ul,
+.snippet-block + ol,
+.code-tabs + ol,
+.docs-content pre + p,
+.docs-content pre + ul,
+.docs-content pre + ol {
+	margin-top: 1.15rem;
+}
+
+.snippet-block + h2,
+.code-tabs + h2 {
+	margin-top: 2.35rem;
+}
+
+.snippet-block + h3,
+.code-tabs + h3 {
+	margin-top: 1.85rem;
+}
+
 .docs-content pre,
 .shiki {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
 	overflow-x: auto;
-	padding: 1rem;
+	padding: 1rem 1.1rem;
 	border: 1px solid var(--site-border-strong);
 	background: var(--site-bg-elevated) !important;
+	font-size: 0.94rem;
+	line-height: 1.65;
+	tab-size: 2;
+}
+
+.docs-content pre code,
+.shiki code {
+	display: block;
+	min-width: max-content;
 }
 
 [data-mantine-color-scheme="dark"] .shiki,
@@ -1013,6 +1063,8 @@ samp {
 .code-tabs-stack {
 	display: grid;
 	gap: 0.85rem;
+	min-width: 0;
+	max-width: 100%;
 }
 
 .code-tab-list {
@@ -1062,6 +1114,9 @@ samp {
 
 .code-panel {
 	display: block;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 }
 
 .portal-grid-compact {

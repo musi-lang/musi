@@ -48,9 +48,10 @@ function chapterDocFiles(chaptersRoot: string) {
 function chapterSnippetUsage(file: string, used: Map<string, string>) {
 	const source = readFileSync(file, "utf8");
 	const embeds = [...source.matchAll(embedPattern)];
-	const id = embeds[0]?.[2];
+	const snippetEmbeds = embeds.filter((embed) => embed[1] === "snippet");
+	const id = snippetEmbeds[0]?.[2];
 	const previous = used.get(String(id));
-	return { embeds, id, previous };
+	return { embeds, snippetEmbeds, id, previous };
 }
 
 function removedSyntaxMatches(path: string) {
@@ -148,13 +149,13 @@ let next := port + 1;`,
 	it("keeps let data declarations and value bindings out of call-site highlighting", () => {
 		const declarationHtml = renderHighlightedCodeForTest(
 			`let Port := data {
-  | Configured : Int
+  | Configured(port : Int)
   | Default
 };`,
 			"musi",
 		);
 		const bindingHtml = renderHighlightedCodeForTest(
-			"let port : Port := .Configured(8080);",
+			"let port : Port := .Configured(port := 8080);",
 			"musi",
 		);
 
@@ -171,8 +172,8 @@ describe("chapter docs", () => {
 		const used = new Map<string, string>();
 		for (const file of chapterDocFiles(chaptersRoot)) {
 			const usage = chapterSnippetUsage(file, used);
-			expect(usage.embeds.length, file).toBe(1);
-			expect(usage.embeds[0]?.[1], file).toBe("snippet");
+			expect(usage.snippetEmbeds.length, file).toBe(1);
+			expect(usage.snippetEmbeds[0]?.[1], file).toBe("snippet");
 			expect(usage.id, file).toBeTruthy();
 			expect(usage.previous, `${file} reuses ${usage.id}`).toBeUndefined();
 			used.set(String(usage.id), file);
@@ -229,7 +230,7 @@ describe("website highlighting", () => {
 		);
 
 		expect(grammarSource).toContain(
-			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|where)\\\\b",
+			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|unsafe|where)\\\\b",
 		);
 		expect(grammarSource).not.toContain(
 			"\\\\b(as|case|export|forall|handle|if|import|of|perform|quote|resume|where)\\\\b",

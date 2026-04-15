@@ -1,6 +1,6 @@
 # Musi website
 
-Public website for Musi. Stack stays **Bun + Vite + React**. Content stays static-first and prerendered into `www/dist`.
+Public website for Musi. Stack stays **Bun + Vite + React**. Content stays static-first, prerendered into `www/dist`, and English-only.
 
 ## Local workflow
 
@@ -22,7 +22,7 @@ Run from repository root:
 
 `bun run dev:prod` builds the production bundle and serves `www/dist` through preview mode so local checks reflect production asset shape instead of Vite dev-server modules.
 
-`bun run verify:lang` rebuilds the prerendered site and verifies representative English and Japanese pages keep the expected top-level `<html lang="...">`.
+`bun run verify:lang` rebuilds the prerendered site and verifies representative English pages keep the expected top-level `<html lang="en">`.
 
 For Lighthouse accessibility audits, use a clean browser context. Browser extensions that inject shadow DOM can add nested `<html>` nodes and create a false `html[lang]` failure even when the shipped document already has the correct `lang` attribute.
 
@@ -97,10 +97,21 @@ Cloudflare Pages should build this site from repository root.
 Use these settings:
 
 - Root directory: repository root
-- Build command: `bun install --frozen-lockfile && bun run build`
+- Build command: `bun install --frozen-lockfile && bun run build:prod`
 - Build output directory: `www/dist`
 
 Recommended Pages environment variables:
 
 - `BUN_VERSION=1.3.12`
 - `SKIP_DEPENDENCY_INSTALL=1`
+
+Recommended Cloudflare dashboard settings:
+
+- disable any managed `robots.txt` augmentation that injects extra directives such as `Content-Signal`
+- disable Web Analytics / Browser Insights if you want Lighthouse free of Cloudflare beacon warnings
+
+Deploy verification after each production rollout:
+
+- `curl -s https://musi-lang.org/ | head`
+- `curl -s https://musi-lang.org/robots.txt`
+- confirm live HTML matches current `www/dist` structure and `robots.txt` contains only repo-generated directives

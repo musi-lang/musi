@@ -4,11 +4,11 @@ import { docForPath, docGroups, docNeighbors, docsPages } from "./docs";
 describe("docs", () => {
 	it("loads english book chapters", () => {
 		expect(docsPages[0]?.id).toBe("getting-started");
-		expect(docsPages.length).toBe(34);
+		expect(docsPages.length).toBe(45);
 	});
 
-	it("returns neighbors for middle pages per locale", () => {
-		const neighbors = docNeighbors("packages", "en");
+	it("returns neighbors for middle pages", () => {
+		const neighbors = docNeighbors("packages");
 		expect(neighbors.previous?.slug).toBe("files");
 		expect(neighbors.next?.slug).toBe("imports-and-exports");
 	});

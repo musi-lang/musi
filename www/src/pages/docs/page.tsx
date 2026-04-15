@@ -1,6 +1,5 @@
 import { docForPath, docGroups, docNeighbors, pagesForPart } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
-import { localizePath } from "../../lib/site-links";
 import type { AppRoute } from "../../routes";
 import { InlineAction, PrimaryAction, SecondaryAction } from "../../ui/actions";
 import { DocListGroup } from "../../ui/doc-list";
@@ -12,8 +11,7 @@ import { OnThisPage } from "../../ui/toc";
 const PART_REGEXP = /\/[^/]+$/;
 
 export function DocsIndexPage(props: { route: AppRoute }) {
-	const localeCopy = siteCopy[props.route.locale];
-	const copy = localeCopy.learn;
+	const copy = siteCopy.learn;
 	return (
 		<div className="page-stack">
 			<PageHeader
@@ -23,79 +21,65 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 				actions={
 					<div className="action-strip">
 						<PrimaryAction href={props.route.path}>
-							{siteCopy[props.route.locale].nav.learn}
+							{siteCopy.nav.learn}
 						</PrimaryAction>
-						<SecondaryAction
-							href={localizePath(props.route.locale, "/install")}
-						>
-							{siteCopy[props.route.locale].nav.install}
+						<SecondaryAction href="/install">
+							{siteCopy.nav.install}
 						</SecondaryAction>
-						<InlineAction href={localizePath(props.route.locale, "/community")}>
-							{siteCopy[props.route.locale].nav.community}
+						<InlineAction href="/community">
+							{siteCopy.nav.community}
 						</InlineAction>
 					</div>
 				}
 			/>
-			<section
-				className="portal-grid"
-				aria-label={localeCopy.ui.docsEntryPoints}
-			>
+			<section className="portal-grid" aria-label={siteCopy.ui.docsEntryPoints}>
 				<Surface tone="accent" className="portal-card">
 					<div className="eyebrow">{copy.eyebrow}</div>
 					<h2>{copy.startTitle}</h2>
 					<p>{copy.description}</p>
-					<InlineAction
-						href={localizePath(
-							props.route.locale,
-							"/learn/language/start/getting-started",
-						)}
-					>
-						{localeCopy.ui.openFirstChapter}
+					<InlineAction href="/learn/language/start/getting-started">
+						{siteCopy.ui.openFirstChapter}
 					</InlineAction>
 				</Surface>
 				<Surface tone="panel" className="portal-card">
-					<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+					<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 					<h2>{copy.partsTitle}</h2>
 					<p>
-						{props.route.locale === "ja"
-							? "短い章を順番に読み進め、必要になった時だけ次の概念へ進みます。"
-							: "Read short chapters in order and move forward only when the current mental model feels stable."}
+						Read short chapters in order and move forward only when the current
+						mental model feels stable.
 					</p>
 				</Surface>
 			</section>
 			<Surface tone="panel" className="section-panel">
 				<div className="section-heading-row">
 					<div>
-						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 						<h2>{copy.partsTitle}</h2>
 					</div>
 				</div>
 				<div className="doc-groups-grid doc-groups-grid-compact">
-					{docGroups
-						.filter((group) => group.locale === props.route.locale)
-						.map((group) => (
-							<DocListGroup
-								key={`${group.locale}:${group.group}`}
-								group={group.group}
-								path={group.path}
-								summaryHtml={group.summaryHtml}
-								pages={group.pages}
-								linkLabel={localeCopy.ui.openSection}
-							/>
-						))}
+					{docGroups.map((group) => (
+						<DocListGroup
+							key={group.group}
+							group={group.group}
+							path={group.path}
+							summaryHtml={group.summaryHtml}
+							pages={group.pages}
+							linkLabel={siteCopy.ui.openSection}
+						/>
+					))}
 				</div>
 			</Surface>
 			<Surface tone="panel" className="section-panel">
 				<div className="section-heading-row">
 					<div>
-						<div className="eyebrow">{localeCopy.ui.learnSection}</div>
+						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 						<h2>{copy.startTitle}</h2>
 					</div>
 				</div>
 				<p className="muted">
-					{props.route.locale === "ja"
-						? "古い章ルートは残していません。今のブック構成だけを案内します。"
-						: "Old chapter routes are gone. This page only guides the current language book."}
+					Old chapter routes are gone. This page only guides the current
+					language book.
 				</p>
 			</Surface>
 		</div>
@@ -103,14 +87,13 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 }
 
 function SectionNav(props: {
-	locale: "en" | "ja";
 	previous: { path: string; title: string } | undefined;
 	next: { path: string; title: string } | undefined;
 }) {
 	if (!(props.previous || props.next)) {
 		return null;
 	}
-	const labels = siteCopy[props.locale].ui;
+	const labels = siteCopy.ui;
 	return (
 		<nav className="section-nav" aria-label={labels.chapterNavigation}>
 			<div>
@@ -136,18 +119,14 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 	if (!page) {
 		return null;
 	}
-	const neighbors =
-		page.kind === "chapter" ? docNeighbors(page.id, page.locale) : {};
-	const childPages =
-		page.kind === "part" ? pagesForPart(page.id, page.locale) : [];
+	const neighbors = page.kind === "chapter" ? docNeighbors(page.id) : {};
+	const childPages = page.kind === "part" ? pagesForPart(page.id) : [];
 	return (
 		<div className="page-stack docs-page">
 			<PageHeader
 				eyebrow={
 					<span className="crumbs">
-						<a href={localizePath(page.locale, "/learn")}>
-							{siteCopy[page.locale].nav.learn}
-						</a>
+						<a href="/learn">{siteCopy.nav.learn}</a>
 						<span aria-hidden="true">/</span>
 						{page.kind === "part" ? (
 							<span>{page.title}</span>
@@ -164,21 +143,15 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 			<OnThisPage
 				headings={page.headings}
 				className="toc-panel-mobile"
-				label={siteCopy[page.locale].ui.onThisPage}
+				label={siteCopy.ui.onThisPage}
 			/>
 			<div className="docs-body-grid">
 				<Surface tone="base" className="doc-article-surface">
 					<article className="docs-article">
-						<HtmlSnippet
-							className="docs-content"
-							html={page.html}
-							locale={page.locale}
-						/>
+						<HtmlSnippet className="docs-content" html={page.html} />
 						{page.kind === "part" && childPages.length > 0 ? (
 							<div className="part-children-block">
-								<div className="eyebrow">
-									{siteCopy[page.locale].ui.chapters}
-								</div>
+								<div className="eyebrow">{siteCopy.ui.chapters}</div>
 								<DocListGroup group={page.title} pages={childPages} />
 							</div>
 						) : null}
@@ -187,15 +160,11 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 				<OnThisPage
 					headings={page.headings}
 					className="toc-panel-desktop"
-					label={siteCopy[page.locale].ui.onThisPage}
+					label={siteCopy.ui.onThisPage}
 				/>
 			</div>
 			{page.kind === "chapter" ? (
-				<SectionNav
-					locale={page.locale}
-					previous={neighbors.previous}
-					next={neighbors.next}
-				/>
+				<SectionNav previous={neighbors.previous} next={neighbors.next} />
 			) : null}
 		</div>
 	);

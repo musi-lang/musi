@@ -1,6 +1,5 @@
 import { useId } from "react";
 
-import type { Locale } from "../lib/site-copy";
 import { HtmlSnippet } from "./html-snippet";
 
 export interface CodeTab {
@@ -11,7 +10,6 @@ export interface CodeTab {
 
 export function CodeTabs(props: {
 	tabs: readonly CodeTab[];
-	locale: Locale;
 	ariaLabel: string;
 }) {
 	const baseId = useId();
@@ -61,11 +59,7 @@ export function CodeTabs(props: {
 						className="code-tab-panel"
 						hidden={!selected}
 					>
-						<HtmlSnippet
-							className="docs-content"
-							html={tab.html}
-							locale={props.locale}
-						/>
+						<HtmlSnippet className="docs-content" html={tab.html} />
 					</div>
 				);
 			})}

@@ -38,8 +38,8 @@ twice(21);`,
 music build index.ms
 music run index.seam`,
 		evidence: {
-			path: "docs/how/toolchain.md",
-			line: 1,
+			path: "README.md",
+			line: 131,
 		},
 	},
 	{
@@ -71,26 +71,26 @@ counter;`,
   base + 80
 );`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 137,
+			path: "www/src/content/snippet-registry.ts",
+			line: 67,
 		},
 	},
 	{
 		id: "case-port",
 		language: "musi",
 		sourceText: `let Port := data {
-  | Configured : Int
+  | Configured(port : Int)
   | Default
 };
 
-let port : Port := .Configured(8080);
+let port : Port := .Configured(port := 8080);
 match port (
 | .Configured(port) => port
 | .Default => 3000
 );`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
-			line: 1160,
+			line: 1586,
 		},
 	},
 	{
@@ -110,8 +110,8 @@ match port (
 		id: "import-std-root",
 		language: "musi",
 		sourceText: `let Std := import "@std";
-let Option := Std.Option;
-let Result := Std.Result;`,
+let Option := Std.option;
+let Result := Std.result;`,
 		evidence: {
 			path: "packages/std/index.ms",
 			line: 2,
@@ -123,8 +123,8 @@ let Result := Std.Result;`,
 		sourceText: `let port : Int := 8080;
 let identityFn[T] (input : T) : T := input;`,
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 3,
+			path: "www/src/content/snippet-registry.ts",
+			line: 121,
 		},
 	},
 	{
@@ -132,29 +132,29 @@ let identityFn[T] (input : T) : T := input;`,
 		language: "musi",
 		sourceText: "identityFn[Int](port);",
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 8,
+			path: "www/src/content/snippet-registry.ts",
+			line: 131,
 		},
 	},
 	{
 		id: "data-port",
 		language: "musi",
 		sourceText: `let Port := data {
-  | Configured : Int
+  | Configured(port : Int)
   | Default
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
-			line: 1160,
+			line: 1586,
 		},
 	},
 	{
 		id: "data-port-value",
 		language: "musi",
-		sourceText: "let port : Port := .Configured(8080);",
+		sourceText: "let port : Port := .Configured(port := 8080);",
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
-			line: 1165,
+			line: 1590,
 		},
 	},
 	{
@@ -166,7 +166,7 @@ let identityFn[T] (input : T) : T := input;`,
 );`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
-			line: 1167,
+			line: 1591,
 		},
 	},
 	{
@@ -185,8 +185,8 @@ let values := [1, 2, 3];`,
 		sourceText: `let point3 := { ...point, z := 5 };
 let extended := [0, ...values];`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 153,
+			path: "www/src/content/snippet-registry.ts",
+			line: 183,
 		},
 	},
 	{
@@ -199,8 +199,8 @@ let same := next = port + 1;
 let capped := port <= 9000;
 let masked := 1 shl 3;`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 380,
+			path: "www/src/content/snippet-registry.ts",
+			line: 193,
 		},
 	},
 	{
@@ -261,8 +261,8 @@ Local.answer;`,
 let next := port + 1;
 next;`,
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 3,
+			path: "www/src/content/snippet-registry.ts",
+			line: 258,
 		},
 	},
 	{
@@ -281,8 +281,8 @@ next;`,
 		language: "musi",
 		sourceText: "request console.readln();",
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 205,
+			path: "www/src/content/snippet-registry.ts",
+			line: 280,
 		},
 	},
 	{
@@ -300,8 +300,8 @@ next;`,
 	{
 		id: "using-signature",
 		language: "musi",
-		sourceText: `let readClosed (x : Int) : String using { Console } :=
-  request State.readln();`,
+		sourceText: `let readClosed () : String using { Console } :=
+  request Console.readln();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -375,8 +375,8 @@ next;`,
 		sourceText: `let addOne (x : Int) : Int := x + 1;
 let addTwo (x : Int) : Int := x + 2;`,
 		evidence: {
-			path: "docs/what/language/metaprogramming.md",
-			line: 1,
+			path: "www/src/content/snippet-registry.ts",
+			line: 373,
 		},
 	},
 	{
@@ -386,8 +386,8 @@ let addTwo (x : Int) : Int := x + 2;`,
 let addOneSyntax := quote (#(x) + 1);
 let addTwoSyntax := quote (#(x) + 2);`,
 		evidence: {
-			path: "docs/what/language/metaprogramming.md",
-			line: 8,
+			path: "www/src/content/snippet-registry.ts",
+			line: 383,
 		},
 	},
 	{
@@ -428,8 +428,8 @@ cargo install --locked --force --path crates/musi`,
 		sourceText: `let Core := import "musi:core";
 Core;`,
 		evidence: {
-			path: "crates/music_session/src/session/foundation.rs",
-			line: 1,
+			path: "crates/musi_foundation/src/lib.rs",
+			line: 9,
 		},
 	},
 	{
@@ -468,8 +468,8 @@ musi test`,
 	{
 		id: "stdlib-option-import",
 		language: "musi",
-		sourceText: `let configured := Option.some[Int](8080);
-Option.unwrapOr[Int](configured, 3000);`,
+		sourceText: `Option.some[Int](8080)
+  |> Option.unwrapOr[Int](3000);`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 6,
@@ -478,8 +478,8 @@ Option.unwrapOr[Int](configured, 3000);`,
 	{
 		id: "stdlib-result-import",
 		language: "musi",
-		sourceText: `let parsed := Result.ok[Int, String](8080);
-Result.unwrapOr[Int, String](parsed, 3000);`,
+		sourceText: `Result.ok[Int, String](8080)
+  |> Result.unwrapOr[Int, String](3000);`,
 		evidence: {
 			path: "packages/std/result/index.ms",
 			line: 6,
@@ -538,8 +538,8 @@ nextPort;`,
   base + offset
 );`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 137,
+			path: "www/src/content/snippet-registry.ts",
+			line: 533,
 		},
 	},
 	{
@@ -561,8 +561,8 @@ let label := "ready";
 let enabled := .True;
 label;`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 380,
+			path: "www/src/content/snippet-registry.ts",
+			line: 557,
 		},
 	},
 	{
@@ -573,8 +573,8 @@ let next := port + 1;
 let same := next = 8081;
 let capped := next <= 9000;`,
 		evidence: {
-			path: "grammar/Musi.g4",
-			line: 380,
+			path: "www/src/content/snippet-registry.ts",
+			line: 569,
 		},
 	},
 	{
@@ -591,12 +591,31 @@ halfOpen;`,
 	{
 		id: "chapter-functions",
 		language: "musi",
-		sourceText: `let twice (x : Int) : Int := x + x;
-let answer := twice(21);
-answer;`,
+		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+let positional := render(8080, 0 = 0);
+let labeled := render(secure := 0 = 0, port := 8080);
+labeled;`,
 		evidence: {
 			path: "docs/what/language/syntax.md",
 			line: 5,
+		},
+	},
+	{
+		id: "named-callable-values",
+		language: "musi",
+		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+
+let f := render;
+f(secure := 0 = 0, port := 8080);
+
+let g : (Int, Bool) -> Int := render;
+g(8080, 0 = 0);
+
+let h : (host : Int, tls : Bool) -> Int := render;
+h(host := 8080, tls := 0 = 0);`,
+		evidence: {
+			path: "docs/what/language/core/functions.md",
+			line: 1,
 		},
 	},
 	{
@@ -647,18 +666,18 @@ Slice.concat[Int](values, [4]);`,
 		id: "chapter-patterns",
 		language: "musi",
 		sourceText: `let Port := data {
-  | Configured : Int
+  | Configured(port : Int)
   | Default
 };
 
-let port : Port := .Configured(8080);
+let port : Port := .Configured(port := 8080);
 match port (
 | .Configured(value) => value
 | .Default => 3000
 );`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
-			line: 1160,
+			line: 1586,
 		},
 	},
 	{
@@ -701,8 +720,8 @@ Local.answer;`,
 let twice (x : Int) : Int := x + x;
 twice(port);`,
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 3,
+			path: "www/src/content/snippet-registry.ts",
+			line: 698,
 		},
 	},
 	{
@@ -712,19 +731,29 @@ twice(port);`,
 let next := port + 1;
 next;`,
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 3,
+			path: "www/src/content/snippet-registry.ts",
+			line: 709,
 		},
 	},
 	{
 		id: "chapter-generics",
 		language: "musi",
 		sourceText: `let identityFn[T] (input : T) : T := input;
-let port : Int := 8080;
-identityFn[Int](port);`,
+let tools := { identity := identityFn };
+let Box1[T] := data {
+  | Box1(T)
+};
+let Keeps[F : Type -> Type] := class {
+  let keep(value : F[Int]) : F[Int];
+};
+let boxKeeps := instance Keeps[Box1] {
+  let keep(value : Box1[Int]) : Box1[Int] := value;
+};
+
+tools.identity[Int](8080);`,
 		evidence: {
-			path: "docs/what/language/type-system.md",
-			line: 3,
+			path: "www/src/content/snippet-registry.ts",
+			line: 720,
 		},
 	},
 	{
@@ -778,8 +807,8 @@ request console.readln();`,
 	{
 		id: "chapter-using",
 		language: "musi",
-		sourceText: `let readClosed (x : Int) : String using { Console } :=
-  request State.readln();`,
+		sourceText: `let readClosed () : String using { Console } :=
+  request Console.readln();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -803,8 +832,8 @@ request console.readln();`,
 		sourceText: `let Core := import "musi:core";
 Core;`,
 		evidence: {
-			path: "crates/music_session/src/session/foundation.rs",
-			line: 1,
+			path: "crates/musi_foundation/src/lib.rs",
+			line: 9,
 		},
 	},
 	{
@@ -821,8 +850,8 @@ Runtime.envGet("HOME");`,
 		id: "chapter-stdlib",
 		language: "musi",
 		sourceText: `let Option := import "@std/option";
-let configured := Option.some[Int](8080);
-Option.unwrapOr[Int](configured, 3000);`,
+Option.some[Int](8080)
+  |> Option.unwrapOr[Int](3000);`,
 		evidence: {
 			path: "packages/std/option/index.ms",
 			line: 6,
@@ -831,11 +860,17 @@ Option.unwrapOr[Int](configured, 3000);`,
 	{
 		id: "chapter-attributes",
 		language: "musi",
-		sourceText:
-			'@link(name := "c") foreign "c" let puts (msg : CString) : Int;',
+		sourceText: `@known(name := "Bool")
+export let Bool := Bool;
+
+@link(name := "c")
+foreign "c" let puts (msg : CString) : Int;
+
+@when(os := "linux")
+foreign let clock_gettime (id : Int, out : CPtr) : Int;`,
 		evidence: {
-			path: "crates/music_syntax/src/parser/tests.rs",
-			line: 78,
+			path: "www/src/content/snippet-registry.ts",
+			line: 832,
 		},
 	},
 	{
@@ -848,14 +883,87 @@ Option.unwrapOr[Int](configured, 3000);`,
 		},
 	},
 	{
+		id: "foreign-safe-wrapper",
+		language: "musi",
+		sourceText: `foreign "c" let puts (message : CString) : Int;
+
+export let printLine (message : CString) : Int := unsafe {
+  puts(message);
+};`,
+		evidence: {
+			path: "docs/what/language/advanced/foreign.md",
+			line: 1,
+		},
+	},
+	{
+		id: "chapter-unsafe-and-ffi",
+		language: "musi",
+		sourceText: `let Ffi := import "@std/ffi";
+
+foreign "c" let get_counter () : CPtr;
+
+let counter := unsafe {
+  let raw := get_counter();
+  Ffi.ptr.cast[Int](raw);
+};
+
+let next := unsafe {
+  let offset := Ffi.ptr.offset;
+  offset[Int](counter, 1);
+};`,
+		evidence: {
+			path: "docs/what/language/advanced/unsafe-and-ffi.md",
+			line: 1,
+		},
+	},
+	{
+		id: "ffi-c-abi-signatures",
+		language: "musi",
+		sourceText: `foreign "c" let puts (message : CString) : Int;
+foreign "c" let memset (dst : CPtr, byte : Int, count : Int) : CPtr;`,
+		evidence: {
+			path: "docs/what/language/advanced/unsafe-and-ffi.md",
+			line: 1,
+		},
+	},
+	{
+		id: "ffi-typed-pointer-view",
+		language: "musi",
+		sourceText: `let Ffi := import "@std/ffi";
+
+foreign "c" let get_counter () : CPtr;
+
+let counter := unsafe {
+  let raw := get_counter();
+  Ffi.ptr.cast[Int](raw);
+};`,
+		evidence: {
+			path: "docs/what/language/advanced/unsafe-and-ffi.md",
+			line: 1,
+		},
+	},
+	{
+		id: "unsafe-safe-wrapper",
+		language: "musi",
+		sourceText: `foreign "c" let clock () : Int;
+
+export let currentTicks () : Int := unsafe {
+  clock();
+};`,
+		evidence: {
+			path: "docs/what/language/advanced/unsafe-and-ffi.md",
+			line: 1,
+		},
+	},
+	{
 		id: "chapter-quote-and-syntax",
 		language: "musi",
 		sourceText: `let addTemplate := quote (x + #(delta));
 let addOneSyntax := quote (#(x) + 1);
 addOneSyntax;`,
 		evidence: {
-			path: "docs/what/language/metaprogramming.md",
-			line: 8,
+			path: "www/src/content/snippet-registry.ts",
+			line: 857,
 		},
 	},
 	{
@@ -879,6 +987,131 @@ musi test`,
 		evidence: {
 			path: "vscode-ext/README.md",
 			line: 8,
+		},
+	},
+
+	{
+		id: "chapter-tuples-and-unit",
+		language: "musi",
+		sourceText: `let status := (8080, "ready");
+let empty := ();
+status;`,
+		evidence: {
+			path: "docs/what/language/core/tuples-and-unit.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-lambdas",
+		language: "musi",
+		sourceText: `let twice := \\(x : Int) : Int => x + x;
+twice(21);`,
+		evidence: {
+			path: "docs/what/language/core/lambdas.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-indexing-and-fields",
+		language: "musi",
+		sourceText: `let point := { x := 3, y := 4 };
+let values := [10, 20, 30];
+let x := point.x;
+let first := values.[0];
+x + first;`,
+		evidence: {
+			path: "docs/what/language/data/indexing-and-fields.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-data-definitions",
+		language: "musi",
+		sourceText: `let Port := data {
+  | Configured(port : Int, secure : Bool)
+  | Default
+};
+
+let Settings := data {
+  port : Int := 3000;
+  label : String;
+};`,
+		evidence: {
+			path: "docs/what/language/data/data-definitions.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-callable-types",
+		language: "musi",
+		sourceText: `let Pure := Int -> Int;
+let Effectful := Int ~> Int;
+Pure;`,
+		evidence: {
+			path: "docs/what/language/types/callable-types.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-type-tests-and-casts",
+		language: "musi",
+		sourceText: `let value := 42;
+let isInt := value :? Int;
+let same := value :?> Int;
+same;`,
+		evidence: {
+			path: "docs/what/language/types/type-tests-and-casts.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-forall-types",
+		language: "musi",
+		sourceText: `let identityFn[T] (input : T) : T := input;
+let identityType := forall(T : Type) -> T -> T;
+
+identityFn[Int](8080);`,
+		evidence: {
+			path: "docs/what/language/types/forall-types.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-dependent-types",
+		language: "musi",
+		sourceText: `let Vec[T, n : Nat] := data {
+  | Nil() -> Vec[T, 0]
+  | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1]
+};
+
+partial let parsePort(text : String) : Int := 0;`,
+		evidence: {
+			path: "docs/what/language/types/dependent-types.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-operator-forms",
+		language: "musi",
+		sourceText: `infixl 6 (+);
+
+let add := (+);
+let total := add(1, 2);
+total;`,
+		evidence: {
+			path: "docs/what/language/advanced/operator-forms.md",
+			line: 11,
+		},
+	},
+	{
+		id: "chapter-templates-and-splices",
+		language: "musi",
+		sourceText: `let port := 8080;
+let label := \`port $\{port}\`;
+label;`,
+		evidence: {
+			path: "docs/what/language/advanced/templates-and-splices.md",
+			line: 11,
 		},
 	},
 ] as const;

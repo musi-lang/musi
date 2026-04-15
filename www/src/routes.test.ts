@@ -10,7 +10,7 @@ describe("routes", () => {
 		expect(routeForPath("/missing").id).toBe("home:en");
 	});
 
-	it("resolves localized docs pages", () => {
+	it("resolves docs pages", () => {
 		expect(routeForPath("/learn/language/effects-runtime/effects").kind).toBe(
 			"doc",
 		);
@@ -23,8 +23,8 @@ describe("routes", () => {
 		);
 	});
 
-	it("does not expose blog routes", () => {
+	it("does not expose blog or ja routes", () => {
 		expect(appRoutes.some((route) => route.path === "/blog")).toBe(false);
-		expect(appRoutes.some((route) => route.path === "/ja/blog")).toBe(false);
+		expect(appRoutes.some((route) => route.path.startsWith("/ja"))).toBe(false);
 	});
 });

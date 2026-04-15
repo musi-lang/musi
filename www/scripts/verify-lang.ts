@@ -6,8 +6,8 @@ const distDir = join(import.meta.dir, "..", "dist");
 const routeChecks = [
 	{ path: "index.html", lang: "en" },
 	{ path: join("community", "index.html"), lang: "en" },
-	{ path: join("ja", "index.html"), lang: "ja" },
-	{ path: join("ja", "community", "index.html"), lang: "ja" },
+	{ path: join("learn", "index.html"), lang: "en" },
+	{ path: join("install", "index.html"), lang: "en" },
 ] as const;
 
 const htmlLangPattern = /<html lang="(?<lang>[^"]+)"/;
@@ -16,7 +16,8 @@ async function main() {
 	for (const route of routeChecks) {
 		const html = await readFile(join(distDir, route.path), "utf8");
 		const match = html.match(htmlLangPattern);
-		const lang = match?.groups?.["lang"];
+		const groups = match?.groups as { lang?: string } | undefined;
+		const lang = groups?.lang;
 
 		if (lang !== route.lang) {
 			throw new Error(

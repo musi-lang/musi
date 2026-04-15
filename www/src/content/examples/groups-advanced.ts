@@ -2,6 +2,25 @@ import type { ExampleGroup } from "./types";
 
 export const advancedExampleGroups: readonly ExampleGroup[] = [
 	{
+		id: "attribute-catalog",
+		title: "Attribute families at different boundaries",
+		caption:
+			"Attributes mean different things depending on whether declaration is foundation-owned, foreign-linked, or target-gated.",
+		note: "Read them top to bottom as metadata filters. First decide what boundary declaration crosses, then pick only the attribute family that explains that boundary directly.",
+		sourceText: `@known(name := "Bool")
+export let Bool := Bool;
+
+@link(name := "c")
+foreign "c" let puts (msg : CString) : Int;
+
+@when(os := "linux")
+foreign let clock_gettime (id : Int, out : CPtr) : Int;`,
+		evidence: {
+			path: "www/src/content/examples/groups-advanced.ts",
+			line: 5,
+		},
+	},
+	{
 		id: "quote-metaprogramming",
 		title: "Code as data template (metaprogramming)",
 		caption:

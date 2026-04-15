@@ -1,5 +1,3 @@
-import type { Locale } from "../../lib/site-copy";
-
 export interface BookPartDefinition {
 	id: string;
 	path: string;
@@ -7,7 +5,7 @@ export interface BookPartDefinition {
 }
 
 export interface BookPageQuestion {
-	labels: Record<Locale, string>;
+	labels: Record<"en", string>;
 }
 
 export interface BookPageDefinition {
@@ -112,6 +110,14 @@ export const bookPages = [
 		questions: [],
 	},
 	{
+		id: "tuples-and-unit",
+		partId: "core",
+		path: "/docs/language/core/tuples-and-unit",
+		aliases: [],
+		sourcePath: "docs/what/language/core/tuples-and-unit.md",
+		questions: [],
+	},
+	{
 		id: "operators",
 		partId: "core",
 		path: "/docs/language/core/operators",
@@ -136,6 +142,14 @@ export const bookPages = [
 		questions: [],
 	},
 	{
+		id: "lambdas",
+		partId: "core",
+		path: "/docs/language/core/lambdas",
+		aliases: [],
+		sourcePath: "docs/what/language/core/lambdas.md",
+		questions: [],
+	},
+	{
 		id: "calls",
 		partId: "core",
 		path: "/docs/language/core/calls",
@@ -157,6 +171,22 @@ export const bookPages = [
 		path: "/docs/language/data/records",
 		aliases: [],
 		sourcePath: "docs/what/language/data/records.md",
+		questions: [],
+	},
+	{
+		id: "indexing-and-fields",
+		partId: "data",
+		path: "/docs/language/data/indexing-and-fields",
+		aliases: [],
+		sourcePath: "docs/what/language/data/indexing-and-fields.md",
+		questions: [],
+	},
+	{
+		id: "data-definitions",
+		partId: "data",
+		path: "/docs/language/data/data-definitions",
+		aliases: [],
+		sourcePath: "docs/what/language/data/data-definitions.md",
 		questions: [],
 	},
 	{
@@ -208,6 +238,14 @@ export const bookPages = [
 		questions: [],
 	},
 	{
+		id: "callable-types",
+		partId: "types",
+		path: "/docs/language/types/callable-types",
+		aliases: [],
+		sourcePath: "docs/what/language/types/callable-types.md",
+		questions: [],
+	},
+	{
 		id: "type-inference",
 		partId: "types",
 		path: "/docs/language/types/type-inference",
@@ -221,6 +259,30 @@ export const bookPages = [
 		path: "/docs/language/types/generics",
 		aliases: [],
 		sourcePath: "docs/what/language/types/generics.md",
+		questions: [],
+	},
+	{
+		id: "type-tests-and-casts",
+		partId: "types",
+		path: "/docs/language/types/type-tests-and-casts",
+		aliases: [],
+		sourcePath: "docs/what/language/types/type-tests-and-casts.md",
+		questions: [],
+	},
+	{
+		id: "forall-types",
+		partId: "types",
+		path: "/docs/language/types/forall-types",
+		aliases: [],
+		sourcePath: "docs/what/language/types/forall-types.md",
+		questions: [],
+	},
+	{
+		id: "dependent-types",
+		partId: "types",
+		path: "/docs/language/types/dependent-types",
+		aliases: [],
+		sourcePath: "docs/what/language/types/dependent-types.md",
 		questions: [],
 	},
 	{
@@ -312,11 +374,35 @@ export const bookPages = [
 		questions: [],
 	},
 	{
+		id: "unsafe-and-ffi",
+		partId: "advanced",
+		path: "/docs/language/advanced/unsafe-and-ffi",
+		aliases: [],
+		sourcePath: "docs/what/language/advanced/unsafe-and-ffi.md",
+		questions: [],
+	},
+	{
+		id: "operator-forms",
+		partId: "advanced",
+		path: "/docs/language/advanced/operator-forms",
+		aliases: [],
+		sourcePath: "docs/what/language/advanced/operator-forms.md",
+		questions: [],
+	},
+	{
 		id: "quote-and-syntax",
 		partId: "advanced",
 		path: "/docs/language/advanced/quote-and-syntax",
 		aliases: [],
 		sourcePath: "docs/what/language/advanced/quote-and-syntax.md",
+		questions: [],
+	},
+	{
+		id: "templates-and-splices",
+		partId: "advanced",
+		path: "/docs/language/advanced/templates-and-splices",
+		aliases: [],
+		sourcePath: "docs/what/language/advanced/templates-and-splices.md",
 		questions: [],
 	},
 	{

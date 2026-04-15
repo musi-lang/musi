@@ -62,9 +62,7 @@ export const docParts = docLandingPages.map((part) => ({
 	title: part.title,
 	summaryHtml: part.summaryHtml,
 	path: part.path,
-	pages: docsPages.filter(
-		(page) => page.partId === part.id && page.locale === part.locale,
-	),
+	pages: docsPages.filter((page) => page.partId === part.id),
 	locale: part.locale,
 })) satisfies DocPart[];
 
@@ -88,30 +86,27 @@ export function docForPath(pathname: string) {
 	return docsByPath.get(pathname);
 }
 
-export function docNeighbors(id: string, locale: Locale) {
-	const localizedPages = docsPages.filter((page) => page.locale === locale);
-	const index = localizedPages.findIndex(
+export function docNeighbors(id: string) {
+	const index = docsPages.findIndex(
 		(page) => page.id === id || page.slug === id,
 	);
 	if (index === -1) {
 		return {};
 	}
 	return {
-		previous: localizedPages[index - 1],
-		next: localizedPages[index + 1],
+		previous: docsPages[index - 1],
+		next: docsPages[index + 1],
 	};
 }
 
-export function pagesForPart(partId: string, locale: Locale) {
-	return docsPages.filter(
-		(page) => page.partId === partId && page.locale === locale,
-	);
+export function pagesForPart(partId: string) {
+	return docsPages.filter((page) => page.partId === partId);
 }
 
 export function docsRoutes(): AppRoute[] {
 	return localizedDocs.flatMap((page) => [
 		{
-			id: `docs:${page.locale}:${page.id}`,
+			id: `docs:${page.id}`,
 			label: page.title,
 			path: page.path,
 			title: `${page.title} | Musi`,
@@ -123,7 +118,7 @@ export function docsRoutes(): AppRoute[] {
 			section: "learn" as const,
 		},
 		...page.aliases.map((alias) => ({
-			id: `docs-alias:${page.locale}:${page.id}:${alias}`,
+			id: `docs-alias:${page.id}:${alias}`,
 			label: page.title,
 			path: alias,
 			title: `${page.title} | Musi`,
