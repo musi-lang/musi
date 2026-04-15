@@ -269,14 +269,14 @@ fn rejects_opaque_exports_from_root_and_dynamic_modules() {
     let dep = compile_program(
         &[(
             "dep",
-            "export opaque let Hidden := data { | Hidden : Int }; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
         )],
         "dep",
     );
     let main = compile_program(
         &[(
             "main",
-            "export opaque let Secret := data { | Secret : Int }; export let root () : Int := 0;",
+            "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
         )],
         "main",
     );
@@ -416,7 +416,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
               let puts (value : Int) : Int;
             );
             let Console := effect { let readln (prompt : String) : Int; };
-            export let call_puts () : Int := puts(1);
+            export let call_puts () : Int := unsafe { puts(1); };
             export let call_readln () : Int := request Console.readln(">");
         "#,
         )],
@@ -480,7 +480,7 @@ fn exposes_data_layout_descriptors_for_named_types() {
         &[(
             "main",
             r"
-            let Maybe := data { | Some : Int | None };
+            let Maybe := data { | Some(Int) | None };
             export let answer () : Int := 0;
         ",
         )],

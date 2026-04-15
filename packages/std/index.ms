@@ -10,6 +10,7 @@ export let encoding := {
 };
 export let env := import "@std/env";
 export let fs := import "@std/fs";
+export let ffi := import "@std/ffi";
 export let io := import "@std/io";
 export let iter := import "@std/iter";
 export let json := import "@std/json";

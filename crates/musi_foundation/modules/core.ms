@@ -56,7 +56,7 @@ export let CString := CString;
 export let CPtr := CPtr;
 
 export opaque let Option[T] := data {
-  | Some : T
+  | Some(T)
   | None
 };
 

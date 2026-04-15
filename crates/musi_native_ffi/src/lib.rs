@@ -15,6 +15,9 @@ pub struct NativeFfi;
 
 type NativeErrorText = Box<str>;
 
+mod pointer_intrinsics;
+pub use pointer_intrinsics::call_musi_pointer_intrinsic;
+
 impl NativeFfi {
     #[must_use]
     pub const fn new() -> Self {

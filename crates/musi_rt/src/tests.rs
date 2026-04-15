@@ -92,13 +92,13 @@ fn rejects_opaque_exports_through_runtime_api() {
     runtime
         .register_module_text(
             "main",
-            "export opaque let Secret := data { | Secret : Int }; export let root () : Int := 0;",
+            "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
         )
         .unwrap();
     runtime
         .register_module_text(
             "dep",
-            "export opaque let Hidden := data { | Hidden : Int }; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
         )
         .unwrap();
     runtime.load_root("main").unwrap();
@@ -165,7 +165,7 @@ fn routes_foreign_calls_through_registered_handlers() {
             foreign "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := puts(42);
+            export let answer () : Int := unsafe { puts(42); };
         "#,
         )
         .unwrap();
@@ -265,7 +265,7 @@ fn custom_host_still_handles_unregistered_edges() {
             foreign "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := puts(1);
+            export let answer () : Int := unsafe { puts(1); };
         "#,
         )
         .unwrap();
@@ -537,7 +537,7 @@ export let clamp (value : Int, low : Int, high : Int) : Int :=
         "@std/option",
         r"
 export opaque let Option[T] := data {
-    | Some : T
+    | Some(T)
     | None
 };
 

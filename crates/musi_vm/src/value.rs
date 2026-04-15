@@ -96,15 +96,23 @@ impl ModuleValue {
 pub struct ForeignValue {
     pub(crate) module_slot: usize,
     pub(crate) foreign: ForeignId,
+    pub(crate) type_args: Box<[TypeId]>,
 }
 
 impl ForeignValue {
     #[must_use]
-    pub const fn new(module_slot: usize, foreign: ForeignId) -> Self {
+    pub fn new(module_slot: usize, foreign: ForeignId) -> Self {
         Self {
             module_slot,
             foreign,
+            type_args: Box::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_type_args(mut self, type_args: impl Into<Box<[TypeId]>>) -> Self {
+        self.type_args = type_args.into();
+        self
     }
 }
 
@@ -346,7 +354,7 @@ impl Value {
     }
 
     #[must_use]
-    pub const fn foreign(module_slot: usize, foreign: ForeignId) -> Self {
+    pub fn foreign(module_slot: usize, foreign: ForeignId) -> Self {
         Self::Foreign(ForeignValue::new(module_slot, foreign))
     }
 

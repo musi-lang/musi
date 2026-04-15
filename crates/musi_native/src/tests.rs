@@ -81,7 +81,7 @@ fn dispatches_registered_foreign_handler() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(42);
+        export let answer () : Int := unsafe { puts(42); };
         "#,
     )
     .expect("registered foreign should succeed");
@@ -134,11 +134,11 @@ fn foreign_calls_expose_data_layout_descriptors() {
     let value = call_export_with_host(
         host,
         r#"
-        let Maybe := data { | Some : Int | None };
+        let Maybe := data { | Some(Int) | None };
         foreign "c" (
           let inspect (value : Maybe) : Int;
         );
-        export let answer () : Int := inspect(.Some(1));
+        export let answer () : Int := unsafe { inspect(.Some(1)); };
         "#,
     )
     .expect("layout-aware foreign should succeed");
@@ -172,7 +172,7 @@ fn native_abi_support_accepts_c_scalar_foreigns() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(42);
+        export let answer () : Int := unsafe { puts(42); };
         "#,
     )
     .expect("scalar foreign should succeed");
@@ -203,7 +203,7 @@ fn native_abi_support_rejects_non_c_abi() {
         foreign "system" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(42);
+        export let answer () : Int := unsafe { puts(42); };
         "#,
     )
     .expect("non-c foreign should still dispatch through registered host");
@@ -218,7 +218,7 @@ fn native_abi_support_link_smoke() {
         foreign "c" let strerror (code : Int) : CString;
         @link(name := "c", symbol := "strlen")
         foreign "c" let strlen (value : CString) : Int;
-        export let answer () : Int := strlen(strerror(2));
+        export let answer () : Int := unsafe { strlen(strerror(2)); };
     "#;
     let value = call_export_with_host(NativeHost::default(), source)
         .expect("linked native call should succeed");
@@ -234,7 +234,7 @@ fn native_abi_symbol_failures_report_typed_errors() {
     let source = r#"
         @link(name := "c")
         foreign "c" let musi_native_test_missing_symbol (value : Int) : Int;
-        export let answer () : Int := musi_native_test_missing_symbol(1);
+        export let answer () : Int := unsafe { musi_native_test_missing_symbol(1); };
     "#;
     let err = call_export_with_host(NativeHost::default(), source)
         .expect_err("missing symbol should fail");
@@ -256,7 +256,7 @@ fn native_abi_cstring_results_roundtrip() {
         foreign "c" let musi_native_test_progname () : CString;
         @link(name := "/usr/lib/libSystem.B.dylib", symbol := "strchr")
         foreign "c" let strchr (value : CString, code : Int) : CString;
-        export let answer () : CString := strchr(musi_native_test_progname(), 0);
+        export let answer () : CString := unsafe { strchr(musi_native_test_progname(), 0); };
     "#;
     let value = call_export_with_host(NativeHost::default(), source)
         .expect("cstring result should succeed");
@@ -295,7 +295,7 @@ fn registered_handlers_override_fallback() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(1);
+        export let answer () : Int := unsafe { puts(1); };
         "#,
     )
     .expect("registered foreign should win");
@@ -313,7 +313,7 @@ fn falls_back_for_unregistered_edges() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(1);
+        export let answer () : Int := unsafe { puts(1); };
         "#,
     )
     .expect("fallback should handle foreign");
@@ -329,7 +329,7 @@ fn rejects_unhandled_edges_without_fallback() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(1);
+        export let answer () : Int := unsafe { puts(1); };
         "#,
     )
     .expect_err("missing host edge should reject");
@@ -352,7 +352,7 @@ fn clones_share_registered_state() {
         foreign "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := puts(1);
+        export let answer () : Int := unsafe { puts(1); };
         "#,
     )
     .expect("shared state should be visible");
