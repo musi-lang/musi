@@ -343,13 +343,17 @@ pub(super) fn normalize_lookup_path(path: &Path) -> PathBuf {
 pub(super) fn build_lockfile(package_records: &BTreeMap<PackageId, PackageRecord>) -> Lockfile {
     let packages = package_records
         .values()
-        .map(|record| LockedPackage {
-            name: record.package.id.name.clone(),
-            version: record.package.id.version.clone(),
-            source: match record.package.source {
+        .filter_map(|record| {
+            let source = match record.package.source {
                 PackageSource::Workspace => LockedPackageSource::Workspace,
                 PackageSource::Registry { .. } => LockedPackageSource::Registry,
-            },
+                PackageSource::Builtin => return None,
+            };
+            Some(LockedPackage {
+                name: record.package.id.name.clone(),
+                version: record.package.id.version.clone(),
+                source,
+            })
         })
         .collect::<Vec<_>>();
     Lockfile {

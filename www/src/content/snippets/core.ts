@@ -437,7 +437,8 @@ Runtime.envGet("HOME");`,
 		language: "bash",
 		sourceText: `musi init hello
 cd hello
-musi run`,
+musi check
+musi test`,
 		evidence: {
 			path: "crates/musi/src/main.rs",
 			line: 1,
@@ -685,7 +686,8 @@ answer;`,
 		language: "bash",
 		sourceText: `musi init hello
 cd hello
-musi run`,
+musi check
+musi test`,
 		evidence: {
 			path: "crates/musi/src/main.rs",
 			line: 1,
@@ -990,7 +992,7 @@ export let test () :=
 		id: "chapter-running-and-tooling",
 		language: "bash",
 		sourceText: `music check index.ms
-musi run
+musi check
 musi test`,
 		evidence: {
 			path: "vscode-ext/README.md",

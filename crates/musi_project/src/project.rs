@@ -4,21 +4,25 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules};
-use music_base::Span;
 use music_base::diag::DiagCode;
+use music_base::{SourceId, Span};
 use music_emit::EmitOptions;
-use music_module::{ImportMap, ModuleKey};
+use music_module::{ImportMap, ImportSiteKind, ModuleKey, collect_import_sites};
 use music_seam::Artifact;
 use music_sema::TargetInfo;
 use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
+use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
+use crate::builtin_std::{
+    STD_FILES, STD_MANIFEST, STD_MANIFEST_PATH, STD_PACKAGE_NAME, STD_ROOT_DIR,
+};
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackageSource, Lockfile};
 use crate::manifest::{PackageManifest, PublishConfig, TaskConfig};
 use crate::manifest_source::ManifestSource;
 use crate::project::module_graph::{
-    build_import_map, build_lockfile, discover_modules, normalize_lookup_path,
+    build_import_map, build_lockfile, discover_modules, module_key_for, normalize_lookup_path,
     resolve_module_target,
 };
 use crate::registry::{RegistryPackage, resolve_registry_package};
@@ -50,6 +54,7 @@ impl PackageId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageSource {
     Workspace,
+    Builtin,
     Registry {
         registry_dir: PathBuf,
         cache_dir: PathBuf,
@@ -703,6 +708,11 @@ fn resolve_workspace_state(
         mut package_records,
         mut package_name_index,
     } = seed_workspace_packages(&local_packages)?;
+    seed_builtin_std_package(
+        &local_packages,
+        &mut package_records,
+        &mut package_name_index,
+    )?;
     let mut resolving = BTreeSet::<String>::new();
 
     let root_package = manifest
@@ -829,6 +839,21 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             ));
         }
     }
+    for (index, lib) in manifest.enabled_libs().into_iter().enumerate() {
+        if lib != "std" {
+            let pointer = format!("/lib/{index}");
+            let span = source
+                .value_span(&pointer)
+                .or_else(|| source.value_span(&json_pointer(&["lib"])))
+                .unwrap_or_else(|| source.insertion_span());
+            return Err(source.error(
+                DiagCode::new(3606),
+                format!("unknown lib `{lib}`"),
+                span,
+                format!("lib `{lib}` is not supported"),
+            ));
+        }
+    }
     if matches!(manifest.publish, Some(PublishConfig::Disabled(true))) {
         let span = source
             .value_span(&json_pointer(&["publish"]))
@@ -870,6 +895,117 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     }
     validate_task_graph(manifest, source)?;
     Ok(())
+}
+
+fn seed_builtin_std_package(
+    local_packages: &BTreeMap<String, LocalPackage>,
+    package_records: &mut BTreeMap<PackageId, PackageRecord>,
+    package_name_index: &mut BTreeMap<String, PackageId>,
+) -> ProjectResult {
+    if package_name_index.contains_key(STD_PACKAGE_NAME)
+        || !local_packages
+            .values()
+            .any(|package| package_uses_std(&package.manifest))
+    {
+        return Ok(());
+    }
+    let record = load_builtin_std_record()?;
+    let _ = package_name_index.insert(STD_PACKAGE_NAME.into(), record.package.id.clone());
+    let _ = package_records.insert(record.package.id.clone(), record);
+    Ok(())
+}
+
+fn package_uses_std(manifest: &PackageManifest) -> bool {
+    manifest.enabled_libs().contains(&"std")
+}
+
+fn load_builtin_std_record() -> ProjectResult<PackageRecord> {
+    let manifest_path = PathBuf::from(STD_MANIFEST_PATH);
+    let manifest_source = ManifestSource::from_text(manifest_path.clone(), STD_MANIFEST.into());
+    let manifest = serde_json::from_str::<PackageManifest>(STD_MANIFEST)
+        .map_err(|source| manifest_source.parse_error(&source))?;
+    validate_manifest(&manifest, &manifest_source)?;
+    load_embedded_package_record(
+        PathBuf::from(STD_ROOT_DIR),
+        manifest_path,
+        &manifest_source,
+        manifest,
+        PackageSource::Builtin,
+        STD_FILES,
+    )
+}
+
+fn load_embedded_package_record(
+    root_dir: PathBuf,
+    manifest_path: PathBuf,
+    manifest_source: &ManifestSource,
+    manifest: PackageManifest,
+    source: PackageSource,
+    files: &[(&str, &str)],
+) -> ProjectResult<PackageRecord> {
+    let id = PackageId::new(
+        manifest.name.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package name missing",
+                manifest_source.insertion_span(),
+                "`name` field missing",
+                "add `name` to this package manifest",
+            )
+        })?,
+        manifest.version.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package version missing",
+                manifest_source.insertion_span(),
+                "`version` field missing",
+                "add `version` to this package manifest",
+            )
+        })?,
+    );
+    let modules = files
+        .iter()
+        .map(|(relative, text)| embedded_module(&id, &root_dir, relative, text))
+        .collect::<BTreeMap<_, _>>();
+    package_record_from_modules(
+        id,
+        root_dir,
+        manifest_path,
+        source,
+        manifest_source,
+        manifest,
+        modules,
+    )
+}
+
+fn embedded_module(
+    package_id: &PackageId,
+    root_dir: &Path,
+    relative: &str,
+    text: &str,
+) -> (ModuleKey, LoadedModule) {
+    let key = module_key_for(package_id, relative);
+    let path = root_dir.join(relative);
+    let parsed = parse(Lexer::new(text).lex());
+    let imports = collect_import_sites(SourceId::from_raw(0), parsed.tree())
+        .into_iter()
+        .filter_map(|site| match site.kind {
+            ImportSiteKind::Static { spec } => Some(LoadedImportSite {
+                spec: spec.as_str().to_owned(),
+                span: site.span,
+            }),
+            ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
+        })
+        .collect::<Vec<_>>();
+    let module = LoadedModule {
+        key: key.clone(),
+        path,
+        package_relative: relative.into(),
+        local_scope_key: ModuleKey::new(format!("./{relative}")),
+        text: text.into(),
+        imports,
+    };
+    (key, module)
 }
 
 fn validate_task_graph(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
@@ -1151,6 +1287,12 @@ fn resolve_dependency(
         return Ok(Some(package_id));
     }
 
+    if let Some(package_id) = package_name_index.get(name).cloned()
+        && package_records.contains_key(&package_id)
+    {
+        return Ok(Some(package_id));
+    }
+
     let Some(registry_root) = options.registry_root.as_deref() else {
         return if optional {
             Ok(None)
@@ -1255,8 +1397,27 @@ fn load_package_record(
             )
         })?,
     );
-
     let modules = discover_modules(&id, &root_dir)?;
+    package_record_from_modules(
+        id,
+        root_dir,
+        manifest_path,
+        source,
+        manifest_source,
+        manifest,
+        modules,
+    )
+}
+
+fn package_record_from_modules(
+    id: PackageId,
+    root_dir: PathBuf,
+    manifest_path: PathBuf,
+    source: PackageSource,
+    manifest_source: &ManifestSource,
+    manifest: PackageManifest,
+    modules: BTreeMap<ModuleKey, LoadedModule>,
+) -> ProjectResult<PackageRecord> {
     let relative_modules = modules
         .values()
         .map(|module| (module.package_relative.clone(), module.key.clone()))

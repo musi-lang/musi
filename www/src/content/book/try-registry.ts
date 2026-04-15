@@ -28,8 +28,8 @@ export const tryBlocks = [
 		title: "Try it",
 		steps: [
 			"Create a package with `musi init hello`.",
-			"Open the generated entry file.",
-			"Run `musi run` from the package root.",
+			"Open the generated entry and test files.",
+			"Run `musi check` and `musi test` from the package root.",
 		],
 	},
 	{

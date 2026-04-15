@@ -1,3 +1,4 @@
+mod builtin_std;
 mod errors;
 mod lock;
 pub mod manifest;

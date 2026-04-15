@@ -14,7 +14,11 @@ A package is a project boundary. It gives source files a root, gives tools a man
 
 ## Reading Model
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+Read the example from top to bottom. The generated package starts with a hello-world entry file and a tiny add test, so checking and testing stay separate from runtime entry conventions.
+
+## Standard Library
+
+Packages use the standard library by default. That default makes imports such as `@std/testing` available without dependency boilerplate. Add `"lib": []` to `musi.json` only when a package needs to opt out of bundled libraries.
 
 ## Practical Rule
 

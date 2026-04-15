@@ -100,6 +100,9 @@
       "description": "Tool-specific extension data.",
       "additionalProperties": true
     },
+    "lib": {
+      "$ref": "#/$defs/lib"
+    },
     "imports": {
       "$ref": "#/$defs/importMap"
     },
@@ -181,6 +184,16 @@
     "relativePath": {
       "type": "string",
       "pattern": "^\\./.*$"
+    },
+    "lib": {
+      "type": "array",
+      "description": "Toolchain-provided libraries. Omitted means [\"std\"]. Empty array disables bundled libraries.",
+      "items": {
+        "enum": [
+          "std"
+        ]
+      },
+      "uniqueItems": true
     },
     "person": {
       "oneOf": [

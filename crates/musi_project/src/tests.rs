@@ -836,3 +836,149 @@ export let none[T] () : Option[T] := .None;
         .check_module(&entry.module_key)
         .expect("root module should typecheck with auto prelude");
 }
+
+#[test]
+fn missing_lib_defaults_to_builtin_std() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"
+let Testing := import "@std/testing";
+export let test () :=
+  (
+    Testing.describe("default std");
+    Testing.it("adds values", Testing.toBe(1 + 2, 3));
+    Testing.endDescribe()
+  );
+"#,
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    assert!(project.package("@std").is_some());
+    let output = project.compile_root_entry().expect("root entry compiles");
+
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn explicit_std_dependency_uses_builtin_std() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@std": "*"
+  }
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"
+let Testing := import "@std/testing";
+export let test () :=
+  (
+    Testing.describe("explicit std");
+    Testing.it("adds values", Testing.toBe(1 + 2, 3));
+    Testing.endDescribe()
+  );
+"#,
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    assert!(project.package("@std").is_some());
+    let output = project.compile_root_entry().expect("root entry compiles");
+
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn empty_lib_disables_builtin_std() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": []
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"let Testing := import "@std/testing";
+export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
+"#,
+    );
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("std should be disabled");
+
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unresolved import `@std/testing`")
+    );
+}
+
+#[test]
+fn empty_lib_disables_auto_std_prelude() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": []
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r"
+export let answer () : Option[Int] := some[Int](1);
+",
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let entry = project.root_entry().expect("root entry resolves");
+    let mut session = project.build_session().expect("project session builds");
+    let _error = session
+        .check_module(&entry.module_key)
+        .expect_err("std prelude should be disabled");
+}
+
+#[test]
+fn unknown_lib_fails_manifest_validation() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": ["!std"]
+}"#,
+    );
+    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("lib should be invalid");
+
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
+    assert_eq!(error.diag_message().as_deref(), Some("unknown lib `!std`"));
+}
