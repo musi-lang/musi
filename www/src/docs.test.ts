@@ -52,6 +52,24 @@ describe("docs", () => {
 			docForPath("/learn/book/developers/guides/javascript-typescript/overview")
 				?.kind,
 		).toBe("chapter");
+		expect(docForPath("/learn/book/developers/guides/csharp")?.kind).toBe(
+			"section",
+		);
+		expect(
+			docForPath("/learn/book/developers/guides/csharp/overview")?.kind,
+		).toBe("chapter");
+		expect(
+			docForPath("/learn/book/developers/csharp/null-option-result")?.title,
+		).toBe("Null, Option, and Result");
+		expect(docForPath("/learn/book/developers/guides/python")?.kind).toBe(
+			"section",
+		);
+		expect(
+			docForPath("/learn/book/developers/guides/python/overview")?.kind,
+		).toBe("chapter");
+		expect(
+			docForPath("/learn/book/developers/python/none-option-result")?.title,
+		).toBe("None, Option, and Result");
 		expect(docForPath("/learn/book/developers/javascript")?.kind).toBe(
 			"section",
 		);
@@ -72,7 +90,9 @@ describe("docs", () => {
 	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
 		const titles = docChildren("developers-guides").map((page) => page.title);
 		expect(titles).toEqual([
+			"Musi for C# Developers",
 			"Musi for JavaScript and TypeScript Developers",
+			"Musi for Python Developers",
 			"Musi for Rust Developers",
 		]);
 	});

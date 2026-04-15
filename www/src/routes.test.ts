@@ -38,8 +38,23 @@ describe("routes", () => {
 				"/learn/book/developers/guides/javascript-typescript/overview",
 			).kind,
 		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/csharp").kind).toBe(
+			"doc",
+		);
+		expect(
+			routeForPath("/learn/book/developers/guides/csharp/overview").kind,
+		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/python").kind).toBe(
+			"doc",
+		);
+		expect(
+			routeForPath("/learn/book/developers/guides/python/overview").kind,
+		).toBe("doc");
 		expect(routeForPath("/learn/book/developers/javascript").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/typescript").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/csharp").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/c-sharp").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/python").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust/mutation").kind).toBe(
 			"doc",
@@ -67,6 +82,15 @@ describe("routes", () => {
 		expect(
 			routeForPath("/learn/book/developers/typescript").canonicalPath,
 		).toBe("/learn/book/developers/guides/javascript-typescript");
+		expect(routeForPath("/learn/book/developers/csharp").canonicalPath).toBe(
+			"/learn/book/developers/guides/csharp",
+		);
+		expect(routeForPath("/learn/book/developers/c-sharp").canonicalPath).toBe(
+			"/learn/book/developers/guides/csharp",
+		);
+		expect(routeForPath("/learn/book/developers/python").canonicalPath).toBe(
+			"/learn/book/developers/guides/python",
+		);
 		expect(
 			routeForPath(
 				"/learn/book/developers/guides/javascript-typescript/overview",

@@ -293,6 +293,32 @@ export const bookSections: readonly BookSectionDefinition[] = [
 			"Rust-specific contrasts for mutation, data, traits, effects, and native boundaries.",
 	},
 	{
+		id: "developers-csharp",
+		partId: "developers",
+		parentId: "developers-guides",
+		path: "/docs/book/developers/guides/csharp",
+		aliases: [
+			"/docs/book/developers/guides/c-sharp",
+			"/learn/book/developers/guides/c-sharp",
+			"/docs/book/developers/csharp",
+			"/docs/book/developers/c-sharp",
+			"/learn/book/developers/c-sharp",
+			"/docs/language/developers/csharp",
+			"/docs/language/developers/c-sharp",
+			"/learn/language/developers/csharp",
+			"/learn/language/developers/c-sharp",
+		],
+		title: "Musi for C# Developers",
+		description:
+			"Translate .NET 8.0 and C# 12.0 habits into Musi's expression, data, effect, and package model.",
+		group: "Musi for Developers",
+		section: "C# Developers",
+		order: 1,
+		slug: "csharp",
+		summary:
+			"C#-specific contrasts for methods, records, collections, nullability, exceptions, interfaces, packages, tests, and native boundaries.",
+	},
+	{
 		id: "developers-javascript-typescript",
 		partId: "developers",
 		parentId: "developers-guides",
@@ -316,6 +342,26 @@ export const bookSections: readonly BookSectionDefinition[] = [
 		slug: "javascript-typescript",
 		summary:
 			"Side-by-side contrasts for objects, functions, unions, generics, promises, modules, and tests.",
+	},
+	{
+		id: "developers-python",
+		partId: "developers",
+		parentId: "developers-guides",
+		path: "/docs/book/developers/guides/python",
+		aliases: [
+			"/docs/book/developers/python",
+			"/docs/language/developers/python",
+			"/learn/language/developers/python",
+		],
+		title: "Musi for Python Developers",
+		description:
+			"Translate Python 3.14 habits into Musi's expression, data, effect, and package model.",
+		group: "Musi for Developers",
+		section: "Python Developers",
+		order: 1,
+		slug: "python",
+		summary:
+			"Python-specific contrasts for functions, blocks, objects, collections, errors, protocols, modules, tests, and native boundaries.",
 	},
 	{
 		id: "advanced-interop",
@@ -830,6 +876,209 @@ const rawBookPages = [
 		questions: [],
 	},
 	{
+		id: "csharp-overview",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/overview",
+		aliases: [
+			"/docs/book/developers/c-sharp/overview",
+			"/docs/language/developers/csharp/overview",
+			"/docs/language/developers/c-sharp/overview",
+			"/learn/language/developers/csharp/overview",
+			"/learn/language/developers/c-sharp/overview",
+		],
+		sourcePath: "docs/what/language/developers/csharp/overview.md",
+		questions: [],
+	},
+	{
+		id: "csharp-values-methods-expressions",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/values-methods-expressions",
+		aliases: [
+			"/docs/book/developers/c-sharp/values-methods-expressions",
+			"/docs/language/developers/csharp/values-methods-expressions",
+			"/docs/language/developers/c-sharp/values-methods-expressions",
+			"/learn/language/developers/csharp/values-methods-expressions",
+			"/learn/language/developers/c-sharp/values-methods-expressions",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/values-methods-expressions.md",
+		questions: [],
+	},
+	{
+		id: "csharp-blocks-control-flow",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/blocks-control-flow",
+		aliases: [
+			"/docs/book/developers/c-sharp/blocks-control-flow",
+			"/docs/language/developers/csharp/blocks-control-flow",
+			"/docs/language/developers/c-sharp/blocks-control-flow",
+			"/learn/language/developers/csharp/blocks-control-flow",
+			"/learn/language/developers/c-sharp/blocks-control-flow",
+		],
+		sourcePath: "docs/what/language/developers/csharp/blocks-control-flow.md",
+		questions: [],
+	},
+	{
+		id: "csharp-variables-mutation",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/variables-mutation",
+		aliases: [
+			"/docs/book/developers/c-sharp/variables-mutation",
+			"/docs/language/developers/csharp/variables-mutation",
+			"/docs/language/developers/c-sharp/variables-mutation",
+			"/learn/language/developers/csharp/variables-mutation",
+			"/learn/language/developers/c-sharp/variables-mutation",
+		],
+		sourcePath: "docs/what/language/developers/csharp/variables-mutation.md",
+		questions: [],
+	},
+	{
+		id: "csharp-records-classes-objects",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/records-classes-objects",
+		aliases: [
+			"/docs/book/developers/c-sharp/records-classes-objects",
+			"/docs/language/developers/csharp/records-classes-objects",
+			"/docs/language/developers/c-sharp/records-classes-objects",
+			"/learn/language/developers/csharp/records-classes-objects",
+			"/learn/language/developers/c-sharp/records-classes-objects",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/records-classes-objects.md",
+		questions: [],
+	},
+	{
+		id: "csharp-collections-linq-pipelines",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/collections-linq-pipelines",
+		aliases: [
+			"/docs/book/developers/c-sharp/collections-linq-pipelines",
+			"/docs/language/developers/csharp/collections-linq-pipelines",
+			"/docs/language/developers/c-sharp/collections-linq-pipelines",
+			"/learn/language/developers/csharp/collections-linq-pipelines",
+			"/learn/language/developers/c-sharp/collections-linq-pipelines",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/collections-linq-pipelines.md",
+		questions: [],
+	},
+	{
+		id: "csharp-null-option-result",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/null-option-result",
+		aliases: [
+			"/docs/book/developers/c-sharp/null-option-result",
+			"/docs/language/developers/csharp/null-option-result",
+			"/docs/language/developers/c-sharp/null-option-result",
+			"/learn/language/developers/csharp/null-option-result",
+			"/learn/language/developers/c-sharp/null-option-result",
+		],
+		sourcePath: "docs/what/language/developers/csharp/null-option-result.md",
+		questions: [],
+	},
+	{
+		id: "csharp-exceptions-effects",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/exceptions-effects",
+		aliases: [
+			"/docs/book/developers/c-sharp/exceptions-effects",
+			"/docs/language/developers/csharp/exceptions-effects",
+			"/docs/language/developers/c-sharp/exceptions-effects",
+			"/learn/language/developers/csharp/exceptions-effects",
+			"/learn/language/developers/c-sharp/exceptions-effects",
+		],
+		sourcePath: "docs/what/language/developers/csharp/exceptions-effects.md",
+		questions: [],
+	},
+	{
+		id: "csharp-unions-pattern-matching",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/unions-pattern-matching",
+		aliases: [
+			"/docs/book/developers/c-sharp/unions-pattern-matching",
+			"/docs/language/developers/csharp/unions-pattern-matching",
+			"/docs/language/developers/c-sharp/unions-pattern-matching",
+			"/learn/language/developers/csharp/unions-pattern-matching",
+			"/learn/language/developers/c-sharp/unions-pattern-matching",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/unions-pattern-matching.md",
+		questions: [],
+	},
+	{
+		id: "csharp-generics-interfaces-laws",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/generics-interfaces-laws",
+		aliases: [
+			"/docs/book/developers/c-sharp/generics-interfaces-laws",
+			"/docs/language/developers/csharp/generics-interfaces-laws",
+			"/docs/language/developers/c-sharp/generics-interfaces-laws",
+			"/learn/language/developers/csharp/generics-interfaces-laws",
+			"/learn/language/developers/c-sharp/generics-interfaces-laws",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/generics-interfaces-laws.md",
+		questions: [],
+	},
+	{
+		id: "csharp-extension-methods-and-calls",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/extension-methods-and-calls",
+		aliases: [
+			"/docs/book/developers/c-sharp/extension-methods-and-calls",
+			"/docs/language/developers/csharp/extension-methods-and-calls",
+			"/docs/language/developers/c-sharp/extension-methods-and-calls",
+			"/learn/language/developers/csharp/extension-methods-and-calls",
+			"/learn/language/developers/c-sharp/extension-methods-and-calls",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/extension-methods-and-calls.md",
+		questions: [],
+	},
+	{
+		id: "csharp-namespaces-modules-packages",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/namespaces-modules-packages",
+		aliases: [
+			"/docs/book/developers/c-sharp/namespaces-modules-packages",
+			"/docs/language/developers/csharp/namespaces-modules-packages",
+			"/docs/language/developers/c-sharp/namespaces-modules-packages",
+			"/learn/language/developers/csharp/namespaces-modules-packages",
+			"/learn/language/developers/c-sharp/namespaces-modules-packages",
+		],
+		sourcePath:
+			"docs/what/language/developers/csharp/namespaces-modules-packages.md",
+		questions: [],
+	},
+	{
+		id: "csharp-testing-tooling",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/testing-tooling",
+		aliases: [
+			"/docs/book/developers/c-sharp/testing-tooling",
+			"/docs/language/developers/csharp/testing-tooling",
+			"/docs/language/developers/c-sharp/testing-tooling",
+			"/learn/language/developers/csharp/testing-tooling",
+			"/learn/language/developers/c-sharp/testing-tooling",
+		],
+		sourcePath: "docs/what/language/developers/csharp/testing-tooling.md",
+		questions: [],
+	},
+	{
+		id: "csharp-unsafe-interop-ffi",
+		partId: "developers",
+		path: "/docs/book/developers/csharp/unsafe-interop-ffi",
+		aliases: [
+			"/docs/book/developers/c-sharp/unsafe-interop-ffi",
+			"/docs/language/developers/csharp/unsafe-interop-ffi",
+			"/docs/language/developers/c-sharp/unsafe-interop-ffi",
+			"/learn/language/developers/csharp/unsafe-interop-ffi",
+			"/learn/language/developers/c-sharp/unsafe-interop-ffi",
+		],
+		sourcePath: "docs/what/language/developers/csharp/unsafe-interop-ffi.md",
+		questions: [],
+	},
+	{
 		id: "js-ts-overview",
 		partId: "developers",
 		path: "/docs/book/developers/javascript-typescript/overview",
@@ -1021,6 +1270,151 @@ const rawBookPages = [
 		questions: [],
 	},
 	{
+		id: "python-overview",
+		partId: "developers",
+		path: "/docs/book/developers/python/overview",
+		aliases: [
+			"/docs/language/developers/python/overview",
+			"/learn/language/developers/python/overview",
+		],
+		sourcePath: "docs/what/language/developers/python/overview.md",
+		questions: [],
+	},
+	{
+		id: "python-values-functions",
+		partId: "developers",
+		path: "/docs/book/developers/python/values-functions",
+		aliases: [
+			"/docs/language/developers/python/values-functions",
+			"/learn/language/developers/python/values-functions",
+		],
+		sourcePath: "docs/what/language/developers/python/values-functions.md",
+		questions: [],
+	},
+	{
+		id: "python-blocks-control-flow",
+		partId: "developers",
+		path: "/docs/book/developers/python/blocks-control-flow",
+		aliases: [
+			"/docs/language/developers/python/blocks-control-flow",
+			"/learn/language/developers/python/blocks-control-flow",
+		],
+		sourcePath: "docs/what/language/developers/python/blocks-control-flow.md",
+		questions: [],
+	},
+	{
+		id: "python-names-mutation",
+		partId: "developers",
+		path: "/docs/book/developers/python/names-mutation",
+		aliases: [
+			"/docs/language/developers/python/names-mutation",
+			"/learn/language/developers/python/names-mutation",
+		],
+		sourcePath: "docs/what/language/developers/python/names-mutation.md",
+		questions: [],
+	},
+	{
+		id: "python-records-objects-dicts",
+		partId: "developers",
+		path: "/docs/book/developers/python/records-objects-dicts",
+		aliases: [
+			"/docs/language/developers/python/records-objects-dicts",
+			"/learn/language/developers/python/records-objects-dicts",
+		],
+		sourcePath: "docs/what/language/developers/python/records-objects-dicts.md",
+		questions: [],
+	},
+	{
+		id: "python-collections-pipelines",
+		partId: "developers",
+		path: "/docs/book/developers/python/collections-pipelines",
+		aliases: [
+			"/docs/language/developers/python/collections-pipelines",
+			"/learn/language/developers/python/collections-pipelines",
+		],
+		sourcePath: "docs/what/language/developers/python/collections-pipelines.md",
+		questions: [],
+	},
+	{
+		id: "python-none-option-result",
+		partId: "developers",
+		path: "/docs/book/developers/python/none-option-result",
+		aliases: [
+			"/docs/language/developers/python/none-option-result",
+			"/learn/language/developers/python/none-option-result",
+		],
+		sourcePath: "docs/what/language/developers/python/none-option-result.md",
+		questions: [],
+	},
+	{
+		id: "python-exceptions-effects",
+		partId: "developers",
+		path: "/docs/book/developers/python/exceptions-effects",
+		aliases: [
+			"/docs/language/developers/python/exceptions-effects",
+			"/learn/language/developers/python/exceptions-effects",
+		],
+		sourcePath: "docs/what/language/developers/python/exceptions-effects.md",
+		questions: [],
+	},
+	{
+		id: "python-data-variants-patterns",
+		partId: "developers",
+		path: "/docs/book/developers/python/data-variants-patterns",
+		aliases: [
+			"/docs/language/developers/python/data-variants-patterns",
+			"/learn/language/developers/python/data-variants-patterns",
+		],
+		sourcePath:
+			"docs/what/language/developers/python/data-variants-patterns.md",
+		questions: [],
+	},
+	{
+		id: "python-types-generics-protocols",
+		partId: "developers",
+		path: "/docs/book/developers/python/types-generics-protocols",
+		aliases: [
+			"/docs/language/developers/python/types-generics-protocols",
+			"/learn/language/developers/python/types-generics-protocols",
+		],
+		sourcePath:
+			"docs/what/language/developers/python/types-generics-protocols.md",
+		questions: [],
+	},
+	{
+		id: "python-modules-packages",
+		partId: "developers",
+		path: "/docs/book/developers/python/modules-packages",
+		aliases: [
+			"/docs/language/developers/python/modules-packages",
+			"/learn/language/developers/python/modules-packages",
+		],
+		sourcePath: "docs/what/language/developers/python/modules-packages.md",
+		questions: [],
+	},
+	{
+		id: "python-testing-tooling",
+		partId: "developers",
+		path: "/docs/book/developers/python/testing-tooling",
+		aliases: [
+			"/docs/language/developers/python/testing-tooling",
+			"/learn/language/developers/python/testing-tooling",
+		],
+		sourcePath: "docs/what/language/developers/python/testing-tooling.md",
+		questions: [],
+	},
+	{
+		id: "python-native-unsafe-ffi",
+		partId: "developers",
+		path: "/docs/book/developers/python/native-unsafe-ffi",
+		aliases: [
+			"/docs/language/developers/python/native-unsafe-ffi",
+			"/learn/language/developers/python/native-unsafe-ffi",
+		],
+		sourcePath: "docs/what/language/developers/python/native-unsafe-ffi.md",
+		questions: [],
+	},
+	{
 		id: "musi-for-rust-developers",
 		partId: "developers",
 		path: "/docs/book/developers/overview",
@@ -1157,6 +1551,22 @@ const rawBookPages = [
 type BookSectionId = (typeof bookSections)[number]["id"];
 type RawBookPageDefinition = (typeof rawBookPages)[number];
 
+function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
+	if (page.id === "musi-for-rust-developers" || page.id.startsWith("rust-")) {
+		return "developers-rust";
+	}
+	if (page.id.startsWith("csharp-")) {
+		return "developers-csharp";
+	}
+	if (page.id.startsWith("js-ts-")) {
+		return "developers-javascript-typescript";
+	}
+	if (page.id.startsWith("python-")) {
+		return "developers-python";
+	}
+	return "developers-guides";
+}
+
 function sectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 	switch (page.partId) {
 		case "start":
@@ -1189,16 +1599,7 @@ function sectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 			}
 			return "effects-handling";
 		case "developers":
-			if (
-				page.id === "musi-for-rust-developers" ||
-				page.id.startsWith("rust-")
-			) {
-				return "developers-rust";
-			}
-			if (page.id.startsWith("js-ts-")) {
-				return "developers-javascript-typescript";
-			}
-			return "developers-guides";
+			return developerSectionIdForPage(page);
 		case "advanced":
 			if (
 				page.id === "attributes" ||

@@ -204,6 +204,55 @@ describe("content generation", () => {
 		).toBe(false);
 	});
 
+	it("keeps C# guide examples paired with C# snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/csharp")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("csharp-")),
+				page.sourcePath,
+			).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/csharp/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain(".NET 8.0");
+		expect(overviewSource).toContain("C# 12.0");
+	});
+
+	it("keeps Python guide examples paired with Python snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/python")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("python-")),
+				page.sourcePath,
+			).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/python/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("Python 3.14");
+	});
+
 	it("keeps developer guides from redefining stdlib result and option shapes", () => {
 		for (const snippet of contentSnippets) {
 			if (!snippet.evidence.path.startsWith("docs/what/language/developers/")) {

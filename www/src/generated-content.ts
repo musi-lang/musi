@@ -904,7 +904,9 @@ export const renderedDocs = [
 			"developers-guides"
 		],
 		"childIds": [
+			"developers-csharp",
 			"developers-javascript-typescript",
+			"developers-python",
 			"developers-rust"
 		],
 		"partId": "developers",
@@ -1016,6 +1018,66 @@ export const renderedDocs = [
 	},
 	{
 		"locale": "en",
+		"id": "developers-csharp",
+		"kind": "section",
+		"parentId": "developers-guides",
+		"depth": 2,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp"
+		],
+		"childIds": [
+			"csharp-overview",
+			"csharp-values-methods-expressions",
+			"csharp-blocks-control-flow",
+			"csharp-variables-mutation",
+			"csharp-records-classes-objects",
+			"csharp-collections-linq-pipelines",
+			"csharp-null-option-result",
+			"csharp-exceptions-effects",
+			"csharp-unions-pattern-matching",
+			"csharp-generics-interfaces-laws",
+			"csharp-extension-methods-and-calls",
+			"csharp-namespaces-modules-packages",
+			"csharp-testing-tooling",
+			"csharp-unsafe-interop-ffi"
+		],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp",
+		"canonicalPath": "/learn/book/developers/guides/csharp",
+		"aliases": [
+			"/docs/book/developers/guides/csharp",
+			"/learn/book/developers/guides/csharp",
+			"/docs/book/developers/guides/c-sharp",
+			"/learn/book/developers/guides/c-sharp",
+			"/docs/book/developers/csharp",
+			"/learn/book/developers/csharp",
+			"/docs/book/developers/c-sharp",
+			"/learn/book/developers/c-sharp",
+			"/docs/language/developers/csharp",
+			"/learn/language/developers/csharp",
+			"/docs/language/developers/c-sharp",
+			"/learn/language/developers/c-sharp"
+		],
+		"questions": [],
+		"title": "Musi for C# Developers",
+		"description": "Translate .NET 8.0 and C# 12.0 habits into Musi's expression, data, effect, and package model.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 1,
+		"slug": "csharp",
+		"summary": "C#-specific contrasts for methods, records, collections, nullability, exceptions, interfaces, packages, tests, and native boundaries.",
+		"descriptionHtml": "Translate .NET 8.0 and C# 12.0 habits into Musi&#39;s expression, data, effect, and package model.",
+		"headings": [],
+		"html": "<p>Translate .NET 8.0 and C# 12.0 habits into Musi&#39;s expression, data, effect, and package model.</p>",
+		"summaryHtml": "C#-specific contrasts for methods, records, collections, nullability, exceptions, interfaces, packages, tests, and native boundaries."
+	},
+	{
+		"locale": "en",
 		"id": "developers-javascript-typescript",
 		"kind": "section",
 		"parentId": "developers-guides",
@@ -1073,6 +1135,59 @@ export const renderedDocs = [
 		"headings": [],
 		"html": "<p>Translate JavaScript runtime habits and TypeScript 6.0.2 type habits into Musi.</p>",
 		"summaryHtml": "Side-by-side contrasts for objects, functions, unions, generics, promises, modules, and tests."
+	},
+	{
+		"locale": "en",
+		"id": "developers-python",
+		"kind": "section",
+		"parentId": "developers-guides",
+		"depth": 2,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python"
+		],
+		"childIds": [
+			"python-overview",
+			"python-values-functions",
+			"python-blocks-control-flow",
+			"python-names-mutation",
+			"python-records-objects-dicts",
+			"python-collections-pipelines",
+			"python-none-option-result",
+			"python-exceptions-effects",
+			"python-data-variants-patterns",
+			"python-types-generics-protocols",
+			"python-modules-packages",
+			"python-testing-tooling",
+			"python-native-unsafe-ffi"
+		],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python",
+		"canonicalPath": "/learn/book/developers/guides/python",
+		"aliases": [
+			"/docs/book/developers/guides/python",
+			"/learn/book/developers/guides/python",
+			"/docs/book/developers/python",
+			"/learn/book/developers/python",
+			"/docs/language/developers/python",
+			"/learn/language/developers/python"
+		],
+		"questions": [],
+		"title": "Musi for Python Developers",
+		"description": "Translate Python 3.14 habits into Musi's expression, data, effect, and package model.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 1,
+		"slug": "python",
+		"summary": "Python-specific contrasts for functions, blocks, objects, collections, errors, protocols, modules, tests, and native boundaries.",
+		"descriptionHtml": "Translate Python 3.14 habits into Musi&#39;s expression, data, effect, and package model.",
+		"headings": [],
+		"html": "<p>Translate Python 3.14 habits into Musi&#39;s expression, data, effect, and package model.</p>",
+		"summaryHtml": "Python-specific contrasts for functions, blocks, objects, collections, errors, protocols, modules, tests, and native boundaries."
 	},
 	{
 		"locale": "en",
@@ -3408,6 +3523,709 @@ export const renderedDocs = [
 	},
 	{
 		"locale": "en",
+		"id": "csharp-overview",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-overview"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/overview",
+		"canonicalPath": "/learn/book/developers/guides/csharp/overview",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/overview",
+			"/learn/book/developers/guides/csharp/overview",
+			"/docs/book/developers/csharp/overview",
+			"/learn/book/developers/csharp/overview",
+			"/docs/book/developers/c-sharp/overview",
+			"/learn/book/developers/c-sharp/overview",
+			"/docs/language/developers/csharp/overview",
+			"/learn/language/developers/csharp/overview",
+			"/docs/language/developers/c-sharp/overview",
+			"/learn/language/developers/c-sharp/overview"
+		],
+		"questions": [],
+		"title": "Overview",
+		"description": "Translate .NET 8.0 and C# 12.0 habits into Musi code with side-by-side examples.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 1,
+		"slug": "overview",
+		"summary": "Start from .NET 8.0 and C# 12.0 habits, then read the equivalent Musi expression, data, effect, and package shapes.",
+		"descriptionHtml": "Translate .NET 8.0 and C# 12.0 habits into Musi code with side-by-side examples.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "first-translation",
+				"text": "First translation"
+			},
+			{
+				"depth": 2,
+				"id": "reading-path",
+				"text": "Reading path"
+			},
+			{
+				"depth": 2,
+				"id": "c-habits-that-transfer",
+				"text": "C# habits that transfer"
+			},
+			{
+				"depth": 2,
+				"id": "c-habits-to-translate",
+				"text": "C# habits to translate"
+			}
+		],
+		"html": "<p>.NET 8.0 and C# 12.0 are the comparison points for this guide. Each page starts with C# code, then shows Musi code with the same names and the same job.</p>\n<p>C# readers often bring methods, classes, records, nullable references, exceptions, async tasks, interfaces, extension methods, namespaces, and native interop. Musi keeps those jobs recognizable while making values, effects, and data shape explicit.</p>\n<h2 id=\"first-translation\"><a href=\"#first-translation\">First translation</a></h2><p>C# can write a small expression-bodied method:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> basePrice</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> fee</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> answer</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><p>Musi writes the same calculation as a <code>let</code> function. The final expression leaves the value.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (basePrice : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre></section></div><p>Read it like a service counter: arguments arrive, one expression calculates the receipt, and the final value leaves the counter.</p>\n<h2 id=\"reading-path\"><a href=\"#reading-path\">Reading path</a></h2><ul>\n<li><a href=\"/learn/book/developers/guides/csharp/values-methods-expressions\">Values, Methods, and Expressions</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/blocks-control-flow\">Blocks and Control Flow</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/variables-mutation\">Variables and Mutation</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/records-classes-objects\">Records, Classes, and Objects</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/collections-linq-pipelines\">Collections, LINQ, and Pipelines</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/null-option-result\">Null, Option, and Result</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/exceptions-effects\">Exceptions, Results, and Effects</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/unions-pattern-matching\">Unions and Pattern Matching</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/generics-interfaces-laws\">Generics, Interfaces, and Laws</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/extension-methods-and-calls\">Extension Methods and Calls</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/namespaces-modules-packages\">Namespaces, Modules, and Packages</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/testing-tooling\">Testing and Tooling</a></li>\n<li><a href=\"/learn/book/developers/guides/csharp/unsafe-interop-ffi\">Unsafe, Interop, and FFI</a></li>\n</ul>\n<h2 id=\"c-habits-that-transfer\"><a href=\"#c-habits-that-transfer\">C# habits that transfer</a></h2><ul>\n<li>name domain types clearly</li>\n<li>keep boundary work visible</li>\n<li>use static types to explain values</li>\n<li>keep tests close to behavior</li>\n<li>use small functions when a calculation has a name</li>\n</ul>\n<h2 id=\"c-habits-to-translate\"><a href=\"#c-habits-to-translate\">C# habits to translate</a></h2><ul>\n<li><code>return</code> becomes the final expression</li>\n<li>records and classes split into records, <code>data</code>, classes, and instances by job</li>\n<li>nullable values become <code>Option</code></li>\n<li>ordinary recoverable exceptions become <code>Result</code></li>\n<li>async and outside work become effects or stdlib runtime helpers</li>\n<li>interfaces become classes, instances, and laws when behavior needs rules</li>\n<li>native interop stays behind <code>foreign</code> and <code>unsafe</code></li>\n</ul>\n",
+		"summaryHtml": "Start from .NET 8.0 and C# 12.0 habits, then read the equivalent Musi expression, data, effect, and package shapes."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-values-methods-expressions",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-values-methods-expressions"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/values-methods-expressions",
+		"canonicalPath": "/learn/book/developers/guides/csharp/values-methods-expressions",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/values-methods-expressions",
+			"/learn/book/developers/guides/csharp/values-methods-expressions",
+			"/docs/book/developers/csharp/values-methods-expressions",
+			"/learn/book/developers/csharp/values-methods-expressions",
+			"/docs/book/developers/c-sharp/values-methods-expressions",
+			"/learn/book/developers/c-sharp/values-methods-expressions",
+			"/docs/language/developers/csharp/values-methods-expressions",
+			"/learn/language/developers/csharp/values-methods-expressions",
+			"/docs/language/developers/c-sharp/values-methods-expressions",
+			"/learn/language/developers/c-sharp/values-methods-expressions"
+		],
+		"questions": [],
+		"title": "Values, Methods, and Expressions",
+		"description": "Translate C# methods, expression-bodied members, and return into Musi let functions and final expressions.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 2,
+		"slug": "values-methods-expressions",
+		"summary": "Use let functions and final expressions where C# uses methods and return.",
+		"descriptionHtml": "Translate C# methods, expression-bodied members, and return into Musi let functions and final expressions.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "named-arguments",
+				"text": "Named arguments"
+			}
+		],
+		"html": "<p>C# methods name work. Expression-bodied methods make a simple calculation compact:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> basePrice</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> fee</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> answer</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre><p>Musi uses <code>let</code> to name functions. The body can be the expression itself.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (basePrice : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre></section></div><p>No <code>return</code> is needed for this shape. The expression after <code>:=</code> is the value.</p>\n<h2 id=\"named-arguments\"><a href=\"#named-arguments\">Named arguments</a></h2><p>C# named arguments make call sites clearer:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">bool</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> secure</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> selected</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">secure</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">true</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected;</span></span></code></pre><p>Musi uses named arguments for the same reading job.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (port : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected;</span></span></code></pre></section></div><p>Use named calls when two adjacent values could be confused.</p>\n",
+		"summaryHtml": "Use let functions and final expressions where C# uses methods and return."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-blocks-control-flow",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-blocks-control-flow"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/blocks-control-flow",
+		"canonicalPath": "/learn/book/developers/guides/csharp/blocks-control-flow",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/blocks-control-flow",
+			"/learn/book/developers/guides/csharp/blocks-control-flow",
+			"/docs/book/developers/csharp/blocks-control-flow",
+			"/learn/book/developers/csharp/blocks-control-flow",
+			"/docs/book/developers/c-sharp/blocks-control-flow",
+			"/learn/book/developers/c-sharp/blocks-control-flow",
+			"/docs/language/developers/csharp/blocks-control-flow",
+			"/learn/language/developers/csharp/blocks-control-flow",
+			"/docs/language/developers/c-sharp/blocks-control-flow",
+			"/learn/language/developers/c-sharp/blocks-control-flow"
+		],
+		"questions": [],
+		"title": "Blocks and Control Flow",
+		"description": "Translate C# statement blocks, switch expressions, and loops into Musi blocks, match arms, and recursion.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 3,
+		"slug": "blocks-control-flow",
+		"summary": "Use expression blocks, match arms, and let rec for repeated work.",
+		"descriptionHtml": "Translate C# statement blocks, switch expressions, and loops into Musi blocks, match arms, and recursion.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "repetition",
+				"text": "Repetition"
+			}
+		],
+		"html": "<p>C# statement blocks often collect local setup before a <code>return</code>:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> InvoiceTotal</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> basePrice</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> fee</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#622CBC;--shiki-dark:#B392F0\">InvoiceTotal</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">();</span></span></code></pre><p>Musi blocks produce a value. The final expression is what leaves the block.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> invoiceTotal</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  (</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#622CBC;--shiki-dark:#B392F0\">invoiceTotal</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">();</span></span></code></pre></section></div><p>Think of the block as a workbench. Local names stay on the bench; the final expression is the finished part.</p>\n<h2 id=\"repetition\"><a href=\"#repetition\">Repetition</a></h2><p>C# loops can update local state:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> TotalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> rounds</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> seats</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    for</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> remaining</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> rounds; remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">; remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">-=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    }</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span></code></pre><p>Musi gives repeated work a name with <code>let rec</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> rec</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (remaining : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, seats : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> remaining</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">-</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#622CBC;--shiki-dark:#B392F0\">totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span></code></pre></section></div><p>The <code>match</code> arms describe the two roads: stop, or continue with less remaining work.</p>\n",
+		"summaryHtml": "Use expression blocks, match arms, and let rec for repeated work."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-variables-mutation",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-variables-mutation"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/variables-mutation",
+		"canonicalPath": "/learn/book/developers/guides/csharp/variables-mutation",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/variables-mutation",
+			"/learn/book/developers/guides/csharp/variables-mutation",
+			"/docs/book/developers/csharp/variables-mutation",
+			"/learn/book/developers/csharp/variables-mutation",
+			"/docs/book/developers/c-sharp/variables-mutation",
+			"/learn/book/developers/c-sharp/variables-mutation",
+			"/docs/language/developers/csharp/variables-mutation",
+			"/learn/language/developers/csharp/variables-mutation",
+			"/docs/language/developers/c-sharp/variables-mutation",
+			"/learn/language/developers/c-sharp/variables-mutation"
+		],
+		"questions": [],
+		"title": "Variables and Mutation",
+		"description": "Translate C# locals, var, and assignment into Musi names, mut values, and fresh bindings.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 4,
+		"slug": "variables-mutation",
+		"summary": "Use mut for real state changes and fresh names for ordinary derived values.",
+		"descriptionHtml": "Translate C# locals, var, and assignment into Musi names, mut values, and fresh bindings.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "fresh-values",
+				"text": "Fresh values"
+			}
+		],
+		"html": "<p>C# local variables can be reassigned:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> visits</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> nextVisits</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">nextVisits;</span></span></code></pre><p>Musi marks the value that can change with <code>mut</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> mut</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> nextVisits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">nextVisits;</span></span></code></pre></section></div><p>Use <code>mut</code> like a visible dial on a machine. Readers know which dial can move.</p>\n<h2 id=\"fresh-values\"><a href=\"#fresh-values\">Fresh values</a></h2><p>C# often uses <code>var</code> for derived values:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> basePrice</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> total</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total;</span></span></code></pre><p>Musi fresh bindings read the same way.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> total </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> basePrice </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total;</span></span></code></pre></section></div><p>Use fresh names when a later value is another fact, not a state change.</p>\n",
+		"summaryHtml": "Use mut for real state changes and fresh names for ordinary derived values."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-records-classes-objects",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-records-classes-objects"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/records-classes-objects",
+		"canonicalPath": "/learn/book/developers/guides/csharp/records-classes-objects",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/records-classes-objects",
+			"/learn/book/developers/guides/csharp/records-classes-objects",
+			"/docs/book/developers/csharp/records-classes-objects",
+			"/learn/book/developers/csharp/records-classes-objects",
+			"/docs/book/developers/c-sharp/records-classes-objects",
+			"/learn/book/developers/c-sharp/records-classes-objects",
+			"/docs/language/developers/csharp/records-classes-objects",
+			"/learn/language/developers/csharp/records-classes-objects",
+			"/docs/language/developers/c-sharp/records-classes-objects",
+			"/learn/language/developers/c-sharp/records-classes-objects"
+		],
+		"questions": [],
+		"title": "Records, Classes, and Objects",
+		"description": "Translate C# records, classes, and object updates into Musi data definitions and records.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 5,
+		"slug": "records-classes-objects",
+		"summary": "Use data definitions for named shapes and records for named field values.",
+		"descriptionHtml": "Translate C# records, classes, and object updates into Musi data definitions and records.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "class-habit",
+				"text": "Class habit"
+			}
+		],
+		"html": "<p>C# records give a named shape and a copy-update form:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> sealed</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> record</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Endpoint</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">string</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Host</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">bool</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Secure</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> local</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> new</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Endpoint</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"localhost\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">false</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> publicEndpoint</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> local </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">with</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> { Host </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"api.example.com\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, Secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> true</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">publicEndpoint.Port;</span></span></code></pre><p>Musi names the shape with <code>data</code> and updates field values with record spread.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Endpoint</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  host : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  port : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  secure : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> local </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  host </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"localhost\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> publicEndpoint </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">...</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">local, host </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"api.example.com\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">publicEndpoint.port;</span></span></code></pre></section></div><p>Use records like a badge: each field name says what role the value plays.</p>\n<h2 id=\"class-habit\"><a href=\"#class-habit\">Class habit</a></h2><p>C# classes often mix identity, mutation, and behavior. In Musi, choose the smallest shape that matches the job: a record for fields, a <code>data</code> variant for cases, and a class plus instance for shared behavior.</p>\n",
+		"summaryHtml": "Use data definitions for named shapes and records for named field values."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-collections-linq-pipelines",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-collections-linq-pipelines"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/collections-linq-pipelines",
+		"canonicalPath": "/learn/book/developers/guides/csharp/collections-linq-pipelines",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/collections-linq-pipelines",
+			"/learn/book/developers/guides/csharp/collections-linq-pipelines",
+			"/docs/book/developers/csharp/collections-linq-pipelines",
+			"/learn/book/developers/csharp/collections-linq-pipelines",
+			"/docs/book/developers/c-sharp/collections-linq-pipelines",
+			"/learn/book/developers/c-sharp/collections-linq-pipelines",
+			"/docs/language/developers/csharp/collections-linq-pipelines",
+			"/learn/language/developers/csharp/collections-linq-pipelines",
+			"/docs/language/developers/c-sharp/collections-linq-pipelines",
+			"/learn/language/developers/c-sharp/collections-linq-pipelines"
+		],
+		"questions": [],
+		"title": "Collections, LINQ, and Pipelines",
+		"description": "Translate C# collection and LINQ habits into Musi arrays, stdlib helpers, and pipelines.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 6,
+		"slug": "collections-linq-pipelines",
+		"summary": "Use arrays and pipeline-first stdlib helpers for visible collection flow.",
+		"descriptionHtml": "Translate C# collection and LINQ habits into Musi arrays, stdlib helpers, and pipelines.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "linq-habit",
+				"text": "LINQ habit"
+			}
+		],
+		"html": "<p>C# 12.0 collection expressions make small arrays direct:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[] </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">ports</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[] </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">visible</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">..</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visible;</span></span></code></pre><p>Musi arrays use <code>[]</code>, and pipelines keep transformations left to right.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/iter\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visible </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">append</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">collect</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]();</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visible;</span></span></code></pre></section></div><p>Read the pipeline like a conveyor: the collection enters on the left, each helper does one step, and the final value leaves on the right.</p>\n<h2 id=\"linq-habit\"><a href=\"#linq-habit\">LINQ habit</a></h2><p>LINQ chains are useful because readers can follow each operation. Musi pipelines keep that same shape, with the data flow visible at the beginning of each line.</p>\n",
+		"summaryHtml": "Use arrays and pipeline-first stdlib helpers for visible collection flow."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-null-option-result",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-null-option-result"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/null-option-result",
+		"canonicalPath": "/learn/book/developers/guides/csharp/null-option-result",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/null-option-result",
+			"/learn/book/developers/guides/csharp/null-option-result",
+			"/docs/book/developers/csharp/null-option-result",
+			"/learn/book/developers/csharp/null-option-result",
+			"/docs/book/developers/c-sharp/null-option-result",
+			"/learn/book/developers/c-sharp/null-option-result",
+			"/docs/language/developers/csharp/null-option-result",
+			"/learn/language/developers/csharp/null-option-result",
+			"/docs/language/developers/c-sharp/null-option-result",
+			"/learn/language/developers/c-sharp/null-option-result"
+		],
+		"questions": [],
+		"title": "Null, Option, and Result",
+		"description": "Translate C# nullable reference habits into Musi Option and Result values.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 7,
+		"slug": "null-option-result",
+		"summary": "Use Option for maybe-present values and Result for success-or-error data.",
+		"descriptionHtml": "Translate C# nullable reference habits into Musi Option and Result values.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "result-for-ordinary-failure",
+				"text": "Result for ordinary failure"
+			}
+		],
+		"html": "<p>C# nullable references make absence visible in the type:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">? </span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">LookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">string</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> name</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    name </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">==</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"admin\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> ?</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 9000</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> null</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> port</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> LookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"web\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">??</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><p>Musi uses <code>Option</code> to make the same absence explicit.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> lookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (name : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> name</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"admin\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">some</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">none</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> lookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"web\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>The function reports whether a value exists. The caller chooses the fallback.</p>\n<h2 id=\"result-for-ordinary-failure\"><a href=\"#result-for-ordinary-failure\">Result for ordinary failure</a></h2><p>When a C# API would return a success value or an error value, Musi can use <code>Result</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/result\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (text : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> text</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"8080\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">ok</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">err</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"invalid port\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"abc\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Use <code>Option</code> for maybe-present values. Use <code>Result</code> when the failure carries information.</p>\n",
+		"summaryHtml": "Use Option for maybe-present values and Result for success-or-error data."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-exceptions-effects",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-exceptions-effects"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/exceptions-effects",
+		"canonicalPath": "/learn/book/developers/guides/csharp/exceptions-effects",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/exceptions-effects",
+			"/learn/book/developers/guides/csharp/exceptions-effects",
+			"/docs/book/developers/csharp/exceptions-effects",
+			"/learn/book/developers/csharp/exceptions-effects",
+			"/docs/book/developers/c-sharp/exceptions-effects",
+			"/learn/book/developers/c-sharp/exceptions-effects",
+			"/docs/language/developers/csharp/exceptions-effects",
+			"/learn/language/developers/csharp/exceptions-effects",
+			"/docs/language/developers/c-sharp/exceptions-effects",
+			"/learn/language/developers/c-sharp/exceptions-effects"
+		],
+		"questions": [],
+		"title": "Exceptions, Results, and Effects",
+		"description": "Translate C# exceptions, async tasks, and outside work into Musi Result values and effectful boundaries.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 8,
+		"slug": "exceptions-effects",
+		"summary": "Use Result for recoverable failure and effects or stdlib helpers for requested outside work.",
+		"descriptionHtml": "Translate C# exceptions, async tasks, and outside work into Musi Result values and effectful boundaries.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "async-and-outside-work",
+				"text": "Async and outside work"
+			}
+		],
+		"html": "<p>C# exceptions can move failure out of the return path:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> ParsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">string</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> text</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    try</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        return</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">Parse</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(text);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    }</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    catch</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">FormatException</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    }</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span></code></pre><p>Musi keeps ordinary failure in a <code>Result</code> value.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/result\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (text : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> text</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"8080\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">ok</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">err</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"format error\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"abc\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Use this when bad input is part of normal use, not a crash.</p>\n<h2 id=\"async-and-outside-work\"><a href=\"#async-and-outside-work\">Async and outside work</a></h2><p>C# <code>Task</code>, <code>async</code>, I/O, timers, and process calls reach outside a pure calculation. Musi keeps those edges visible through stdlib modules and effects.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Io</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/io\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> name </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Io</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">promptTrimmed</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"name> \"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Io</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">writeLine</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(name);</span></span></code></pre></section></div><p>The import names the outside capability. The call site shows where input and output happen.</p>\n",
+		"summaryHtml": "Use Result for recoverable failure and effects or stdlib helpers for requested outside work."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-unions-pattern-matching",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-unions-pattern-matching"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/unions-pattern-matching",
+		"canonicalPath": "/learn/book/developers/guides/csharp/unions-pattern-matching",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/unions-pattern-matching",
+			"/learn/book/developers/guides/csharp/unions-pattern-matching",
+			"/docs/book/developers/csharp/unions-pattern-matching",
+			"/learn/book/developers/csharp/unions-pattern-matching",
+			"/docs/book/developers/c-sharp/unions-pattern-matching",
+			"/learn/book/developers/c-sharp/unions-pattern-matching",
+			"/docs/language/developers/csharp/unions-pattern-matching",
+			"/learn/language/developers/csharp/unions-pattern-matching",
+			"/docs/language/developers/c-sharp/unions-pattern-matching",
+			"/learn/language/developers/c-sharp/unions-pattern-matching"
+		],
+		"questions": [],
+		"title": "Unions and Pattern Matching",
+		"description": "Translate C# switch expressions and inheritance-based cases into Musi data variants and match arms.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 9,
+		"slug": "unions-pattern-matching",
+		"summary": "Use data variants when each case has a name and a different payload.",
+		"descriptionHtml": "Translate C# switch expressions and inheritance-based cases into Musi data variants and match arms.",
+		"headings": [],
+		"html": "<p>C# often models cases with a base type and derived records:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">abstract</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> record</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> TaskState</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">sealed</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> record</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Waiting</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">TaskState</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">sealed</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> record</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Id</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">TaskState</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">sealed</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> record</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Code</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">TaskState</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#702C00;--shiki-dark:#B392F0\">TaskState</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> state</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> new</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">42</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> selected</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> state </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">switch</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#702C00;--shiki-dark:#B392F0\">    Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> id</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> id,</span></span>\n<span class=\"line\"><span style=\"color:#702C00;--shiki-dark:#B392F0\">    Waiting</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#702C00;--shiki-dark:#B392F0\">    Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> code</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> code,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span></code></pre><p>Musi names those cases directly in one <code>data</code> definition.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> TaskState</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Waiting</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">id</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">code</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> state : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">TaskState</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> .Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(id </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> state</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(id) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> id</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Waiting</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(code) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> code</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span></code></pre></section></div><p>Use variants when the set of cases matters more than object inheritance.</p>\n",
+		"summaryHtml": "Use data variants when each case has a name and a different payload."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-generics-interfaces-laws",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-generics-interfaces-laws"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/generics-interfaces-laws",
+		"canonicalPath": "/learn/book/developers/guides/csharp/generics-interfaces-laws",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/generics-interfaces-laws",
+			"/learn/book/developers/guides/csharp/generics-interfaces-laws",
+			"/docs/book/developers/csharp/generics-interfaces-laws",
+			"/learn/book/developers/csharp/generics-interfaces-laws",
+			"/docs/book/developers/c-sharp/generics-interfaces-laws",
+			"/learn/book/developers/c-sharp/generics-interfaces-laws",
+			"/docs/language/developers/csharp/generics-interfaces-laws",
+			"/learn/language/developers/csharp/generics-interfaces-laws",
+			"/docs/language/developers/c-sharp/generics-interfaces-laws",
+			"/learn/language/developers/c-sharp/generics-interfaces-laws"
+		],
+		"questions": [],
+		"title": "Generics, Interfaces, and Laws",
+		"description": "Translate C# generics, interfaces, and constraints into Musi type parameters, classes, instances, and laws.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 10,
+		"slug": "generics-interfaces-laws",
+		"summary": "Use generics for reusable shape and classes with laws for shared behavior with rules.",
+		"descriptionHtml": "Translate C# generics, interfaces, and constraints into Musi type parameters, classes, instances, and laws.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "interfaces-and-laws",
+				"text": "Interfaces and laws"
+			}
+		],
+		"html": "<p>C# generics let one function keep the same shape for many types:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">static</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> T</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">&#x3C;</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">>(</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> input</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> input;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> port</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> Identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">&#x3C;</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">>(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><p>Musi writes type parameters beside the function name.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> input;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>The function promises to return the same type it receives.</p>\n<h2 id=\"interfaces-and-laws\"><a href=\"#interfaces-and-laws\">Interfaces and laws</a></h2><p>C# interfaces name behavior. Musi classes name behavior too, and laws can name rules that valid instances should satisfy.</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> interface</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> IVehicle</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Wheels</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">get</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">; }</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span></code></pre><p>Musi separates the behavior from the instance that provides it.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Vehicle</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> class</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> wheels</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(self : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  law</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> atLeastFourWheels</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(vehicle : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> vehicle.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">wheels</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">>=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Car</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Car</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> carVehicle </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> instance</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Vehicle</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Car</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> wheels</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(self : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Car</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span></code></pre></section></div><p>A car is a vehicle, and the law says what this model expects from valid vehicle instances.</p>\n",
+		"summaryHtml": "Use generics for reusable shape and classes with laws for shared behavior with rules."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-extension-methods-and-calls",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-extension-methods-and-calls"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/extension-methods-and-calls",
+		"canonicalPath": "/learn/book/developers/guides/csharp/extension-methods-and-calls",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/extension-methods-and-calls",
+			"/learn/book/developers/guides/csharp/extension-methods-and-calls",
+			"/docs/book/developers/csharp/extension-methods-and-calls",
+			"/learn/book/developers/csharp/extension-methods-and-calls",
+			"/docs/book/developers/c-sharp/extension-methods-and-calls",
+			"/learn/book/developers/c-sharp/extension-methods-and-calls",
+			"/docs/language/developers/csharp/extension-methods-and-calls",
+			"/learn/language/developers/csharp/extension-methods-and-calls",
+			"/docs/language/developers/c-sharp/extension-methods-and-calls",
+			"/learn/language/developers/c-sharp/extension-methods-and-calls"
+		],
+		"questions": [],
+		"title": "Extension Methods and Calls",
+		"description": "Translate C# extension method call habits into Musi receiver methods and ordinary calls.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 11,
+		"slug": "extension-methods-and-calls",
+		"summary": "Use receiver methods when a call should read from the value outward.",
+		"descriptionHtml": "Translate C# extension method call habits into Musi receiver methods and ordinary calls.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "ordinary-calls-still-fit",
+				"text": "Ordinary calls still fit"
+			}
+		],
+		"html": "<p>C# extension methods let a static function read like a method on the receiver:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> class</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> PortExtensions</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> WithOffset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">this</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">int</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> offset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> offset;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> publicPort</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">WithOffset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">publicPort;</span></span></code></pre><p>Musi receiver methods serve the same reading goal.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : Int).</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">withOffset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (offset : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> offset;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> publicPort </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">withOffset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">publicPort;</span></span></code></pre></section></div><p>Use a receiver method when the left-side value is the thing being described.</p>\n<h2 id=\"ordinary-calls-still-fit\"><a href=\"#ordinary-calls-still-fit\">Ordinary calls still fit</a></h2><p>Not every helper should be a method. If the operation belongs to a module or package rather than one receiver value, keep it as a plain function call.</p>\n",
+		"summaryHtml": "Use receiver methods when a call should read from the value outward."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-namespaces-modules-packages",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-namespaces-modules-packages"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/namespaces-modules-packages",
+		"canonicalPath": "/learn/book/developers/guides/csharp/namespaces-modules-packages",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/namespaces-modules-packages",
+			"/learn/book/developers/guides/csharp/namespaces-modules-packages",
+			"/docs/book/developers/csharp/namespaces-modules-packages",
+			"/learn/book/developers/csharp/namespaces-modules-packages",
+			"/docs/book/developers/c-sharp/namespaces-modules-packages",
+			"/learn/book/developers/c-sharp/namespaces-modules-packages",
+			"/docs/language/developers/csharp/namespaces-modules-packages",
+			"/learn/language/developers/csharp/namespaces-modules-packages",
+			"/docs/language/developers/c-sharp/namespaces-modules-packages",
+			"/learn/language/developers/c-sharp/namespaces-modules-packages"
+		],
+		"questions": [],
+		"title": "Namespaces, Modules, and Packages",
+		"description": "Translate C# namespaces, files, and NuGet-style package habits into Musi exports, imports, and package paths.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 12,
+		"slug": "namespaces-modules-packages",
+		"summary": "Use export for public names and import for package or relative module boundaries.",
+		"descriptionHtml": "Translate C# namespaces, files, and NuGet-style package habits into Musi exports, imports, and package paths.",
+		"headings": [],
+		"html": "<p>C# namespaces and projects organize public APIs:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">namespace</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Ports</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> class</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Defaults</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> DefaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span></code></pre><p>Musi marks public names with <code>export</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span></code></pre></section></div><p>Another file imports the module and calls the exported function.</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">using</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Ports</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">var</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> port</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> Defaults.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">DefaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">();</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre><p>Musi imports the module value and reads exported names from it.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Defaults</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"./defaults\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Defaults</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">();</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Package imports such as <code>@std/io</code> are for shared packages. Relative imports such as <code>./ports</code> are for nearby project files.</p>\n",
+		"summaryHtml": "Use export for public names and import for package or relative module boundaries."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-testing-tooling",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-testing-tooling"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/testing-tooling",
+		"canonicalPath": "/learn/book/developers/guides/csharp/testing-tooling",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/testing-tooling",
+			"/learn/book/developers/guides/csharp/testing-tooling",
+			"/docs/book/developers/csharp/testing-tooling",
+			"/learn/book/developers/csharp/testing-tooling",
+			"/docs/book/developers/c-sharp/testing-tooling",
+			"/learn/book/developers/c-sharp/testing-tooling",
+			"/docs/language/developers/csharp/testing-tooling",
+			"/learn/language/developers/csharp/testing-tooling",
+			"/docs/language/developers/c-sharp/testing-tooling",
+			"/learn/language/developers/c-sharp/testing-tooling"
+		],
+		"questions": [],
+		"title": "Testing and Tooling",
+		"description": "Translate C# test habits into Musi std testing helpers and command-line checks.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 13,
+		"slug": "testing-tooling",
+		"summary": "Use @std/testing to keep tests close to behavior.",
+		"descriptionHtml": "Translate C# test habits into Musi std testing helpers and command-line checks.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "tooling-habit",
+				"text": "Tooling habit"
+			}
+		],
+		"html": "<p>C# tests commonly name a behavior and assert the result:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Fact</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">public</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> void</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> DefaultPortIsHttpAlt</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    Assert.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">Equal</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">DefaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">());</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span></code></pre><p>Musi uses <code>@std/testing</code> for named suites and cases.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> test</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  (</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">describe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"ports\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">it</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"default port is http alt\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(), </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">));</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">endDescribe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span></code></pre></section></div><p>A test should read like a receipt: name the behavior, run the check, and leave a pass or fail value.</p>\n<h2 id=\"tooling-habit\"><a href=\"#tooling-habit\">Tooling habit</a></h2><p>.NET projects commonly separate restore, build, test, and format steps. Musi projects should keep the same habit: use commands that make syntax, package shape, and test behavior visible.</p>\n",
+		"summaryHtml": "Use @std/testing to keep tests close to behavior."
+	},
+	{
+		"locale": "en",
+		"id": "csharp-unsafe-interop-ffi",
+		"kind": "chapter",
+		"parentId": "developers-csharp",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-csharp",
+			"csharp-unsafe-interop-ffi"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-csharp",
+		"sectionTitle": "Musi for C# Developers",
+		"path": "/learn/book/developers/guides/csharp/unsafe-interop-ffi",
+		"canonicalPath": "/learn/book/developers/guides/csharp/unsafe-interop-ffi",
+		"aliases": [
+			"/docs/book/developers/guides/csharp/unsafe-interop-ffi",
+			"/learn/book/developers/guides/csharp/unsafe-interop-ffi",
+			"/docs/book/developers/csharp/unsafe-interop-ffi",
+			"/learn/book/developers/csharp/unsafe-interop-ffi",
+			"/docs/book/developers/c-sharp/unsafe-interop-ffi",
+			"/learn/book/developers/c-sharp/unsafe-interop-ffi",
+			"/docs/language/developers/csharp/unsafe-interop-ffi",
+			"/learn/language/developers/csharp/unsafe-interop-ffi",
+			"/docs/language/developers/c-sharp/unsafe-interop-ffi",
+			"/learn/language/developers/c-sharp/unsafe-interop-ffi"
+		],
+		"questions": [],
+		"title": "Unsafe, Interop, and FFI",
+		"description": "Translate C# unsafe code and P/Invoke habits into Musi foreign declarations, Ptr values, and unsafe blocks.",
+		"group": "Musi for Developers",
+		"section": "C# Developers",
+		"order": 14,
+		"slug": "unsafe-interop-ffi",
+		"summary": "Keep native calls explicit with foreign declarations, @std/ffi types, and unsafe blocks.",
+		"descriptionHtml": "Translate C# unsafe code and P/Invoke habits into Musi foreign declarations, Ptr values, and unsafe blocks.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "pointer-helpers",
+				"text": "Pointer helpers"
+			}
+		],
+		"html": "<p>C# can cross native boundaries with P/Invoke and unsafe code:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">using</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> System</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Runtime</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">InteropServices</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">LibraryImport</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"c\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)]</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">internal</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> static</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> partial</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> int</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">IntPtr</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> message</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span></code></pre><p>Musi declares the foreign function and keeps the call behind <code>unsafe</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/ffi\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">foreign</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (message : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CInt</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> announce</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (message : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CInt</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  unsafe </span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{ </span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">puts</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(message); };</span></span></code></pre></section></div><p><code>foreign &quot;c&quot;</code> names the native calling world. <code>unsafe { ... }</code> marks the operation that needs extra care.</p>\n<h2 id=\"pointer-helpers\"><a href=\"#pointer-helpers\">Pointer helpers</a></h2><p>Use <code>@std/ffi</code> pointer helpers when the native boundary gives you pointer-shaped values.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/ffi\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> pointer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">null</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]();</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> samePointer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> unsafe </span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{ </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">offset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](pointer, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">); };</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">isNull</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](samePointer);</span></span></code></pre></section></div><p>Keep raw native work small. Convert it to ordinary Musi data before passing values deeper into the program.</p>\n",
+		"summaryHtml": "Keep native calls explicit with foreign declarations, @std/ffi types, and unsafe blocks."
+	},
+	{
+		"locale": "en",
 		"id": "js-ts-overview",
 		"kind": "chapter",
 		"parentId": "developers-javascript-typescript",
@@ -3984,6 +4802,607 @@ export const renderedDocs = [
 		"headings": [],
 		"html": "<p>JavaScript and TypeScript tests usually name behavior, call code, and assert a result:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">function</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> number</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#622CBC;--shiki-dark:#B392F0\">test</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"default port is http alt\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, () </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#622CBC;--shiki-dark:#B392F0\">  expect</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()).</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">});</span></span></code></pre><p>Musi uses <code>@std/testing</code> for the same shape.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> test</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  (</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">describe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"ports\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">it</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"default port is http alt\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(), </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">));</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">endDescribe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span></code></pre></section></div>\n",
 		"summaryHtml": "Use <code>@std/testing</code> for small package tests that name behavior and return test results."
+	},
+	{
+		"locale": "en",
+		"id": "python-overview",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-overview"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/overview",
+		"canonicalPath": "/learn/book/developers/guides/python/overview",
+		"aliases": [
+			"/docs/book/developers/guides/python/overview",
+			"/learn/book/developers/guides/python/overview",
+			"/docs/book/developers/python/overview",
+			"/learn/book/developers/python/overview",
+			"/docs/language/developers/python/overview",
+			"/learn/language/developers/python/overview"
+		],
+		"questions": [],
+		"title": "Overview",
+		"description": "Translate Python 3.14 habits into Musi code with side-by-side examples.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 1,
+		"slug": "overview",
+		"summary": "Start from Python habits, then read the equivalent Musi expression, data, effect, and package shapes.",
+		"descriptionHtml": "Translate Python 3.14 habits into Musi code with side-by-side examples.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "first-translation",
+				"text": "First translation"
+			},
+			{
+				"depth": 2,
+				"id": "reading-path",
+				"text": "Reading path"
+			},
+			{
+				"depth": 2,
+				"id": "python-habits-that-transfer",
+				"text": "Python habits that transfer"
+			},
+			{
+				"depth": 2,
+				"id": "python-habits-to-translate",
+				"text": "Python habits to translate"
+			}
+		],
+		"html": "<p>Python 3.14 is the comparison point for this guide. Each page starts with Python code, then shows Musi code with the same names and the same job.</p>\n<p>Python readers often rely on indentation, dynamic objects, <code>None</code>, exceptions, and flexible imports. Musi keeps the same practical goals, but makes value flow, data shape, and outside work visible in the code.</p>\n<h2 id=\"first-translation\"><a href=\"#first-translation\">First translation</a></h2><p>Python often starts with a small function and a result binding:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(base: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> total(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer</span></span></code></pre><p>Musi writes the same calculation as a <code>let</code> function. The final expression leaves the value.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (base : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre></section></div><p>Read it like a kitchen ticket: inputs enter the named station, the expression at the end is the dish that leaves.</p>\n<h2 id=\"reading-path\"><a href=\"#reading-path\">Reading path</a></h2><ul>\n<li><a href=\"/learn/book/developers/guides/python/values-functions\">Values, Functions, and Final Expressions</a></li>\n<li><a href=\"/learn/book/developers/guides/python/blocks-control-flow\">Blocks, Control Flow, and Repetition</a></li>\n<li><a href=\"/learn/book/developers/guides/python/names-mutation\">Names, Mutation, and Fresh Values</a></li>\n<li><a href=\"/learn/book/developers/guides/python/records-objects-dicts\">Records, Objects, and Dictionaries</a></li>\n<li><a href=\"/learn/book/developers/guides/python/collections-pipelines\">Collections and Pipelines</a></li>\n<li><a href=\"/learn/book/developers/guides/python/none-option-result\"><code>None</code>, Option, and Result</a></li>\n<li><a href=\"/learn/book/developers/guides/python/exceptions-effects\">Exceptions, Results, and Effects</a></li>\n<li><a href=\"/learn/book/developers/guides/python/data-variants-patterns\">Data Variants and Pattern Matching</a></li>\n<li><a href=\"/learn/book/developers/guides/python/types-generics-protocols\">Types, Generics, and Protocols</a></li>\n<li><a href=\"/learn/book/developers/guides/python/modules-packages\">Modules and Packages</a></li>\n<li><a href=\"/learn/book/developers/guides/python/testing-tooling\">Testing and Tooling</a></li>\n<li><a href=\"/learn/book/developers/guides/python/native-unsafe-ffi\">Native Boundaries, Unsafe, and FFI</a></li>\n</ul>\n<h2 id=\"python-habits-that-transfer\"><a href=\"#python-habits-that-transfer\">Python habits that transfer</a></h2><ul>\n<li>name functions after domain work</li>\n<li>keep data close to behavior that reads it</li>\n<li>use tests as executable examples</li>\n<li>make package boundaries clear</li>\n<li>prefer readable code over clever compression</li>\n</ul>\n<h2 id=\"python-habits-to-translate\"><a href=\"#python-habits-to-translate\">Python habits to translate</a></h2><ul>\n<li><code>return</code> becomes the final expression</li>\n<li>indentation blocks become expression blocks with braces or parentheses</li>\n<li><code>None</code> becomes <code>Option</code></li>\n<li>exceptions become <code>Result</code> when failure is ordinary data</li>\n<li>async and outside work become effect requests or stdlib runtime helpers</li>\n<li>duck typing and <code>Protocol</code> become classes, instances, and laws when behavior needs rules</li>\n</ul>\n",
+		"summaryHtml": "Start from Python habits, then read the equivalent Musi expression, data, effect, and package shapes."
+	},
+	{
+		"locale": "en",
+		"id": "python-values-functions",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-values-functions"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/values-functions",
+		"canonicalPath": "/learn/book/developers/guides/python/values-functions",
+		"aliases": [
+			"/docs/book/developers/guides/python/values-functions",
+			"/learn/book/developers/guides/python/values-functions",
+			"/docs/book/developers/python/values-functions",
+			"/learn/book/developers/python/values-functions",
+			"/docs/language/developers/python/values-functions",
+			"/learn/language/developers/python/values-functions"
+		],
+		"questions": [],
+		"title": "Values, Functions, and Final Expressions",
+		"description": "Translate Python def, annotations, and return into Musi let functions and final expressions.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 2,
+		"slug": "values-functions",
+		"summary": "Use let functions and final expressions where Python uses def and return.",
+		"descriptionHtml": "Translate Python def, annotations, and return into Musi let functions and final expressions.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "named-calls",
+				"text": "Named calls"
+			}
+		],
+		"html": "<p>Python <code>def</code> introduces a function. A type annotation helps readers and tools, but <code>return</code> still marks the value that leaves the function.</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(base: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> total(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer</span></span></code></pre><p>Musi uses <code>let</code> for named values and named functions. The function body can be one expression.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (base : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, fee : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> answer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">answer;</span></span></code></pre></section></div><p>The important habit change is where the result sits. Python says <code>return base + fee</code>; Musi lets <code>base + fee</code> be the body itself.</p>\n<h2 id=\"named-calls\"><a href=\"#named-calls\">Named calls</a></h2><p>Python keyword arguments help a call site read like a form:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(port: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">bool</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> render(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">port</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">secure</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">True</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected</span></span></code></pre><p>Musi supports the same readability with named arguments.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (port : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> render</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected;</span></span></code></pre></section></div><p>Use named calls when position alone would make the call hard to read.</p>\n",
+		"summaryHtml": "Use let functions and final expressions where Python uses def and return."
+	},
+	{
+		"locale": "en",
+		"id": "python-blocks-control-flow",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-blocks-control-flow"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/blocks-control-flow",
+		"canonicalPath": "/learn/book/developers/guides/python/blocks-control-flow",
+		"aliases": [
+			"/docs/book/developers/guides/python/blocks-control-flow",
+			"/learn/book/developers/guides/python/blocks-control-flow",
+			"/docs/book/developers/python/blocks-control-flow",
+			"/learn/book/developers/python/blocks-control-flow",
+			"/docs/language/developers/python/blocks-control-flow",
+			"/learn/language/developers/python/blocks-control-flow"
+		],
+		"questions": [],
+		"title": "Blocks, Control Flow, and Repetition",
+		"description": "Translate Python indentation, loops, and branching habits into Musi expression blocks and recursion.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 3,
+		"slug": "blocks-control-flow",
+		"summary": "Use blocks as expressions and let rec when repeated work needs a named path.",
+		"descriptionHtml": "Translate Python indentation, loops, and branching habits into Musi expression blocks and recursion.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "blocks-return-values",
+				"text": "Blocks return values"
+			}
+		],
+		"html": "<p>Python indentation defines a block. A loop changes local state as it repeats work:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> total_seats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(rounds: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> rounds</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    while</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">-</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total_seats(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span></code></pre><p>Musi gives the repeated path a name. <code>let rec</code> is the road sign that says the function may call itself.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> rec</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (remaining : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, seats : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> remaining</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(remaining </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">-</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 4</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> seats </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> totalSeats</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">seats;</span></span></code></pre></section></div><p>Read the recursive version like a delivery route. One arm says the route is finished. The other arm makes the next stop with smaller remaining work.</p>\n<h2 id=\"blocks-return-values\"><a href=\"#blocks-return-values\">Blocks return values</a></h2><p>Python often builds a local value and returns it at the end of the function. Musi blocks can do the same job as one expression.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> invoiceTotal </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  (</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> fee</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">invoiceTotal;</span></span></code></pre></section></div><p>Use this when a calculation needs local names but outside code should see only the finished value.</p>\n",
+		"summaryHtml": "Use blocks as expressions and let rec when repeated work needs a named path."
+	},
+	{
+		"locale": "en",
+		"id": "python-names-mutation",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-names-mutation"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/names-mutation",
+		"canonicalPath": "/learn/book/developers/guides/python/names-mutation",
+		"aliases": [
+			"/docs/book/developers/guides/python/names-mutation",
+			"/learn/book/developers/guides/python/names-mutation",
+			"/docs/book/developers/python/names-mutation",
+			"/learn/book/developers/python/names-mutation",
+			"/docs/language/developers/python/names-mutation",
+			"/learn/language/developers/python/names-mutation"
+		],
+		"questions": [],
+		"title": "Names, Mutation, and Fresh Values",
+		"description": "Translate Python rebinding and mutable habits into Musi mutable values and fresh bindings.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 4,
+		"slug": "names-mutation",
+		"summary": "Use mut for real state changes and fresh names for ordinary derived values.",
+		"descriptionHtml": "Translate Python rebinding and mutable habits into Musi mutable values and fresh bindings.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "fresh-names-first",
+				"text": "Fresh names first"
+			}
+		],
+		"html": "<p>Python lets a name point at a new value later:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">next_visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">next_visits</span></span></code></pre><p>Musi makes real mutation visible at the value that can change.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> mut</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> nextVisits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visits </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">nextVisits;</span></span></code></pre></section></div><p>Think of <code>mut</code> as a counter on a desk. You can change the number on that counter, but readers can see which counter is allowed to move.</p>\n<h2 id=\"fresh-names-first\"><a href=\"#fresh-names-first\">Fresh names first</a></h2><p>When a step is just a derived value, prefer a new name:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total</span></span></code></pre><p>Musi reads that style directly.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1200</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> total </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> base </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">+</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 45</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">total;</span></span></code></pre></section></div><p>Use mutation for counters, cursors, buffers, and small accumulators. Use fresh names when the next value is another fact in the calculation.</p>\n",
+		"summaryHtml": "Use mut for real state changes and fresh names for ordinary derived values."
+	},
+	{
+		"locale": "en",
+		"id": "python-records-objects-dicts",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-records-objects-dicts"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/records-objects-dicts",
+		"canonicalPath": "/learn/book/developers/guides/python/records-objects-dicts",
+		"aliases": [
+			"/docs/book/developers/guides/python/records-objects-dicts",
+			"/learn/book/developers/guides/python/records-objects-dicts",
+			"/docs/book/developers/python/records-objects-dicts",
+			"/learn/book/developers/python/records-objects-dicts",
+			"/docs/language/developers/python/records-objects-dicts",
+			"/learn/language/developers/python/records-objects-dicts"
+		],
+		"questions": [],
+		"title": "Records, Objects, and Dictionaries",
+		"description": "Translate Python dictionaries and dataclass-style data into Musi records and data definitions.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 5,
+		"slug": "records-objects-dicts",
+		"summary": "Use records for named fields and data definitions when the shape deserves a name.",
+		"descriptionHtml": "Translate Python dictionaries and dataclass-style data into Musi records and data definitions.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "dataclass-habit",
+				"text": "Dataclass habit"
+			}
+		],
+		"html": "<p>Python dictionaries are quick named bags of data:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">local </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#032563;--shiki-dark:#9ECBFF\">    \"host\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"localhost\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#032563;--shiki-dark:#9ECBFF\">    \"port\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#032563;--shiki-dark:#9ECBFF\">    \"secure\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">False</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">public </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">**</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">local, </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"host\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"api.example.com\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"secure\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">True</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">public[</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"host\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]</span></span></code></pre><p>Musi records keep the same named-field idea. A <code>data</code> definition names the expected shape, and record spread updates selected fields.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Endpoint</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  host : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  port : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  secure : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Bool</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> local </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  host </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"localhost\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">,</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 1</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> public </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> { </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">...</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">local, host </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"api.example.com\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, secure </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> };</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">public.host;</span></span></code></pre></section></div><p>Use records like a shipping label: every field name tells the reader what the slot means.</p>\n<h2 id=\"dataclass-habit\"><a href=\"#dataclass-habit\">Dataclass habit</a></h2><p>Python dataclasses give a stable shape to object-like data. In Musi, a <code>data</code> definition is the stable shape; the record literal is the value that fills it.</p>\n",
+		"summaryHtml": "Use records for named fields and data definitions when the shape deserves a name."
+	},
+	{
+		"locale": "en",
+		"id": "python-collections-pipelines",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-collections-pipelines"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/collections-pipelines",
+		"canonicalPath": "/learn/book/developers/guides/python/collections-pipelines",
+		"aliases": [
+			"/docs/book/developers/guides/python/collections-pipelines",
+			"/learn/book/developers/guides/python/collections-pipelines",
+			"/docs/book/developers/python/collections-pipelines",
+			"/learn/book/developers/python/collections-pipelines",
+			"/docs/language/developers/python/collections-pipelines",
+			"/learn/language/developers/python/collections-pipelines"
+		],
+		"questions": [],
+		"title": "Collections and Pipelines",
+		"description": "Translate Python list operations into Musi arrays, stdlib helpers, and pipelines.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 6,
+		"slug": "collections-pipelines",
+		"summary": "Use arrays and pipeline-first stdlib helpers for visible collection flow.",
+		"descriptionHtml": "Translate Python list operations into Musi arrays, stdlib helpers, and pipelines.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "why-this-matters-for-python-readers",
+				"text": "Why this matters for Python readers"
+			}
+		],
+		"html": "<p>Python list code often grows by applying one collection operation after another:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">ports </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visible </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#A0111F;--shiki-dark:#F97583\">*</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">ports, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visible</span></span></code></pre><p>Musi arrays use <code>[]</code>. The pipeline operator puts the value being transformed on the left and the operation on the right.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/iter\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">];</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> visible </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">append</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Iter</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">collect</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]();</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">visible;</span></span></code></pre></section></div><p>Read the pipeline like a conveyor belt: <code>ports</code> enters, <code>Iter.append</code> adds a port, and <code>Iter.collect</code> leaves an array for the next step.</p>\n<h2 id=\"why-this-matters-for-python-readers\"><a href=\"#why-this-matters-for-python-readers\">Why this matters for Python readers</a></h2><p>Python list comprehensions are compact. Musi favors a visible chain when multiple steps matter. That keeps later additions easy to review.</p>\n",
+		"summaryHtml": "Use arrays and pipeline-first stdlib helpers for visible collection flow."
+	},
+	{
+		"locale": "en",
+		"id": "python-none-option-result",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-none-option-result"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/none-option-result",
+		"canonicalPath": "/learn/book/developers/guides/python/none-option-result",
+		"aliases": [
+			"/docs/book/developers/guides/python/none-option-result",
+			"/learn/book/developers/guides/python/none-option-result",
+			"/docs/book/developers/python/none-option-result",
+			"/learn/book/developers/python/none-option-result",
+			"/docs/language/developers/python/none-option-result",
+			"/learn/language/developers/python/none-option-result"
+		],
+		"questions": [],
+		"title": "None, Option, and Result",
+		"description": "Translate Python None and ordinary failure values into Musi Option and Result.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 7,
+		"slug": "none-option-result",
+		"summary": "Use Option for maybe-present values and Result for ordinary success-or-error data.",
+		"descriptionHtml": "Translate Python None and ordinary failure values into Musi Option and Result.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "result-for-ordinary-failure",
+				"text": "Result for ordinary failure"
+			}
+		],
+		"html": "<p>Python commonly uses <code>None</code> when a value might be missing:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> lookup_port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(name: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">str</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> |</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> None</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    match</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> name:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        case</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"admin\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">            return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 9000</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        case</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> _:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">            return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> None</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> lookup_port(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"web\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">or</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port</span></span></code></pre><p>Musi uses <code>Option</code> so absence is visible in the type and at the call site.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/option\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> lookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (name : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> name</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"admin\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">some</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">9000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">none</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> lookupPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"web\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Option</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>The caller decides the fallback. The function only reports whether it found a value.</p>\n<h2 id=\"result-for-ordinary-failure\"><a href=\"#result-for-ordinary-failure\">Result for ordinary failure</a></h2><p>When Python returns a value or raises for ordinary input failure, Musi can model that as data.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/result\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (text : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> text</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"8080\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">ok</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">err</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"port must be numeric\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"abc\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Use <code>Option</code> for missing value. Use <code>Result</code> when the error carries information a caller may read.</p>\n",
+		"summaryHtml": "Use Option for maybe-present values and Result for ordinary success-or-error data."
+	},
+	{
+		"locale": "en",
+		"id": "python-exceptions-effects",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-exceptions-effects"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/exceptions-effects",
+		"canonicalPath": "/learn/book/developers/guides/python/exceptions-effects",
+		"aliases": [
+			"/docs/book/developers/guides/python/exceptions-effects",
+			"/learn/book/developers/guides/python/exceptions-effects",
+			"/docs/book/developers/python/exceptions-effects",
+			"/learn/book/developers/python/exceptions-effects",
+			"/docs/language/developers/python/exceptions-effects",
+			"/learn/language/developers/python/exceptions-effects"
+		],
+		"questions": [],
+		"title": "Exceptions, Results, and Effects",
+		"description": "Translate Python exceptions and outside work into Musi Result values and effectful boundaries.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 8,
+		"slug": "exceptions-effects",
+		"summary": "Use Result for recoverable failure and effects or stdlib helpers for requested outside work.",
+		"descriptionHtml": "Translate Python exceptions and outside work into Musi Result values and effectful boundaries.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "outside-work",
+				"text": "Outside work"
+			}
+		],
+		"html": "<p>Python exceptions can carry a failure out of the ordinary return path:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parse_port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(text: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">str</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    try</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(text)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    except</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> ValueError</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">        return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 3000</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> parse_port(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"abc\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port</span></span></code></pre><p>Musi keeps ordinary failure in a <code>Result</code> value. That makes the fallback decision visible.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/result\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (text : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> text</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"8080\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">ok</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">_</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">err</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"invalid port\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> parsePort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"abc\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  |></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Result</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">unwrapOr</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">String</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">3000</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Use this when failure is a normal part of the domain: bad input, missing config, or a rejected request.</p>\n<h2 id=\"outside-work\"><a href=\"#outside-work\">Outside work</a></h2><p>Python <code>input</code>, file access, time, and network calls reach outside the pure calculation. Musi keeps those edges explicit through stdlib modules and effects.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Io</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/io\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> name </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Io</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">promptTrimmed</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"name> \"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Io</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">writeLine</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(name);</span></span></code></pre></section></div><p>The import tells readers where outside work comes from. The call site shows that the program is asking the runtime for input and output.</p>\n",
+		"summaryHtml": "Use Result for recoverable failure and effects or stdlib helpers for requested outside work."
+	},
+	{
+		"locale": "en",
+		"id": "python-data-variants-patterns",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-data-variants-patterns"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/data-variants-patterns",
+		"canonicalPath": "/learn/book/developers/guides/python/data-variants-patterns",
+		"aliases": [
+			"/docs/book/developers/guides/python/data-variants-patterns",
+			"/learn/book/developers/guides/python/data-variants-patterns",
+			"/docs/book/developers/python/data-variants-patterns",
+			"/learn/book/developers/python/data-variants-patterns",
+			"/docs/language/developers/python/data-variants-patterns",
+			"/learn/language/developers/python/data-variants-patterns"
+		],
+		"questions": [],
+		"title": "Data Variants and Pattern Matching",
+		"description": "Translate Python match and tagged object habits into Musi data variants and match arms.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 9,
+		"slug": "data-variants-patterns",
+		"summary": "Use data variants when each case has a name and a different payload.",
+		"descriptionHtml": "Translate Python match and tagged object habits into Musi data variants and match arms.",
+		"headings": [],
+		"html": "<p>Python <code>match</code> can branch on object shape, strings, tuples, or classes:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">state </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"kind\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"running\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"id\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">42</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">match</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> state:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    case</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"kind\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"running\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"id\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: task_id}:</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> task_id</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    case</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"kind\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"waiting\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">}:</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    case</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> _:</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">        selected </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> -</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">1</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">selected</span></span></code></pre><p>Musi names the cases directly with <code>data</code> variants. The payload label says what travels with that case.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> TaskState</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Waiting</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">id</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">code</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> state : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">TaskState</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> .Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(id </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 42</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> state</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Running</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(id) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> id</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Waiting</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> =></span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 0</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">| </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Done</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(code) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> code</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span></code></pre></section></div><p>Use variants when a plain dictionary would make readers remember which string tags and fields are valid.</p>\n",
+		"summaryHtml": "Use data variants when each case has a name and a different payload."
+	},
+	{
+		"locale": "en",
+		"id": "python-types-generics-protocols",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-types-generics-protocols"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/types-generics-protocols",
+		"canonicalPath": "/learn/book/developers/guides/python/types-generics-protocols",
+		"aliases": [
+			"/docs/book/developers/guides/python/types-generics-protocols",
+			"/learn/book/developers/guides/python/types-generics-protocols",
+			"/docs/book/developers/python/types-generics-protocols",
+			"/learn/book/developers/python/types-generics-protocols",
+			"/docs/language/developers/python/types-generics-protocols",
+			"/learn/language/developers/python/types-generics-protocols"
+		],
+		"questions": [],
+		"title": "Types, Generics, and Protocols",
+		"description": "Translate Python annotations, generics, and Protocol habits into Musi type parameters, classes, and instances.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 10,
+		"slug": "types-generics-protocols",
+		"summary": "Use generics for reusable value shape and classes for shared behavior.",
+		"descriptionHtml": "Translate Python annotations, generics, and Protocol habits into Musi type parameters, classes, and instances.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "protocol-habits",
+				"text": "Protocol habits"
+			}
+		],
+		"html": "<p>Python typing can describe a reusable function:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> identity[T](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">input</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: T) </span><span style=\"color:#6E011A;--shiki-light-font-style:italic;--shiki-dark:#FDAEB7;--shiki-dark-font-style:italic\">-></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> T:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> input</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> identity[</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port</span></span></code></pre><p>Musi type parameters sit beside the function name.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] (input : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> input;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> identity</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>The type parameter says the function works the same way for any <code>T</code>.</p>\n<h2 id=\"protocol-habits\"><a href=\"#protocol-habits\">Protocol habits</a></h2><p>Python <code>Protocol</code> names behavior that many types can satisfy:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">from</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> typing </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">import</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> Protocol</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">class</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Sized</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#023B95;--shiki-dark:#B392F0\">Protocol</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">):</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> size</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(self) -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">: </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">...</span></span></code></pre><p>Musi uses a <code>class</code> for the behavior shape and an <code>instance</code> for a type that provides it.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Sized</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> class</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> size</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(self : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">T</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Crate</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> data</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> {</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  | </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Crate</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#702C00;--shiki-dark:#FFAB70\">items</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> : </span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> crateSized </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> instance</span><span style=\"color:#702C00;--shiki-dark:#B392F0\"> Sized</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Crate</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">] {</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> size</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(self : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Crate</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    match</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> self</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    | </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">.Crate</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(items) </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=></span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> items</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">    );</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">};</span></span></code></pre></section></div><p>Use a class when callers need behavior, not a particular concrete data type.</p>\n",
+		"summaryHtml": "Use generics for reusable value shape and classes for shared behavior."
+	},
+	{
+		"locale": "en",
+		"id": "python-modules-packages",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-modules-packages"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/modules-packages",
+		"canonicalPath": "/learn/book/developers/guides/python/modules-packages",
+		"aliases": [
+			"/docs/book/developers/guides/python/modules-packages",
+			"/learn/book/developers/guides/python/modules-packages",
+			"/docs/book/developers/python/modules-packages",
+			"/learn/book/developers/python/modules-packages",
+			"/docs/language/developers/python/modules-packages",
+			"/learn/language/developers/python/modules-packages"
+		],
+		"questions": [],
+		"title": "Modules and Packages",
+		"description": "Translate Python imports and package files into Musi exports, imports, and package paths.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 11,
+		"slug": "modules-packages",
+		"summary": "Use export for public names and import for package or relative module boundaries.",
+		"descriptionHtml": "Translate Python imports and package files into Musi exports, imports, and package paths.",
+		"headings": [],
+		"html": "<p>Python modules export names by making them available at module scope:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#66707B;--shiki-dark:#6A737D\"># ports.py</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> default_port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span></span></code></pre><p>Musi marks public names with <code>export</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#66707B;--shiki-dark:#6A737D\">// ports.ms</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span></code></pre></section></div><p>Another file imports the module and calls the exported function:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">import</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ports.default_port()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port</span></span></code></pre><p>Musi imports the module value and reads exported names from it.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ports</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"./ports\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> port </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ports</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">();</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">port;</span></span></code></pre></section></div><p>Package imports such as <code>@std/io</code> are for shared packages. Relative imports such as <code>./ports</code> are for nearby project files.</p>\n",
+		"summaryHtml": "Use export for public names and import for package or relative module boundaries."
+	},
+	{
+		"locale": "en",
+		"id": "python-testing-tooling",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-testing-tooling"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/testing-tooling",
+		"canonicalPath": "/learn/book/developers/guides/python/testing-tooling",
+		"aliases": [
+			"/docs/book/developers/guides/python/testing-tooling",
+			"/learn/book/developers/guides/python/testing-tooling",
+			"/docs/book/developers/python/testing-tooling",
+			"/learn/book/developers/python/testing-tooling",
+			"/docs/language/developers/python/testing-tooling",
+			"/learn/language/developers/python/testing-tooling"
+		],
+		"questions": [],
+		"title": "Testing and Tooling",
+		"description": "Translate Python test habits into Musi std testing helpers and command-line checks.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 12,
+		"slug": "testing-tooling",
+		"summary": "Use @std/testing to keep tests close to the behavior they describe.",
+		"descriptionHtml": "Translate Python test habits into Musi std testing helpers and command-line checks.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "tooling-habit",
+				"text": "Tooling habit"
+			}
+		],
+		"html": "<p>Python tests often name a small behavior and assert the result:</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> default_port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    return</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">def</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> test_default_port</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">() -> </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">None</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">:</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">    assert</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> default_port() </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">==</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span></span></code></pre><p>Musi uses <code>@std/testing</code> for named test suites and cases.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Testing</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/testing\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Int</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> 8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> test</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> () </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  (</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">describe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"ports\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">);</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">it</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"default port is http alt\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">toBe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">defaultPort</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(), </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">8080</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">));</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">    Testing</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">endDescribe</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">()</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">  );</span></span></code></pre></section></div><p>A test should read like a receipt: name the behavior, run the check, and leave a pass or fail value.</p>\n<h2 id=\"tooling-habit\"><a href=\"#tooling-habit\">Tooling habit</a></h2><p>Python projects often separate formatting, type checks, and tests. Musi projects should do the same kind of loop with package checks and tests as the toolchain grows.</p>\n",
+		"summaryHtml": "Use @std/testing to keep tests close to the behavior they describe."
+	},
+	{
+		"locale": "en",
+		"id": "python-native-unsafe-ffi",
+		"kind": "chapter",
+		"parentId": "developers-python",
+		"depth": 3,
+		"treePath": [
+			"developers",
+			"developers-guides",
+			"developers-python",
+			"python-native-unsafe-ffi"
+		],
+		"childIds": [],
+		"partId": "developers",
+		"partTitle": "Musi for Developers",
+		"sectionId": "developers-python",
+		"sectionTitle": "Musi for Python Developers",
+		"path": "/learn/book/developers/guides/python/native-unsafe-ffi",
+		"canonicalPath": "/learn/book/developers/guides/python/native-unsafe-ffi",
+		"aliases": [
+			"/docs/book/developers/guides/python/native-unsafe-ffi",
+			"/learn/book/developers/guides/python/native-unsafe-ffi",
+			"/docs/book/developers/python/native-unsafe-ffi",
+			"/learn/book/developers/python/native-unsafe-ffi",
+			"/docs/language/developers/python/native-unsafe-ffi",
+			"/learn/language/developers/python/native-unsafe-ffi"
+		],
+		"questions": [],
+		"title": "Native Boundaries, Unsafe, and FFI",
+		"description": "Translate Python C extension and ctypes boundary habits into Musi foreign declarations, Ptr values, and unsafe blocks.",
+		"group": "Musi for Developers",
+		"section": "Python Developers",
+		"order": 13,
+		"slug": "native-unsafe-ffi",
+		"summary": "Keep native calls explicit with foreign declarations, @std/ffi types, and unsafe blocks.",
+		"descriptionHtml": "Translate Python C extension and ctypes boundary habits into Musi foreign declarations, Ptr values, and unsafe blocks.",
+		"headings": [
+			{
+				"depth": 2,
+				"id": "pointer-helpers",
+				"text": "Pointer helpers"
+			}
+		],
+		"html": "<p>Python can cross into native code through extension modules, <code>ctypes</code>, or <code>cffi</code>. That boundary deserves a signpost because the host language cannot protect every operation there.</p>\n<pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">from</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> ctypes </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">import</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> CDLL</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">, c_char_p</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">libc </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> CDLL(</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\">\"libc.so.6\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">)</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">puts </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> libc.puts</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">puts.argtypes </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> [c_char_p]</span></span>\n<span class=\"line\"><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">puts.restype </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> int</span></span></code></pre><p>Musi declares the foreign function and keeps the call behind <code>unsafe</code>.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/ffi\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">foreign</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"c\"</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> puts</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (message : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CInt</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">export</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> let</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\"> announce</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> (message : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CString</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">) : </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">CInt</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">  unsafe </span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{ </span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">puts</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">(message); };</span></span></code></pre></section></div><p><code>foreign &quot;c&quot;</code> says which native calling world the declaration belongs to. <code>unsafe { ... }</code> marks the operation that needs extra care.</p>\n<h2 id=\"pointer-helpers\"><a href=\"#pointer-helpers\">Pointer helpers</a></h2><p>Use <code>@std/ffi</code> pointer helpers when the native boundary gives you pointer-shaped values.</p>\n<div class=\"snippet-block\"><section class=\"code-panel\"><pre class=\"shiki shiki-themes github-light-high-contrast github-dark\" style=\"background-color:#ffffff;--shiki-dark-bg:#24292e;color:#0e1116;--shiki-dark:#e1e4e8\" tabindex=\"0\"><code><span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> :=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> import</span><span style=\"color:#032563;--shiki-dark:#9ECBFF\"> \"@std/ffi\"</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">;</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> pointer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#023B95;--shiki-dark:#79B8FF\"> Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">null</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">]();</span></span>\n<span class=\"line\"><span style=\"color:#A0111F;--shiki-dark:#F97583\">let</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\"> samePointer </span><span style=\"color:#A0111F;--shiki-dark:#F97583\">:=</span><span style=\"color:#A0111F;--shiki-dark:#F97583\"> unsafe </span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">{ </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">offset</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](pointer, </span><span style=\"color:#023B95;--shiki-dark:#79B8FF\">0</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">); };</span></span>\n<span class=\"line\"><span style=\"color:#023B95;--shiki-dark:#79B8FF\">Ffi</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">.ptr.</span><span style=\"color:#622CBC;--shiki-dark:#B392F0\">isNull</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">[</span><span style=\"color:#702C00;--shiki-dark:#B392F0\">Int</span><span style=\"color:#0E1116;--shiki-dark:#E1E4E8\">](samePointer);</span></span></code></pre></section></div><p>Keep raw native work small. Convert it to ordinary Musi data before passing values deeper into the program.</p>\n",
+		"summaryHtml": "Keep native calls explicit with foreign declarations, @std/ffi types, and unsafe blocks."
 	},
 	{
 		"locale": "en",
