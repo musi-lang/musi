@@ -26,6 +26,19 @@ use thiserror::Error;
 
 type MusiResult<T = ()> = Result<T, MusiError>;
 
+const STARTER_INDEX: &str = "let message := \"Hello, world!\";\nmessage;\n";
+const STARTER_TEST: &str = r#"let Testing := import "@std/testing";
+
+let add (left : Int, right : Int) : Int := left + right;
+
+export let test () :=
+  (
+    Testing.describe("add");
+    Testing.it("adds values", Testing.toBe(add(2, 3), 5));
+    Testing.endDescribe()
+  );
+"#;
+
 #[derive(Debug, Error)]
 enum MusiError {
     #[error(transparent)]
@@ -129,16 +142,22 @@ fn init_package(target: Option<&Path>) -> MusiResult {
     fs::write(
         root.join("musi.json"),
         format!(
-            "{{\n  \"name\": \"{name}\",\n  \"version\": \"0.1.0\",\n  \"main\": \"index.ms\"\n}}\n"
+            "{{\n  \"name\": \"{name}\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}}\n"
         ),
     )
     .map_err(|source| ToolingError::ToolingIoFailed {
         path: root.join("musi.json"),
         source,
     })?;
-    fs::write(root.join("index.ms"), "export let main () : Int := 42;\n").map_err(|source| {
+    fs::write(root.join("index.ms"), STARTER_INDEX).map_err(|source| {
         ToolingError::ToolingIoFailed {
             path: root.join("index.ms"),
+            source,
+        }
+    })?;
+    fs::write(root.join("add.test.ms"), STARTER_TEST).map_err(|source| {
+        ToolingError::ToolingIoFailed {
+            path: root.join("add.test.ms"),
             source,
         }
     })?;
@@ -174,7 +193,9 @@ fn package_name_for_path(root: &Path) -> MusiResult<String> {
 }
 
 fn package_marker_exists(root: &Path) -> bool {
-    root.join("musi.json").exists() || root.join("index.ms").exists()
+    root.join("musi.json").exists()
+        || root.join("index.ms").exists()
+        || root.join("add.test.ms").exists()
 }
 
 fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiResult {

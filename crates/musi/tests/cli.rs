@@ -58,6 +58,15 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
+fn assert_success(output: &Output) {
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,14 +91,26 @@ mod tests {
 
         let output = run_musi(&["init", "sample"], temp.path());
 
-        assert!(output.status.success());
+        assert_success(&output);
         assert!(temp.path().join("sample/musi.json").exists());
         assert!(temp.path().join("sample/index.ms").exists());
+        assert!(temp.path().join("sample/add.test.ms").exists());
         assert!(temp.path().join("sample/.gitignore").exists());
         let manifest = fs::read_to_string(temp.path().join("sample/musi.json"))
             .expect("manifest should be readable");
+        let index = fs::read_to_string(temp.path().join("sample/index.ms"))
+            .expect("index should be readable");
+        let test = fs::read_to_string(temp.path().join("sample/add.test.ms"))
+            .expect("test should be readable");
         assert!(manifest.contains("\"name\""));
         assert!(manifest.contains("sample"));
+        assert!(manifest.contains("\"entry\""));
+        assert!(!manifest.contains("\"main\""));
+        assert!(index.contains("\"Hello, world!\""));
+        assert!(!index.contains("export let main"));
+        assert!(test.contains("import \"@std/testing\""));
+        assert!(test.contains("let add"));
+        assert!(test.contains("export let test"));
     }
 
     #[test]
@@ -98,9 +119,25 @@ mod tests {
 
         let output = run_musi(&["init"], temp.path());
 
-        assert!(output.status.success());
+        assert_success(&output);
         assert!(temp.path().join("musi.json").exists());
         assert!(temp.path().join("index.ms").exists());
+        assert!(temp.path().join("add.test.ms").exists());
+    }
+
+    #[test]
+    fn init_creates_package_that_checks_and_tests() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["init", "sample"], temp.path());
+
+        assert_success(&output);
+        assert_success(&run_musi(&["check"], &temp.path().join("sample")));
+        let test_output = run_musi(&["test"], &temp.path().join("sample"));
+        assert_success(&test_output);
+        let stdout = String::from_utf8_lossy(&test_output.stdout);
+        assert!(stdout.contains("pass"));
+        assert!(stdout.contains("adds values"));
     }
 
     #[test]
@@ -109,7 +146,7 @@ mod tests {
 
         let output = run_musi(&["init", "."], temp.path());
 
-        assert!(output.status.success());
+        assert_success(&output);
         let manifest =
             fs::read_to_string(temp.path().join("musi.json")).expect("manifest should be readable");
         let expected_name = temp
@@ -124,6 +161,18 @@ mod tests {
     fn init_refuses_existing_package_markers() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", "{}\n");
+
+        let output = run_musi(&["init"], temp.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("already initialized"));
+    }
+
+    #[test]
+    fn init_refuses_existing_test_marker() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "add.test.ms", "\n");
 
         let output = run_musi(&["init"], temp.path());
 

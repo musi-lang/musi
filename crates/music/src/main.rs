@@ -138,7 +138,7 @@ fn run_program(program: Program) -> MusicResult {
 }
 
 fn print_artifact_metadata(path: &Path) -> MusicResult {
-    let bytes = read_artifact_bytes(path)?;
+    let bytes = artifact_bytes_for(path)?;
     let artifact = decode_binary(&bytes)?;
 
     println!("binaryVersion: {BINARY_VERSION}");
@@ -164,10 +164,39 @@ fn print_artifact_metadata(path: &Path) -> MusicResult {
 }
 
 fn disasm(path: &Path) -> MusicResult {
-    let bytes = read_artifact_bytes(path)?;
+    let bytes = artifact_bytes_for(path)?;
     let artifact = decode_binary(&bytes)?;
     print!("{}", format_text(&artifact));
     Ok(())
+}
+
+fn artifact_bytes_for(path: &Path) -> MusicResult<Vec<u8>> {
+    if path.extension().is_some_and(|ext| ext == "ms") {
+        return compile_source_bytes(path);
+    }
+    if path.extension().is_some_and(|ext| ext == "seam") {
+        return Ok(read_artifact_bytes(path)?);
+    }
+    if path.extension().is_none() {
+        let artifact_path = path.with_extension("seam");
+        if artifact_path.exists() {
+            return Ok(read_artifact_bytes(&artifact_path)?);
+        }
+        let source_path = path.with_extension("ms");
+        if source_path.exists() {
+            return compile_source_bytes(path);
+        }
+    }
+    if path.exists() {
+        return Ok(read_artifact_bytes(path)?);
+    }
+    compile_source_bytes(path)
+}
+
+fn compile_source_bytes(path: &Path) -> MusicResult<Vec<u8>> {
+    let graph = load_direct_graph(path)?;
+    let mut session = graph.build_session(SessionOptions::default())?;
+    Ok(session.compile_entry(graph.entry_key())?.bytes)
 }
 
 fn print_vm_value(vm: &Vm, value: &Value) {
