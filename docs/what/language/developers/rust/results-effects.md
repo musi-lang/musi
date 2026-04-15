@@ -1,11 +1,11 @@
 ---
-title: "Results, Requests, and Effects"
-description: "Translate Rust `Result` and I/O boundary habits into Musi data and effects."
+title: "Results, I/O, and Effects"
+description: "Translate Rust `Result` and I/O boundary habits into Musi stdlib results and I/O."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 8
 slug: "results-effects"
-summary: "Rust `Result` maps to data for recoverable failure; outside work maps to effect requests."
+summary: "Rust `Result` maps to `@std/result`; standard input starts with `@std/io`."
 ---
 
 Rust often uses `Result` for recoverable failure:
@@ -19,11 +19,11 @@ let parsed = Ok(8080);
 parsed
 ```
 
-Musi can model that same recoverable shape as data.
+Musi uses `@std/result` for the same recoverable shape.
 
 {{snippet:rust-result-data}}
 
-That is ordinary data: a value is either `Ok` or `Error`.
+That keeps recoverable failure in the value, with helpers for fallback or mapping.
 
 Rust also uses `Result` for outside work such as reading from standard input:
 
@@ -35,8 +35,8 @@ fn read_line() -> std::result::Result<String, std::io::Error> {
 }
 ```
 
-Musi writes outside work as a request to an effect.
+Musi user code reaches for `@std/io` first. The runtime request stays under that wrapper.
 
 {{snippet:rust-effect-request}}
 
-Use data results when the value itself can be one of several outcomes. Use effects when the computation asks an outside interpreter to do work.
+Use stdlib results when the value itself can be one of several outcomes. Use stdlib I/O for ordinary terminal boundaries. Define custom effects when the program needs a capability that is not already in the standard library.

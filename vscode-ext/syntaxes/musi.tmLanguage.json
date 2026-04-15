@@ -720,15 +720,18 @@
 				},
 				{
 					"name": "meta.declaration.foreign.musi",
-					"match": "\\b(foreign)\\b(?:\\s+\"[^\"]+\")?\\s+(let)\\s+([a-z_][A-Za-z0-9_]*)",
+					"match": "\\b(foreign)\\b(?:\\s+(\"[^\"]+\"))?\\s+(let)\\s+([a-z_][A-Za-z0-9_]*)",
 					"captures": {
 						"1": {
 							"name": "keyword.modifier.musi"
 						},
 						"2": {
-							"name": "keyword.declaration.musi"
+							"name": "string.quoted.double.musi"
 						},
 						"3": {
+							"name": "keyword.declaration.musi"
+						},
+						"4": {
 							"name": "entity.name.function.musi"
 						}
 					}

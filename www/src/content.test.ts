@@ -27,6 +27,10 @@ const BANNED_WEBSITE_DOC_STAGING_PATTERNS = [
 	/raw Markdown editing is acceptable/i,
 	/richer fields.*later/i,
 ];
+const BANNED_DEVELOPER_GUIDE_STDLIB_REDEFINITION_PATTERN =
+	/\blet\s+(?:Maybe|Option|Result|[A-Za-z]+Result)(?:\[[^\]]+\])?\s*:=\s*data\b/;
+const BANNED_DEVELOPER_GUIDE_FAKE_STDIN_PATTERN =
+	/Console\.readLine|console\.readLine/;
 const repoRoot = join(import.meta.dirname, "..", "..");
 const snippetEmbedPattern = /\{\{snippet:([\w-]+)\}\}/g;
 const topLevelLetPattern = /^let\s/;
@@ -128,7 +132,8 @@ describe("content generation", () => {
 		expect(docsSource).not.toContain("```musi");
 		expect(docsSource).not.toContain("In this chapter");
 		expect(docsSource).not.toContain("Why it matters");
-		expect(docsSource).not.toContain("@std/io");
+		expect(docsSource).not.toContain("Console.readLine");
+		expect(docsSource).not.toContain("console.readLine");
 		expect(docsSource).not.toContain("let Option[T] := data");
 		expect(docsSource).not.toContain("let Result[T, E] := data");
 		expect(docsSource).not.toContain("RustBaseline");
@@ -159,6 +164,61 @@ describe("content generation", () => {
 				snippet.sourceText.includes("RustBaseline"),
 			),
 		).toBe(false);
+	});
+
+	it("keeps JavaScript and TypeScript guide examples paired with JS/TS snippets", () => {
+		for (const page of bookPages) {
+			if (
+				!page.sourcePath.startsWith(
+					"docs/what/language/developers/javascript-typescript",
+				)
+			) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("js-ts-")),
+				page.sourcePath,
+			).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(
+				repoRoot,
+				"docs/what/language/developers/javascript-typescript/overview.md",
+			),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("TypeScript 6.0.2");
+		expect(
+			contentSnippets.some(
+				(snippet) =>
+					snippet.id === "guide-javascript-developers" ||
+					snippet.id === "guide-typescript-developers",
+			),
+		).toBe(false);
+	});
+
+	it("keeps developer guides from redefining stdlib result and option shapes", () => {
+		for (const snippet of contentSnippets) {
+			if (!snippet.evidence.path.startsWith("docs/what/language/developers/")) {
+				continue;
+			}
+
+			expect(
+				snippet.sourceText,
+				`${snippet.id} redefines a stdlib-shaped type`,
+			).not.toMatch(BANNED_DEVELOPER_GUIDE_STDLIB_REDEFINITION_PATTERN);
+			expect(
+				snippet.sourceText,
+				`${snippet.id} defines fake stdin`,
+			).not.toMatch(BANNED_DEVELOPER_GUIDE_FAKE_STDIN_PATTERN);
+		}
 	});
 
 	it("keeps generic examples spaced by usage step", () => {
@@ -287,7 +347,7 @@ describe("content generation", () => {
 		expect(renderedDocs.filter((doc) => doc.kind === "chapter")).toHaveLength(
 			bookPages.length,
 		);
-		expect(languageGuideEntries.length).toBeGreaterThanOrEqual(11);
+		expect(languageGuideEntries.length).toBeGreaterThanOrEqual(20);
 		expect(
 			contentCollections.some((collection) => collection.title === "Musi Book"),
 		).toBe(true);

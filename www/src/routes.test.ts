@@ -30,6 +30,16 @@ describe("routes", () => {
 		expect(
 			routeForPath("/learn/book/developers/guides/rust/mutation").kind,
 		).toBe("doc");
+		expect(
+			routeForPath("/learn/book/developers/guides/javascript-typescript").kind,
+		).toBe("doc");
+		expect(
+			routeForPath(
+				"/learn/book/developers/guides/javascript-typescript/overview",
+			).kind,
+		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/javascript").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/typescript").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust/mutation").kind).toBe(
 			"doc",
@@ -51,6 +61,17 @@ describe("routes", () => {
 		expect(
 			routeForPath("/learn/book/developers/rust/mutation").canonicalPath,
 		).toBe("/learn/book/developers/guides/rust/mutation");
+		expect(
+			routeForPath("/learn/book/developers/javascript").canonicalPath,
+		).toBe("/learn/book/developers/guides/javascript-typescript");
+		expect(
+			routeForPath("/learn/book/developers/typescript").canonicalPath,
+		).toBe("/learn/book/developers/guides/javascript-typescript");
+		expect(
+			routeForPath(
+				"/learn/book/developers/guides/javascript-typescript/overview",
+			).canonicalPath,
+		).toBe("/learn/book/developers/guides/javascript-typescript/overview");
 		expect(routeForPath("/learn").canonicalPath).toBe("/learn/book");
 	});
 

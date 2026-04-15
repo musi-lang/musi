@@ -68,6 +68,7 @@
 		"keyword.operator.match.arm.musi",
 		"punctuation.definition.type.arguments.begin.musi",
 		"punctuation.definition.type.arguments.end.musi",
+		"string.quoted.double.musi",
 		"variable.other.member.musi",
 		"keyword.operator.equivalence.musi",
 		"meta.type.parameters.musi"
@@ -149,6 +150,32 @@
 					"line": 0,
 					"lexeme": "Some",
 					"scope": "entity.name.type.constructor.musi"
+				}
+			]
+		},
+		{
+			"name": "foreign declaration with ABI string",
+			"source": "foreign \"c\" let puts (message : CString) : Int;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "foreign",
+					"scope": "keyword.modifier.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "\"c\"",
+					"scope": "string.quoted.double.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "let",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "puts",
+					"scope": "entity.name.function.musi"
 				}
 			]
 		},

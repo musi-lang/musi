@@ -26,6 +26,8 @@ const partialKeywordPattern = /> ?partial<\/span>/;
 const equivalenceOperatorPattern = /<span style="color:[^"]+">~=<\/span>/;
 const pureFunctionOperatorPattern = /<span style="color:[^"]+">\s*-><\/span>/;
 const payloadLabelPattern = /<span style="color:[^"]+">value<\/span>/;
+const foreignAbiStringPattern = /<span style="color:[^"]+">\s*"c"<\/span>/;
+const foreignLetKeywordPattern = /<span style="color:[^"]+">\s*let<\/span>/;
 const snippetPlaceholder = "${";
 const matchSnippetPattern = `match ${snippetPlaceholder}1:expr} (`;
 const handleRequestSnippetPattern = `handle ${snippetPlaceholder}1:effect}.${snippetPlaceholder}2:op}(${snippetPlaceholder}3:value}) using ${snippetPlaceholder}4:effect} {`;
@@ -169,6 +171,17 @@ let next := port + 1;`,
 		expect(bindingHtml).toMatch(plainValueBindingPattern);
 		expect(bindingHtml).toContain(".Configured");
 		expect(bindingHtml).not.toMatch(splitCallLikeBindingPattern);
+	});
+
+	it("highlights foreign ABI names as string literals", () => {
+		const html = renderHighlightedCodeForTest(
+			'foreign "c" let puts (message : CString) : Int;',
+			"musi",
+		);
+
+		expect(html).toMatch(foreignAbiStringPattern);
+		expect(html).toMatch(foreignLetKeywordPattern);
+		expect(html).toContain("puts");
 	});
 });
 

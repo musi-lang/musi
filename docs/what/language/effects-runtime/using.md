@@ -12,7 +12,7 @@ summary: "`using` tells readers and the compiler which effects a callable may re
 
 {{snippet:chapter-using}}
 
-Read `using { Console }` as a permit list. The body requests console work, and the signature tells that story before the body starts.
+Read `using { Clock }` as a permit list. The body requests clock work, and the signature tells that story before the body starts.
 
 Callable types show the same idea: `T -> U` is pure shape, while `T ~> U` can require effects. Musi does not let effectful work blend into ordinary pure code without a marker.
 

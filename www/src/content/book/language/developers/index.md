@@ -11,8 +11,9 @@ summary: "Translate familiar habits into Musi without carrying over syntax that 
 This part is for readers who already write software in another language.
 Each guide starts from habits you already have, then shows how Musi writes the same idea with expressions, `let`, data constructors, pattern matching, effects, packages, and explicit unsafe boundaries.
 
-Rust gets the deepest comparison because the mutability model and type-driven habits need a slower translation.
-That guide goes further into `let mut x`, value-based mutation, and the way Musi keeps the mutable part visible instead of scattered through the whole binding model.
+Rust and JavaScript/TypeScript get deeper comparisons because their common habits hide different questions.
+Rust needs a slower translation for value-based mutation and type-driven boundaries.
+JavaScript and TypeScript need a slower translation for objects, nullable values, promises, discriminated unions, modules, and TypeScript 6.0.2 type habits.
 
 ## Choose Your Starting Point
 
@@ -28,12 +29,5 @@ The final expression is the value.
 
 ## Guides
 
-- [Musi for C Developers](/learn/book/developers/guides/c)
-- [Musi for C# Developers](/learn/book/developers/guides/csharp)
-- [Musi for C++ Developers](/learn/book/developers/guides/cpp)
-- [Musi for Go Developers](/learn/book/developers/guides/go)
-- [Musi for Java Developers](/learn/book/developers/guides/java)
-- [Musi for JavaScript Developers](/learn/book/developers/guides/javascript)
-- [Musi for Python Developers](/learn/book/developers/guides/python)
+- [Musi for JavaScript and TypeScript Developers](/learn/book/developers/guides/javascript-typescript)
 - [Musi for Rust Developers](/learn/book/developers/guides/rust)
-- [Musi for TypeScript Developers](/learn/book/developers/guides/typescript)

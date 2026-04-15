@@ -268,8 +268,8 @@ next;`,
 	{
 		id: "effect-console",
 		language: "musi",
-		sourceText: `let console := effect {
-  let readLine () : String;
+		sourceText: `let Clock := effect {
+  let tick () : Int;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -279,7 +279,7 @@ next;`,
 	{
 		id: "request-console",
 		language: "musi",
-		sourceText: "request console.readLine();",
+		sourceText: "request Clock.tick();",
 		evidence: {
 			path: "www/src/content/snippet-registry.ts",
 			line: 280,
@@ -288,9 +288,9 @@ next;`,
 	{
 		id: "handle-console",
 		language: "musi",
-		sourceText: `handle console.readLine() using console {
+		sourceText: `handle Clock.tick() using Clock {
   value => value;
-  readLine(k) => resume "ok";
+  tick(k) => resume 1;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -300,8 +300,8 @@ next;`,
 	{
 		id: "using-signature",
 		language: "musi",
-		sourceText: `let readClosed () : String using { Console } :=
-  request Console.readLine();`,
+		sourceText: `let nextTick () : Int using { Clock } :=
+  request Clock.tick();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -797,7 +797,7 @@ copiedPort;`,
 };
 
 let Car := data {
-  | Sport
+  | Sports
   | Family
 };
 
@@ -812,11 +812,11 @@ let carLaw := instance Vehicle[Car] {
 	{
 		id: "chapter-effects",
 		language: "musi",
-		sourceText: `let console := effect {
-  let readLine () : String;
+		sourceText: `let Clock := effect {
+  let tick () : Int;
 };
 
-request console.readLine();`,
+request Clock.tick();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 317,
@@ -825,8 +825,8 @@ request console.readLine();`,
 	{
 		id: "chapter-using",
 		language: "musi",
-		sourceText: `let readClosed () : String using { Console } :=
-  request Console.readLine();`,
+		sourceText: `let nextTick () : Int using { Clock } :=
+  request Clock.tick();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
@@ -835,9 +835,9 @@ request console.readLine();`,
 	{
 		id: "chapter-handlers",
 		language: "musi",
-		sourceText: `handle console.readLine() using console {
+		sourceText: `handle Clock.tick() using Clock {
   value => value;
-  readLine(k) => resume "ok";
+  tick(k) => resume 1;
 };`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
@@ -1086,7 +1086,7 @@ same;`,
 		id: "chapter-forall-types",
 		language: "musi",
 		sourceText: `let identityFn[T] (input : T) : T := input;
-let identityType := forall(T : Type) -> T -> T;
+let identityType := forall (T : Type) -> T -> T;
 
 identityFn[Int](8080);`,
 		evidence: {
@@ -1132,112 +1132,233 @@ label;`,
 			line: 11,
 		},
 	},
-
 	{
-		id: "guide-python-developers",
+		id: "js-ts-values-functions",
 		language: "musi",
-		sourceText: `let User := data {
-  name : String;
-  visits : Int := 0;
+		sourceText: `let total (base : Int, fee : Int) : Int := base + fee;
+
+let answer := total(1200, 45);
+answer;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/values-functions.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-named-calls",
+		language: "musi",
+		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+
+let selected := render(port := 8080, secure := 0 = 0);
+selected;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/values-functions.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-mutable-state",
+		language: "musi",
+		sourceText: `let visits := mut 0;
+visits := visits + 1;
+visits;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/state.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-fresh-value",
+		language: "musi",
+		sourceText: `let base := 1200;
+let total := base + 45;
+total;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/state.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-object-record",
+		language: "musi",
+		sourceText: `let Endpoint := data {
+  host : String;
+  port : Int;
+  secure : Bool;
 };
 
-let greet (user : User) : String := user.name;`,
-		evidence: {
-			path: "docs/what/language/developers/python.md",
-			line: 1,
-		},
-	},
-	{
-		id: "guide-java-developers",
-		language: "musi",
-		sourceText: `let Show[T] := class {
-  let show(value : T) : String;
+let local := {
+  host := "localhost",
+  port := 8080,
+  secure := 0 = 1
 };
 
-let showInt := instance Show[Int] {
-  let show(value : Int) : String := "int";
-};`,
+let secure := { ...local, secure := 0 = 0 };
+secure.port;`,
 		evidence: {
-			path: "docs/what/language/developers/java.md",
+			path: "docs/what/language/developers/javascript-typescript/objects-records.md",
 			line: 1,
 		},
 	},
 	{
-		id: "guide-javascript-developers",
+		id: "js-ts-arrays-pipelines",
 		language: "musi",
-		sourceText: `let makeUser (name : String) := {
-  name := name,
-  active := .True,
-};
+		sourceText: `let Iter := import "@std/iter";
 
-makeUser("Musi");`,
+let ports := [3000, 8080, 9000];
+let visible := ports
+  |> Iter.map[Int, Int](\\(port : Int) : Int => port + 1);
+visible;`,
 		evidence: {
-			path: "docs/what/language/developers/javascript.md",
+			path: "docs/what/language/developers/javascript-typescript/arrays-pipelines.md",
 			line: 1,
 		},
 	},
 	{
-		id: "guide-typescript-developers",
+		id: "js-ts-null-option",
 		language: "musi",
-		sourceText: `let LoadResult[T] := data {
-  | Loaded(value : T)
-  | Missing(reason : String)
-};
+		sourceText: `let Option := import "@std/option";
 
-let port : LoadResult[Int] := .Loaded(value := 8080);`,
-		evidence: {
-			path: "docs/what/language/developers/typescript.md",
-			line: 1,
-		},
-	},
-	{
-		id: "guide-c-developers",
-		language: "musi",
-		sourceText: `let Ffi := import "@std/ffi";
+let findPort (name : String) : Option.Option[Int] := Option.some[Int](8080);
 
-foreign "c" let get_counter () : CPtr;
-
-let counter := unsafe {
-  Ffi.ptr.cast[Int](get_counter());
-};`,
-		evidence: {
-			path: "docs/what/language/developers/c.md",
-			line: 1,
-		},
-	},
-	{
-		id: "guide-cpp-developers",
-		language: "musi",
-		sourceText: `let identityFn[T] (input : T) : T := input;
-let port := identityFn[Int](8080);
+let port := findPort("local")
+  |> Option.unwrapOr[Int](3000);
 port;`,
 		evidence: {
-			path: "docs/what/language/developers/cpp.md",
+			path: "docs/what/language/developers/javascript-typescript/null-result.md",
 			line: 1,
 		},
 	},
 	{
-		id: "guide-csharp-developers",
+		id: "js-ts-result-data",
 		language: "musi",
-		sourceText: `let Pipeline := import "@std/iter";
-let values := [1, 2, 3];
-values;`,
+		sourceText: `let Result := import "@std/result";
+
+let parsePort (text : String) : Result.Result[Int, String] := Result.ok[Int, String](8080);
+
+let port := parsePort("8080")
+  |> Result.unwrapOr[Int, String](3000);
+port;`,
 		evidence: {
-			path: "docs/what/language/developers/csharp.md",
+			path: "docs/what/language/developers/javascript-typescript/null-result.md",
 			line: 1,
 		},
 	},
 	{
-		id: "guide-go-developers",
+		id: "js-ts-union-variant",
 		language: "musi",
-		sourceText: `let ParseResult := data {
-  | Ok(port : Int)
-  | Error(message : String)
+		sourceText: `let LoadState := data {
+  | Loading
+  | Loaded(value : Int)
+  | Failed(message : String)
 };
 
-let parsed := .Ok(port := 8080);`,
+let state : LoadState := .Loaded(value := 8080);
+match state (
+| .Loaded(value) => value
+| .Loading => 3000
+| .Failed(message) => 3000
+);`,
 		evidence: {
-			path: "docs/what/language/developers/go.md",
+			path: "docs/what/language/developers/javascript-typescript/unions-variants.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-generic-function",
+		language: "musi",
+		sourceText: `let identity[T] (input : T) : T := input;
+
+let port := identity[Int](8080);
+port;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/generics.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-generic-data",
+		language: "musi",
+		sourceText: `let Box1[T] := data {
+  | Box1(value : T)
+};
+
+let boxed := .Box1(value := 8080);
+match boxed (
+| .Box1(value) => value
+);`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/generics.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-promise-effect",
+		language: "musi",
+		sourceText: `let Io := import "@std/io";
+
+let name := Io.promptTrimmed("name> ");
+Io.writeLine(name);`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/promises-effects.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-module-export",
+		language: "musi",
+		sourceText: "export let defaultPort () : Int := 8080;",
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/modules-packages.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-module-import",
+		language: "musi",
+		sourceText: `let Ports := import "./ports";
+
+let port := Ports.defaultPort();
+port;`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/modules-packages.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-class-instance",
+		language: "musi",
+		sourceText: `let Vehicle[T] := class {
+  let wheels(self : T) : Int;
+};
+
+let Car := data {
+  | Car
+};
+
+let carVehicle := instance Vehicle[Car] {
+  let wheels(self : Car) : Int := 4;
+};`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/classes-behavior.md",
+			line: 1,
+		},
+	},
+	{
+		id: "js-ts-testing-tooling",
+		language: "musi",
+		sourceText: `let Testing := import "@std/testing";
+
+let defaultPort () : Int := 8080;
+
+export let test () :=
+  (
+    Testing.describe("ports");
+    Testing.it("default port is http alt", Testing.toBe(defaultPort(), 8080));
+    Testing.endDescribe()
+  );`,
+		evidence: {
+			path: "docs/what/language/developers/javascript-typescript/testing-tooling.md",
 			line: 1,
 		},
 	},
@@ -1397,13 +1518,12 @@ let boxKeeps := instance Keeps[Box1] {
 	{
 		id: "rust-result-data",
 		language: "musi",
-		sourceText: `let RustResult[T, E] := data {
-  | Ok(value : T)
-  | Error(error : E)
-};
+		sourceText: `let Result := import "@std/result";
 
-let parsed := .Ok(value := 8080);
-parsed;`,
+let parsed : Result.Result[Int, String] := Result.ok[Int, String](8080);
+
+parsed
+  |> Result.unwrapOr[Int, String](3000);`,
 		evidence: {
 			path: "docs/what/language/developers/rust/results-effects.md",
 			line: 1,
@@ -1412,12 +1532,10 @@ parsed;`,
 	{
 		id: "rust-effect-request",
 		language: "musi",
-		sourceText: `let Console := effect {
-  let readLine () : String;
-};
+		sourceText: `let Io := import "@std/io";
 
-let readLine () : String using { Console } :=
-  request Console.readLine();`,
+let line := Io.readTrimmedLine();
+line;`,
 		evidence: {
 			path: "docs/what/language/developers/rust/results-effects.md",
 			line: 1,

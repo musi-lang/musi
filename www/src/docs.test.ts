@@ -45,6 +45,19 @@ describe("docs", () => {
 		expect(
 			docForPath("/learn/book/developers/guides/rust/mutation")?.title,
 		).toBe("Mutation");
+		expect(
+			docForPath("/learn/book/developers/guides/javascript-typescript")?.kind,
+		).toBe("section");
+		expect(
+			docForPath("/learn/book/developers/guides/javascript-typescript/overview")
+				?.kind,
+		).toBe("chapter");
+		expect(docForPath("/learn/book/developers/javascript")?.kind).toBe(
+			"section",
+		);
+		expect(docForPath("/learn/book/developers/typescript")?.kind).toBe(
+			"section",
+		);
 	});
 
 	it("builds breadcrumbs for deep developer pages", () => {
@@ -56,18 +69,11 @@ describe("docs", () => {
 		]);
 	});
 
-	it("keeps non-rust guides visible in alphabetical order under language guides", () => {
+	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
 		const titles = docChildren("developers-guides").map((page) => page.title);
 		expect(titles).toEqual([
-			"Musi for C Developers",
-			"Musi for C# Developers",
-			"Musi for C++ Developers",
-			"Musi for Go Developers",
-			"Musi for Java Developers",
-			"Musi for JavaScript Developers",
-			"Musi for Python Developers",
+			"Musi for JavaScript and TypeScript Developers",
 			"Musi for Rust Developers",
-			"Musi for TypeScript Developers",
 		]);
 	});
 
