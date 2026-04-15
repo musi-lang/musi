@@ -68,7 +68,7 @@
 				"path": "syntaxes/musi.tmLanguage.json",
 				"balancedBracketScopes": [
 					"punctuation.section",
-					"punctuation.definition.type-params"
+					"punctuation.definition.type.arguments"
 				]
 			},
 			{

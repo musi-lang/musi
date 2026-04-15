@@ -56,7 +56,17 @@
 		"storage.type.documentation.musi",
 		"markup.underline.link.documentation.musi",
 		"markup.inline.raw.documentation.musi",
-		"keyword.other.documentation.tag.musi"
+		"keyword.other.documentation.tag.musi",
+		"meta.type.expression.musi",
+		"meta.type.arguments.musi",
+		"entity.name.type.parameter.musi",
+		"keyword.operator.function.pure.musi",
+		"keyword.operator.function.effect.musi",
+		"keyword.operator.pipe.musi",
+		"keyword.operator.match.arm.musi",
+		"punctuation.definition.type.arguments.begin.musi",
+		"punctuation.definition.type.arguments.end.musi",
+		"variable.other.member.musi"
 	],
 	"requiredDocumentationPatterns": [
 		"@(param(?:eter)?|arg(?:ument)?|property|var)",
@@ -139,6 +149,27 @@
 			]
 		},
 		{
+			"name": "named variant payload definition",
+			"source": "let Port := data { | Configured(port : Int, secure : Bool) | Default };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "Configured",
+					"scope": "entity.name.type.constructor.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "port",
+					"scope": "variable.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Int",
+					"scope": "entity.name.type.musi"
+				}
+			]
+		},
+		{
 			"name": "using clauses",
 			"source": "let run () using { Console } := 1;\nhandle run() using Console { value => value };",
 			"checks": [
@@ -210,6 +241,138 @@
 					"line": 1,
 					"lexeme": "(+)",
 					"scope": "entity.name.function.operator.musi"
+				}
+			]
+		},
+		{
+			"name": "type annotation names builtin type",
+			"source": "let value : Bool := true;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": ":",
+					"scope": "punctuation.separator.colon.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Bool",
+					"scope": "entity.name.type.musi"
+				}
+			]
+		},
+		{
+			"name": "bare generic call",
+			"source": "let out := isEmpty[T](iter);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "isEmpty",
+					"scope": "entity.name.function.call.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "[",
+					"scope": "punctuation.definition.type.arguments.begin.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "T",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "]",
+					"scope": "punctuation.definition.type.arguments.end.musi"
+				}
+			]
+		},
+		{
+			"name": "generic method call head",
+			"source": "let out := xs.map[T](f);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "map",
+					"scope": "entity.name.function.method.call.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "T",
+					"scope": "entity.name.type.parameter.musi"
+				}
+			]
+		},
+		{
+			"name": "named function call arguments",
+			"source": "let out := render(port := 8080, secure := true);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "render",
+					"scope": "entity.name.function.call.musi"
+				}
+			]
+		},
+		{
+			"name": "pure and effectful function types",
+			"source": "let f : T -> U := g;\nlet h : T ~> U := k;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "T",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "->",
+					"scope": "keyword.operator.function.pure.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "U",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "T",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "~>",
+					"scope": "keyword.operator.function.effect.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "U",
+					"scope": "entity.name.type.parameter.musi"
+				}
+			]
+		},
+		{
+			"name": "nested generic type annotation",
+			"source": "let run : Result[T] -> Option[U] := next;",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "Result",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "T",
+					"scope": "entity.name.type.parameter.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "Option",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "U",
+					"occurrence": 1,
+					"scope": "entity.name.type.parameter.musi"
 				}
 			]
 		}
