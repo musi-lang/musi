@@ -86,6 +86,7 @@ where
             SyntaxNodeKind::QuoteExpr => self.lower_quote_expr(node),
             SyntaxNodeKind::SpliceExpr => self.lower_splice_expr(node),
             SyntaxNodeKind::AttributedExpr => self.lower_attributed_expr(node),
+            SyntaxNodeKind::UnsafeExpr => self.lower_unsafe_expr(node),
             SyntaxNodeKind::TupleExpr => self.lower_tuple_expr(node),
             SyntaxNodeKind::ArrayExpr => self.lower_array_expr_or_ty(node),
             SyntaxNodeKind::ArrayTy => self.lower_array_ty_expr(node),

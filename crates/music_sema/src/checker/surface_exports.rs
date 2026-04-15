@@ -14,6 +14,7 @@ use crate::api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
     ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
     ExportedValue, InstanceSurface, LawParamSurface, LawSurface, SurfaceEffectRow, SurfaceTy,
+    SurfaceTyId,
 };
 
 #[derive(Debug, Clone)]
@@ -94,16 +95,8 @@ fn lower_attr_value(
         HirExprKind::Variant { tag, args } => {
             let tag: Box<str> = interner.resolve(tag.name).into();
             let mut lowered = Vec::new();
-            for arg in module
-                .resolved
-                .module
-                .store
-                .expr_ids
-                .get(args)
-                .iter()
-                .copied()
-            {
-                lowered.push(lower_attr_value(module, interner, arg)?);
+            for arg in module.resolved.module.store.args.get(args) {
+                lowered.push(lower_attr_value(module, interner, arg.expr)?);
             }
             Some(AttrValue::Variant {
                 tag,
@@ -248,12 +241,30 @@ impl ExportSurfaceCollector<'_, '_> {
             if typing.is_gated_binding(export.binding) {
                 return None;
             }
-            let ty = typing.binding_types().get(&export.binding).copied()?;
             let symbol = this.module.resolved.names.bindings.get(export.binding).name;
             let scheme = typing.binding_schemes().get(&export.binding);
+            let ty = scheme.map_or_else(
+                || typing.binding_types().get(&export.binding).copied(),
+                |scheme| Some(scheme.ty),
+            )?;
             let mut value = ExportedValue::new(export.name.clone(), this.tys.lower(ty))
                 .with_type_params(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
                     lower_type_params(&scheme.type_params, this.tys.interner)
+                }))
+                .with_type_param_kinds(scheme.map_or_else(
+                    Box::<[SurfaceTyId]>::default,
+                    |scheme| {
+                        scheme
+                            .type_param_kinds
+                            .iter()
+                            .copied()
+                            .map(|ty| this.tys.lower(ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice()
+                    },
+                ))
+                .with_param_names(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
+                    lower_type_params(&scheme.param_names, this.tys.interner)
                 }))
                 .with_constraints(
                     scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
@@ -341,9 +352,7 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
                 .binding_id_at_site(site)
                 .is_some_and(|found| found == binding)
         }
-        HirPatKind::Tuple { items }
-        | HirPatKind::Array { items }
-        | HirPatKind::Variant { args: items, .. } => module
+        HirPatKind::Tuple { items } | HirPatKind::Array { items } => module
             .resolved
             .module
             .store
@@ -352,6 +361,14 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
             .iter()
             .copied()
             .any(|item| pat_binds(module, item, binding)),
+        HirPatKind::Variant { args, .. } => module
+            .resolved
+            .module
+            .store
+            .variant_pat_args
+            .get(args)
+            .iter()
+            .any(|item| pat_binds(module, item.pat, binding)),
         HirPatKind::Record { fields } => module
             .resolved
             .module
@@ -428,16 +445,32 @@ impl ExportSurfaceCollector<'_, '_> {
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
                             );
-                            if let Some(payload) = variant.payload() {
+                            let lowered = if let Some(payload) = variant.payload() {
                                 lowered.with_payload(this.tys.lower(payload))
                             } else {
                                 lowered
-                            }
+                            };
+                            let lowered = if let Some(result) = variant.result() {
+                                lowered.with_result(this.tys.lower(result))
+                            } else {
+                                lowered
+                            };
+                            lowered
+                                .with_field_names(variant.field_names().to_vec().into_boxed_slice())
                         })
                         .collect::<Vec<_>>()
                         .into_boxed_slice()
                 });
             let mut surface = DataSurface::new(data.key().clone(), variants)
+                .with_type_params(lower_type_params(data.type_params(), this.tys.interner))
+                .with_type_param_kinds(
+                    data.type_param_kinds()
+                        .iter()
+                        .copied()
+                        .map(|ty| this.tys.lower(ty))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )
                 .with_inert_attrs(inert_attrs)
                 .with_musi_attrs(musi_attrs);
             if let Some(repr_kind) = data.repr_kind() {
@@ -501,6 +534,15 @@ impl ExportSurfaceCollector<'_, '_> {
             Some(
                 ClassSurface::new(facts.key.clone(), members, laws)
                     .with_type_params(lower_type_params(&facts.type_params, this.tys.interner))
+                    .with_type_param_kinds(
+                        facts
+                            .type_param_kinds
+                            .iter()
+                            .copied()
+                            .map(|ty| this.tys.lower(ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    )
                     .with_constraints(this.lower_constraints(&facts.constraints))
                     .with_inert_attrs(inert_attrs)
                     .with_musi_attrs(musi_attrs),
@@ -526,6 +568,7 @@ impl ExportSurfaceCollector<'_, '_> {
                                     .map(|ty| this.tys.lower(ty))
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
+                                lower_type_params(op.param_names(), this.tys.interner),
                                 this.tys.lower(op.result()),
                             )
                         })
@@ -593,6 +636,15 @@ impl ExportSurfaceCollector<'_, '_> {
                         lower_type_params(&facts.member_names, self.tys.interner),
                     )
                     .with_type_params(lower_type_params(&facts.type_params, self.tys.interner))
+                    .with_type_param_kinds(
+                        facts
+                            .type_param_kinds
+                            .iter()
+                            .copied()
+                            .map(|ty| self.tys.lower(ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    )
                     .with_constraints(self.lower_constraints(&facts.constraints))
                     .with_inert_attrs(inert_attrs)
                     .with_musi_attrs(musi_attrs),
@@ -678,7 +730,8 @@ fn collect_exports_from_kind(
         }
         HirExprKind::Lambda { body, .. }
         | HirExprKind::Import { arg: body }
-        | HirExprKind::Request { expr: body } => {
+        | HirExprKind::Request { expr: body }
+        | HirExprKind::Unsafe { body } => {
             collect_expr(module, interner, *body, exports, attr_stack);
         }
         HirExprKind::Call { callee, args } => {
@@ -914,7 +967,15 @@ fn collect_data_exports(
     attr_stack: &mut Vec<HirAttr>,
 ) {
     for variant in module.resolved.module.store.variants.get(variants.clone()) {
-        collect_optional_expr(module, interner, variant.arg, exports, attr_stack);
+        for field in module
+            .resolved
+            .module
+            .store
+            .variant_fields
+            .get(variant.fields.clone())
+        {
+            collect_expr(module, interner, field.ty, exports, attr_stack);
+        }
         collect_optional_expr(module, interner, variant.value, exports, attr_stack);
     }
     for field in module.resolved.module.store.fields.get(fields.clone()) {
@@ -1010,10 +1071,15 @@ fn collect_export_bindings_from_pat(
         HirPatKind::Bind { name } => {
             push_export_binding(module, interner, name, opaque, exports, attr_stack);
         }
-        HirPatKind::Tuple { items }
-        | HirPatKind::Array { items }
-        | HirPatKind::Variant { args: items, .. } => {
+        HirPatKind::Tuple { items } | HirPatKind::Array { items } => {
             collect_pat_id_range(module, interner, items, opaque, exports, attr_stack);
+        }
+        HirPatKind::Variant { args, .. } => {
+            for item in module.resolved.module.store.variant_pat_args.get(args) {
+                collect_export_bindings_from_pat(
+                    module, interner, item.pat, opaque, exports, attr_stack,
+                );
+            }
         }
         HirPatKind::Record { fields } => {
             for field in module.resolved.module.store.record_pat_fields.get(fields) {

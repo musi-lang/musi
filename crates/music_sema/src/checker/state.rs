@@ -9,6 +9,7 @@ use music_hir::{
     HirEffectSet, HirExpr, HirExprId, HirFieldDef, HirHandleClause, HirLit, HirLitId, HirLitKind,
     HirMatchArm, HirMemberDef, HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem,
     HirRecordPatField, HirTemplatePart, HirTy, HirTyField, HirTyId, HirTyKind, HirVariantDef,
+    HirVariantFieldDef, HirVariantPatArg,
 };
 use music_module::ModuleKey;
 use music_names::{
@@ -33,12 +34,15 @@ type ImportTargetMap = HashMap<Span, ModuleKey>;
 type BindingTypeMap = HashMap<NameBindingId, HirTyId>;
 type BindingEffectsMap = HashMap<NameBindingId, EffectRow>;
 type BindingSchemeMap = HashMap<NameBindingId, BindingScheme>;
+type TypeParamKindScope = HashMap<Symbol, HirTyId>;
+type TypeParamKindScopeList = Vec<TypeParamKindScope>;
 type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
 type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
 type BindingAttachedReceiverMap = HashMap<NameBindingId, AttachedReceiverInfo>;
 type SealedClassSet = HashSet<DefinitionKey>;
 type GatedBindingSet = HashSet<NameBindingId>;
 type ForeignLinkMap = HashMap<NameBindingId, ForeignLinkInfo>;
+type UnsafeBindingSet = HashSet<NameBindingId>;
 type EffectDefMap = HashMap<Box<str>, EffectDef>;
 type DataDefMap = HashMap<Box<str>, DataDef>;
 type AttachedMethodMap = HashMap<AttachedMethodKey, Vec<NameBindingId>>;
@@ -73,13 +77,16 @@ type HandleClauseList = Vec<HirHandleClause>;
 type MatchArmList = Vec<HirMatchArm>;
 type ConstraintList = Vec<HirConstraint>;
 type VariantDefList = Vec<HirVariantDef>;
+type VariantFieldDefList = Vec<HirVariantFieldDef>;
 type FieldDefList = Vec<HirFieldDef>;
 type EffectItemList = Vec<HirEffectItem>;
 type PatIdList = Vec<HirPatId>;
 type RecordPatFieldList = Vec<HirRecordPatField>;
+type VariantPatArgList = Vec<HirVariantPatArg>;
 type IdentList = Vec<Ident>;
 type BinderList = Vec<HirBinder>;
 type TemplatePartList = Vec<HirTemplatePart>;
+type TypeParamKindList = Vec<(Symbol, HirTyId)>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Builtins {
@@ -219,12 +226,14 @@ pub struct TypingState {
     binding_types: BindingTypeMap,
     binding_effects: BindingEffectsMap,
     binding_schemes: BindingSchemeMap,
+    type_param_kind_scopes: TypeParamKindScopeList,
     binding_evidence_keys: BindingEvidenceKeyMap,
     binding_module_targets: BindingModuleTargetMap,
     binding_attached_receivers: BindingAttachedReceiverMap,
     sealed_classes: SealedClassSet,
     gated_bindings: GatedBindingSet,
     foreign_links: ForeignLinkMap,
+    unsafe_bindings: UnsafeBindingSet,
     next_open_row_id: u32,
 }
 
@@ -318,6 +327,7 @@ pub struct CheckPass<'ctx, 'interner, 'env> {
     expected: ExpectedTyList,
     evidence_scopes: EvidenceScopeList,
     module_stmt_depth: u32,
+    unsafe_depth: u32,
 }
 
 pub fn prepare_module<'interner, 'env>(
@@ -371,9 +381,12 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
     let bool_variants = BTreeMap::from([
         (
             "False".into(),
-            SemaDataVariantDef::new(None, Box::default()),
+            SemaDataVariantDef::new(None, None, Box::default(), Box::default()),
         ),
-        ("True".into(), SemaDataVariantDef::new(None, Box::default())),
+        (
+            "True".into(),
+            SemaDataVariantDef::new(None, None, Box::default(), Box::default()),
+        ),
     ]);
     let _ = decls.data_defs.insert(
         "Bool".into(),
@@ -415,6 +428,7 @@ pub fn finish_module(
             binding_types: typing.binding_types().clone(),
             binding_schemes: typing.binding_schemes().clone(),
             binding_evidence_keys: typing.binding_evidence_keys().clone(),
+            binding_module_targets: typing.binding_module_targets().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,
@@ -667,6 +681,16 @@ impl PassBase<'_, '_, '_> {
             .to_vec()
     }
 
+    pub fn variant_fields(&self, range: SliceRange<HirVariantFieldDef>) -> VariantFieldDefList {
+        self.module
+            .resolved
+            .module
+            .store
+            .variant_fields
+            .get(range)
+            .to_vec()
+    }
+
     pub fn fields(&self, range: SliceRange<HirFieldDef>) -> FieldDefList {
         self.module.resolved.module.store.fields.get(range).to_vec()
     }
@@ -701,6 +725,16 @@ impl PassBase<'_, '_, '_> {
             .to_vec()
     }
 
+    pub fn variant_pat_args(&self, range: SliceRange<HirVariantPatArg>) -> VariantPatArgList {
+        self.module
+            .resolved
+            .module
+            .store
+            .variant_pat_args
+            .get(range)
+            .to_vec()
+    }
+
     pub fn idents(&self, range: SliceRange<Ident>) -> IdentList {
         self.module.resolved.module.store.idents.get(range).to_vec()
     }
@@ -713,6 +747,51 @@ impl PassBase<'_, '_, '_> {
             .binders
             .get(range)
             .to_vec()
+    }
+
+    pub fn lower_type_param_kinds(&mut self, range: SliceRange<HirBinder>) -> TypeParamKindList {
+        let builtins = self.builtins();
+        self.binders(range)
+            .into_iter()
+            .map(|binder| {
+                let kind = binder.ty.map_or(builtins.type_, |expr| {
+                    let origin = self.expr(expr).origin;
+                    self.lower_type_expr(expr, origin)
+                });
+                (binder.name.name, kind)
+            })
+            .collect()
+    }
+
+    pub fn push_type_param_kinds(&mut self, kinds: &[(Symbol, HirTyId)]) {
+        self.typing
+            .type_param_kind_scopes
+            .push(kinds.iter().copied().collect());
+    }
+
+    pub fn pop_type_param_kinds(&mut self) {
+        let _ = self.typing.type_param_kind_scopes.pop();
+    }
+
+    pub fn type_constructor_scheme_arity(&self, symbol: Symbol) -> Option<usize> {
+        self.module
+            .resolved
+            .names
+            .bindings
+            .iter()
+            .find(|(id, binding)| {
+                binding.name == symbol && self.typing.binding_schemes.contains_key(id)
+            })
+            .and_then(|(id, _)| self.typing.binding_schemes.get(&id))
+            .map(|scheme| scheme.type_params.len())
+    }
+
+    pub fn type_param_kind(&self, symbol: Symbol) -> Option<HirTyId> {
+        self.typing
+            .type_param_kind_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(&symbol).copied())
     }
 
     pub fn template_parts(&self, range: SliceRange<HirTemplatePart>) -> TemplatePartList {
@@ -915,6 +994,14 @@ impl PassBase<'_, '_, '_> {
     pub fn set_foreign_link(&mut self, binding: NameBindingId, link: ForeignLinkInfo) {
         let _prev = self.typing.foreign_links.insert(binding, link);
     }
+
+    pub fn mark_unsafe_binding(&mut self, binding: NameBindingId) {
+        let _ = self.typing.unsafe_bindings.insert(binding);
+    }
+
+    pub fn is_unsafe_binding(&self, binding: NameBindingId) -> bool {
+        self.typing.unsafe_bindings.contains(&binding)
+    }
 }
 
 impl PassBase<'_, '_, '_> {
@@ -973,11 +1060,21 @@ impl PassBase<'_, '_, '_> {
         let variants = BTreeMap::from([
             (
                 "Left".into(),
-                SemaDataVariantDef::new(Some(left), vec![left].into_boxed_slice()),
+                SemaDataVariantDef::new(
+                    Some(left),
+                    None,
+                    vec![left].into_boxed_slice(),
+                    Box::default(),
+                ),
             ),
             (
                 "Right".into(),
-                SemaDataVariantDef::new(Some(right), vec![right].into_boxed_slice()),
+                SemaDataVariantDef::new(
+                    Some(right),
+                    None,
+                    vec![right].into_boxed_slice(),
+                    Box::default(),
+                ),
             ),
         ]);
         let _prev = self.decls.data_defs.insert(
@@ -1149,6 +1246,7 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
             expected: Vec::new(),
             evidence_scopes: Vec::new(),
             module_stmt_depth: 0,
+            unsafe_depth: 0,
         }
     }
 
@@ -1162,6 +1260,18 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
 
     pub const fn in_module_stmt(&self) -> bool {
         self.module_stmt_depth > 0
+    }
+
+    pub const fn enter_unsafe_block(&mut self) {
+        self.unsafe_depth = self.unsafe_depth.saturating_add(1);
+    }
+
+    pub const fn exit_unsafe_block(&mut self) {
+        self.unsafe_depth = self.unsafe_depth.saturating_sub(1);
+    }
+
+    pub const fn in_unsafe_block(&self) -> bool {
+        self.unsafe_depth > 0
     }
 
     pub fn push_evidence_scope(&mut self, scope: EvidenceScope) {

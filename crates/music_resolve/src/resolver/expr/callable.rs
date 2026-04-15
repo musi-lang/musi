@@ -68,11 +68,45 @@ where
             let spread = arg_node
                 .child_tokens()
                 .any(|t| t.kind() == TokenKind::DotDotDot);
+            let name = if arg_node
+                .child_tokens()
+                .any(|t| t.kind() == TokenKind::ColonEq)
+            {
+                arg_node
+                    .child_tokens()
+                    .find(|t| t.kind() == TokenKind::Ident)
+                    .and_then(|tok| self.intern_ident_token(tok))
+            } else {
+                None
+            };
             let expr = self.lower_opt_expr(origin, arg_node.child_nodes().next());
-            args.push(HirArg::new(spread, expr));
+            args.push(HirArg::new(spread, name, expr));
         }
         let args = self.store.args.alloc_from_iter(args);
         self.alloc_expr(origin, HirExprKind::Call { callee, args })
+    }
+
+    pub(super) fn alloc_call_expr_with_piped_value(
+        &mut self,
+        origin: HirOrigin,
+        piped_value: HirExprId,
+        rhs: HirExprId,
+    ) -> HirExprId {
+        let rhs_kind = self.store.exprs.get(rhs).kind.clone();
+        if let HirExprKind::Call { callee, args } = rhs_kind {
+            let mut combined_args =
+                Vec::with_capacity(usize::try_from(args.len()).unwrap_or(0) + 1);
+            combined_args.push(HirArg::new(false, None, piped_value));
+            combined_args.extend(self.store.args.get(args).iter().cloned());
+            let args = self.store.args.alloc_from_iter(combined_args);
+            self.alloc_expr(origin, HirExprKind::Call { callee, args })
+        } else {
+            let args = self
+                .store
+                .args
+                .alloc_from_iter([HirArg::new(false, None, piped_value)]);
+            self.alloc_expr(origin, HirExprKind::Call { callee: rhs, args })
+        }
     }
 
     pub(super) fn lower_apply_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

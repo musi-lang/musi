@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, HashMap};
 use music_arena::SliceRange;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirBinder, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirTyKind,
-    HirVariantDef,
+    HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
+    HirVariantFieldDef,
 };
 use music_names::Ident;
 
@@ -14,6 +14,7 @@ use super::attrs::extract_data_layout_hints;
 use super::decls::{member_law_facts, member_signature};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
+use super::variant_payload::lower_variant_payload;
 use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
@@ -203,8 +204,8 @@ impl CollectPass<'_, '_, '_> {
 
     fn visit_data(&mut self, variants: SliceRange<HirVariantDef>, fields: SliceRange<HirFieldDef>) {
         for variant in self.variants(variants) {
-            if let Some(arg) = variant.arg {
-                self.visit_expr(arg);
+            for field in self.variant_fields(variant.fields) {
+                self.visit_expr(field.ty);
             }
             if let Some(value) = variant.value {
                 self.visit_expr(value);
@@ -229,7 +230,7 @@ impl CollectPass<'_, '_, '_> {
         let attrs = outer_attrs.map_or_else(Vec::new, |(_, range)| vec![range.clone()]);
         match self.expr(value).kind {
             HirExprKind::Data { variants, fields } => {
-                self.collect_data_decl(origin, &attrs, name, variants, fields);
+                self.collect_data_decl(origin, &attrs, name, type_params, variants, fields);
             }
             HirExprKind::Effect { members } => self.collect_effect_decl(name, members),
             HirExprKind::Class {
@@ -245,6 +246,7 @@ impl CollectPass<'_, '_, '_> {
         origin: HirOrigin,
         attrs: &[SliceRange<HirAttr>],
         name: Ident,
+        type_params: SliceRange<HirBinder>,
         variants: SliceRange<HirVariantDef>,
         fields: SliceRange<HirFieldDef>,
     ) {
@@ -255,16 +257,46 @@ impl CollectPass<'_, '_, '_> {
 
         let (repr_kind, layout_align, layout_pack, frozen) =
             extract_data_layout_hints(self, origin, attrs);
+        let type_param_kinds = self.lower_type_param_kinds(type_params);
+        let key = surface_key(self.module_key(), self.interner(), name.name);
+        let type_param_names = type_param_kinds
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let type_param_kind_tys = type_param_kinds
+            .iter()
+            .map(|(_, kind)| *kind)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        self.insert_data_def(
+            data_name.clone(),
+            DataDef::new(
+                key.clone(),
+                BTreeMap::new(),
+                repr_kind.clone(),
+                layout_align,
+                layout_pack,
+                frozen,
+            )
+            .with_type_params(type_param_names.clone(), type_param_kind_tys.clone()),
+        );
+        self.push_type_param_kinds(&type_param_kinds);
         let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
         for variant in self.variants(variants) {
             let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
-            let payload = variant.arg.map(|expr| {
-                let origin = self.expr(expr).origin;
-                self.lower_type_expr(expr, origin)
-            });
-            let field_tys =
-                payload.map_or_else(Box::<[_]>::default, |ty| self.flatten_data_field_tys(ty));
-            let prev = variant_map.insert(tag, DataVariantDef::new(payload, field_tys));
+            let variant_fields = self.variant_fields(variant.fields);
+            if variant_payload_style_is_mixed(&variant_fields) {
+                self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
+            }
+            let (payload, field_tys, field_names) = lower_variant_payload(self, &variant_fields);
+            let result = variant
+                .result
+                .map(|expr| self.lower_type_expr(expr, variant.origin));
+            let prev = variant_map.insert(
+                tag,
+                DataVariantDef::new(payload, result, field_tys, field_names),
+            );
             if prev.is_some() {
                 self.diag(
                     variant.origin.span,
@@ -284,11 +316,14 @@ impl CollectPass<'_, '_, '_> {
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
             if !field_tys.is_empty() {
-                let _ = variant_map.insert(data_name.clone(), DataVariantDef::new(None, field_tys));
+                let _ = variant_map.insert(
+                    data_name.clone(),
+                    DataVariantDef::new(None, None, field_tys, Box::default()),
+                );
             }
         }
 
-        let key = surface_key(self.module_key(), self.interner(), name.name);
+        self.pop_type_param_kinds();
         self.insert_data_def(
             data_name,
             DataDef::new(
@@ -298,15 +333,9 @@ impl CollectPass<'_, '_, '_> {
                 layout_align,
                 layout_pack,
                 frozen,
-            ),
+            )
+            .with_type_params(type_param_names, type_param_kind_tys),
         );
-    }
-
-    fn flatten_data_field_tys(&self, ty: HirTyId) -> Box<[HirTyId]> {
-        match &self.ty(ty).kind {
-            HirTyKind::Tuple { items } => self.ty_ids(*items).into_boxed_slice(),
-            _ => vec![ty].into_boxed_slice(),
-        }
     }
 
     fn collect_effect_decl(&mut self, name: Ident, members: SliceRange<HirMemberDef>) {
@@ -339,7 +368,15 @@ impl CollectPass<'_, '_, '_> {
                 let facts = member_signature(self, member, false);
                 (
                     Box::<str>::from(self.resolve_symbol(member.name.name)),
-                    EffectOpDef::new(facts.params.clone(), facts.result),
+                    EffectOpDef::new(
+                        facts.params.clone(),
+                        self.params(member.params.clone())
+                            .into_iter()
+                            .map(|param| param.name.name)
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                        facts.result,
+                    ),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -388,6 +425,8 @@ impl CollectPass<'_, '_, '_> {
                 _ => {}
             }
         }
+        let type_param_kinds = self.lower_type_param_kinds(type_params);
+        self.push_type_param_kinds(&type_param_kinds);
         let class_members = members_vec
             .iter()
             .filter(|member| member.kind == HirMemberKind::Let)
@@ -401,13 +440,18 @@ impl CollectPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_class_id(name.name, value);
-        let type_params = self
-            .binders(type_params)
-            .into_iter()
-            .map(|binder| binder.name.name)
+        let type_params = type_param_kinds
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let type_param_kind_tys = type_param_kinds
+            .iter()
+            .map(|(_, kind)| *kind)
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let constraints = self.lower_constraints(constraints);
+        self.pop_type_param_kinds();
         let facts = ClassFacts::new(
             surface_key(self.module_key(), self.interner(), name.name),
             name.name,
@@ -415,6 +459,7 @@ impl CollectPass<'_, '_, '_> {
             laws,
         )
         .with_type_params(type_params)
+        .with_type_param_kinds(type_param_kind_tys)
         .with_constraints(constraints);
         self.insert_class_facts(value, facts.clone());
         self.insert_class_facts_by_name(name.name, facts);
@@ -436,4 +481,10 @@ impl CollectPass<'_, '_, '_> {
             self.visit_expr(value);
         }
     }
+}
+
+fn variant_payload_style_is_mixed(fields: &[HirVariantFieldDef]) -> bool {
+    let has_named = fields.iter().any(|field| field.name.is_some());
+    let has_positional = fields.iter().any(|field| field.name.is_none());
+    has_named && has_positional
 }

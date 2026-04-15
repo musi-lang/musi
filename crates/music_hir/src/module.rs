@@ -5,9 +5,9 @@ use music_names::Ident;
 use crate::expr::{
     HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirEffectItem, HirExpr,
     HirFieldDef, HirHandleClause, HirLit, HirMatchArm, HirMemberDef, HirParam, HirRecordItem,
-    HirTemplatePart, HirVariantDef,
+    HirTemplatePart, HirVariantDef, HirVariantFieldDef,
 };
-use crate::pat::{HirPat, HirRecordPatField};
+use crate::pat::{HirPat, HirRecordPatField, HirVariantPatArg};
 use crate::ty::{HirDim, HirTy, HirTyField};
 
 pub type HirExprId = Idx<HirExpr>;
@@ -33,6 +33,7 @@ pub struct HirStore {
     pub array_items: SliceArena<HirArrayItem>,
     pub record_items: SliceArena<HirRecordItem>,
     pub record_pat_fields: SliceArena<HirRecordPatField>,
+    pub variant_pat_args: SliceArena<HirVariantPatArg>,
     pub template_parts: SliceArena<HirTemplatePart>,
     pub attrs: SliceArena<HirAttr>,
     pub attr_args: SliceArena<HirAttrArg>,
@@ -41,6 +42,7 @@ pub struct HirStore {
     pub effect_items: SliceArena<HirEffectItem>,
     pub members: SliceArena<HirMemberDef>,
     pub variants: SliceArena<HirVariantDef>,
+    pub variant_fields: SliceArena<HirVariantFieldDef>,
     pub fields: SliceArena<HirFieldDef>,
     pub handle_clauses: SliceArena<HirHandleClause>,
     pub dims: SliceArena<HirDim>,
@@ -65,6 +67,7 @@ impl HirStore {
             array_items: SliceArena::new(),
             record_items: SliceArena::new(),
             record_pat_fields: SliceArena::new(),
+            variant_pat_args: SliceArena::new(),
             template_parts: SliceArena::new(),
             attrs: SliceArena::new(),
             attr_args: SliceArena::new(),
@@ -73,6 +76,7 @@ impl HirStore {
             effect_items: SliceArena::new(),
             members: SliceArena::new(),
             variants: SliceArena::new(),
+            variant_fields: SliceArena::new(),
             fields: SliceArena::new(),
             handle_clauses: SliceArena::new(),
             dims: SliceArena::new(),

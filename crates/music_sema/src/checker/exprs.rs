@@ -41,6 +41,9 @@ impl CheckPass<'_, '_, '_> {
         if !attrs.is_empty() {
             ctx.validate_expr_attrs(origin, attrs, id);
         }
+        if expr.mods.partial && !matches!(expr.kind, HirExprKind::Let { .. }) {
+            ctx.diag(origin.span, DiagKind::InvalidPartialModifier, "");
+        }
         let facts = ctx.check_expr_kind(id);
         ctx.set_expr_facts(id, facts.clone());
         facts
@@ -114,6 +117,7 @@ impl CheckPass<'_, '_, '_> {
                 invalid_expr_path(self, "nested let escaped primary dispatcher")
             }
             HirExprKind::Import { arg } => self.check_import_expr(id, arg),
+            HirExprKind::Unsafe { body } => self.check_unsafe_expr(body),
             HirExprKind::Match { scrutinee, arms } => self.check_match_expr(scrutinee, arms),
             HirExprKind::Data { .. }
             | HirExprKind::Effect { .. }
@@ -129,6 +133,13 @@ impl CheckPass<'_, '_, '_> {
                 invalid_expr_path(self, "simple expr escaped primary dispatcher")
             }
         }
+    }
+
+    fn check_unsafe_expr(&mut self, body: HirExprId) -> ExprFacts {
+        self.enter_unsafe_block();
+        let facts = check_expr(self, body);
+        self.exit_unsafe_block();
+        facts
     }
 
     fn check_composite_expr(&mut self, kind: HirExprKind) -> ExprFacts {

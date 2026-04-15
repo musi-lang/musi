@@ -341,7 +341,6 @@ impl CheckPass<'_, '_, '_> {
     }
 
     pub fn validate_foreign_let(&mut self, expr: HirExprId, abi: &str) {
-        let _ = abi;
         let origin = self.expr(expr).origin;
         let HirExprKind::Let { params, sig, .. } = self.expr(expr).kind else {
             self.diag(origin.span, DiagKind::AttrForeignRequiresForeignLet, "");
@@ -351,13 +350,13 @@ impl CheckPass<'_, '_, '_> {
             if let Some(expr) = param.ty {
                 let origin = self.expr(expr).origin;
                 let ty = self.lower_type_expr(expr, origin);
-                self.validate_ffi_type(expr, ty);
+                self.validate_ffi_type(expr, ty, abi);
             }
         }
         if let Some(sig) = sig {
             let origin = self.expr(sig).origin;
             let ty = self.lower_type_expr(sig, origin);
-            self.validate_ffi_type(sig, ty);
+            self.validate_ffi_type(sig, ty, abi);
         } else {
             let span = self.expr(expr).origin.span;
             self.diag(span, DiagKind::ForeignSignatureRequired, "");
@@ -375,7 +374,10 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn validate_ffi_type(&mut self, expr: HirExprId, ty: HirTyId) {
+    fn validate_ffi_type(&mut self, expr: HirExprId, ty: HirTyId, abi: &str) {
+        if abi == "musi" {
+            return;
+        }
         let valid = match self.ty(ty).kind {
             HirTyKind::Int
             | HirTyKind::Float

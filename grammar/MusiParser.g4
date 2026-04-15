@@ -31,6 +31,7 @@ infix_op:
 	| PIPE_GT
 	| MINUS_GT
 	| TILDE_GT
+	| TILDE_EQ
 	| KW_OR
 	| KW_XOR
 	| KW_AND
@@ -100,6 +101,7 @@ atom:
 	| class_expr
 	| instance_expr
 	| request_expr
+	| unsafe_expr
 	| handle_expr
 	| quote_expr
 	| with_mods_expr;
@@ -156,7 +158,11 @@ record_field: ident (COLON_EQ expr)? | spread;
 
 spread: DOT_DOT_DOT expr;
 
-dot_prefix_expr: DOT ident (LPAREN expr_list? RPAREN)?;
+dot_prefix_expr: DOT ident (LPAREN variant_arg_list? RPAREN)?;
+
+variant_arg_list: variant_arg (COMMA variant_arg)* COMMA?;
+
+variant_arg: ident COLON_EQ expr | expr;
 
 resume_expr: KW_RESUME expr?;
 
@@ -173,7 +179,9 @@ let_head: receiver_let_head | pattern;
 receiver_let_head:
 	LPAREN KW_MUT? ident COLON expr RPAREN DOT ident;
 
-bracket_params: LBRACKET ident (COMMA ident)* COMMA? RBRACKET;
+bracket_params: LBRACKET bracket_param (COMMA bracket_param)* COMMA? RBRACKET;
+
+bracket_param: ident type_annot?;
 
 using_clause: KW_USING effect_set;
 
@@ -183,7 +191,12 @@ data_body: variant_list | rec_def_fields | PIPE | SEMICOLON;
 
 variant_list: PIPE? variant (PIPE variant)* PIPE?;
 
-variant: attrs? ident (COLON expr)? (COLON_EQ expr)?;
+variant: attrs? ident variant_payload_defs? (MINUS_GT expr)? (COLON_EQ expr)?;
+
+variant_payload_defs:
+	LPAREN variant_payload_def (COMMA variant_payload_def)* COMMA? RPAREN;
+
+variant_payload_def: ident COLON expr | expr;
 
 rec_def_fields:
 	SEMICOLON? rec_def_field (SEMICOLON rec_def_field)* SEMICOLON?;
@@ -203,6 +216,8 @@ instance_expr:
 	KW_INSTANCE bracket_params? expr where_clause? instance_body;
 
 request_expr: KW_REQUEST expr;
+
+unsafe_expr: KW_UNSAFE LBRACE stmt* RBRACE;
 
 handle_expr:
 	KW_HANDLE expr (handler_expr | KW_USING prefix_expr);
@@ -225,19 +240,20 @@ splice:
 	| HASH LBRACKET expr_list? RBRACKET;
 
 with_mods_expr:
-	attrs export_mod? foreign_mod? (
+	attrs modifier* (
 		expr
 		| foreign_let_group
 		| let_expr
 	)
-	| export_mod foreign_mod? (
+	| modifier+ (
 		expr
 		| foreign_let_group
 		| let_expr
-	)
-	| foreign_mod (foreign_let_group | let_expr);
+	);
 
-modifier: attr | export_mod | foreign_mod;
+modifier: attr | export_mod | foreign_mod | partial_mod;
+
+partial_mod: KW_PARTIAL;
 
 export_mod: KW_EXPORT KW_OPAQUE?;
 
@@ -280,7 +296,7 @@ effect_item: ident (LBRACKET expr RBRACKET)?;
 
 where_clause: KW_WHERE constraint (COMMA constraint)* COMMA?;
 
-constraint: ident LT_COLON expr | ident COLON expr;
+constraint: ident LT_COLON expr | ident COLON expr | ident TILDE_EQ expr;
 
 // --- Patterns ---
 
@@ -292,10 +308,15 @@ pattern_primary:
 	UNDERSCORE
 	| literal
 	| ident
-	| DOT ident (LPAREN pat_list? RPAREN)?
+	| DOT ident (LPAREN variant_pat_arg_list? RPAREN)?
 	| LBRACE rec_pat_fields? RBRACE
 	| LPAREN pat_list? RPAREN
 	| LBRACKET pat_list? RBRACKET;
+
+variant_pat_arg_list:
+	variant_pat_arg (COMMA variant_pat_arg)* COMMA?;
+
+variant_pat_arg: ident COLON_EQ pattern | pattern;
 
 rec_pat_fields: rec_pat_field (COMMA rec_pat_field)*;
 

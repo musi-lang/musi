@@ -327,6 +327,8 @@ pub struct ExportedValue {
     pub receiver_ty: Option<SurfaceTyId>,
     pub receiver_mut: bool,
     pub type_params: NameList,
+    pub type_param_kinds: SurfaceTyIdList,
+    pub param_names: NameList,
     pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
     pub opaque: bool,
@@ -350,6 +352,8 @@ impl ExportedValue {
             receiver_ty: None,
             receiver_mut: false,
             type_params: Box::default(),
+            type_param_kinds: Box::default(),
+            param_names: Box::default(),
             constraints: Box::default(),
             effects: SurfaceEffectRow::default(),
             opaque: false,
@@ -365,6 +369,18 @@ impl ExportedValue {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_param_names(mut self, param_names: impl Into<NameList>) -> Self {
+        self.param_names = param_names.into();
         self
     }
 
@@ -434,7 +450,9 @@ impl ExportedValue {
 pub struct DataVariantSurface {
     pub name: Box<str>,
     pub payload: Option<SurfaceTyId>,
+    pub result: Option<SurfaceTyId>,
     pub field_tys: SurfaceTyIdList,
+    pub field_names: Box<[Option<Box<str>>]>,
 }
 
 impl DataVariantSurface {
@@ -447,7 +465,9 @@ impl DataVariantSurface {
         Self {
             name: name.into(),
             payload: None,
+            result: None,
             field_tys: field_tys.into(),
+            field_names: Box::default(),
         }
     }
 
@@ -456,11 +476,25 @@ impl DataVariantSurface {
         self.payload = Some(payload);
         self
     }
+
+    #[must_use]
+    pub const fn with_result(mut self, result: SurfaceTyId) -> Self {
+        self.result = Some(result);
+        self
+    }
+
+    #[must_use]
+    pub fn with_field_names(mut self, field_names: impl Into<Box<[Option<Box<str>>]>>) -> Self {
+        self.field_names = field_names.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSurface {
     pub key: DefinitionKey,
+    pub type_params: NameList,
+    pub type_param_kinds: SurfaceTyIdList,
     pub variants: Box<[DataVariantSurface]>,
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
@@ -475,6 +509,8 @@ impl DataSurface {
     pub fn new(key: DefinitionKey, variants: impl Into<Box<[DataVariantSurface]>>) -> Self {
         Self {
             key,
+            type_params: Box::default(),
+            type_param_kinds: Box::default(),
             variants: variants.into(),
             repr_kind: None,
             layout_align: None,
@@ -483,6 +519,18 @@ impl DataSurface {
             inert_attrs: Box::default(),
             musi_attrs: Box::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
+        self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
+        self
     }
 
     #[must_use]
@@ -663,6 +711,7 @@ impl LawSurface {
 pub struct ClassSurface {
     pub key: DefinitionKey,
     pub type_params: Box<[Box<str>]>,
+    pub type_param_kinds: SurfaceTyIdList,
     pub constraints: Box<[ConstraintSurface]>,
     pub members: Box<[ClassMemberSurface]>,
     pub laws: Box<[LawSurface]>,
@@ -680,6 +729,7 @@ impl ClassSurface {
         Self {
             key,
             type_params: Box::default(),
+            type_param_kinds: Box::default(),
             constraints: Box::default(),
             members: members.into(),
             laws: laws.into(),
@@ -691,6 +741,12 @@ impl ClassSurface {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
         self
     }
 
@@ -717,19 +773,27 @@ impl ClassSurface {
 pub struct EffectOpSurface {
     pub name: Box<str>,
     pub params: Box<[SurfaceTyId]>,
+    pub param_names: NameList,
     pub result: SurfaceTyId,
 }
 
 impl EffectOpSurface {
     #[must_use]
-    pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
+    pub fn new<Name, Params, ParamNames>(
+        name: Name,
+        params: Params,
+        param_names: ParamNames,
+        result: SurfaceTyId,
+    ) -> Self
     where
         Name: Into<Box<str>>,
         Params: Into<SurfaceTyIdList>,
+        ParamNames: Into<NameList>,
     {
         Self {
             name: name.into(),
             params: params.into(),
+            param_names: param_names.into(),
             result,
         }
     }
@@ -776,6 +840,7 @@ impl EffectSurface {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceSurface {
     pub type_params: Box<[Box<str>]>,
+    pub type_param_kinds: SurfaceTyIdList,
     pub class_key: DefinitionKey,
     pub class_args: Box<[SurfaceTyId]>,
     pub constraints: Box<[ConstraintSurface]>,
@@ -796,6 +861,7 @@ impl InstanceSurface {
     {
         Self {
             type_params: Box::default(),
+            type_param_kinds: Box::default(),
             class_key,
             class_args: class_args.into(),
             constraints: Box::default(),
@@ -808,6 +874,12 @@ impl InstanceSurface {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<NameList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<SurfaceTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
         self
     }
 
@@ -956,6 +1028,7 @@ impl ExprFacts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
     params: HirTyIdList,
+    param_names: Box<[Symbol]>,
     result: HirTyId,
 }
 
@@ -969,12 +1042,16 @@ pub struct SemaEffectDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
     payload: Option<HirTyId>,
+    result: Option<HirTyId>,
     field_tys: HirTyIdList,
+    field_names: Box<[Option<Box<str>>]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataDef {
     key: DefinitionKey,
+    type_params: Box<[Symbol]>,
+    type_param_kinds: HirTyIdList,
     variants: BTreeMap<Box<str>, SemaDataVariantDef>,
     repr_kind: Option<Box<str>>,
     layout_align: Option<u32>,
@@ -984,12 +1061,14 @@ pub struct SemaDataDef {
 
 impl SemaEffectOpDef {
     #[must_use]
-    pub(crate) fn new<Params>(params: Params, result: HirTyId) -> Self
+    pub(crate) fn new<Params, Names>(params: Params, param_names: Names, result: HirTyId) -> Self
     where
         Params: Into<HirTyIdList>,
+        Names: Into<Box<[Symbol]>>,
     {
         Self {
             params: params.into(),
+            param_names: param_names.into(),
             result,
         }
     }
@@ -997,6 +1076,11 @@ impl SemaEffectOpDef {
     #[must_use]
     pub fn params(&self) -> &[HirTyId] {
         &self.params
+    }
+
+    #[must_use]
+    pub fn param_names(&self) -> &[Symbol] {
+        &self.param_names
     }
 
     #[must_use]
@@ -1054,13 +1138,20 @@ impl SemaEffectDef {
 
 impl SemaDataVariantDef {
     #[must_use]
-    pub(crate) fn new<FieldTys>(payload: Option<HirTyId>, field_tys: FieldTys) -> Self
+    pub(crate) fn new<FieldTys>(
+        payload: Option<HirTyId>,
+        result: Option<HirTyId>,
+        field_tys: FieldTys,
+        field_names: impl Into<Box<[Option<Box<str>>]>>,
+    ) -> Self
     where
         FieldTys: Into<HirTyIdList>,
     {
         Self {
             payload,
+            result,
             field_tys: field_tys.into(),
+            field_names: field_names.into(),
         }
     }
 
@@ -1070,8 +1161,18 @@ impl SemaDataVariantDef {
     }
 
     #[must_use]
+    pub const fn result(&self) -> Option<HirTyId> {
+        self.result
+    }
+
+    #[must_use]
     pub fn field_tys(&self) -> &[HirTyId] {
         &self.field_tys
+    }
+
+    #[must_use]
+    pub fn field_names(&self) -> &[Option<Box<str>>] {
+        &self.field_names
     }
 }
 
@@ -1087,6 +1188,8 @@ impl SemaDataDef {
     ) -> Self {
         Self {
             key,
+            type_params: Box::default(),
+            type_param_kinds: Box::default(),
             variants: variants.into(),
             repr_kind,
             layout_align,
@@ -1096,8 +1199,29 @@ impl SemaDataDef {
     }
 
     #[must_use]
+    pub(crate) fn with_type_params(
+        mut self,
+        type_params: impl Into<Box<[Symbol]>>,
+        type_param_kinds: impl Into<HirTyIdList>,
+    ) -> Self {
+        self.type_params = type_params.into();
+        self.type_param_kinds = type_param_kinds.into();
+        self
+    }
+
+    #[must_use]
     pub const fn key(&self) -> &DefinitionKey {
         &self.key
+    }
+
+    #[must_use]
+    pub fn type_params(&self) -> &[Symbol] {
+        &self.type_params
+    }
+
+    #[must_use]
+    pub fn type_param_kinds(&self) -> &[HirTyId] {
+        &self.type_param_kinds
     }
 
     #[must_use]
@@ -1159,6 +1283,7 @@ impl PatFacts {
 pub enum ConstraintKind {
     Subtype,
     Implements,
+    TypeEq,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1279,6 +1404,7 @@ pub struct ClassFacts {
     pub key: DefinitionKey,
     pub name: Symbol,
     pub type_params: Box<[Symbol]>,
+    pub type_param_kinds: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
     pub members: Box<[ClassMemberFacts]>,
     pub laws: Box<[LawFacts]>,
@@ -1296,6 +1422,7 @@ impl ClassFacts {
             key,
             name,
             type_params: Box::default(),
+            type_param_kinds: Box::default(),
             constraints: Box::default(),
             members: members.into(),
             laws: laws.into(),
@@ -1305,6 +1432,12 @@ impl ClassFacts {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<HirTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
         self
     }
 
@@ -1319,6 +1452,7 @@ impl ClassFacts {
 pub struct InstanceFacts {
     pub origin: HirOrigin,
     pub type_params: Box<[Symbol]>,
+    pub type_param_kinds: HirTyIdList,
     pub class_key: DefinitionKey,
     pub class_name: Symbol,
     pub class_args: HirTyIdList,
@@ -1342,6 +1476,7 @@ impl InstanceFacts {
         Self {
             origin,
             type_params: Box::default(),
+            type_param_kinds: Box::default(),
             class_key,
             class_name,
             class_args: class_args.into(),
@@ -1354,6 +1489,12 @@ impl InstanceFacts {
     #[must_use]
     pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
         self.type_params = type_params.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_type_param_kinds(mut self, type_param_kinds: impl Into<HirTyIdList>) -> Self {
+        self.type_param_kinds = type_param_kinds.into();
         self
     }
 
@@ -1379,6 +1520,7 @@ pub struct SemaModule {
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
+    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
@@ -1400,6 +1542,7 @@ struct SemaContextTables {
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
+    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
 }
 
 struct SemaFactTables {
@@ -1443,6 +1586,7 @@ impl From<SemaModuleBuild> for SemaModule {
             binding_types: build_context.binding_types,
             binding_schemes: build_context.binding_schemes,
             binding_evidence_keys: build_context.binding_evidence_keys,
+            binding_module_targets: build_context.binding_module_targets,
         };
         let facts = SemaFactTables {
             expr_facts,
@@ -1526,6 +1670,11 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn binding_module_target(&self, binding: NameBindingId) -> Option<&ModuleKey> {
+        self.binding_module_targets.get(&binding)
+    }
+
+    #[must_use]
     pub fn binding_type(&self, binding: NameBindingId) -> Option<HirTyId> {
         self.binding_types.get(&binding).copied()
     }
@@ -1601,6 +1750,7 @@ impl SemaModule {
             binding_types: context.binding_types,
             binding_schemes: context.binding_schemes,
             binding_evidence_keys: context.binding_evidence_keys,
+            binding_module_targets: context.binding_module_targets,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_module_targets: facts.expr_module_targets,

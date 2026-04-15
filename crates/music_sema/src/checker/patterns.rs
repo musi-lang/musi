@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use music_arena::SliceRange;
 use music_base::Span;
-use music_hir::{HirPatId, HirPatKind, HirRecordPatField, HirTyId, HirTyKind};
+use music_hir::{HirPatId, HirPatKind, HirRecordPatField, HirTyId, HirTyKind, HirVariantPatArg};
 use music_names::Ident;
 use music_names::NameBindingId;
 
-use crate::api::{PatFacts, SemaDataVariantDef};
+use crate::api::PatFacts;
 
 use super::exprs::check_expr;
 use super::{CheckPass, DiagKind, PassBase};
@@ -149,10 +149,13 @@ impl CheckPass<'_, '_, '_> {
         span: Span,
         ty: HirTyId,
         tag: Ident,
-        args: SliceRange<HirPatId>,
+        args: SliceRange<HirVariantPatArg>,
     ) {
         let builtins = self.builtins();
-        let expected_payload = match self.ty(ty).kind {
+        let (expected_args, field_names): (Vec<HirTyId>, Vec<Option<Box<str>>>) = match self
+            .ty(ty)
+            .kind
+        {
             HirTyKind::Sum { left, right } => {
                 let tag_name = self.resolve_symbol(tag.name);
                 let chosen = match tag_name {
@@ -163,29 +166,69 @@ impl CheckPass<'_, '_, '_> {
                 if chosen.is_some() {
                     let _sum_def = self.ensure_sum_data_def(left, right);
                 }
-                chosen
+                (
+                    chosen.map_or_else(Vec::new, |payload_ty| match &self.ty(payload_ty).kind {
+                        HirTyKind::Tuple { items } => self.ty_ids(*items),
+                        _ => vec![payload_ty],
+                    }),
+                    Vec::new(),
+                )
             }
             HirTyKind::Named { name, .. } => {
                 let data_name = self.resolve_symbol(name);
                 let tag_name = self.resolve_symbol(tag.name);
                 self.data_def(data_name)
                     .and_then(|data| data.variant(tag_name))
-                    .and_then(SemaDataVariantDef::payload)
+                    .map(|variant| (variant.field_tys().to_vec(), variant.field_names().to_vec()))
+                    .unwrap_or_default()
             }
             HirTyKind::Bool => {
                 let tag_name = self.resolve_symbol(tag.name);
                 self.data_def("Bool")
                     .and_then(|data| data.variant(tag_name))
-                    .and_then(SemaDataVariantDef::payload)
+                    .map(|variant| (variant.field_tys().to_vec(), variant.field_names().to_vec()))
+                    .unwrap_or_default()
             }
-            _ => None,
+            _ => (Vec::new(), Vec::new()),
         };
-        let expected_args: Vec<HirTyId> =
-            expected_payload.map_or_else(Vec::new, |payload_ty| match &self.ty(payload_ty).kind {
-                HirTyKind::Tuple { items } => self.ty_ids(*items),
-                _ => vec![payload_ty],
-            });
-        let args_vec = self.pat_ids(args);
+        let args_vec = self.variant_pat_args(args);
+        let named_variant = field_names.iter().any(Option::is_some);
+        let named_args = args_vec
+            .iter()
+            .any(|arg| self.variant_pat_arg_name(arg, &field_names).is_some());
+        if named_variant {
+            if !named_args {
+                self.diag(span, DiagKind::VariantNamedFieldsRequired, "");
+            }
+            let mut seen = BTreeSet::new();
+            for arg in args_vec {
+                let Some(name) = self.variant_pat_arg_name(&arg, &field_names) else {
+                    self.bind_pat_inner(arg.pat, builtins.unknown);
+                    continue;
+                };
+                if !seen.insert(name.name) {
+                    self.diag(name.span, DiagKind::DuplicateVariantField, "");
+                }
+                let expected = field_names
+                    .iter()
+                    .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)))
+                    .and_then(|index| expected_args.get(index).copied())
+                    .unwrap_or_else(|| {
+                        self.diag(name.span, DiagKind::UnknownVariantField, "");
+                        builtins.unknown
+                    });
+                self.bind_pat_inner(arg.pat, expected);
+            }
+            for field_name in field_names.iter().flatten() {
+                if !seen.contains(&self.intern(field_name)) {
+                    self.diag(span, DiagKind::MissingVariantField, "");
+                }
+            }
+            return;
+        }
+        if named_args {
+            self.diag(span, DiagKind::VariantNamedFieldsUnexpected, "");
+        }
         if expected_args.len() != args_vec.len() {
             self.diag(span, DiagKind::VariantPatternArityMismatch, "");
         }
@@ -194,8 +237,27 @@ impl CheckPass<'_, '_, '_> {
                 .get(index)
                 .copied()
                 .unwrap_or(builtins.unknown);
-            self.bind_pat_inner(arg, expected);
+            self.bind_pat_inner(arg.pat, expected);
         }
+    }
+
+    fn variant_pat_arg_name(
+        &self,
+        arg: &HirVariantPatArg,
+        field_names: &[Option<Box<str>>],
+    ) -> Option<Ident> {
+        if let Some(name) = arg.name {
+            return Some(name);
+        }
+        let HirPatKind::Bind { name } = self.pat(arg.pat).kind else {
+            return None;
+        };
+        let binder_name = self.resolve_symbol(name.name);
+        field_names
+            .iter()
+            .flatten()
+            .any(|field_name| field_name.as_ref() == binder_name)
+            .then_some(name)
     }
 
     fn bind_or_pat(&mut self, span: Span, ty: HirTyId, left: HirPatId, right: HirPatId) {
@@ -241,8 +303,8 @@ fn collect_binders(ctx: &CheckPass<'_, '_, '_>, pat: HirPatId, out: &mut BTreeSe
             }
         }
         HirPatKind::Variant { args, .. } => {
-            for arg in ctx.pat_ids(args) {
-                collect_binders(ctx, arg, out);
+            for arg in ctx.variant_pat_args(args) {
+                collect_binders(ctx, arg.pat, out);
             }
         }
         HirPatKind::Or { left, right } => {

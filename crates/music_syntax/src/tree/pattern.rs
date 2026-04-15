@@ -34,6 +34,13 @@ impl<'tree, 'src> PatternBinderCollector<'tree, 'src> {
                 }
             }
             SyntaxNodeKind::RecordPat => self.collect_record_pattern_binder_tokens(node),
+            SyntaxNodeKind::VariantPat
+            | SyntaxNodeKind::VariantPayloadList
+            | SyntaxNodeKind::VariantPatArg => {
+                for child in node.child_nodes() {
+                    self.collect_pattern_binder_tokens(child);
+                }
+            }
             kind if kind.is_pat() => {
                 for child in node.child_nodes().filter(|child| child.kind().is_pat()) {
                     self.collect_pattern_binder_tokens(child);

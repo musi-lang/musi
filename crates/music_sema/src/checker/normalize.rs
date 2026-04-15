@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use music_arena::SliceRange;
 use music_hir::{
     HirBinaryOp, HirConstraint, HirConstraintKind, HirDim, HirEffectSet, HirExprId, HirExprKind,
-    HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::Symbol;
 
@@ -451,7 +451,7 @@ impl PassBase<'_, '_, '_> {
     pub fn named_type_for_symbol(&mut self, symbol: Symbol) -> HirTyId {
         let known = self.known();
         let builtins = self.builtins();
-        if symbol == known.type_ {
+        if symbol == known.type_ || self.is_universe_symbol(symbol) {
             builtins.type_
         } else if symbol == known.any {
             builtins.any
@@ -481,6 +481,13 @@ impl PassBase<'_, '_, '_> {
             let args = self.alloc_ty_list(Vec::<HirTyId>::new());
             self.alloc_ty(HirTyKind::Named { name: symbol, args })
         }
+    }
+
+    fn is_universe_symbol(&self, symbol: Symbol) -> bool {
+        let Some(rest) = self.resolve_symbol(symbol).strip_prefix("Type") else {
+            return false;
+        };
+        !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit())
     }
 
     pub fn symbol_value_type(&self, symbol: Symbol) -> HirTyId {
@@ -531,6 +538,13 @@ impl PassBase<'_, '_, '_> {
         Some(match self.expr(expr).kind {
             HirExprKind::Error => self.builtins().error,
             HirExprKind::Name { name } => self.named_type_for_symbol(name.name),
+            HirExprKind::Lit { lit } => match self.lit_kind(lit) {
+                HirLitKind::Int { raw } => match raw.parse::<u64>() {
+                    Ok(value) => self.alloc_ty(HirTyKind::NatLit(value)),
+                    Err(_) => self.builtins().error,
+                },
+                _ => return None,
+            },
             HirExprKind::Import { .. } => self.builtins().module,
             _ => return None,
         })
@@ -630,11 +644,7 @@ impl PassBase<'_, '_, '_> {
         callee: HirExprId,
         args: SliceRange<HirExprId>,
     ) -> HirTyId {
-        let HirExprKind::Name { name } = self.expr(callee).kind else {
-            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
-            return self.builtins().error;
-        };
-
+        let callee_ty = self.lower_type_expr(callee, self.expr(callee).origin);
         let args = self
             .expr_ids(args)
             .into_iter()
@@ -643,35 +653,135 @@ impl PassBase<'_, '_, '_> {
                 self.lower_type_expr(arg, origin)
             })
             .collect::<Vec<_>>();
-        match self.resolve_symbol(name.name) {
-            "Array" if args.len() == 1 => {
+        if self
+            .remaining_constructor_kind(origin, callee_ty, args.len())
+            .is_none()
+        {
+            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+            return self.builtins().error;
+        }
+        let HirTyKind::Named {
+            name,
+            args: existing_args,
+        } = self.ty(callee_ty).kind
+        else {
+            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+            return self.builtins().error;
+        };
+        let mut all_args = self.ty_ids(existing_args);
+        all_args.extend(args);
+        match self.resolve_symbol(name) {
+            "Array" if all_args.len() == 1 => {
                 let dims = self.alloc_dims([HirDim::Unknown]);
                 self.alloc_ty(HirTyKind::Array {
                     dims,
-                    item: args[0],
+                    item: all_args[0],
                 })
             }
-            "Range" if args.len() == 1 => self.alloc_ty(HirTyKind::Range { bound: args[0] }),
-            "ClosedRange" if args.len() == 1 => {
-                self.alloc_ty(HirTyKind::ClosedRange { bound: args[0] })
+            "Range" if all_args.len() == 1 => {
+                self.alloc_ty(HirTyKind::Range { bound: all_args[0] })
             }
-            "PartialRangeFrom" if args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeFrom { bound: args[0] })
+            "ClosedRange" if all_args.len() == 1 => {
+                self.alloc_ty(HirTyKind::ClosedRange { bound: all_args[0] })
             }
-            "PartialRangeUpTo" if args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeUpTo { bound: args[0] })
+            "PartialRangeFrom" if all_args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeFrom { bound: all_args[0] })
             }
-            "PartialRangeThru" if args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeThru { bound: args[0] })
+            "PartialRangeUpTo" if all_args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeUpTo { bound: all_args[0] })
+            }
+            "PartialRangeThru" if all_args.len() == 1 => {
+                self.alloc_ty(HirTyKind::PartialRangeThru { bound: all_args[0] })
             }
             _ => {
-                let args = self.alloc_ty_list(args);
-                self.alloc_ty(HirTyKind::Named {
-                    name: name.name,
-                    args,
-                })
+                let args = self.alloc_ty_list(all_args);
+                self.alloc_ty(HirTyKind::Named { name, args })
             }
         }
+    }
+
+    fn type_constructor_param_kinds(&self, name: Symbol) -> Option<Vec<HirTyId>> {
+        let known = self.known();
+        if [
+            known.array,
+            known.range,
+            known.closed_range,
+            known.partial_range_from,
+            known.partial_range_up_to,
+            known.partial_range_thru,
+        ]
+        .contains(&name)
+        {
+            return Some(vec![self.builtins().type_]);
+        }
+        let text = self.resolve_symbol(name);
+        if let Some(data) = self.data_def(text) {
+            return Some(data.type_param_kinds().to_vec());
+        }
+        if let Some(facts) = self.class_facts_by_name(name) {
+            return Some(facts.type_param_kinds.to_vec());
+        }
+        self.type_constructor_scheme_arity(name)
+            .map(|arity| vec![self.builtins().type_; arity])
+    }
+
+    fn type_constructor_kind_from_params(&mut self, param_kinds: &[HirTyId]) -> HirTyId {
+        let mut kind = self.builtins().type_;
+        for param_kind in param_kinds.iter().rev().copied() {
+            let params = self.alloc_ty_list([param_kind]);
+            kind = self.alloc_ty(HirTyKind::Arrow {
+                params,
+                ret: kind,
+                is_effectful: false,
+            });
+        }
+        kind
+    }
+
+    fn remaining_constructor_kind(
+        &mut self,
+        origin: HirOrigin,
+        callee: HirTyId,
+        arg_count: usize,
+    ) -> Option<HirTyId> {
+        let mut kind = match self.ty(callee).kind {
+            HirTyKind::Named { name, args } if self.ty_ids(args).is_empty() => {
+                self.type_param_kind(name).or_else(|| {
+                    self.type_constructor_param_kinds(name)
+                        .map(|param_kinds| self.type_constructor_kind_from_params(&param_kinds))
+                })?
+            }
+            HirTyKind::Named { name, args } => {
+                let param_kinds = self.type_constructor_param_kinds(name)?;
+                let used = self.ty_ids(args).len();
+                if used > param_kinds.len() {
+                    self.diag(origin.span, DiagKind::TypeApplicationArityMismatch, "");
+                    return None;
+                }
+                self.type_constructor_kind_from_params(&param_kinds[used..])
+            }
+            HirTyKind::Arrow { .. } => callee,
+            HirTyKind::Error | HirTyKind::Unknown => return Some(self.builtins().unknown),
+            _ => return None,
+        };
+        for _ in 0..arg_count {
+            let HirTyKind::Arrow {
+                params,
+                ret,
+                is_effectful: false,
+            } = self.ty(kind).kind
+            else {
+                self.diag(origin.span, DiagKind::TypeApplicationArityMismatch, "");
+                return None;
+            };
+            let params = self.ty_ids(params);
+            if params.len() != 1 {
+                self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+                return None;
+            }
+            kind = ret;
+        }
+        Some(kind)
     }
 
     fn lower_binary_type_expr(
@@ -751,6 +861,7 @@ impl PassBase<'_, '_, '_> {
                 let kind = match constraint.kind {
                     HirConstraintKind::Subtype => ConstraintKind::Subtype,
                     HirConstraintKind::Implements => ConstraintKind::Implements,
+                    HirConstraintKind::TypeEq => ConstraintKind::TypeEq,
                 };
                 let value = {
                     let origin = self.expr(constraint.value).origin;

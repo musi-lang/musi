@@ -333,6 +333,15 @@ impl CheckPass<'_, '_, '_> {
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )
+            .with_type_param_kinds(
+                surface
+                    .type_param_kinds
+                    .iter()
+                    .copied()
+                    .map(|ty| import_surface_ty(self, module_surface, ty))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            )
             .with_constraints(constraints);
         self.insert_class_facts_by_name(alias_name, facts);
     }
@@ -368,6 +377,11 @@ impl CheckPass<'_, '_, '_> {
                             .iter()
                             .copied()
                             .map(|ty| import_surface_ty(self, module_surface, ty))
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                        op.param_names
+                            .iter()
+                            .map(|name| self.intern(name))
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                         import_surface_ty(self, module_surface, op.result),
@@ -430,16 +444,33 @@ impl CheckPass<'_, '_, '_> {
                             .payload
                             .map(|ty| import_surface_ty(self, module_surface, ty)),
                         variant
+                            .result
+                            .map(|ty| import_surface_ty(self, module_surface, ty)),
+                        variant
                             .field_tys
                             .iter()
                             .copied()
                             .map(|ty| import_surface_ty(self, module_surface, ty))
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
+                        variant.field_names.clone(),
                     ),
                 )
             })
             .collect::<BTreeMap<_, _>>();
+        let type_params = surface
+            .type_params
+            .iter()
+            .map(|param| self.intern(param))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let type_param_kinds = surface
+            .type_param_kinds
+            .iter()
+            .copied()
+            .map(|ty| import_surface_ty(self, module_surface, ty))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let alias_name: Box<str> = self.resolve_symbol(alias_name).into();
         self.insert_data_def(
             alias_name,
@@ -450,7 +481,8 @@ impl CheckPass<'_, '_, '_> {
                 surface.layout_align,
                 surface.layout_pack,
                 surface.frozen,
-            ),
+            )
+            .with_type_params(type_params, type_param_kinds),
         );
     }
 

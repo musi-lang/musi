@@ -180,7 +180,7 @@ fn lowers_exports_and_semantic_metadata() {
 fn lowers_data_and_foreign_facts() {
     let ir = lower(
         r#"
-        let Maybe := data { | Some : Int | None };
+        let Maybe := data { | Some(Int) | None };
         foreign "c" (
           let puts (value : CString) : Int;
         );
@@ -639,6 +639,8 @@ fn contains_named_value_ref_kind(kind: &IrExprKind, expected: &str) -> bool {
         IrExprKind::Unit
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
+        | IrExprKind::IntrinsicCall { .. }
+        | IrExprKind::TypeApply { .. }
         | IrExprKind::TypeValue { .. }
         | IrExprKind::SyntaxValue { .. } => false,
     }

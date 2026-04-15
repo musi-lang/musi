@@ -43,6 +43,13 @@ impl MethodEmitter<'_, '_> {
             )));
             return;
         }
+        if let Some(foreign) = self.resolve_foreign(binding, name, module_target) {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::FfiRef,
+                Operand::Foreign(foreign),
+            )));
+            return;
+        }
         super::support::push_expr_diag(
             diags,
             self.module_key,

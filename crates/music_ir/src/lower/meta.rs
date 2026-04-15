@@ -346,6 +346,7 @@ fn push_export_sig_meta(
                     let op = match constraint.kind {
                         ConstraintKind::Subtype => "<:",
                         ConstraintKind::Implements => ":",
+                        ConstraintKind::TypeEq => "~=",
                     };
                     format!(
                         "{} {op} {}",

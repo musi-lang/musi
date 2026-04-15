@@ -311,6 +311,13 @@ fn collect_expr_types_leaf(
             let _ = ensure_type(state, layout, ty_name);
             true
         }
+        IrExprKind::TypeApply { callee, type_args } => {
+            collect_expr_types(state, layout, callee);
+            for ty in type_args {
+                let _ = ensure_type(state, layout, ty);
+            }
+            true
+        }
         _ => false,
     }
 }
@@ -451,6 +458,19 @@ fn collect_expr_types_call_and_effect(
     match &expr.kind {
         IrExprKind::Call { callee, args } => {
             collect_call_expr_types(state, layout, callee, args);
+            true
+        }
+        IrExprKind::IntrinsicCall {
+            param_tys,
+            result_ty,
+            args,
+            ..
+        } => {
+            for ty in param_tys {
+                let _ = ensure_type(state, layout, ty);
+            }
+            let _ = ensure_type(state, layout, result_ty);
+            collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
             true
         }
         IrExprKind::CallSeq { callee, args } => {

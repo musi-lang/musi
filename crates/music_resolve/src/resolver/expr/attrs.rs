@@ -20,6 +20,12 @@ where
         if let Some(export_mod) = export_mod {
             mods = mods.with_export(export_mod);
         }
+        if node
+            .child_tokens()
+            .any(|t| t.kind() == TokenKind::KwPartial)
+        {
+            mods = mods.with_partial();
+        }
         if export_mod_node.is_some()
             && (export_foreign_abi.is_some() || is_foreign_group_target(&node))
         {

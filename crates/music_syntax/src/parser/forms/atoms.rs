@@ -156,7 +156,7 @@ impl Parser<'_> {
     }
 
     pub(crate) fn parse_dot_prefix_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        self.parse_variant_like(SyntaxNodeKind::VariantExpr, Parser::parse_expr_node)
+        self.parse_variant_expr_like(SyntaxNodeKind::VariantExpr)
     }
 
     pub(crate) fn parse_match_expr(&mut self) -> ParseResult<SyntaxNodeId> {
@@ -234,6 +234,19 @@ impl Parser<'_> {
         };
         self.quote_depth = self.quote_depth.saturating_sub(1);
         Ok(result)
+    }
+
+    pub(crate) fn parse_unsafe_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let unsafe_kw = self.expect_token(TokenKind::KwUnsafe)?;
+        let open = self.expect_token(TokenKind::LBrace)?;
+        let mut children = vec![unsafe_kw, open];
+        while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
+            children.push(SyntaxElementId::Node(self.parse_stmt()?));
+        }
+        children.push(self.expect_token(TokenKind::RBrace)?);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::UnsafeExpr, children))
     }
 
     pub(crate) fn parse_splice_expr(&mut self) -> ParseResult<SyntaxNodeId> {

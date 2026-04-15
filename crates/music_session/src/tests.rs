@@ -177,6 +177,15 @@ fn compiles_module_to_artifact_bytes_and_text() {
 }
 
 #[test]
+fn compiles_piped_calls_as_normal_calls() {
+    let output = assert_main_module_compiles_with(
+        "export let add (left : Int, right : Int) : Int := left + right; export let answer : Int := 1 |> add(2);",
+        &[".global $main::answer export"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
 fn parse_failures_expose_typed_syntax_errors_and_diags() {
     let mut session = session();
     set_main_text(&mut session, "let x := 1");
@@ -268,6 +277,19 @@ fn compiles_imported_generic_callable_calls() {
 }
 
 #[test]
+fn compiles_first_class_generic_values_in_records() {
+    let output = compile_main_entry_with_dep(
+        "export let id[T] (x : T) : T := x;",
+        r#"
+            let dep := import "dep";
+            let tools := { id := dep.id };
+            export let answer () : Int := tools.id[Int](42);
+        "#,
+    );
+    assert_output_contains(&output, &["ty.apply", "$main::answer"]);
+}
+
+#[test]
 fn compiles_imported_globals_and_local_assignment() {
     let output = compile_main_entry_with_dep(
         "export let base : Int := 41;",
@@ -322,6 +344,22 @@ fn compiles_closures_and_higher_order_calls() {
             );
         ",
         &["call.cls", "cls.new"],
+    );
+}
+
+#[test]
+fn compiles_named_call_arguments_and_named_requests() {
+    let _ = assert_main_module_compiles_with(
+        r#"
+        export let Console := effect {
+          let readln (prompt : String) : String;
+        };
+
+        let render (port : Int, secure : Bool) : Int := port;
+        export let read () : String using { Console } := request Console.readln(prompt := ">");
+        export let main () : Int := render(secure := 0 = 0, port := 8080);
+        "#,
+        &["call $main::render", "eff.invk $main::Console $readln"],
     );
 }
 
@@ -519,7 +557,7 @@ fn compiles_capturing_recursion_record_patterns_and_type_values() {
 fn compiles_variants_with_case_patterns() {
     let _ = assert_main_entry_compiles_with!(
         r"
-            let Maybe := data { | Some : Int | None };
+            let Maybe := data { | Some(Int) | None };
             export let answer () : Int := (
               let x : Maybe := .Some(1);
               match x (
@@ -542,7 +580,7 @@ fn compiles_variants_with_case_patterns() {
 fn compiles_variants_without_type_context_when_tag_unique() {
     let _ = assert_main_entry_compiles_with!(
         r"
-            let Maybe := data { | Some : Int | None };
+            let Maybe := data { | Some(Int) | None };
             export let answer () : Int := (
               let x := .Some(1);
               match x (
@@ -648,12 +686,12 @@ fn emits_meta_records_for_laws_and_attrs() {
 
             export let Eq[T] := class {
               let (=) (a : T, b : T) : Bool;
-              law reflexive (x : T) := musi_true();
+              law reflexive (x : T) := unsafe { musi_true(); };
             };
 
             export let Console := effect {
               let readln () : String;
-              law total () := musi_true();
+              law total () := unsafe { musi_true(); };
             };
         "#,
         )
@@ -705,12 +743,12 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
 
             export let Eq[T] := class {
               let (=) (a : T, b : T) : Bool;
-              law reflexive (x : T) := musi_true();
+              law reflexive (x : T) := unsafe { musi_true(); };
             };
 
             export let Console := effect {
               let readln () : String;
-              law total () := musi_true();
+              law total () := unsafe { musi_true(); };
             };
         ",
         )
@@ -739,7 +777,10 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
         suite_source.contains("__musi_law_test.testCase(\"Console.total\""),
         "{suite_source}"
     );
-    assert!(suite_source.contains("musi_true()"), "{suite_source}");
+    assert!(
+        suite_source.contains("unsafe { musi_true(); }"),
+        "{suite_source}"
+    );
     assert!(!suite_source.contains(".True)"), "{suite_source}");
 }
 
@@ -758,7 +799,7 @@ fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
             };
 
             let eqInt := instance IntEq {
-              let eq (a : Int, b : Int) : Bool := musi_true();
+              let eq (a : Int, b : Int) : Bool := unsafe { musi_true(); };
             };
         ",
         )
@@ -779,7 +820,7 @@ fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
         "{suite_source}"
     );
     assert!(
-        suite_source.contains("let eq (a : Int, b : Int) : Bool := musi_true();"),
+        suite_source.contains("let eq (a : Int, b : Int) : Bool := unsafe { musi_true(); };"),
         "{suite_source}"
     );
     assert!(suite_source.contains("eq(x, x)"), "{suite_source}");
@@ -800,7 +841,7 @@ fn rejects_polymorphic_instances_for_class_law_suites() {
             };
 
             instance[T] Eq[T] {
-              let eq (a : T, b : T) : Bool := musi_true();
+              let eq (a : T, b : T) : Bool := unsafe { musi_true(); };
             };
         ",
         )
@@ -853,7 +894,7 @@ fn emits_meta_records_for_exported_signatures() {
         .set_module_text(
             &ModuleKey::new("main"),
             r"
-            let Option[T] := data { | Some : Int | None };
+            let Option[T] := data { | Some(Int) | None };
 
             let Eq[T] := class { };
             let eqInt := instance Eq[Int] { };

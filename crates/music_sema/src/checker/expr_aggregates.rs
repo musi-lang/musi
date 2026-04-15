@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use music_arena::SliceRange;
 use music_base::Span;
 use music_hir::{
-    HirAccessKind, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirOrigin,
+    HirAccessKind, HirArg, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirOrigin,
     HirPartialRangeKind, HirRecordItem, HirTyField, HirTyId, HirTyKind,
 };
 use music_names::{Ident, Symbol};
@@ -12,7 +12,7 @@ use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
 use super::decls::module_export_for_expr;
-use super::exprs::peel_mut_ty;
+use super::exprs::{check_expr, peel_mut_ty};
 use super::state::DataDef;
 use super::{CheckPass, DiagKind};
 
@@ -482,8 +482,7 @@ impl CheckPass<'_, '_, '_> {
         }
         if matches!(
             op,
-            HirBinaryOp::Pipe
-                | HirBinaryOp::Or
+            HirBinaryOp::Or
                 | HirBinaryOp::Xor
                 | HirBinaryOp::And
                 | HirBinaryOp::Shl
@@ -529,13 +528,9 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(ty, facts.effects)
     }
 
-    pub(super) fn check_variant_expr(
-        &mut self,
-        tag: Ident,
-        args: SliceRange<HirExprId>,
-    ) -> ExprFacts {
+    pub(super) fn check_variant_expr(&mut self, tag: Ident, args: SliceRange<HirArg>) -> ExprFacts {
         let builtins = self.builtins();
-        if let Some(facts) = self.check_sum_constructor_variant(tag, args) {
+        if let Some(facts) = self.check_sum_constructor_variant(tag, args.clone()) {
             return facts;
         }
 
@@ -545,20 +540,20 @@ impl CheckPass<'_, '_, '_> {
             .and_then(|ty| self.variant_context_ty(ty));
         let expected_ty = expected_ty.or_else(|| self.infer_variant_context_ty(tag));
         let Some(expected_ty) = expected_ty else {
-            self.check_exprs_collect_effects(self.expr_ids(args), &mut effects);
+            self.check_variant_arg_effects(args, &mut effects);
             return ExprFacts::new(builtins.unknown, effects);
         };
 
         let data_def = self.expected_data_def(expected_ty);
         let Some(data_def) = data_def else {
-            self.check_exprs_collect_effects(self.expr_ids(args), &mut effects);
+            self.check_variant_arg_effects(args, &mut effects);
             self.diag(tag.span, DiagKind::VariantMissingDataContext, "");
             return ExprFacts::new(builtins.unknown, effects);
         };
 
         let tag_name = self.resolve_symbol(tag.name).to_owned();
         let Some(variant) = data_def.variant(&tag_name) else {
-            self.check_exprs_collect_effects(self.expr_ids(args), &mut effects);
+            self.check_variant_arg_effects(args, &mut effects);
             self.diag(
                 tag.span,
                 DiagKind::UnknownDataVariant,
@@ -567,21 +562,9 @@ impl CheckPass<'_, '_, '_> {
             return ExprFacts::new(expected_ty, effects);
         };
 
-        let expected_payload = variant.payload();
-        let arg_exprs = self.expr_ids(args);
-        let expected_args: TyIdList =
-            expected_payload.map_or_else(Vec::new, |payload_ty| match &self.ty(payload_ty).kind {
-                HirTyKind::Tuple { items } => self.ty_ids(*items),
-                _ => vec![payload_ty],
-            });
-
-        self.typecheck_positional_args(
-            tag.span,
-            &expected_args,
-            arg_exprs,
-            &mut effects,
-            DiagKind::VariantConstructorArityMismatch,
-        );
+        let expected_args = variant.field_tys().to_vec();
+        let field_names = variant.field_names().to_vec();
+        self.typecheck_variant_args(tag.span, &expected_args, &field_names, args, &mut effects);
 
         ExprFacts::new(expected_ty, effects)
     }
@@ -647,7 +630,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_sum_constructor_variant(
         &mut self,
         tag: Ident,
-        args: SliceRange<HirExprId>,
+        args: SliceRange<HirArg>,
     ) -> Option<ExprFacts> {
         let builtins = self.builtins();
         let mut effects = EffectRow::empty();
@@ -666,7 +649,10 @@ impl CheckPass<'_, '_, '_> {
         }?;
 
         let _ = self.ensure_sum_data_def(left, right);
-        let arg_exprs = self.expr_ids(args);
+        let arg_exprs = self.args(args);
+        if arg_exprs.iter().any(|arg| arg.name.is_some()) {
+            self.diag(tag.span, DiagKind::VariantNamedFieldsUnexpected, "");
+        }
         let expected_args: TyIdList = match &self.ty(chosen).kind {
             HirTyKind::Tuple { items } => self.ty_ids(*items),
             _ => vec![chosen],
@@ -674,11 +660,87 @@ impl CheckPass<'_, '_, '_> {
         self.typecheck_positional_args(
             tag.span,
             &expected_args,
-            arg_exprs,
+            arg_exprs.into_iter().map(|arg| arg.expr).collect(),
             &mut effects,
             DiagKind::SumConstructorArityMismatch,
         );
         Some(ExprFacts::new(expected_sum_ty, effects))
+    }
+
+    fn typecheck_variant_args(
+        &mut self,
+        diag_span: Span,
+        expected_args: &[HirTyId],
+        field_names: &[Option<Box<str>>],
+        args: SliceRange<HirArg>,
+        effects: &mut EffectRow,
+    ) {
+        let arg_nodes = self.args(args);
+        let named_variant = field_names.iter().any(Option::is_some);
+        let named_args = arg_nodes.iter().any(|arg| arg.name.is_some());
+        if named_variant {
+            if !named_args {
+                self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
+                self.typecheck_positional_args(
+                    diag_span,
+                    expected_args,
+                    arg_nodes.into_iter().map(|arg| arg.expr).collect(),
+                    effects,
+                    DiagKind::VariantConstructorArityMismatch,
+                );
+                return;
+            }
+            let mut seen = HashSet::<Symbol>::new();
+            for arg in &arg_nodes {
+                let Some(name) = arg.name else {
+                    self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
+                    continue;
+                };
+                if !seen.insert(name.name) {
+                    self.diag(name.span, DiagKind::DuplicateVariantField, "");
+                }
+                let field_index = field_names
+                    .iter()
+                    .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)));
+                let expected = field_index
+                    .and_then(|index| expected_args.get(index).copied())
+                    .unwrap_or_else(|| {
+                        self.diag(name.span, DiagKind::UnknownVariantField, "");
+                        self.builtins().unknown
+                    });
+                self.push_expected_ty(expected);
+                let facts = check_expr(self, arg.expr);
+                let _ = self.pop_expected_ty();
+                effects.union_with(&facts.effects);
+                let origin = self.expr(arg.expr).origin;
+                self.type_mismatch(origin, expected, facts.ty);
+            }
+            for field_name in field_names.iter().flatten() {
+                let expected_symbol = self.intern(field_name);
+                if !seen.contains(&expected_symbol) {
+                    self.diag(diag_span, DiagKind::MissingVariantField, "");
+                }
+            }
+            return;
+        }
+
+        if named_args {
+            self.diag(diag_span, DiagKind::VariantNamedFieldsUnexpected, "");
+        }
+        self.typecheck_positional_args(
+            diag_span,
+            expected_args,
+            arg_nodes.into_iter().map(|arg| arg.expr).collect(),
+            effects,
+            DiagKind::VariantConstructorArityMismatch,
+        );
+    }
+
+    fn check_variant_arg_effects(&mut self, args: SliceRange<HirArg>, effects: &mut EffectRow) {
+        for arg in self.args(args) {
+            let facts = check_expr(self, arg.expr);
+            effects.union_with(&facts.effects);
+        }
     }
 
     fn typecheck_positional_args(
@@ -706,14 +768,6 @@ impl CheckPass<'_, '_, '_> {
             self.type_mismatch(origin, expected, facts.ty);
         }
     }
-
-    fn check_exprs_collect_effects(&mut self, exprs: ExprIdList, effects: &mut EffectRow) {
-        for expr in exprs {
-            let facts = super::exprs::check_expr(self, expr);
-            effects.union_with(&facts.effects);
-        }
-    }
-
     fn variant_context_ty(&self, ty: HirTyId) -> Option<HirTyId> {
         self.expected_data_def(ty).map(|_| ty)
     }
@@ -809,7 +863,7 @@ impl CheckPass<'_, '_, '_> {
                     }
                 }
                 self.set_expr_callable_effects(expr_id, scheme.effects.clone());
-                return scheme.ty;
+                return self.scheme_value_ty(&scheme);
             }
             return builtins.any;
         }
@@ -819,6 +873,9 @@ impl CheckPass<'_, '_, '_> {
             self.check_attached_method_field(expr_id, origin, base_ty, base_is_mut, method_name)
         {
             return method_ty;
+        }
+        if let Some(field_ty) = self.check_std_ffi_pointer_field(expr_id, base_expr, name) {
+            return field_ty;
         }
         if matches!(self.ty(base_ty).kind, HirTyKind::Record { .. })
             || self.range_item_type(base_ty).is_some()
@@ -845,6 +902,36 @@ impl CheckPass<'_, '_, '_> {
             );
         }
         builtins.unknown
+    }
+
+    fn check_std_ffi_pointer_field(
+        &mut self,
+        expr_id: HirExprId,
+        base_expr: HirExprId,
+        name: Ident,
+    ) -> Option<HirTyId> {
+        let HirExprKind::Field {
+            base: module_expr,
+            name: pointer_name,
+            ..
+        } = self.expr(base_expr).kind
+        else {
+            return None;
+        };
+        if self.resolve_symbol(pointer_name.name) != "ptr" {
+            return None;
+        }
+        let (surface, _) = module_export_for_expr(self, module_expr, pointer_name)?;
+        let module_key = surface.module_key().as_str();
+        if module_key != "@std/ffi" && !module_key.ends_with("ffi/index.ms") {
+            return None;
+        }
+        let export = surface
+            .exported_value(self.resolve_symbol(name.name))?
+            .clone();
+        let scheme = self.scheme_from_export(&surface, &export);
+        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+        Some(self.scheme_value_ty(&scheme))
     }
 
     fn check_attached_method_field(
@@ -1206,13 +1293,13 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Div
             | HirBinaryOp::Rem => self.numeric_binary_type(origin, left_ty, right_ty),
             HirBinaryOp::Eq
+            | HirBinaryOp::TypeEq
             | HirBinaryOp::Ne
             | HirBinaryOp::Lt
             | HirBinaryOp::Gt
             | HirBinaryOp::Le
             | HirBinaryOp::Ge => builtins.bool_,
             HirBinaryOp::Assign
-            | HirBinaryOp::Pipe
             | HirBinaryOp::Or
             | HirBinaryOp::Xor
             | HirBinaryOp::And

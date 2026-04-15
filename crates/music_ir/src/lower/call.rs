@@ -14,9 +14,17 @@ pub(super) fn lower_call_expr(
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let arg_nodes = sema.module().store.args.get(args.clone());
+    let arg_nodes = ordered_call_args(
+        sema,
+        interner,
+        callee,
+        sema.module().store.args.get(args.clone()),
+    );
+    if let Some(intrinsic) = lower_ffi_pointer_intrinsic(ctx, callee, &arg_nodes) {
+        return intrinsic;
+    }
     if let Some(attached) = resolve_attached_call_target(sema, callee) {
-        return lower_attached_call_expr(ctx, callee, arg_nodes, &attached, interner);
+        return lower_attached_call_expr(ctx, callee, &arg_nodes, &attached, interner);
     }
 
     if !arg_nodes.iter().any(|arg| arg.spread) {
@@ -43,7 +51,7 @@ pub(super) fn lower_call_expr(
     let callee_expr = IrExpr::new(origin, IrExprKind::Temp { temp: callee_temp });
 
     let (arg_prelude, parts, has_runtime_spread) =
-        lower_spread_args(ctx, origin, arg_nodes, SpreadMode::Call)?;
+        lower_spread_args(ctx, origin, &arg_nodes, SpreadMode::Call)?;
     prelude.extend(arg_prelude);
 
     prelude.push(IrExpr::new(
@@ -75,6 +83,199 @@ pub(super) fn lower_call_expr(
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
     })
+}
+
+fn lower_ffi_pointer_intrinsic(
+    ctx: &mut LowerCtx<'_>,
+    callee: HirExprId,
+    args: &[HirArg],
+) -> Option<Result<IrExprKind, Box<str>>> {
+    let target = pointer_intrinsic_target(ctx, callee)?;
+    let lowered_args = args
+        .iter()
+        .map(|arg| IrArg::new(false, lower_expr(ctx, arg.expr)))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let call = IrExprKind::IntrinsicCall {
+        kind: target.kind,
+        symbol: target.symbol,
+        param_tys: target.param_tys,
+        result_ty: target.result_ty,
+        args: lowered_args,
+    };
+    Some(Ok(call))
+}
+
+struct PointerIntrinsicTarget {
+    kind: IrIntrinsicKind,
+    symbol: Box<str>,
+    param_tys: Box<[Box<str>]>,
+    result_ty: Box<str>,
+}
+
+fn pointer_intrinsic_target(
+    ctx: &LowerCtx<'_>,
+    callee: HirExprId,
+) -> Option<PointerIntrinsicTarget> {
+    let (callee, type_arg) = match ctx.sema.module().store.exprs.get(callee).kind {
+        HirExprKind::Apply { callee, args } => {
+            let args = ctx.sema.module().store.expr_ids.get(args);
+            (callee, args.first().copied())
+        }
+        _ => (callee, None),
+    };
+    let (HirExprKind::Name { name } | HirExprKind::Field { name, .. }) =
+        ctx.sema.module().store.exprs.get(callee).kind
+    else {
+        return None;
+    };
+    let name = ctx.interner.resolve(name.name);
+    match name {
+        "ptrNullIntrinsic" if is_std_ffi_module(&ctx.module_key) => Some(PointerIntrinsicTarget {
+            kind: IrIntrinsicKind::FfiPtrNull,
+            symbol: "ffi.ptr.null".into(),
+            param_tys: Box::default(),
+            result_ty: "CPtr".into(),
+        }),
+        "ptrIsNullIntrinsic" if is_std_ffi_module(&ctx.module_key) => {
+            Some(PointerIntrinsicTarget {
+                kind: IrIntrinsicKind::FfiPtrIsNull,
+                symbol: "ffi.ptr.is_null".into(),
+                param_tys: Box::new(["CPtr".into()]),
+                result_ty: "Bool".into(),
+            })
+        }
+        "offset" if is_std_ffi_public_pointer_callee(ctx, callee) => {
+            pointer_public_offset_target(ctx, type_arg?)
+        }
+        "read" if is_std_ffi_public_pointer_callee(ctx, callee) => pointer_storage_target(
+            ctx,
+            type_arg?,
+            IrIntrinsicKind::FfiPtrRead,
+            "ffi.ptr.read",
+            Box::new([pointer_view_ty(ctx, type_arg?)]),
+            pointer_storage_result_ty(ctx, type_arg?)?,
+        ),
+        "write" if is_std_ffi_public_pointer_callee(ctx, callee) => pointer_storage_target(
+            ctx,
+            type_arg?,
+            IrIntrinsicKind::FfiPtrWrite,
+            "ffi.ptr.write",
+            pointer_public_write_param_tys(ctx, type_arg?)?,
+            "Unit".into(),
+        ),
+        _ => None,
+    }
+}
+
+fn pointer_public_offset_target(
+    ctx: &LowerCtx<'_>,
+    type_arg: HirExprId,
+) -> Option<PointerIntrinsicTarget> {
+    pointer_storage_target(
+        ctx,
+        type_arg,
+        IrIntrinsicKind::FfiPtrOffset,
+        "ffi.ptr.offset",
+        Box::new([pointer_view_ty(ctx, type_arg), "Int".into()]),
+        pointer_view_ty(ctx, type_arg),
+    )
+}
+
+fn pointer_storage_target(
+    ctx: &LowerCtx<'_>,
+    type_arg: HirExprId,
+    kind: IrIntrinsicKind,
+    symbol_prefix: &str,
+    param_tys: Box<[Box<str>]>,
+    result_ty: Box<str>,
+) -> Option<PointerIntrinsicTarget> {
+    let suffix = pointer_storage_suffix(ctx, type_arg)?;
+    Some(PointerIntrinsicTarget {
+        kind,
+        symbol: format!("{symbol_prefix}.{suffix}").into(),
+        param_tys,
+        result_ty,
+    })
+}
+
+fn pointer_public_write_param_tys(
+    ctx: &LowerCtx<'_>,
+    type_arg: HirExprId,
+) -> Option<Box<[Box<str>]>> {
+    let result_ty = pointer_storage_result_ty(ctx, type_arg)?;
+    Some(Box::new([pointer_view_ty(ctx, type_arg), result_ty]))
+}
+
+fn pointer_view_ty(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Box<str> {
+    let ty = render_type_value_expr_name(ctx.sema, type_arg, ctx.interner);
+    format!("Ptr[{ty}]").into()
+}
+
+fn pointer_storage_result_ty(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<Box<str>> {
+    match pointer_storage_name(ctx, type_arg)?.as_ref() {
+        "Float" | "CFloat" | "CDouble" => Some("Float".into()),
+        "CPtr" => Some("CPtr".into()),
+        _ => Some("Int".into()),
+    }
+}
+
+fn pointer_storage_suffix(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<&'static str> {
+    match pointer_storage_name(ctx, type_arg)?.as_ref() {
+        "CChar" | "CSChar" => Some("i8"),
+        "CUChar" => Some("u8"),
+        "CShort" => Some("i16"),
+        "CUShort" => Some("u16"),
+        "CInt" => Some("i32"),
+        "CUInt" => Some("u32"),
+        "CLong" | "CLongLong" | "CSizeDiff" | "Int" => Some("i64"),
+        "CULong" | "CULongLong" | "CSize" => Some("u64"),
+        "CFloat" => Some("f32"),
+        "CDouble" | "Float" => Some("f64"),
+        "CPtr" => Some("ptr"),
+        _ => None,
+    }
+}
+
+fn pointer_storage_name(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<Box<str>> {
+    let expr = ctx.sema.module().store.exprs.get(type_arg);
+    match expr.kind {
+        HirExprKind::Name { name } | HirExprKind::Field { name, .. } => {
+            Some(ctx.interner.resolve(name.name).into())
+        }
+        _ => None,
+    }
+}
+
+fn is_std_ffi_module(module_key: &ModuleKey) -> bool {
+    let key = module_key.as_str();
+    key == "@std/ffi" || key.ends_with("ffi/index.ms")
+}
+
+fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bool {
+    match ctx.sema.module().store.exprs.get(callee).kind {
+        HirExprKind::Field { base, .. } => is_std_ffi_public_pointer_base(ctx, base),
+        HirExprKind::Name { name } => use_binding_id(ctx.sema, name)
+            .and_then(|binding| ctx.sema.binding_module_target(binding))
+            .is_some_and(is_std_ffi_module),
+        _ => false,
+    }
+}
+
+fn is_std_ffi_public_pointer_base(ctx: &LowerCtx<'_>, base: HirExprId) -> bool {
+    match ctx.sema.module().store.exprs.get(base).kind {
+        HirExprKind::Name { name } => use_binding_id(ctx.sema, name)
+            .and_then(|binding| ctx.sema.binding_module_target(binding))
+            .is_some_and(is_std_ffi_module),
+        HirExprKind::Field {
+            base: module_base,
+            name,
+            ..
+        } if ctx.interner.resolve(name.name) == "ptr" => {
+            is_std_ffi_public_pointer_base(ctx, module_base)
+        }
+        _ => false,
+    }
 }
 
 fn lower_attached_call_expr(
@@ -192,6 +393,118 @@ const fn is_attached_call_candidate(base_kind: &HirTyKind, callee_kind: &HirTyKi
     !matches!(base_kind, HirTyKind::Module) && matches!(callee_kind, HirTyKind::Arrow { .. })
 }
 
+fn ordered_call_args(
+    sema: &SemaModule,
+    interner: &Interner,
+    callee: HirExprId,
+    args: &[HirArg],
+) -> Vec<HirArg> {
+    if !args.iter().any(|arg| arg.name.is_some()) {
+        return args.to_vec();
+    }
+
+    let param_names = call_param_names(sema, interner, callee);
+    if param_names.is_empty() {
+        return args.to_vec();
+    }
+
+    let mut prefix = Vec::new();
+    let mut named_start = 0usize;
+    let mut in_named_suffix = false;
+
+    for arg in args {
+        if arg.name.is_some() {
+            in_named_suffix = true;
+            break;
+        }
+        let Some(next_index) = named_prefix_advance(sema, arg, named_start) else {
+            return args.to_vec();
+        };
+        named_start = next_index;
+        prefix.push(arg.clone());
+    }
+
+    let mut ordered = vec![None; param_names.len()];
+    for arg in args.iter().skip(prefix.len()) {
+        let Some(name) = arg.name else {
+            return args.to_vec();
+        };
+        if arg.spread {
+            return args.to_vec();
+        }
+        let Some(index) = param_names.iter().position(|param| *param == name.name) else {
+            return args.to_vec();
+        };
+        if !in_named_suffix || index < named_start || ordered[index].is_some() {
+            return args.to_vec();
+        }
+        ordered[index] = Some(arg.clone());
+    }
+
+    let mut result = prefix;
+    for arg in ordered.into_iter().skip(named_start).flatten() {
+        result.push(arg);
+    }
+    if result.len() == args.len() {
+        result
+    } else {
+        args.to_vec()
+    }
+}
+
+fn named_prefix_advance(sema: &SemaModule, arg: &HirArg, index: usize) -> Option<usize> {
+    if !arg.spread {
+        return Some(index.saturating_add(1));
+    }
+
+    let spread_ty = sema.try_expr_ty(arg.expr)?;
+    match &sema.ty(spread_ty).kind {
+        HirTyKind::Tuple { items } => {
+            Some(index.saturating_add(sema.module().store.ty_ids.get(*items).len()))
+        }
+        HirTyKind::Array { dims, .. } => {
+            let dims = sema.module().store.dims.get(dims.clone());
+            (dims.len() == 1).then_some(())?;
+            match dims[0] {
+                HirDim::Int(len) => Some(index.saturating_add(usize::try_from(len).ok()?)),
+                HirDim::Unknown | HirDim::Name(_) => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -> Box<[Symbol]> {
+    if let Some(binding) = sema.expr_attached_binding(callee)
+        && let Some(scheme) = sema.binding_scheme(binding)
+    {
+        return scheme.param_names.iter().copied().skip(1).collect();
+    }
+
+    match sema.module().store.exprs.get(callee).kind {
+        HirExprKind::Name { name } => sema
+            .resolved()
+            .names
+            .refs
+            .get(&NameSite::new(sema.module().source_id, name.span))
+            .copied()
+            .and_then(|binding| sema.binding_scheme(binding))
+            .map(|scheme| scheme.param_names.clone())
+            .unwrap_or_default(),
+        HirExprKind::Field { base, name, .. } => {
+            if let HirExprKind::Name { name: effect_name } =
+                sema.module().store.exprs.get(base).kind
+                && let Some(effect) = sema.effect_def(interner.resolve(effect_name.name))
+                && let Some(op) = effect.op(interner.resolve(name.name))
+            {
+                return op.param_names().to_vec().into_boxed_slice();
+            }
+            Box::default()
+        }
+        _ => Box::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use music_arena::SliceRange;
@@ -234,9 +547,9 @@ pub(super) fn lower_request_expr(
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let (effect_key, op_index, args) =
+    let (effect_key, op_index, callee, args) =
         resolve_request_target(sema, interner, expr).map_err(Box::<str>::from)?;
-    let args_nodes = sema.module().store.args.get(args);
+    let args_nodes = ordered_call_args(sema, interner, callee, sema.module().store.args.get(args));
     if !args_nodes.iter().any(|arg| arg.spread) {
         let lowered_args = args_nodes
             .iter()
@@ -252,7 +565,7 @@ pub(super) fn lower_request_expr(
 
     let origin = lower_origin(sema, expr);
     let (prelude, parts, has_runtime_spread) =
-        lower_spread_args(ctx, origin, args_nodes, SpreadMode::Request)?;
+        lower_spread_args(ctx, origin, &args_nodes, SpreadMode::Request)?;
     let mut exprs = prelude;
     exprs.push(IrExpr::new(
         origin,
@@ -324,7 +637,7 @@ fn resolve_request_target(
     sema: &SemaModule,
     interner: &Interner,
     expr: HirExprId,
-) -> Result<(DefinitionKey, u16, SliceRange<HirArg>), &'static str> {
+) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), &'static str> {
     let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
         return Err("request without call");
     };
@@ -343,7 +656,7 @@ fn resolve_request_target(
     if op_index == u16::MAX {
         return Err("request with unknown effect op");
     }
-    Ok((effect.key().clone(), op_index, args.clone()))
+    Ok((effect.key().clone(), op_index, callee, args.clone()))
 }
 
 fn lower_spread_args(

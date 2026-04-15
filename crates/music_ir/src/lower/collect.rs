@@ -71,6 +71,7 @@ impl<'a> SyntheticNameSetMut<'a> {
             }
             IrExprKind::ModuleGet { base, .. }
             | IrExprKind::RecordGet { base, .. }
+            | IrExprKind::TypeApply { callee: base, .. }
             | IrExprKind::TyTest { base, .. }
             | IrExprKind::TyCast { base, .. }
             | IrExprKind::Not { expr: base }
@@ -102,6 +103,11 @@ impl<'a> SyntheticNameSetMut<'a> {
             }
             IrExprKind::Call { callee, args } => {
                 self.collect_used(callee);
+                for arg in args {
+                    self.collect_used(&arg.expr);
+                }
+            }
+            IrExprKind::IntrinsicCall { args, .. } => {
                 for arg in args {
                     self.collect_used(&arg.expr);
                 }
@@ -235,6 +241,7 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::ModuleGet { base, .. }
         | IrExprKind::RecordGet { base, .. }
+        | IrExprKind::TypeApply { callee: base, .. }
         | IrExprKind::TyTest { base, .. }
         | IrExprKind::TyCast { base, .. }
         | IrExprKind::Not { expr: base }
@@ -265,6 +272,9 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::Call { callee, args } => {
             collect_used_bindings(callee, out);
+            collect_call_arg_exprs(args, out, collect_used_bindings);
+        }
+        IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect_used_bindings);
         }
         IrExprKind::HandlerLit { value, ops, .. } => {
@@ -324,6 +334,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::ModuleGet { base, .. }
         | IrExprKind::RecordGet { base, .. }
+        | IrExprKind::TypeApply { callee: base, .. }
         | IrExprKind::TyTest { base, .. }
         | IrExprKind::TyCast { base, .. }
         | IrExprKind::Not { expr: base }
@@ -355,6 +366,9 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::Call { callee, args } => {
             collect_local_decl_bindings(callee, out);
+            collect_call_arg_exprs(args, out, collect_local_decl_bindings);
+        }
+        IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect_local_decl_bindings);
         }
         IrExprKind::HandlerLit { value, ops, .. } => {

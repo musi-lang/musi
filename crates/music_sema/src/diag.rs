@@ -32,6 +32,8 @@ pub enum SemaDiagKind {
     AttrWhenRequiresStringValue,
     AttrWhenRequiresStringList,
     ForeignSignatureRequired,
+    InvalidPartialModifier,
+    PartialForeignConflict,
     InvalidFfiType,
     LawMustBePure,
     CollectDuplicateDataVariant,
@@ -67,6 +69,12 @@ pub enum SemaDiagKind {
     DuplicateRecordField,
     VariantMissingDataContext,
     VariantConstructorArityMismatch,
+    VariantNamedFieldsRequired,
+    VariantNamedFieldsUnexpected,
+    DuplicateVariantField,
+    MissingVariantField,
+    UnknownVariantField,
+    MixedVariantPayloadStyle,
     InvalidVariantArity,
     UnknownDataVariant,
     RecordLiteralRequiresNamedFields,
@@ -76,6 +84,14 @@ pub enum SemaDiagKind {
     InvalidIndexArgCount,
     InvalidCallTarget,
     CallArityMismatch,
+    CallPositionalAfterNamedArgument,
+    CallSpreadAfterNamedArgument,
+    CallNamedArgumentUnknown,
+    CallNamedArgumentDuplicate,
+    CallNamedArgumentAlreadyProvided,
+    CallNamedArgumentsAfterRuntimeSpread,
+    CallNamedSpreadArgument,
+    UnsafeCallRequiresUnsafeBlock,
     InvalidTypeApplication,
     CallRuntimeSpreadRequiresArrayAny,
     CallSpreadRequiresTupleOrArray,
@@ -119,53 +135,22 @@ impl SemaDiagKind {
 
     #[must_use]
     pub fn label(self) -> &'static str {
-        match self {
-            Self::InvalidRequestTarget => "request target must be effect operation call",
-            Self::DuplicateHandlerClause => "duplicate handler clause here",
-            Self::HandlerClauseArityMismatch => "handler clause params do not match operation",
-            Self::HandleRequiresSingleValueClause => {
-                "handler literal requires exactly one `value` clause"
+        for label in SEMA_DIAG_LABELS {
+            if label.kind == self {
+                return label.text;
             }
-            Self::HandlerMissingOperationClause => {
-                "handler literal is missing handled operation clause"
-            }
-            Self::ResumeOutsideHandlerClause => {
-                "`resume` is only valid inside handler operation clause"
-            }
-            Self::EffectNotDeclared => "effect must appear in surrounding `using` set",
-            Self::InvalidSpreadSource => "spread source is not valid here",
-            Self::InvalidIndexArgCount => "index expression has invalid argument count",
-            Self::InvalidIndexTarget => "index target must support indexing",
-            Self::InvalidCallTarget => "callee must be callable",
-            Self::CallArityMismatch => "call argument count does not match callee",
-            Self::CallRuntimeSpreadRequiresArrayAny => "runtime call spread requires `[]Any`",
-            Self::CallSpreadRequiresTupleOrArray => {
-                "call spread requires tuple or one-dimensional array"
-            }
-            Self::InvalidFieldTarget => "field target is not valid here",
-            Self::InvalidRecordUpdateTarget => "record update target must be record value",
-            Self::WriteTargetRequiresMut => "assignment target must be mutable",
-            Self::UnsupportedAssignmentTarget => "assignment target is not writable",
-            Self::AmbiguousVariantTag => "variant tag needs type context",
-            _ => self.message(),
         }
+        self.message()
     }
 
     #[must_use]
-    pub const fn hint(self) -> Option<&'static str> {
-        match self {
-            Self::InvalidRequestTarget => Some("write `request Effect.op(...)`"),
-            Self::HandleRequiresSingleValueClause => Some("add exactly one `value => ...` clause"),
-            Self::HandlerMissingOperationClause => Some("add clause for each handled operation"),
-            Self::ResumeOutsideHandlerClause => Some("move `resume` into handler operation clause"),
-            Self::EffectNotDeclared => Some("declare effect in `using` clause or remove request"),
-            Self::CallRuntimeSpreadRequiresArrayAny => Some("use `[]Any` for runtime-sized spread"),
-            Self::CallSpreadRequiresTupleOrArray => {
-                Some("spread tuple or one-dimensional array instead")
+    pub fn hint(self) -> Option<&'static str> {
+        for hint in SEMA_DIAG_HINTS {
+            if hint.kind == self {
+                return Some(hint.text);
             }
-            Self::AmbiguousVariantTag => Some("add type annotation"),
-            _ => None,
         }
+        None
     }
 
     fn info(self) -> &'static SemaDiagInfo {
@@ -204,6 +189,189 @@ struct SemaDiagInfo {
     code: u16,
     message: &'static str,
 }
+
+struct SemaDiagText {
+    kind: SemaDiagKind,
+    text: &'static str,
+}
+
+const SEMA_DIAG_LABELS: &[SemaDiagText] = &[
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidRequestTarget,
+        text: "request target must be effect operation call",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::DuplicateHandlerClause,
+        text: "duplicate handler clause here",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::HandlerClauseArityMismatch,
+        text: "handler clause params do not match operation",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::HandleRequiresSingleValueClause,
+        text: "handler literal requires exactly one `value` clause",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::HandlerMissingOperationClause,
+        text: "handler literal is missing handled operation clause",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::ResumeOutsideHandlerClause,
+        text: "`resume` is only valid inside handler operation clause",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::EffectNotDeclared,
+        text: "effect must appear in surrounding `using` set",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidSpreadSource,
+        text: "spread source is not valid here",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidIndexArgCount,
+        text: "index expression has invalid argument count",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidIndexTarget,
+        text: "index target must support indexing",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidCallTarget,
+        text: "callee must be callable",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallArityMismatch,
+        text: "call argument count does not match callee",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallPositionalAfterNamedArgument,
+        text: "positional call argument cannot follow named argument",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallSpreadAfterNamedArgument,
+        text: "call spread cannot follow named argument",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallNamedArgumentUnknown,
+        text: "named call argument is not declared",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallNamedArgumentDuplicate,
+        text: "named call argument appears more than once",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallNamedArgumentAlreadyProvided,
+        text: "named call argument is already provided",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallNamedArgumentsAfterRuntimeSpread,
+        text: "named call arguments cannot follow runtime spread",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallNamedSpreadArgument,
+        text: "call spread cannot be named",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::UnsafeCallRequiresUnsafeBlock,
+        text: "call must appear inside `unsafe` block",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallRuntimeSpreadRequiresArrayAny,
+        text: "runtime call spread requires `[]Any`",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallSpreadRequiresTupleOrArray,
+        text: "call spread requires tuple or one-dimensional array",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidFieldTarget,
+        text: "field target is not valid here",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidRecordUpdateTarget,
+        text: "record update target must be record value",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::WriteTargetRequiresMut,
+        text: "assignment target must be mutable",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::UnsupportedAssignmentTarget,
+        text: "assignment target is not writable",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::AmbiguousVariantTag,
+        text: "variant tag needs type context",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::VariantNamedFieldsRequired,
+        text: "variant requires named payload fields",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::VariantNamedFieldsUnexpected,
+        text: "variant does not accept named payload fields",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::DuplicateVariantField,
+        text: "variant field appears more than once",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::MissingVariantField,
+        text: "variant field is missing",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::UnknownVariantField,
+        text: "variant field is not declared",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::MixedVariantPayloadStyle,
+        text: "variant payload fields must be all named or all positional",
+    },
+];
+
+const SEMA_DIAG_HINTS: &[SemaDiagText] = &[
+    SemaDiagText {
+        kind: SemaDiagKind::InvalidRequestTarget,
+        text: "write `request Effect.op(...)`",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::HandleRequiresSingleValueClause,
+        text: "add exactly one `value => ...` clause",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::HandlerMissingOperationClause,
+        text: "add clause for each handled operation",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::ResumeOutsideHandlerClause,
+        text: "move `resume` into handler operation clause",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::EffectNotDeclared,
+        text: "declare effect in `using` clause or remove request",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallRuntimeSpreadRequiresArrayAny,
+        text: "use `[]Any` for runtime-sized spread",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallSpreadRequiresTupleOrArray,
+        text: "spread tuple or one-dimensional array instead",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallPositionalAfterNamedArgument,
+        text: "move positional arguments before named arguments",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::CallSpreadAfterNamedArgument,
+        text: "move spread arguments before named arguments",
+    },
+    SemaDiagText {
+        kind: SemaDiagKind::AmbiguousVariantTag,
+        text: "add type annotation",
+    },
+];
 
 const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
@@ -350,6 +518,16 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         kind: SemaDiagKind::ForeignSignatureRequired,
         code: 3021,
         message: "foreign signature required",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::InvalidPartialModifier,
+        code: 3120,
+        message: "invalid `partial` target",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::PartialForeignConflict,
+        code: 3121,
+        message: "`partial` conflicts with foreign binding",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidFfiType,
@@ -527,6 +705,36 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         message: "variant constructor arity mismatch",
     },
     SemaDiagInfo {
+        kind: SemaDiagKind::VariantNamedFieldsRequired,
+        code: 3102,
+        message: "variant named fields required",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::VariantNamedFieldsUnexpected,
+        code: 3103,
+        message: "variant named fields not allowed",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::DuplicateVariantField,
+        code: 3104,
+        message: "duplicate variant field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::MissingVariantField,
+        code: 3105,
+        message: "missing variant field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnknownVariantField,
+        code: 3106,
+        message: "unknown variant field",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::MixedVariantPayloadStyle,
+        code: 3107,
+        message: "mixed variant payload style",
+    },
+    SemaDiagInfo {
         kind: SemaDiagKind::InvalidVariantArity,
         code: 3058,
         message: "invalid variant arity",
@@ -570,6 +778,46 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
         kind: SemaDiagKind::CallArityMismatch,
         code: 3066,
         message: "call arity mismatch",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallPositionalAfterNamedArgument,
+        code: 3108,
+        message: "positional call argument after named argument",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallSpreadAfterNamedArgument,
+        code: 3109,
+        message: "call spread after named argument",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallNamedArgumentUnknown,
+        code: 3110,
+        message: "unknown named call argument",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallNamedArgumentDuplicate,
+        code: 3111,
+        message: "duplicate named call argument",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallNamedArgumentAlreadyProvided,
+        code: 3112,
+        message: "named call argument already provided",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallNamedArgumentsAfterRuntimeSpread,
+        code: 3113,
+        message: "named call arguments after runtime spread",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::CallNamedSpreadArgument,
+        code: 3114,
+        message: "named spread call argument",
+    },
+    SemaDiagInfo {
+        kind: SemaDiagKind::UnsafeCallRequiresUnsafeBlock,
+        code: 3115,
+        message: "unsafe block required for call",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidTypeApplication,

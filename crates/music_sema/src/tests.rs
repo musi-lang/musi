@@ -188,7 +188,7 @@ fn opaque_imported_data_stays_abstract() {
         40,
         r"
         export opaque let Token := data {
-          | Token : Int
+          | Token(Int)
         };
         export let makeToken (value : Int) : Token := .Token(value);
     ",
@@ -273,7 +273,7 @@ fn frozen_attr_requires_exported_non_opaque_data() {
         r"
         @frozen
         let Token := data {
-          | Token : Int
+          | Token(Int)
         };
     ",
     );
@@ -316,7 +316,7 @@ fn opaque_local_data_alias_stays_abstract() {
         45,
         r"
         let TokenBase := data {
-          | Token : Int
+          | Token(Int)
         };
         let TokenAlias := TokenBase;
         export opaque let Token := TokenAlias;
@@ -344,7 +344,7 @@ fn opaque_chained_local_data_alias_stays_abstract() {
         47,
         r"
         let TokenBase := data {
-          | Token : Int
+          | Token(Int)
         };
         let TokenMid := TokenBase;
         let TokenTop := TokenMid;
@@ -548,6 +548,55 @@ fn dot_call_resolves_attached_receiver_let() {
     );
     assert!(
         !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn named_call_arguments_reorder_by_parameter_name() {
+    let sema = check(
+        r"
+        let render (port : Int, secure : Bool) : Int := port;
+        render(secure := 0 = 0, port := 8080);
+    ",
+    );
+    let call_id =
+        find_expr(&sema, |kind| matches!(kind, HirExprKind::Call { .. })).expect("call expr");
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(call_id).expect("call expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallArityMismatch),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallNamedArgumentUnknown),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn request_named_arguments_follow_effect_op_parameter_names() {
+    let sema = check(
+        r#"
+        let Console := effect {
+          let readln (prompt : String) : String;
+        };
+        request Console.readln(prompt := ">");
+    "#,
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidRequestTarget),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::CallNamedArgumentUnknown),
         "{:?}",
         sema.diags()
     );
@@ -1069,6 +1118,24 @@ fn explicit_type_apply_instantiates_local_generic_lets() {
 }
 
 #[test]
+fn type_apply_instantiates_generic_values_stored_in_records() {
+    let sema = check(
+        r"
+        let id[T] (x : T) : T := x;
+        let tools := { id := id };
+        tools.id[Int](1);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    let root = sema.module().root;
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
+}
+
+#[test]
 fn explicit_type_apply_instantiates_imported_generic_exports() {
     let import_env = TestImportEnv::default().with_module("std/base", "std/base");
     let base = check_module_src(
@@ -1385,6 +1452,31 @@ fn local_recursive_callable_let_typechecks() {
 }
 
 #[test]
+fn piped_calls_typecheck_without_binary_lowering_diag() {
+    let sema = check(
+        r"
+        export let add (left : Int, right : Int) : Int := left + right;
+        export let answer : Int := 1 |> add(2);
+    ",
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::TypeMismatch),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
 fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
     let sema = check("let answer := 1.x;");
     assert!(
@@ -1554,10 +1646,200 @@ fn sum_constructors_and_patterns_typecheck() {
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }
 
+#[test]
+fn named_variant_fields_support_named_construction_and_shorthand_patterns() {
+    let sema = check(
+        r"
+        let Port := data {
+          | Configured(port : Int, secure : Bool)
+          | Default
+        };
+        let port : Port := .Configured(secure := 0 = 0, port := 8080);
+        let value : Int := match port (
+          | .Configured(port, secure := _) => port
+          | .Default => 0
+        );
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn mixed_variant_payload_style_reports_diag() {
+    let sema = check(
+        r"
+        let Port := data {
+          | Configured(Int, secure : Bool)
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::MixedVariantPayloadStyle),
+        "{:?}",
+        sema.diags()
+    );
+}
+
 fn find_expr(sema: &SemaModule, predicate: impl Fn(&HirExprKind) -> bool) -> Option<HirExprId> {
     sema.module()
         .store
         .exprs
         .iter()
         .find_map(|(id, expr)| predicate(&expr.kind).then_some(id))
+}
+
+#[test]
+fn foreign_call_requires_unsafe_block() {
+    let module = check(
+        r#"
+        foreign "c" let clock () : Int;
+        let value := clock();
+    "#,
+    );
+    assert!(has_diag(
+        &module,
+        SemaDiagKind::UnsafeCallRequiresUnsafeBlock
+    ));
+}
+
+#[test]
+fn foreign_call_inside_unsafe_block_passes_unsafe_check() {
+    let module = check(
+        r#"
+        foreign "c" let clock () : Int;
+        let value := unsafe { clock(); };
+    "#,
+    );
+    assert!(!has_diag(
+        &module,
+        SemaDiagKind::UnsafeCallRequiresUnsafeBlock
+    ));
+}
+
+#[test]
+fn higher_kinded_class_accepts_unary_data_constructor() {
+    let sema = check(
+        r"
+        let Option[T] := data {
+          | Some(T)
+          | None
+        };
+        let Functor[F : Type -> Type] := class {
+          let keep(value : F[Int]) : F[Int];
+        };
+        let optionFunctor := instance Functor[Option] {
+          let keep(value : Option[Int]) : Option[Int] := value;
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn higher_kinded_class_accepts_partial_type_application() {
+    let sema = check(
+        r"
+        let Box2[A, B] := data {
+          | Box2(A, B)
+        };
+        let Uses[F : Type -> Type] := class {
+          let keep(value : F[Int]) : F[Int];
+        };
+        let boxStringUses := instance Uses[Box2[String]] {
+          let keep(value : Box2[String, Int]) : Box2[String, Int] := value;
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn partial_let_is_accepted_as_totality_modifier() {
+    let sema = check("partial let parseInt(text : String) : Int := 0;");
+    assert!(
+        !has_diag(&sema, SemaDiagKind::InvalidPartialModifier),
+        "{:?}",
+        sema.diags()
+    );
+    assert!(
+        !has_diag(&sema, SemaDiagKind::PartialForeignConflict),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn partial_non_let_reports_invalid_modifier() {
+    let sema = check("partial 1;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidPartialModifier),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn partial_foreign_reports_modifier_conflict() {
+    let sema = check("partial foreign \"c\" let clock () : Int;");
+    assert!(
+        has_diag(&sema, SemaDiagKind::PartialForeignConflict),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn indexed_variant_result_clause_is_recorded() {
+    let sema = check(
+        r"
+        let Vec[T, n] := data {
+          | Nil() -> Vec[T, 0]
+          | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1]
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    let vec = sema.data_def("Vec").expect("Vec data definition");
+    assert!(
+        vec.variant("Nil")
+            .and_then(super::api::SemaDataVariantDef::result)
+            .is_some()
+    );
+    assert!(
+        vec.variant("Cons")
+            .and_then(super::api::SemaDataVariantDef::result)
+            .is_some()
+    );
+}
+
+#[test]
+fn type_equality_constraint_accepts_matching_type_application() {
+    let sema = check(
+        r"
+        let same[A, B] (value : A) : A where A ~= B := value;
+        let answer := same[Int, Int](42);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn type_equality_constraint_rejects_mismatched_type_application() {
+    let sema = check(
+        r"
+        let same[A, B] (value : A) : A where A ~= B := value;
+        let answer := same[Int, String](42);
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn type_universe_names_accept_numeric_levels() {
+    let sema = check("let id[T : Type0] (value : T) : T := value;");
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
 }

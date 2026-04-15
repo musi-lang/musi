@@ -18,7 +18,9 @@ where
                     .child_tokens()
                     .find(|t| t.kind() == TokenKind::Ident)
                     .and_then(|t| self.intern_ident_token(t))?;
-                Some(HirBinder::new(name, None))
+                let mut exprs = n.child_nodes().filter(|child| is_expr_or_ty(child.kind()));
+                let ty = self.lower_optional_expr_clause(n, TokenKind::Colon, &mut exprs);
+                Some(HirBinder::new(name, ty))
             })
             .collect();
         for p in &params {
@@ -72,6 +74,8 @@ where
 
         let kind = if node.child_tokens().any(|t| t.kind() == TokenKind::LtColon) {
             HirConstraintKind::Subtype
+        } else if node.child_tokens().any(|t| t.kind() == TokenKind::TildeEq) {
+            HirConstraintKind::TypeEq
         } else {
             HirConstraintKind::Implements
         };

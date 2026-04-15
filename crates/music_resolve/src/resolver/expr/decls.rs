@@ -1,6 +1,6 @@
 use super::*;
 use crate::resolver::util::is_expr_or_ty;
-use music_hir::{HirBinder, HirLetReceiver, HirPrefixOp};
+use music_hir::{HirBinder, HirLetReceiver, HirPrefixOp, HirVariantFieldDef};
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -158,12 +158,64 @@ where
         let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
-        let mut exprs = node
+        let fields = node
             .child_nodes()
-            .filter(|child| is_expr_or_ty(child.kind()));
-        let arg = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
-        HirVariantDef::new(origin, attrs, name, arg, value)
+            .find(|child| child.kind() == SyntaxNodeKind::VariantPayloadList)
+            .map_or_else(Vec::new, |list| self.lower_variant_field_defs(list));
+        let fields = self.store.variant_fields.alloc_from_iter(fields);
+        let mut result = None;
+        let mut value = None;
+        let mut pending_clause = None;
+        for child in node.children() {
+            if let Some(token) = child.into_token() {
+                match token.kind() {
+                    TokenKind::MinusGt | TokenKind::ColonEq => pending_clause = Some(token.kind()),
+                    _ => {}
+                }
+                continue;
+            }
+            let Some(child) = child.into_node() else {
+                continue;
+            };
+            if !is_expr_or_ty(child.kind()) || child.kind() == SyntaxNodeKind::VariantPayloadList {
+                continue;
+            }
+            match pending_clause.take() {
+                Some(TokenKind::MinusGt) => result = Some(self.lower_expr(child)),
+                Some(TokenKind::ColonEq) => value = Some(self.lower_expr(child)),
+                _ => {}
+            }
+        }
+        HirVariantDef::new(origin, attrs, name, fields, result, value)
+    }
+
+    fn lower_variant_field_defs(
+        &mut self,
+        node: SyntaxNode<'tree, 'src>,
+    ) -> Vec<HirVariantFieldDef> {
+        let mut out = Vec::new();
+        for child in node.child_nodes() {
+            match child.kind() {
+                SyntaxNodeKind::VariantFieldDef => {
+                    let name_tok = child.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+                    let name = name_tok.and_then(|tok| self.intern_ident_token(tok));
+                    let ty = match child
+                        .child_nodes()
+                        .find(|inner| is_expr_or_ty(inner.kind()))
+                    {
+                        Some(inner) => self.lower_expr(inner),
+                        None => self.error_expr(self.origin_node(child)),
+                    };
+                    out.push(HirVariantFieldDef::new(name, ty));
+                }
+                kind if is_expr_or_ty(kind) => {
+                    let ty = self.lower_expr(child);
+                    out.push(HirVariantFieldDef::new(None, ty));
+                }
+                _ => {}
+            }
+        }
+        out
     }
 
     fn lower_field_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirFieldDef {

@@ -197,8 +197,10 @@ impl Parser<'_> {
                 | TokenKind::KwHandle
                 | TokenKind::KwForeign
                 | TokenKind::KwQuote
+                | TokenKind::KwUnsafe
                 | TokenKind::At
                 | TokenKind::KwExport
+                | TokenKind::KwPartial
                 | TokenKind::Minus
                 | TokenKind::KwNot
                 | TokenKind::KwMut
@@ -221,6 +223,10 @@ impl Parser<'_> {
         let mut children = Vec::new();
         if let Some(spread) = self.eat(TokenKind::DotDotDot) {
             children.push(spread);
+        }
+        if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::ColonEq {
+            children.push(self.advance_element());
+            children.push(self.advance_element());
         }
         children.push(SyntaxElementId::Node(self.parse_expr(0)?));
         Ok(self
@@ -418,6 +424,7 @@ const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
             Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison))
         }
         TokenKind::Eq
+        | TokenKind::TildeEq
         | TokenKind::SlashEq
         | TokenKind::Lt
         | TokenKind::Gt

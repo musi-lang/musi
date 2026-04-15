@@ -221,6 +221,32 @@ impl MethodEmitter<'_, '_> {
                 )));
                 true
             }
+            IrExprKind::TypeApply { callee, type_args } => {
+                self.compile_expr(callee, true, diags);
+                for ty_name in type_args {
+                    let Some(ty) = self.layout.types.get(ty_name).copied() else {
+                        support::push_expr_diag(
+                            diags,
+                            self.module_key,
+                            &expr.origin,
+                            EmitDiagKind::UnknownTypeValue,
+                            format!("unknown emitted type value `{ty_name}`"),
+                        );
+                        emit_zero(self);
+                        return true;
+                    };
+                    self.code.push(CodeEntry::Instruction(Instruction::new(
+                        Opcode::TyId,
+                        Operand::Type(ty),
+                    )));
+                }
+                let count = i16::try_from(type_args.len()).unwrap_or(i16::MAX);
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::TyApply,
+                    Operand::I16(count),
+                )));
+                true
+            }
             IrExprKind::SyntaxValue { raw } => {
                 self.compile_syntax_constant(raw, &expr.origin, diags);
                 true
@@ -277,6 +303,16 @@ impl MethodEmitter<'_, '_> {
             }
             IrExprKind::Call { callee, args } => {
                 self.compile_call(callee, args, diags);
+                true
+            }
+            IrExprKind::IntrinsicCall {
+                symbol,
+                param_tys,
+                result_ty,
+                args,
+                ..
+            } => {
+                self.compile_intrinsic_call(symbol, param_tys, result_ty, args, diags);
                 true
             }
             IrExprKind::CallSeq { callee, args } => {

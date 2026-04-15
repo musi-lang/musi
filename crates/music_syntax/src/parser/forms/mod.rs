@@ -40,7 +40,9 @@ impl Parser<'_> {
             TokenKind::LBracket => self.parse_array_expr(),
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
-            TokenKind::At | TokenKind::KwExport => self.parse_with_mods_expr(),
+            TokenKind::At | TokenKind::KwExport | TokenKind::KwPartial => {
+                self.parse_with_mods_expr()
+            }
             _ => return None,
         })
     }
@@ -59,6 +61,7 @@ impl Parser<'_> {
             TokenKind::KwUsing => self.parse_handler_expr(),
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwForeign => self.parse_foreign_expr(Vec::new()),
+            TokenKind::KwUnsafe => self.parse_unsafe_expr(),
             _ => return None,
         })
     }
@@ -78,11 +81,14 @@ impl Parser<'_> {
         Ok(self.node(SyntaxNodeKind::RecordItem, children))
     }
 
-    pub(super) fn parse_variant_like(
+    pub(super) fn parse_variant_like<F>(
         &mut self,
         kind: SyntaxNodeKind,
-        parse_item: fn(&mut Self) -> ParseResult<SyntaxNodeId>,
-    ) -> ParseResult<SyntaxNodeId> {
+        parse_item: F,
+    ) -> ParseResult<SyntaxNodeId>
+    where
+        F: Fn(&mut Self) -> ParseResult<SyntaxNodeId> + Copy,
+    {
         let dot = self.expect_token(TokenKind::Dot)?;
         let ident = self.expect_ident_element()?;
         let mut children = vec![dot, ident];
@@ -97,6 +103,88 @@ impl Parser<'_> {
             children.push(self.expect_token(TokenKind::RParen)?);
         }
         Ok(self.builder.push_node_from_children(kind, children))
+    }
+
+    pub(super) fn parse_variant_expr_like(
+        &mut self,
+        kind: SyntaxNodeKind,
+    ) -> ParseResult<SyntaxNodeId> {
+        self.parse_dot_variant_like(kind, Parser::parse_variant_expr_payload_item)
+    }
+
+    pub(super) fn parse_variant_pat_like(&mut self) -> ParseResult<SyntaxNodeId> {
+        self.parse_dot_variant_like(
+            SyntaxNodeKind::VariantPat,
+            Parser::parse_variant_pat_payload_item,
+        )
+    }
+
+    fn parse_dot_variant_like<F>(
+        &mut self,
+        kind: SyntaxNodeKind,
+        parse_item: F,
+    ) -> ParseResult<SyntaxNodeId>
+    where
+        F: Fn(&mut Self) -> ParseResult<SyntaxNodeId> + Copy,
+    {
+        let dot = self.expect_token(TokenKind::Dot)?;
+        let ident = self.expect_ident_element()?;
+        let mut children = vec![dot, ident];
+        if self.at(TokenKind::LParen) {
+            children.push(SyntaxElementId::Node(
+                self.parse_variant_payload_list(parse_item)?,
+            ));
+        }
+        Ok(self.builder.push_node_from_children(kind, children))
+    }
+
+    pub(super) fn parse_variant_payload_list<F>(
+        &mut self,
+        parse_item: F,
+    ) -> ParseResult<SyntaxNodeId>
+    where
+        F: Fn(&mut Self) -> ParseResult<SyntaxNodeId> + Copy,
+    {
+        let open = self.expect_token(TokenKind::LParen)?;
+        let mut children = vec![open];
+        if !self.at(TokenKind::RParen) {
+            children.push(SyntaxElementId::Node(parse_item(self)?));
+            while let Some(comma) = self.eat(TokenKind::Comma) {
+                children.push(comma);
+                if self.at(TokenKind::RParen) {
+                    break;
+                }
+                children.push(SyntaxElementId::Node(parse_item(self)?));
+            }
+        }
+        children.push(self.expect_token(TokenKind::RParen)?);
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::VariantPayloadList, children))
+    }
+
+    fn parse_variant_expr_payload_item(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = Vec::new();
+        if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::ColonEq {
+            children.push(self.advance_element());
+            children.push(self.advance_element());
+        }
+        children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::VariantArg, children))
+    }
+
+    fn parse_variant_pat_payload_item(&mut self) -> ParseResult<SyntaxNodeId> {
+        let mut children = Vec::new();
+        if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::ColonEq {
+            children.push(self.advance_element());
+            children.push(self.advance_element());
+        }
+        children.push(SyntaxElementId::Node(self.parse_pattern()?));
+        Ok(self
+            .builder
+            .push_node_from_children(SyntaxNodeKind::VariantPatArg, children))
     }
 
     pub(super) fn parse_expr_node(&mut self) -> ParseResult<SyntaxNodeId> {

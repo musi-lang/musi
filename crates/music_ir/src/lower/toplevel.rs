@@ -35,6 +35,9 @@ pub(super) fn collect_top_level_items(
                 collect_top_level_items(ctx, expr, exported, items);
             }
         }
+        HirExprKind::Unsafe { body } => {
+            collect_top_level_items(ctx, *body, exported, items);
+        }
         HirExprKind::Let {
             pat,
             has_param_clause,

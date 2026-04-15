@@ -3,7 +3,7 @@ use super::*;
 use std::collections::HashSet;
 
 use music_arena::SliceRange;
-use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField};
+use music_hir::{HirExprId, HirPat, HirPatId, HirPatKind, HirRecordPatField, HirVariantPatArg};
 use music_syntax::SyntaxElement;
 use music_syntax::{SyntaxNodeKind, pattern_binder_tokens};
 
@@ -88,14 +88,34 @@ where
                 let sym = self.interner.intern("_");
                 Ident::new(sym, node.span())
             });
-        let args: Vec<_> = node
+        let args = node
             .child_nodes()
-            .filter(|n| n.kind().is_pat())
-            .map(|n| self.lower_pat(n))
-            .collect();
-        let args = self.store.alloc_pat_list(args);
+            .find(|child| child.kind() == SyntaxNodeKind::VariantPayloadList)
+            .map_or_else(Vec::new, |list| self.lower_variant_pat_args(list));
+        let args = self.store.variant_pat_args.alloc_from_iter(args);
         self.store
             .alloc_pat(HirPat::new(origin, HirPatKind::Variant { tag, args }))
+    }
+
+    fn lower_variant_pat_args(&mut self, node: SyntaxNode<'tree, 'src>) -> Vec<HirVariantPatArg> {
+        let mut out = Vec::new();
+        for child in node
+            .child_nodes()
+            .filter(|inner| inner.kind() == SyntaxNodeKind::VariantPatArg)
+        {
+            let name_tok = child.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+            let name = if child.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
+                name_tok.and_then(|tok| self.intern_ident_token(tok))
+            } else {
+                None
+            };
+            let pat = match child.child_nodes().find(|inner| inner.kind().is_pat()) {
+                Some(inner) => self.lower_pat(inner),
+                None => self.alloc_error_pat(child),
+            };
+            out.push(HirVariantPatArg::new(name, pat));
+        }
+        out
     }
 
     fn lower_pat_tuple(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
