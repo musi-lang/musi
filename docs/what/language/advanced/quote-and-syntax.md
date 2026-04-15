@@ -10,25 +10,25 @@ summary: "Treat code as data only after ordinary code reading feels natural."
 
 {{snippet:chapter-quote-and-syntax}}
 
-## What
+## In this chapter
 
 `quote` turns code shape into syntax data you can inspect, build, or reuse.
 The first snippet shows simplest quoted expression, and the second shows interpolation with `#(...)` inside quoted form.
 This chapter belongs late because it asks you to reason about code as data rather than just running code.
 
-## Why
+## Why it matters
 
 Metaprogramming questions show up after ordinary code already feels familiar.
 At that point users need examples that explain both power and boundary: quoting is useful, but it is not default way to write everyday logic.
 A focused page keeps this tool available without overwhelming readers who are still stabilizing basic syntax.
 
-## How
+## Walk through it
 
 Read `quote (x + 1);` as syntax value representing expression shape.
 Then read `#(delta)` or `#(x)` inside quoted form as splice points where surrounding values contribute pieces to generated syntax.
 When experimenting, start with very small quoted expressions and ask what syntax object each quote should represent before building larger templates.
 
-## Try it
+## Try it next
 
 - Quote one simple expression.
 - Add one splice inside a quoted template.
@@ -40,4 +40,4 @@ Do not reach for quote when an ordinary function or data value already solves th
 
 ## Next
 
-Continue to [Testing](/docs/language/advanced/testing) to come back from metaprogramming into practical project workflow.
+Continue to [Templates and splices](/docs/language/advanced/templates-and-splices) to separate text interpolation from syntax splicing.

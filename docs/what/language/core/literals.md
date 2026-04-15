@@ -5,30 +5,30 @@ group: "Core syntax"
 section: "Core syntax"
 order: 6
 slug: "literals"
-summary: "Start with numbers, strings, booleans, and templates."
+summary: "Start with numbers, strings, booleans, runes, and template text."
 ---
 
 {{snippet:chapter-literals}}
 
-## What
+## In this chapter
 
-Literals are values written directly in source: numbers, strings, booleans, and other small values you can read without another definition step.
+Literals are values written directly in source: integers, floats, strings, runes, booleans, and template text you can read without another definition step.
 This example mixes a few literal kinds with nearby derived bindings so you can see what is written directly and what is computed from it.
 The language stays readable when you can spot that difference quickly.
 
-## Why
+## Why it matters
 
 Users rarely ask for "literal theory." They ask how to write a port number, a label, or a comparison flag in working code.
 A useful chapter connects literal syntax to ordinary tasks instead of listing token categories.
 That lowers early friction before operators, ranges, and structured data show up.
 
-## How
+## Walk through it
 
-Read `8080` and `"ready"` as direct source values.
-Then notice how nearby bindings such as `next`, `same`, and `capped` are built from those literals rather than introducing brand-new syntax categories.
+Read `8080`, `0xff`, `3.14`, `"ready"`, and rune values as direct source values.
+Then notice how nearby bindings such as `next`, `same`, and `capped` are built from those literals rather than introducing another category to memorize.
 When learning, start with small direct values, then derive one or two computed bindings so you can tell where literal writing stops and expression building begins.
 
-## Try it
+## Try it next
 
 - Bind one integer and one string.
 - Add one boolean comparison from them or nearby values.
@@ -40,4 +40,4 @@ Do not try to learn literals, operators, and data shapes as one giant syntax dum
 
 ## Next
 
-Continue to [Operators](/docs/language/core/operators) to turn those direct values into useful expressions.
+Continue to [Tuples and unit](/docs/language/core/tuples-and-unit) to group direct values by position.

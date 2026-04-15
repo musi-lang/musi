@@ -10,25 +10,25 @@ summary: "Use laws to document the meaning of an abstraction, not just its shape
 
 {{snippet:chapter-laws}}
 
-## What
+## In this chapter
 
 Laws document semantic expectations of an abstraction.
 In the `Eq` example, `reflexive` states that comparing a value with itself should succeed.
 That means class definitions can communicate not only available operations, but also what correct behavior is supposed to preserve.
 
-## Why
+## Why it matters
 
 Without laws, abstractions can be technically implemented yet still behave in surprising or inconsistent ways.
 Users need to know that Musi has a place to state these expectations close to the abstraction itself.
 That keeps class design from becoming only a bag of function signatures.
 
-## How
+## Walk through it
 
 Read a law as part of abstraction meaning.
 It is not there to add another callable member; it tells implementers and readers what behavior should hold across instances.
 When adding laws, start with one obvious property that would help another reader tell correct implementation from suspicious one.
 
-## Try it
+## Try it next
 
 - Look at one class operation.
 - Write one law that expresses expected behavior of that operation.

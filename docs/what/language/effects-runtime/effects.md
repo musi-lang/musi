@@ -10,25 +10,25 @@ summary: "Understand effects as requests for work, not immediate hidden side eff
 
 {{snippet:chapter-effects}}
 
-## What
+## In this chapter
 
 An effect describes operations code may request, and `request` issues one of those requests.
 This pair of snippets keeps model intentionally small: first define console capability, then request one read operation from it.
 That is core effect story before handlers, runtime imports, or stdlib layering enter scene.
 
-## Why
+## Why it matters
 
 Users often know hidden side effects from other languages, but Musi wants capability flow to stay visible.
 If docs jump straight to handlers, the basic question "what is an effect?" never gets a clean answer.
 This page should make one thing obvious: effectful code is asking for work that something else must eventually provide.
 
-## How
+## Walk through it
 
 Read effect block as declaration of available operations, not as immediate implementation.
 Then read `request console.readln();` as explicit request made from code that depends on that capability.
 When writing your own examples, keep one effect and one operation at first so the request model stays sharper than the surrounding syntax.
 
-## Try it
+## Try it next
 
 - Define one effect with one operation.
 - Request that operation once.

@@ -10,25 +10,25 @@ summary: "Use mut only when changing a value helps more than rebuilding it."
 
 {{snippet:chapter-mutation}}
 
-## What
+## In this chapter
 
 Mutation in Musi is explicit.
 A value becomes mutable only when you mark it with `mut`, and reassignment uses same `:=` surface in a clearly state-changing position.
 That keeps changing state visible instead of quietly blending it into ordinary bindings.
 
-## Why
+## Why it matters
 
 New users need to know both that mutation exists and that Musi does not want it everywhere.
 If docs only show immutable examples, people ask how to update counters or accumulators.
 If docs present mutation as default, readers miss one of the language's clarity wins: stable values stay stable unless you opt into change.
 
-## How
+## Walk through it
 
 Read `let counter := mut 1;` as creation of one mutable cell with initial value `1`.
 Read `counter := 2;` as reassignment of existing mutable value, not creation of a second binding.
 When writing real code, start by asking whether a new immutable value would read better; choose `mut` when step-by-step updates make the intent clearer.
 
-## Try it
+## Try it next
 
 - Create one mutable counter.
 - Reassign it once.

@@ -1,43 +1,69 @@
 ---
 title: "Using"
-description: "Learn using syntax before full handlers so capability requirements stay visible."
+description: "Track required effects with `using`, understand capability flow, and keep effectful code readable."
 group: "Effects and runtime"
 section: "Effects and runtime"
 order: 25
 slug: "using"
-summary: "Read and write using clauses as explicit capability flow."
+summary: "`using` tells readers and the compiler which effects a callable may request."
 ---
 
 {{snippet:chapter-using}}
 
-## What
+`using` is Musi's way of making effect requirements visible.
+It answers a practical question: what capabilities may this code request while it runs?
 
-`using` clauses make capability requirements visible in the type-level surface of a definition.
-A function that requests effectful work can say so directly instead of leaving the dependency ambient or hidden.
-That makes effect requirements part of the signature a reader sees first.
+## In this chapter
 
-## Why
+Read `using { Console }` as part of the callable's public shape.
+Effect sets can include named effects and a rest entry such as `...Base` when a signature forwards an existing capability set.
+It says this code may request operations from `Console`.
+That is not a hidden implementation detail.
+It is something callers, handlers, and readers should be able to see.
 
-Once users understand effect requests, the next question is "how do I know this function needs that capability?"
-A signature-level answer scales better than relying on comments or hidden convention.
-This page should show that effectful code advertises its needs instead of surprising the caller later.
+A callable type can also show the same distinction:
 
-## How
+- `T -> U` for pure callables
+- `T ~> U` for effectful callables
 
-Read `using { Console }` as requirement attached to the function, not as runtime argument list.
-Even if the example is small, the lesson is practical: signatures can tell you what must be available before the body can request certain operations.
-When designing APIs, add `using` where capability dependence is real and useful for callers to know up front.
+Those two spellings matter because Musi does not hide effectful work behind the same surface as pure transformation.
 
-## Try it
+## Why it matters
 
-- Write one function signature with `using` clause.
-- Add one requested effect inside body.
-- Compare signature with equivalent hidden-dependency story.
+Users coming from mainstream languages often expect effects to be ambient.
+File I/O, randomness, or console input might just happen inside the function body with no visible contract.
+Musi goes the other direction.
+It makes effect use explicit so code review and composition stay honest.
+
+That visibility matters even more when you later reach handlers.
+If a request appears, there should be a visible effect story around it.
+
+## Walk through it
+
+Read a `using` example in three parts:
+
+1. which effect set appears in the signature?
+2. which `request` expressions appear in the body?
+3. who will eventually handle those requests?
+
+If the body requests an effect that is not present in the surrounding `using` set, that is a type error, not a hidden runtime surprise.
+
+## What Musi does not have
+
+Musi does not let effectful work blend into ordinary pure code without a marker.
+Instead of hoping readers notice side effects by convention, the language makes capability requirements visible.
+
+## Try it next
+
+- Write one pure callable type with `->`.
+- Write one effectful callable type with `~>`.
+- Add `using { Console }` to a callable that requests console input.
 
 ## Common mistake
 
-Do not treat `using` as optional decoration when function genuinely depends on capability availability.
+Do not read `using` as optional documentation.
+It is part of the callable's real contract.
 
 ## Next
 
-Continue to [Handlers](/docs/language/effects-runtime/handlers) to resolve those requests at a boundary that can choose policy.
+Continue to [Handlers](/docs/language/effects-runtime/handlers) to see how requested work gets interpreted.

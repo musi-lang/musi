@@ -10,25 +10,25 @@ summary: "Finish with the everyday command flow for checking, running, and build
 
 {{snippet:chapter-running-and-tooling}}
 
-## What
+## In this chapter
 
 Musi has everyday commands for package workflow and direct file workflow.
 This page brings them together at end of language path so readers can connect all earlier examples to routine habits: check code, run packages, build outputs, and run tests.
 The command surface is small enough to learn, but distinct enough to deserve a final summary.
 
-## Why
+## Why it matters
 
 After learning syntax, users still need operational confidence.
 They want to know which command to run when checking a file, when to use package commands, and how testing fits into normal iteration.
 A workflow chapter turns scattered command knowledge into repeatable practice.
 
-## How
+## Walk through it
 
 Read `musi run`, `musi check`, `musi build`, and `musi test` as package-root commands for project lifecycle.
 Read `music check index.ms`, `music build index.ms`, and `music run index.seam` as direct lane for single-file or lower-level work.
 When in doubt, ask first whether you are inside a package or handling one file directly; that decision usually picks the right command family immediately.
 
-## Try it
+## Try it next
 
 - Run one direct `music check` on a scratch file.
 - Run one package command inside generated project.

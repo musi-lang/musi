@@ -10,25 +10,25 @@ summary: "Use musi:runtime for runtime-backed capabilities and host services."
 
 {{snippet:chapter-runtime}}
 
-## What
+## In this chapter
 
 `musi:runtime` exposes runtime-backed capabilities tied to the host environment.
 The example uses `envGet("HOME")`, which is good because it looks like something ordinary code might want while still clearly depending on runtime presence.
 This is where Musi crosses from pure language surface into host-connected services.
 
-## Why
+## Why it matters
 
 Users need to know why runtime imports are separate from both foundation and `@std` modules.
 If docs flatten those layers together, it becomes hard to tell what is portable language code and what depends on runtime support.
 A concrete runtime import makes that boundary easier to reason about.
 
-## How
+## Walk through it
 
 Read `import "musi:runtime"` as explicit opt-in to host-backed functionality.
 Then read `Runtime.envGet("HOME")` as normal call over imported module, with extra understanding that result depends on surrounding runtime environment.
 Use runtime modules when code truly needs host services, and keep that dependency visible instead of smuggling it in through unrelated helpers.
 
-## Try it
+## Try it next
 
 - Import `musi:runtime`.
 - Call one runtime-backed function.

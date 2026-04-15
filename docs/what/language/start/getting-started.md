@@ -10,25 +10,25 @@ summary: "Install tools, install Musi, and learn the two command lanes."
 
 {{snippet:chapter-getting-started}}
 
-## What
+## In this chapter
 
 Getting started in Musi means setting up one toolchain, then learning that there are two command lanes.
 Use `music` when you are working directly with one file. Use `musi` when you are working inside a package.
 That split matters early because it tells you whether you are experimenting with syntax or managing a project.
 
-## Why
+## Why it matters
 
 Many "how do I run this?" questions come from not knowing which command lane owns which job.
 If the install page only says "install Musi," beginners still do not know whether to reach for `music check index.ms` or `musi run`.
 This page should make the mental model concrete: one binary for direct file work, one binary for package workflow.
 
-## How
+## Walk through it
 
 Read the first command block as fastest path to a working install, then keep the Cargo path as fallback when you want a local clone or explicit build.
 After installation, verify `music` first with a single-file check command.
 Then create one package and run `musi` inside it so the two lanes become separate muscle memory instead of one blurred command surface.
 
-## Try it
+## Try it next
 
 - Install Musi with one command path.
 - Run `music check index.ms` on a scratch file.

@@ -10,25 +10,25 @@ summary: "Reach for @std modules first in ordinary application code."
 
 {{snippet:chapter-stdlib}}
 
-## What
+## In this chapter
 
 The standard library gives ordinary application code ready-made modules such as `@std/option` and `@std/testing`.
 This page pairs a simple import example with a testing import to show stdlib as practical toolbox, not abstract layer diagram.
 For most day-to-day code, this is friendliest layer to reach for first.
 
-## Why
+## Why it matters
 
 After foundation and runtime pages, users need a clear answer to "what do I usually import in normal code?"
 That answer is often `@std`.
 Putting stdlib in its own chapter prevents the lower layers from looking like default entry point for common tasks.
 
-## How
+## Walk through it
 
 Read `let Option := import "@std/option";` as explicit acquisition of a higher-level module designed for ordinary code.
 Then notice that testing uses same import model: `@std/testing` is still just a module you bind and call through.
 When writing app code, start from `@std` modules, then move downward only when you truly need lower-level control.
 
-## Try it
+## Try it next
 
 - Import one `@std` module.
 - Call one exported helper from it.

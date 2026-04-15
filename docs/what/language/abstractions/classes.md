@@ -10,25 +10,25 @@ summary: "Describe shared behavior with class declarations."
 
 {{snippet:chapter-classes}}
 
-## What
+## In this chapter
 
 A class describes a behavior surface for values of some type.
 In this example, `Eq[T]` says that values of type `T` can be compared for equality, and the law names one semantic expectation that should hold.
 The key idea is contract first: what operations and guarantees exist before any one concrete implementation appears.
 
-## Why
+## Why it matters
 
 Users coming from inheritance-heavy languages can misread classes immediately.
 This page should prevent that by showing classes as behavior descriptions, not object hierarchies.
 Once that distinction is clear, later instance and law pages feel like natural follow-ups instead of confusing add-ons.
 
-## How
+## Walk through it
 
 Read `let Eq[T] := class { ... };` as definition of shared capability over some type parameter `T`.
 Inside it, focus first on operation shape `let (=) ... : Bool;`, then on the law as statement about meaning rather than syntax decoration.
 When writing your own first class, keep member count tiny and choose behavior that several concrete types could plausibly share.
 
-## Try it
+## Try it next
 
 - Define one class with one operation.
 - Name the behavior after what callers need.

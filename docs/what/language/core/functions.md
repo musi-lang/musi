@@ -1,43 +1,81 @@
 ---
 title: "Functions"
-description: "Write one reusable function and read its shape without extra abstraction noise."
+description: "Define reusable functions, learn named arguments, and understand why parameter names matter."
 group: "Core syntax"
 section: "Core syntax"
 order: 9
 slug: "functions"
-summary: "Define plain functions with let before learning calls or methods."
+summary: "Functions are ordinary `let` bindings with parameters, result types, and expression bodies."
 ---
 
 {{snippet:chapter-functions}}
 
-## What
+A Musi function is still a `let` binding.
+The difference is that the bound value accepts parameters and produces a result.
+That keeps the language surface small while still letting you write real reusable code.
 
-A function in Musi is still a `let` binding, but now the bound thing takes inputs and returns a result.
-That continuity matters: you are not leaving basic syntax behind, only adding parameters and usually a result type.
-The page's example stays tiny on purpose so the function shape is easier to see than the arithmetic.
+## In this chapter
 
-## Why
+Read a function definition in pieces:
 
-People ask "how do I reuse logic?" almost immediately after first successful file.
-A helpful answer should show that functions are ordinary named values with a clearer shape, not a new top-level declaration family to memorize.
-That keeps the learning curve flatter when later chapters add calls, methods, or recursion.
+- function name
+- parameter list
+- optional result type annotation
+- body expression
 
-## How
+Musi supports named arguments at ordinary call sites.
+That means parameter names are not just internal decoration.
+They are part of the public call surface when you choose to call with labels.
 
-Read `let twice (x : Int) : Int := x + x;` as three pieces: function name, parameter list, and result expression.
-Then read `twice(21);` as proof that function definition and use stay close together.
-When writing your own first functions, keep one parameter, one small body, and one obvious return value until the shape feels automatic.
+For example, if a function is defined with parameters like `port` and `secure`, callers can write the positional form or the labeled form:
 
-## Try it
+- `render(8080, .True)`
+- `render(port := 8080, secure := .True)`
 
-- Write one one-argument function.
-- Call it once with literal input.
-- Rename function or parameter to make intent clearer.
+## Why it matters
+
+Named arguments help most when a call has several parameters of similar shape.
+They make call sites read like intent instead of like memory work.
+
+They also make one thing important: renaming a public parameter name changes call sites that use named arguments.
+
+## Walk through it
+
+Start with the plain definition.
+Then read the call site.
+If the call uses names, match each label back to the parameter list.
+
+Musi keeps one simple mixing rule:
+
+- positional arguments first
+- named arguments after
+
+That means code like `f(1, mode := "fast")` is fine, but once named arguments begin, later positional arguments are not.
+
+Pipelines still work with this model.
+A piped value becomes the first positional argument, and any later named arguments stay named.
+
+Function values keep the labels from the callable surface you give them. An unlabeled callable annotation gives callers only positional access. A labeled callable annotation gives callers those labels.
+
+The chapter example above shows the same function called positionally and with labels.
+
+## What Musi does not have
+
+Musi does not use a separate external-label system like some languages do.
+The parameter names themselves are the labels.
+That keeps the model smaller.
+
+## Try it next
+
+- Define one two-argument function.
+- Call it positionally once.
+- Call it again with named arguments in a different order.
 
 ## Common mistake
 
-Do not jump to methods, classes, or generic helpers before plain function flow feels normal.
+Do not think of parameter names as throwaway implementation detail if other modules call the function with labels.
+When that happens, the names become part of the function's user-facing shape.
 
 ## Next
 
-Continue to [Calls](/docs/language/core/calls) to focus on what function application looks like in everyday code.
+Continue to [Lambdas](/docs/language/core/lambdas) to write small function values inside expressions.
