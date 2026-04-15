@@ -36,7 +36,9 @@ const repoRoot = join(import.meta.dirname, "..", "..");
 const snippetEmbedPattern = /\{\{snippet:([\w-]+)\}\}/g;
 const cFencePattern = /```c\n/;
 const cppFencePattern = /```cpp\n/;
+const goFencePattern = /```go\n/;
 const javaFencePattern = /```java\n/;
+const luaFencePattern = /```lua\n/;
 const topLevelLetPattern = /^let\s/;
 
 function snippetIdsInMarkdown(source: string) {
@@ -267,6 +269,31 @@ describe("content generation", () => {
 		expect(overviewSource).toContain("C# 12.0");
 	});
 
+	it("keeps Go guide examples paired with Go snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/go/")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("go-")),
+				page.sourcePath,
+			).toBe(true);
+			expect(goFencePattern.test(source), page.sourcePath).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/go/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("Go 1.26.2");
+	});
+
 	it("keeps Java guide examples paired with Java snippets", () => {
 		for (const page of bookPages) {
 			if (!page.sourcePath.startsWith("docs/what/language/developers/java/")) {
@@ -290,6 +317,31 @@ describe("content generation", () => {
 		);
 
 		expect(overviewSource).toContain("Java 17");
+	});
+
+	it("keeps Lua guide examples paired with Lua snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/lua/")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("lua-")),
+				page.sourcePath,
+			).toBe(true);
+			expect(luaFencePattern.test(source), page.sourcePath).toBe(true);
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/lua/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("Lua 5.4.8");
 	});
 
 	it("keeps Python guide examples paired with Python snippets", () => {
@@ -450,6 +502,89 @@ describe("content generation", () => {
 		expect(websiteReadme).not.toContain("Postgres");
 		expect(websiteReadme).not.toContain("npm ");
 		expect(websiteReadme).not.toContain("npx ");
+	});
+
+	describe("content registry architecture", () => {
+		it("keeps public registry modules as small facades", () => {
+			const manifestSource = readFileSync(
+				join(repoRoot, "www", "src", "content", "book", "manifest.ts"),
+				"utf8",
+			);
+			const snippetRegistrySource = readFileSync(
+				join(repoRoot, "www", "src", "content", "snippet-registry.ts"),
+				"utf8",
+			);
+
+			expect(manifestSource.split("\n").length).toBeLessThanOrEqual(120);
+			expect(snippetRegistrySource.split("\n").length).toBeLessThanOrEqual(20);
+			expect(snippetRegistrySource).toContain("./snippets");
+			expect(manifestSource).toContain("./registry/pages");
+		});
+
+		it("stores developer registry data in per-language modules", () => {
+			const developerFiles = [
+				"c-cpp",
+				"csharp",
+				"go",
+				"java",
+				"js-ts",
+				"lua",
+				"python",
+				"rust",
+			];
+
+			for (const file of developerFiles) {
+				expect(
+					existsSync(
+						join(
+							repoRoot,
+							"www",
+							"src",
+							"content",
+							"book",
+							"registry",
+							"pages",
+							"developers",
+							`${file}.ts`,
+						),
+					),
+					file,
+				).toBe(true);
+				expect(
+					existsSync(
+						join(
+							repoRoot,
+							"www",
+							"src",
+							"content",
+							"snippets",
+							"developers",
+							`${file}.ts`,
+						),
+					),
+					file,
+				).toBe(true);
+			}
+		});
+	});
+
+	it("keeps generated content TypeScript small", () => {
+		const generatedContentSource = readFileSync(
+			join(repoRoot, "www", "src", "generated-content.ts"),
+			"utf8",
+		);
+
+		expect(generatedContentSource.length).toBeLessThan(10_000);
+		expect(
+			existsSync(
+				join(repoRoot, "www", "src", "generated", "rendered-docs.json"),
+			),
+		).toBe(true);
+		expect(
+			existsSync(
+				join(repoRoot, "www", "src", "generated", "rendered-snippets.json"),
+			),
+		).toBe(true);
 	});
 
 	it("renders every manifest doc entry", () => {

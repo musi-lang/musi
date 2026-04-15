@@ -50,9 +50,17 @@ describe("routes", () => {
 		expect(
 			routeForPath("/learn/book/developers/guides/csharp/overview").kind,
 		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/go").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/go/overview").kind).toBe(
+			"doc",
+		);
 		expect(routeForPath("/learn/book/developers/guides/java").kind).toBe("doc");
 		expect(
 			routeForPath("/learn/book/developers/guides/java/overview").kind,
+		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/lua").kind).toBe("doc");
+		expect(
+			routeForPath("/learn/book/developers/guides/lua/overview").kind,
 		).toBe("doc");
 		expect(routeForPath("/learn/book/developers/guides/python").kind).toBe(
 			"doc",
@@ -68,7 +76,9 @@ describe("routes", () => {
 		expect(routeForPath("/learn/book/developers/c-and-cpp").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/csharp").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/c-sharp").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/go").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/java").kind).toBe("doc");
+		expect(routeForPath("/learn/book/developers/lua").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/python").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust").kind).toBe("doc");
 		expect(routeForPath("/learn/book/developers/rust/mutation").kind).toBe(
@@ -115,8 +125,14 @@ describe("routes", () => {
 		expect(routeForPath("/learn/book/developers/c-sharp").canonicalPath).toBe(
 			"/learn/book/developers/guides/csharp",
 		);
+		expect(routeForPath("/learn/book/developers/go").canonicalPath).toBe(
+			"/learn/book/developers/guides/go",
+		);
 		expect(routeForPath("/learn/book/developers/java").canonicalPath).toBe(
 			"/learn/book/developers/guides/java",
+		);
+		expect(routeForPath("/learn/book/developers/lua").canonicalPath).toBe(
+			"/learn/book/developers/guides/lua",
 		);
 		expect(routeForPath("/learn/book/developers/python").canonicalPath).toBe(
 			"/learn/book/developers/guides/python",

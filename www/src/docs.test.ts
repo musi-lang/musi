@@ -70,6 +70,15 @@ describe("docs", () => {
 		expect(
 			docForPath("/learn/book/developers/csharp/null-option-result")?.title,
 		).toBe("Null, Option, and Result");
+		expect(docForPath("/learn/book/developers/guides/go")?.kind).toBe(
+			"section",
+		);
+		expect(docForPath("/learn/book/developers/guides/go/overview")?.kind).toBe(
+			"chapter",
+		);
+		expect(
+			docForPath("/learn/book/developers/go/nil-option-result")?.title,
+		).toBe("Nil, Option, and Result");
 		expect(docForPath("/learn/book/developers/guides/java")?.kind).toBe(
 			"section",
 		);
@@ -79,6 +88,15 @@ describe("docs", () => {
 		expect(
 			docForPath("/learn/book/developers/java/null-option-result")?.title,
 		).toBe("Null, Option, and Result");
+		expect(docForPath("/learn/book/developers/guides/lua")?.kind).toBe(
+			"section",
+		);
+		expect(docForPath("/learn/book/developers/guides/lua/overview")?.kind).toBe(
+			"chapter",
+		);
+		expect(
+			docForPath("/learn/book/developers/lua/nil-option-result")?.title,
+		).toBe("Nil, Option, and Result");
 		expect(docForPath("/learn/book/developers/guides/python")?.kind).toBe(
 			"section",
 		);
@@ -110,8 +128,10 @@ describe("docs", () => {
 		expect(titles).toEqual([
 			"Musi for C/C++ Developers",
 			"Musi for C# Developers",
+			"Musi for Go Developers",
 			"Musi for Java Developers",
 			"Musi for JavaScript and TypeScript Developers",
+			"Musi for Lua Developers",
 			"Musi for Python Developers",
 			"Musi for Rust Developers",
 		]);

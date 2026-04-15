@@ -110,6 +110,11 @@ describe("content watch paths", () => {
 			),
 		).toBe(true);
 		expect(
+			isWatchedContentPath(
+				join(root, "..", "src", "content", "snippets", "developers", "lua.ts"),
+			),
+		).toBe(true);
+		expect(
 			isWatchedContentPath(join(root, "..", "src", "content", "catalog.ts")),
 		).toBe(true);
 		expect(isWatchedContentPath(join(root, "content-generator.ts"))).toBe(true);
@@ -202,6 +207,7 @@ describe("website learning syntax", () => {
 		const files = [
 			join(root, "..", "..", "docs", "what", "language"),
 			join(root, "..", "src", "content", "snippet-registry.ts"),
+			join(root, "..", "src", "content", "snippets"),
 			join(root, "..", "src", "content", "examples", "groups-core.ts"),
 			join(root, "..", "src", "content", "examples", "groups-advanced.ts"),
 		];

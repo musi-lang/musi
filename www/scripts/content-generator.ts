@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
@@ -107,6 +107,7 @@ const repoRoot = join(appRoot, "..");
 const docsDirectory = join(repoRoot, "docs", "what", "language");
 const examplesDirectory = join(appRoot, "src", "content", "examples");
 const bookContentDirectory = join(appRoot, "src", "content", "book");
+const snippetsDirectory = join(appRoot, "src", "content", "snippets");
 const snippetRegistryPath = join(
 	appRoot,
 	"src",
@@ -207,16 +208,25 @@ function createWebsiteMusiGrammar(
 	return grammar;
 }
 
+const generatedDirectory = join(appRoot, "src", "generated");
+
 export const generatedContentPath = join(
 	appRoot,
 	"src",
 	"generated-content.ts",
 );
 
+export const generatedDocsPath = join(generatedDirectory, "rendered-docs.json");
+export const generatedSnippetsPath = join(
+	generatedDirectory,
+	"rendered-snippets.json",
+);
+
 export const watchedContentPaths = [
 	docsDirectory,
 	examplesDirectory,
 	bookContentDirectory,
+	snippetsDirectory,
 	snippetRegistryPath,
 	bookManifestPath,
 	contentCatalogPath,
@@ -236,6 +246,7 @@ export function isWatchedContentPath(path: string) {
 		normalized.startsWith(pathWithTrailingSeparator(docsDirectory)) ||
 		normalized.startsWith(pathWithTrailingSeparator(examplesDirectory)) ||
 		normalized.startsWith(pathWithTrailingSeparator(bookContentDirectory)) ||
+		normalized.startsWith(pathWithTrailingSeparator(snippetsDirectory)) ||
 		normalized === normalize(snippetRegistryPath) ||
 		normalized === normalize(bookManifestPath) ||
 		normalized === normalize(contentCatalogPath) ||
@@ -1026,46 +1037,68 @@ export async function generateContent() {
 		);
 	}
 
-	const generated = `export interface GeneratedHeading {
-\tdepth: number;
-\tid: string;
-\ttext: string;
+	const generated = `import renderedDocsJson from "./generated/rendered-docs.json";
+import renderedSnippetsJson from "./generated/rendered-snippets.json";
+
+export interface GeneratedHeading {
+	depth: number;
+	id: string;
+	text: string;
 }
 
 export interface GeneratedDoc {
-\tlocale: "en";
-\tid: string;
-\tkind: "part" | "section" | "chapter";
-\tparentId: string | null;
-\tdepth: number;
-\ttreePath: string[];
-\tchildIds: string[];
-\tpartId: string;
-\tpartTitle: string;
-\tsectionId: string | null;
-\tsectionTitle: string | null;
-\tpath: string;
-\tcanonicalPath: string;
-\taliases: string[];
-\tquestions: { label: string; href: string }[];
-\ttitle: string;
-\tdescription: string;
-\tdescriptionHtml: string;
-\tgroup: string;
-\tsection: string;
-\torder: number;
-\tslug: string;
-\tsummary: string;
-\tsummaryHtml: string;
-\theadings: GeneratedHeading[];
-\thtml: string;
+	locale: "en";
+	id: string;
+	kind: "part" | "section" | "chapter";
+	parentId: string | null;
+	depth: number;
+	treePath: string[];
+	childIds: string[];
+	partId: string;
+	partTitle: string;
+	sectionId: string | null;
+	sectionTitle: string | null;
+	path: string;
+	canonicalPath: string;
+	aliases: string[];
+	questions: { label: string; href: string }[];
+	title: string;
+	description: string;
+	descriptionHtml: string;
+	group: string;
+	section: string;
+	order: number;
+	slug: string;
+	summary: string;
+	summaryHtml: string;
+	headings: GeneratedHeading[];
+	html: string;
 }
 
-export const renderedSnippets = ${JSON.stringify(renderedSnippets, null, "\t")} as const;
+export interface GeneratedSnippets {
+	homeSampleHtml: string;
+	installCurlHtml: string;
+	installPowershellHtml: string;
+	installCargoHtml: string;
+	quickstartHtml: string;
+}
 
-export const renderedDocs = ${JSON.stringify(renderedDocs, null, "\t")} satisfies GeneratedDoc[];
-
+export const renderedSnippets = renderedSnippetsJson as GeneratedSnippets;
+export const renderedDocs = renderedDocsJson as GeneratedDoc[];
 `;
 
-	await writeFile(generatedContentPath, generated, "utf8");
+	await mkdir(generatedDirectory, { recursive: true });
+	await Promise.all([
+		writeFile(generatedContentPath, generated, "utf8"),
+		writeFile(
+			generatedSnippetsPath,
+			`${JSON.stringify(renderedSnippets, null, "\t")}\n`,
+			"utf8",
+		),
+		writeFile(
+			generatedDocsPath,
+			`${JSON.stringify(renderedDocs, null, "\t")}\n`,
+			"utf8",
+		),
+	]);
 }
