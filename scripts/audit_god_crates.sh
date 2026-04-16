@@ -20,7 +20,7 @@ while IFS= read -r file; do
   if [[ "$(basename "$file")" == "tests.rs" ]]; then
     continue
   fi
-  if rg -q "#\\[test\\]" "$file"; then
+  if rg -q "#\[test\]" "$file"; then
     continue
   fi
 
@@ -47,26 +47,29 @@ awk -v min_total="$min_total" -v max_share="$max_share" '
 }
 END {
   violations = 0;
-  print "== God-crate audit (largest-file share) ==";
-  print "rules:";
-  printf("  - total_loc >= %d\n", min_total);
-  printf("  - largest_file_loc / total_loc >= %.2f\n\n", max_share);
-
   for (crate in total) {
     t = total[crate] + 0;
     m = max_lines[crate] + 0;
     share = (t > 0) ? (m / t) : 0;
-    printf("  %s: total=%d max=%d share=%.3f file=%s\n", crate, t, m, share, max_file[crate]);
     if (t >= min_total && share >= max_share) {
       violations += 1;
+      violating_total[violations] = t;
+      violating_max[violations] = m;
+      violating_share[violations] = share;
+      violating_crate[violations] = crate;
+      violating_file[violations] = max_file[crate];
     }
   }
 
   if (violations > 0) {
-    print "";
     print "FAILED: crate dominated by a single file." > "/dev/stderr";
+    print "rules:" > "/dev/stderr";
+    printf("  - total_loc >= %d\n", min_total) > "/dev/stderr";
+    printf("  - largest_file_loc / total_loc >= %.2f\n\n", max_share) > "/dev/stderr";
+    for (idx = 1; idx <= violations; idx += 1) {
+      printf("  %s: total=%d max=%d share=%.3f file=%s\n", violating_crate[idx], violating_total[idx], violating_max[idx], violating_share[idx], violating_file[idx]) > "/dev/stderr";
+    }
     exit 1;
   }
 }
 ' "$tmp"
-
