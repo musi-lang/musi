@@ -17,7 +17,8 @@ rscheck:
 lint:
 	$(MAKE) rscheck
 	bash scripts/audit_god_crates.sh crates
-	cargo clippy --workspace && cargo clippy --workspace --tests
+	cargo clippy --locked --workspace -- -D warnings
+	cargo clippy --locked --workspace --tests -- -D warnings
 
 fmt:
 	cargo fmt --all

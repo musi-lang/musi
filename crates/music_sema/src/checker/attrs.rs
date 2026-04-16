@@ -319,15 +319,11 @@ impl CheckPass<'_, '_, '_> {
         for attr in attrs {
             let path = self.attr_path(&attr);
             match path.as_slice() {
-                ["link" | "when"] => {
-                    if !inner_is_foreign {
-                        self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
-                    }
+                ["link" | "when"] if !inner_is_foreign => {
+                    self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
                 }
-                ["repr" | "layout"] => {
-                    if !self.is_data_target(inner) {
-                        self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
-                    }
+                ["repr" | "layout"] if !self.is_data_target(inner) => {
+                    self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
                 }
                 ["frozen"] => {
                     let export = inner_expr.mods.export.as_ref();
