@@ -4,7 +4,7 @@ use std::iter::repeat_n;
 use music_arena::SliceRange;
 use music_hir::{
     HirAttr, HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirParam, HirPatKind, HirTyId,
-    HirTyKind,
+    HirTyKind, simple_hir_ty_display_name,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId};
@@ -137,6 +137,9 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
     }
 
     if is_callable {
+        if has_comptime_params(ctx, params.clone()) {
+            return;
+        }
         items.callables.push(lower_callable_item(
             ctx,
             CallableItemInput {
@@ -251,6 +254,7 @@ fn lower_instance_provider_callable(
             IrExprKind::VariantNew {
                 data_key,
                 tag_index: 0,
+                tag_value: 0,
                 field_count,
                 args: fields.into_iter().map(|field| field.expr).collect(),
             },
@@ -307,6 +311,7 @@ fn lower_instance_provider_data_def(
         instance_provider_data_key(provider_name, instance),
         vec![IrDataVariantDef::new(
             provider_name,
+            0,
             repeat_n(Box::<str>::from("Any"), field_tys)
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
@@ -411,6 +416,7 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
                 .collect::<Vec<_>>();
             vec![IrDataVariantDef::new(
                 name_text.clone(),
+                0,
                 field_tys.into_boxed_slice(),
             )]
             .into_boxed_slice()
@@ -420,6 +426,7 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
                 .map(|(variant_name, variant)| {
                     IrDataVariantDef::new(
                         variant_name,
+                        variant.tag(),
                         variant
                             .field_tys()
                             .iter()
@@ -462,23 +469,14 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
 }
 
 fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
-    match &sema.ty(ty).kind {
-        HirTyKind::Error => "<error>".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::NatLit(value) => value.to_string().into(),
+    let kind = &sema.ty(ty).kind;
+    if let HirTyKind::NatLit(value) = kind {
+        return value.to_string().into();
+    }
+    if let Some(name) = simple_hir_ty_display_name(kind) {
+        return name.into();
+    }
+    match kind {
         HirTyKind::Named { name, args } => {
             super::render_named_ty_name(sema, *name, *args, interner)
         }
@@ -508,6 +506,33 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
         | HirTyKind::Sum { .. }
         | HirTyKind::Mut { .. }
         | HirTyKind::Record { .. } => super::render_ty_name(sema, ty, interner),
+        HirTyKind::Error
+        | HirTyKind::Unknown
+        | HirTyKind::Type
+        | HirTyKind::Syntax
+        | HirTyKind::Any
+        | HirTyKind::Empty
+        | HirTyKind::Unit
+        | HirTyKind::Bool
+        | HirTyKind::Nat
+        | HirTyKind::Int
+        | HirTyKind::Int8
+        | HirTyKind::Int16
+        | HirTyKind::Int32
+        | HirTyKind::Int64
+        | HirTyKind::Nat8
+        | HirTyKind::Nat16
+        | HirTyKind::Nat32
+        | HirTyKind::Nat64
+        | HirTyKind::Float
+        | HirTyKind::Float32
+        | HirTyKind::Float64
+        | HirTyKind::String
+        | HirTyKind::Rune
+        | HirTyKind::CString
+        | HirTyKind::CPtr
+        | HirTyKind::Module
+        | HirTyKind::NatLit(_) => super::invalid_lowering_path("simple type should render"),
     }
 }
 
@@ -658,6 +683,7 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         .params
         .get(params)
         .iter()
+        .filter(|param| !param.is_comptime)
         .map(|param| {
             IrParam::new(
                 super::decl_binding_id(sema, param.name)
@@ -667,4 +693,14 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()
+}
+
+fn has_comptime_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> bool {
+    ctx.sema
+        .module()
+        .store
+        .params
+        .get(params)
+        .iter()
+        .any(|param| param.is_comptime)
 }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use music_base::Span;
 use music_hir::{
     HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirPatKind, HirTyId, HirTyKind,
+    simple_hir_ty_display_name,
 };
 use music_module::ModuleKey;
 use music_names::Symbol;
@@ -468,6 +469,10 @@ fn sample_cases_for_hir_ty(
         HirTyKind::Int => Ok(int_samples()),
         HirTyKind::Float => Ok(float_samples()),
         HirTyKind::String | HirTyKind::CString => Ok(string_samples()),
+        HirTyKind::Rune => Ok(vec![SampleCase {
+            label: "rune".into(),
+            expr: "'a'".into(),
+        }]),
         HirTyKind::Named { name, .. } => Err(law_suite_error(
             module_key,
             format!(
@@ -513,6 +518,10 @@ fn sample_cases_for_surface_ty(
         SurfaceTyKind::Int => Ok(int_samples()),
         SurfaceTyKind::Float => Ok(float_samples()),
         SurfaceTyKind::String | SurfaceTyKind::CString => Ok(string_samples()),
+        SurfaceTyKind::Rune => Ok(vec![SampleCase {
+            label: "rune".into(),
+            expr: "'a'".into(),
+        }]),
         other => Err(law_suite_error(
             module_key,
             format!(
@@ -687,22 +696,10 @@ fn render_instance_head(class_name: &str, class_args: &[HirTyId], sema: &SemaMod
 
 fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {
     match &sema.ty(ty).kind {
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Error => "<error>".into(),
         HirTyKind::NatLit(value) => value.to_string(),
+        kind if simple_hir_ty_display_name(kind).is_some() => {
+            simple_hir_ty_display_name(kind).unwrap_or("<error>").into()
+        }
         HirTyKind::Named { name, args } => {
             let name = render_named_type_fallback(sema, *name);
             if args.is_empty() {
@@ -726,14 +723,13 @@ fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {
 }
 
 fn render_hir_ty(kind: &HirTyKind) -> String {
+    if let HirTyKind::NatLit(value) = kind {
+        return value.to_string();
+    }
+    if let Some(name) = simple_hir_ty_display_name(kind) {
+        return name.into();
+    }
     match kind {
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Named { .. } => "<named>".into(),
         _ => "<unsupported>".into(),
     }
@@ -746,6 +742,7 @@ fn render_surface_ty(kind: &SurfaceTyKind) -> String {
         SurfaceTyKind::Int => "Int".into(),
         SurfaceTyKind::Float => "Float".into(),
         SurfaceTyKind::String => "String".into(),
+        SurfaceTyKind::Rune => "Rune".into(),
         SurfaceTyKind::CString => "CString".into(),
         SurfaceTyKind::CPtr => "CPtr".into(),
         SurfaceTyKind::Named { name, .. } => name.to_string(),

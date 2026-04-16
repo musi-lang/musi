@@ -44,6 +44,10 @@ fn lex_keywords_idents_and_literals() {
     let rec_kw = lex("rec");
     assert_eq!(rec_kw.tokens()[0].kind, TokenKind::KwRec);
     assert_eq!(rec_kw.tokens()[1].kind, TokenKind::Eof);
+
+    let comptime_kw = lex("comptime");
+    assert_eq!(comptime_kw.tokens()[0].kind, TokenKind::KwComptime);
+    assert_eq!(comptime_kw.tokens()[1].kind, TokenKind::Eof);
 }
 
 #[test]

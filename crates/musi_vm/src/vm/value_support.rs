@@ -36,9 +36,11 @@ impl Vm {
         })
     }
 
-    pub(crate) const fn expect_int(value: &Value) -> VmResult<i64> {
+    pub(crate) fn expect_int(value: &Value) -> VmResult<i64> {
         match value {
             Value::Int(value) => Ok(*value),
+            Value::Nat(number) => i64::try_from(*number)
+                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, value)),
             _ => Err(Self::invalid_value_kind(VmValueKind::Int, value)),
         }
     }

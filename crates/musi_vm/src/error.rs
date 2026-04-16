@@ -27,6 +27,7 @@ pub enum OperandShape {
 pub enum VmValueKind {
     Unit,
     Int,
+    Nat,
     Float,
     Bool,
     String,
@@ -154,6 +155,9 @@ pub enum VmErrorKind {
     InvalidTypeCast {
         expected: Box<str>,
         found: VmValueKind,
+    },
+    ArithmeticFailed {
+        detail: Box<str>,
     },
     ModuleLoadRejected {
         spec: Box<str>,
@@ -355,6 +359,9 @@ impl VmErrorKind {
                     f,
                     "type cast to `{expected}` failed for value kind `{found}`"
                 )
+            }
+            Self::ArithmeticFailed { detail } => {
+                write!(f, "arithmetic failed (`{detail}`)")
             }
             _ => self.fmt_module_and_call(f),
         }

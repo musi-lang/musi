@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{
@@ -11,6 +11,7 @@ use music_names::Ident;
 use crate::api::ClassFacts;
 
 use super::attrs::extract_data_layout_hints;
+use super::const_eval::{data_variant_tag, record_data_variant_tag};
 use super::decls::{member_law_facts, member_signature};
 use super::patterns::bound_name_from_pat;
 use super::surface::surface_key;
@@ -19,6 +20,13 @@ use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpD
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     ctx.collect_module();
+}
+
+fn member_has_attr(ctx: &CollectPass<'_, '_, '_>, member: &HirMemberDef, name: &str) -> bool {
+    ctx.attrs(member.attrs.clone()).iter().any(|attr| {
+        let parts = ctx.idents(attr.path);
+        parts.len() == 1 && ctx.resolve_symbol(parts[0].name) == name
+    })
 }
 
 impl CollectPass<'_, '_, '_> {
@@ -283,8 +291,21 @@ impl CollectPass<'_, '_, '_> {
         );
         self.push_type_param_kinds(&type_param_kinds);
         let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
-        for variant in self.variants(variants) {
+        let mut seen_tags = HashSet::<i64>::new();
+        for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
             let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+            let tag_value = data_variant_tag(
+                self,
+                variant.value,
+                i64::try_from(variant_index).unwrap_or(i64::MAX),
+            );
+            if !record_data_variant_tag(&mut seen_tags, tag_value) {
+                self.diag(
+                    variant.origin.span,
+                    DiagKind::DuplicateDataVariantDiscriminant,
+                    "",
+                );
+            }
             let variant_fields = self.variant_fields(variant.fields);
             if variant_payload_style_is_mixed(&variant_fields) {
                 self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
@@ -295,7 +316,7 @@ impl CollectPass<'_, '_, '_> {
                 .map(|expr| self.lower_type_expr(expr, variant.origin));
             let prev = variant_map.insert(
                 tag,
-                DataVariantDef::new(payload, result, field_tys, field_names),
+                DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
             );
             if prev.is_some() {
                 self.diag(
@@ -318,7 +339,7 @@ impl CollectPass<'_, '_, '_> {
             if !field_tys.is_empty() {
                 let _ = variant_map.insert(
                     data_name.clone(),
-                    DataVariantDef::new(None, None, field_tys, Box::default()),
+                    DataVariantDef::new(0, None, None, field_tys, Box::default()),
                 );
             }
         }
@@ -376,7 +397,12 @@ impl CollectPass<'_, '_, '_> {
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                         facts.result,
-                    ),
+                    )
+                    .with_comptime_safe(member_has_attr(
+                        self,
+                        member,
+                        "comptimeSafe",
+                    )),
                 )
             })
             .collect::<BTreeMap<_, _>>();

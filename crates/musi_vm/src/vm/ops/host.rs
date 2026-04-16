@@ -137,6 +137,7 @@ impl Vm {
             return None;
         }
         let result = match foreign.symbol() {
+            "data.tag" => Self::data_tag(foreign, args),
             "ffi.ptr.null" => Ok(Value::CPtr(0)),
             "ffi.ptr.is_null" => self.ptr_is_null(module_slot, foreign, args),
             "ffi.ptr.offset.i8" | "ffi.ptr.offset.u8" => Self::ptr_offset(foreign, args, 1),
@@ -160,6 +161,14 @@ impl Vm {
             _ => return None,
         };
         Some(result)
+    }
+
+    fn data_tag(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
+        match args.first() {
+            Some(Value::Data(data)) => Ok(Value::Int(data.borrow().tag)),
+            Some(found) => Err(Self::invalid_value_kind(VmValueKind::Data, found)),
+            None => Err(Self::ptr_error(foreign, "data tag argument missing")),
+        }
     }
 
     fn ptr_is_null(
@@ -241,15 +250,26 @@ fn pointer_storage_suffix(type_name: &str) -> Option<&'static str> {
         ("CUShort", "u16"),
         ("CInt", "i32"),
         ("CUInt", "u32"),
+        ("Int8", "i8"),
+        ("Nat8", "u8"),
+        ("Int16", "i16"),
+        ("Nat16", "u16"),
+        ("Int32", "i32"),
+        ("Nat32", "u32"),
+        ("Int64", "i64"),
+        ("Nat64", "u64"),
         ("CLong", "i64"),
         ("CLongLong", "i64"),
         ("CSizeDiff", "i64"),
         ("Int", "i64"),
+        ("Nat", "u64"),
         ("CULong", "u64"),
         ("CULongLong", "u64"),
         ("CSize", "u64"),
         ("CFloat", "f32"),
+        ("Float32", "f32"),
         ("CDouble", "f64"),
+        ("Float64", "f64"),
         ("Float", "f64"),
         ("CPtr", "ptr"),
     ];

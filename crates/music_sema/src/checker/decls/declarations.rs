@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{
@@ -7,6 +7,7 @@ use music_hir::{
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
+use super::super::const_eval::{data_variant_tag, record_data_variant_tag};
 use super::super::exprs::check_expr;
 use super::super::schemes::BindingScheme;
 use super::super::surface::surface_key;
@@ -21,6 +22,13 @@ type VariantDefRange = SliceRange<HirVariantDef>;
 type FieldDefRange = SliceRange<HirFieldDef>;
 type ConstraintRange = SliceRange<HirConstraint>;
 type MemberDefRange = SliceRange<HirMemberDef>;
+
+fn member_has_attr(ctx: &CheckPass<'_, '_, '_>, member: &HirMemberDef, name: &str) -> bool {
+    ctx.attrs(member.attrs.clone()).iter().any(|attr| {
+        let parts = ctx.idents(attr.path);
+        parts.len() == 1 && ctx.resolve_symbol(parts[0].name) == name
+    })
+}
 
 pub(in super::super) fn member_signature(
     ctx: &mut PassBase<'_, '_, '_>,
@@ -205,6 +213,7 @@ impl CheckPass<'_, '_, '_> {
                 type_params,
                 type_param_kinds,
                 param_names,
+                comptime_params: Box::default(),
                 constraints: Box::default(),
                 ty,
                 effects: EffectRow::empty(),
@@ -361,8 +370,22 @@ impl CheckPass<'_, '_, '_> {
         let data_name: Box<str> = self.resolve_symbol(name.name).into();
         if self.data_def(&data_name).is_none() {
             let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
-            for variant in self.variants(variants.clone()) {
+            let mut seen_tags = HashSet::<i64>::new();
+            for (variant_index, variant) in self.variants(variants.clone()).into_iter().enumerate()
+            {
                 let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+                let tag_value = data_variant_tag(
+                    self,
+                    variant.value,
+                    i64::try_from(variant_index).unwrap_or(i64::MAX),
+                );
+                if !record_data_variant_tag(&mut seen_tags, tag_value) {
+                    self.diag(
+                        variant.origin.span,
+                        DiagKind::DuplicateDataVariantDiscriminant,
+                        "",
+                    );
+                }
                 let variant_fields = self.variant_fields(variant.fields);
                 if variant_payload_style_is_mixed(&variant_fields) {
                     self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
@@ -374,7 +397,13 @@ impl CheckPass<'_, '_, '_> {
                     .map(|expr| self.lower_type_expr(expr, variant.origin));
                 let prev = variant_map.insert(
                     tag,
-                    super::super::DataVariantDef::new(payload, result, field_tys, field_names),
+                    super::super::DataVariantDef::new(
+                        tag_value,
+                        payload,
+                        result,
+                        field_tys,
+                        field_names,
+                    ),
                 );
                 if prev.is_some() {
                     self.diag(
@@ -397,7 +426,7 @@ impl CheckPass<'_, '_, '_> {
                 if !field_tys.is_empty() {
                     let _ = variant_map.insert(
                         data_name.clone(),
-                        super::super::DataVariantDef::new(None, None, field_tys, Box::default()),
+                        super::super::DataVariantDef::new(0, None, None, field_tys, Box::default()),
                     );
                 }
             }
@@ -435,7 +464,12 @@ impl CheckPass<'_, '_, '_> {
                                 .collect::<Vec<_>>()
                                 .into_boxed_slice(),
                             facts.result,
-                        ),
+                        )
+                        .with_comptime_safe(member_has_attr(
+                            self,
+                            member,
+                            "comptimeSafe",
+                        )),
                     )
                 })
                 .collect::<BTreeMap<_, _>>();

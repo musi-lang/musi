@@ -119,8 +119,19 @@ impl CheckPass<'_, '_, '_> {
                 | "Bool"
                 | "Nat"
                 | "Int"
+                | "Int8"
+                | "Int16"
+                | "Int32"
+                | "Int64"
+                | "Nat8"
+                | "Nat16"
+                | "Nat32"
+                | "Nat64"
                 | "Float"
+                | "Float32"
+                | "Float64"
                 | "String"
+                | "Rune"
                 | "Range"
                 | "ClosedRange"
                 | "PartialRangeFrom"
@@ -380,7 +391,18 @@ impl CheckPass<'_, '_, '_> {
         }
         let valid = match self.ty(ty).kind {
             HirTyKind::Int
+            | HirTyKind::Int8
+            | HirTyKind::Int16
+            | HirTyKind::Int32
+            | HirTyKind::Int64
+            | HirTyKind::Nat
+            | HirTyKind::Nat8
+            | HirTyKind::Nat16
+            | HirTyKind::Nat32
+            | HirTyKind::Nat64
             | HirTyKind::Float
+            | HirTyKind::Float32
+            | HirTyKind::Float64
             | HirTyKind::Bool
             | HirTyKind::Unit
             | HirTyKind::CString

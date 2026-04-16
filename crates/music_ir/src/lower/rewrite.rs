@@ -208,9 +208,10 @@ impl RecursiveBindingInput<'_, '_> {
             IrExprKind::VariantNew {
                 data_key,
                 tag_index,
+                tag_value,
                 field_count,
                 args,
-            } => self.rewrite_variant_kind(data_key, tag_index, field_count, args),
+            } => self.rewrite_variant_kind(data_key, tag_index, tag_value, field_count, args),
             IrExprKind::Call { callee, args } => rewrite_call_kind(
                 self.ctx,
                 self.origin,
@@ -453,12 +454,14 @@ impl RecursiveBindingInput<'_, '_> {
         &self,
         data_key: DefinitionKey,
         tag_index: u16,
+        tag_value: i64,
         field_count: u16,
         args: Box<[IrExpr]>,
     ) -> IrExprKind {
         IrExprKind::VariantNew {
             data_key,
             tag_index,
+            tag_value,
             field_count,
             args: rewrite_expr_slice(
                 self.ctx,

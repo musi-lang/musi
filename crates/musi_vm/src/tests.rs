@@ -54,7 +54,7 @@ struct SignatureHost {
 }
 
 type ForeignSignatureRecord = (Box<str>, Box<[Box<str>]>, Box<str>);
-type EffectSignatureRecord = (Box<str>, Box<str>, Box<[Box<str>]>, Box<str>);
+type EffectSignatureRecord = (Box<str>, Box<str>, Box<[Box<str>]>, Box<str>, bool);
 
 #[derive(Default)]
 struct SignatureLog {
@@ -88,6 +88,7 @@ impl VmHost for SignatureHost {
                 .collect::<Vec<Box<str>>>()
                 .into_boxed_slice(),
             effect.result_ty_name().into(),
+            effect.is_comptime_safe(),
         ));
         Ok(Value::Int(42))
     }
@@ -415,7 +416,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
             foreign "c" (
               let puts (value : Int) : Int;
             );
-            let Console := effect { let readLine (prompt : String) : Int; };
+            let Console := effect { @comptimeSafe let readLine (prompt : String) : Int; };
             export let call_puts () : Int := unsafe { puts(1); };
             export let call_readLine () : Int := request Console.readLine(">");
         "#,
@@ -451,6 +452,7 @@ fn exposes_typed_foreign_and_effect_signatures_to_host() {
     assert_eq!(log.effect_calls[0].2.len(), 1);
     assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
     assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
+    assert!(log.effect_calls[0].4);
 }
 
 #[test]
@@ -525,6 +527,45 @@ fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
     artifact.types.alloc(TypeDescriptor::new(name, term))
 }
 
+fn alloc_simple_type(artifact: &mut Artifact, name: &str, kind: TypeTermKind) -> TypeId {
+    let name_id = artifact.intern_string(name);
+    let term = artifact.intern_string(&TypeTerm::new(kind).to_json());
+    artifact.types.alloc(TypeDescriptor::new(name_id, term))
+}
+
+#[test]
+fn classifies_fixed_width_native_abi_kinds() {
+    let mut artifact = Artifact::new();
+    let int32 = alloc_simple_type(&mut artifact, "Int32", TypeTermKind::Int32);
+    let nat64 = alloc_simple_type(&mut artifact, "Nat64", TypeTermKind::Nat64);
+    let float32 = alloc_simple_type(&mut artifact, "Float32", TypeTermKind::Float32);
+    let float64 = alloc_simple_type(&mut artifact, "Float64", TypeTermKind::Float64);
+    let program = Program::from_artifact(artifact).expect("program load should succeed");
+
+    assert_eq!(
+        program.type_abi_kind(int32),
+        ProgramTypeAbiKind::Int {
+            signed: true,
+            bits: 32
+        }
+    );
+    assert_eq!(
+        program.type_abi_kind(nat64),
+        ProgramTypeAbiKind::Int {
+            signed: false,
+            bits: 64
+        }
+    );
+    assert_eq!(
+        program.type_abi_kind(float32),
+        ProgramTypeAbiKind::Float { bits: 32 }
+    );
+    assert_eq!(
+        program.type_abi_kind(float64),
+        ProgramTypeAbiKind::Float { bits: 64 }
+    );
+}
+
 fn alloc_named_data(
     artifact: &mut Artifact,
     full_name: &str,
@@ -566,6 +607,7 @@ fn classifies_named_data_native_abi_kinds() {
         "main::Point",
         Box::new([DataVariantDescriptor::new(
             point_variant_name,
+            0,
             Box::new([point_field_ty; 2]),
         )]),
         Some(repr_c),
@@ -577,6 +619,7 @@ fn classifies_named_data_native_abi_kinds() {
         "main::Handle",
         Box::new([DataVariantDescriptor::new(
             handle_variant_name,
+            0,
             Box::new([handle_field_ty]),
         )]),
         Some(transparent),
@@ -587,8 +630,8 @@ fn classifies_named_data_native_abi_kinds() {
         &mut artifact,
         "main::Maybe",
         Box::new([
-            DataVariantDescriptor::new(none_variant_name, Box::new([])),
-            DataVariantDescriptor::new(some_variant_name, Box::new([maybe_self_ty])),
+            DataVariantDescriptor::new(none_variant_name, 0, Box::new([])),
+            DataVariantDescriptor::new(some_variant_name, 1, Box::new([maybe_self_ty])),
         ]),
         Some(repr_c),
         None,

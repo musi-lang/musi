@@ -466,7 +466,12 @@ where
             } else {
                 receiver.ty
             };
-            params.push(HirParam::new(receiver.binder, Some(receiver_ty), None));
+            params.push(HirParam::new(
+                receiver.binder,
+                Some(receiver_ty),
+                None,
+                false,
+            ));
         }
         if let Some(list) = child_of_kind(node, SyntaxNodeKind::ParamList) {
             let lowered = self.lower_param_list(list);

@@ -2,15 +2,20 @@ use std::rc::Rc;
 
 use music_seam::{Instruction, Opcode};
 
-use super::{StepOutcome, Value, Vm, VmResult};
+use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
-    pub(crate) fn binary_int_op(&mut self, op: impl FnOnce(i64, i64) -> i64) -> VmResult {
+    pub(crate) fn binary_int_op(&mut self, op: impl FnOnce(i64, i64) -> Option<i64>) -> VmResult {
         let right_value = self.pop_value()?;
         let right = Self::expect_int(&right_value)?;
         let left_value = self.pop_value()?;
         let left = Self::expect_int(&left_value)?;
-        self.push_value(Value::Int(op(left, right)))
+        let result = op(left, right).ok_or_else(|| {
+            VmError::new(VmErrorKind::ArithmeticFailed {
+                detail: "signed integer overflow".into(),
+            })
+        })?;
+        self.push_value(Value::Int(result))
     }
 
     pub(crate) fn binary_float_op(&mut self, op: impl FnOnce(f64, f64) -> f64) -> VmResult {
@@ -28,19 +33,22 @@ impl Vm {
         self.push_value(self.bool_value(module_slot, op(&left, &right))?)
     }
 
-    pub(crate) fn compare_ord<OpInt, OpFloat>(
+    pub(crate) fn compare_ord<OpInt, OpNat, OpFloat>(
         &mut self,
         op_int: OpInt,
+        op_nat: OpNat,
         op_float: OpFloat,
     ) -> VmResult
     where
         OpInt: FnOnce(i64, i64) -> bool,
+        OpNat: FnOnce(u64, u64) -> bool,
         OpFloat: FnOnce(f64, f64) -> bool,
     {
         let right_value = self.pop_value()?;
         let left_value = self.pop_value()?;
         let value = match (&left_value, &right_value) {
             (Value::Int(left), Value::Int(right)) => op_int(*left, *right),
+            (Value::Nat(left), Value::Nat(right)) => op_nat(*left, *right),
             (Value::Float(left), Value::Float(right)) => op_float(*left, *right),
             _ => return Err(Self::invalid_value_kind(left_value.kind(), &right_value)),
         };
@@ -51,23 +59,23 @@ impl Vm {
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
             Opcode::IAdd => {
-                self.binary_int_op(i64::saturating_add)?;
+                self.binary_int_op(i64::checked_add)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::ISub => {
-                self.binary_int_op(i64::saturating_sub)?;
+                self.binary_int_op(i64::checked_sub)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::IMul => {
-                self.binary_int_op(i64::saturating_mul)?;
+                self.binary_int_op(i64::checked_mul)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::IDiv => {
-                self.binary_int_op(|left, right| left / right)?;
+                self.binary_int_op(i64::checked_div)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::IRem => {
-                self.binary_int_op(|left, right| left % right)?;
+                self.binary_int_op(i64::checked_rem)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::FAdd => {
@@ -108,19 +116,35 @@ impl Vm {
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpLt => {
-                self.compare_ord(|left, right| left < right, |left, right| left < right)?;
+                self.compare_ord(
+                    |left, right| left < right,
+                    |left, right| left < right,
+                    |left, right| left < right,
+                )?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGt => {
-                self.compare_ord(|left, right| left > right, |left, right| left > right)?;
+                self.compare_ord(
+                    |left, right| left > right,
+                    |left, right| left > right,
+                    |left, right| left > right,
+                )?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpLe => {
-                self.compare_ord(|left, right| left <= right, |left, right| left <= right)?;
+                self.compare_ord(
+                    |left, right| left <= right,
+                    |left, right| left <= right,
+                    |left, right| left <= right,
+                )?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGe => {
-                self.compare_ord(|left, right| left >= right, |left, right| left >= right)?;
+                self.compare_ord(
+                    |left, right| left >= right,
+                    |left, right| left >= right,
+                    |left, right| left >= right,
+                )?;
                 Ok(StepOutcome::Continue)
             }
             _ => Err(Self::invalid_dispatch(instruction, "scalar")),

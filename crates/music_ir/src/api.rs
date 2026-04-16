@@ -9,6 +9,118 @@ use music_term::{TypeDim, TypeField, TypeModuleRef, TypeTerm, TypeTermKind};
 
 use crate::IrDiagKind;
 
+struct SurfaceTypeTermPrimitive {
+    surface: SurfaceTyKind,
+    term: TypeTermKind,
+}
+
+const SURFACE_TYPE_TERM_PRIMITIVES: &[SurfaceTypeTermPrimitive] = &[
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Error,
+        term: TypeTermKind::Error,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Unknown,
+        term: TypeTermKind::Unknown,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Type,
+        term: TypeTermKind::Type,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Syntax,
+        term: TypeTermKind::Syntax,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Any,
+        term: TypeTermKind::Any,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Empty,
+        term: TypeTermKind::Empty,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Unit,
+        term: TypeTermKind::Unit,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Bool,
+        term: TypeTermKind::Bool,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Nat,
+        term: TypeTermKind::Nat,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Int,
+        term: TypeTermKind::Int,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Int8,
+        term: TypeTermKind::Int8,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Int16,
+        term: TypeTermKind::Int16,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Int32,
+        term: TypeTermKind::Int32,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Int64,
+        term: TypeTermKind::Int64,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Nat8,
+        term: TypeTermKind::Nat8,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Nat16,
+        term: TypeTermKind::Nat16,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Nat32,
+        term: TypeTermKind::Nat32,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Nat64,
+        term: TypeTermKind::Nat64,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Float,
+        term: TypeTermKind::Float,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Float32,
+        term: TypeTermKind::Float32,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Float64,
+        term: TypeTermKind::Float64,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::String,
+        term: TypeTermKind::String,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Rune,
+        term: TypeTermKind::Rune,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::CString,
+        term: TypeTermKind::CString,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::CPtr,
+        term: TypeTermKind::CPtr,
+    },
+    SurfaceTypeTermPrimitive {
+        surface: SurfaceTyKind::Module,
+        term: TypeTermKind::Module,
+    },
+];
+
 pub type IrDiagList = Vec<Diag>;
 pub type IrNameList = Box<[Box<str>]>;
 
@@ -27,25 +139,12 @@ pub fn lower_surface_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> TypeTerm 
         .unwrap_or_else(|| TypeTerm::new(TypeTermKind::Error))
 }
 
-const fn lower_surface_primitive_type_term(ty: &SurfaceTy) -> Option<TypeTerm> {
-    Some(match &ty.kind {
-        SurfaceTyKind::Error => TypeTerm::new(TypeTermKind::Error),
-        SurfaceTyKind::Unknown => TypeTerm::new(TypeTermKind::Unknown),
-        SurfaceTyKind::Type => TypeTerm::new(TypeTermKind::Type),
-        SurfaceTyKind::Syntax => TypeTerm::new(TypeTermKind::Syntax),
-        SurfaceTyKind::Any => TypeTerm::new(TypeTermKind::Any),
-        SurfaceTyKind::Empty => TypeTerm::new(TypeTermKind::Empty),
-        SurfaceTyKind::Unit => TypeTerm::new(TypeTermKind::Unit),
-        SurfaceTyKind::Bool => TypeTerm::new(TypeTermKind::Bool),
-        SurfaceTyKind::Nat => TypeTerm::new(TypeTermKind::Nat),
-        SurfaceTyKind::Int => TypeTerm::new(TypeTermKind::Int),
-        SurfaceTyKind::Float => TypeTerm::new(TypeTermKind::Float),
-        SurfaceTyKind::String => TypeTerm::new(TypeTermKind::String),
-        SurfaceTyKind::CString => TypeTerm::new(TypeTermKind::CString),
-        SurfaceTyKind::CPtr => TypeTerm::new(TypeTermKind::CPtr),
-        SurfaceTyKind::Module => TypeTerm::new(TypeTermKind::Module),
-        SurfaceTyKind::NatLit(value) => TypeTerm::new(TypeTermKind::NatLit(*value)),
-        _ => return None,
+fn lower_surface_primitive_type_term(ty: &SurfaceTy) -> Option<TypeTerm> {
+    if let SurfaceTyKind::NatLit(value) = &ty.kind {
+        return Some(TypeTerm::new(TypeTermKind::NatLit(*value)));
+    }
+    SURFACE_TYPE_TERM_PRIMITIVES.iter().find_map(|primitive| {
+        (primitive.surface == ty.kind).then(|| TypeTerm::new(primitive.term.clone()))
     })
 }
 
@@ -461,6 +560,7 @@ pub enum IrCasePattern {
         data_key: DefinitionKey,
         variant_count: u16,
         tag_index: u16,
+        tag_value: i64,
         args: Box<[Self]>,
     },
     As {
@@ -631,6 +731,7 @@ pub enum IrExprKind {
     VariantNew {
         data_key: DefinitionKey,
         tag_index: u16,
+        tag_value: i64,
         field_count: u16,
         args: Box<[IrExpr]>,
     },
@@ -779,17 +880,19 @@ impl IrCallable {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrDataVariantDef {
     pub name: Box<str>,
+    pub tag: i64,
     pub field_tys: IrNameList,
 }
 
 impl IrDataVariantDef {
     #[must_use]
-    pub fn new<Name>(name: Name, field_tys: IrNameList) -> Self
+    pub fn new<Name>(name: Name, tag: i64, field_tys: IrNameList) -> Self
     where
         Name: Into<Box<str>>,
     {
         Self {
             name: name.into(),
+            tag,
             field_tys,
         }
     }
@@ -1030,6 +1133,7 @@ pub struct IrEffectOpDef {
     pub name: Box<str>,
     pub param_tys: IrNameList,
     pub result_ty: Box<str>,
+    pub is_comptime_safe: bool,
 }
 
 impl IrEffectOpDef {
@@ -1043,7 +1147,14 @@ impl IrEffectOpDef {
             name: name.into(),
             param_tys,
             result_ty: result_ty.into(),
+            is_comptime_safe: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
+        self.is_comptime_safe = is_comptime_safe;
+        self
     }
 }
 

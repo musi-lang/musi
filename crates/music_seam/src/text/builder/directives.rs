@@ -6,10 +6,20 @@ impl TextBuilder {
         &mut self,
         parts: &[String],
         idx: &mut usize,
+        implicit_tag: i64,
     ) -> AssemblyResult<DataVariantDescriptor> {
         let value = must_get(parts.get(*idx + 1), "variant name")?;
         let variant_name = self.intern_string(&parse_symbol(value)?);
         *idx = (*idx).saturating_add(2);
+        let tag = if parts.get(*idx).map(String::as_str) == Some("tag") {
+            let raw_tag = must_get(parts.get(*idx + 1), "variant tag")?;
+            *idx = (*idx).saturating_add(2);
+            raw_tag
+                .parse()
+                .map_err(|_| AssemblyError::TextParseFailed("invalid variant tag".into()))?
+        } else {
+            implicit_tag
+        };
         let mut field_tys = Vec::new();
         while parts.get(*idx).map(String::as_str) == Some("field") {
             let field_value = must_get(parts.get(*idx + 1), "field type")?;
@@ -19,6 +29,7 @@ impl TextBuilder {
         }
         Ok(DataVariantDescriptor::new(
             variant_name,
+            tag,
             field_tys.into_boxed_slice(),
         ))
     }
@@ -116,7 +127,11 @@ impl TextBuilder {
         let mut idx = 6usize;
         while idx < parts.len() {
             if parts[idx].as_str() == "variant" {
-                variants.push(self.parse_data_variant(parts, &mut idx)?);
+                variants.push(self.parse_data_variant(
+                    parts,
+                    &mut idx,
+                    i64::try_from(variants.len()).unwrap_or(i64::MAX),
+                )?);
                 continue;
             }
             self.parse_data_metadata(
@@ -261,11 +276,18 @@ impl TextBuilder {
             }
             let result_ty = parse_symbol(must_get(parts.get(idx + 1), "effect op result type")?)?;
             idx += 2;
-            ops.push(EffectOpDescriptor::new(
-                self.intern_string(&op_name),
-                param_tys.into_boxed_slice(),
-                self.ensure_type_symbol(&result_ty, &result_ty),
-            ));
+            let is_comptime_safe = parts.get(idx).map(String::as_str) == Some("comptime-safe");
+            if is_comptime_safe {
+                idx += 1;
+            }
+            ops.push(
+                EffectOpDescriptor::new(
+                    self.intern_string(&op_name),
+                    param_tys.into_boxed_slice(),
+                    self.ensure_type_symbol(&result_ty, &result_ty),
+                )
+                .with_comptime_safe(is_comptime_safe),
+            );
         }
         let id = self
             .artifact

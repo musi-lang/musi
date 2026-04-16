@@ -109,7 +109,7 @@ fn variant_dispatch_span(arms: &[IrMatchArm]) -> (Option<usize>, Option<usize>) 
 struct Variantish<'a> {
     data_key: &'a DefinitionKey,
     variant_count: u16,
-    tag_index: u16,
+    tag_value: i64,
     args: &'a [IrCasePattern],
     as_binding: Option<(NameBindingId, &'a str)>,
 }
@@ -119,12 +119,13 @@ fn pattern_variantish(pattern: &IrCasePattern) -> Option<Variantish<'_>> {
         IrCasePattern::Variant {
             data_key,
             variant_count,
-            tag_index,
+            tag_value,
             args,
+            ..
         } => Some(Variantish {
             data_key,
             variant_count: *variant_count,
-            tag_index: *tag_index,
+            tag_value: *tag_value,
             args,
             as_binding: None,
         }),
@@ -132,12 +133,13 @@ fn pattern_variantish(pattern: &IrCasePattern) -> Option<Variantish<'_>> {
             IrCasePattern::Variant {
                 data_key,
                 variant_count,
-                tag_index,
+                tag_value,
                 args,
+                ..
             } => Some(Variantish {
                 data_key,
                 variant_count: *variant_count,
-                tag_index: *tag_index,
+                tag_value: *tag_value,
                 args,
                 as_binding: Some((*binding, name.as_ref())),
             }),
@@ -186,6 +188,18 @@ impl MethodEmitter<'_, '_> {
             return;
         };
 
+        if !variant_tags_are_dense(arms) {
+            self.emit_sparse_variant_dispatch(
+                scrutinee_slot,
+                arms,
+                tail,
+                data_ty,
+                end_label,
+                diags,
+            );
+            return;
+        }
+
         let default_label = self.alloc_label();
         let tag_labels = (0..usize::from(first.variant_count))
             .map(|_| self.alloc_label())
@@ -204,6 +218,60 @@ impl MethodEmitter<'_, '_> {
 
         self.code
             .push(CodeEntry::Label(Label { id: default_label }));
+        self.emit_match_arms(scrutinee_slot, tail, Some(end_label), diags);
+        emit_zero(self);
+    }
+}
+
+fn variant_tags_are_dense(arms: &[IrMatchArm]) -> bool {
+    arms.iter()
+        .filter_map(|arm| pattern_variantish(&arm.pattern))
+        .all(|info| {
+            info.tag_value >= 0
+                && u16::try_from(info.tag_value)
+                    .ok()
+                    .is_some_and(|tag| tag < info.variant_count)
+        })
+}
+
+impl MethodEmitter<'_, '_> {
+    fn emit_sparse_variant_dispatch(
+        &mut self,
+        scrutinee_slot: u16,
+        arms: &[IrMatchArm],
+        tail: &[IrMatchArm],
+        data_ty: TypeId,
+        end_label: u16,
+        diags: &mut EmitDiagList,
+    ) {
+        for arm in arms {
+            let Some(info) = pattern_variantish(&arm.pattern) else {
+                continue;
+            };
+            let next_label = self.alloc_label();
+            self.emit_case_arm(
+                next_label,
+                arm.guard.as_ref(),
+                &arm.expr,
+                Some(end_label),
+                diags,
+                |emitter, next_label, diags| {
+                    emitter.compile_variant_tag_match(
+                        scrutinee_slot,
+                        data_ty,
+                        info.tag_value,
+                        next_label,
+                    );
+                    emitter.compile_variant_payload_patterns(
+                        scrutinee_slot,
+                        info.args,
+                        info.as_binding,
+                        next_label,
+                        diags,
+                    )
+                },
+            );
+        }
         self.emit_match_arms(scrutinee_slot, tail, Some(end_label), diags);
         emit_zero(self);
     }
@@ -248,8 +316,9 @@ fn group_variant_arms_by_tag(arms: &[IrMatchArm], variant_count: u16) -> Vec<Vec
     let mut out = vec![Vec::<&IrMatchArm>::new(); usize::from(variant_count)];
     for arm in arms {
         if let Some(info) = pattern_variantish(&arm.pattern) {
-            let idx = usize::from(info.tag_index);
-            if idx < out.len() {
+            if let Ok(idx) = usize::try_from(info.tag_value)
+                && idx < out.len()
+            {
                 out[idx].push(arm);
             }
         }
@@ -394,13 +463,13 @@ impl MethodEmitter<'_, '_> {
             }
             IrCasePattern::Variant {
                 data_key,
-                tag_index,
+                tag_value,
                 args,
                 ..
             } => self.compile_case_variant_pattern(
                 scrutinee_slot,
                 data_key,
-                *tag_index,
+                *tag_value,
                 args,
                 next_label,
                 diags,
@@ -453,7 +522,7 @@ impl MethodEmitter<'_, '_> {
         &mut self,
         scrutinee_slot: u16,
         data_key: &DefinitionKey,
-        tag_index: u16,
+        tag_value: i64,
         args: &[IrCasePattern],
         next_label: u16,
         diags: &mut EmitDiagList,
@@ -468,7 +537,7 @@ impl MethodEmitter<'_, '_> {
         ) else {
             return false;
         };
-        self.compile_variant_tag_match(scrutinee_slot, data_ty, tag_index, next_label);
+        self.compile_variant_tag_match(scrutinee_slot, data_ty, tag_value, next_label);
         self.compile_variant_payload_patterns(scrutinee_slot, args, None, next_label, diags)
     }
 }
@@ -609,7 +678,7 @@ impl MethodEmitter<'_, '_> {
         &mut self,
         scrutinee_slot: u16,
         data_ty: TypeId,
-        tag_index: u16,
+        tag_value: i64,
         next_label: u16,
     ) {
         self.code.push(CodeEntry::Instruction(Instruction::new(
@@ -620,7 +689,7 @@ impl MethodEmitter<'_, '_> {
             Opcode::DataTag,
             Operand::Type(data_ty),
         )));
-        self.compile_i64(i64::from(tag_index));
+        self.compile_i64(tag_value);
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::CmpEq,
             Operand::None,

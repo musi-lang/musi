@@ -290,7 +290,9 @@ fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
         .expect("sample artifact type");
     let effect = artifact.effects.alloc(EffectDescriptor::new(
         effect_name,
-        Box::new([EffectOpDescriptor::new(op_name, Box::new([int_ty]), int_ty)]),
+        Box::new([
+            EffectOpDescriptor::new(op_name, Box::new([int_ty]), int_ty).with_comptime_safe(true)
+        ]),
     ));
 
     let foreign_name = artifact.intern_string("puts");
@@ -333,6 +335,7 @@ fn seq_call_and_arity_metadata_roundtrip_in_text_and_binary() {
     let text = format_text(&artifact);
     let parsed = parse_text(&text).unwrap();
     assert_eq!(format_text(&parsed), text);
+    assert!(parsed.effects.get(effect).ops[0].is_comptime_safe);
 
     let bytes = encode_binary(&artifact).unwrap();
     let decoded = decode_binary(&bytes).unwrap();

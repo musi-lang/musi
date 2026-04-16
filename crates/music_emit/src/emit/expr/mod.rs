@@ -145,11 +145,12 @@ impl MethodEmitter<'_, '_> {
             }
             IrExprKind::VariantNew {
                 data_key,
-                tag_index,
+                tag_index: _,
+                tag_value,
                 field_count,
                 args,
             } => {
-                self.compile_variant_new(data_key, *tag_index, *field_count, args, diags);
+                self.compile_variant_new(data_key, *tag_value, *field_count, args, diags);
                 true
             }
             IrExprKind::HandlerLit {

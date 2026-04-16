@@ -5,6 +5,7 @@ use crate::api::{SemaModule, SemaOptions};
 
 mod attrs;
 mod collect;
+mod const_eval;
 mod decls;
 mod expr_aggregates;
 mod expr_calls;

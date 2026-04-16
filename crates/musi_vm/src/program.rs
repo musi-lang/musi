@@ -4,7 +4,8 @@ use std::sync::Arc;
 use music_seam::decode_binary;
 use music_seam::descriptor::ExportTarget;
 use music_seam::{
-    Artifact, CodeEntry, DataId, ExportId, Instruction, LabelId, MethodId, StringId, TypeId,
+    Artifact, ClassId, CodeEntry, DataId, EffectId, ExportId, ForeignId, Instruction, LabelId,
+    MethodId, StringId, TypeId,
 };
 use music_term::{TypeTerm, TypeTermKind};
 
@@ -43,6 +44,7 @@ impl ProgramExport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProgramDataVariantLayout {
     pub name: Box<str>,
+    pub tag: i64,
     pub field_tys: Box<[TypeId]>,
     pub field_ty_names: Box<[Box<str>]>,
 }
@@ -51,11 +53,13 @@ impl ProgramDataVariantLayout {
     #[must_use]
     pub const fn new(
         name: Box<str>,
+        tag: i64,
         field_tys: Box<[TypeId]>,
         field_ty_names: Box<[Box<str>]>,
     ) -> Self {
         Self {
             name,
+            tag,
             field_tys,
             field_ty_names,
         }
@@ -184,8 +188,8 @@ pub enum ProgramTypeAbiKind {
     Unsupported,
     Unit,
     Bool,
-    Int,
-    Float,
+    Int { signed: bool, bits: u8 },
+    Float { bits: u8 },
     CString,
     CPtr,
     DataTransparent,
@@ -201,6 +205,24 @@ impl ProgramTypeAbiKind {
     #[must_use]
     pub const fn uses_data_layout(self) -> bool {
         matches!(self, Self::DataTransparent | Self::DataReprCProduct)
+    }
+}
+
+const fn fsize_bits() -> u8 {
+    if cfg!(target_pointer_width = "32") {
+        32
+    } else {
+        64
+    }
+}
+
+const fn target_pointer_bits() -> u8 {
+    if cfg!(target_pointer_width = "16") {
+        16
+    } else if cfg!(target_pointer_width = "32") {
+        32
+    } else {
+        64
     }
 }
 
@@ -296,6 +318,50 @@ impl Program {
         self.string_text(descriptor.name)
     }
 
+    #[must_use]
+    pub fn method_name(&self, id: MethodId) -> &str {
+        let descriptor = self.inner.artifact.methods.get(id);
+        self.string_text(descriptor.name)
+    }
+
+    #[must_use]
+    pub fn method_source_name(&self, id: MethodId) -> &str {
+        source_export_name(self.method_name(id))
+    }
+
+    #[must_use]
+    pub fn foreign_name(&self, id: ForeignId) -> &str {
+        let descriptor = self.inner.artifact.foreigns.get(id);
+        self.string_text(descriptor.name)
+    }
+
+    #[must_use]
+    pub fn foreign_source_name(&self, id: ForeignId) -> &str {
+        source_export_name(self.foreign_name(id))
+    }
+
+    #[must_use]
+    pub fn effect_name(&self, id: EffectId) -> &str {
+        let descriptor = self.inner.artifact.effects.get(id);
+        self.string_text(descriptor.name)
+    }
+
+    #[must_use]
+    pub fn effect_source_name(&self, id: EffectId) -> &str {
+        source_export_name(self.effect_name(id))
+    }
+
+    #[must_use]
+    pub fn class_name(&self, id: ClassId) -> &str {
+        let descriptor = self.inner.artifact.classes.get(id);
+        self.string_text(descriptor.name)
+    }
+
+    #[must_use]
+    pub fn class_source_name(&self, id: ClassId) -> &str {
+        source_export_name(self.class_name(id))
+    }
+
     /// # Errors
     ///
     /// Returns [`VmErrorKind::TypeTermInvalid`] when the stored type-term JSON cannot be decoded.
@@ -339,8 +405,49 @@ impl Program {
         match self.type_term(ty).kind {
             TypeTermKind::Unit => ProgramTypeAbiKind::Unit,
             TypeTermKind::Bool => ProgramTypeAbiKind::Bool,
-            TypeTermKind::Int => ProgramTypeAbiKind::Int,
-            TypeTermKind::Float => ProgramTypeAbiKind::Float,
+            TypeTermKind::Nat => ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: target_pointer_bits(),
+            },
+            TypeTermKind::Int => ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: target_pointer_bits(),
+            },
+            TypeTermKind::Int8 => ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: 8,
+            },
+            TypeTermKind::Int16 => ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: 16,
+            },
+            TypeTermKind::Int32 => ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: 32,
+            },
+            TypeTermKind::Int64 => ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: 64,
+            },
+            TypeTermKind::Nat8 => ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: 8,
+            },
+            TypeTermKind::Nat16 => ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: 16,
+            },
+            TypeTermKind::Nat32 => ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: 32,
+            },
+            TypeTermKind::Nat64 => ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: 64,
+            },
+            TypeTermKind::Float => ProgramTypeAbiKind::Float { bits: fsize_bits() },
+            TypeTermKind::Float32 => ProgramTypeAbiKind::Float { bits: 32 },
+            TypeTermKind::Float64 => ProgramTypeAbiKind::Float { bits: 64 },
             TypeTermKind::CString => ProgramTypeAbiKind::CString,
             TypeTermKind::CPtr => ProgramTypeAbiKind::CPtr,
             TypeTermKind::Named { .. } => self.type_data_layout(ty).map_or(
@@ -461,6 +568,7 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
             .map(|variant| {
                 ProgramDataVariantLayout::new(
                     artifact.string_text(variant.name).into(),
+                    variant.tag,
                     variant.field_tys.clone(),
                     variant
                         .field_tys

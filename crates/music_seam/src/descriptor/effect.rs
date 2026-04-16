@@ -5,6 +5,7 @@ pub struct EffectOpDescriptor {
     pub name: StringId,
     pub param_tys: Box<[TypeId]>,
     pub result_ty: TypeId,
+    pub is_comptime_safe: bool,
 }
 
 impl EffectOpDescriptor {
@@ -14,7 +15,14 @@ impl EffectOpDescriptor {
             name,
             param_tys,
             result_ty,
+            is_comptime_safe: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
+        self.is_comptime_safe = is_comptime_safe;
+        self
     }
 }
 

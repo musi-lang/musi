@@ -237,6 +237,7 @@ fn lower_variant_patterns(
         data_key: data.key().clone(),
         variant_count,
         tag_index,
+        tag_value: variant.tag(),
         args: items,
     })
 }

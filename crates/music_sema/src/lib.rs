@@ -14,12 +14,15 @@ use std::collections::{HashMap, HashSet};
 
 pub use api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface,
-    ConstraintEvidence, ConstraintKey, ConstraintKind, ConstraintSurface, DataSurface,
-    DataVariantSurface, DefinitionKey, EffectOpSurface, EffectSurface, ExportedValue,
-    InstanceFacts, InstanceSurface, LawFacts, LawParamFacts, LawParamSurface, LawSurface,
-    ModuleSurface, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef,
-    SemaEnv, SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy,
-    SurfaceTyField, SurfaceTyId, SurfaceTyKind, TargetInfo, sema_diag_kind,
+    ComptimeClassValue, ComptimeClosureValue, ComptimeContinuationValue, ComptimeDataValue,
+    ComptimeEffectValue, ComptimeForeignValue, ComptimeModuleValue, ComptimeSeqValue,
+    ComptimeTypeValue, ComptimeValue, ComptimeValueList, ConstraintEvidence, ConstraintKey,
+    ConstraintKind, ConstraintSurface, DataSurface, DataVariantSurface, DefinitionKey,
+    EffectOpSurface, EffectSurface, ExportedValue, InstanceFacts, InstanceSurface, LawFacts,
+    LawParamFacts, LawParamSurface, LawSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef,
+    SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim,
+    SurfaceEffectItem, SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
+    TargetInfo, sema_diag_kind,
 };
 pub use checker::check_module;
 pub use checker::schemes::BindingScheme;
@@ -34,6 +37,7 @@ pub(crate) struct SemaContextBuild {
     pub binding_schemes: HashMap<NameBindingId, BindingScheme>,
     pub binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     pub binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    pub binding_comptime_values: HashMap<NameBindingId, ComptimeValue>,
 }
 
 pub(crate) struct SemaFactsBuild {
@@ -43,6 +47,7 @@ pub(crate) struct SemaFactsBuild {
     pub type_test_targets: HashMap<HirExprId, HirTyId>,
     pub expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     pub expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    pub expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 
 pub(crate) struct SemaDeclsBuild {

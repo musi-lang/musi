@@ -385,7 +385,8 @@ impl CheckPass<'_, '_, '_> {
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                         import_surface_ty(self, module_surface, op.result),
-                    ),
+                    )
+                    .with_comptime_safe(op.is_comptime_safe),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -440,6 +441,7 @@ impl CheckPass<'_, '_, '_> {
                 (
                     variant.name.clone(),
                     DataVariantDef::new(
+                        variant.tag,
                         variant
                             .payload
                             .map(|ty| import_surface_ty(self, module_surface, ty)),
@@ -525,6 +527,12 @@ impl CheckPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
+        if let Some(const_int) = export.const_int {
+            self.insert_binding_const_int(binding, const_int);
+        }
+        if let Some(comptime_value) = export.comptime_value.clone() {
+            self.insert_binding_comptime_value(binding, comptime_value);
+        }
         self.set_binding_evidence_keys(binding, evidence_keys);
         if let Some(receiver_ty) = export.receiver_ty {
             let imported_receiver = import_surface_ty(self, surface, receiver_ty);

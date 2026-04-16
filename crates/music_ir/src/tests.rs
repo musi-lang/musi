@@ -154,6 +154,7 @@ fn lowers_exports_and_semantic_metadata() {
         r"
         export let id[T] (x : T) : T := x;
         export let Console := effect {
+          @comptimeSafe
           let readLine () : String;
         };
         export let Eq[T] := class {
@@ -170,10 +171,46 @@ fn lowers_exports_and_semantic_metadata() {
     assert_eq!(ir.effects().len(), 1);
     assert_eq!(ir.effects()[0].ops.len(), 1);
     assert!(ir.effects()[0].ops[0].param_tys.is_empty());
+    assert!(ir.effects()[0].ops[0].is_comptime_safe);
     assert_eq!(ir.effects()[0].ops[0].result_ty.as_ref(), "String");
     assert_eq!(ir.classes().len(), 1);
     assert_eq!(ir.instances().len(), 1);
     assert!(ir.static_imports().is_empty());
+}
+
+#[test]
+fn lowers_comptime_param_calls_to_specialized_runtime_callables() {
+    let ir = lower(
+        r"
+        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let y : Int := scale(3, 2);
+    ",
+    );
+    assert!(
+        ir.callables()
+            .iter()
+            .all(|callable| callable.name.as_ref() != "scale")
+    );
+    let specialized = callable(&ir, "scale$ct$0_i3");
+    assert_eq!(specialized.params.len(), 1);
+    assert_eq!(specialized.params[0].name.as_ref(), "x");
+    assert_global_tail_matches(
+        r"
+        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let y : Int := scale(3, 2);
+    ",
+        "y",
+        |kind| match kind {
+            IrExprKind::Call { callee, args } => {
+                args.len() == 1
+                    && matches!(
+                        &callee.kind,
+                        IrExprKind::Name { name, .. } if name.as_ref() == "scale$ct$0_i3"
+                    )
+            }
+            _ => false,
+        },
+    );
 }
 
 #[test]
@@ -209,6 +246,24 @@ fn lowers_data_and_foreign_facts() {
     assert!(ir.foreigns()[0].link.is_none());
     assert!(!ir.callables().is_empty());
     assert_eq!(ir.exports().len(), 1);
+}
+
+#[test]
+fn lowers_fixed_width_foreign_type_names() {
+    let ir = lower(
+        r#"
+        foreign "c" (
+          let sample (x : Int32, y : Nat64, z : Float32) : Float64;
+        );
+    "#,
+    );
+
+    let foreign = &ir.foreigns()[0];
+    assert_eq!(foreign.param_tys.len(), 3);
+    assert_eq!(foreign.param_tys[0].as_ref(), "Int32");
+    assert_eq!(foreign.param_tys[1].as_ref(), "Nat64");
+    assert_eq!(foreign.param_tys[2].as_ref(), "Float32");
+    assert_eq!(foreign.result_ty.as_ref(), "Float64");
 }
 
 #[test]
@@ -335,6 +390,55 @@ fn lowers_sum_constructors_as_synthetic_variants() {
         panic!("expected variant pattern");
     };
     assert_eq!(data_key.name.as_ref(), synth.key.name.as_ref());
+}
+
+#[test]
+fn lowers_data_variant_discriminants_to_variant_tags() {
+    let ir = lower(
+        r"
+        let Level := data {
+          | Debug := 10
+          | Warn := 30
+        };
+        export let x : Level := .Warn;
+        export let y (level : Level) : Int := match level (
+          | .Debug => 1
+          | .Warn => 2
+        );
+    ",
+    );
+
+    let level = ir
+        .data_defs()
+        .iter()
+        .find(|data| data.key.name.as_ref() == "Level")
+        .expect("Level data def");
+    assert_eq!(level.variants.len(), 2);
+    assert_eq!(level.variants[0].tag, 10);
+    assert_eq!(level.variants[1].tag, 30);
+
+    let x = ir
+        .globals()
+        .iter()
+        .find(|global| global.name.as_ref() == "x")
+        .expect("x global");
+    let IrExprKind::VariantNew { tag_value, .. } = &x.body.kind else {
+        panic!("expected variant new");
+    };
+    assert_eq!(*tag_value, 30);
+
+    let y = ir
+        .callables()
+        .iter()
+        .find(|callable| callable.name.as_ref() == "y")
+        .expect("y callable");
+    let IrExprKind::Match { arms, .. } = &y.body.kind else {
+        panic!("expected match");
+    };
+    let IrCasePattern::Variant { tag_value, .. } = &arms[1].pattern else {
+        panic!("expected variant pattern");
+    };
+    assert_eq!(*tag_value, 30);
 }
 
 #[test]

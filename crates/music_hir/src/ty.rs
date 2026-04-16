@@ -29,8 +29,19 @@ pub enum HirTyKind {
     Bool,
     Nat,
     Int,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Nat8,
+    Nat16,
+    Nat32,
+    Nat64,
     Float,
+    Float32,
+    Float64,
     String,
+    Rune,
     CString,
     CPtr,
     Module,
@@ -90,6 +101,65 @@ pub enum HirTyKind {
     Record {
         fields: SliceRange<HirTyField>,
     },
+}
+
+pub struct SimpleHirTyInfo {
+    pub kind: HirTyKind,
+    pub parse_name: &'static str,
+    pub display_name: &'static str,
+}
+
+impl SimpleHirTyInfo {
+    const fn new(kind: HirTyKind, parse_name: &'static str, display_name: &'static str) -> Self {
+        Self {
+            kind,
+            parse_name,
+            display_name,
+        }
+    }
+}
+
+pub const SIMPLE_HIR_TYS: &[SimpleHirTyInfo] = &[
+    SimpleHirTyInfo::new(HirTyKind::Error, "Error", "<error>"),
+    SimpleHirTyInfo::new(HirTyKind::Unknown, "Unknown", "Unknown"),
+    SimpleHirTyInfo::new(HirTyKind::Type, "Type", "Type"),
+    SimpleHirTyInfo::new(HirTyKind::Syntax, "Syntax", "Syntax"),
+    SimpleHirTyInfo::new(HirTyKind::Any, "Any", "Any"),
+    SimpleHirTyInfo::new(HirTyKind::Empty, "Empty", "Empty"),
+    SimpleHirTyInfo::new(HirTyKind::Unit, "Unit", "Unit"),
+    SimpleHirTyInfo::new(HirTyKind::Bool, "Bool", "Bool"),
+    SimpleHirTyInfo::new(HirTyKind::Nat, "Nat", "Nat"),
+    SimpleHirTyInfo::new(HirTyKind::Int, "Int", "Int"),
+    SimpleHirTyInfo::new(HirTyKind::Int8, "Int8", "Int8"),
+    SimpleHirTyInfo::new(HirTyKind::Int16, "Int16", "Int16"),
+    SimpleHirTyInfo::new(HirTyKind::Int32, "Int32", "Int32"),
+    SimpleHirTyInfo::new(HirTyKind::Int64, "Int64", "Int64"),
+    SimpleHirTyInfo::new(HirTyKind::Nat8, "Nat8", "Nat8"),
+    SimpleHirTyInfo::new(HirTyKind::Nat16, "Nat16", "Nat16"),
+    SimpleHirTyInfo::new(HirTyKind::Nat32, "Nat32", "Nat32"),
+    SimpleHirTyInfo::new(HirTyKind::Nat64, "Nat64", "Nat64"),
+    SimpleHirTyInfo::new(HirTyKind::Float, "Float", "Float"),
+    SimpleHirTyInfo::new(HirTyKind::Float32, "Float32", "Float32"),
+    SimpleHirTyInfo::new(HirTyKind::Float64, "Float64", "Float64"),
+    SimpleHirTyInfo::new(HirTyKind::String, "String", "String"),
+    SimpleHirTyInfo::new(HirTyKind::Rune, "Rune", "Rune"),
+    SimpleHirTyInfo::new(HirTyKind::CString, "CString", "CString"),
+    SimpleHirTyInfo::new(HirTyKind::CPtr, "CPtr", "CPtr"),
+    SimpleHirTyInfo::new(HirTyKind::Module, "Module", "Module"),
+];
+
+#[must_use]
+pub fn simple_hir_ty_name(kind: &HirTyKind) -> Option<&'static str> {
+    SIMPLE_HIR_TYS
+        .iter()
+        .find_map(|info| (&info.kind == kind).then_some(info.parse_name))
+}
+
+#[must_use]
+pub fn simple_hir_ty_display_name(kind: &HirTyKind) -> Option<&'static str> {
+    SIMPLE_HIR_TYS
+        .iter()
+        .find_map(|info| (&info.kind == kind).then_some(info.display_name))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -231,6 +231,7 @@ fn resolves_data_descriptors_from_type_and_name() {
         point_name,
         Box::new([DataVariantDescriptor::new(
             point_name,
+            0,
             Box::new([point_ty, point_ty]),
         )]),
     ));
@@ -257,6 +258,7 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
             point_name,
             Box::new([DataVariantDescriptor::new(
                 point_name,
+                30,
                 Box::new([point_ty, point_ty]),
             )]),
         )
@@ -291,6 +293,7 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
     assert_eq!(binary_layout.layout_pack, Some(4));
     assert!(binary_layout.frozen);
     assert_eq!(binary_layout.variants.len(), 1);
+    assert_eq!(binary_layout.variants[0].tag, 30);
     assert_eq!(
         binary_layout.variants[0].field_tys.as_ref(),
         &[point_ty, point_ty]
@@ -321,7 +324,9 @@ fn roundtrips_data_layout_metadata_through_binary_and_text() {
     assert_eq!(text_layout.layout_pack, Some(4));
     assert!(text_layout.frozen);
     assert_eq!(text_layout.variants.len(), 1);
+    assert_eq!(text_layout.variants[0].tag, 30);
     assert_eq!(text_layout.variants[0].field_tys.len(), 2);
+    assert!(text.contains("variant $main::Point tag 30"));
     assert!(text.contains(".method $main::work params 0 locals 0 export hot"));
     assert!(
         text.contains(".foreign $main::puts param $Int result $Int abi \"c\" symbol \"puts\" cold")

@@ -384,7 +384,8 @@ impl Vm {
         };
         let variant = layout
             .variants
-            .get(usize::try_from(data.tag).unwrap_or(usize::MAX))
+            .iter()
+            .find(|variant| variant.tag == data.tag)
             .ok_or_else(|| {
                 VmError::new(VmErrorKind::InvalidRangeStep {
                     detail: "step result tag invalid".into(),

@@ -266,6 +266,9 @@ impl ExportSurfaceCollector<'_, '_> {
                 .with_param_names(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
                     lower_type_params(&scheme.param_names, this.tys.interner)
                 }))
+                .with_comptime_params(scheme.map_or_else(Box::<[bool]>::default, |scheme| {
+                    scheme.comptime_params.clone()
+                }))
                 .with_constraints(
                     scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
                         this.lower_constraints(&scheme.constraints)
@@ -298,6 +301,12 @@ impl ExportSurfaceCollector<'_, '_> {
                 .map(|data| data.key().clone())
             {
                 value = value.with_data_key(data_key);
+            }
+            if let Some(const_int) = typing.binding_const_ints().get(&export.binding).copied() {
+                value = value.with_const_int(const_int);
+            }
+            if let Some(comptime_value) = typing.binding_comptime_values().get(&export.binding) {
+                value = value.with_comptime_value(comptime_value.clone());
             }
             if let Some(receiver) = typing.binding_attached_receiver(export.binding) {
                 value = value.with_receiver(this.tys.lower(receiver.receiver), receiver.is_mut);
@@ -456,6 +465,7 @@ impl ExportSurfaceCollector<'_, '_> {
                                 lowered
                             };
                             lowered
+                                .with_tag(variant.tag())
                                 .with_field_names(variant.field_names().to_vec().into_boxed_slice())
                         })
                         .collect::<Vec<_>>()
@@ -571,6 +581,7 @@ impl ExportSurfaceCollector<'_, '_> {
                                 lower_type_params(op.param_names(), this.tys.interner),
                                 this.tys.lower(op.result()),
                             )
+                            .with_comptime_safe(op.is_comptime_safe())
                         })
                         .collect::<Vec<_>>()
                         .into_boxed_slice()

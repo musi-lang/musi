@@ -54,6 +54,7 @@ fn register_data_defs(state: &mut ProgramState, module: &IrModule, layout: &mut 
             .map(|variant| {
                 DataVariantDescriptor::new(
                     state.artifact.intern_string(variant.name.as_ref()),
+                    variant.tag,
                     variant
                         .field_tys
                         .iter()
@@ -657,6 +658,7 @@ fn ensure_effect(
                     .into_boxed_slice(),
                 ensure_type(state, layout, op.result_ty.as_ref()),
             )
+            .with_comptime_safe(op.is_comptime_safe)
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();

@@ -15,8 +15,10 @@ use super::Session;
 #[derive(Default)]
 pub(super) struct ModuleRecord {
     pub(super) text: String,
+    pub(super) expanded_text: Option<String>,
     pub(super) revision: u64,
     pub(super) source_id: Option<SourceId>,
+    pub(super) expanded_source_id: Option<SourceId>,
     pub(super) parsed: Option<ParsedModule>,
     pub(super) parsed_source: Option<SyntaxParsedSource>,
     pub(super) resolved: Option<ResolvedModule>,
@@ -65,8 +67,10 @@ impl Session {
         self.store.next_revision = self.store.next_revision.saturating_add(1);
         let record = self.store.modules.entry(key.clone()).or_default();
         record.text = text.into();
+        record.expanded_text = None;
         record.revision = revision;
         record.source_id = None;
+        record.expanded_source_id = None;
         record.parsed = None;
         record.parsed_source = None;
         record.resolved = None;

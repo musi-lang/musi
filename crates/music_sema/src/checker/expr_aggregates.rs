@@ -975,7 +975,7 @@ impl CheckPass<'_, '_, '_> {
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         Some(
             self.strip_attached_receiver_param(scheme.ty)
-                .unwrap_or(builtins.unknown),
+                .unwrap_or(scheme.ty),
         )
     }
 

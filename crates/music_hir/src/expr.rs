@@ -299,6 +299,7 @@ pub enum HirPrefixOp {
     Neg,
     Not,
     Mut,
+    Comptime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -355,12 +356,23 @@ pub struct HirParam {
     pub name: Ident,
     pub ty: Option<HirExprId>,
     pub default: Option<HirExprId>,
+    pub is_comptime: bool,
 }
 
 impl HirParam {
     #[must_use]
-    pub const fn new(name: Ident, ty: Option<HirExprId>, default: Option<HirExprId>) -> Self {
-        Self { name, ty, default }
+    pub const fn new(
+        name: Ident,
+        ty: Option<HirExprId>,
+        default: Option<HirExprId>,
+        is_comptime: bool,
+    ) -> Self {
+        Self {
+            name,
+            ty,
+            default,
+            is_comptime,
+        }
     }
 }
 

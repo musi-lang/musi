@@ -61,7 +61,7 @@ impl MethodEmitter<'_, '_> {
     pub(super) fn compile_variant_new(
         &mut self,
         data_key: &DefinitionKey,
-        tag_index: u16,
+        tag_value: i64,
         field_count: u16,
         args: &[IrExpr],
         diags: &mut EmitDiagList,
@@ -69,7 +69,7 @@ impl MethodEmitter<'_, '_> {
         for arg in args {
             self.compile_expr(arg, true, diags);
         }
-        self.compile_i64(i64::from(tag_index));
+        self.compile_i64(tag_value);
 
         let ty_name = qualified_name(&data_key.module, &data_key.name);
         let Some(ty) = self.layout.types.get(ty_name.as_ref()).copied() else {

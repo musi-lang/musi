@@ -1,4 +1,5 @@
 use super::*;
+use music_hir::{SIMPLE_HIR_TYS, simple_hir_ty_name};
 
 pub(super) fn render_type_value_expr_name(
     sema: &SemaModule,
@@ -135,23 +136,7 @@ fn render_type_value_apply_arg_name(
 }
 
 pub(super) fn is_builtin_type_name_symbol(text: &str) -> bool {
-    matches!(
-        text,
-        "Type"
-            | "Any"
-            | "Unknown"
-            | "Syntax"
-            | "Empty"
-            | "Unit"
-            | "Bool"
-            | "Nat"
-            | "Int"
-            | "Float"
-            | "String"
-            | "CString"
-            | "CPtr"
-            | "Module"
-    )
+    SIMPLE_HIR_TYS.iter().any(|ty| ty.parse_name == text)
 }
 
 fn render_array_type_value_expr_name(
@@ -221,25 +206,10 @@ pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
 }
 
 fn render_atomic_ty_name(kind: &HirTyKind) -> Option<Box<str>> {
-    Some(match kind {
-        HirTyKind::Error => "Error".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::NatLit(value) => value.to_string().into(),
-        _ => return None,
-    })
+    if let HirTyKind::NatLit(value) = kind {
+        return Some(value.to_string().into());
+    }
+    simple_hir_ty_name(kind).map(Into::into)
 }
 
 fn render_collection_ty_name(

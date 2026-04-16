@@ -1,3 +1,6 @@
+use musi_vm::{
+    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+};
 use music_base::diag::Diag;
 use music_emit::{EmitDiagKind, emit_diag_kind};
 use music_ir::{IrDiagKind, ir_diag_kind};
@@ -84,6 +87,153 @@ fn compile_main_module_with_source(source: &str) -> CompiledOutput {
     compile_main_module(&mut session)
 }
 
+fn compile_main_entry_with_source(source: &str) -> CompiledOutput {
+    let mut session = session();
+    set_main_text(&mut session, source);
+    compile_main_entry(&mut session)
+}
+
+#[test]
+fn compiles_vm_backed_comptime_function_call() {
+    let output = compile_main_entry_with_source(
+        r"
+        let add (a : Int, b : Int) : Int := a + b;
+        export let answer () : Int := comptime add(20, 22);
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(42));
+}
+
+#[test]
+fn compiles_vm_backed_comptime_argument_specialization() {
+    let output = compile_main_entry_with_source(
+        r"
+        let add (a : Int, b : Int) : Int := a + b;
+        let scale (comptime n : Int, x : Int) : Int := x * n;
+        export let answer () : Int := scale(add(20, 22), 2);
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(84));
+}
+
+#[test]
+fn compiles_comptime_data_value_as_runtime_value() {
+    let output = compile_main_entry_with_source(
+        r"
+        let Maybe := data {
+          | Some(Int)
+          | None
+        };
+        let make () : Maybe := .Some(42);
+        export let answer () : Int := match comptime make() (
+          | .Some(value) => value
+          | .None => 0
+        );
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(42));
+}
+
+#[test]
+fn compiles_comptime_sequence_value_as_runtime_value() {
+    let output = compile_main_entry_with_source(
+        r"
+        export let answer () : Int := match comptime [40, 2] (
+          | [left, right] => left + right
+          | _ => 0
+        );
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(42));
+}
+
+#[test]
+fn compiles_comptime_closure_value_as_runtime_value() {
+    let output = compile_main_entry_with_source(
+        r"
+        let makeAdder (n : Int) := \(x : Int) => x + n;
+        let add := comptime makeAdder(40);
+        export let answer () : Int := add(2);
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(42));
+}
+
+#[test]
+fn compiles_handled_effect_inside_comptime() {
+    let output = compile_main_entry_with_source(
+        r"
+        let Clock := effect {
+          let tick () : Int;
+        };
+        export let answer () : Int := comptime handle request Clock.tick() using Clock {
+          value => value;
+          tick(k) => resume 21;
+        };
+    ",
+    );
+    assert_eq!(run_export(&output, "answer"), Value::Int(21));
+}
+
+#[test]
+fn rejects_unhandled_effect_inside_comptime() {
+    let mut session = session();
+    set_main_text(
+        &mut session,
+        r"
+        let Clock := effect {
+          @comptimeSafe
+          let tick () : Int;
+        };
+        export let answer () : Int := comptime request Clock.tick();
+    ",
+    );
+    let error = session
+        .compile_entry(&main_key())
+        .expect_err("unhandled CTFE effect should fail");
+    assert!(matches!(error, SessionError::ModuleLoweringFailed { .. }));
+}
+
+#[derive(Default)]
+struct CtfeTestHost;
+
+impl VmHost for CtfeTestHost {
+    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+        Err(VmError::new(VmErrorKind::ForeignCallRejected {
+            foreign: foreign.name().into(),
+        }))
+    }
+
+    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+        match (effect.effect_name(), effect.op_name()) {
+            ("main::Clock", "tick") => Ok(Value::Int(42)),
+            _ => Err(VmError::new(VmErrorKind::EffectRejected {
+                effect: effect.effect_name().into(),
+                op: Some(effect.op_name().into()),
+                reason: "test host rejected effect".into(),
+            })),
+        }
+    }
+}
+
+#[test]
+fn compiles_comptime_safe_host_effect_inside_comptime() {
+    let mut session = session();
+    session.set_ctfe_host(CtfeTestHost);
+    set_main_text(
+        &mut session,
+        r"
+        let Clock := effect {
+          @comptimeSafe
+          let tick () : Int;
+        };
+        export let answer () : Int := comptime request Clock.tick();
+    ",
+    );
+    let output = compile_main_entry(&mut session);
+    assert_eq!(run_export(&output, "answer"), Value::Int(42));
+}
+
 fn assert_output_contains(output: &CompiledOutput, needles: &[&str]) {
     for needle in needles {
         assert!(
@@ -92,6 +242,13 @@ fn assert_output_contains(output: &CompiledOutput, needles: &[&str]) {
             output.text
         );
     }
+}
+
+fn run_export(output: &CompiledOutput, name: &str) -> Value {
+    let program = Program::from_bytes(&output.bytes).expect("program should load");
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
+    vm.initialize().expect("program should initialize");
+    vm.call_export(name, &[]).expect("export should run")
 }
 
 fn assert_main_module_compiles_with(source: &str, needles: &[&str]) -> CompiledOutput {
@@ -274,6 +431,117 @@ fn compiles_imported_generic_callable_calls() {
         "#,
     );
     assert_output_contains(&output, &["$dep::id", "$main::answer"]);
+}
+
+#[test]
+fn compiles_local_comptime_param_callable_specialization() {
+    let output = assert_main_module_compiles_with(
+        r"
+            let scale (comptime n : Int, x : Int) : Int := x * n;
+            export let answer () : Int := scale(3, 14);
+        ",
+        &["scale$ct$0_i3", "$main::answer"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_comptime_quote_expr_expansion() {
+    let output = assert_main_module_compiles_with(
+        r"
+            export let answer () : Int := comptime quote (40 + 2);
+        ",
+        &["$main::answer", "i.add"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_comptime_quote_item_expansion() {
+    let output = assert_main_module_compiles_with(
+        r"
+            comptime quote {
+                export let answer () : Int := 42;
+            };
+        ",
+        &["$main::answer", "ld.smi 42"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_nested_comptime_quote_item_expansion() {
+    let output = assert_main_module_compiles_with(
+        r"
+            comptime quote {
+                comptime quote {
+                    export let answer () : Int := 42;
+                };
+            };
+        ",
+        &["$main::answer", "ld.smi 42"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_local_syntax_item_expansion() {
+    let output = assert_main_module_compiles_with(
+        r"
+            let generated : Syntax := comptime quote {
+                export let answer () : Int := 42;
+            };
+            comptime generated;
+        ",
+        &["$main::answer", "ld.smi 42"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_imported_syntax_item_expansion() {
+    let output = compile_main_entry_with_dep(
+        r"
+            export let generated : Syntax := comptime quote {
+                export let answer () : Int := 42;
+            };
+        ",
+        r#"
+            let dep := import "dep";
+            comptime dep.generated;
+        "#,
+    );
+    assert_output_contains(&output, &["$main::answer", "ld.smi 42"]);
+}
+
+#[test]
+fn compiles_local_syntax_factory_item_expansion() {
+    let output = assert_main_module_compiles_with(
+        r"
+            let generated (value : Int) : Syntax := comptime quote {
+                export let answer () : Int := #(value);
+            };
+            comptime generated(42);
+        ",
+        &["$main::answer", "ld.smi 42"],
+    );
+    assert!(output.artifact.validate().is_ok());
+}
+
+#[test]
+fn compiles_imported_syntax_factory_item_expansion() {
+    let output = compile_main_entry_with_dep(
+        r"
+            export let generated (value : Int) : Syntax := comptime quote {
+                export let answer () : Int := #(value);
+            };
+        ",
+        r#"
+            let dep := import "dep";
+            comptime dep.generated(42);
+        "#,
+    );
+    assert_output_contains(&output, &["$main::answer", "ld.smi 42"]);
 }
 
 #[test]

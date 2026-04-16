@@ -16,6 +16,7 @@ pub type SyntaxValuePtr = Rc<SyntaxTerm>;
 pub enum Value {
     Unit,
     Int(i64),
+    Nat(u64),
     Float(f64),
     String(Rc<str>),
     CPtr(usize),
@@ -209,6 +210,7 @@ pub type ContinuationValuePtr = Rc<ContinuationValue>;
 pub enum ValueView<'a> {
     Unit,
     Int(i64),
+    Nat(u64),
     Float(f64),
     Bool(bool),
     String(StringView<'a>),
@@ -231,6 +233,7 @@ pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
     match view {
         ValueView::Unit => None,
         ValueView::Int(value) => Some(value.to_string()),
+        ValueView::Nat(value) => Some(value.to_string()),
         ValueView::Float(value) => Some(value.to_string()),
         ValueView::Bool(value) => Some(if value { ".True" } else { ".False" }.to_owned()),
         ValueView::String(text) => Some(text.as_str().to_owned()),
@@ -264,6 +267,24 @@ impl<'a> StringView<'a> {
 #[derive(Debug)]
 pub struct SyntaxView<'a> {
     pub(crate) inner: &'a SyntaxTerm,
+}
+
+#[derive(Debug)]
+pub struct ClosureView<'a> {
+    pub(crate) inner: Ref<'a, ClosureValue>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModuleView<'a> {
+    pub(crate) spec: &'a str,
+    pub(crate) slot: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ForeignView<'a> {
+    pub(crate) module_slot: usize,
+    pub(crate) foreign: ForeignId,
+    pub(crate) type_args: &'a [TypeId],
 }
 
 impl<'a> SyntaxView<'a> {
@@ -368,6 +389,7 @@ impl Value {
         match self {
             Self::Unit => VmValueKind::Unit,
             Self::Int(_) => VmValueKind::Int,
+            Self::Nat(_) => VmValueKind::Nat,
             Self::Float(_) => VmValueKind::Float,
             Self::String(_) => VmValueKind::String,
             Self::CPtr(_) => VmValueKind::CPtr,
@@ -399,6 +421,42 @@ impl Value {
             _ => None,
         }
     }
+
+    #[must_use]
+    pub fn as_seq(&self) -> Option<SeqView<'_>> {
+        match self {
+            Self::Seq(value) => Some(SeqView::new(value.borrow())),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_closure(&self) -> Option<ClosureView<'_>> {
+        match self {
+            Self::Closure(value) => Some(ClosureView::new(value.borrow())),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_module(&self) -> Option<ModuleView<'_>> {
+        match self {
+            Self::Module(value) => Some(ModuleView::new(value.spec.as_ref(), value.slot)),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_foreign(&self) -> Option<ForeignView<'_>> {
+        match self {
+            Self::Foreign(value) => Some(ForeignView::new(
+                value.module_slot,
+                value.foreign,
+                &value.type_args,
+            )),
+            _ => None,
+        }
+    }
 }
 
 impl<'a> StringView<'a> {
@@ -412,6 +470,71 @@ impl<'a> SyntaxView<'a> {
     #[must_use]
     pub const fn term(&self) -> &'a SyntaxTerm {
         self.inner
+    }
+}
+
+impl<'a> ClosureView<'a> {
+    #[must_use]
+    pub const fn new(inner: Ref<'a, ClosureValue>) -> Self {
+        Self { inner }
+    }
+
+    #[must_use]
+    pub fn module_slot(&self) -> usize {
+        self.inner.module_slot
+    }
+
+    #[must_use]
+    pub fn method(&self) -> MethodId {
+        self.inner.method
+    }
+
+    #[must_use]
+    pub fn captures(&self) -> &[Value] {
+        &self.inner.captures
+    }
+}
+
+impl<'a> ModuleView<'a> {
+    #[must_use]
+    pub const fn new(spec: &'a str, slot: usize) -> Self {
+        Self { spec, slot }
+    }
+
+    #[must_use]
+    pub const fn spec(self) -> &'a str {
+        self.spec
+    }
+
+    #[must_use]
+    pub const fn slot(self) -> usize {
+        self.slot
+    }
+}
+
+impl<'a> ForeignView<'a> {
+    #[must_use]
+    pub const fn new(module_slot: usize, foreign: ForeignId, type_args: &'a [TypeId]) -> Self {
+        Self {
+            module_slot,
+            foreign,
+            type_args,
+        }
+    }
+
+    #[must_use]
+    pub const fn module_slot(self) -> usize {
+        self.module_slot
+    }
+
+    #[must_use]
+    pub const fn foreign(self) -> ForeignId {
+        self.foreign
+    }
+
+    #[must_use]
+    pub const fn type_args(self) -> &'a [TypeId] {
+        self.type_args
     }
 }
 

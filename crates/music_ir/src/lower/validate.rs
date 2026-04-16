@@ -124,8 +124,19 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
         | SurfaceTyKind::Bool
         | SurfaceTyKind::Nat
         | SurfaceTyKind::Int
+        | SurfaceTyKind::Int8
+        | SurfaceTyKind::Int16
+        | SurfaceTyKind::Int32
+        | SurfaceTyKind::Int64
+        | SurfaceTyKind::Nat8
+        | SurfaceTyKind::Nat16
+        | SurfaceTyKind::Nat32
+        | SurfaceTyKind::Nat64
         | SurfaceTyKind::Float
+        | SurfaceTyKind::Float32
+        | SurfaceTyKind::Float64
         | SurfaceTyKind::String
+        | SurfaceTyKind::Rune
         | SurfaceTyKind::CString
         | SurfaceTyKind::CPtr
         | SurfaceTyKind::Module
