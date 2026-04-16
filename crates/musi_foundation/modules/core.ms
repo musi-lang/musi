@@ -28,11 +28,44 @@ export let Nat := Nat;
 @known(name := "Int")
 export let Int := Int;
 
+@known(name := "Int8")
+export let Int8 := Int8;
+
+@known(name := "Int16")
+export let Int16 := Int16;
+
+@known(name := "Int32")
+export let Int32 := Int32;
+
+@known(name := "Int64")
+export let Int64 := Int64;
+
+@known(name := "Nat8")
+export let Nat8 := Nat8;
+
+@known(name := "Nat16")
+export let Nat16 := Nat16;
+
+@known(name := "Nat32")
+export let Nat32 := Nat32;
+
+@known(name := "Nat64")
+export let Nat64 := Nat64;
+
 @known(name := "Float")
 export let Float := Float;
 
+@known(name := "Float32")
+export let Float32 := Float32;
+
+@known(name := "Float64")
+export let Float64 := Float64;
+
 @known(name := "String")
 export let String := String;
+
+@known(name := "Rune")
+export let Rune := Rune;
 
 @known(name := "Range")
 export let Range := Range;

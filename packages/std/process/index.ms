@@ -1,16 +1,16 @@
-let Option := import "@std/option";
-let Runtime := import "musi:runtime";
+let option := import "@std/option";
+let runtime := import "musi:runtime";
 
-export let argsCount () : Int := Runtime.processArgCount();
+export let argsCount () : Int := runtime.processArgCount();
 
 export let argAt (index : Int) :=
-  match Runtime.processArgAt(index) (
-  | value if value = "" => Option.none[String]()
-  | value => Option.some[String](value)
+  match runtime.processArgAt(index) (
+  | value if value = "" => option.none[String]()
+  | value => option.some[String](value)
   );
 
-export let cwd () : String := Runtime.processCwd();
+export let cwd () : String := runtime.processCwd();
 
-export let run (command : String) : Int := Runtime.processRun(command);
+export let run (command : String) : Int := runtime.processRun(command);
 
-export let exit (code : Int) : Unit := Runtime.processExit(code);
+export let exit (code : Int) : Unit := runtime.processExit(code);

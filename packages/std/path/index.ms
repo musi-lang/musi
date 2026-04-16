@@ -1,13 +1,13 @@
-let Runtime := import "musi:runtime";
+let runtime := import "musi:runtime";
 
-export let join (left : String, right : String) : String := Runtime.pathJoin(left, right);
+export let join (left : String, right : String) : String := runtime.pathJoin(left, right);
 
-export let normalize (value : String) : String := Runtime.pathNormalize(value);
+export let normalize (value : String) : String := runtime.pathNormalize(value);
 
-export let dirname (value : String) : String := Runtime.pathDirname(value);
+export let dirName (value : String) : String := runtime.pathDirname(value);
 
-export let basename (value : String) : String := Runtime.pathBasename(value);
+export let baseName (value : String) : String := runtime.pathBasename(value);
 
-export let extname (value : String) : String := Runtime.pathExtname(value);
+export let extName (value : String) : String := runtime.pathExtname(value);
 
-export let isAbsolute (value : String) : Bool := Runtime.pathIsAbsolute(value) > 0;
+export let isAbsolute (value : String) : Bool := runtime.pathIsAbsolute(value) > 0;

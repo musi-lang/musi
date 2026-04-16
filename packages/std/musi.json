@@ -30,6 +30,7 @@
         "./text": "./text/index.ms",
         "./time": "./time/index.ms",
         "./testing": "./testing/index.ms",
-        "./ffi": "./ffi/index.ms"
+        "./ffi": "./ffi/index.ms",
+        "./list": "./list/index.ms"
     }
 }

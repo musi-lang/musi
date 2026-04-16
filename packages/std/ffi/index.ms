@@ -1,22 +1,22 @@
-let Core := import "musi:core";
+let core := import "musi:core";
 
-export let CString := Core.CString;
-export let CPtr := Core.CPtr;
-export let CChar := Core.Int;
-export let CSChar := Core.Int;
-export let CUChar := Core.Int;
-export let CShort := Core.Int;
-export let CUShort := Core.Int;
-export let CInt := Core.Int;
-export let CUInt := Core.Int;
-export let CLong := Core.Int;
-export let CULong := Core.Int;
-export let CLongLong := Core.Int;
-export let CULongLong := Core.Int;
-export let CSize := Core.Int;
-export let CSizeDiff := Core.Int;
-export let CFloat := Core.Float;
-export let CDouble := Core.Float;
+export let CString := core.CString;
+export let CPtr := core.CPtr;
+export let CChar := core.Int8;
+export let CSChar := core.Int8;
+export let CUChar := core.Nat8;
+export let CShort := core.Int16;
+export let CUShort := core.Nat16;
+export let CInt := core.Int32;
+export let CUInt := core.Nat32;
+export let CLong := core.Int;
+export let CULong := core.Nat;
+export let CLongLong := core.Int64;
+export let CULongLong := core.Nat64;
+export let CSize := core.Nat;
+export let CSizeDiff := core.Int;
+export let CFloat := core.Float32;
+export let CDouble := core.Float64;
 
 export opaque let Ptr[T] := data {
   | Ptr(raw : CPtr)

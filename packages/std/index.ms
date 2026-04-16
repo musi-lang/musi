@@ -15,6 +15,7 @@ export let io := import "@std/io";
 export let iter := import "@std/iter";
 export let json := import "@std/json";
 export let log := import "@std/log";
+export let list := import "@std/list";
 export let math := import "@std/math";
 export let option := import "@std/option";
 export let path := import "@std/path";

@@ -1,16 +1,16 @@
-let Testing := import "@std/testing";
-let Path := import "@std/path";
-let Fs := import "./index.ms";
+let testing := import "@std/testing";
+let path := import "@std/path";
+let fs := import "./index.ms";
 
-let filePath := Path.join("target", "musi-std-fs-test.txt");
+let filePath := path.join("target", "musi-std-fs-test.txt");
 
 export let test () :=
   (
-    Testing.describe("fs/index");
-    Testing.it("'createDirAll' creates target dir", Testing.toBeTruthy(Fs.createDirAll("target")));
-    Testing.it("'writeText' stores file", (Fs.writeText(filePath, "hello"); 0 = 0));
-    Testing.it("'exists' detects written file", Testing.toBeTruthy(Fs.exists(filePath)));
-    Testing.it("'readText' returns file content", Testing.toBeTruthy(Fs.readText(filePath) = "hello"));
-    Testing.it("'remove' deletes file", Testing.toBeTruthy(Fs.remove(filePath)));
-    Testing.endDescribe()
+    testing.describe("fs/index");
+    testing.it("'createDirAll' creates target dir", testing.toBeTruthy(fs.createDirAll("target")));
+    testing.it("'writeText' stores file", (fs.writeText(filePath, "hello"); 0 = 0));
+    testing.it("'exists' detects written file", testing.toBeTruthy(fs.exists(filePath)));
+    testing.it("'readText' returns file content", testing.toBeTruthy(fs.readText(filePath) = "hello"));
+    testing.it("'remove' deletes file", testing.toBeTruthy(fs.remove(filePath)));
+    testing.endDescribe()
   );

@@ -1,21 +1,34 @@
-let Runtime := import "musi:runtime";
+let runtime := import "musi:runtime";
 
-export let debugLevel : Int := 10;
-export let infoLevel : Int := 20;
-export let warnLevel : Int := 30;
-export let errorLevel : Int := 40;
+export opaque let Level := data {
+  | Debug := 10
+  | Info := 20
+  | Warn := 30
+  | Error := 40
+};
 
-export let levelName (level : Int) : String :=
-  match () (
-  | _ if level = debugLevel => "debug"
-  | _ if level = infoLevel => "info"
-  | _ if level = warnLevel => "warn"
-  | _ => "error"
+@link(symbol := "data.tag")
+foreign "musi" let levelTagIntrinsic (level : Level) : Int;
+
+export let debugLevel () : Level := .Debug;
+export let infoLevel () : Level := .Info;
+export let warnLevel () : Level := .Warn;
+export let errorLevel () : Level := .Error;
+
+export let levelValue (level : Level) : Int :=
+  unsafe { levelTagIntrinsic(level); };
+
+export let levelName (level : Level) : String :=
+  match level (
+  | .Debug => "debug"
+  | .Info => "info"
+  | .Warn => "warn"
+  | .Error => "error"
   );
 
-export let write (level : Int, message : String) : Unit := Runtime.logWrite(level, message);
+export let write (level : Level, message : String) : Unit := runtime.logWrite(levelValue(level), message);
 
-export let debug (message : String) : Unit := write(debugLevel, message);
-export let info (message : String) : Unit := write(infoLevel, message);
-export let warn (message : String) : Unit := write(warnLevel, message);
-export let error (message : String) : Unit := write(errorLevel, message);
+export let debug (message : String) : Unit := write(.Debug, message);
+export let info (message : String) : Unit := write(.Info, message);
+export let warn (message : String) : Unit := write(.Warn, message);
+export let error (message : String) : Unit := write(.Error, message);

@@ -5,6 +5,7 @@ export let test () :=
   (
     Testing.describe("std");
     Testing.it("root reexports bytes family", Testing.toBeTruthy(Std.bytes.equals([1, 2], [1, 2])));
+    Testing.it("root reexports list family", Testing.toBeTruthy(Std.list.equalsInt(Std.list.of[Int](1), [1])));
     Testing.it("root reexports math family", Testing.toBe(Std.math.clamp(9, 0, 4), 4));
     Testing.it(
       "root reexports option family",

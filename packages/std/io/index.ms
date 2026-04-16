@@ -1,16 +1,16 @@
-let Option := import "@std/option";
-let Runtime := import "musi:runtime";
-let Text := import "@std/text";
+let option := import "@std/option";
+let runtime := import "musi:runtime";
+let text := import "@std/text";
 
-export let readLine () : String := Runtime.ioReadLine();
+export let readLine () : String := runtime.ioReadLine();
 
-export let write (value : String) : Unit := Runtime.ioPrint(value);
+export let write (value : String) : Unit := runtime.ioPrint(value);
 
-export let writeLine (value : String) : Unit := Runtime.ioPrintLine(value);
+export let writeLine (value : String) : Unit := runtime.ioPrintLine(value);
 
-export let writeError (value : String) : Unit := Runtime.ioPrintError(value);
+export let writeErr (value : String) : Unit := runtime.ioPrintError(value);
 
-export let writeErrorLine (value : String) : Unit := Runtime.ioPrintErrorLine(value);
+export let writeErrLine (value : String) : Unit := runtime.ioPrintErrorLine(value);
 
 export let prompt (message : String) : String :=
   (
@@ -18,18 +18,18 @@ export let prompt (message : String) : String :=
     readLine()
   );
 
-export let readTrimmedLine () : String := Text.trim(readLine());
+export let readTrimmedLine () : String := text.trim(readLine());
 
-export let promptTrimmed (message : String) : String := Text.trim(prompt(message));
+export let promptTrimmed (message : String) : String := text.trim(prompt(message));
 
 export let readNonEmptyLine () :=
   match readTrimmedLine() (
-  | value if Text.isEmpty(value) => Option.none[String]()
-  | value => Option.some[String](value)
+  | value if text.isEmpty(value) => option.none[String]()
+  | value => option.some[String](value)
   );
 
 export let promptNonEmpty (message : String) :=
   match promptTrimmed(message) (
-  | value if Text.isEmpty(value) => Option.none[String]()
-  | value => Option.some[String](value)
+  | value if text.isEmpty(value) => option.none[String]()
+  | value => option.some[String](value)
   );

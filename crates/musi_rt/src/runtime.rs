@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use musi_foundation::{extend_import_map, register_modules, syntax};
@@ -390,10 +390,7 @@ fn resolve_store_spec(store: &RuntimeStore, spec: &str) -> Box<str> {
     spec.into()
 }
 
-fn resolve_runtime_map_spec(
-    map: &std::collections::BTreeMap<String, String>,
-    spec: &str,
-) -> Option<Box<str>> {
+fn resolve_runtime_map_spec(map: &BTreeMap<String, String>, spec: &str) -> Option<Box<str>> {
     if let Some(target) = map.get(spec) {
         return Some(target.as_str().into());
     }

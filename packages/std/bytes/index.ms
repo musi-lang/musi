@@ -1,14 +1,14 @@
-let Build := import "./_build.ms";
-let Compare := import "./_compare.ms";
+let build := import "./_build.ms";
+let compare := import "./_compare.ms";
 
-export let empty := Build.empty;
-export let single := Build.single;
-export let copy := Build.copy;
-export let concat := Build.concat;
-export let append := Build.append;
-export let prepend := Build.prepend;
+export let empty := build.empty;
+export let single := build.single;
+export let copy := build.copy;
+export let concat := build.concat;
+export let append := build.append;
+export let prepend := build.prepend;
 
-export let equals := Compare.equals;
-export let notEquals := Compare.notEquals;
-export let isEmpty := Compare.isEmpty;
-export let nonEmpty := Compare.nonEmpty;
+export let equals := compare.equals;
+export let notEquals := compare.notEquals;
+export let isEmpty := compare.isEmpty;
+export let nonEmpty := compare.nonEmpty;
