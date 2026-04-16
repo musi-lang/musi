@@ -233,10 +233,8 @@ impl<'src> Lexer<'src> {
             TokenKind::LBrace => {
                 ctx.brace_depth = ctx.brace_depth.saturating_add(1);
             }
-            TokenKind::RBrace => {
-                if ctx.brace_depth > 0 {
-                    ctx.brace_depth -= 1;
-                }
+            TokenKind::RBrace if ctx.brace_depth > 0 => {
+                ctx.brace_depth -= 1;
             }
             _ => {}
         }
