@@ -303,10 +303,10 @@ impl PackageManifest {
 
     #[must_use]
     pub fn enabled_libs(&self) -> Vec<&str> {
-        match &self.lib {
-            Some(libs) => libs.iter().map(String::as_str).collect(),
-            None => vec!["std"],
-        }
+        self.lib.as_ref().map_or_else(
+            || vec!["std"],
+            |libs| libs.iter().map(String::as_str).collect(),
+        )
     }
 
     #[must_use]

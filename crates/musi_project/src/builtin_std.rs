@@ -1,8 +1,8 @@
-pub(super) const STD_PACKAGE_NAME: &str = "@std";
-pub(super) const STD_MANIFEST_PATH: &str = "builtin:/@std/musi.json";
-pub(super) const STD_ROOT_DIR: &str = "builtin:/@std";
-pub(super) const STD_MANIFEST: &str = include_str!("../../../packages/std/musi.json");
-pub(super) const STD_FILES: &[(&str, &str)] = &[
+pub const STD_PACKAGE_NAME: &str = "@std";
+pub const STD_MANIFEST_PATH: &str = "builtin:/@std/musi.json";
+pub const STD_ROOT_DIR: &str = "builtin:/@std";
+pub const STD_MANIFEST: &str = include_str!("../../../packages/std/musi.json");
+pub const STD_FILES: &[(&str, &str)] = &[
     (
         "array/index.ms",
         include_str!("../../../packages/std/array/index.ms"),
@@ -67,6 +67,10 @@ pub(super) const STD_FILES: &[(&str, &str)] = &[
     (
         "json/index.ms",
         include_str!("../../../packages/std/json/index.ms"),
+    ),
+    (
+        "list/index.ms",
+        include_str!("../../../packages/std/list/index.ms"),
     ),
     (
         "log/index.ms",

@@ -31,6 +31,7 @@ mod module_graph;
 
 type ExportModuleMap = BTreeMap<String, ModuleKey>;
 type DependencyPackageMap = BTreeMap<String, PackageId>;
+type LocalPackageMap = BTreeMap<String, LocalPackage>;
 type VisitedPackageNames = BTreeSet<String>;
 type TaskNameSet = BTreeSet<String>;
 type CompiledOutputResult = ProjectResult<CompiledOutput>;
@@ -898,7 +899,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
 }
 
 fn seed_builtin_std_package(
-    local_packages: &BTreeMap<String, LocalPackage>,
+    local_packages: &LocalPackageMap,
     package_records: &mut BTreeMap<PackageId, PackageRecord>,
     package_name_index: &mut BTreeMap<String, PackageId>,
 ) -> ProjectResult {
@@ -1072,9 +1073,7 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
     })
 }
 
-fn seed_workspace_packages(
-    local_packages: &BTreeMap<String, LocalPackage>,
-) -> ProjectResult<WorkspaceSeed> {
+fn seed_workspace_packages(local_packages: &LocalPackageMap) -> ProjectResult<WorkspaceSeed> {
     let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
     let mut package_name_index = BTreeMap::<String, PackageId>::new();
     for (name, package) in local_packages {
@@ -1099,7 +1098,7 @@ fn load_local_packages(
     manifest: &PackageManifest,
     root_manifest_path: &Path,
     root_manifest_source: &ManifestSource,
-) -> ProjectResult<BTreeMap<String, LocalPackage>> {
+) -> ProjectResult<LocalPackageMap> {
     let mut out = BTreeMap::new();
     if let Some(name) = manifest.name.clone() {
         let _ = manifest
@@ -1173,7 +1172,7 @@ fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> 
 
 fn resolve_package_dependencies(
     package_id: &PackageId,
-    local_packages: &BTreeMap<String, LocalPackage>,
+    local_packages: &LocalPackageMap,
     options: &ProjectOptions,
     lockfile: &Lockfile,
     package_records: &mut BTreeMap<PackageId, PackageRecord>,
