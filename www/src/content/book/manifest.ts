@@ -20,8 +20,11 @@ function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 	if (page.id === "musi-for-rust-developers" || page.id.startsWith("rust-")) {
 		return "developers-rust";
 	}
-	if (page.id.startsWith("c-cpp-")) {
-		return "developers-c-cpp";
+	if (page.id.startsWith("c99-")) {
+		return "developers-c99";
+	}
+	if (page.id.startsWith("cpp17-")) {
+		return "developers-cpp17";
 	}
 	if (page.id.startsWith("csharp-")) {
 		return "developers-csharp";

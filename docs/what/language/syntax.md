@@ -21,6 +21,7 @@ Canonical syntax sources live in grammar, not in scattered prose, but this page 
 - Pure function types use `T -> U`.
 - Effectful function types use `T ~> U`.
 - Generic calls can be bare or dotted: `f[T](x)` and `value.f[T](x)`.
+- Compile-time values use value-position `comptime`: `let x := comptime 3;` and `let scale(comptime n : Int, x : Int) := x * n;`. See `docs/what/language/advanced/comptime.md` for specialization and generated syntax.
 - Higher-kinded type parameters use arrow kinds: `F : Type -> Type`.
 - Type constructors can be partially applied from the left: `Result[String]` can fit `Type -> Type` when `Result` has two type parameters.
 - Parsing pipeline today is `music_syntax` lexer + parser, then `music_resolve`, `music_sema`, `music_ir`, `music_emit`.

@@ -26,6 +26,7 @@ A focused page keeps this tool available without overwhelming readers who are st
 
 Read `quote (x + 1);` as syntax value representing expression shape.
 Then read `#(delta)` or `#(x)` inside quoted form as splice points where surrounding values contribute pieces to generated syntax.
+Use `comptime quote { ... }` when quoted module items should expand before normal checking continues.
 When experimenting, start with very small quoted expressions and ask what syntax object each quote should represent before building larger templates.
 
 ## Small Exercise
@@ -40,4 +41,4 @@ Do not reach for quote when an ordinary function or data value already solves th
 
 ## Next Page
 
-Continue to [Templates and splices](/learn/book/advanced/templates-and-splices) to separate text interpolation from syntax splicing.
+Continue to [Comptime](/learn/book/advanced/comptime) to run code during compilation and expand generated syntax.

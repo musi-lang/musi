@@ -16,11 +16,13 @@ Native code can do things the Musi type system cannot prove safe. Musi marks tha
 
 ## C ABI Types
 
-Use `CString` for null-terminated C strings and `CPtr` for raw C pointer values in native signatures.
+Use `CString` for null-terminated C strings and `CPtr` for raw C pointer values in native signatures. Use fixed-width numeric types (`Int8` through `Int64`, `Nat8` through `Nat64`, `Float32`, `Float64`) when the ABI requires an exact size. `Int`, `Nat`, and `Float` are language-sized defaults; `Float` follows the compiler target `fsize` policy.
 
 {{snippet:ffi-c-abi-signatures}}
 
 `CPtr` means "this value has C pointer ABI shape." It is the right type at the native boundary. `@std/ffi` adds typed pointer views for Musi code that wants to name what a raw pointer points at after the boundary has already been crossed.
+
+`@std/ffi` C aliases map onto those core numeric types: `CInt` is `Int32`, `CUInt` is `Nat32`, `CFloat` is `Float32`, and `CDouble` is `Float64`. Host-dependent aliases such as `CLong`, `CULong`, `CSize`, and `CSizeDiff` follow the active C ABI.
 
 {{snippet:ffi-typed-pointer-view}}
 

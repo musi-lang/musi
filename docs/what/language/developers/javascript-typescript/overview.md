@@ -1,15 +1,15 @@
 ---
 title: "Overview"
-description: "Translate JavaScript and TypeScript 6.0.2 habits into Musi code with side-by-side examples."
+description: "Translate ES6 JavaScript and TypeScript 5.9 habits into Musi code with side-by-side examples."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 1
 slug: "overview"
-summary: "Start from JavaScript runtime habits and TypeScript 6.0.2 type habits, then read the equivalent Musi shapes."
+summary: "Start from ES6 JavaScript runtime habits and TypeScript 5.9 type habits, then read the equivalent Musi shapes."
 ---
 
-JavaScript supplies the runtime habits for this guide: objects, functions, arrays, promises, modules, and tests.
-TypeScript 6.0.2 is the typed comparison point for annotations, generic functions, union modeling, and import habits.
+ES6 JavaScript supplies the runtime habits for this guide: objects, functions, arrays, promises, modules, and tests.
+TypeScript 5.9 is the typed comparison point for annotations, generic functions, union modeling, and import habits.
 
 Each page starts with JavaScript or TypeScript code, then shows the matching Musi code with the same names and the same job.
 

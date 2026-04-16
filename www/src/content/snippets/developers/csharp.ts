@@ -105,12 +105,12 @@ publicEndpoint.port;`,
 	{
 		id: "csharp-collections-linq-pipelines",
 		language: "musi",
-		sourceText: `let Iter := import "@std/iter";
+		sourceText: `let iter := import "@std/iter";
 
 let ports := [3000, 8080];
 let visible := ports
-  |> Iter.append[Int](9000)
-  |> Iter.collect[Int]();
+  |> iter.append[Int](9000)
+  |> iter.collect[Int]();
 visible;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/collections-linq-pipelines.md",
@@ -120,16 +120,16 @@ visible;`,
 	{
 		id: "csharp-null-option",
 		language: "musi",
-		sourceText: `let Option := import "@std/option";
+		sourceText: `let option := import "@std/option";
 
-let lookupPort (name : String) : Option.Option[Int] :=
+let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => Option.some[Int](9000)
-  | _ => Option.none[Int]()
+  | "admin" => option.some[Int](9000)
+  | _ => option.none[Int]()
   );
 
 let port := lookupPort("web")
-  |> Option.unwrapOr[Int](8080);
+  |> option.unwrapOr[Int](8080);
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/null-option-result.md",
@@ -139,16 +139,16 @@ port;`,
 	{
 		id: "csharp-result-value",
 		language: "musi",
-		sourceText: `let Result := import "@std/result";
+		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : Result.Result[Int, String] :=
+let parsePort (text : String) : result.Result[Int, String] :=
   match text (
-  | "8080" => Result.ok[Int, String](8080)
-  | _ => Result.err[Int, String]("invalid port")
+  | "8080" => result.ok[Int, String](8080)
+  | _ => result.err[Int, String]("invalid port")
   );
 
 let port := parsePort("abc")
-  |> Result.unwrapOr[Int, String](3000);
+  |> result.unwrapOr[Int, String](3000);
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/null-option-result.md",
@@ -158,16 +158,16 @@ port;`,
 	{
 		id: "csharp-exceptions-results",
 		language: "musi",
-		sourceText: `let Result := import "@std/result";
+		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : Result.Result[Int, String] :=
+let parsePort (text : String) : result.Result[Int, String] :=
   match text (
-  | "8080" => Result.ok[Int, String](8080)
-  | _ => Result.err[Int, String]("format error")
+  | "8080" => result.ok[Int, String](8080)
+  | _ => result.err[Int, String]("format error")
   );
 
 let port := parsePort("abc")
-  |> Result.unwrapOr[Int, String](3000);
+  |> result.unwrapOr[Int, String](3000);
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/exceptions-effects.md",
@@ -177,10 +177,10 @@ port;`,
 	{
 		id: "csharp-effect-boundary",
 		language: "musi",
-		sourceText: `let Io := import "@std/io";
+		sourceText: `let io := import "@std/io";
 
-let name := Io.promptTrimmed("name> ");
-Io.writeLine(name);`,
+let name := io.promptTrimmed("name> ");
+io.writeLine(name);`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/exceptions-effects.md",
 			line: 1,
@@ -274,15 +274,15 @@ port;`,
 	{
 		id: "csharp-testing-tooling",
 		language: "musi",
-		sourceText: `let Testing := import "@std/testing";
+		sourceText: `let testing := import "@std/testing";
 
 let defaultPort () : Int := 8080;
 
 export let test () :=
   (
-    Testing.describe("ports");
-    Testing.it("default port is http alt", Testing.toBe(defaultPort(), 8080));
-    Testing.endDescribe()
+    testing.describe("ports");
+    testing.it("default port is http alt", testing.toBe(defaultPort(), 8080));
+    testing.endDescribe()
   );`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/testing-tooling.md",
@@ -292,11 +292,11 @@ export let test () :=
 	{
 		id: "csharp-unsafe-interop-ffi",
 		language: "musi",
-		sourceText: `let Ffi := import "@std/ffi";
+		sourceText: `let ffi := import "@std/ffi";
 
-foreign "c" let puts (message : Ffi.CString) : Ffi.CInt;
+foreign "c" let puts (message : ffi.CString) : ffi.CInt;
 
-export let announce (message : Ffi.CString) : Ffi.CInt :=
+export let announce (message : ffi.CString) : ffi.CInt :=
   unsafe { puts(message); };`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/unsafe-interop-ffi.md",
@@ -306,11 +306,11 @@ export let announce (message : Ffi.CString) : Ffi.CInt :=
 	{
 		id: "csharp-ffi-pointer",
 		language: "musi",
-		sourceText: `let Ffi := import "@std/ffi";
+		sourceText: `let ffi := import "@std/ffi";
 
-let pointer := Ffi.ptr.null[Int]();
-let samePointer := unsafe { Ffi.ptr.offset[Int](pointer, 0); };
-Ffi.ptr.isNull[Int](samePointer);`,
+let pointer := ffi.ptr.null[Int]();
+let samePointer := unsafe { ffi.ptr.offset[Int](pointer, 0); };
+ffi.ptr.isNull[Int](samePointer);`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/unsafe-interop-ffi.md",
 			line: 1,

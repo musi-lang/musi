@@ -20,7 +20,7 @@ Musi arrays use `[]`. The pipeline operator puts the value being transformed on 
 
 {{snippet:python-collections-pipelines}}
 
-Read the pipeline like a conveyor belt: `ports` enters, `Iter.append` adds a port, and `Iter.collect` leaves an array for the next step.
+Read the pipeline like a conveyor belt: `ports` enters, `iter.append` adds a port, and `iter.collect` leaves an array for the next step.
 
 ## Why this matters for Python readers
 

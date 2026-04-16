@@ -20,6 +20,7 @@ The built-in attribute families you will see most often are:
 
 - compiler and foundation identity: `@known`, `@intrinsic`
 - foreign boundary: `@link`, `@when`
+- compile-time host boundary: `@comptimeSafe`
 - data layout and freezing: `@repr`, `@layout`, `@frozen`
 - hotness and optimization hints: `@hot`, `@cold`
 - lifecycle metadata: `@deprecated`, `@since`
@@ -49,6 +50,7 @@ A short catalog of common meanings:
 - `@intrinsic(name := "ptr.load")`: implementation comes from compiler/runtime intrinsic machinery
 - `@link(name := "c")`: foreign declaration links against host symbol provider
 - `@when(...)`: gate declaration by target or environment facts
+- `@comptimeSafe`: effect operation may be handled by a compile-time host when requested inside `comptime`
 - `@repr(...)`, `@layout(...)`: influence data representation details
 - `@frozen`: exported data layout should not drift casually
 - `@hot`, `@cold`: codegen-facing temperature hint
@@ -56,8 +58,9 @@ A short catalog of common meanings:
 
 ## What Musi does not do here
 
-Musi attributes are not a full macro system.
-They do not replace normal functions, data definitions, or effects.
+Musi attributes are not the metaprogramming system.
+Use `quote`, `Syntax`, and value-position `comptime` for generated syntax.
+Attributes do not replace normal functions, data definitions, or effects.
 If you need ordinary behavior, write ordinary Musi code first.
 Reach for attributes when the information really is metadata.
 

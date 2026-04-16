@@ -157,11 +157,11 @@ let boxKeeps := instance Keeps[Box1] {
 	{
 		id: "rust-result-data",
 		language: "musi",
-		sourceText: `let Result := import "@std/result";
+		sourceText: `let result := import "@std/result";
 
-let parsed : Result.Result[Int, String] := Result.ok[Int, String](8080);
+let parsed : result.Result[Int, String] := result.ok[Int, String](8080);
 parsed
-  |> Result.unwrapOr[Int, String](3000);`,
+  |> result.unwrapOr[Int, String](3000);`,
 		evidence: {
 			path: "docs/what/language/developers/rust/results-effects.md",
 			line: 1,
@@ -170,9 +170,9 @@ parsed
 	{
 		id: "rust-effect-request",
 		language: "musi",
-		sourceText: `let Io := import "@std/io";
+		sourceText: `let io := import "@std/io";
 
-let line := Io.readTrimmedLine();
+let line := io.readTrimmedLine();
 line;`,
 		evidence: {
 			path: "docs/what/language/developers/rust/results-effects.md",
@@ -203,12 +203,12 @@ port;`,
 	{
 		id: "rust-unsafe-ffi",
 		language: "musi",
-		sourceText: `let Ffi := import "@std/ffi";
+		sourceText: `let ffi := import "@std/ffi";
 
 foreign "c" let get_counter () : CPtr;
 
 let counter := unsafe {
-  Ffi.ptr.cast[Int](get_counter());
+  ffi.ptr.cast[Int](get_counter());
 };`,
 		evidence: {
 			path: "docs/what/language/developers/rust/unsafe-ffi.md",
@@ -218,15 +218,15 @@ let counter := unsafe {
 	{
 		id: "rust-testing-tooling",
 		language: "musi",
-		sourceText: `let Testing := import "@std/testing";
+		sourceText: `let testing := import "@std/testing";
 
 let defaultPort () : Int := 8080;
 
 export let test () :=
   (
-    Testing.describe("ports");
-    Testing.it("default port is http alt", Testing.toBe(defaultPort(), 8080));
-    Testing.endDescribe()
+    testing.describe("ports");
+    testing.it("default port is http alt", testing.toBe(defaultPort(), 8080));
+    testing.endDescribe()
   );`,
 		evidence: {
 			path: "docs/what/language/developers/rust/testing-tooling.md",

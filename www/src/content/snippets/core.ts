@@ -977,6 +977,53 @@ addOneSyntax;`,
 		},
 	},
 	{
+		id: "chapter-comptime",
+		language: "musi",
+		sourceText: `let add (a : Int, b : Int) : Int := a + b;
+export let answer () : Int := comptime add(20, 22);`,
+		evidence: {
+			path: "crates/music_session/src/tests.rs",
+			line: 97,
+		},
+	},
+	{
+		id: "comptime-parameter",
+		language: "musi",
+		sourceText: `let scale (comptime n : Int, x : Int) : Int := x * n;
+export let answer () : Int := scale(3, 14);`,
+		evidence: {
+			path: "crates/music_session/src/tests.rs",
+			line: 437,
+		},
+	},
+	{
+		id: "comptime-quote-module",
+		language: "musi",
+		sourceText: `let generated : Syntax := comptime quote {
+  export let answer () : Int := 42;
+};
+
+comptime generated;`,
+		evidence: {
+			path: "crates/music_session/src/tests.rs",
+			line: 489,
+		},
+	},
+	{
+		id: "comptime-safe-effect",
+		language: "musi",
+		sourceText: `let Clock := effect {
+  @comptimeSafe
+  let tick () : Int;
+};
+
+export let answer () : Int := comptime request Clock.tick();`,
+		evidence: {
+			path: "crates/music_session/src/tests.rs",
+			line: 220,
+		},
+	},
+	{
 		id: "chapter-testing",
 		language: "musi",
 		sourceText: `let Testing := import "@std/testing";
