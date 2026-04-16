@@ -65,6 +65,37 @@
 		],
 		"description": "Quoted module syntax"
 	},
+	"Comptime Expression": {
+		"prefix": "comptime",
+		"body": [
+			"comptime ${0:expr}"
+		],
+		"description": "Compile-time expression"
+	},
+	"Comptime Parameter": {
+		"prefix": "comptimeparam",
+		"body": [
+			"let ${1:name}(comptime ${2:n}: ${3:Int}, ${4:x}: ${5:Int}) : ${6:Int} := ${0:body};"
+		],
+		"description": "Callable with a compile-time parameter"
+	},
+	"Comptime Quote Module": {
+		"prefix": "comptimequote",
+		"body": [
+			"comptime quote {",
+			"\t${0:export let value () : Int := 1;}",
+			"};"
+		],
+		"description": "Compile-time quoted module expansion"
+	},
+	"Comptime-Safe Effect Operation": {
+		"prefix": "comptimesafe",
+		"body": [
+			"@comptimeSafe",
+			"let ${1:op}(${2:value}: ${3:Type}) : ${0:Type};"
+		],
+		"description": "Effect operation allowed for compile-time host handling"
+	},
 	"Foreign Let Binding": {
 		"prefix": "foreign",
 		"body": [

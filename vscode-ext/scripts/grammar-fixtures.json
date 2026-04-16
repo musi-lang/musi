@@ -13,6 +13,7 @@
 		"resume",
 		"match",
 		"quote",
+		"comptime",
 		"forall",
 		"where",
 		"using",
@@ -72,7 +73,17 @@
 		"string.quoted.double.musi",
 		"variable.other.member.musi",
 		"keyword.operator.equivalence.musi",
-		"meta.type.parameters.musi"
+		"meta.type.parameters.musi",
+		"keyword.declaration.musi",
+		"keyword.declaration.fixity.musi",
+		"storage.modifier.musi",
+		"keyword.modifier.musi",
+		"keyword.control.unsafe.musi",
+		"keyword.control.quote.musi",
+		"keyword.control.effects.musi",
+		"keyword.control.conditional.musi",
+		"keyword.control.module.musi",
+		"keyword.control.constraint.musi"
 	],
 	"requiredDocumentationPatterns": [
 		"@(param(?:eter)?|arg(?:ument)?|property|var)",
@@ -107,6 +118,10 @@
 		"handle",
 		"quote",
 		"quotemod",
+		"comptime",
+		"comptimeparam",
+		"comptimequote",
+		"comptimesafe",
 		"foreign",
 		"forall"
 	],
@@ -178,7 +193,7 @@
 				{
 					"line": 0,
 					"lexeme": "foreign",
-					"scope": "keyword.modifier.musi"
+					"scope": "storage.modifier.musi"
 				},
 				{
 					"line": 0,
@@ -258,7 +273,7 @@
 		},
 		{
 			"name": "attributes and docs",
-			"source": "/// @param value := input\n@known(name := \"Type\")\nlet x := 1;",
+			"source": "/// @param value := input\n@known(name := \"Type\")\nlet x := 1;\n@comptimeSafe\nlet tick () : Int;",
 			"checks": [
 				{
 					"line": 0,
@@ -273,6 +288,11 @@
 				{
 					"line": 1,
 					"lexeme": "known",
+					"scope": "entity.other.attribute-name.musi"
+				},
+				{
+					"line": 3,
+					"lexeme": "comptimeSafe",
 					"scope": "entity.other.attribute-name.musi"
 				}
 			]
@@ -432,7 +452,7 @@
 				{
 					"line": 0,
 					"lexeme": "partial",
-					"scope": "keyword.modifier.musi"
+					"scope": "storage.modifier.musi"
 				},
 				{
 					"line": 0,
@@ -442,6 +462,51 @@
 				{
 					"line": 0,
 					"lexeme": "parsePort",
+					"scope": "entity.name.function.musi"
+				}
+			]
+		},
+		{
+			"name": "comptime expression and parameter",
+			"source": "let scale (comptime n : Int, x : Int) : Int := x * n;\nlet out := comptime scale(3, 14);",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "comptime",
+					"scope": "keyword.modifier.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "comptime",
+					"scope": "keyword.modifier.musi",
+					"forbiddenScopes": [
+						"entity.name.function.call.musi"
+					]
+				},
+				{
+					"line": 1,
+					"lexeme": "scale",
+					"scope": "entity.name.function.call.musi"
+				}
+			]
+		},
+		{
+			"name": "comptime quote module",
+			"source": "comptime quote { export let answer () : Int := 42; };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "comptime",
+					"scope": "keyword.modifier.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "quote",
+					"scope": "keyword.control.quote.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "answer",
 					"scope": "entity.name.function.musi"
 				}
 			]
@@ -519,6 +584,108 @@
 					"lexeme": "T",
 					"occurrence": 2,
 					"scope": "entity.name.type.parameter.musi"
+				}
+			]
+		},
+		{
+			"name": "keyword category split",
+			"source": "export opaque let Config := data { | Enabled };\nlet Runner := class { law stable := true; };\nlet Impl := instance Runner { law stable := true; };\nunsafe { request Console.write(\"ok\") };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "export",
+					"scope": "keyword.control.module.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "opaque",
+					"scope": "storage.modifier.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "let",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "data",
+					"scope": "storage.type.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "class",
+					"scope": "storage.type.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "law",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 2,
+					"lexeme": "instance",
+					"scope": "keyword.declaration.musi"
+				},
+				{
+					"line": 3,
+					"lexeme": "unsafe",
+					"scope": "keyword.control.unsafe.musi"
+				},
+				{
+					"line": 3,
+					"lexeme": "request",
+					"scope": "keyword.control.effects.musi"
+				}
+			]
+		},
+		{
+			"name": "control keyword split",
+			"source": "let value := if ready match input { | Some(x) => x } else 0;\nhandle run() using Console { value as out => resume out };\nforall T where Eq[T];\nimport \"@std/io\";",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "if",
+					"scope": "keyword.control.conditional.musi"
+				},
+				{
+					"line": 0,
+					"lexeme": "match",
+					"scope": "keyword.control.conditional.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "handle",
+					"scope": "keyword.control.effects.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "using",
+					"scope": "keyword.control.effects.using.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "as",
+					"scope": "keyword.control.constraint.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "resume",
+					"scope": "keyword.control.effects.musi"
+				},
+				{
+					"line": 2,
+					"lexeme": "forall",
+					"scope": "keyword.control.constraint.musi"
+				},
+				{
+					"line": 2,
+					"lexeme": "where",
+					"scope": "keyword.control.constraint.musi"
+				},
+				{
+					"line": 3,
+					"lexeme": "import",
+					"scope": "keyword.control.module.musi"
 				}
 			]
 		}
