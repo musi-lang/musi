@@ -13,24 +13,26 @@ pub fn call_musi_pointer_intrinsic(
     }
     let result = match foreign.symbol() {
         "ffi.ptr.read.i8" => ptr_read::<i8>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u8" => ptr_read::<u8>(foreign, args).map(|value| Value::Int(value.into())),
+        "ffi.ptr.read.u8" => ptr_read::<u8>(foreign, args).map(|value| Value::Nat(value.into())),
         "ffi.ptr.read.i16" => ptr_read::<i16>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u16" => ptr_read::<u16>(foreign, args).map(|value| Value::Int(value.into())),
+        "ffi.ptr.read.u16" => ptr_read::<u16>(foreign, args).map(|value| Value::Nat(value.into())),
         "ffi.ptr.read.i32" => ptr_read::<i32>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u32" => ptr_read::<u32>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.i64" | "ffi.ptr.read.u64" => ptr_read::<i64>(foreign, args).map(Value::Int),
+        "ffi.ptr.read.u32" => ptr_read::<u32>(foreign, args).map(|value| Value::Nat(value.into())),
+        "ffi.ptr.read.i64" => ptr_read::<i64>(foreign, args).map(Value::Int),
+        "ffi.ptr.read.u64" => ptr_read::<u64>(foreign, args).map(Value::Nat),
         "ffi.ptr.read.f32" => {
             ptr_read::<f32>(foreign, args).map(|value| Value::Float(value.into()))
         }
         "ffi.ptr.read.f64" => ptr_read::<f64>(foreign, args).map(Value::Float),
         "ffi.ptr.read.ptr" => ptr_read::<usize>(foreign, args).map(Value::CPtr),
         "ffi.ptr.write.i8" => ptr_write_int::<i8>(foreign, args),
-        "ffi.ptr.write.u8" => ptr_write_int::<u8>(foreign, args),
+        "ffi.ptr.write.u8" => ptr_write_nat::<u8>(foreign, args),
         "ffi.ptr.write.i16" => ptr_write_int::<i16>(foreign, args),
-        "ffi.ptr.write.u16" => ptr_write_int::<u16>(foreign, args),
+        "ffi.ptr.write.u16" => ptr_write_nat::<u16>(foreign, args),
         "ffi.ptr.write.i32" => ptr_write_int::<i32>(foreign, args),
-        "ffi.ptr.write.u32" => ptr_write_int::<u32>(foreign, args),
-        "ffi.ptr.write.i64" | "ffi.ptr.write.u64" => ptr_write_int::<i64>(foreign, args),
+        "ffi.ptr.write.u32" => ptr_write_nat::<u32>(foreign, args),
+        "ffi.ptr.write.i64" => ptr_write_int::<i64>(foreign, args),
+        "ffi.ptr.write.u64" => ptr_write_nat::<u64>(foreign, args),
         "ffi.ptr.write.f32" => ptr_write_float::<f32>(foreign, args),
         "ffi.ptr.write.f64" => ptr_write_float::<f64>(foreign, args),
         "ffi.ptr.write.ptr" => ptr_write_ptr(foreign, args),
@@ -53,6 +55,17 @@ where
     T: TryFrom<i64>,
 {
     let value = int_arg(foreign, args, 1)?;
+    let value = T::try_from(value).map_err(|_| {
+        pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
+    })?;
+    ptr_write_raw(foreign, args, value)
+}
+
+fn ptr_write_nat<T>(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value>
+where
+    T: TryFrom<u64>,
+{
+    let value = nat_arg(foreign, args, 1)?;
     let value = T::try_from(value).map_err(|_| {
         pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
     })?;
@@ -119,6 +132,22 @@ fn int_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<i64>
         Some(_) => Err(pointer_intrinsic_failed(
             foreign,
             "pointer value must be Int",
+        )),
+        None => Err(pointer_intrinsic_failed(
+            foreign,
+            "pointer intrinsic argument missing",
+        )),
+    }
+}
+
+fn nat_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<u64> {
+    match args.get(index) {
+        Some(Value::Nat(value)) => Ok(*value),
+        Some(Value::Int(value)) => u64::try_from(*value)
+            .map_err(|_| pointer_intrinsic_failed(foreign, "pointer value must be Nat")),
+        Some(_) => Err(pointer_intrinsic_failed(
+            foreign,
+            "pointer value must be Nat",
         )),
         None => Err(pointer_intrinsic_failed(
             foreign,
