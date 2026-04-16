@@ -162,6 +162,44 @@ for (const page of chapterDocs) {
 	}
 }
 
+export interface DocSearchEntry {
+	id: string;
+	title: string;
+	path: string;
+	summary: string;
+	partTitle: string;
+	sectionTitle: string | null;
+	kind: DocPage["kind"];
+	questions: string[];
+	searchText: string;
+}
+
+export const docSearchEntries: DocSearchEntry[] = localizedDocs.map((page) => {
+	const questions = page.questions.map((question) => question.label);
+	const searchText = [
+		page.title,
+		page.summary,
+		page.description,
+		page.partTitle,
+		page.sectionTitle ?? "",
+		page.kind,
+		...questions,
+	]
+		.join(" ")
+		.toLowerCase();
+	return {
+		id: page.id,
+		title: page.title,
+		path: page.path,
+		summary: page.summary,
+		partTitle: page.partTitle,
+		sectionTitle: page.sectionTitle,
+		kind: page.kind,
+		questions,
+		searchText,
+	};
+});
+
 export function docForPath(pathname: string) {
 	return docsByPath.get(pathname);
 }
@@ -199,7 +237,32 @@ for (const part of partDocs) {
 	walkChapterTraversal(part.id);
 }
 
+function languageGuideSiblings(id: string) {
+	const page = docsById.get(id);
+	if (!page?.parentId) {
+		return null;
+	}
+	const parent = docsById.get(page.parentId);
+	if (parent?.parentId !== "developers-guides") {
+		return null;
+	}
+	return (childrenByParentId.get(parent.id) ?? []).filter(
+		(child) => child.kind === "chapter",
+	);
+}
+
 export function docNeighbors(id: string) {
+	const siblings = languageGuideSiblings(id);
+	if (siblings) {
+		const index = siblings.findIndex((page) => page.id === id);
+		if (index === -1) {
+			return {};
+		}
+		return {
+			previous: siblings[index - 1],
+			next: siblings[index + 1],
+		};
+	}
 	const index = chapterIndexById.get(id);
 	if (index === undefined) {
 		return {};

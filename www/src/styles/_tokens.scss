@@ -1,0 +1,152 @@
+html {
+	box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: inherit;
+	margin: 0;
+}
+
+:root {
+	--site-bg: #f8f3ea;
+	--site-bg-elevated: #fffaf2;
+	--site-bg-hero: #efe2d2;
+	--site-bg-accent: #e7f0ef;
+	--site-bg-code-shell: #f5eadc;
+	--site-bg-code: #e6eef0;
+	--site-panel: #fffaf2;
+	--site-panel-raised: #fff6ea;
+	--site-panel-recessed: #eadfce;
+	--site-forum-header: #8a5c49;
+	--site-forum-header-end: #c99a7b;
+	--site-forum-subheader: #e1c8ad;
+	--site-forum-subheader-end: #fff3e2;
+	--site-forum-row: #f4eadc;
+	--site-forum-row-alt: #fff8ee;
+	--site-header-flat: #b38d76;
+	--site-header-stripe: rgba(255, 250, 242, 0.2);
+	--site-header-stripe-soft: rgba(122, 102, 88, 0.14);
+	--site-gradient-nav-rail: linear-gradient(180deg, color-mix(in srgb, var(--site-forum-header-end) 70%, var(--site-forum-subheader)), var(--site-forum-header));
+	--site-gradient-titlebar: linear-gradient(180deg, var(--site-forum-header), var(--site-forum-header-end));
+	--site-gradient-subheader: linear-gradient(180deg, var(--site-forum-subheader), var(--site-forum-subheader-end));
+	--site-gradient-tab: linear-gradient(180deg, var(--site-forum-header-end), var(--site-forum-header) 82%);
+	--site-gradient-tab-hover: linear-gradient(180deg, color-mix(in srgb, var(--site-forum-subheader-end) 68%, var(--site-forum-header-end)), var(--site-forum-header-end));
+	--site-gradient-raised: linear-gradient(180deg, var(--site-forum-subheader-end), var(--site-panel-raised));
+	--site-gradient-row: linear-gradient(180deg, var(--site-forum-row-alt), var(--site-forum-row));
+	--site-gradient-recessed: linear-gradient(180deg, var(--site-panel-recessed), var(--site-forum-row));
+	--site-gradient-active-tab: linear-gradient(180deg, var(--site-bg-elevated), var(--site-bg) 72%);
+	--site-gradient-primary: linear-gradient(180deg, var(--site-forum-header-end), var(--site-accent-strong));
+	--site-gradient-hover: linear-gradient(180deg, var(--site-bg-accent), var(--site-forum-row-alt));
+	--site-border: #c7b7a4;
+	--site-border-strong: #7a6658;
+	--site-border-soft: #dccdc0;
+	--site-border-wrapper: #9d8b7a;
+	--site-border-code: #78949b;
+	--site-text: #211a16;
+	--site-text-muted: #5a4d44;
+	--site-link: #075f73;
+	--site-link-hover: #063f4c;
+	--site-accent: #99624d;
+	--site-accent-strong: #6f4436;
+	--site-accent-contrast: #fffaf2;
+	--site-on-header: var(--site-accent-contrast);
+	--site-on-titlebar: var(--site-accent-contrast);
+	--site-on-tab: var(--site-accent-contrast);
+	--site-on-primary: var(--site-accent-contrast);
+	--site-accent-soft: #bb7b6d;
+	--site-accent-alt: #1b7485;
+	--site-code-rail: #1b7485;
+	--site-focus: #005fcc;
+	--site-success: #2f6e4f;
+	--site-warning: #8a5a00;
+	--site-reference: #5d4aa0;
+	--site-shadow: 0 1px 0 rgba(33, 26, 22, 0.1);
+	--site-shadow-raised:
+		1px 1px 0 rgba(33, 26, 22, 0.08),
+		0 3px 8px rgba(33, 26, 22, 0.05);
+	--site-shadow-recessed:
+		inset 0 1px 0 rgba(255, 250, 242, 0.64),
+		inset 0 0 0 1px rgba(122, 102, 88, 0.08);
+	--site-radius: 0.25rem;
+	--site-max-width: 76rem;
+	--site-reading-width: 46rem;
+	--site-gap-xs: 0.5rem;
+	--site-gap-sm: 0.75rem;
+	--site-gap-md: 1rem;
+	--site-gap-lg: 1.5rem;
+	--site-gap-xl: 2rem;
+	--site-gap-2xl: 3rem;
+	--site-header-height: 4.5rem;
+	--site-header-top-height: 4.5rem;
+	--site-header-tab-height: 2.35rem;
+	font-family:
+		Inter, "IBM Plex Sans", "BIZ UDPGothic", "Hiragino Kaku Gothic ProN",
+		"Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui,
+		sans-serif;
+	color-scheme: light;
+}
+
+:root[data-mantine-color-scheme="dark"] {
+	--site-bg: #121416;
+	--site-bg-elevated: #1a1d20;
+	--site-bg-hero: #241d19;
+	--site-bg-accent: #17242a;
+	--site-bg-code-shell: #171b1d;
+	--site-bg-code: #0b1117;
+	--site-panel: #1b1f22;
+	--site-panel-raised: #23201e;
+	--site-panel-recessed: #151719;
+	--site-forum-header: #4b322c;
+	--site-forum-header-end: #8d5f4c;
+	--site-forum-subheader: #2b2826;
+	--site-forum-subheader-end: #3a302b;
+	--site-forum-row: #191d20;
+	--site-forum-row-alt: #20262a;
+	--site-header-flat: #7a5d4e;
+	--site-header-stripe: rgba(255, 232, 214, 0.08);
+	--site-header-stripe-soft: rgba(0, 0, 0, 0.12);
+	--site-gradient-nav-rail: linear-gradient(180deg, color-mix(in srgb, var(--site-forum-header-end) 86%, var(--site-panel)), var(--site-forum-header));
+	--site-gradient-titlebar: linear-gradient(180deg, var(--site-forum-header-end), var(--site-forum-header));
+	--site-gradient-subheader: linear-gradient(180deg, var(--site-forum-subheader-end), var(--site-forum-subheader));
+	--site-gradient-tab: linear-gradient(180deg, color-mix(in srgb, var(--site-forum-header-end) 78%, var(--site-panel)), var(--site-forum-header));
+	--site-gradient-tab-hover: linear-gradient(180deg, color-mix(in srgb, var(--site-accent-strong) 38%, var(--site-forum-header-end)), var(--site-forum-header-end));
+	--site-gradient-raised: linear-gradient(180deg, color-mix(in srgb, var(--site-panel-raised) 88%, var(--site-forum-header-end)), var(--site-panel));
+	--site-gradient-row: linear-gradient(180deg, var(--site-forum-row-alt), var(--site-forum-row));
+	--site-gradient-recessed: linear-gradient(180deg, var(--site-panel-recessed), color-mix(in srgb, var(--site-panel-recessed) 72%, var(--site-panel)));
+	--site-gradient-active-tab: linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 84%, var(--site-forum-header-end)), var(--site-bg) 72%);
+	--site-gradient-primary: linear-gradient(180deg, var(--site-accent-strong), var(--site-forum-header-end));
+	--site-gradient-hover: linear-gradient(180deg, var(--site-forum-row-alt), var(--site-bg-accent));
+	--site-border: #746961;
+	--site-border-strong: #d6aa8b;
+	--site-border-soft: #504840;
+	--site-border-wrapper: #8d7b6d;
+	--site-border-code: #48646c;
+	--site-text: #f7f3ee;
+	--site-text-muted: #d4c9bf;
+	--site-link: #8bd7ee;
+	--site-link-hover: #c6f0fb;
+	--site-accent: #d49b7c;
+	--site-accent-strong: #f0bf9e;
+	--site-accent-contrast: #1f1715;
+	--site-on-header: #fff6ee;
+	--site-on-titlebar: #fff6ee;
+	--site-on-tab: #f7eee7;
+	--site-on-primary: #1f1715;
+	--site-accent-soft: #8e635d;
+	--site-accent-alt: #7ac6d8;
+	--site-code-rail: #7ac6d8;
+	--site-focus: #91e0fa;
+	--site-success: #98d2ad;
+	--site-warning: #f2c866;
+	--site-reference: #b7a7ff;
+	--site-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+	--site-shadow-raised:
+		0 0 0 1px rgba(242, 196, 182, 0.08),
+		0 10px 22px rgba(0, 0, 0, 0.28);
+	--site-shadow-recessed:
+		inset 0 1px 0 rgba(255, 255, 255, 0.04),
+		inset 0 0 0 1px rgba(242, 196, 182, 0.08);
+	color-scheme: dark;
+}

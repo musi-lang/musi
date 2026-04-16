@@ -55,7 +55,7 @@ export function DocListGroup(props: {
 							<p dangerouslySetInnerHTML={{ __html: page.summaryHtml }} />
 						</div>
 						<span className="doc-row-arrow" aria-hidden="true">
-							&rarr;
+							&gt;&gt;
 						</span>
 					</a>
 				))}
