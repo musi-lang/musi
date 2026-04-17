@@ -433,11 +433,33 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
 fn host_target_info() -> TargetInfo {
     use std::env::consts::{ARCH, OS};
 
-    let os = match OS {
-        "macos" => "mac",
-        other => other,
+    let pointer_width = u16::try_from(usize::BITS).unwrap_or(64);
+    let endian = if cfg!(target_endian = "big") {
+        "big"
+    } else {
+        "little"
     };
-    TargetInfo::new().with_os(os).with_arch(ARCH)
+    let mut target = TargetInfo::new()
+        .with_os(OS)
+        .with_arch(ARCH)
+        .with_pointer_width(pointer_width)
+        .with_endian(endian);
+    if cfg!(unix) {
+        target = target.with_family("unix").with_family("posix");
+    }
+    if cfg!(windows) {
+        target = target.with_family("windows");
+    }
+    if cfg!(target_vendor = "apple") {
+        target = target.with_family("darwin");
+    }
+    if cfg!(target_os = "linux") {
+        target = target.with_family("linux");
+    }
+    if cfg!(target_family = "wasm") || ARCH.starts_with("wasm") {
+        target = target.with_family("webassembly");
+    }
+    target
 }
 
 pub fn finish_module(
@@ -1214,12 +1236,61 @@ impl PassBase<'_, '_, '_> {
         diag
     }
 
+    pub fn diag_message_builder(
+        &self,
+        span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        label: impl Into<String>,
+    ) -> Diag {
+        let mut diag =
+            Diag::error(message)
+                .with_code(kind.code())
+                .with_label(span, self.source_id(), label);
+        if let Some(hint) = kind.hint() {
+            diag = diag.with_hint(hint);
+        }
+        diag
+    }
+
     pub fn push_diag(&mut self, diag: Diag) {
         self.facts.diags.push(diag);
     }
 
     pub fn diag(&mut self, span: Span, kind: DiagKind, label: &str) {
         self.push_diag(self.diag_builder(span, kind, label));
+    }
+
+    pub fn diag_message(
+        &mut self,
+        span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        label: impl Into<String>,
+    ) {
+        self.push_diag(self.diag_message_builder(span, kind, message, label));
+    }
+
+    pub fn diag_named(&mut self, span: Span, kind: DiagKind, message: impl Into<String>) {
+        let message = message.into();
+        self.push_diag(self.diag_message_builder(span, kind, message.clone(), message));
+    }
+
+    pub fn diag_message_with_previous(
+        &mut self,
+        span: Span,
+        previous_span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        previous_label: impl Into<String>,
+    ) {
+        let message = message.into();
+        self.push_diag(
+            Diag::error(message.clone())
+                .with_code(kind.code())
+                .with_label(span, self.source_id(), message)
+                .with_label(previous_span, self.source_id(), previous_label),
+        );
     }
 
     pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {
