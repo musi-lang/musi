@@ -22,6 +22,9 @@ pub(super) fn lower_call_expr(
         callee,
         sema.module().store.args.get(args.clone()),
     );
+    if let Some(intrinsic) = lower_std_cmp_intrinsic(ctx, callee, &arg_nodes) {
+        return intrinsic;
+    }
     if let Some(intrinsic) = lower_ffi_pointer_intrinsic(ctx, callee, &arg_nodes) {
         return intrinsic;
     }
@@ -412,6 +415,34 @@ fn lower_runtime_params(ctx: &LowerCtx<'_>, params: &[HirParam]) -> Vec<IrParam>
         .collect()
 }
 
+fn lower_std_cmp_intrinsic(
+    ctx: &mut LowerCtx<'_>,
+    callee: HirExprId,
+    args: &[HirArg],
+) -> Option<Result<IrExprKind, Box<str>>> {
+    if !is_std_cmp_module(&ctx.module_key) {
+        return None;
+    }
+    let HirExprKind::Name { name } = ctx.sema.module().store.exprs.get(callee).kind else {
+        return None;
+    };
+    if ctx.interner.resolve(name.name) != "compareFloatTotalIntrinsic" {
+        return None;
+    }
+    let lowered_args = args
+        .iter()
+        .map(|arg| IrArg::new(false, lower_expr(ctx, arg.expr)))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    Some(Ok(IrExprKind::IntrinsicCall {
+        kind: IrIntrinsicKind::FloatTotalCompare,
+        symbol: "cmp.float.total_compare".into(),
+        param_tys: Box::new(["Float".into(), "Float".into()]),
+        result_ty: "Int".into(),
+        args: lowered_args,
+    }))
+}
+
 fn lower_ffi_pointer_intrinsic(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
@@ -579,6 +610,11 @@ fn pointer_storage_name(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<Box<s
 fn is_std_ffi_module(module_key: &ModuleKey) -> bool {
     let key = module_key.as_str();
     key == "@std/ffi" || key.ends_with("ffi/index.ms")
+}
+
+fn is_std_cmp_module(module_key: &ModuleKey) -> bool {
+    let key = module_key.as_str();
+    key == "@std/cmp" || key.ends_with("cmp/index.ms") || key.contains("cmp/index.ms::__laws")
 }
 
 fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bool {

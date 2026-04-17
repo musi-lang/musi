@@ -416,6 +416,7 @@ pub enum IrRangeKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrIntrinsicKind {
+    FloatTotalCompare,
     FfiPtrNull,
     FfiPtrIsNull,
     FfiPtrOffset,

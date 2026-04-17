@@ -33,16 +33,18 @@ impl Vm {
         self.push_value(self.bool_value(module_slot, op(&left, &right))?)
     }
 
-    pub(crate) fn compare_ord<OpInt, OpNat, OpFloat>(
+    pub(crate) fn compare_ord<OpInt, OpNat, OpFloat, OpString>(
         &mut self,
         op_int: OpInt,
         op_nat: OpNat,
         op_float: OpFloat,
+        op_string: OpString,
     ) -> VmResult
     where
         OpInt: FnOnce(i64, i64) -> bool,
         OpNat: FnOnce(u64, u64) -> bool,
         OpFloat: FnOnce(f64, f64) -> bool,
+        OpString: FnOnce(&str, &str) -> bool,
     {
         let right_value = self.pop_value()?;
         let left_value = self.pop_value()?;
@@ -50,6 +52,7 @@ impl Vm {
             (Value::Int(left), Value::Int(right)) => op_int(*left, *right),
             (Value::Nat(left), Value::Nat(right)) => op_nat(*left, *right),
             (Value::Float(left), Value::Float(right)) => op_float(*left, *right),
+            (Value::String(left), Value::String(right)) => op_string(left, right),
             _ => return Err(Self::invalid_value_kind(left_value.kind(), &right_value)),
         };
         let module_slot = self.current_module_slot()?;
@@ -120,11 +123,13 @@ impl Vm {
                     |left, right| left < right,
                     |left, right| left < right,
                     |left, right| left < right,
+                    |left, right| left < right,
                 )?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGt => {
                 self.compare_ord(
+                    |left, right| left > right,
                     |left, right| left > right,
                     |left, right| left > right,
                     |left, right| left > right,
@@ -136,11 +141,13 @@ impl Vm {
                     |left, right| left <= right,
                     |left, right| left <= right,
                     |left, right| left <= right,
+                    |left, right| left <= right,
                 )?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpGe => {
                 self.compare_ord(
+                    |left, right| left >= right,
                     |left, right| left >= right,
                     |left, right| left >= right,
                     |left, right| left >= right,

@@ -12,4 +12,5 @@ mod host;
 mod load_store;
 mod scalar;
 mod seq;
+mod target;
 mod types;

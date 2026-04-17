@@ -52,6 +52,9 @@ fn meta_has_exact(
 fn session() -> Session {
     let mut import_map = ImportMap::default();
     let _ = import_map.imports.insert("dep".into(), "dep".into());
+    let _ = import_map
+        .imports
+        .insert("musi:test".into(), "musi:test".into());
     Session::new(SessionOptions::new().with_import_map(import_map))
 }
 
@@ -67,6 +70,21 @@ fn session_with_target(target: TargetInfo) -> Session {
 
 fn main_key() -> ModuleKey {
     ModuleKey::new("main")
+}
+
+fn register_test_intrinsics(session: &mut Session) {
+    session
+        .set_module_text(
+            &ModuleKey::new("musi:test"),
+            r#"
+            export foreign "musi" (
+              let suiteStart (name : String) : Unit;
+              let testCase (name : String, passed : Bool) : Unit;
+              let suiteEnd () : Unit;
+            );
+            "#,
+        )
+        .unwrap();
 }
 
 fn set_main_text(session: &mut Session, text: &str) {
@@ -922,7 +940,7 @@ fn skips_gated_foreign_declarations_for_target() {
         .set_module_text(
             &ModuleKey::new("main"),
             r#"
-            @when(os := "linux")
+            @when(os := "LiNuX", arch := "x86_64")
             foreign let clock_gettime (id : Int, out : CPtr) : Int;
 
             @when(os := "windows")
@@ -935,6 +953,39 @@ fn skips_gated_foreign_declarations_for_target() {
     assert!(output.artifact.validate().is_ok());
     assert!(output.text.contains("clock_gettime"), "{}", output.text);
     assert!(!output.text.contains("QueryPerformanceCounter"));
+}
+
+#[test]
+fn matches_gated_foreign_declarations_by_target_family() {
+    let mut session = session_with_target(
+        TargetInfo::new()
+            .with_os("macOS")
+            .with_arch("AaRcH64")
+            .with_family("Darwin")
+            .with_family("Unix")
+            .with_pointer_width(64),
+    );
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r#"
+            @when(family := ["darwin", "bsd"], arch := ["x86-64", "aarch64"], pointerWidth := 64)
+            foreign let mach_absolute_time () : Nat64;
+
+            @when(family := "windows")
+            foreign let GetLastError () : Nat64;
+        "#,
+        )
+        .unwrap();
+
+    let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+    assert!(output.artifact.validate().is_ok());
+    assert!(
+        output.text.contains("mach_absolute_time"),
+        "{}",
+        output.text
+    );
+    assert!(!output.text.contains("GetLastError"));
 }
 
 #[test]
@@ -1003,6 +1054,7 @@ fn emits_meta_records_for_laws_and_attrs() {
 #[test]
 fn synthesizes_law_suite_modules_for_law_bearing_exports() {
     let mut session = session();
+    register_test_intrinsics(&mut session);
     session
         .set_module_text(
             &ModuleKey::new("main"),
@@ -1028,7 +1080,7 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
     let suite = &suites[0];
     assert_eq!(suite.source_module_key, ModuleKey::new("main"));
     assert_eq!(suite.suite_module_key, ModuleKey::new("main::__laws"));
-    assert_eq!(suite.export_name.as_ref(), "__laws_test");
+    assert_eq!(suite.export_name.as_ref(), "musiLawsTest");
     assert_eq!(suite.law_count, 1);
     let suite_source = session
         .module_text(&suite.suite_module_key)
@@ -1042,7 +1094,7 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
         "{suite_source}"
     );
     assert!(
-        suite_source.contains("__musi_law_test.testCase(\"Console.total\""),
+        suite_source.contains("musiLawTest.testCase(\"Console.total\""),
         "{suite_source}"
     );
     assert!(
@@ -1050,11 +1102,13 @@ fn synthesizes_law_suite_modules_for_law_bearing_exports() {
         "{suite_source}"
     );
     assert!(!suite_source.contains(".True)"), "{suite_source}");
+    let _ = session.check_module(&suite.suite_module_key).unwrap();
 }
 
 #[test]
 fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
     let mut session = session();
+    register_test_intrinsics(&mut session);
     session
         .set_module_text(
             &ModuleKey::new("main"),
@@ -1077,21 +1131,46 @@ fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
     assert_eq!(suites.len(), 1);
 
     let suite = &suites[0];
-    assert_eq!(suite.export_name.as_ref(), "__laws_test");
+    assert_eq!(suite.export_name.as_ref(), "musiLawsTest");
     assert_eq!(suite.law_count, 5);
 
     let suite_source = session
         .module_text(&suite.suite_module_key)
         .expect("suite source should be materialized in session");
     assert!(
-        suite_source.contains("__musi_law_test.testCase(\"IntEq.reflexive[-2]\""),
+        suite_source.contains("musiLawTest.testCase(\"IntEq.reflexive[-2]\""),
         "{suite_source}"
     );
-    assert!(
-        suite_source.contains("let eq (a : Int, b : Int) : Bool := unsafe { musi_true(); };"),
-        "{suite_source}"
-    );
-    assert!(suite_source.contains("eq(x, x)"), "{suite_source}");
+    assert!(suite_source.contains("let musiLawCase"), "{suite_source}");
+    assert!(suite_source.contains("(x, x)"), "{suite_source}");
+    let _ = session.check_module(&suite.suite_module_key).unwrap();
+}
+
+#[test]
+fn synthesizes_generic_class_laws_for_exported_concrete_instances() {
+    let mut session = session();
+    register_test_intrinsics(&mut session);
+    session
+        .set_module_text(
+            &ModuleKey::new("main"),
+            r"
+            export let Eq[T] := class {
+              let eq (left : T, right : T) : Bool;
+              law reflexive (value : T) := eq(value, value);
+              law symmetric (left : T, right : T) := eq(left, right) = eq(right, left);
+            };
+
+            export let intEq := instance Eq[Int] {
+              let eq (left : Int, right : Int) : Bool := left = right;
+            };
+        ",
+        )
+        .unwrap();
+
+    let suites = session.law_suite_modules().unwrap();
+    assert_eq!(suites.len(), 1);
+    assert_eq!(suites[0].law_count, 30);
+    let _ = session.check_module(&suites[0].suite_module_key).unwrap();
 }
 
 #[test]

@@ -197,6 +197,40 @@ fn executes_record_projection_and_update() {
 }
 
 #[test]
+fn executes_string_order_comparisons() {
+    let program = compile_program(
+        &[(
+            "main",
+            r#"
+            export let less () : Bool := "a" < "b";
+            export let greater () : Bool := "é" > "z";
+            export let equal () : Bool := "same" <= "same";
+        "#,
+        )],
+        "main",
+    );
+
+    let mut vm = Vm::with_rejecting_host(program, VmOptions);
+    vm.initialize().expect("vm init should succeed");
+
+    let less = vm.call_export("less", &[]).expect("less");
+    assert_eq!(
+        render_value_view(vm.inspect(&less)).as_deref(),
+        Some(".True")
+    );
+    let greater = vm.call_export("greater", &[]).expect("greater");
+    assert_eq!(
+        render_value_view(vm.inspect(&greater)).as_deref(),
+        Some(".True")
+    );
+    let equal = vm.call_export("equal", &[]).expect("equal");
+    assert_eq!(
+        render_value_view(vm.inspect(&equal)).as_deref(),
+        Some(".True")
+    );
+}
+
+#[test]
 fn executes_multi_index_get_and_set() {
     let program = compile_program(
         &[(

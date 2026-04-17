@@ -1049,24 +1049,41 @@ fn collect_direct_exports(
     attr_stack: &[HirAttr],
 ) {
     match &module.resolved.module.store.exprs.get(expr_id).kind {
-        HirExprKind::Let { pat, .. } => {
+        HirExprKind::Let { pat, value, .. } => {
+            if matches!(
+                module.resolved.module.store.exprs.get(*value).kind,
+                HirExprKind::Instance { .. }
+            ) {
+                collect_exported_instance(module, *value, opaque, exports, attr_stack);
+                return;
+            }
             collect_export_bindings_from_pat(module, interner, *pat, opaque, exports, attr_stack);
         }
         HirExprKind::Instance { .. } => {
-            let span = module.resolved.module.store.exprs.get(expr_id).origin.span;
-            if opaque {
-                return;
-            }
-            if exports.instances.iter().any(|export| export.span == span) {
-                return;
-            }
-            exports.instances.push(ExportInstance {
-                span,
-                attrs: attr_stack.to_vec().into_boxed_slice(),
-            });
+            collect_exported_instance(module, expr_id, opaque, exports, attr_stack);
         }
         _ => {}
     }
+}
+
+fn collect_exported_instance(
+    module: &ModuleState,
+    expr_id: HirExprId,
+    opaque: bool,
+    exports: &mut ModuleExports,
+    attr_stack: &[HirAttr],
+) {
+    let span = module.resolved.module.store.exprs.get(expr_id).origin.span;
+    if opaque {
+        return;
+    }
+    if exports.instances.iter().any(|export| export.span == span) {
+        return;
+    }
+    exports.instances.push(ExportInstance {
+        span,
+        attrs: attr_stack.to_vec().into_boxed_slice(),
+    });
 }
 
 fn collect_export_bindings_from_pat(
