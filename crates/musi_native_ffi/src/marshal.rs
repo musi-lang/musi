@@ -141,8 +141,9 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         .map(FfiTypeRef::as_mut_ptr)
         .collect::<Vec<_>>();
     let result_type_ptr = signature.result_ffi.as_mut_ptr();
-    let arg_count = c_uint::try_from(arg_type_ptrs.len())
-        .map_err(|_| native_abi_unsupported(foreign, "native ffi arg count overflow".into()))?;
+    let arg_count = c_uint::try_from(arg_type_ptrs.len()).map_err(|_| {
+        native_abi_unsupported(foreign, "native FFI argument count overflow".into())
+    })?;
     let prep_status = {
         // SAFETY: `cif`, `result_type_ptr`, and the arg type array all outlive the call.
         unsafe {
@@ -159,7 +160,7 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         return Err(native_abi_unsupported(
             foreign,
             format!(
-                "ffi_prep_cif failed with status `{prep_status}` for abi `{}`",
+                "`ffi_prep_cif` failed with status `{prep_status}` for ABI `{}`",
                 default_ffi_abi()
             )
             .into(),
@@ -266,7 +267,7 @@ fn marshal_arg_value(
                     native_arg_invalid(
                         foreign,
                         index,
-                        "CString argument contains interior NUL".into(),
+                        "`CString` argument contains interior NULL".into(),
                     )
                 })?;
                 let pointer = storage.as_ptr().cast_mut();
@@ -384,14 +385,14 @@ fn marshal_record_bytes(
         return Err(native_arg_invalid(
             foreign,
             index,
-            "repr(c) product argument has non-zero tag".into(),
+            "`@repr(\"c\")` product argument has non-zero tag".into(),
         ));
     }
     if data.len() != fields.len() {
         return Err(native_arg_invalid(
             foreign,
             index,
-            "repr(c) product argument field count mismatch".into(),
+            "`@repr(\"c\")` product argument field count mismatch".into(),
         ));
     }
     let size = ffi.struct_size().unwrap_or(0);
@@ -403,14 +404,14 @@ fn marshal_record_bytes(
             return Err(native_arg_invalid(
                 foreign,
                 index,
-                "repr(c) product argument offset missing".into(),
+                "`@repr(\"c\")` product argument offset missing".into(),
             ));
         };
         let Some(field_value) = data.get(field_index) else {
             return Err(native_arg_invalid(
                 foreign,
                 index,
-                "repr(c) product argument field missing".into(),
+                "`@repr(\"c\")` product argument field missing".into(),
             ));
         };
         let mut write_ctx = FieldWriteCtx {
@@ -444,7 +445,7 @@ fn write_field_bytes(
                 Err(native_arg_invalid(
                     ctx.foreign,
                     ctx.arg_index,
-                    format!("expected `Bool`, found `{:?}`", value.kind()).into(),
+                    format!("expected type `Bool`, found `{:?}`", value.kind()).into(),
                 ))
             },
             |flag| write_bytes(ctx.out, offset, &[u8::from(flag)]),
@@ -461,7 +462,7 @@ fn write_field_bytes(
             other => Err(native_arg_invalid(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected `Float`, found `{:?}`", other.kind()).into(),
+                format!("expected type `Float`, found `{:?}`", other.kind()).into(),
             )),
         },
         NativeAbiType::CString => match value {
@@ -470,7 +471,7 @@ fn write_field_bytes(
                     native_arg_invalid(
                         ctx.foreign,
                         ctx.arg_index,
-                        "CString argument contains interior NUL".into(),
+                        "`CString` argument contains interior NULL".into(),
                     )
                 })?;
                 let pointer = c_string.as_ptr().addr();
@@ -480,7 +481,7 @@ fn write_field_bytes(
             other => Err(native_arg_invalid(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected `CString`, found `{:?}`", other.kind()).into(),
+                format!("expected type `CString`, found `{:?}`", other.kind()).into(),
             )),
         },
         NativeAbiType::CPtr => match value {
@@ -488,7 +489,7 @@ fn write_field_bytes(
             other => Err(native_arg_invalid(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected `CPtr`, found `{:?}`", other.kind()).into(),
+                format!("expected type `CPtr`, found `{:?}`", other.kind()).into(),
             )),
         },
         NativeAbiType::Transparent { inner, .. } => {
@@ -500,7 +501,7 @@ fn write_field_bytes(
                 return Err(native_arg_invalid(
                     ctx.foreign,
                     ctx.arg_index,
-                    "nested repr(c) product ffi metadata missing".into(),
+                    "nested `@repr(\"c\")` product FFI metadata missing".into(),
                 ));
             };
             let (nested, nested_strings) =
@@ -579,7 +580,7 @@ fn unmarshal_result_value(
             if pointer.is_null() {
                 return Err(native_result_invalid(
                     foreign,
-                    "CString result was null".into(),
+                    "`CString` result was null".into(),
                 ));
             }
             let c_text = {
@@ -589,7 +590,7 @@ fn unmarshal_result_value(
             let text = c_text.to_str().map_err(|error| {
                 native_result_invalid(
                     foreign,
-                    format!("CString result is not UTF-8 (`{error}`)").into(),
+                    format!("`CString` result is not UTF-8 (`{error}`)").into(),
                 )
             })?;
             Ok(Value::string(text))
@@ -607,7 +608,7 @@ fn unmarshal_result_value(
                     let Some(offset) = offsets.get(index).copied() else {
                         return Err(native_result_invalid(
                             foreign,
-                            "repr(c) result offset missing".into(),
+                            "`@repr(\"c\")` result offset missing".into(),
                         ));
                     };
                     read_field_value(foreign, field_ty, ffi_child(ffi, index), &bytes, offset)
@@ -617,7 +618,7 @@ fn unmarshal_result_value(
         }
         _ => Err(native_result_invalid(
             foreign,
-            "native result storage shape mismatch".into(),
+            "`@repr(\"c\")` result storage shape mismatch".into(),
         )),
     }
 }
@@ -648,7 +649,7 @@ fn read_field_value(
             if ptr == 0 {
                 return Err(native_result_invalid(
                     foreign,
-                    "CString result was null".into(),
+                    "`CString` result was null".into(),
                 ));
             }
             let c_text = {
@@ -658,7 +659,7 @@ fn read_field_value(
             let text = c_text.to_str().map_err(|error| {
                 native_result_invalid(
                     foreign,
-                    format!("CString result is not UTF-8 (`{error}`)").into(),
+                    format!("`CString` result is not UTF-8 (`{error}`)").into(),
                 )
             })?;
             Ok(Value::string(text))
@@ -674,7 +675,7 @@ fn read_field_value(
             let Some(ffi) = ffi else {
                 return Err(native_result_invalid(
                     foreign,
-                    "nested repr(c) result ffi metadata missing".into(),
+                    "`@repr(\"c\")` result foreign function interface metadata missing".into(),
                 ));
             };
             let offsets = ffi.struct_offsets().unwrap_or(&[]);
@@ -685,7 +686,7 @@ fn read_field_value(
                     let Some(field_offset) = offsets.get(index).copied() else {
                         return Err(native_result_invalid(
                             foreign,
-                            "nested repr(c) result offset missing".into(),
+                            "`@repr(\"c\")` result offset missing".into(),
                         ));
                     };
                     read_field_value(

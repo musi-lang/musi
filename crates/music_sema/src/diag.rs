@@ -210,7 +210,7 @@ const SEMA_DIAG_LABELS: &[SemaDiagText] = &[
     },
     SemaDiagText {
         kind: SemaDiagKind::HandlerClauseArityMismatch,
-        text: "handler clause params do not match operation",
+        text: "handler clause parameters do not match operation",
     },
     SemaDiagText {
         kind: SemaDiagKind::HandleRequiresSingleValueClause,
@@ -258,7 +258,7 @@ const SEMA_DIAG_LABELS: &[SemaDiagText] = &[
     },
     SemaDiagText {
         kind: SemaDiagKind::CallNamedArgumentUnknown,
-        text: "named call argument is not declared",
+        text: "named call argument not declared here",
     },
     SemaDiagText {
         kind: SemaDiagKind::CallNamedArgumentDuplicate,
@@ -386,12 +386,12 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrReprRequiresKindString,
         code: 3001,
-        message: "`@repr` requires string `kind` arg",
+        message: "`@repr` requires string `kind` argument",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrLayoutArgRequiresName,
         code: 3002,
-        message: "`@layout` arg requires name",
+        message: "`@layout` argument requires name",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrDuplicateLayoutAlign,
@@ -416,7 +416,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrUnknownArg,
         code: 3007,
-        message: "unknown attr arg",
+        message: "unknown attribute argument",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrKnownRequiresPlainBindLet,
@@ -426,7 +426,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrKnownRequiresNameString,
         code: 3009,
-        message: "`@known` requires string `name` arg",
+        message: "`@known` requires string `name` argument",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrKnownRequiresFoundationModule,
@@ -441,12 +441,12 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrKnownUnknownName,
         code: 3012,
-        message: "`@known` name is unknown",
+        message: "`@known` name unknown",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrIntrinsicRequiresNameString,
         code: 3013,
-        message: "`@intrinsic` requires string `name` arg",
+        message: "`@intrinsic` requires string `name` argument",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrIntrinsicRequiresIntrinsicsModule,
@@ -466,7 +466,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrDataLayoutRequiresDataTarget,
         code: 3016,
-        message: "data layout attr requires data target",
+        message: "data layout attribute requires data target",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrFrozenRequiresExportedNonOpaqueData,
@@ -491,7 +491,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrSinceRequiresVersionString,
         code: 3305,
-        message: "`@since` requires string `version` arg",
+        message: "`@since` requires string `version` argument",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrOpaqueRequiresStructuralExport,
@@ -501,7 +501,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::AttrForeignRequiresForeignLet,
         code: 3017,
-        message: "foreign attr requires foreign `let` target",
+        message: "foreign attribute requires foreign `let` target",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::AttrLinkRequiresStringValue,
@@ -536,7 +536,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidFfiType,
         code: 3022,
-        message: "invalid ffi type",
+        message: "invalid foreign function interface type",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::LawMustBePure,
@@ -566,7 +566,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::CollectDuplicateEffectOp,
         code: 3028,
-        message: "duplicate effect op",
+        message: "duplicate effect operation",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::CollectDuplicateEffectLaw,
@@ -606,7 +606,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::UnknownEffectOp,
         code: 3036,
-        message: "unknown effect op",
+        message: "unknown effect operation",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::HandlerClauseArityMismatch,
@@ -786,7 +786,7 @@ const SEMA_DIAG_INFOS: &[SemaDiagInfo] = &[
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidIndexArgCount,
         code: 3067,
-        message: "invalid index arg count",
+        message: "invalid index argument count",
     },
     SemaDiagInfo {
         kind: SemaDiagKind::InvalidCallTarget,

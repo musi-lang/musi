@@ -48,7 +48,7 @@ pub enum ProjectError {
     TaskDependencyCycle { name: String },
     #[error("package dependency cycle reaches `{name}`")]
     PackageDependencyCycle { name: String },
-    #[error("unresolved import `{spec}`")]
+    #[error("unresolved import specifier `{spec}`")]
     UnresolvedImport { spec: String },
     #[error("unknown package `{name}`")]
     UnknownPackage { name: String },
@@ -182,7 +182,9 @@ impl ProjectError {
             Self::PackageDependencyCycle { name } => {
                 Cow::Owned(format!("package dependency cycle reaches `{name}`"))
             }
-            Self::UnresolvedImport { spec } => Cow::Owned(format!("unresolved import `{spec}`")),
+            Self::UnresolvedImport { spec } => {
+                Cow::Owned(format!("unresolved import specifier `{spec}`"))
+            }
             Self::UnknownPackage { name } => Cow::Owned(format!("unknown package `{name}`")),
             Self::PackageGraphEntryMissing { name } => {
                 Cow::Owned(format!("package graph entry missing `{name}`"))

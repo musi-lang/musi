@@ -28,7 +28,11 @@ impl EmitDiagKind {
     const INFO: [(Self, u16, &'static str); 20] = [
         (Self::ExportTargetMissing, 3500, "export target missing"),
         (Self::UnknownTypeValue, 3501, "unknown emitted type value"),
-        (Self::UnknownTypeNameForOp, 3502, "unknown type name for op"),
+        (
+            Self::UnknownTypeNameForOp,
+            3502,
+            "unknown operation type name",
+        ),
         (
             Self::UnsupportedBinaryOperator,
             3503,
@@ -43,7 +47,7 @@ impl EmitDiagKind {
         (
             Self::SpreadCallArgsNotEmitted,
             3506,
-            "spread call args have no emitted form",
+            "spread call arguments have no emitted form",
         ),
         (
             Self::UnknownClosureTarget,
@@ -78,7 +82,7 @@ impl EmitDiagKind {
         (
             Self::UnsupportedNameRef,
             3517,
-            "name ref has no emitted form",
+            "name reference has no emitted form",
         ),
         (
             Self::UnsupportedAssignTarget,

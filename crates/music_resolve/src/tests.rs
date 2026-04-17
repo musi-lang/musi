@@ -557,11 +557,11 @@ fn invalid_string_imports_emit_invalid_spec_diag() {
         .diags
         .iter()
         .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
-        .expect("expected invalid import spec diag");
-    assert_eq!(diag.message(), "import spec is not string literal");
+        .expect("expected invalid import specifier diag");
+    assert_eq!(diag.message(), "import specifier must be string literal");
     assert_eq!(
         diag.labels()[0].message(),
-        "import spec is not string literal"
+        "import specifier must be string literal"
     );
     assert_eq!(diag.hint(), None);
 }

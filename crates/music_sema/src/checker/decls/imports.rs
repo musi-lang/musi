@@ -176,7 +176,13 @@ impl CheckPass<'_, '_, '_> {
                 .exported_value(self.resolve_symbol(field.name.name))
                 .cloned()
             else {
-                self.diag(field.name.span, DiagKind::UnknownExport, "");
+                let export_name = self.resolve_symbol(field.name.name).to_owned();
+                self.diag_message(
+                    field.name.span,
+                    DiagKind::UnknownExport,
+                    format!("unknown export `{export_name}`"),
+                    format!("unknown export `{export_name}`"),
+                );
                 continue;
             };
             let field_ty = import_surface_ty(self, &surface, export.ty);

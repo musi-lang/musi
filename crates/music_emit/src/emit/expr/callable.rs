@@ -113,7 +113,7 @@ impl MethodEmitter<'_, '_> {
                     self.module_key,
                     &arg.expr.origin,
                     EmitDiagKind::SpreadCallArgsNotEmitted,
-                    "spread call args have no emitted form",
+                    "spread call arguments have no emitted form",
                 );
             }
             self.compile_expr(&arg.expr, true, diags);

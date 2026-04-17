@@ -105,23 +105,25 @@ fn ptr_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<usiz
             Some(Value::CPtr(address)) => Ok(address),
             Some(_) => Err(pointer_intrinsic_failed(
                 foreign,
-                "pointer data field must be CPtr",
+                format!("pointer argument `{index}` data field must be type 'CPtr'"),
             )),
             None if matches!(pointer, Value::Data(_)) => Err(pointer_intrinsic_failed(
                 foreign,
-                "pointer data field missing",
+                format!("pointer argument `{index}` data field missing"),
             )),
             None => Err(pointer_intrinsic_failed(
                 foreign,
                 match pointer {
-                    Value::CPtr(_) | Value::Data(_) => "pointer argument invalid",
-                    _ => "pointer argument must be Ptr or CPtr",
+                    Value::CPtr(_) | Value::Data(_) => {
+                        format!("pointer argument `{index}` invalid")
+                    }
+                    _ => format!("pointer argument `{index}` must be type 'Ptr' or 'CPtr'"),
                 },
             )),
         },
         None => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer intrinsic argument missing",
+            format!("pointer intrinsic argument `{index}` missing"),
         )),
     }
 }
@@ -131,11 +133,11 @@ fn int_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<i64>
         Some(Value::Int(value)) => Ok(*value),
         Some(_) => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer value must be Int",
+            format!("pointer argument `{index}` must be type 'Int'"),
         )),
         None => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer intrinsic argument missing",
+            format!("pointer intrinsic argument `{index}` missing"),
         )),
     }
 }
@@ -143,15 +145,16 @@ fn int_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<i64>
 fn nat_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<u64> {
     match args.get(index) {
         Some(Value::Nat(value)) => Ok(*value),
-        Some(Value::Int(value)) => u64::try_from(*value)
-            .map_err(|_| pointer_intrinsic_failed(foreign, "pointer value must be Nat")),
+        Some(Value::Int(value)) => u64::try_from(*value).map_err(|_| {
+            pointer_intrinsic_failed(foreign, format!("pointer argument `{index}` must be Nat"))
+        }),
         Some(_) => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer value must be Nat",
+            format!("pointer argument `{index}` must be type 'Nat'"),
         )),
         None => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer intrinsic argument missing",
+            format!("pointer intrinsic argument `{index}` missing"),
         )),
     }
 }
@@ -161,16 +164,16 @@ fn float_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<f6
         Some(Value::Float(value)) => Ok(*value),
         Some(_) => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer value must be Float",
+            format!("pointer argument `{index}` must be type 'Float'"),
         )),
         None => Err(pointer_intrinsic_failed(
             foreign,
-            "pointer intrinsic argument missing",
+            format!("pointer intrinsic argument `{index}` missing"),
         )),
     }
 }
 
-fn pointer_intrinsic_failed(foreign: &ForeignCall, detail: &'static str) -> VmError {
+fn pointer_intrinsic_failed(foreign: &ForeignCall, detail: impl Into<Box<str>>) -> VmError {
     VmError::new(VmErrorKind::PointerIntrinsicFailed {
         intrinsic: foreign.symbol().into(),
         detail: detail.into(),

@@ -113,6 +113,6 @@ pub(crate) fn invalid_arg_type<T>(
     Err(native_arg_invalid(
         foreign,
         index,
-        format!("expected `{expected}`, found `{:?}`", found.kind()).into(),
+        format!("expected type `{expected}`, found `{:?}`", found.kind()).into(),
     ))
 }

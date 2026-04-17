@@ -25,10 +25,10 @@ impl ResolveDiagKind {
     pub const fn message(self) -> &'static str {
         match self {
             Self::ExpectedName => "expected name",
-            Self::InvalidStmt => "invalid stmt position",
+            Self::InvalidStmt => "statement invalid here",
             Self::UnboundName => "unbound name",
             Self::ImportResolveFailed => "import resolve failed",
-            Self::InvalidImportSpec => "invalid import spec",
+            Self::InvalidImportSpec => "invalid import specifier",
         }
     }
 
@@ -36,10 +36,10 @@ impl ResolveDiagKind {
     pub const fn label(self) -> &'static str {
         match self {
             Self::ExpectedName => "name starts here",
-            Self::InvalidStmt => "stmt is not valid here",
+            Self::InvalidStmt => "statement not valid here",
             Self::UnboundName => "name is not bound in this scope",
             Self::ImportResolveFailed => "import is not resolved here",
-            Self::InvalidImportSpec => "import spec must be string literal",
+            Self::InvalidImportSpec => "import specifier must be string literal",
         }
     }
 

@@ -919,11 +919,9 @@ fn duplicate_handler_clause_reports_diag() {
         };
     "#,
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::DuplicateHandlerClause),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::DuplicateHandlerClause)
+        .expect("duplicate handler clause diag");
+    assert_eq!(diag.message(), "duplicate handler clause `readLine`");
 }
 
 #[test]
@@ -964,11 +962,9 @@ fn duplicate_class_member_reports_diag() {
         };
     ",
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::CollectDuplicateClassMember),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::CollectDuplicateClassMember)
+        .expect("duplicate class member diag");
+    assert_eq!(diag.message(), "duplicate class member `=`");
 }
 
 #[test]
@@ -984,11 +980,9 @@ fn missing_instance_member_reports_diag() {
         };
     ",
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::MissingInstanceMember),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::MissingInstanceMember)
+        .expect("missing instance member diag");
+    assert_eq!(diag.message(), "missing instance member `compare`");
 }
 
 #[test]

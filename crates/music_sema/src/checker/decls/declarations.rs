@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirMemberDef, HirMemberKind,
-    HirPatKind, HirTyId, HirTyKind, HirVariantDef, HirVariantFieldDef,
+    HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirLitId, HirLitKind,
+    HirMemberDef, HirMemberKind, HirPatKind, HirTyId, HirTyKind, HirVariantDef, HirVariantFieldDef,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
@@ -15,6 +15,7 @@ use super::super::variant_payload::lower_variant_payload;
 use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
+    normalize_arch_text, normalize_target_text,
 };
 use crate::effects::EffectRow;
 
@@ -27,6 +28,22 @@ fn member_has_attr(ctx: &CheckPass<'_, '_, '_>, member: &HirMemberDef, name: &st
     ctx.attrs(member.attrs.clone()).iter().any(|attr| {
         let parts = ctx.idents(attr.path);
         parts.len() == 1 && ctx.resolve_symbol(parts[0].name) == name
+    })
+}
+
+fn matches_target_value(target: Option<&str>, values: &[String]) -> bool {
+    target.is_some_and(|target| {
+        values
+            .iter()
+            .any(|value| normalize_target_text(value) == target)
+    })
+}
+
+fn matches_arch_value(target: Option<&str>, values: &[String]) -> bool {
+    target.is_some_and(|target| {
+        values
+            .iter()
+            .any(|value| normalize_arch_text(value) == target)
     })
 }
 
@@ -268,27 +285,39 @@ impl CheckPass<'_, '_, '_> {
             };
 
             let matched = match name {
-                "os" => target
-                    .os
-                    .as_deref()
-                    .is_some_and(|t| values.iter().any(|v| v == t)),
-                "arch" => target
-                    .arch
-                    .as_deref()
-                    .is_some_and(|t| values.iter().any(|v| v == t)),
-                "env" => target
-                    .env
-                    .as_deref()
-                    .is_some_and(|t| values.iter().any(|v| v == t)),
-                "abi" => target
-                    .abi
-                    .as_deref()
-                    .is_some_and(|t| values.iter().any(|v| v == t)),
-                "vendor" => target
-                    .vendor
-                    .as_deref()
-                    .is_some_and(|t| values.iter().any(|v| v == t)),
+                "os" => matches_target_value(target.os.as_deref(), &values),
+                "arch" => matches_arch_value(target.arch.as_deref(), &values),
+                "archFamily" => matches_target_value(target.arch_family.as_deref(), &values),
+                "env" => matches_target_value(target.env.as_deref(), &values),
+                "abi" => matches_target_value(target.abi.as_deref(), &values),
+                "vendor" => matches_target_value(target.vendor.as_deref(), &values),
+                "family" => values.iter().any(|value| {
+                    target
+                        .family
+                        .contains(normalize_target_text(value).as_str())
+                }),
                 "feature" => values.iter().any(|v| target.features.contains(v.as_str())),
+                "pointerWidth" => target
+                    .pointer_width
+                    .is_some_and(|width| values.iter().any(|value| value == &width.to_string())),
+                "endian" => matches_target_value(target.endian.as_deref(), &values),
+                "jit" => {
+                    target.jit.supported
+                        && matches_target_value(target.jit.backend.as_deref(), &values)
+                }
+                "jitIsa" => {
+                    target.jit.supported && matches_target_value(target.jit.isa.as_deref(), &values)
+                }
+                "jitCallConv" => {
+                    target.jit.supported
+                        && matches_target_value(target.jit.call_conv.as_deref(), &values)
+                }
+                "jitFeature" => values.iter().any(|value| {
+                    target
+                        .jit
+                        .features
+                        .contains(normalize_target_text(value).as_str())
+                }),
                 _ => true,
             };
             if !matched {
@@ -300,12 +329,12 @@ impl CheckPass<'_, '_, '_> {
 
     fn when_values(&self, expr: HirExprId) -> Option<Vec<String>> {
         match self.expr(expr).kind {
-            HirExprKind::Lit { lit } => self.lit_string_value(lit).map(|s| vec![s]),
+            HirExprKind::Lit { lit } => self.when_lit_value(lit).map(|s| vec![s]),
             HirExprKind::Array { items } => {
                 let mut out = Vec::<String>::new();
                 for item in self.array_items(items) {
                     if let HirExprKind::Lit { lit } = self.expr(item.expr).kind {
-                        if let Some(value) = self.lit_string_value(lit) {
+                        if let Some(value) = self.when_lit_value(lit) {
                             out.push(value);
                         }
                     }
@@ -313,6 +342,13 @@ impl CheckPass<'_, '_, '_> {
                 Some(out)
             }
             _ => None,
+        }
+    }
+
+    fn when_lit_value(&self, lit: HirLitId) -> Option<String> {
+        match self.lit_kind(lit) {
+            HirLitKind::String { value } | HirLitKind::Int { raw: value } => Some(value.into()),
+            HirLitKind::Float { .. } | HirLitKind::Rune { .. } => None,
         }
     }
 
@@ -370,6 +406,7 @@ impl CheckPass<'_, '_, '_> {
         let data_name: Box<str> = self.resolve_symbol(name.name).into();
         if self.data_def(&data_name).is_none() {
             let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
+            let mut seen_variants = BTreeMap::<Box<str>, _>::new();
             let mut seen_tags = HashSet::<i64>::new();
             for (variant_index, variant) in self.variants(variants.clone()).into_iter().enumerate()
             {
@@ -395,7 +432,16 @@ impl CheckPass<'_, '_, '_> {
                 let result = variant
                     .result
                     .map(|expr| self.lower_type_expr(expr, variant.origin));
-                let prev = variant_map.insert(
+                if let Some(previous_origin) = seen_variants.insert(tag.clone(), variant.origin) {
+                    self.diag_message_with_previous(
+                        variant.origin.span,
+                        previous_origin.span,
+                        DiagKind::CollectDuplicateDataVariant,
+                        format!("duplicate data variant `{tag}`"),
+                        format!("data variant `{tag}` first declared here"),
+                    );
+                }
+                let _previous_variant = variant_map.insert(
                     tag,
                     super::super::DataVariantDef::new(
                         tag_value,
@@ -405,13 +451,6 @@ impl CheckPass<'_, '_, '_> {
                         field_names,
                     ),
                 );
-                if prev.is_some() {
-                    self.diag(
-                        variant.origin.span,
-                        DiagKind::CollectDuplicateDataVariant,
-                        "",
-                    );
-                }
             }
             if variant_map.is_empty() {
                 let field_tys = self

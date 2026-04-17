@@ -55,7 +55,7 @@ impl MethodEmitter<'_, '_> {
             self.module_key,
             &expr.origin,
             EmitDiagKind::UnsupportedNameRef,
-            format!("name ref `{name}` has no emitted form"),
+            format!("name reference `{name}` has no emitted form"),
         );
         emit_zero(self);
     }
@@ -66,8 +66,7 @@ impl MethodEmitter<'_, '_> {
         name: &str,
         module_target: Option<&ModuleKey>,
     ) -> Option<MethodId> {
-        if module_target.is_none() || module_target.is_some_and(|target| target == self.module_key)
-        {
+        if module_target.is_none_or(|target| target == self.module_key) {
             if let Some(method) = self.layout.callables_by_name.get(name).copied() {
                 return Some(method);
             }

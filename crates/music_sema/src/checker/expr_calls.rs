@@ -92,8 +92,13 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
 
             let Some(expected_index) = param_names.iter().position(|param| *param == name.name)
             else {
-                self.ctx
-                    .diag(name.span, DiagKind::CallNamedArgumentUnknown, "");
+                let argument_name = self.ctx.resolve_symbol(name.name).to_owned();
+                self.ctx.diag_message(
+                    name.span,
+                    DiagKind::CallNamedArgumentUnknown,
+                    format!("unknown named call argument `{argument_name}`"),
+                    format!("unknown named call argument `{argument_name}`"),
+                );
                 self.ctx
                     .check_named_call_arg(name, arg.expr, None, false, self.effects);
                 continue;

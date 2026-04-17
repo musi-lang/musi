@@ -207,21 +207,35 @@ impl CheckPass<'_, '_, '_> {
                     continue;
                 };
                 if !seen.insert(name.name) {
-                    self.diag(name.span, DiagKind::DuplicateVariantField, "");
+                    let field_name = self.resolve_symbol(name.name).to_owned();
+                    self.diag_named(
+                        name.span,
+                        DiagKind::DuplicateVariantField,
+                        format!("duplicate variant field `{field_name}`"),
+                    );
                 }
                 let expected = field_names
                     .iter()
                     .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)))
                     .and_then(|index| expected_args.get(index).copied())
                     .unwrap_or_else(|| {
-                        self.diag(name.span, DiagKind::UnknownVariantField, "");
+                        let field_name = self.resolve_symbol(name.name).to_owned();
+                        self.diag_named(
+                            name.span,
+                            DiagKind::UnknownVariantField,
+                            format!("unknown variant field `{field_name}`"),
+                        );
                         builtins.unknown
                     });
                 self.bind_pat_inner(arg.pat, expected);
             }
             for field_name in field_names.iter().flatten() {
                 if !seen.contains(&self.intern(field_name)) {
-                    self.diag(span, DiagKind::MissingVariantField, "");
+                    self.diag_named(
+                        span,
+                        DiagKind::MissingVariantField,
+                        format!("missing variant field `{field_name}`"),
+                    );
                 }
             }
             return;

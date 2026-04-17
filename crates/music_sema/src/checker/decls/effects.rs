@@ -105,10 +105,11 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let effect_name: Box<str> = self.resolve_symbol(effect.name).into();
         let Some(effect_def) = self.effect_def(&effect_name).cloned() else {
-            self.diag(
+            self.diag_message(
                 origin.span,
                 DiagKind::UnknownEffect,
-                &format!("unknown effect `{effect_name}`"),
+                format!("unknown effect `{effect_name}`"),
+                format!("unknown effect `{effect_name}`"),
             );
             return ExprFacts::new(self.builtins().unknown, EffectRow::empty());
         };
@@ -159,13 +160,19 @@ impl CheckPass<'_, '_, '_> {
                 continue;
             }
             if !seen_ops.insert(clause_name.clone()) {
-                self.diag(origin.span, DiagKind::DuplicateHandlerClause, "");
+                self.diag_message(
+                    origin.span,
+                    DiagKind::DuplicateHandlerClause,
+                    format!("duplicate handler clause `{clause_name}`"),
+                    format!("duplicate handler clause `{clause_name}`"),
+                );
             }
             let Some(op_def) = effect.op(clause_name.as_ref()).cloned() else {
-                self.diag(
+                self.diag_message(
                     origin.span,
                     DiagKind::UnknownEffectOp,
-                    &format!("unknown effect op `{clause_name}`"),
+                    format!("unknown effect operation `{clause_name}`"),
+                    format!("unknown effect operation `{clause_name}`"),
                 );
                 continue;
             };

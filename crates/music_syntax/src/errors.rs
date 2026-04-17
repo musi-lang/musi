@@ -283,7 +283,7 @@ impl ParseErrorKind {
             Self::ExpectedConstraintOperator { .. } => {
                 "expected constraint operator `<:` or `:`".into()
             }
-            Self::ExpectedAttrValue { .. } => "expected attr value".into(),
+            Self::ExpectedAttrValue { .. } => "expected attribute value".into(),
             Self::SpliceOutsideQuote => "splice is only valid inside quote".into(),
             Self::NonAssociativeChain => "comparison chain requires grouping".into(),
         }
