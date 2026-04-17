@@ -10,7 +10,7 @@ use super::super::DiagKind;
 use super::super::const_eval::try_comptime_value;
 use super::super::decls::check_foreign_let;
 use super::super::exprs::{check_expr, peel_mut_ty};
-use super::super::patterns::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
+use super::super::pats::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::effects::require_declared_effects;
 use super::imports::{bind_module_pattern, bind_structural_alias, module_target_for_expr};

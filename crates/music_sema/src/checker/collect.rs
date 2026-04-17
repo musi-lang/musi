@@ -13,7 +13,7 @@ use crate::api::ClassFacts;
 use super::attrs::extract_data_layout_hints;
 use super::const_eval::{data_variant_tag, record_data_variant_tag};
 use super::decls::{member_law_facts, member_signature};
-use super::patterns::bound_name_from_pat;
+use super::pats::bound_name_from_pat;
 use super::surface::surface_key;
 use super::variant_payload::lower_variant_payload;
 use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};

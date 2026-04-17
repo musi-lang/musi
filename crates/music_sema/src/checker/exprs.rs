@@ -10,7 +10,7 @@ use crate::api::{ComptimeValue, ExprFacts};
 
 use super::decls::{LetExprInput, check_let_expr};
 use super::expr_calls::{check_apply_expr, check_call_expr};
-use super::patterns::bind_pat;
+use super::pats::bind_pat;
 use super::state::Builtins;
 use super::{CheckPass, DiagKind};
 use crate::effects::EffectRow;

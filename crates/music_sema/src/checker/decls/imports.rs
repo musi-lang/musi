@@ -4,7 +4,7 @@ use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind};
 use music_module::ModuleKey;
 use music_names::{Ident, NameBindingId, Symbol};
 
-use super::super::patterns::{bind_pat, bound_name_from_pat};
+use super::super::pats::{bind_pat, bound_name_from_pat};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
