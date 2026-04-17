@@ -186,11 +186,11 @@ export const bookSections = [
 			"/docs/language/developers/c",
 			"/learn/language/developers/c",
 		],
-		title: "Musi for C99 Developers",
+		title: "Musi for C Developers",
 		description:
 			"Translate C99 habits into Musi's expression, data, effect, and FFI model.",
 		group: "Musi for Developers",
-		section: "C99 Developers",
+		section: "C Developers",
 		order: 1,
 		slug: "c99",
 		summary:
@@ -225,11 +225,11 @@ export const bookSections = [
 			"/docs/language/developers/c-cpp",
 			"/learn/language/developers/c-cpp",
 		],
-		title: "Musi for C++17 Developers",
+		title: "Musi for C++ Developers",
 		description:
 			"Translate C++17 habits into Musi's expression, data, effect, and FFI model.",
 		group: "Musi for Developers",
-		section: "C++17 Developers",
+		section: "C++ Developers",
 		order: 2,
 		slug: "cpp17",
 		summary:

@@ -35,6 +35,14 @@ const BANNED_DEVELOPER_GUIDE_FAKE_STDIN_PATTERN =
 	/Console\.readLine|console\.readLine/;
 const repoRoot = join(import.meta.dirname, "..", "..");
 const snippetEmbedPattern = /\{\{snippet:([\w-]+)\}\}/g;
+const cFencePattern = /```c\n/;
+const cppFencePattern = /```cpp\n/;
+const nativeCppFunctionReturnPattern =
+	/^\s*(?:bool|int|void|std::[A-Za-z0-9_:<>]+|[A-Z][A-Za-z0-9_:<>]*)\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*(?:const\s*)?(?:\{|;)/m;
+const cppAutoFunctionWithoutTrailingReturnPattern =
+	/^\s*auto\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*(?:const\s*)?\{/m;
+const mutableCppResultBindingPattern =
+	/(?:^|\n)auto\s+(?:answer|is_null|port|selected|visible)\s*=/;
 const goFencePattern = /```go\n/;
 const javaFencePattern = /```java\n/;
 const luaFencePattern = /```lua\n/;
@@ -42,6 +50,26 @@ const topLevelLetPattern = /^let\s/;
 
 function snippetIdsInMarkdown(source: string) {
 	return [...source.matchAll(snippetEmbedPattern)].map((match) => match[1]);
+}
+
+function cppFencesInMarkdown(source: string) {
+	return [...source.matchAll(/```cpp\n([\s\S]*?)\n```/g)].map(
+		(match) => match[1],
+	);
+}
+
+function frontmatterForMarkdown(source: string) {
+	const [, frontmatter = ""] = source.split("---", 2);
+	return frontmatter;
+}
+
+function hasGuideMetadata(source: string) {
+	const frontmatter = frontmatterForMarkdown(source);
+
+	return (
+		frontmatter.includes("\ndescription: ") &&
+		frontmatter.includes("\nsummary: ")
+	);
 }
 
 function snippetSourcesForMarkdown(source: string) {
@@ -236,6 +264,9 @@ describe("content generation", () => {
 			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
 			const snippetIds = snippetIdsInMarkdown(source);
 
+			expect(hasGuideMetadata(source), page.sourcePath).toBe(true);
+			expect(source, page.sourcePath).toMatch(cFencePattern);
+			expect(source, page.sourcePath).not.toContain("{{example:");
 			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
 			expect(
 				snippetIds.every((snippetId) => snippetId.startsWith("c99-")),
@@ -260,11 +291,25 @@ describe("content generation", () => {
 			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
 			const snippetIds = snippetIdsInMarkdown(source);
 
+			expect(hasGuideMetadata(source), page.sourcePath).toBe(true);
+			expect(source, page.sourcePath).toMatch(cppFencePattern);
+			expect(source, page.sourcePath).not.toContain("{{example:");
 			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
 			expect(
 				snippetIds.every((snippetId) => snippetId.startsWith("cpp17-")),
 				page.sourcePath,
 			).toBe(true);
+			for (const cppFence of cppFencesInMarkdown(source)) {
+				expect(cppFence, page.sourcePath).not.toMatch(
+					nativeCppFunctionReturnPattern,
+				);
+				expect(cppFence, page.sourcePath).not.toMatch(
+					cppAutoFunctionWithoutTrailingReturnPattern,
+				);
+				expect(cppFence, page.sourcePath).not.toMatch(
+					mutableCppResultBindingPattern,
+				);
+			}
 		}
 
 		const overviewSource = readFileSync(
@@ -637,6 +682,21 @@ describe("content generation", () => {
 		expect(docsHtml).not.toContain("{{snippet:");
 		expect(docsHtml).not.toContain("{{example:");
 		expect(docsHtml).not.toContain("{{try:");
+	});
+
+	it("renders C and C++ guide examples as native fences plus snippets", () => {
+		const guideDocs = renderedDocs.filter(
+			(doc) =>
+				doc.kind === "chapter" &&
+				(doc.sectionId === "developers-c99" ||
+					doc.sectionId === "developers-cpp17"),
+		);
+
+		expect(guideDocs.length).toBeGreaterThan(0);
+		for (const doc of guideDocs) {
+			expect(doc.html, doc.id).toContain("<pre");
+			expect(doc.html, doc.id).toContain('class="snippet-block"');
+		}
 	});
 
 	it("keeps chapters on repo-level docs paths", () => {

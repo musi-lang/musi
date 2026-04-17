@@ -27,6 +27,12 @@
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
+[data-mantine-color-scheme="dark"] .field-row input,
+[data-mantine-color-scheme="dark"] .field-row textarea {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 86%, var(--site-panel)), var(--site-forum-row-alt));
+	box-shadow: inset 0 1px 0 color-mix(in srgb, #fff6ee 7%, transparent);
+}
+
 .field-row textarea {
 	resize: vertical;
 	min-height: 8rem;

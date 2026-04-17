@@ -153,8 +153,8 @@ describe("docs", () => {
 	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
 		const titles = docChildren("developers-guides").map((page) => page.title);
 		expect(titles).toEqual([
-			"Musi for C99 Developers",
-			"Musi for C++17 Developers",
+			"Musi for C Developers",
+			"Musi for C++ Developers",
 			"Musi for C# Developers",
 			"Musi for Go Developers",
 			"Musi for Java Developers",

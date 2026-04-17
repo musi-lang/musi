@@ -240,6 +240,54 @@
 		inset 0 1px 0 color-mix(in srgb, var(--site-bg-elevated) 24%, transparent);
 }
 
+[data-mantine-color-scheme="dark"] .site-header {
+	background: color-mix(in srgb, var(--site-border-wrapper) 82%, #191310);
+}
+
+[data-mantine-color-scheme="dark"] .site-header-inner {
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, #fff6ee 18%, transparent),
+		inset 0 -1px 0 color-mix(in srgb, var(--site-forum-header) 74%, #000);
+}
+
+[data-mantine-color-scheme="dark"] .site-logo-mark {
+	filter:
+		drop-shadow(0 0 1px color-mix(in srgb, #fff6ee 64%, transparent)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.48)) drop-shadow(0 0 0.38rem color-mix(in srgb, var(--site-accent) 20%, transparent));
+}
+
+[data-mantine-color-scheme="dark"] .site-logo-title {
+	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+[data-mantine-color-scheme="dark"] .site-header-tabbar {
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, #fff6ee 14%, transparent),
+		inset 0 -1px 0 color-mix(in srgb, #000 30%, transparent);
+}
+
+[data-mantine-color-scheme="dark"] .site-header-tabbar .header-link {
+	border-color: color-mix(in srgb, var(--site-border-wrapper) 74%, #120d0b);
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, #fff6ee 15%, transparent),
+		0 -1px 0 rgba(0, 0, 0, 0.36);
+	color: color-mix(in srgb, var(--site-on-tab) 88%, var(--site-text-muted));
+}
+
+[data-mantine-color-scheme="dark"] .site-header-tabbar .header-link::after {
+	border-color: color-mix(in srgb, #fff6ee 16%, transparent);
+}
+
+[data-mantine-color-scheme="dark"] .site-header-tabbar .header-link:hover {
+	color: var(--site-text);
+}
+
+[data-mantine-color-scheme="dark"] .site-header-tabbar .header-link.is-active {
+	border-color: color-mix(in srgb, var(--site-border-wrapper) 78%, #211815);
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, #fff6ee 16%, transparent),
+		0 -1px 0 rgba(0, 0, 0, 0.36);
+}
+
 .menu-toggle {
 	min-width: 2.25rem;
 	min-height: 2.25rem;
@@ -409,6 +457,22 @@
 	color: var(--site-accent-strong);
 }
 
+[data-mantine-color-scheme="dark"] .docs-sidebar-children {
+	border-left-color: color-mix(in srgb, var(--site-border-soft) 84%, #000);
+}
+
+[data-mantine-color-scheme="dark"] .docs-sidebar-link {
+	border-color: color-mix(in srgb, var(--site-border) 82%, #111);
+	box-shadow: inset 0 1px 0 color-mix(in srgb, #fff6ee 7%, transparent);
+}
+
+[data-mantine-color-scheme="dark"] .docs-sidebar-link:hover,
+[data-mantine-color-scheme="dark"] .docs-sidebar-link.is-active {
+	border-color: color-mix(in srgb, var(--site-border-strong) 76%, var(--site-border));
+	border-left-color: var(--site-accent-strong);
+	background: var(--site-gradient-hover);
+}
+
 .site-main {
 	min-width: 0;
 }
@@ -462,6 +526,25 @@
 	background:
 		linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 38%, transparent), transparent 36%),
 		var(--site-bg-accent);
+}
+
+[data-mantine-color-scheme="dark"] .surface {
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, #fff6ee 5%, transparent),
+		var(--site-shadow);
+}
+
+[data-mantine-color-scheme="dark"] .surface-panel,
+[data-mantine-color-scheme="dark"] .surface-base {
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 48%, transparent), transparent 4rem),
+		var(--site-forum-row-alt);
+}
+
+[data-mantine-color-scheme="dark"] .surface-code {
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 34%, transparent), transparent 32%),
+		var(--site-bg-code-shell);
 }
 
 .hero-grid,

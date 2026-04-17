@@ -1,12 +1,16 @@
 .docs-search {
 	display: grid;
 	gap: 0.85rem;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 }
 
 .docs-search-disclosure {
 	position: relative;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 }
@@ -51,6 +55,8 @@
 .docs-search-drawer {
 	display: grid;
 	gap: 0.85rem;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 	margin-top: 0.7rem;
@@ -59,6 +65,7 @@
 	border-radius: var(--site-radius);
 	background: var(--site-panel-recessed);
 	box-shadow: var(--site-shadow-recessed);
+	overflow: hidden;
 }
 
 .docs-search-disclosure .docs-search-header .eyebrow {
@@ -75,11 +82,14 @@
 
 .docs-search-field {
 	display: block;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 }
 
 .docs-search-field input {
+	box-sizing: border-box;
 	width: 100%;
 	max-width: 100%;
 	min-height: 2.8rem;
@@ -98,6 +108,8 @@
 .docs-search-results {
 	display: grid;
 	gap: 0.55rem;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 	max-height: 24rem;
@@ -139,4 +151,37 @@
 	padding: 0.7rem 0.8rem;
 	border: 1px dashed var(--site-border-strong);
 	border-radius: var(--site-radius);
+}
+
+[data-mantine-color-scheme="dark"] .docs-search-summary {
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--site-forum-subheader-end) 80%, var(--site-panel-raised)), var(--site-panel)),
+		var(--site-panel);
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, #fff6ee 8%, transparent),
+		var(--site-shadow);
+}
+
+[data-mantine-color-scheme="dark"] .docs-search-drawer {
+	background: color-mix(in srgb, var(--site-panel-recessed) 90%, var(--site-panel));
+}
+
+[data-mantine-color-scheme="dark"] .docs-search-field input {
+	border-color: color-mix(in srgb, var(--site-border-strong) 70%, var(--site-border));
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 86%, var(--site-panel)), var(--site-forum-row-alt)),
+		var(--site-panel);
+	box-shadow:
+		inset 0 1px 2px rgba(0, 0, 0, 0.26),
+		0 1px 0 color-mix(in srgb, #fff6ee 6%, transparent);
+}
+
+[data-mantine-color-scheme="dark"] .docs-search-result {
+	border-color: color-mix(in srgb, var(--site-border) 82%, #111);
+	background: var(--site-gradient-row);
+}
+
+[data-mantine-color-scheme="dark"] .docs-search-result:hover {
+	border-color: color-mix(in srgb, var(--site-border-strong) 76%, var(--site-border));
+	background: var(--site-gradient-hover);
 }
