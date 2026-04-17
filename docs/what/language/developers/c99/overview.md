@@ -1,21 +1,36 @@
 ---
 title: "Overview"
+description: "Translate C99 habits into Musi code with side-by-side examples."
 group: "Musi for Developers"
-section: "C99 Developers"
+section: "C Developers"
 order: 1
 slug: "overview"
+summary: "Start from C99 habits, then read equivalent Musi expression, data, effect, package, and FFI shapes."
 ---
 
-# Musi for C99 Developers
+# Musi for C Developers
 
-C99 gives you translation units, headers, structs, arrays, pointers, macros, and explicit status-code conventions. Musi keeps the same preference for predictable data and visible boundaries, but moves everyday code toward expression values, variants, records, effects, and package imports.
+C99 is the comparison point for this guide. C developers often bring translation units, headers, structs, arrays, pointers, macros, explicit status codes, and ABI boundaries. Musi keeps those jobs recognizable while making values, data shape, and outside work explicit.
 
-## Main shifts
+C usually starts with a small function and a call:
 
-- C headers become Musi package exports.
-- Status codes become `result.Result[T, E]` or effect requests.
-- `NULL` checks become `option.Option[T]`.
-- Pointer-heavy APIs stay behind `unsafe` and `@std/ffi`.
-- Macros and generated declarations are better represented with Musi comptime syntax.
+```c
+int total(int base_price, int fee) {
+    return base_price + fee;
+}
+
+int answer = total(1200, 45);
+```
+
+Musi gives the function the same inputs and result, then lets the body expression produce the value.
 
 {{snippet:c99-values-functions}}
+
+## Reading path
+
+Read the guide from everyday C toward deeper translation points:
+
+1. values, functions, blocks, and mutation;
+2. structs, arrays, pointers, null, results, and effects;
+3. variants, generics, classes, and receiver calls;
+4. packages, tests, unsafe code, and native FFI boundaries.

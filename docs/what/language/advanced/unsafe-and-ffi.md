@@ -40,6 +40,8 @@ Use `CPtr` when declaring native calls. Use `Ptr[T]` after the call when Musi co
 
 The unsafe rule follows the value. Calling `offset[Int]` through an alias still needs `unsafe { ... }`.
 
+Use `@std/os` for typed platform checks and `@std/sys` for raw target facts when a native wrapper needs platform-specific declarations. `@when` compares those facts case-insensitively, so `aarch64`, `AArch64`, and mixed-case forms match the same target. Rust-supported targets define the platform universe. Future Cranelift JIT support is exposed separately through `@std/sys.jit` and `@std/os.Jit`, not through ordinary OS support.
+
 {{snippet:unsafe-safe-wrapper}}
 
 ## Wrapper Shape

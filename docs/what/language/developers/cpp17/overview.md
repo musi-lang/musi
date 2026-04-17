@@ -1,21 +1,36 @@
 ---
 title: "Overview"
+description: "Translate C++17 habits into Musi code with side-by-side examples."
 group: "Musi for Developers"
-section: "C++17 Developers"
+section: "C++ Developers"
 order: 1
 slug: "overview"
+summary: "Start from C++17 habits, then read equivalent Musi expression, data, effect, package, and FFI shapes."
 ---
 
-# Musi for C++17 Developers
+# Musi for C++ Developers
 
-C++17 gives you RAII, classes, templates, namespaces, `std::optional`, `std::variant`, and header-based libraries. Musi keeps the taste for strong modeling and zero-surprise APIs, but uses expression syntax, records, data variants, effects, package imports, and classes/laws for reusable behavior.
+C++17 is the comparison point for this guide. C++ developers often bring RAII, classes, templates, namespaces, `std::optional`, `std::variant`, exceptions, headers, and native ABI work. Musi keeps those jobs recognizable while making values, data shape, and outside work explicit.
 
-## Main shifts
+C++ usually starts with a small function and a call:
 
-- Header/source organization becomes package exports and imports.
-- `std::optional<T>` becomes `option.Option[T]`.
-- `std::variant` becomes data variants plus `match`.
-- Exceptions usually become `result.Result[T, E]` or explicit effects.
-- Native and ABI work stays behind `unsafe` and `@std/ffi`.
+```cpp
+auto total(const int base_price, const int fee) -> int {
+    return base_price + fee;
+}
+
+const auto answer = total(1200, 45);
+```
+
+Musi gives the function the same inputs and result, then lets the body expression produce the value.
 
 {{snippet:cpp17-values-functions}}
+
+## Reading path
+
+Read the guide from everyday C++ toward deeper translation points:
+
+1. values, functions, blocks, and mutation;
+2. records, collections, pointers, optional values, results, and effects;
+3. variants, templates, classes, and receiver calls;
+4. packages, tests, unsafe code, and native FFI boundaries.

@@ -49,7 +49,7 @@ A short catalog of common meanings:
 - `@known(name := "Bool")`: this exported item is one canonical built-in surface
 - `@intrinsic(name := "ptr.load")`: implementation comes from compiler/runtime intrinsic machinery
 - `@link(name := "c")`: foreign declaration links against host symbol provider
-- `@when(...)`: gate declaration by target or environment facts
+- `@when(...)`: gate foreign declarations by normalized target facts such as `os`, `arch`, `family`, `archFamily`, `pointerWidth`, `endian`, `env`, `abi`, `vendor`, or `feature`
 - `@comptimeSafe`: effect operation may be handled by a compile-time host when requested inside `comptime`
 - `@repr(...)`, `@layout(...)`: influence data representation details
 - `@frozen`: exported data layout should not drift casually
