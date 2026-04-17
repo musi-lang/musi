@@ -7,6 +7,7 @@ use music_names::{Ident, NameBindingId, Symbol};
 use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
+use super::const_eval::try_comptime_value;
 use super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
 use super::exprs::{check_expr, peel_mut_ty};
 use super::schemes::BindingScheme;
@@ -40,7 +41,13 @@ struct CallArgChecker<'ctx, 'interner, 'env, 'borrow, 'filled, 'effects> {
 }
 
 impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
-    fn check_args(&mut self, args: &[HirArg], params: &[HirTyId], param_names: &[Symbol]) {
+    fn check_args(
+        &mut self,
+        args: &[HirArg],
+        params: &[HirTyId],
+        param_names: &[Symbol],
+        comptime_params: &[bool],
+    ) {
         let mut named_seen = HashSet::<Symbol>::new();
         let mut in_named_suffix = false;
 
@@ -55,14 +62,14 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                     let span = self.ctx.expr(arg.expr).origin.span;
                     self.ctx.diag(span, diag, "");
                 }
-                self.check_arg(arg, params);
+                self.check_arg(arg, params, comptime_params);
                 continue;
             };
 
             if arg.spread {
                 self.ctx
                     .diag(name.span, DiagKind::CallNamedSpreadArgument, "");
-                self.check_arg(arg, params);
+                self.check_arg(arg, params, comptime_params);
                 continue;
             }
 
@@ -73,7 +80,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                     "",
                 );
                 self.ctx
-                    .check_named_call_arg(name, arg.expr, None, self.effects);
+                    .check_named_call_arg(name, arg.expr, None, false, self.effects);
                 continue;
             }
 
@@ -85,10 +92,15 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
 
             let Some(expected_index) = param_names.iter().position(|param| *param == name.name)
             else {
+                let argument_name = self.ctx.resolve_symbol(name.name).to_owned();
+                self.ctx.diag_message(
+                    name.span,
+                    DiagKind::CallNamedArgumentUnknown,
+                    format!("unknown named call argument `{argument_name}`"),
+                    format!("unknown named call argument `{argument_name}`"),
+                );
                 self.ctx
-                    .diag(name.span, DiagKind::CallNamedArgumentUnknown, "");
-                self.ctx
-                    .check_named_call_arg(name, arg.expr, None, self.effects);
+                    .check_named_call_arg(name, arg.expr, None, false, self.effects);
                 continue;
             };
 
@@ -98,17 +110,25 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
             }
 
             let expected = params.get(expected_index).copied();
+            let is_comptime = comptime_params
+                .get(expected_index)
+                .copied()
+                .unwrap_or(false);
             self.ctx
-                .check_named_call_arg(name, arg.expr, expected, self.effects);
+                .check_named_call_arg(name, arg.expr, expected, is_comptime, self.effects);
             if let Some(slot) = self.filled.get_mut(expected_index) {
                 *slot = true;
             }
         }
     }
 
-    fn check_arg(&mut self, arg: &HirArg, params: &[HirTyId]) {
+    fn check_arg(&mut self, arg: &HirArg, params: &[HirTyId], comptime_params: &[bool]) {
         let builtins = self.ctx.builtins();
         if !arg.spread {
+            let is_comptime = comptime_params
+                .get(self.param_index)
+                .copied()
+                .unwrap_or(false);
             let expected = params
                 .get(self.param_index)
                 .copied()
@@ -119,6 +139,11 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
             self.effects.union_with(&facts.effects);
             let arg_origin = self.ctx.expr(arg.expr).origin;
             self.ctx.type_mismatch(arg_origin, expected, facts.ty);
+            if is_comptime {
+                if let Some(value) = try_comptime_value(self.ctx, arg.expr) {
+                    self.ctx.set_expr_comptime_value(arg.expr, value);
+                }
+            }
             if let Some(slot) = self.filled.get_mut(self.param_index) {
                 *slot = true;
             }
@@ -275,6 +300,7 @@ impl CheckPass<'_, '_, '_> {
         let mut effects = callee_facts.effects;
         let mut filled = vec![false; params.len()];
         let param_names = self.call_param_names(callee, params.len());
+        let comptime_params = self.call_comptime_params(callee, params.len());
         let (param_index, has_runtime_spread) = {
             let mut state = CallArgChecker {
                 ctx: self,
@@ -283,7 +309,7 @@ impl CheckPass<'_, '_, '_> {
                 effects: &mut effects,
                 has_runtime_spread: false,
             };
-            state.check_args(&args_vec, &params, &param_names);
+            state.check_args(&args_vec, &params, &param_names, &comptime_params);
             (state.param_index, state.has_runtime_spread)
         };
 
@@ -369,6 +395,7 @@ impl CheckPass<'_, '_, '_> {
         _name: Ident,
         expr: HirExprId,
         expected: Option<HirTyId>,
+        is_comptime: bool,
         effects: &mut EffectRow,
     ) {
         let builtins = self.builtins();
@@ -379,6 +406,11 @@ impl CheckPass<'_, '_, '_> {
         effects.union_with(&facts.effects);
         let origin = self.expr(expr).origin;
         self.type_mismatch(origin, expected, facts.ty);
+        if is_comptime {
+            if let Some(value) = try_comptime_value(self, expr) {
+                self.set_expr_comptime_value(expr, value);
+            }
+        }
     }
 
     fn merge_call_effects(
@@ -480,6 +512,7 @@ impl CheckPass<'_, '_, '_> {
         }
         let tail_params = self.alloc_ty_list(params.into_iter().skip(1));
         scheme.param_names = scheme.param_names.into_iter().skip(1).collect();
+        scheme.comptime_params = scheme.comptime_params.into_iter().skip(1).collect();
         scheme.ty = self.alloc_ty(HirTyKind::Arrow {
             params: tail_params,
             ret,
@@ -493,6 +526,13 @@ impl CheckPass<'_, '_, '_> {
             .map(|scheme| scheme.param_names)
             .or_else(|| self.effect_op_param_names(callee))
             .filter(|names| names.len() == param_count)
+            .unwrap_or_default()
+    }
+
+    fn call_comptime_params(&mut self, callee: HirExprId, param_count: usize) -> Box<[bool]> {
+        self.callable_scheme_for_expr(callee)
+            .map(|scheme| scheme.comptime_params)
+            .filter(|params| params.len() == param_count)
             .unwrap_or_default()
     }
 

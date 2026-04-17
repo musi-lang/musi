@@ -15,4 +15,7 @@ pub use expr::{
 pub use module::{HirExprId, HirLitId, HirModule, HirPatId, HirStore, HirTyId};
 pub use origin::HirOrigin;
 pub use pat::{HirPat, HirPatKind, HirRecordPatField, HirVariantPatArg};
-pub use ty::{HirDim, HirTy, HirTyField, HirTyKind};
+pub use ty::{
+    HirDim, HirTy, HirTyField, HirTyKind, SIMPLE_HIR_TYS, SimpleHirTyInfo,
+    simple_hir_ty_display_name, simple_hir_ty_name,
+};

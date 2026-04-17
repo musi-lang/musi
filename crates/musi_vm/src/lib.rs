@@ -9,9 +9,10 @@ pub(crate) mod value;
 mod vm;
 
 pub use api::{
-    Program, ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,
-    ProgramTypeAbiKind, RecordView, RejectingHost, RejectingLoader, SeqView, StringView, Value,
-    ValueView, Vm, VmHost, VmLoader, VmOptions, render_value_view,
+    ClosureView, ForeignView, ModuleView, Program, ProgramDataLayout, ProgramDataVariantLayout,
+    ProgramExport, ProgramExportKind, ProgramTypeAbiKind, RecordView, RejectingHost,
+    RejectingLoader, SeqView, StringView, Value, ValueView, Vm, VmHost, VmLoader, VmOptions,
+    render_value_view,
 };
 pub use error::{
     NativeFailureStage, OperandShape, VmError, VmErrorKind, VmIndexSpace, VmStackKind, VmValueKind,

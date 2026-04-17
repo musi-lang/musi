@@ -33,12 +33,12 @@ impl Resolver<'_, '_, '_, '_> {
                 },
                 ImportSiteKind::InvalidStringLit => {
                     self.diags.push(
-                        Diag::error("import spec is not string literal")
+                        Diag::error("import specifier must be string literal")
                             .with_code(ResolveDiagKind::InvalidImportSpec.code())
                             .with_label(
                                 site.span,
                                 self.source_id,
-                                "import spec is not string literal",
+                                "import specifier must be string literal",
                             ),
                     );
                 }

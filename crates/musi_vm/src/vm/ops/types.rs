@@ -12,8 +12,15 @@ impl Vm {
         match ty_name {
             "Any" => true,
             "Unit" => matches!(value, Value::Unit),
-            "Int" => matches!(value, Value::Int(_)),
-            "Float" => matches!(value, Value::Float(_)),
+            "Int" | "Int64" => matches!(value, Value::Int(_)),
+            "Int8" => int_value_in_range(value, i64::from(i8::MIN), i64::from(i8::MAX)),
+            "Int16" => int_value_in_range(value, i64::from(i16::MIN), i64::from(i16::MAX)),
+            "Int32" => int_value_in_range(value, i64::from(i32::MIN), i64::from(i32::MAX)),
+            "Nat" | "Nat64" => nat_value(value),
+            "Nat8" => nat_value_in_range(value, u64::from(u8::MAX)),
+            "Nat16" => nat_value_in_range(value, u64::from(u16::MAX)),
+            "Nat32" => nat_value_in_range(value, u64::from(u32::MAX)),
+            "Float" | "Float32" | "Float64" => matches!(value, Value::Float(_)),
             "String" | "CString" => matches!(value, Value::String(_)),
             "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
@@ -90,5 +97,21 @@ impl Vm {
             }
             _ => Err(Self::invalid_dispatch(instruction, "type")),
         }
+    }
+}
+
+fn int_value_in_range(value: &Value, min: i64, max: i64) -> bool {
+    matches!(value, Value::Int(value) if (min..=max).contains(value))
+}
+
+const fn nat_value(value: &Value) -> bool {
+    matches!(value, Value::Nat(_)) || matches!(value, Value::Int(value) if *value >= 0)
+}
+
+fn nat_value_in_range(value: &Value, max: u64) -> bool {
+    match value {
+        Value::Nat(value) => *value <= max,
+        Value::Int(value) => u64::try_from(*value).is_ok_and(|value| value <= max),
+        _ => false,
     }
 }

@@ -7,7 +7,7 @@ describe("prerender", () => {
 	it("renders each public route", () => {
 		for (const route of appRoutes) {
 			const html = renderToString(<App route={route} />);
-			expect(html).toContain("Musi");
+			expect(html).toContain("MUSI");
 		}
 	});
 });

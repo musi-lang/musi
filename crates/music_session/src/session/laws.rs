@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use music_base::Span;
 use music_hir::{
     HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirPatKind, HirTyId, HirTyKind,
+    simple_hir_ty_display_name,
 };
 use music_module::ModuleKey;
 use music_names::Symbol;
@@ -12,7 +13,7 @@ use crate::api::{LawSuiteModule, SessionError};
 
 use super::Session;
 
-const LAW_TEST_EXPORT_NAME: &str = "__laws_test";
+const LAW_TEST_EXPORT_NAME: &str = "musiLawsTest";
 
 #[derive(Debug, Clone)]
 struct SampleCase {
@@ -23,6 +24,7 @@ struct SampleCase {
 #[derive(Debug, Clone)]
 struct ExecutableLawCase {
     name: String,
+    helpers: BindingList,
     bindings: BindingList,
     body: String,
 }
@@ -47,6 +49,12 @@ struct InstanceDecl {
     member_defs: Box<[HirMemberDef]>,
 }
 
+#[derive(Debug, Clone)]
+struct InstanceMemberBinding {
+    name: String,
+    source: String,
+}
+
 type TopLevelLetBinding = (HirExprId, String, Box<[Symbol]>, HirExprId);
 type BindingList = Vec<String>;
 type TopLevelLetBindingList = Vec<TopLevelLetBinding>;
@@ -58,7 +66,7 @@ struct SampleCaseBuild<'a> {
     prefix: &'a str,
     param_names: &'a [String],
     sample_sets: &'a [Vec<SampleCase>],
-    prelude_bindings: &'a [String],
+    member_bindings: &'a [InstanceMemberBinding],
     body: &'a str,
 }
 
@@ -239,11 +247,16 @@ fn extend_class_law_cases(
                 ));
             }
             let subst = class_type_subst(class, instance_facts.class_args.as_ref());
-            let member_snippets = instance
+            let member_bindings = instance
                 .member_defs
                 .iter()
                 .filter(|member| member.kind == HirMemberKind::Let)
-                .map(|member| snippet_for_span(module_key, source, member.origin.span))
+                .map(|member| {
+                    Ok::<InstanceMemberBinding, SessionError>(InstanceMemberBinding {
+                        name: snippet_for_span(module_key, source, member.name.span)?,
+                        source: snippet_for_span(module_key, source, member.origin.span)?,
+                    })
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             for (law, law_facts) in class.laws.iter().zip(class_facts.laws.iter()) {
                 let body = member_body_text(module_key, sema, source, law)?;
@@ -273,7 +286,7 @@ fn extend_class_law_cases(
                     &prefix,
                     &param_names,
                     &sample_sets,
-                    &member_snippets,
+                    &member_bindings,
                     &body,
                 );
             }
@@ -458,16 +471,20 @@ fn sample_cases_for_hir_ty(
         HirTyKind::Bool => Ok(vec![
             SampleCase {
                 label: "False".into(),
-                expr: ".False".into(),
+                expr: "0 = 1".into(),
             },
             SampleCase {
                 label: "True".into(),
-                expr: ".True".into(),
+                expr: "0 = 0".into(),
             },
         ]),
         HirTyKind::Int => Ok(int_samples()),
         HirTyKind::Float => Ok(float_samples()),
         HirTyKind::String | HirTyKind::CString => Ok(string_samples()),
+        HirTyKind::Rune => Ok(vec![SampleCase {
+            label: "rune".into(),
+            expr: "'a'".into(),
+        }]),
         HirTyKind::Named { name, .. } => Err(law_suite_error(
             module_key,
             format!(
@@ -503,16 +520,20 @@ fn sample_cases_for_surface_ty(
         SurfaceTyKind::Bool => Ok(vec![
             SampleCase {
                 label: "False".into(),
-                expr: ".False".into(),
+                expr: "0 = 1".into(),
             },
             SampleCase {
                 label: "True".into(),
-                expr: ".True".into(),
+                expr: "0 = 0".into(),
             },
         ]),
         SurfaceTyKind::Int => Ok(int_samples()),
         SurfaceTyKind::Float => Ok(float_samples()),
         SurfaceTyKind::String | SurfaceTyKind::CString => Ok(string_samples()),
+        SurfaceTyKind::Rune => Ok(vec![SampleCase {
+            label: "rune".into(),
+            expr: "'a'".into(),
+        }]),
         other => Err(law_suite_error(
             module_key,
             format!(
@@ -534,13 +555,21 @@ fn int_samples() -> Vec<SampleCase> {
 }
 
 fn float_samples() -> Vec<SampleCase> {
-    ["-1.0", "0.0", "1.0"]
-        .into_iter()
-        .map(|value| SampleCase {
-            label: value.into(),
-            expr: value.into(),
-        })
-        .collect()
+    [
+        ("negative", "-1.0"),
+        ("negativeZero", "0.0 / -1.0"),
+        ("zero", "0.0"),
+        ("positive", "1.0"),
+        ("negativeInfinity", "-1.0 / 0.0"),
+        ("positiveInfinity", "1.0 / 0.0"),
+        ("nan", "0.0 / 0.0"),
+    ]
+    .into_iter()
+    .map(|(label, expr)| SampleCase {
+        label: label.into(),
+        expr: expr.into(),
+    })
+    .collect()
 }
 
 fn string_samples() -> Vec<SampleCase> {
@@ -558,7 +587,7 @@ fn push_sampled_cases(
     prefix: &str,
     param_names: &[String],
     sample_sets: &[Vec<SampleCase>],
-    prelude_bindings: &[String],
+    member_bindings: &[InstanceMemberBinding],
     body: &str,
 ) {
     let mut current = Vec::<SampleCase>::new();
@@ -566,7 +595,7 @@ fn push_sampled_cases(
         prefix,
         param_names,
         sample_sets,
-        prelude_bindings,
+        member_bindings,
         body,
     };
     push_sampled_cases_rec(out, &build, 0, &mut current);
@@ -579,7 +608,10 @@ fn push_sampled_cases_rec(
     current: &mut Vec<SampleCase>,
 ) {
     if index == build.sample_sets.len() {
-        let mut bindings = build.prelude_bindings.to_vec();
+        let case_index = out.len();
+        let helpers = helper_bindings(case_index, build);
+        let body = rewrite_member_calls(case_index, build);
+        let mut bindings = BindingList::new();
         bindings.extend(
             build
                 .param_names
@@ -599,8 +631,9 @@ fn push_sampled_cases_rec(
         };
         out.push(ExecutableLawCase {
             name: case_name,
+            helpers,
             bindings,
-            body: build.body.to_owned(),
+            body,
         });
         return;
     }
@@ -609,6 +642,42 @@ fn push_sampled_cases_rec(
         push_sampled_cases_rec(out, build, index + 1, current);
         let _ = current.pop();
     }
+}
+
+fn helper_bindings(case_index: usize, build: &SampleCaseBuild<'_>) -> BindingList {
+    build
+        .member_bindings
+        .iter()
+        .map(|binding| {
+            let helper = law_helper_name(case_index, &binding.name);
+            replace_member_decl_name(&binding.source, &binding.name, &helper)
+        })
+        .collect()
+}
+
+fn replace_member_decl_name(source: &str, name: &str, helper: &str) -> String {
+    let needle = format!("let {name}");
+    source.replacen(&needle, &format!("let {helper}"), 1)
+}
+
+fn rewrite_member_calls(case_index: usize, build: &SampleCaseBuild<'_>) -> String {
+    build
+        .member_bindings
+        .iter()
+        .fold(build.body.to_owned(), |body, binding| {
+            body.replace(
+                &format!("{}(", binding.name),
+                &format!("{}(", law_helper_name(case_index, &binding.name)),
+            )
+        })
+}
+
+fn law_helper_name(case_index: usize, member_name: &str) -> String {
+    let sanitized = member_name
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect::<String>();
+    format!("musiLawCase{case_index}{sanitized}")
 }
 
 fn member_body_text(
@@ -648,15 +717,28 @@ fn render_law_suite_module_source(
     if !source.ends_with('\n') {
         out.push('\n');
     }
-    out.push_str("\nlet __musi_law_intrinsics := import \"musi:test\";\n");
-    out.push_str("let __musi_law_test := __musi_law_intrinsics.Test;\n\n");
+    out.push_str("\nlet musiLawTest := import \"musi:test\";\n\n");
+    for test_case in cases {
+        for helper in &test_case.helpers {
+            out.push_str(helper);
+            if !helper.trim_end().ends_with(';') {
+                out.push(';');
+            }
+            if !helper.ends_with('\n') {
+                out.push('\n');
+            }
+        }
+    }
+    if cases.iter().any(|case| !case.helpers.is_empty()) {
+        out.push('\n');
+    }
     out.push_str("export let ");
     out.push_str(LAW_TEST_EXPORT_NAME);
-    out.push_str(" () : Unit :=\n    (\n      request __musi_law_test.suiteStart(");
+    out.push_str(" () : Unit :=\n    (\n      musiLawTest.suiteStart(");
     out.push_str(&string_lit(&format!("{} laws", module_key.as_str())));
     out.push_str(");\n");
     for test_case in cases {
-        out.push_str("      request __musi_law_test.testCase(");
+        out.push_str("      musiLawTest.testCase(");
         out.push_str(&string_lit(&test_case.name));
         out.push_str(", (\n");
         for binding in &test_case.bindings {
@@ -668,7 +750,7 @@ fn render_law_suite_module_source(
         out.push_str(test_case.body.trim());
         out.push_str("\n      ));\n");
     }
-    out.push_str("      request __musi_law_test.suiteEnd()\n    );\n");
+    out.push_str("      musiLawTest.suiteEnd()\n    );\n");
     out
 }
 
@@ -687,22 +769,10 @@ fn render_instance_head(class_name: &str, class_args: &[HirTyId], sema: &SemaMod
 
 fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {
     match &sema.ty(ty).kind {
-        HirTyKind::Type => "Type".into(),
-        HirTyKind::Syntax => "Syntax".into(),
-        HirTyKind::Any => "Any".into(),
-        HirTyKind::Empty => "Empty".into(),
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Nat => "Nat".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
-        HirTyKind::Module => "Module".into(),
-        HirTyKind::Unknown => "Unknown".into(),
-        HirTyKind::Error => "<error>".into(),
         HirTyKind::NatLit(value) => value.to_string(),
+        kind if simple_hir_ty_display_name(kind).is_some() => {
+            simple_hir_ty_display_name(kind).unwrap_or("<error>").into()
+        }
         HirTyKind::Named { name, args } => {
             let name = render_named_type_fallback(sema, *name);
             if args.is_empty() {
@@ -726,14 +796,13 @@ fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {
 }
 
 fn render_hir_ty(kind: &HirTyKind) -> String {
+    if let HirTyKind::NatLit(value) = kind {
+        return value.to_string();
+    }
+    if let Some(name) = simple_hir_ty_display_name(kind) {
+        return name.into();
+    }
     match kind {
-        HirTyKind::Unit => "Unit".into(),
-        HirTyKind::Bool => "Bool".into(),
-        HirTyKind::Int => "Int".into(),
-        HirTyKind::Float => "Float".into(),
-        HirTyKind::String => "String".into(),
-        HirTyKind::CString => "CString".into(),
-        HirTyKind::CPtr => "CPtr".into(),
         HirTyKind::Named { .. } => "<named>".into(),
         _ => "<unsupported>".into(),
     }
@@ -746,6 +815,7 @@ fn render_surface_ty(kind: &SurfaceTyKind) -> String {
         SurfaceTyKind::Int => "Int".into(),
         SurfaceTyKind::Float => "Float".into(),
         SurfaceTyKind::String => "String".into(),
+        SurfaceTyKind::Rune => "Rune".into(),
         SurfaceTyKind::CString => "CString".into(),
         SurfaceTyKind::CPtr => "CPtr".into(),
         SurfaceTyKind::Named { name, .. } => name.to_string(),

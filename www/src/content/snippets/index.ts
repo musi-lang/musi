@@ -1,5 +1,6 @@
 import { coreSnippets } from "./core";
-import { cCppDeveloperSnippets } from "./developers/c-cpp";
+import { c99DeveloperSnippets } from "./developers/c99";
+import { cpp17DeveloperSnippets } from "./developers/cpp17";
 import { csharpDeveloperSnippets } from "./developers/csharp";
 import { goDeveloperSnippets } from "./developers/go";
 import { javaDeveloperSnippets } from "./developers/java";
@@ -13,7 +14,8 @@ export type { ContentSnippet, SnippetEvidence } from "./types";
 
 export const contentSnippets = [
 	...coreSnippets,
-	...cCppDeveloperSnippets,
+	...c99DeveloperSnippets,
+	...cpp17DeveloperSnippets,
 	...csharpDeveloperSnippets,
 	...goDeveloperSnippets,
 	...javaDeveloperSnippets,

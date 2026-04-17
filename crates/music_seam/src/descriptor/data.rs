@@ -4,13 +4,18 @@ use crate::artifact::TypeId;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataVariantDescriptor {
     pub name: StringId,
+    pub tag: i64,
     pub field_tys: Box<[TypeId]>,
 }
 
 impl DataVariantDescriptor {
     #[must_use]
-    pub const fn new(name: StringId, field_tys: Box<[TypeId]>) -> Self {
-        Self { name, field_tys }
+    pub const fn new(name: StringId, tag: i64, field_tys: Box<[TypeId]>) -> Self {
+        Self {
+            name,
+            tag,
+            field_tys,
+        }
     }
 }
 

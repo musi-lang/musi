@@ -1,0 +1,43 @@
+.portal-grid-compact {
+	grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.feature-grid-separated,
+.doc-groups-grid-separated,
+.community-grid {
+	display: grid;
+	gap: var(--site-gap-md);
+}
+
+.community-grid {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.field-row span {
+	font-weight: 700;
+}
+
+.field-row input,
+.field-row textarea {
+	width: 100%;
+	padding: 0.75rem 0.8rem;
+	border: 1px solid var(--site-border);
+	background: linear-gradient(180deg, var(--site-bg-elevated), var(--site-forum-row-alt));
+	color: var(--site-text);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+[data-mantine-color-scheme="dark"] .field-row input,
+[data-mantine-color-scheme="dark"] .field-row textarea {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--site-bg-elevated) 86%, var(--site-panel)), var(--site-forum-row-alt));
+	box-shadow: inset 0 1px 0 color-mix(in srgb, #fff6ee 7%, transparent);
+}
+
+.field-row textarea {
+	resize: vertical;
+	min-height: 8rem;
+}
+
+.field-row-wide {
+	grid-column: 1 / -1;
+}

@@ -138,21 +138,15 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 							<span className="site-logo-mark" aria-hidden="true">
 								<MusiMarkIcon size={28} />
 							</span>
-							<span className="site-logo-title">Musi</span>
+							<span className="site-logo-title">MUSI</span>
 						</a>
 					</div>
 					<div className="site-header-actions">
-						<nav
-							aria-label="Primary"
-							className="site-header-nav site-header-nav-desktop"
-						>
-							<HeaderLinks route={props.route} />
-						</nav>
 						<a
 							href="https://github.com/musi-lang/musi"
 							target="_blank"
 							rel="noreferrer"
-							className="header-utility-link utility-icon"
+							className="header-icon-control utility-icon"
 							aria-label={siteCopy.utilityLabels.github}
 							title={siteCopy.utilityLabels.github}
 						>
@@ -162,6 +156,12 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 						<ThemeControl />
 					</div>
 				</div>
+				<nav
+					aria-label="Primary"
+					className="site-header-tabbar site-header-nav site-header-nav-desktop"
+				>
+					<HeaderLinks route={props.route} />
+				</nav>
 				<div id={drawerId} className="site-drawer">
 					<div className="site-drawer-panel">
 						{docsMode ? (

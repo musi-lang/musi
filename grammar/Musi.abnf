@@ -94,6 +94,8 @@ kw-match    = %x6D.61.74.63.68
 
 kw-class    = %x63.6C.61.73.73
 
+kw-comptime = %x63.6F.6D.70.74.69.6D.65
+
 kw-data     = %x64.61.74.61
 
 kw-effect   = %x65.66.66.65.63.74
@@ -387,6 +389,7 @@ infix-op         = colon-eq
 infix-expr       = prefix-expr *(infix-op prefix-expr)
 
 prefix-op        = minus
+                   / kw-comptime
                    / kw-not
                    / kw-mut
 
@@ -672,7 +675,7 @@ params     = lparen [param-list] rparen
 
 param-list = param *(comma param)
 
-param      = ident [type-annot] [colon-eq expr]
+param      = [kw-comptime] ident [type-annot] [colon-eq expr]
 
 ident-list = comma-pad ident *(comma ident) comma-pad
 

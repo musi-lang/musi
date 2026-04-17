@@ -23,6 +23,7 @@ pub struct BindingScheme {
     pub type_params: Box<[Symbol]>,
     pub type_param_kinds: Box<[HirTyId]>,
     pub param_names: Box<[Symbol]>,
+    pub comptime_params: Box<[bool]>,
     pub constraints: Box<[ConstraintFacts]>,
     pub ty: HirTyId,
     pub effects: EffectRow,
@@ -77,6 +78,7 @@ impl PassBase<'_, '_, '_> {
                 .map(|name| ctx.intern(name))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
+            comptime_params: export.comptime_params.clone(),
             constraints: export
                 .constraints
                 .iter()
@@ -187,6 +189,7 @@ impl CheckPass<'_, '_, '_> {
             type_param_kinds: Box::default(),
             type_params: binders.into_boxed_slice(),
             param_names: Box::default(),
+            comptime_params: Box::default(),
             constraints: Box::default(),
             ty: body,
             effects: EffectRow::empty(),
@@ -311,22 +314,6 @@ impl PassBase<'_, '_, '_> {
         let ctx = self;
         let kind = ctx.ty(ty).kind;
         match kind {
-            HirTyKind::Error
-            | HirTyKind::Unknown
-            | HirTyKind::Type
-            | HirTyKind::Syntax
-            | HirTyKind::Any
-            | HirTyKind::Empty
-            | HirTyKind::Unit
-            | HirTyKind::Bool
-            | HirTyKind::Nat
-            | HirTyKind::Int
-            | HirTyKind::Float
-            | HirTyKind::String
-            | HirTyKind::CString
-            | HirTyKind::CPtr
-            | HirTyKind::Module
-            | HirTyKind::NatLit(_) => ty,
             HirTyKind::Named { name, args } => ctx.substitute_named_ty(name, args, subst),
             HirTyKind::Pi {
                 binder,
@@ -398,6 +385,7 @@ impl PassBase<'_, '_, '_> {
                 let fields = ctx.alloc_ty_fields(fields);
                 ctx.alloc_ty(HirTyKind::Record { fields })
             }
+            _ => ty,
         }
     }
 

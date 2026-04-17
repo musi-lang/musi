@@ -25,7 +25,11 @@ impl MethodEmitter<'_, '_> {
                 self.module_key,
                 &origin,
                 EmitDiagKind::UnknownEffect,
-                "unknown emitted effect",
+                format!(
+                    "unknown emitted effect `{}::{}`",
+                    effect_key.module.as_str(),
+                    effect_key.name
+                ),
             );
             emit_zero(self);
             return;
@@ -54,7 +58,11 @@ impl MethodEmitter<'_, '_> {
                 self.module_key,
                 &body.origin,
                 EmitDiagKind::UnknownEffect,
-                "unknown emitted effect",
+                format!(
+                    "unknown emitted effect `{}::{}`",
+                    effect_key.module.as_str(),
+                    effect_key.name
+                ),
             );
             emit_zero(self);
             return;
@@ -137,7 +145,11 @@ impl MethodEmitter<'_, '_> {
                     span: Span::new(0, 0),
                 },
                 EmitDiagKind::UnknownEffect,
-                "unknown emitted effect",
+                format!(
+                    "unknown emitted effect `{}::{}`",
+                    effect_key.module.as_str(),
+                    effect_key.name
+                ),
             );
             emit_zero(self);
             return;

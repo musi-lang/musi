@@ -27,6 +27,7 @@ pub enum OperandShape {
 pub enum VmValueKind {
     Unit,
     Int,
+    Nat,
     Float,
     Bool,
     String,
@@ -155,6 +156,9 @@ pub enum VmErrorKind {
         expected: Box<str>,
         found: VmValueKind,
     },
+    ArithmeticFailed {
+        detail: Box<str>,
+    },
     ModuleLoadRejected {
         spec: Box<str>,
     },
@@ -241,9 +245,11 @@ impl VmErrorKind {
             Self::SyntaxConstantInvalid { detail } => {
                 write!(f, "syntax constant invalid (`{detail}`)")
             }
-            Self::VmInitializationRequired => f.write_str("vm initialization required"),
+            Self::VmInitializationRequired => {
+                f.write_str("virtual machine initialization required")
+            }
             Self::ModuleInitCycle { spec } => {
-                write!(f, "module init cycle detected for `{spec}`")
+                write!(f, "module initialization cycle detected for `{spec}`")
             }
             Self::ExportNotFound { module, export } => {
                 write!(f, "export `{export}` not found in `{module}`")
@@ -356,6 +362,9 @@ impl VmErrorKind {
                     "type cast to `{expected}` failed for value kind `{found}`"
                 )
             }
+            Self::ArithmeticFailed { detail } => {
+                write!(f, "arithmetic failed (`{detail}`)")
+            }
             _ => self.fmt_module_and_call(f),
         }
     }
@@ -409,7 +418,10 @@ impl VmErrorKind {
                     )
                 }
                 NativeFailureStage::AbiUnsupported => {
-                    write!(f, "native abi unsupported for `{foreign}` (`{detail}`)")
+                    write!(
+                        f,
+                        "native application binary interface unsupported for `{foreign}` (`{detail}`)"
+                    )
                 }
                 NativeFailureStage::ArgInvalid => {
                     let index = index.unwrap_or(usize::MAX);
@@ -492,7 +504,7 @@ impl Display for VmIndexSpace {
         match self {
             Self::Local => f.write_str("local slot"),
             Self::Global => f.write_str("global slot"),
-            Self::Method => f.write_str("method id"),
+            Self::Method => f.write_str("method identifier"),
             Self::ModuleSlot => f.write_str("module slot"),
             Self::EffectOp => f.write_str("effect operation index"),
         }

@@ -4,29 +4,39 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules};
-use music_base::Span;
 use music_base::diag::DiagCode;
+use music_base::{SourceId, Span};
 use music_emit::EmitOptions;
-use music_module::{ImportMap, ModuleKey};
+use music_module::{ImportMap, ImportSiteKind, ModuleKey, collect_import_sites};
 use music_seam::Artifact;
 use music_sema::TargetInfo;
 use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
+use music_syntax::{Lexer, parse};
 
 use crate::ProjectResult;
+use crate::builtin_std::{
+    STD_FILES, STD_MANIFEST, STD_MANIFEST_PATH, STD_PACKAGE_NAME, STD_ROOT_DIR,
+};
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackageSource, Lockfile};
-use crate::manifest::{PackageManifest, PublishConfig, TaskConfig};
+use crate::manifest::{MusiModulesDir, PackageManifest, PublishConfig, TaskConfig};
 use crate::manifest_source::ManifestSource;
 use crate::project::module_graph::{
-    build_import_map, build_lockfile, discover_modules, normalize_lookup_path,
+    build_import_map, build_lockfile, discover_modules, module_key_for, normalize_lookup_path,
     resolve_module_target,
 };
-use crate::registry::{RegistryPackage, resolve_registry_package};
+use crate::registry::{RegistryPackage, copy_dir_recursive, resolve_registry_package};
 
+mod git;
 mod module_graph;
+mod storage;
+
+use git::{GitRequirement, locked_or_latest_git_package};
+use storage::ProjectStorage;
 
 type ExportModuleMap = BTreeMap<String, ModuleKey>;
 type DependencyPackageMap = BTreeMap<String, PackageId>;
+type LocalPackageMap = BTreeMap<String, LocalPackage>;
 type VisitedPackageNames = BTreeSet<String>;
 type TaskNameSet = BTreeSet<String>;
 type CompiledOutputResult = ProjectResult<CompiledOutput>;
@@ -50,9 +60,18 @@ impl PackageId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageSource {
     Workspace,
+    Builtin,
     Registry {
         registry_dir: PathBuf,
-        cache_dir: PathBuf,
+        global_cache_dir: PathBuf,
+        modules_dir: Option<PathBuf>,
+    },
+    Git {
+        url: String,
+        reference: String,
+        commit: String,
+        global_cache_dir: PathBuf,
+        modules_dir: Option<PathBuf>,
     },
 }
 
@@ -216,7 +235,7 @@ impl WorkspaceGraph {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProjectOptions {
     pub registry_root: Option<PathBuf>,
-    pub cache_root: Option<PathBuf>,
+    pub global_cache_root: Option<PathBuf>,
     pub emit: EmitOptions,
     pub target: Option<TargetInfo>,
 }
@@ -226,7 +245,7 @@ impl ProjectOptions {
     pub const fn new() -> Self {
         Self {
             registry_root: None,
-            cache_root: None,
+            global_cache_root: None,
             emit: EmitOptions,
             target: None,
         }
@@ -239,8 +258,8 @@ impl ProjectOptions {
     }
 
     #[must_use]
-    pub fn with_cache_root(mut self, cache_root: PathBuf) -> Self {
-        self.cache_root = Some(cache_root);
+    pub fn with_global_cache_root(mut self, global_cache_root: PathBuf) -> Self {
+        self.global_cache_root = Some(global_cache_root);
         self
     }
 
@@ -269,6 +288,8 @@ pub struct Project {
     module_texts: BTreeMap<ModuleKey, String>,
     package_name_index: BTreeMap<String, PackageId>,
     lockfile_path: PathBuf,
+    global_cache_dir: PathBuf,
+    modules_dir: Option<PathBuf>,
     loaded_lockfile: Lockfile,
     resolved_lockfile: Lockfile,
 }
@@ -360,6 +381,7 @@ impl Project {
             source: root_manifest_source,
         } = read_manifest(&root_manifest_path)?;
         validate_manifest(&manifest, &root_manifest_source)?;
+        let storage = ProjectStorage::new(&root_dir, &manifest, &options)?;
 
         let lockfile_path = root_dir.join(manifest.lock_path());
         if manifest.is_lock_frozen() && !lockfile_path.exists() {
@@ -380,6 +402,7 @@ impl Project {
             &root_manifest_source,
             &manifest,
             &options,
+            &storage,
             &loaded_lockfile,
         )?;
         if manifest.is_lock_frozen()
@@ -401,6 +424,8 @@ impl Project {
             module_texts,
             package_name_index,
             lockfile_path,
+            global_cache_dir: storage.global_cache_dir,
+            modules_dir: storage.modules_dir,
             loaded_lockfile,
             resolved_lockfile,
         })
@@ -430,6 +455,16 @@ impl Project {
     #[must_use]
     pub fn root_manifest_path(&self) -> &Path {
         &self.root_manifest_path
+    }
+
+    #[must_use]
+    pub fn global_cache_dir(&self) -> &Path {
+        &self.global_cache_dir
+    }
+
+    #[must_use]
+    pub fn modules_dir(&self) -> Option<&Path> {
+        self.modules_dir.as_deref()
     }
 
     #[must_use]
@@ -695,6 +730,7 @@ fn resolve_workspace_state(
     root_manifest_source: &ManifestSource,
     manifest: &PackageManifest,
     options: &ProjectOptions,
+    storage: &ProjectStorage,
     loaded_lockfile: &Lockfile,
 ) -> ProjectResult<ResolvedWorkspaceState> {
     let local_packages =
@@ -703,6 +739,11 @@ fn resolve_workspace_state(
         mut package_records,
         mut package_name_index,
     } = seed_workspace_packages(&local_packages)?;
+    seed_builtin_std_package(
+        &local_packages,
+        &mut package_records,
+        &mut package_name_index,
+    )?;
     let mut resolving = BTreeSet::<String>::new();
 
     let root_package = manifest
@@ -719,12 +760,16 @@ fn resolve_workspace_state(
         .collect::<Vec<_>>();
 
     let package_ids = package_records.keys().cloned().collect::<Vec<_>>();
+    let dep_inputs = DependencyResolutionInputs {
+        local_packages: &local_packages,
+        options,
+        storage,
+        lockfile: loaded_lockfile,
+    };
     for package_id in package_ids {
         resolve_package_dependencies(
             &package_id,
-            &local_packages,
-            options,
-            loaded_lockfile,
+            &dep_inputs,
             &mut package_records,
             &mut package_name_index,
             &mut resolving,
@@ -829,6 +874,21 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             ));
         }
     }
+    for (index, lib) in manifest.enabled_libs().into_iter().enumerate() {
+        if lib != "std" {
+            let pointer = format!("/lib/{index}");
+            let span = source
+                .value_span(&pointer)
+                .or_else(|| source.value_span(&json_pointer(&["lib"])))
+                .unwrap_or_else(|| source.insertion_span());
+            return Err(source.error(
+                DiagCode::new(3606),
+                format!("unknown lib `{lib}`"),
+                span,
+                format!("lib `{lib}` is not supported"),
+            ));
+        }
+    }
     if matches!(manifest.publish, Some(PublishConfig::Disabled(true))) {
         let span = source
             .value_span(&json_pointer(&["publish"]))
@@ -838,6 +898,20 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             "publish value invalid",
             span,
             "`publish` boolean must be false",
+        ));
+    }
+    if matches!(
+        manifest.musi_modules_dir,
+        Some(MusiModulesDir::Disabled(true))
+    ) {
+        let span = source
+            .value_span(&json_pointer(&["musiModulesDir"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "musiModulesDir value invalid",
+            span,
+            "`musiModulesDir` boolean must be false",
         ));
     }
     for (export_name, export_path) in manifest.export_map() {
@@ -870,6 +944,117 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     }
     validate_task_graph(manifest, source)?;
     Ok(())
+}
+
+fn seed_builtin_std_package(
+    local_packages: &LocalPackageMap,
+    package_records: &mut BTreeMap<PackageId, PackageRecord>,
+    package_name_index: &mut BTreeMap<String, PackageId>,
+) -> ProjectResult {
+    if package_name_index.contains_key(STD_PACKAGE_NAME)
+        || !local_packages
+            .values()
+            .any(|package| package_uses_std(&package.manifest))
+    {
+        return Ok(());
+    }
+    let record = load_builtin_std_record()?;
+    let _ = package_name_index.insert(STD_PACKAGE_NAME.into(), record.package.id.clone());
+    let _ = package_records.insert(record.package.id.clone(), record);
+    Ok(())
+}
+
+fn package_uses_std(manifest: &PackageManifest) -> bool {
+    manifest.enabled_libs().contains(&"std")
+}
+
+fn load_builtin_std_record() -> ProjectResult<PackageRecord> {
+    let manifest_path = PathBuf::from(STD_MANIFEST_PATH);
+    let manifest_source = ManifestSource::from_text(manifest_path.clone(), STD_MANIFEST.into());
+    let manifest = serde_json::from_str::<PackageManifest>(STD_MANIFEST)
+        .map_err(|source| manifest_source.parse_error(&source))?;
+    validate_manifest(&manifest, &manifest_source)?;
+    load_embedded_package_record(
+        PathBuf::from(STD_ROOT_DIR),
+        manifest_path,
+        &manifest_source,
+        manifest,
+        PackageSource::Builtin,
+        STD_FILES,
+    )
+}
+
+fn load_embedded_package_record(
+    root_dir: PathBuf,
+    manifest_path: PathBuf,
+    manifest_source: &ManifestSource,
+    manifest: PackageManifest,
+    source: PackageSource,
+    files: &[(&str, &str)],
+) -> ProjectResult<PackageRecord> {
+    let id = PackageId::new(
+        manifest.name.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package name missing",
+                manifest_source.insertion_span(),
+                "`name` field missing",
+                "add `name` to this package manifest",
+            )
+        })?,
+        manifest.version.clone().ok_or_else(|| {
+            manifest_source.error_with_hint(
+                DiagCode::new(3606),
+                "package version missing",
+                manifest_source.insertion_span(),
+                "`version` field missing",
+                "add `version` to this package manifest",
+            )
+        })?,
+    );
+    let modules = files
+        .iter()
+        .map(|(relative, text)| embedded_module(&id, &root_dir, relative, text))
+        .collect::<BTreeMap<_, _>>();
+    package_record_from_modules(
+        id,
+        root_dir,
+        manifest_path,
+        source,
+        manifest_source,
+        manifest,
+        modules,
+    )
+}
+
+fn embedded_module(
+    package_id: &PackageId,
+    root_dir: &Path,
+    relative: &str,
+    text: &str,
+) -> (ModuleKey, LoadedModule) {
+    let key = module_key_for(package_id, relative);
+    let path = root_dir.join(relative);
+    let parsed = parse(Lexer::new(text).lex());
+    let imports = collect_import_sites(SourceId::from_raw(0), parsed.tree())
+        .into_iter()
+        .filter_map(|site| match site.kind {
+            ImportSiteKind::Static { spec } => Some(LoadedImportSite {
+                spec: spec.as_str().to_owned(),
+                span: site.span,
+            }),
+            ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
+        })
+        .collect::<Vec<_>>();
+    let module = LoadedModule {
+        key: key.clone(),
+        path,
+        package_relative: relative.into(),
+        local_scope_key: ModuleKey::new(format!("./{relative}")),
+        text: text.into(),
+        imports,
+    };
+    (key, module)
 }
 
 fn validate_task_graph(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
@@ -936,9 +1121,7 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
     })
 }
 
-fn seed_workspace_packages(
-    local_packages: &BTreeMap<String, LocalPackage>,
-) -> ProjectResult<WorkspaceSeed> {
+fn seed_workspace_packages(local_packages: &LocalPackageMap) -> ProjectResult<WorkspaceSeed> {
     let mut package_records = BTreeMap::<PackageId, PackageRecord>::new();
     let mut package_name_index = BTreeMap::<String, PackageId>::new();
     for (name, package) in local_packages {
@@ -963,7 +1146,7 @@ fn load_local_packages(
     manifest: &PackageManifest,
     root_manifest_path: &Path,
     root_manifest_source: &ManifestSource,
-) -> ProjectResult<BTreeMap<String, LocalPackage>> {
+) -> ProjectResult<LocalPackageMap> {
     let mut out = BTreeMap::new();
     if let Some(name) = manifest.name.clone() {
         let _ = manifest
@@ -1035,11 +1218,17 @@ fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> 
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+struct DependencyResolutionInputs<'a> {
+    local_packages: &'a LocalPackageMap,
+    options: &'a ProjectOptions,
+    storage: &'a ProjectStorage,
+    lockfile: &'a Lockfile,
+}
+
 fn resolve_package_dependencies(
     package_id: &PackageId,
-    local_packages: &BTreeMap<String, LocalPackage>,
-    options: &ProjectOptions,
-    lockfile: &Lockfile,
+    inputs: &DependencyResolutionInputs<'_>,
     package_records: &mut BTreeMap<PackageId, PackageRecord>,
     package_name_index: &mut BTreeMap<String, PackageId>,
     resolving: &mut BTreeSet<String>,
@@ -1060,9 +1249,7 @@ fn resolve_package_dependencies(
     for (section, deps) in manifest.dependency_maps() {
         let mut dependency_ids = BTreeMap::new();
         let mut dep_ctx = ResolveDepCtx {
-            local_packages,
-            options,
-            lockfile,
+            inputs,
             package_records,
             package_name_index,
             resolving,
@@ -1096,9 +1283,7 @@ fn resolve_package_dependencies(
 }
 
 struct ResolveDepCtx<'a> {
-    local_packages: &'a BTreeMap<String, LocalPackage>,
-    options: &'a ProjectOptions,
-    lockfile: &'a Lockfile,
+    inputs: &'a DependencyResolutionInputs<'a>,
     package_records: &'a mut BTreeMap<PackageId, PackageRecord>,
     package_name_index: &'a mut BTreeMap<String, PackageId>,
     resolving: &'a mut BTreeSet<String>,
@@ -1111,13 +1296,17 @@ fn resolve_dependency(
     optional: bool,
 ) -> ProjectResult<Option<PackageId>> {
     let ResolveDepCtx {
-        local_packages,
-        options,
-        lockfile,
+        inputs,
         package_records,
         package_name_index,
         resolving,
     } = ctx;
+    let DependencyResolutionInputs {
+        local_packages,
+        options,
+        storage,
+        lockfile,
+    } = *inputs;
 
     if let Some(package) = local_packages.get(name) {
         let package_id = PackageId::new(
@@ -1141,9 +1330,7 @@ fn resolve_dependency(
         }
         resolve_package_dependencies(
             &package_id,
-            local_packages,
-            options,
-            lockfile,
+            inputs,
             package_records,
             package_name_index,
             resolving,
@@ -1151,81 +1338,178 @@ fn resolve_dependency(
         return Ok(Some(package_id));
     }
 
-    let Some(registry_root) = options.registry_root.as_deref() else {
-        return if optional {
-            Ok(None)
-        } else {
-            Err(ProjectError::MissingRegistryRoot { name: name.into() })
-        };
-    };
-    let Some(cache_root) = options.cache_root.as_deref() else {
-        return if optional {
-            Ok(None)
-        } else {
-            Err(ProjectError::MissingCacheRoot { name: name.into() })
-        };
-    };
+    if let Some(package_id) = package_name_index.get(name).cloned()
+        && package_records.contains_key(&package_id)
+    {
+        return Ok(Some(package_id));
+    }
 
-    let registry_package_result =
-        locked_or_latest_registry_package(registry_root, cache_root, lockfile, name, requirement);
-    let registry_package = match registry_package_result {
-        Ok(package) => package,
+    let dependency_result = if requirement.trim().starts_with("git+") {
+        resolve_git_dependency(name, requirement, storage, lockfile)
+    } else {
+        let Some(registry_root) = options.registry_root.as_deref() else {
+            return if optional {
+                Ok(None)
+            } else {
+                Err(ProjectError::MissingRegistryRoot { name: name.into() })
+            };
+        };
+        resolve_registry_dependency(name, requirement, registry_root, storage, lockfile)
+    };
+    let dependency = match dependency_result {
+        Ok(dependency) => dependency,
         Err(_) if optional => return Ok(None),
         Err(error) => return Err(error),
     };
 
-    let manifest_path = manifest_path_for(&registry_package.cache_dir)?;
-    let LoadedManifest { manifest, source } = read_manifest(&manifest_path)?;
-    validate_manifest(&manifest, &source)?;
-    let version = manifest
-        .version
-        .clone()
-        .unwrap_or_else(|| registry_package.version.clone());
-    let package_id = PackageId::new(name, version);
-    if !package_records.contains_key(&package_id) {
+    if !package_records.contains_key(&dependency.package_id) {
         let record = load_package_record(
-            registry_package.cache_dir.clone(),
-            manifest_path,
-            &source,
-            manifest,
-            PackageSource::Registry {
-                registry_dir: registry_package.registry_dir,
-                cache_dir: registry_package.cache_dir,
-            },
+            dependency.root_dir,
+            dependency.manifest_path,
+            &dependency.manifest_source,
+            dependency.manifest,
+            dependency.source,
         )?;
         let _ = package_name_index.insert(name.into(), record.package.id.clone());
         let _ = package_records.insert(record.package.id.clone(), record);
     }
     resolve_package_dependencies(
-        &package_id,
-        local_packages,
-        options,
-        lockfile,
+        &dependency.package_id,
+        inputs,
         package_records,
         package_name_index,
         resolving,
     )?;
-    Ok(Some(package_id))
+    Ok(Some(dependency.package_id))
+}
+
+struct ResolvedDependency {
+    package_id: PackageId,
+    root_dir: PathBuf,
+    manifest_path: PathBuf,
+    manifest_source: ManifestSource,
+    manifest: PackageManifest,
+    source: PackageSource,
+}
+
+fn resolve_registry_dependency(
+    name: &str,
+    requirement: &str,
+    registry_root: &Path,
+    storage: &ProjectStorage,
+    lockfile: &Lockfile,
+) -> ProjectResult<ResolvedDependency> {
+    let registry_package = locked_or_latest_registry_package(
+        registry_root,
+        &storage.global_cache_dir,
+        lockfile,
+        name,
+        requirement,
+    )?;
+    let root_dir = hydrate_package_dir(
+        &registry_package.global_cache_dir,
+        storage.modules_dir.as_deref(),
+        name,
+        &registry_package.version,
+    )?;
+    let manifest_path = manifest_path_for(&root_dir)?;
+    let LoadedManifest {
+        manifest,
+        source: manifest_source,
+    } = read_manifest(&manifest_path)?;
+    validate_manifest(&manifest, &manifest_source)?;
+    let version = manifest
+        .version
+        .clone()
+        .unwrap_or_else(|| registry_package.version.clone());
+    Ok(ResolvedDependency {
+        package_id: PackageId::new(name, version),
+        root_dir,
+        manifest_path,
+        manifest_source,
+        manifest,
+        source: PackageSource::Registry {
+            registry_dir: registry_package.registry_dir,
+            global_cache_dir: registry_package.global_cache_dir,
+            modules_dir: storage.modules_dir.clone(),
+        },
+    })
+}
+
+fn resolve_git_dependency(
+    name: &str,
+    requirement: &str,
+    storage: &ProjectStorage,
+    lockfile: &Lockfile,
+) -> ProjectResult<ResolvedDependency> {
+    let git_requirement = GitRequirement::parse(name, requirement)?;
+    let git_package = locked_or_latest_git_package(name, &git_requirement, storage, lockfile)?;
+    let root_dir = hydrate_package_dir(
+        &git_package.checkout_dir,
+        storage.modules_dir.as_deref(),
+        name,
+        &git_package.commit,
+    )?;
+    let manifest_path = manifest_path_for(&root_dir)?;
+    let LoadedManifest {
+        manifest,
+        source: manifest_source,
+    } = read_manifest(&manifest_path)?;
+    validate_manifest(&manifest, &manifest_source)?;
+    let version = manifest
+        .version
+        .clone()
+        .ok_or_else(|| ProjectError::MissingPackageVersion { name: name.into() })?;
+    Ok(ResolvedDependency {
+        package_id: PackageId::new(name, version),
+        root_dir,
+        manifest_path,
+        manifest_source,
+        manifest,
+        source: PackageSource::Git {
+            url: git_requirement.url,
+            reference: git_requirement.reference,
+            commit: git_package.commit,
+            global_cache_dir: git_package.checkout_dir,
+            modules_dir: storage.modules_dir.clone(),
+        },
+    })
+}
+
+fn hydrate_package_dir(
+    source_dir: &Path,
+    modules_dir: Option<&Path>,
+    name: &str,
+    version_or_commit: &str,
+) -> ProjectResult<PathBuf> {
+    let Some(modules_dir) = modules_dir else {
+        return Ok(source_dir.to_path_buf());
+    };
+    let package_dir = modules_dir.join(name).join(version_or_commit);
+    if !package_dir.exists() {
+        copy_dir_recursive(source_dir, &package_dir)?;
+    }
+    Ok(package_dir)
 }
 
 fn locked_or_latest_registry_package(
     registry_root: &Path,
-    cache_root: &Path,
+    global_cache_root: &Path,
     lockfile: &Lockfile,
     name: &str,
     requirement: &str,
 ) -> ProjectResult<RegistryPackage> {
-    if let Some(locked) = lockfile
-        .packages
-        .iter()
-        .find(|package| package.name == name && package.source == LockedPackageSource::Registry)
-    {
+    if let Some(locked) = lockfile.packages.iter().find(|package| {
+        matches!(&package.source, LockedPackageSource::Registry { .. }) && package.name == name
+    }) {
         let exact = format!("={}", locked.version);
-        if let Ok(package) = resolve_registry_package(registry_root, cache_root, name, &exact) {
+        if let Ok(package) =
+            resolve_registry_package(registry_root, global_cache_root, name, &exact)
+        {
             return Ok(package);
         }
     }
-    resolve_registry_package(registry_root, cache_root, name, requirement)
+    resolve_registry_package(registry_root, global_cache_root, name, requirement)
 }
 
 fn load_package_record(
@@ -1255,8 +1539,27 @@ fn load_package_record(
             )
         })?,
     );
-
     let modules = discover_modules(&id, &root_dir)?;
+    package_record_from_modules(
+        id,
+        root_dir,
+        manifest_path,
+        source,
+        manifest_source,
+        manifest,
+        modules,
+    )
+}
+
+fn package_record_from_modules(
+    id: PackageId,
+    root_dir: PathBuf,
+    manifest_path: PathBuf,
+    source: PackageSource,
+    manifest_source: &ManifestSource,
+    manifest: PackageManifest,
+    modules: BTreeMap<ModuleKey, LoadedModule>,
+) -> ProjectResult<PackageRecord> {
     let relative_modules = modules
         .values()
         .map(|module| (module.package_relative.clone(), module.key.clone()))

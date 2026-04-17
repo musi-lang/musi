@@ -227,6 +227,7 @@ fn encode_effects(out: &mut Vec<u8>, artifact: &Artifact) {
                 push_u32(out, ty.raw());
             }
             push_u32(out, op.result_ty.raw());
+            out.push(u8::from(op.is_comptime_safe));
         }
     }
 }
@@ -326,6 +327,7 @@ fn encode_data(out: &mut Vec<u8>, artifact: &Artifact) {
         );
         for variant in &entry.variants {
             push_u32(out, variant.name.raw());
+            push_i64(out, variant.tag);
             push_u32(
                 out,
                 u32::try_from(variant.field_tys.len()).expect("data field overflow"),
@@ -589,11 +591,10 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             for _ in 0..param_len {
                 param_tys.push(cursor.read_idx()?);
             }
-            ops.push(EffectOpDescriptor::new(
-                name,
-                param_tys.into_boxed_slice(),
-                cursor.read_idx()?,
-            ));
+            ops.push(
+                EffectOpDescriptor::new(name, param_tys.into_boxed_slice(), cursor.read_idx()?)
+                    .with_comptime_safe(cursor.read_u8()? != 0),
+            );
         }
         let _ = artifact
             .effects
@@ -681,6 +682,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
         let mut variants = Vec::with_capacity(usize::try_from(variant_len).unwrap_or(usize::MAX));
         for _ in 0..variant_len {
             let variant_name = Idx::from_raw(cursor.read_u32()?);
+            let tag = cursor.read_i64()?;
             let field_len = cursor.read_u32()?;
             let mut field_tys =
                 Vec::with_capacity(usize::try_from(field_len).unwrap_or(usize::MAX));
@@ -689,6 +691,7 @@ fn decode_data(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResu
             }
             variants.push(DataVariantDescriptor::new(
                 variant_name,
+                tag,
                 field_tys.into_boxed_slice(),
             ));
         }

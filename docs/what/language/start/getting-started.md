@@ -14,17 +14,17 @@ Getting started in Musi has two tracks: direct file work and package work. The c
 
 `music` is the direct-file tool. Use it when one entry file is enough. It is the fast lane for learning syntax and testing a small idea.
 
-`musi` is the package tool. Use it when a directory has `musi.json`, package imports, tasks, tests, targets, and project-level configuration.
+`musi` is the package tool. Use it when a directory has `musi.json`, package imports, standard-library helpers, tests, targets, and project-level configuration.
 
-Think of it like a notebook and a workshop. `music check index.ms` is the notebook: one page, one idea, fast feedback. `musi run` is the workshop: project layout, dependencies, and repeatable commands.
+Think of it like a notebook and a workshop. `music check index.ms` is the notebook: one page, one idea, fast feedback. `musi check` and `musi test` are the workshop: project layout, tests, and repeatable commands.
 
 ## First File
 
-Create `index.ms` with one exported `main` when you want to run it later, or one plain expression when you only want to check syntax.
+Create `index.ms` with a few bindings and a final expression. That final expression is the value the file leaves behind; there is no required `main` function.
 
 ## Package Start
 
-Use `musi init hello` when the code needs a manifest. From that point, prefer `musi check`, `musi run`, and `musi test` inside the package.
+Use `musi init hello` when the code needs a manifest. From that point, prefer `musi check` and `musi test` inside the package.
 
 ## Mistake to Avoid
 

@@ -14,10 +14,17 @@ pub struct LockedPackage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LockedPackageSource {
     Workspace,
-    Registry,
+    Registry {
+        registry: String,
+    },
+    Git {
+        url: String,
+        reference: String,
+        commit: String,
+    },
 }
 
 impl Lockfile {
@@ -60,7 +67,22 @@ impl LockedPackageSource {
     }
 
     #[must_use]
-    pub const fn registry() -> Self {
-        Self::Registry
+    pub fn registry(registry: impl Into<String>) -> Self {
+        Self::Registry {
+            registry: registry.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn git(
+        url: impl Into<String>,
+        reference: impl Into<String>,
+        commit: impl Into<String>,
+    ) -> Self {
+        Self::Git {
+            url: url.into(),
+            reference: reference.into(),
+            commit: commit.into(),
+        }
     }
 }

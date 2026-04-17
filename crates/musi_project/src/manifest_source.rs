@@ -321,14 +321,12 @@ fn offset_for_error(text: &str, line: usize, column: usize) -> usize {
     if line <= 1 {
         return column.saturating_sub(1).min(text.len());
     }
-    let mut current_line = 1usize;
     let mut offset = 0usize;
-    for chunk in text.split_inclusive('\n') {
+    for (current_line, chunk) in (1usize..).zip(text.split_inclusive('\n')) {
         if current_line == line {
             return offset + column.saturating_sub(1).min(chunk.len());
         }
         offset += chunk.len();
-        current_line += 1;
     }
     text.len()
 }

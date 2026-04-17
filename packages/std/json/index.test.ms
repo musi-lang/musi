@@ -1,11 +1,11 @@
-let Testing := import "@std/testing";
-let Json := import "./index.ms";
+let testing := import "@std/testing";
+let json := import "./index.ms";
 
 export let test () :=
   (
-    Testing.describe("json/index");
-    Testing.it("'isValid' rejects invalid json", Testing.toBeFalsy(Json.isValid("{")));
-    Testing.it("'stringify' keeps normalized source", Testing.toBeTruthy(Json.stringify(Json.parse("{\"x\":1}")) = "{\"x\":1}"));
-    Testing.it("'isValid' detects valid source", Testing.toBeTruthy(Json.isValid("{}")));
-    Testing.endDescribe()
+    testing.describe("json/index");
+    testing.it("'isValid' rejects invalid json", testing.toBeFalsy(json.isValid("{")));
+    testing.it("'stringify' keeps normalized source", testing.toBeTruthy(json.stringify(json.parse("{\"x\":1}")) = "{\"x\":1}"));
+    testing.it("'isValid' detects valid source", testing.toBeTruthy(json.isValid("{}")));
+    testing.endDescribe()
   );

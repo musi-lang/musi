@@ -7,6 +7,7 @@ import { bookPages, bookParts, bookSections } from "./content/book/manifest";
 import { contentCollections, languageGuideEntries } from "./content/catalog";
 import { exampleGroups } from "./content/examples/groups";
 import { contentSnippets } from "./content/snippet-registry";
+import { docSearchEntries } from "./docs";
 import { renderedDocs, renderedSnippets } from "./generated-content";
 import { nextScheme } from "./layout/site-layout";
 import { siteCopy } from "./lib/site-copy";
@@ -36,6 +37,12 @@ const repoRoot = join(import.meta.dirname, "..", "..");
 const snippetEmbedPattern = /\{\{snippet:([\w-]+)\}\}/g;
 const cFencePattern = /```c\n/;
 const cppFencePattern = /```cpp\n/;
+const nativeCppFunctionReturnPattern =
+	/^\s*(?:bool|int|void|std::[A-Za-z0-9_:<>]+|[A-Z][A-Za-z0-9_:<>]*)\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*(?:const\s*)?(?:\{|;)/m;
+const cppAutoFunctionWithoutTrailingReturnPattern =
+	/^\s*auto\s+[A-Za-z_]\w*\s*\([^;{}]*\)\s*(?:const\s*)?\{/m;
+const mutableCppResultBindingPattern =
+	/(?:^|\n)auto\s+(?:answer|is_null|port|selected|visible)\s*=/;
 const goFencePattern = /```go\n/;
 const javaFencePattern = /```java\n/;
 const luaFencePattern = /```lua\n/;
@@ -43,6 +50,26 @@ const topLevelLetPattern = /^let\s/;
 
 function snippetIdsInMarkdown(source: string) {
 	return [...source.matchAll(snippetEmbedPattern)].map((match) => match[1]);
+}
+
+function cppFencesInMarkdown(source: string) {
+	return [...source.matchAll(/```cpp\n([\s\S]*?)\n```/g)].map(
+		(match) => match[1],
+	);
+}
+
+function frontmatterForMarkdown(source: string) {
+	const [, frontmatter = ""] = source.split("---", 2);
+	return frontmatter;
+}
+
+function hasGuideMetadata(source: string) {
+	const frontmatter = frontmatterForMarkdown(source);
+
+	return (
+		frontmatter.includes("\ndescription: ") &&
+		frontmatter.includes("\nsummary: ")
+	);
 }
 
 function snippetSourcesForMarkdown(source: string) {
@@ -102,6 +129,17 @@ describe("content generation", () => {
 		);
 		expect(renderedSnippets.homeSampleHtml).toContain("github-dark");
 		expect(renderedSnippets.homeSampleHtml).not.toContain("Source:");
+	});
+
+	it("builds searchable docs entries from generated docs", () => {
+		const valuesAndLet = docSearchEntries.find(
+			(entry) => entry.path === "/learn/book/start/foundations/values-and-let",
+		);
+
+		expect(valuesAndLet?.title).toBe("Values and Let");
+		expect(valuesAndLet?.searchText).toContain("let");
+		expect(valuesAndLet?.summary.length).toBeGreaterThan(0);
+		expect(valuesAndLet?.partTitle).toBe("Start");
 	});
 
 	it("keeps shared public copy free of old slogan text", () => {
@@ -207,7 +245,7 @@ describe("content generation", () => {
 			"utf8",
 		);
 
-		expect(overviewSource).toContain("TypeScript 6.0.2");
+		expect(overviewSource).toContain("TypeScript 5.9");
 		expect(
 			contentSnippets.some(
 				(snippet) =>
@@ -217,31 +255,69 @@ describe("content generation", () => {
 		).toBe(false);
 	});
 
-	it("keeps C/C++ guide examples paired with C/C++ snippets", () => {
+	it("keeps C99 guide examples paired with C99 snippets", () => {
 		for (const page of bookPages) {
-			if (!page.sourcePath.startsWith("docs/what/language/developers/c-cpp")) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/c99")) {
 				continue;
 			}
 
 			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
 			const snippetIds = snippetIdsInMarkdown(source);
 
+			expect(hasGuideMetadata(source), page.sourcePath).toBe(true);
+			expect(source, page.sourcePath).toMatch(cFencePattern);
+			expect(source, page.sourcePath).not.toContain("{{example:");
 			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
 			expect(
-				snippetIds.every((snippetId) => snippetId.startsWith("c-cpp-")),
+				snippetIds.every((snippetId) => snippetId.startsWith("c99-")),
 				page.sourcePath,
 			).toBe(true);
-			expect(cFencePattern.test(source), page.sourcePath).toBe(true);
-			expect(cppFencePattern.test(source), page.sourcePath).toBe(true);
 		}
 
 		const overviewSource = readFileSync(
-			join(repoRoot, "docs/what/language/developers/c-cpp/overview.md"),
+			join(repoRoot, "docs/what/language/developers/c99/overview.md"),
 			"utf8",
 		);
 
-		expect(overviewSource).toContain("C23");
-		expect(overviewSource).toContain("C++23");
+		expect(overviewSource).toContain("C99");
+	});
+
+	it("keeps C++17 guide examples paired with C++17 snippets", () => {
+		for (const page of bookPages) {
+			if (!page.sourcePath.startsWith("docs/what/language/developers/cpp17")) {
+				continue;
+			}
+
+			const source = readFileSync(join(repoRoot, page.sourcePath), "utf8");
+			const snippetIds = snippetIdsInMarkdown(source);
+
+			expect(hasGuideMetadata(source), page.sourcePath).toBe(true);
+			expect(source, page.sourcePath).toMatch(cppFencePattern);
+			expect(source, page.sourcePath).not.toContain("{{example:");
+			expect(snippetIds.length, page.sourcePath).toBeGreaterThan(0);
+			expect(
+				snippetIds.every((snippetId) => snippetId.startsWith("cpp17-")),
+				page.sourcePath,
+			).toBe(true);
+			for (const cppFence of cppFencesInMarkdown(source)) {
+				expect(cppFence, page.sourcePath).not.toMatch(
+					nativeCppFunctionReturnPattern,
+				);
+				expect(cppFence, page.sourcePath).not.toMatch(
+					cppAutoFunctionWithoutTrailingReturnPattern,
+				);
+				expect(cppFence, page.sourcePath).not.toMatch(
+					mutableCppResultBindingPattern,
+				);
+			}
+		}
+
+		const overviewSource = readFileSync(
+			join(repoRoot, "docs/what/language/developers/cpp17/overview.md"),
+			"utf8",
+		);
+
+		expect(overviewSource).toContain("C++17");
 	});
 
 	it("keeps C# guide examples paired with C# snippets", () => {
@@ -523,7 +599,8 @@ describe("content generation", () => {
 
 		it("stores developer registry data in per-language modules", () => {
 			const developerFiles = [
-				"c-cpp",
+				"c99",
+				"cpp17",
 				"csharp",
 				"go",
 				"java",
@@ -605,6 +682,21 @@ describe("content generation", () => {
 		expect(docsHtml).not.toContain("{{snippet:");
 		expect(docsHtml).not.toContain("{{example:");
 		expect(docsHtml).not.toContain("{{try:");
+	});
+
+	it("renders C and C++ guide examples as native fences plus snippets", () => {
+		const guideDocs = renderedDocs.filter(
+			(doc) =>
+				doc.kind === "chapter" &&
+				(doc.sectionId === "developers-c99" ||
+					doc.sectionId === "developers-cpp17"),
+		);
+
+		expect(guideDocs.length).toBeGreaterThan(0);
+		for (const doc of guideDocs) {
+			expect(doc.html, doc.id).toContain("<pre");
+			expect(doc.html, doc.id).toContain('class="snippet-block"');
+		}
 	});
 
 	it("keeps chapters on repo-level docs paths", () => {

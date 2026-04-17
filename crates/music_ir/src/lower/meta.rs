@@ -8,6 +8,118 @@ use crate::api::IrMetaRecord;
 
 type MetaRecordList = Vec<IrMetaRecord>;
 
+struct SimpleSurfaceTyName {
+    kind: SurfaceTyKind,
+    display_name: &'static str,
+}
+
+const SIMPLE_SURFACE_TY_NAMES: &[SimpleSurfaceTyName] = &[
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Error,
+        display_name: "<error>",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Unknown,
+        display_name: "Unknown",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Type,
+        display_name: "Type",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Syntax,
+        display_name: "Syntax",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Any,
+        display_name: "Any",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Empty,
+        display_name: "Empty",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Unit,
+        display_name: "Unit",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Bool,
+        display_name: "Bool",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Nat,
+        display_name: "Nat",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Int,
+        display_name: "Int",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Int8,
+        display_name: "Int8",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Int16,
+        display_name: "Int16",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Int32,
+        display_name: "Int32",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Int64,
+        display_name: "Int64",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Nat8,
+        display_name: "Nat8",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Nat16,
+        display_name: "Nat16",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Nat32,
+        display_name: "Nat32",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Nat64,
+        display_name: "Nat64",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Float,
+        display_name: "Float",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Float32,
+        display_name: "Float32",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Float64,
+        display_name: "Float64",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::String,
+        display_name: "String",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Rune,
+        display_name: "Rune",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::CString,
+        display_name: "CString",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::CPtr,
+        display_name: "CPtr",
+    },
+    SimpleSurfaceTyName {
+        kind: SurfaceTyKind::Module,
+        display_name: "Module",
+    },
+];
+
 fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
     format!("{}::{name}", module.as_str()).into_boxed_str()
 }
@@ -147,8 +259,19 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
         | SurfaceTyKind::Bool
         | SurfaceTyKind::Nat
         | SurfaceTyKind::Int
+        | SurfaceTyKind::Int8
+        | SurfaceTyKind::Int16
+        | SurfaceTyKind::Int32
+        | SurfaceTyKind::Int64
+        | SurfaceTyKind::Nat8
+        | SurfaceTyKind::Nat16
+        | SurfaceTyKind::Nat32
+        | SurfaceTyKind::Nat64
         | SurfaceTyKind::Float
+        | SurfaceTyKind::Float32
+        | SurfaceTyKind::Float64
         | SurfaceTyKind::String
+        | SurfaceTyKind::Rune
         | SurfaceTyKind::CString
         | SurfaceTyKind::CPtr
         | SurfaceTyKind::Module
@@ -157,25 +280,12 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
 }
 
 fn format_simple_surface_ty(kind: &SurfaceTyKind) -> Option<String> {
-    Some(match kind {
-        SurfaceTyKind::Error => "<error>".into(),
-        SurfaceTyKind::Unknown => "Unknown".into(),
-        SurfaceTyKind::Type => "Type".into(),
-        SurfaceTyKind::Syntax => "Syntax".into(),
-        SurfaceTyKind::Any => "Any".into(),
-        SurfaceTyKind::Empty => "Empty".into(),
-        SurfaceTyKind::Unit => "Unit".into(),
-        SurfaceTyKind::Bool => "Bool".into(),
-        SurfaceTyKind::Nat => "Nat".into(),
-        SurfaceTyKind::Int => "Int".into(),
-        SurfaceTyKind::Float => "Float".into(),
-        SurfaceTyKind::String => "String".into(),
-        SurfaceTyKind::CString => "CString".into(),
-        SurfaceTyKind::CPtr => "CPtr".into(),
-        SurfaceTyKind::Module => "Module".into(),
-        SurfaceTyKind::NatLit(value) => value.to_string(),
-        _ => return None,
-    })
+    if let SurfaceTyKind::NatLit(value) = kind {
+        return Some(value.to_string());
+    }
+    SIMPLE_SURFACE_TY_NAMES
+        .iter()
+        .find_map(|simple| (&simple.kind == kind).then(|| simple.display_name.to_owned()))
 }
 
 fn format_named_surface_ty(surface: &ModuleSurface, name: &str, args: &[SurfaceTyId]) -> String {

@@ -427,9 +427,12 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
         | ProjectError::PackageDependencyCycle { .. }
         | ProjectError::UnresolvedImport { .. }
         | ProjectError::MissingRegistryRoot { .. }
-        | ProjectError::MissingCacheRoot { .. }
+        | ProjectError::MissingGlobalCacheRoot
         | ProjectError::RegistryVersionNotFound { .. }
         | ProjectError::InvalidVersionRequirement { .. }
+        | ProjectError::InvalidGitDependency { .. }
+        | ProjectError::GitCommandFailed { .. }
+        | ProjectError::GitReferenceNotFound { .. }
         | ProjectError::UnknownPackage { .. }
         | ProjectError::PackageGraphEntryMissing { .. }
         | ProjectError::SessionCompilationFailed(_)

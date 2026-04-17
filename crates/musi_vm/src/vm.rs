@@ -4,8 +4,8 @@ pub use super::host::{EffectCall, ForeignCall};
 pub use super::loader::{RejectingLoader, VmLoader};
 use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
-    ClosureValuePtr, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr,
-    ForeignValue, SeqValuePtr, SyntaxView, ValueList,
+    ContinuationFrame, ContinuationHandler, ContinuationValuePtr, DataValuePtr, ForeignValue,
+    SeqValuePtr, SyntaxView, ValueList,
 };
 pub use super::{
     OperandShape, Program, RecordView, RejectingHost, SeqView, StringView, Value, ValueView,
@@ -134,6 +134,18 @@ impl Vm {
         Ok(Value::module(spec, slot))
     }
 
+    #[must_use]
+    pub fn module_spec(&self, slot: usize) -> Option<&str> {
+        self.loaded_modules
+            .get(slot)
+            .map(|module| module.spec.as_ref())
+    }
+
+    #[must_use]
+    pub fn module_program(&self, slot: usize) -> Option<&Program> {
+        self.loaded_modules.get(slot).map(|module| &module.program)
+    }
+
     /// Calls one runtime value if it is callable.
     ///
     /// # Errors
@@ -190,6 +202,7 @@ impl Vm {
         match value {
             Value::Unit => ValueView::Unit,
             Value::Int(value) => ValueView::Int(*value),
+            Value::Nat(value) => ValueView::Nat(*value),
             Value::Float(value) => ValueView::Float(*value),
             Value::String(text) => ValueView::String(StringView::new(text)),
             Value::CPtr(address) => ValueView::CPtr(*address),

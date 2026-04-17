@@ -3,7 +3,7 @@ use std::path::Path;
 use musi_project::{Project, ProjectOptions, ProjectResult, load_project_ancestor};
 use music_arena::SliceRange;
 use music_base::Span;
-use music_hir::{HirDim, HirTyField, HirTyId, HirTyKind};
+use music_hir::{HirDim, HirTyField, HirTyId, HirTyKind, simple_hir_ty_display_name};
 use music_module::ModuleKey;
 use music_names::{NameBinding, NameBindingId, NameBindingKind};
 use music_sema::SemaModule;
@@ -235,8 +235,19 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
         | HirTyKind::Bool
         | HirTyKind::Nat
         | HirTyKind::Int
+        | HirTyKind::Int8
+        | HirTyKind::Int16
+        | HirTyKind::Int32
+        | HirTyKind::Int64
+        | HirTyKind::Nat8
+        | HirTyKind::Nat16
+        | HirTyKind::Nat32
+        | HirTyKind::Nat64
         | HirTyKind::Float
+        | HirTyKind::Float32
+        | HirTyKind::Float64
         | HirTyKind::String
+        | HirTyKind::Rune
         | HirTyKind::CString
         | HirTyKind::CPtr
         | HirTyKind::Module
@@ -245,39 +256,10 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
 }
 
 fn render_atomic_hir_ty(kind: &HirTyKind) -> Option<String> {
-    match kind {
-        HirTyKind::Error => Some("<error>".into()),
-        HirTyKind::Unknown => Some("Unknown".into()),
-        HirTyKind::Type => Some("Type".into()),
-        HirTyKind::Syntax => Some("Syntax".into()),
-        HirTyKind::Any => Some("Any".into()),
-        HirTyKind::Empty => Some("Empty".into()),
-        HirTyKind::Unit => Some("Unit".into()),
-        HirTyKind::Bool => Some("Bool".into()),
-        HirTyKind::Nat => Some("Nat".into()),
-        HirTyKind::Int => Some("Int".into()),
-        HirTyKind::Float => Some("Float".into()),
-        HirTyKind::String => Some("String".into()),
-        HirTyKind::CString => Some("CString".into()),
-        HirTyKind::CPtr => Some("CPtr".into()),
-        HirTyKind::Module => Some("Module".into()),
-        HirTyKind::NatLit(value) => Some(value.to_string()),
-        HirTyKind::Named { .. }
-        | HirTyKind::Pi { .. }
-        | HirTyKind::Arrow { .. }
-        | HirTyKind::Sum { .. }
-        | HirTyKind::Tuple { .. }
-        | HirTyKind::Array { .. }
-        | HirTyKind::Seq { .. }
-        | HirTyKind::Range { .. }
-        | HirTyKind::ClosedRange { .. }
-        | HirTyKind::PartialRangeFrom { .. }
-        | HirTyKind::PartialRangeUpTo { .. }
-        | HirTyKind::PartialRangeThru { .. }
-        | HirTyKind::Handler { .. }
-        | HirTyKind::Mut { .. }
-        | HirTyKind::Record { .. } => None,
+    if let HirTyKind::NatLit(value) = kind {
+        return Some(value.to_string());
     }
+    simple_hir_ty_display_name(kind).map(str::to_owned)
 }
 
 fn render_sum_hir_ty(

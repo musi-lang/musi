@@ -63,7 +63,9 @@ pub enum Command {
     Serve(ReservedCommandArgs),
     Repl(ReservedCommandArgs),
     Eval(ReservedCommandArgs),
-    Install(ReservedCommandArgs),
+    Install {
+        target: Option<PathBuf>,
+    },
     Add(ReservedCommandArgs),
     Remove(ReservedCommandArgs),
     Update(ReservedCommandArgs),

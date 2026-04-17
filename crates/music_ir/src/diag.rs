@@ -20,9 +20,13 @@ impl IrDiagKind {
     #[must_use]
     pub const fn message(self) -> &'static str {
         match self {
-            Self::InvalidSurfaceTypeId => "invalid surface type id",
-            Self::LoweringRequiresSemaCleanModule => "ir lowering requires sema-clean module",
-            Self::LoweringInvariantViolated => "ir lowering invariant violated",
+            Self::InvalidSurfaceTypeId => "invalid surface type identifier",
+            Self::LoweringRequiresSemaCleanModule => {
+                "intermediate representation lowering requires semantic-clean module"
+            }
+            Self::LoweringInvariantViolated => {
+                "intermediate representation lowering invariant violated"
+            }
         }
     }
 

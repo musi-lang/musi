@@ -57,6 +57,15 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
+fn assert_success(output: &Output) {
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,14 +93,81 @@ mod tests {
             "--out",
             artifact_path.to_str().expect("utf-8 artifact path"),
         ]);
-        assert!(build_output.status.success());
+        assert_success(&build_output);
 
         let output = run_music(&["info", artifact_path.to_str().expect("utf-8 artifact path")]);
 
-        assert!(output.status.success());
+        assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains("binaryVersion:"));
         assert!(stdout.contains("exports:"));
+    }
+
+    #[test]
+    fn info_accepts_source_file() {
+        let temp = TempDir::new();
+        let source_path = temp.path().join("main.ms");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let output = run_music(&["info", source_path.to_str().expect("utf-8 source path")]);
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("binaryVersion:"));
+        assert!(stdout.contains("exports:"));
+    }
+
+    #[test]
+    fn info_accepts_extensionless_source_file() {
+        let temp = TempDir::new();
+        let source_stem = temp.path().join("main");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let output = run_music(&["info", source_stem.to_str().expect("utf-8 source stem")]);
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("binaryVersion:"));
+        assert!(stdout.contains("exports:"));
+    }
+
+    #[test]
+    fn disasm_accepts_source_file() {
+        let temp = TempDir::new();
+        let source_path = temp.path().join("main.ms");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let output = run_music(&["disasm", source_path.to_str().expect("utf-8 source path")]);
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(".method"));
+        assert!(stdout.contains("::main"));
+    }
+
+    #[test]
+    fn disasm_accepts_extensionless_artifact_file() {
+        let temp = TempDir::new();
+        let source_path = temp.path().join("main.ms");
+        let source_stem = temp.path().join("main");
+        let artifact_path = temp.path().join("main.seam");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let build_output = run_music(&[
+            "build",
+            source_path.to_str().expect("utf-8 source path"),
+            "--out",
+            artifact_path.to_str().expect("utf-8 artifact path"),
+        ]);
+        assert_success(&build_output);
+        fs::remove_file(source_path).expect("source should be removable");
+
+        let output = run_music(&["disasm", source_stem.to_str().expect("utf-8 source stem")]);
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(".method"));
+        assert!(stdout.contains("::main"));
     }
 
     #[test]

@@ -124,6 +124,7 @@ pub struct EffectCall {
     pub(crate) op_name: Box<str>,
     pub(crate) param_tys: Box<[TypeId]>,
     pub(crate) result_ty: TypeId,
+    pub(crate) is_comptime_safe: bool,
 }
 
 impl EffectCall {
@@ -160,6 +161,11 @@ impl EffectCall {
     #[must_use]
     pub const fn result_ty(&self) -> TypeId {
         self.result_ty
+    }
+
+    #[must_use]
+    pub const fn is_comptime_safe(&self) -> bool {
+        self.is_comptime_safe
     }
 
     #[must_use]

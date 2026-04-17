@@ -63,8 +63,14 @@ pub(super) fn push_span_diag(
     kind: EmitDiagKind,
     label: impl Into<String>,
 ) {
+    let label = label.into();
+    let message = if label == kind.message() {
+        kind.message().to_owned()
+    } else {
+        label.clone()
+    };
     diags.push(
-        Diag::error(kind.message())
+        Diag::error(message)
             .with_code(kind.code())
             .with_label(span, source_id, label),
     );

@@ -111,6 +111,9 @@ impl Parser<'_> {
 
     fn parse_param(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
+        if let Some(comptime) = self.eat(TokenKind::KwComptime) {
+            children.push(comptime);
+        }
         children.push(self.expect_ident_element()?);
         self.parse_optional_typed_expr(&mut children)?;
         self.parse_optional_bound_expr(&mut children)?;

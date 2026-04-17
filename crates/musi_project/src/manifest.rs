@@ -5,6 +5,7 @@ use serde::Deserialize;
 pub type ManifestStringMap = BTreeMap<String, String>;
 pub type ManifestScopeMap = BTreeMap<String, ManifestStringMap>;
 pub type ManifestMetadata = BTreeMap<String, serde_json::Value>;
+pub type ManifestLibList = Vec<String>;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
@@ -27,6 +28,7 @@ pub struct PackageManifest {
     pub keywords: Vec<String>,
     pub categories: Vec<String>,
     pub metadata: ManifestMetadata,
+    pub lib: Option<ManifestLibList>,
     pub imports: ManifestStringMap,
     pub scopes: ManifestScopeMap,
     pub dependencies: ManifestStringMap,
@@ -37,6 +39,8 @@ pub struct PackageManifest {
     #[serde(rename = "optionalDependencies")]
     pub optional_dependencies: ManifestStringMap,
     pub overrides: ManifestStringMap,
+    #[serde(rename = "musiModulesDir")]
+    pub musi_modules_dir: Option<MusiModulesDir>,
     #[serde(rename = "compilerOptions")]
     pub compiler_options: Option<CompilerOptions>,
     pub tasks: BTreeMap<String, TaskDefinition>,
@@ -282,6 +286,13 @@ pub enum WorkspaceConfig {
     Object(WorkspaceMembersObject),
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum MusiModulesDir {
+    Enabled(String),
+    Disabled(bool),
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceMembersObject {
@@ -300,11 +311,28 @@ impl PackageManifest {
     }
 
     #[must_use]
+    pub fn enabled_libs(&self) -> Vec<&str> {
+        self.lib.as_ref().map_or_else(
+            || vec!["std"],
+            |libs| libs.iter().map(String::as_str).collect(),
+        )
+    }
+
+    #[must_use]
     pub fn workspace_members(&self) -> &[String] {
         match &self.workspace {
             Some(WorkspaceConfig::Members(members)) => members,
             Some(WorkspaceConfig::Object(object)) => &object.members,
             None => &[],
+        }
+    }
+
+    #[must_use]
+    pub const fn modules_dir(&self) -> Option<&str> {
+        match &self.musi_modules_dir {
+            Some(MusiModulesDir::Enabled(path)) => Some(path.as_str()),
+            Some(MusiModulesDir::Disabled(false)) => None,
+            Some(MusiModulesDir::Disabled(true)) | None => Some("musi_modules"),
         }
     }
 

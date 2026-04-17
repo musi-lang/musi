@@ -4,7 +4,7 @@
 ## Test plan
 <!-- How was this tested? Check all that apply -->
 - [ ] `cargo test --workspace`
-- [ ] `cargo clippy --workspace`
+- [ ] `make lint`
 - [ ] `musi test` (stdlib tests pass)
 - [ ] Manual testing: _describe steps_
 

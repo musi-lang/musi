@@ -4,16 +4,52 @@ use music_arena::SliceRange;
 use music_hir::{
     HirBinaryOp, HirConstraint, HirConstraintKind, HirDim, HirEffectSet, HirExprId, HirExprKind,
     HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
+    simple_hir_ty_display_name,
 };
-use music_names::Symbol;
+use music_names::{KnownSymbols, Symbol};
 
 use super::exprs::check_expr;
+use super::state::Builtins;
 use super::surface::surface_key;
 use super::{CheckPass, DiagKind, PassBase};
 use crate::api::{ConstraintFacts, ConstraintKind, DefinitionKey};
 use crate::effects::{EffectKey, EffectRow};
 
 type HirTyFieldRange = SliceRange<HirTyField>;
+
+fn simple_named_type_for_symbol(
+    known: KnownSymbols,
+    builtins: Builtins,
+    symbol: Symbol,
+) -> Option<HirTyId> {
+    [
+        (known.any, builtins.any),
+        (known.unknown, builtins.unknown),
+        (known.syntax, builtins.syntax),
+        (known.empty, builtins.empty),
+        (known.unit, builtins.unit),
+        (known.bool_, builtins.bool_),
+        (known.nat, builtins.nat),
+        (known.int_, builtins.int_),
+        (known.int8, builtins.int8),
+        (known.int16, builtins.int16),
+        (known.int32, builtins.int32),
+        (known.int64, builtins.int64),
+        (known.nat8, builtins.nat8),
+        (known.nat16, builtins.nat16),
+        (known.nat32, builtins.nat32),
+        (known.nat64, builtins.nat64),
+        (known.float_, builtins.float_),
+        (known.float32, builtins.float32),
+        (known.float64, builtins.float64),
+        (known.string_, builtins.string_),
+        (known.rune, builtins.rune),
+        (known.cstring, builtins.cstring),
+        (known.cptr, builtins.cptr),
+    ]
+    .into_iter()
+    .find_map(|(known_symbol, ty)| (symbol == known_symbol).then_some(ty))
+}
 
 impl PassBase<'_, '_, '_> {
     pub fn render_ty(&self, ty: HirTyId) -> String {
@@ -30,40 +66,7 @@ impl PassBase<'_, '_, '_> {
         if let HirTyKind::NatLit(value) = kind {
             return Some(value.to_string());
         }
-        let text = if matches!(kind, HirTyKind::Error) {
-            "<error>"
-        } else if matches!(kind, HirTyKind::Unknown) {
-            "Unknown"
-        } else if matches!(kind, HirTyKind::Type) {
-            "Type"
-        } else if matches!(kind, HirTyKind::Syntax) {
-            "Syntax"
-        } else if matches!(kind, HirTyKind::Any) {
-            "Any"
-        } else if matches!(kind, HirTyKind::Empty) {
-            "Empty"
-        } else if matches!(kind, HirTyKind::Unit) {
-            "Unit"
-        } else if matches!(kind, HirTyKind::Bool) {
-            "Bool"
-        } else if matches!(kind, HirTyKind::Nat) {
-            "Nat"
-        } else if matches!(kind, HirTyKind::Int) {
-            "Int"
-        } else if matches!(kind, HirTyKind::Float) {
-            "Float"
-        } else if matches!(kind, HirTyKind::String) {
-            "String"
-        } else if matches!(kind, HirTyKind::CString) {
-            "CString"
-        } else if matches!(kind, HirTyKind::CPtr) {
-            "CPtr"
-        } else if matches!(kind, HirTyKind::Module) {
-            "Module"
-        } else {
-            return None;
-        };
-        Some(text.into())
+        simple_hir_ty_display_name(kind).map(str::to_owned)
     }
 
     fn render_ty_named_or_callable(&self, kind: &HirTyKind) -> Option<String> {
@@ -269,8 +272,19 @@ impl PassBase<'_, '_, '_> {
                 | (HirTyKind::Empty, HirTyKind::Empty)
                 | (HirTyKind::Unit, HirTyKind::Unit)
                 | (HirTyKind::Bool, HirTyKind::Bool)
+                | (HirTyKind::Nat, HirTyKind::Nat)
                 | (HirTyKind::Int, HirTyKind::Int)
+                | (HirTyKind::Int8, HirTyKind::Int8)
+                | (HirTyKind::Int16, HirTyKind::Int16)
+                | (HirTyKind::Int32, HirTyKind::Int32)
+                | (HirTyKind::Int64, HirTyKind::Int64)
+                | (HirTyKind::Nat8, HirTyKind::Nat8)
+                | (HirTyKind::Nat16, HirTyKind::Nat16)
+                | (HirTyKind::Nat32, HirTyKind::Nat32)
+                | (HirTyKind::Nat64, HirTyKind::Nat64)
                 | (HirTyKind::Float, HirTyKind::Float)
+                | (HirTyKind::Float32, HirTyKind::Float32)
+                | (HirTyKind::Float64, HirTyKind::Float64)
                 | (HirTyKind::String, HirTyKind::String)
                 | (HirTyKind::CString, HirTyKind::CString)
                 | (HirTyKind::CPtr, HirTyKind::CPtr)
@@ -452,35 +466,13 @@ impl PassBase<'_, '_, '_> {
         let known = self.known();
         let builtins = self.builtins();
         if symbol == known.type_ || self.is_universe_symbol(symbol) {
-            builtins.type_
-        } else if symbol == known.any {
-            builtins.any
-        } else if symbol == known.unknown {
-            builtins.unknown
-        } else if symbol == known.syntax {
-            builtins.syntax
-        } else if symbol == known.empty {
-            builtins.empty
-        } else if symbol == known.unit {
-            builtins.unit
-        } else if symbol == known.bool_ {
-            builtins.bool_
-        } else if symbol == known.nat {
-            builtins.nat
-        } else if symbol == known.int_ {
-            builtins.int_
-        } else if symbol == known.float_ {
-            builtins.float_
-        } else if symbol == known.string_ {
-            builtins.string_
-        } else if symbol == known.cstring {
-            builtins.cstring
-        } else if symbol == known.cptr {
-            builtins.cptr
-        } else {
-            let args = self.alloc_ty_list(Vec::<HirTyId>::new());
-            self.alloc_ty(HirTyKind::Named { name: symbol, args })
+            return builtins.type_;
         }
+        if let Some(ty) = simple_named_type_for_symbol(known, builtins, symbol) {
+            return ty;
+        }
+        let args = self.alloc_ty_list(Vec::<HirTyId>::new());
+        self.alloc_ty(HirTyKind::Named { name: symbol, args })
     }
 
     fn is_universe_symbol(&self, symbol: Symbol) -> bool {
@@ -509,8 +501,19 @@ impl PassBase<'_, '_, '_> {
             known.partial_range_thru,
             known.nat,
             known.int_,
+            known.int8,
+            known.int16,
+            known.int32,
+            known.int64,
+            known.nat8,
+            known.nat16,
+            known.nat32,
+            known.nat64,
             known.float_,
+            known.float32,
+            known.float64,
             known.string_,
+            known.rune,
             known.cstring,
             known.cptr,
         ]

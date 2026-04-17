@@ -4,6 +4,7 @@ use music_arena::SliceRange;
 use music_hir::{
     HirAttr, HirAttrArg, HirExprId, HirExprKind, HirOrigin, HirPatKind, HirTyId, HirTyKind,
 };
+use music_names::{Ident, Symbol};
 
 use super::decls::expr_has_structural_target;
 use super::{CheckPass, DiagKind, PassBase};
@@ -84,7 +85,11 @@ impl PassBase<'_, '_, '_> {
                                         );
                                     }
                                 }
-                                _ => self.diag(origin.span, DiagKind::AttrUnknownArg, ""),
+                                _ => self.diag_named(
+                                    name.span,
+                                    DiagKind::AttrUnknownArg,
+                                    format!("unknown attribute argument `{key}`"),
+                                ),
                             }
                         }
                     }
@@ -119,8 +124,19 @@ impl CheckPass<'_, '_, '_> {
                 | "Bool"
                 | "Nat"
                 | "Int"
+                | "Int8"
+                | "Int16"
+                | "Int32"
+                | "Int64"
+                | "Nat8"
+                | "Nat16"
+                | "Nat32"
+                | "Nat64"
                 | "Float"
+                | "Float32"
+                | "Float64"
                 | "String"
+                | "Rune"
                 | "Range"
                 | "ClosedRange"
                 | "PartialRangeFrom"
@@ -257,28 +273,50 @@ impl CheckPass<'_, '_, '_> {
 
     fn validate_deprecated_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
         let known = self.known();
+        self.validate_string_attr_args(
+            attr,
+            origin,
+            &[known.message_key, known.replace_key, known.version_key],
+            DiagKind::AttrDeprecatedRequiresStringValue,
+        );
+    }
+
+    fn validate_string_attr_args(
+        &mut self,
+        attr: &HirAttr,
+        origin: HirOrigin,
+        allowed_names: &[Symbol],
+        value_diag: DiagKind,
+    ) {
         for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name)
-                && name != known.message_key
-                && name != known.replace_key
-                && name != known.version_key
+            if let Some(name) = arg.name
+                && !allowed_names.contains(&name.name)
             {
-                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
+                self.diag_unknown_attr_argument(name);
             }
             if !self.attr_value_is_string(&arg) {
-                self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+                self.diag(origin.span, value_diag, "");
             }
         }
+    }
+
+    fn diag_unknown_attr_argument(&mut self, name: Ident) {
+        let argument_name = self.resolve_symbol(name.name).to_owned();
+        self.diag_named(
+            name.span,
+            DiagKind::AttrUnknownArg,
+            format!("unknown attribute argument `{argument_name}`"),
+        );
     }
 
     fn validate_since_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
         let known = self.known();
         let mut found = false;
         for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name)
-                && name != known.version_key
+            if let Some(name) = arg.name
+                && name.name != known.version_key
             {
-                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
+                self.diag_unknown_attr_argument(name);
             }
             if arg.name.map(|ident| ident.name) == Some(known.version_key)
                 && self.attr_value_is_string(&arg)
@@ -308,15 +346,11 @@ impl CheckPass<'_, '_, '_> {
         for attr in attrs {
             let path = self.attr_path(&attr);
             match path.as_slice() {
-                ["link" | "when"] => {
-                    if !inner_is_foreign {
-                        self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
-                    }
+                ["link" | "when"] if !inner_is_foreign => {
+                    self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
                 }
-                ["repr" | "layout"] => {
-                    if !self.is_data_target(inner) {
-                        self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
-                    }
+                ["repr" | "layout"] if !self.is_data_target(inner) => {
+                    self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
                 }
                 ["frozen"] => {
                     let export = inner_expr.mods.export.as_ref();
@@ -380,7 +414,18 @@ impl CheckPass<'_, '_, '_> {
         }
         let valid = match self.ty(ty).kind {
             HirTyKind::Int
+            | HirTyKind::Int8
+            | HirTyKind::Int16
+            | HirTyKind::Int32
+            | HirTyKind::Int64
+            | HirTyKind::Nat
+            | HirTyKind::Nat8
+            | HirTyKind::Nat16
+            | HirTyKind::Nat32
+            | HirTyKind::Nat64
             | HirTyKind::Float
+            | HirTyKind::Float32
+            | HirTyKind::Float64
             | HirTyKind::Bool
             | HirTyKind::Unit
             | HirTyKind::CString
@@ -398,37 +443,55 @@ impl CheckPass<'_, '_, '_> {
 
     pub(super) fn validate_link_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
         let known = self.known();
-        for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name)
-                && name != known.name_key
-                && name != known.symbol_key
-            {
-                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
-            }
-            if !self.attr_value_is_string(&arg) {
-                self.diag(origin.span, DiagKind::AttrLinkRequiresStringValue, "");
-            }
-        }
+        self.validate_string_attr_args(
+            attr,
+            origin,
+            &[known.name_key, known.symbol_key],
+            DiagKind::AttrLinkRequiresStringValue,
+        );
     }
 
     pub(super) fn validate_when_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
-        let allowed = ["os", "arch", "env", "abi", "vendor", "feature"]
-            .into_iter()
-            .map(|name| self.intern(name))
-            .collect::<BTreeSet<_>>();
+        let allowed = [
+            "os",
+            "arch",
+            "archFamily",
+            "env",
+            "abi",
+            "vendor",
+            "family",
+            "feature",
+            "pointerWidth",
+            "endian",
+            "jit",
+            "jitIsa",
+            "jitCallConv",
+            "jitFeature",
+        ]
+        .into_iter()
+        .map(|name| self.intern(name))
+        .collect::<BTreeSet<_>>();
         for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name.map(|ident| ident.name)
-                && !allowed.contains(&name)
+            if let Some(name) = arg.name
+                && !allowed.contains(&name.name)
             {
-                self.diag(origin.span, DiagKind::AttrUnknownArg, "");
+                self.diag_unknown_attr_argument(name);
             }
-            if !self.attr_value_is_string(&arg) && !self.attr_value_is_string_array(&arg) {
-                let kind =
-                    if arg.name.map(|ident| self.resolve_symbol(ident.name)) == Some("feature") {
-                        DiagKind::AttrWhenRequiresStringList
-                    } else {
-                        DiagKind::AttrWhenRequiresStringValue
-                    };
+            let arg_name = arg.name.map(|ident| self.resolve_symbol(ident.name));
+            let valid = if arg_name == Some("pointerWidth") {
+                self.attr_value_is_string(&arg)
+                    || self.attr_value_is_string_array(&arg)
+                    || self.attr_value_is_int(&arg)
+                    || self.attr_value_is_int_array(&arg)
+            } else {
+                self.attr_value_is_string(&arg) || self.attr_value_is_string_array(&arg)
+            };
+            if !valid {
+                let kind = if matches!(arg_name, Some("feature" | "family" | "jitFeature")) {
+                    DiagKind::AttrWhenRequiresStringList
+                } else {
+                    DiagKind::AttrWhenRequiresStringValue
+                };
                 self.diag(origin.span, kind, "");
             }
         }
@@ -446,6 +509,27 @@ impl CheckPass<'_, '_, '_> {
         self.array_items(items).iter().all(
             |item| matches!(self.expr(item.expr).kind, HirExprKind::Lit { lit } if self.lit_is_string(lit)),
         )
+    }
+
+    fn attr_value_is_int(&self, arg: &HirAttrArg) -> bool {
+        matches!(
+            self.expr(arg.value).kind,
+            HirExprKind::Lit { lit }
+                if matches!(self.lit_kind(lit), music_hir::HirLitKind::Int { .. })
+        )
+    }
+
+    fn attr_value_is_int_array(&self, arg: &HirAttrArg) -> bool {
+        let HirExprKind::Array { items } = self.expr(arg.value).kind else {
+            return false;
+        };
+        self.array_items(items).iter().all(|item| {
+            matches!(
+                self.expr(item.expr).kind,
+                HirExprKind::Lit { lit }
+                    if matches!(self.lit_kind(lit), music_hir::HirLitKind::Int { .. })
+            )
+        })
     }
 
     pub(super) fn attr_path<'a>(&'a self, attr: &HirAttr) -> Vec<&'a str> {

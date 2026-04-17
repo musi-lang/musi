@@ -26,6 +26,19 @@ use thiserror::Error;
 
 type MusiResult<T = ()> = Result<T, MusiError>;
 
+const STARTER_INDEX: &str = "let message := \"Hello, world!\";\nmessage;\n";
+const STARTER_TEST: &str = r#"let Testing := import "@std/testing";
+
+let add (left : Int, right : Int) : Int := left + right;
+
+export let test () :=
+  (
+    Testing.describe("add");
+    Testing.it("adds values", Testing.toBe(add(2, 3), 5));
+    Testing.endDescribe()
+  );
+"#;
+
 #[derive(Debug, Error)]
 enum MusiError {
     #[error(transparent)]
@@ -90,6 +103,7 @@ fn run() -> MusiResult {
         Command::Test { target } => test_project(target.as_deref()),
         Command::Task { name, target } => run_task(&name, target.as_deref()),
         Command::Info { target } => print_project_metadata(target.as_deref()),
+        Command::Install { target } => install_project(target.as_deref()),
         Command::Lsp => run_stdio_server().map_err(|source| MusiError::LspServerFailed {
             message: source.to_string(),
         }),
@@ -102,7 +116,6 @@ fn run() -> MusiResult {
         | Command::Serve(_)
         | Command::Repl(_)
         | Command::Eval(_)
-        | Command::Install(_)
         | Command::Add(_)
         | Command::Remove(_)
         | Command::Update(_)
@@ -129,21 +142,27 @@ fn init_package(target: Option<&Path>) -> MusiResult {
     fs::write(
         root.join("musi.json"),
         format!(
-            "{{\n  \"name\": \"{name}\",\n  \"version\": \"0.1.0\",\n  \"main\": \"index.ms\"\n}}\n"
+            "{{\n  \"name\": \"{name}\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}}\n"
         ),
     )
     .map_err(|source| ToolingError::ToolingIoFailed {
         path: root.join("musi.json"),
         source,
     })?;
-    fs::write(root.join("index.ms"), "export let main () : Int := 42;\n").map_err(|source| {
+    fs::write(root.join("index.ms"), STARTER_INDEX).map_err(|source| {
         ToolingError::ToolingIoFailed {
             path: root.join("index.ms"),
             source,
         }
     })?;
+    fs::write(root.join("add.test.ms"), STARTER_TEST).map_err(|source| {
+        ToolingError::ToolingIoFailed {
+            path: root.join("add.test.ms"),
+            source,
+        }
+    })?;
     if !root.join(".gitignore").exists() {
-        fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
+        fs::write(root.join(".gitignore"), "musi_modules/\n").map_err(|source| {
             ToolingError::ToolingIoFailed {
                 path: root.join(".gitignore"),
                 source,
@@ -174,7 +193,9 @@ fn package_name_for_path(root: &Path) -> MusiResult<String> {
 }
 
 fn package_marker_exists(root: &Path) -> bool {
-    root.join("musi.json").exists() || root.join("index.ms").exists()
+    root.join("musi.json").exists()
+        || root.join("index.ms").exists()
+        || root.join("add.test.ms").exists()
 }
 
 fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiResult {
@@ -306,6 +327,21 @@ fn run_task(name: &str, target: Option<&Path>) -> MusiResult {
     Ok(())
 }
 
+fn install_project(target: Option<&Path>) -> MusiResult {
+    let anchor = project_anchor(target)?;
+    let project = load_project_ancestor(anchor, ProjectOptions::default())?;
+    if project.lockfile_needs_write() {
+        project.write_lockfile()?;
+    }
+    match project.modules_dir() {
+        Some(path) => println!("musiModules: {}", path.display()),
+        None => println!("musiModules: disabled"),
+    }
+    println!("globalCache: {}", project.global_cache_dir().display());
+    println!("lockfile: {}", project.lockfile_path().display());
+    Ok(())
+}
+
 fn print_project_metadata(target: Option<&Path>) -> MusiResult {
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
@@ -318,6 +354,11 @@ fn print_project_metadata(target: Option<&Path>) -> MusiResult {
     println!("workspacePackages: {}", workspace.packages.len());
     println!("workspaceMembers: {}", workspace.members.len());
     println!("modules: {}", project.module_texts().count());
+    match project.modules_dir() {
+        Some(path) => println!("musiModules: {}", path.display()),
+        None => println!("musiModules: disabled"),
+    }
+    println!("globalCache: {}", project.global_cache_dir().display());
     println!("lockfile: {}", project.lockfile_path().display());
     Ok(())
 }
@@ -333,7 +374,6 @@ fn reserved_command_for(command: Command) -> MusiResult {
         Command::Serve(args) => ("serve", "HTTP server runtime", args.args),
         Command::Repl(args) => ("repl", "interactive runtime", args.args),
         Command::Eval(args) => ("eval", "inline evaluator", args.args),
-        Command::Install(args) => ("install", "package installer", args.args),
         Command::Add(args) => ("add", "package dependency writer", args.args),
         Command::Remove(args) => ("remove", "package dependency remover", args.args),
         Command::Update(args) => ("update", "package updater", args.args),

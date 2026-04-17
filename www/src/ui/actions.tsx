@@ -53,7 +53,7 @@ export function InlineAction(
 export function ThemeToggleButton(
 	props: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode },
 ) {
-	const className = `button button-ghost theme-toggle${props.className ? ` ${props.className}` : ""}`;
+	const className = `header-icon-control theme-toggle${props.className ? ` ${props.className}` : ""}`;
 	return (
 		<button type="button" {...props} className={className}>
 			{props.children}

@@ -1,4 +1,4 @@
-use std::env::temp_dir;
+use std::env::{remove_var, temp_dir, var, var_os};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -84,6 +84,70 @@ fn loads_dynamic_module_from_registered_text() {
     let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
 
     assert_eq!(value, Value::Int(42));
+}
+
+#[test]
+fn array_patterns_require_exact_length() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r"
+            export let emptyMismatch () : Int :=
+              match [1] (
+              | [] => 1
+              | _ => 0
+              );
+            export let lengthMismatch () : Int :=
+              match [1, 2, 3] (
+              | [1, 2] => 1
+              | _ => 0
+              );
+            export let emptyMatches () : Int :=
+              match [] (
+              | [] => 1
+              | _ => 0
+              );
+        ",
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    assert_eq!(
+        runtime.call_export("emptyMismatch", &[]).unwrap(),
+        Value::Int(0)
+    );
+    assert_eq!(
+        runtime.call_export("lengthMismatch", &[]).unwrap(),
+        Value::Int(0)
+    );
+    assert_eq!(
+        runtime.call_export("emptyMatches", &[]).unwrap(),
+        Value::Int(1)
+    );
+}
+
+#[test]
+fn runtime_array_spread_preserves_expression_type() {
+    let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
+    runtime
+        .register_module_text(
+            "main",
+            r"
+            export let prependMatches () : Int :=
+              match () (
+              | _ if [0, ...[1, 2]] = [0, 1, 2] => 1
+              | _ => 0
+              );
+        ",
+        )
+        .unwrap();
+    runtime.load_root("main").unwrap();
+
+    assert_eq!(
+        runtime.call_export("prependMatches", &[]).unwrap(),
+        Value::Int(1)
+    );
 }
 
 #[test]
@@ -395,7 +459,7 @@ fn handles_runtime_env_and_random_services() {
 }
 
 #[test]
-fn rejects_unsupported_runtime_env_mutation_services() {
+fn supports_runtime_env_mutation_services() {
     let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
     runtime
         .register_module_text(
@@ -409,24 +473,37 @@ fn rejects_unsupported_runtime_env_mutation_services() {
         .unwrap();
     runtime.load_root("main").unwrap();
 
-    let set_error = runtime
+    let key = format!("MUSI_RT_TEST_{}", unique_test_suffix());
+    #[allow(unsafe_code)]
+    unsafe {
+        remove_var(&key);
+    }
+    let set_value = runtime
         .call_export(
             "envSet",
-            &[Value::string("MUSI_RT_TEST"), Value::string("value")],
+            &[Value::string(key.clone()), Value::string("value")],
         )
-        .unwrap_err();
-    let remove_error = runtime
-        .call_export("envRemove", &[Value::string("MUSI_RT_TEST")])
-        .unwrap_err();
+        .unwrap();
+    let has_value = runtime
+        .call_export("envHas", &[Value::string(key.clone())])
+        .unwrap();
+    let get_value = runtime
+        .call_export("envGet", &[Value::string(key.clone())])
+        .unwrap();
+    assert_eq!(var(&key).as_deref(), Ok("value"));
+    let remove_value = runtime
+        .call_export("envRemove", &[Value::string(key.clone())])
+        .unwrap();
+    let missing_value = runtime
+        .call_export("envHas", &[Value::string(key.clone())])
+        .unwrap();
 
-    assert!(matches!(
-        set_error.kind(),
-        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
-    ));
-    assert!(matches!(
-        remove_error.kind(),
-        RuntimeErrorKind::VmExecutionFailed(VmError { .. })
-    ));
+    assert_eq!(set_value, Value::Int(1));
+    assert_eq!(has_value, Value::Int(1));
+    assert_eq!(get_value, Value::string("value"));
+    assert_eq!(remove_value, Value::Int(1));
+    assert_eq!(missing_value, Value::Int(0));
+    assert_eq!(var_os(&key), None);
 }
 
 #[test]

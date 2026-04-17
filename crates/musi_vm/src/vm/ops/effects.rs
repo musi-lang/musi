@@ -143,6 +143,7 @@ impl Vm {
                 op_name: module.program.string_text(op_desc.name).into(),
                 param_tys: op_desc.param_tys.clone(),
                 result_ty: op_desc.result_ty,
+                is_comptime_safe: op_desc.is_comptime_safe,
             };
             self.host.handle_effect(&effect_call, args)
         }

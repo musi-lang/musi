@@ -1,15 +1,16 @@
 use music_arena::SliceRange;
 use music_hir::{
     HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirMods, HirOrigin,
-    HirParam, HirPatId, HirPatKind, HirTyId, HirTyKind,
+    HirParam, HirPatId, HirPatKind, HirPrefixOp, HirTyId, HirTyKind,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
 use super::super::CheckPass;
 use super::super::DiagKind;
+use super::super::const_eval::try_comptime_value;
 use super::super::decls::check_foreign_let;
 use super::super::exprs::{check_expr, peel_mut_ty};
-use super::super::patterns::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
+use super::super::pats::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::effects::require_declared_effects;
 use super::imports::{bind_module_pattern, bind_structural_alias, module_target_for_expr};
@@ -66,12 +67,23 @@ struct NonCallableLetCheckInput {
     mods: HirLetMods,
     pat: HirPatId,
     value: HirExprId,
+    params: SliceRange<HirParam>,
     binding: Option<NameBindingId>,
     declared_ty: Option<HirTyId>,
     is_module_stmt: bool,
     bound_name: Option<Ident>,
     type_params: Box<[Symbol]>,
     type_param_kinds: Box<[HirTyId]>,
+    constraints: ConstraintFactsList,
+}
+
+struct LetBindingSchemeInput {
+    binding: NameBindingId,
+    ty: HirTyId,
+    effects: EffectRow,
+    type_params: (Box<[Symbol]>, Box<[HirTyId]>),
+    param_names: Box<[Symbol]>,
+    comptime_params: Box<[bool]>,
     constraints: ConstraintFactsList,
 }
 
@@ -139,19 +151,21 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn insert_let_binding_scheme(
-        &mut self,
-        binding: NameBindingId,
-        ty: HirTyId,
-        effects: EffectRow,
-        type_params: (Box<[Symbol]>, Box<[HirTyId]>),
-        param_names: Box<[Symbol]>,
-        constraints: ConstraintFactsList,
-    ) {
+    fn insert_let_binding_scheme(&mut self, input: LetBindingSchemeInput) {
+        let LetBindingSchemeInput {
+            binding,
+            ty,
+            effects,
+            type_params,
+            param_names,
+            comptime_params,
+            constraints,
+        } = input;
         let scheme = BindingScheme {
             type_params: type_params.0,
             type_param_kinds: type_params.1,
             param_names,
+            comptime_params,
             constraints,
             ty,
             effects: effects.clone(),
@@ -224,17 +238,18 @@ impl CheckPass<'_, '_, '_> {
             ret: provisional_ret,
             is_effectful: !provisional_effects.is_pure(),
         });
-        self.insert_let_binding_scheme(
+        self.insert_let_binding_scheme(LetBindingSchemeInput {
             binding,
-            provisional_ty,
-            provisional_effects,
-            (
+            ty: provisional_ty,
+            effects: provisional_effects,
+            type_params: (
                 seed.type_params.to_vec().into_boxed_slice(),
                 seed.type_param_kinds.to_vec().into_boxed_slice(),
             ),
-            Box::default(),
-            seed.constraints.to_vec().into_boxed_slice(),
-        );
+            param_names: Box::default(),
+            comptime_params: Box::default(),
+            constraints: seed.constraints.to_vec().into_boxed_slice(),
+        });
     }
 
     fn check_value_with_expected_ty(
@@ -342,6 +357,12 @@ impl CheckPass<'_, '_, '_> {
             .map(|param| param.name.name)
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        let comptime_params = self
+            .params(params.clone())
+            .into_iter()
+            .map(|param| param.is_comptime)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let param_types = self.lower_params(params);
         self.seed_recursive_callable_scheme(&RecCallableSeed {
             binding,
@@ -363,14 +384,15 @@ impl CheckPass<'_, '_, '_> {
         );
         let attached_receiver = self.attached_receiver_ty(is_module_stmt, mods, &param_types);
         binding.map_or(ty, |binding| {
-            self.insert_let_binding_scheme(
+            self.insert_let_binding_scheme(LetBindingSchemeInput {
                 binding,
                 ty,
-                callable_effects,
-                (type_params, type_param_kinds),
+                effects: callable_effects,
+                type_params: (type_params, type_param_kinds),
                 param_names,
+                comptime_params,
                 constraints,
-            );
+            });
             if let Some((receiver_ty, method_name, receiver_mut)) = attached_receiver {
                 self.insert_attached_method_binding(
                     receiver_ty,
@@ -411,6 +433,7 @@ impl CheckPass<'_, '_, '_> {
             mods,
             pat,
             value,
+            params,
             binding,
             declared_ty,
             is_module_stmt,
@@ -423,6 +446,20 @@ impl CheckPass<'_, '_, '_> {
         if !constraints.is_empty() {
             self.diag(origin.span, DiagKind::ConstrainedNonCallableBinding, "");
         }
+        let param_names = self
+            .params(params.clone())
+            .into_iter()
+            .map(|param| param.name.name)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let comptime_params = self
+            .params(params.clone())
+            .into_iter()
+            .map(|param| param.is_comptime)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let param_types = self.lower_params(params);
+        let attached_receiver = self.attached_receiver_ty(is_module_stmt, mods, &param_types);
         if mods.is_rec
             && let Some(binding) = binding
         {
@@ -440,14 +477,28 @@ impl CheckPass<'_, '_, '_> {
         let ty = declared_ty.unwrap_or(value_facts.ty);
         self.type_mismatch(origin, ty, value_facts.ty);
         if let Some(binding) = binding {
-            self.insert_let_binding_scheme(
+            self.insert_let_binding_scheme(LetBindingSchemeInput {
                 binding,
                 ty,
-                EffectRow::empty(),
-                (type_params, type_param_kinds),
-                Box::default(),
+                effects: EffectRow::empty(),
+                type_params: (type_params, type_param_kinds),
+                param_names,
+                comptime_params,
                 constraints,
-            );
+            });
+            if is_explicit_comptime_expr(self, value)
+                && let Some(value) = try_comptime_value(self, value)
+            {
+                self.insert_binding_comptime_value(binding, value);
+            }
+            if let Some((receiver_ty, method_name, receiver_mut)) = attached_receiver {
+                self.insert_attached_method_binding(
+                    receiver_ty,
+                    method_name,
+                    binding,
+                    receiver_mut,
+                );
+            }
         }
         ty
     }
@@ -513,6 +564,7 @@ impl CheckPass<'_, '_, '_> {
                 mods,
                 pat,
                 value,
+                params,
                 binding,
                 declared_ty,
                 is_module_stmt,
@@ -546,6 +598,16 @@ impl CheckPass<'_, '_, '_> {
         }
         ExprFacts::new(builtins.unit, EffectRow::empty())
     }
+}
+
+fn is_explicit_comptime_expr(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> bool {
+    matches!(
+        ctx.expr(expr).kind,
+        HirExprKind::Prefix {
+            op: HirPrefixOp::Comptime,
+            ..
+        }
+    )
 }
 
 fn is_std_ffi_unsafe_public_pointer_op(module_key: &str, name: &str) -> bool {

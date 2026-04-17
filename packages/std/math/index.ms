@@ -1,13 +1,22 @@
-let IntMath := import "./_int.ms";
-let FloatMath := import "./_float.ms";
+let intMath := import "./_int.ms";
+let floatMath := import "./_float.ms";
 
-export let abs := IntMath.abs;
-export let signInt := IntMath.signInt;
-export let max := IntMath.max;
-export let min := IntMath.min;
-export let clamp := IntMath.clamp;
+/// Absolute integer value.
+export let abs := intMath.abs;
+/// Integer sign value.
+export let signInt := intMath.signInt;
+/// Maximum integer value.
+export let max := intMath.max;
+/// Minimum integer value.
+export let min := intMath.min;
+/// Clamp an integer into inclusive bounds.
+export let clamp := intMath.clamp;
 
-export let absFloat := FloatMath.absFloat;
-export let maxFloat := FloatMath.maxFloat;
-export let minFloat := FloatMath.minFloat;
-export let clampFloat := FloatMath.clampFloat;
+/// Absolute float value.
+export let absFloat := floatMath.absFloat;
+/// Maximum float value.
+export let maxFloat := floatMath.maxFloat;
+/// Minimum float value.
+export let minFloat := floatMath.minFloat;
+/// Clamp a float into inclusive bounds.
+export let clampFloat := floatMath.clampFloat;

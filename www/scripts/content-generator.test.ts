@@ -285,9 +285,16 @@ let proof := left ~= right;`,
 			"utf8",
 		);
 
-		expect(grammarSource).toContain(
-			"\\\\b(as|export|forall|handle|if|import|match|quote|request|resume|unsafe|where)\\\\b",
-		);
+		expect(grammarSource).toContain("keyword.declaration.musi");
+		expect(grammarSource).toContain("keyword.declaration.fixity.musi");
+		expect(grammarSource).toContain("storage.type.musi");
+		expect(grammarSource).toContain("storage.modifier.musi");
+		expect(grammarSource).toContain("keyword.modifier.musi");
+		expect(grammarSource).toContain("keyword.control.unsafe.musi");
+		expect(grammarSource).toContain("keyword.control.effects.musi");
+		expect(grammarSource).toContain("keyword.control.conditional.musi");
+		expect(grammarSource).toContain("keyword.control.module.musi");
+		expect(grammarSource).toContain("keyword.control.constraint.musi");
 		expect(grammarSource).not.toContain(
 			"\\\\b(as|case|export|forall|handle|if|import|of|perform|quote|resume|where)\\\\b",
 		);

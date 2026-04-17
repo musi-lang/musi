@@ -491,7 +491,7 @@
 			"end": "(?=\\s|$|[;,\\]}\\)])",
 			"beginCaptures": {
 				"0": {
-					"name": "keyword.other.quote.musi"
+					"name": "keyword.control.quote.musi"
 				}
 			},
 			"patterns": [
@@ -583,7 +583,7 @@
 			"begin": "\\bwhere\\b",
 			"beginCaptures": {
 				"0": {
-					"name": "keyword.control.constraint.where.musi"
+					"name": "keyword.control.constraint.musi"
 				}
 			},
 			"end": "(?=\\s*(?:\\{|:=|;|\\)|\\]|$))",
@@ -603,13 +603,13 @@
 							"name": "keyword.declaration.musi"
 						},
 						"2": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"4": {
 							"name": "punctuation.section.parens.begin.musi"
 						},
 						"5": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"6": {
 							"name": "variable.parameter.receiver.musi"
@@ -639,7 +639,7 @@
 							"name": "keyword.declaration.musi"
 						},
 						"2": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"4": {
 							"name": "entity.name.function.musi"
@@ -657,7 +657,7 @@
 							"name": "keyword.declaration.musi"
 						},
 						"2": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"4": {
 							"name": "variable.other.definition.musi"
@@ -675,7 +675,7 @@
 							"name": "keyword.declaration.musi"
 						},
 						"2": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"4": {
 							"name": "entity.name.type.musi"
@@ -687,13 +687,22 @@
 				},
 				{
 					"name": "meta.declaration.type.musi",
-					"match": "\\b(class|data|effect|instance)\\s+([A-Z][A-Za-z0-9_]*)",
+					"match": "\\b(class|data|effect)\\s+([A-Z][A-Za-z0-9_]*)",
 					"captures": {
 						"1": {
-							"name": "keyword.declaration.musi"
+							"name": "storage.type.musi"
 						},
 						"2": {
 							"name": "entity.name.type.musi"
+						}
+					}
+				},
+				{
+					"name": "meta.declaration.instance.musi",
+					"match": "\\b(instance)\\b",
+					"captures": {
+						"1": {
+							"name": "keyword.declaration.musi"
 						}
 					}
 				},
@@ -723,7 +732,7 @@
 					"match": "\\b(foreign)\\b(?:\\s+(\"[^\"]+\"))?\\s+(let)\\s+([a-z_][A-Za-z0-9_]*)",
 					"captures": {
 						"1": {
-							"name": "keyword.modifier.musi"
+							"name": "storage.modifier.musi"
 						},
 						"2": {
 							"name": "string.quoted.double.musi"
@@ -811,20 +820,52 @@
 		"keywords": {
 			"patterns": [
 				{
+					"name": "storage.type.musi",
+					"match": "\\b(class|data|effect)\\b"
+				},
+				{
 					"name": "keyword.declaration.musi",
-					"match": "\\b(class|data|effect|infix|infixl|infixr|instance|law|let)\\b"
+					"match": "\\b(instance|law|let)\\b"
+				},
+				{
+					"name": "keyword.declaration.fixity.musi",
+					"match": "\\b(infix|infixl|infixr)\\b"
+				},
+				{
+					"name": "storage.modifier.musi",
+					"match": "\\b(foreign|mut|opaque|partial|rec)\\b"
 				},
 				{
 					"name": "keyword.modifier.musi",
-					"match": "\\b(foreign|mut|opaque|partial|rec)\\b"
+					"match": "\\b(comptime)\\b"
+				},
+				{
+					"name": "keyword.control.unsafe.musi",
+					"match": "\\bunsafe\\b"
 				},
 				{
 					"name": "keyword.control.effects.using.musi",
 					"match": "\\busing\\b"
 				},
 				{
-					"name": "keyword.control.musi",
-					"match": "\\b(as|export|forall|handle|if|import|match|quote|request|resume|unsafe|where)\\b"
+					"name": "keyword.control.effects.musi",
+					"match": "\\b(handle|request|resume)\\b"
+				},
+				{
+					"name": "keyword.control.conditional.musi",
+					"match": "\\b(if|match)\\b"
+				},
+				{
+					"name": "keyword.control.module.musi",
+					"match": "\\b(export|import)\\b"
+				},
+				{
+					"name": "keyword.control.quote.musi",
+					"match": "\\bquote\\b"
+				},
+				{
+					"name": "keyword.control.constraint.musi",
+					"match": "\\b(as|forall|where)\\b"
 				},
 				{
 					"name": "keyword.operator.wordlike.musi",
@@ -836,7 +877,7 @@
 			"patterns": [
 				{
 					"name": "meta.function.call.musi",
-					"begin": "(?<!\\.)\\b(?!and\\b|as\\b|class\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|match\\b|mut\\b|not\\b|opaque\\b|or\\b|partial\\b|quote\\b|rec\\b|request\\b|resume\\b|shl\\b|shr\\b|unsafe\\b|using\\b|where\\b|xor\\b)([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\n]*\\]\\s*)?\\()",
+					"begin": "(?<!\\.)\\b(?!and\\b|as\\b|class\\b|comptime\\b|data\\b|effect\\b|export\\b|foreign\\b|forall\\b|handle\\b|if\\b|import\\b|in\\b|infix\\b|infixl\\b|infixr\\b|instance\\b|law\\b|let\\b|match\\b|mut\\b|not\\b|opaque\\b|or\\b|partial\\b|quote\\b|rec\\b|request\\b|resume\\b|shl\\b|shr\\b|unsafe\\b|using\\b|where\\b|xor\\b)([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\n]*\\]\\s*)?\\()",
 					"end": "(?=\\s*\\()",
 					"beginCaptures": {
 						"1": {

@@ -51,11 +51,12 @@ impl SessionSyntaxErrors {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
     pub emit: EmitOptions,
     pub import_map: ImportMap,
     pub target: Option<TargetInfo>,
+    pub enable_ctfe: bool,
 }
 
 impl SessionOptions {
@@ -65,6 +66,7 @@ impl SessionOptions {
             emit: EmitOptions,
             import_map: ImportMap::default(),
             target: None,
+            enable_ctfe: true,
         }
     }
 
@@ -84,6 +86,18 @@ impl SessionOptions {
     pub fn with_target(mut self, target: TargetInfo) -> Self {
         self.target = Some(target);
         self
+    }
+
+    #[must_use]
+    pub const fn with_ctfe(mut self, enable_ctfe: bool) -> Self {
+        self.enable_ctfe = enable_ctfe;
+        self
+    }
+}
+
+impl Default for SessionOptions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

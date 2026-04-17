@@ -36,6 +36,11 @@ export interface SiteCopy {
 		lane: string;
 		command: string;
 		description: string;
+		status: string;
+		startHere: string;
+		fastPath: string;
+		unusualCases: string;
+		findDocs: string;
 	};
 	home: {
 		eyebrow: string;
@@ -46,6 +51,14 @@ export interface SiteCopy {
 		primaryCta: string;
 		secondaryCta: string;
 		tertiaryCta: string;
+		statusItems: Array<{ label: string; value: string; copy: string }>;
+		taskBoards: Array<{
+			label: string;
+			title: string;
+			copy: string;
+			href: string;
+			actionLabel: string;
+		}>;
 		paths: Array<{
 			label: string;
 			title: string;
@@ -131,10 +144,15 @@ export const siteCopy = {
 		lane: "Lane",
 		command: "Command",
 		description: "Description",
+		status: "Status",
+		startHere: "Start here",
+		fastPath: "I know what I need",
+		unusualCases: "Unusual cases",
+		findDocs: "Find docs",
 	},
 	home: {
 		eyebrow: "Home",
-		title: "The Musi Programming Language",
+		title: "What is Musi?",
 		description:
 			"Musi is an expression-first programming language with pattern matching, effects, and a small command surface. Learn the language, install it from source, check playground status, and find community links from one site.",
 		sectionsTitle: "Why Musi",
@@ -144,8 +162,48 @@ export const siteCopy = {
 			"Learning, setup, playground status, and community each have their own path.",
 		],
 		primaryCta: "Start Learning",
-		secondaryCta: "Install Musi",
+		secondaryCta: "Install",
 		tertiaryCta: "See Community",
+		statusItems: [
+			{
+				label: "Docs",
+				value: "Book-first",
+				copy: "Chapters stay close to runnable examples and current commands.",
+			},
+			{
+				label: "Install",
+				value: "Source-first",
+				copy: "Build lanes use package and direct command paths.",
+			},
+			{
+				label: "Playground",
+				value: "Not public",
+				copy: "Browser execution is tracked openly, with install as the working path.",
+			},
+		],
+		taskBoards: [
+			{
+				label: "Start here",
+				title: "First file path",
+				copy: "Begin with setup, one value, one function, and one result.",
+				href: "/learn/book/start/getting-started",
+				actionLabel: "Open first chapter",
+			},
+			{
+				label: "I know what I need",
+				title: "Install and commands",
+				copy: "Go straight to prerequisites, bootstrap commands, and command lanes.",
+				href: "/install",
+				actionLabel: "Open install path",
+			},
+			{
+				label: "Unusual cases",
+				title: "Source, issues, and FFI",
+				copy: "Find project links, unsafe/FFI docs, and current community tracking.",
+				href: "/community",
+				actionLabel: "Open project links",
+			},
+		],
 		paths: [
 			{
 				label: "Learn",

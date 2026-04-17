@@ -1,15 +1,18 @@
-let Testing := import "@std/testing";
-let Bytes := import "@std/bytes";
+let testing := import "@std/testing";
+let bytes := import "@std/bytes";
 
 export let test () :=
   (
-    Testing.describe("bytes");
-    Testing.it("'copy' copies the array", Testing.toBeTruthy(Bytes.equals(Bytes.copy([1, 2, 3]), [1, 2, 3])));
-    Testing.it("'concat' concatenates arrays", Testing.toBeTruthy(Bytes.equals(Bytes.concat([1, 2], [3, 4]), [1, 2, 3, 4])));
-    Testing.it("'equals' returns true for equal arrays", Testing.toBeTruthy(Bytes.equals([1, 2, 3], [1, 2, 3])));
-    Testing.it("'equals' returns false for different arrays", Testing.toBeFalsy(Bytes.equals([1, 2, 3], [1, 2, 4])));
-    Testing.it("'append' adds trailing byte", Testing.toBeTruthy(Bytes.equals(Bytes.append([1, 2], 3), [1, 2, 3])));
-    Testing.it("'prepend' adds leading byte", Testing.toBeTruthy(Bytes.equals(Bytes.prepend(0, [1, 2]), [0, 1, 2])));
-    Testing.it("'isEmpty' detects empty bytes", Testing.toBeTruthy(Bytes.isEmpty([])));
-    Testing.endDescribe()
+    testing.describe("bytes");
+    let left := bytes.fromArray([1, 2]);
+    let right := bytes.fromArray([3, 4]);
+    let same := bytes.fromArray([1, 2]);
+    testing.it("'copy' copies bytes", testing.toBeTruthy(bytes.equals(bytes.copy(left), left)));
+    testing.it("'concat' concatenates bytes", testing.toBeTruthy(bytes.equals(bytes.concat(left, right), bytes.fromArray([1, 2, 3, 4]))));
+    testing.it("'equals' returns true for equal bytes", testing.toBeTruthy(bytes.equals(left, same)));
+    testing.it("'equals' returns false for different bytes", testing.toBeFalsy(bytes.equals(left, right)));
+    testing.it("'append' adds trailing byte", testing.toBeTruthy(bytes.equals(bytes.append(left, 3), bytes.fromArray([1, 2, 3]))));
+    testing.it("'prepend' adds leading byte", testing.toBeTruthy(bytes.equals(bytes.prepend(left, 0), bytes.fromArray([0, 1, 2]))));
+    testing.it("'isEmpty' detects empty bytes", testing.toBeTruthy(bytes.isEmpty(bytes.empty())));
+    testing.endDescribe()
   );

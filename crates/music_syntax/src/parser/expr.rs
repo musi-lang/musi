@@ -99,6 +99,7 @@ impl Parser<'_> {
     fn parse_prefix_expr(&mut self) -> SyntaxNodeParseResult {
         if self.at_any(&[
             TokenKind::Minus,
+            TokenKind::KwComptime,
             TokenKind::KwNot,
             TokenKind::KwMut,
             TokenKind::DotDot,
@@ -198,6 +199,7 @@ impl Parser<'_> {
                 | TokenKind::KwForeign
                 | TokenKind::KwQuote
                 | TokenKind::KwUnsafe
+                | TokenKind::KwComptime
                 | TokenKind::At
                 | TokenKind::KwExport
                 | TokenKind::KwPartial

@@ -1,12 +1,12 @@
-let Testing := import "@std/testing";
-let Slice := import "./index.ms";
+let testing := import "@std/testing";
+let slice := import "./index.ms";
 
 export let test () :=
   (
-    Testing.describe("slice");
-    Testing.it("'copy' keeps values", Testing.toBeTruthy(Slice.equalsInt(Slice.copy[Int]([7, 8]), [7, 8])));
-    Testing.it("'concat' joins slices", Testing.toBeTruthy(Slice.equalsInt(Slice.concat[Int]([1], [2, 3]), [1, 2, 3])));
-    Testing.it("'isEmpty' detects empty slice", Testing.toBeTruthy(Slice.isEmpty[Int]([])));
-    Testing.it("'nonEmpty' detects non-empty slice", Testing.toBeTruthy(Slice.nonEmpty[Int]([1])));
-    Testing.endDescribe()
+    testing.describe("slice");
+    testing.it("'copy' keeps values", testing.toBeTruthy(slice.equalsInt(slice.copy[Int]([7, 8]), [7, 8])));
+    testing.it("'concat' joins slices", testing.toBeTruthy(slice.equalsInt(slice.concat[Int]([1], [2, 3]), [1, 2, 3])));
+    testing.it("'isEmpty' detects empty slice", testing.toBeTruthy(slice.isEmpty[Int]([])));
+    testing.it("'nonEmpty' detects non-empty slice", testing.toBeTruthy(slice.nonEmpty[Int]([1])));
+    testing.endDescribe()
   );

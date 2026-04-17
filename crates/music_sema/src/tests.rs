@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use music_base::SourceId;
 use music_base::diag::Diag;
+use music_base::{DiagCode, SourceId};
 use music_hir::{HirExprId, HirExprKind, HirTyKind};
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
@@ -554,6 +554,41 @@ fn dot_call_resolves_attached_receiver_let() {
 }
 
 #[test]
+fn dot_field_resolves_attached_receiver_value() {
+    let sema = check(
+        r"
+        let (self : Int).isPositive : Bool := self > 0;
+        let one : Int := 1;
+        one.isPositive;
+    ",
+    );
+    let root = sema.module().root;
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
+        HirTyKind::Bool
+    ));
+}
+
+#[test]
+fn rune_literal_has_rune_type() {
+    let sema = check("'a';");
+    let root = sema.module().root;
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
+        HirTyKind::Rune
+    ));
+}
+
+#[test]
+fn type_params_allow_whitespace_before_brackets() {
+    let sema = check("export let identity [T] (value : T) : T := value;");
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
 fn named_call_arguments_reorder_by_parameter_name() {
     let sema = check(
         r"
@@ -802,6 +837,7 @@ fn exported_class_and_effect_laws_keep_structured_params() {
           law reflexive (x : T) := .True;
         };
         export let Console := effect {
+          @comptimeSafe
           let readLine () : String;
           law total (attempts : Int) := .True;
         };
@@ -832,6 +868,7 @@ fn exported_class_and_effect_laws_keep_structured_params() {
         .iter()
         .find(|item| item.key.name.as_ref() == "Console")
         .expect("expected exported effect");
+    assert!(effect.ops[0].is_comptime_safe);
     let effect_law = effect.laws.first().expect("expected exported effect law");
     assert_eq!(effect_law.name.as_ref(), "total");
     assert_eq!(effect_law.params.len(), 1);
@@ -882,11 +919,9 @@ fn duplicate_handler_clause_reports_diag() {
         };
     "#,
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::DuplicateHandlerClause),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::DuplicateHandlerClause)
+        .expect("duplicate handler clause diag");
+    assert_eq!(diag.message(), "duplicate handler clause `readLine`");
 }
 
 #[test]
@@ -927,11 +962,9 @@ fn duplicate_class_member_reports_diag() {
         };
     ",
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::CollectDuplicateClassMember),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::CollectDuplicateClassMember)
+        .expect("duplicate class member diag");
+    assert_eq!(diag.message(), "duplicate class member `=`");
 }
 
 #[test]
@@ -947,11 +980,9 @@ fn missing_instance_member_reports_diag() {
         };
     ",
     );
-    assert!(
-        has_diag(&sema, SemaDiagKind::MissingInstanceMember),
-        "{:?}",
-        sema.diags()
-    );
+    let diag = find_diag(&sema, SemaDiagKind::MissingInstanceMember)
+        .expect("missing instance member diag");
+    assert_eq!(diag.message(), "missing instance member `compare`");
 }
 
 #[test]
@@ -1842,4 +1873,176 @@ fn type_equality_constraint_rejects_mismatched_type_application() {
 fn type_universe_names_accept_numeric_levels() {
     let sema = check("let id[T : Type0] (value : T) : T := value;");
     assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn comptime_diag_kind_roundtrips_code() {
+    assert_eq!(
+        SemaDiagKind::from_code(DiagCode::new(3102)),
+        Some(SemaDiagKind::AmbiguousAttachedMethod)
+    );
+    assert_eq!(
+        SemaDiagKind::from_code(DiagCode::new(3122)),
+        Some(SemaDiagKind::RuntimeValueInComptimeContext)
+    );
+}
+
+#[test]
+fn data_variant_discriminants_accept_const_int_expressions() {
+    let sema = check(
+        r"
+        let base : Int := comptime 20;
+        let Level := data {
+          | Debug := 10
+          | Warn := base + 10
+        };
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+    let level = sema.data_def("Level").expect("Level data definition");
+    assert_eq!(
+        level
+            .variant("Debug")
+            .map(super::api::SemaDataVariantDef::tag),
+        Some(10)
+    );
+    assert_eq!(
+        level
+            .variant("Warn")
+            .map(super::api::SemaDataVariantDef::tag),
+        Some(30)
+    );
+}
+
+#[test]
+fn data_variant_discriminants_reject_plain_let_values() {
+    let sema = check(
+        r"
+        let base : Int := 20;
+        let Level := data {
+          | Warn := base + 10
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidDataVariantDiscriminant),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn comptime_prefix_accepts_const_int_expressions() {
+    let sema = check(
+        r"
+        let x : Int := comptime (1 + 2);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn comptime_prefix_accepts_non_int_literals() {
+    let sema = check(
+        r#"
+        let text : String := comptime "hello";
+        let unit : Unit := comptime ();
+    "#,
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn comptime_quote_expands_expression_type() {
+    let sema = check(
+        r"
+        let value : Int := comptime quote (40 + 2);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn comptime_quote_splices_primitive_literals_into_syntax() {
+    let sema = check(
+        r"
+        let base : Int := comptime 40;
+        let generated : Syntax := comptime quote (#(base) + 2);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn comptime_prefix_accepts_runtime_expressions_for_ctfe() {
+    let sema = check(
+        r"
+        let runtime () : Int := 1;
+        let x : Int := comptime runtime();
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn imported_comptime_param_metadata_accepts_runtime_arguments_for_ctfe() {
+    let (_module_a, module_b) = check_with_imported_surface(
+        210,
+        r"
+        export let scale (comptime n : Int, x : Int) : Int := x * n;
+    ",
+        r#"
+        let A := import "a";
+        let scale := A.scale;
+        let runtime () : Int := 3;
+        let y : Int := scale(runtime(), 2);
+    "#,
+    );
+    assert!(module_b.diags().is_empty(), "{:?}", module_b.diags());
+}
+
+#[test]
+fn comptime_params_accept_runtime_arguments_for_ctfe() {
+    let sema = check(
+        r"
+        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let runtime () : Int := 3;
+        let y : Int := scale(runtime(), 2);
+    ",
+    );
+    assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+}
+
+#[test]
+fn data_variant_discriminants_reject_duplicate_values() {
+    let sema = check(
+        r"
+        let Level := data {
+          | Debug := 10
+          | Trace := 10
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::DuplicateDataVariantDiscriminant),
+        "{:?}",
+        sema.diags()
+    );
+}
+
+#[test]
+fn data_variant_discriminants_reject_runtime_expressions() {
+    let sema = check(
+        r"
+        let level () : Int := 10;
+        let Level := data {
+          | Debug := level()
+        };
+    ",
+    );
+    assert!(
+        has_diag(&sema, SemaDiagKind::InvalidDataVariantDiscriminant),
+        "{:?}",
+        sema.diags()
+    );
 }

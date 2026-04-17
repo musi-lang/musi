@@ -58,6 +58,26 @@ fn parses_mut_receiver_prefixed_let_statement() {
 }
 
 #[test]
+fn parses_comptime_prefix_expr() {
+    let parsed = parse(Lexer::new("let x := comptime (1 + 2);").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
+fn parses_comptime_value_param() {
+    let parsed = parse(Lexer::new("let scale (comptime n : Int, x : Int) : Int := x * n;").lex());
+    assert!(
+        parsed.errors().is_empty(),
+        "unexpected errors: {:?}",
+        parsed.errors()
+    );
+}
+
+#[test]
 fn parses_apply_and_index_chain() {
     let parsed = parse(Lexer::new("foo[Bar].[0];").lex());
     assert!(

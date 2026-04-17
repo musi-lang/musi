@@ -198,6 +198,7 @@ fn emits_case_tuple_and_array_patterns() {
     assert!(emitted.artifact.validate().is_ok());
     let opcodes = emitted_opcodes(&emitted);
     assert!(opcodes.contains(&Opcode::SeqGet));
+    assert!(opcodes.contains(&Opcode::SeqLen));
     assert!(opcodes.contains(&Opcode::BrFalse));
 }
 

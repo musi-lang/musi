@@ -13,7 +13,8 @@ use music_hir::{
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 use music_sema::{
-    ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, SemaDataVariantDef, SemaModule,
+    ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue,
+    SemaDataVariantDef, SemaModule,
 };
 
 use crate::IrDiagKind;
@@ -31,6 +32,7 @@ mod bindings;
 mod call;
 mod closures;
 mod collect;
+mod comptime;
 mod destructure;
 mod effects;
 mod evidence;
@@ -48,6 +50,7 @@ use closures::{
     ClosureCallableInput, lower_closure_callable, lower_lambda_expr, lower_local_callable_let,
     lower_named_params,
 };
+use comptime::lower_comptime_value;
 use effects::{lower_handle_expr, lower_handler_literal_expr, lower_request_expr};
 use evidence::{
     bind_expr_evidence, hidden_evidence_params_for_binding, hidden_evidence_params_for_keys,
@@ -96,6 +99,8 @@ struct LowerCtx<'a> {
     next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
     evidence_bindings: EvidenceBindingStack,
+    comptime_bindings: HashMap<NameBindingId, ComptimeValue>,
+    specialized_callables: HashSet<Box<str>>,
 }
 
 type LoweringResult<T = IrExprKind> = Result<T, Box<str>>;
@@ -163,6 +168,8 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
         next_temp_id: 0,
         extra_callables: Vec::new(),
         evidence_bindings: Vec::new(),
+        comptime_bindings: HashMap::new(),
+        specialized_callables: HashSet::new(),
     };
 
     let mut items = TopLevelItems::default();
@@ -224,6 +231,7 @@ fn append_synthesized_sum_data_defs(
             .map(|(name, variant)| {
                 IrDataVariantDef::new(
                     name,
+                    variant.tag(),
                     variant
                         .field_tys()
                         .iter()
@@ -275,6 +283,7 @@ fn build_effect_defs(sema: &SemaModule, interner: &Interner) -> Box<[IrEffectDef
                                 .into_boxed_slice(),
                             render_ty_name(sema, def.result(), interner),
                         )
+                        .with_comptime_safe(def.is_comptime_safe())
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
@@ -363,11 +372,9 @@ fn lower_value_expr(
     origin: IrOrigin,
     kind: &HirExprKind,
 ) -> IrExprKind {
-    let sema = ctx.sema;
-    let interner = ctx.interner;
     match kind {
-        HirExprKind::Name { name } => lower_name_expr(sema, expr_id, *name, interner),
-        HirExprKind::Lit { lit } => lower_lit_expr(sema, *lit),
+        HirExprKind::Name { name } => lower_name_expr(ctx, expr_id, *name),
+        HirExprKind::Lit { lit } => lower_lit_expr(ctx.sema, *lit),
         HirExprKind::Sequence { exprs } => lower_sequence_expr(ctx, *exprs),
         HirExprKind::Tuple { items } => lower_tuple_expr(ctx, expr_id, *items),
         HirExprKind::Array { items } => lower_array_expr(ctx, expr_id, items.clone())
@@ -531,7 +538,7 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
                 && is_type_value_expr(sema, *right, interner)
         }
         HirExprKind::Prefix {
-            op: HirPrefixOp::Mut,
+            op: HirPrefixOp::Mut | HirPrefixOp::Comptime,
             expr,
         } => is_type_value_expr(sema, *expr, interner),
         HirExprKind::Record { items } => sema
@@ -570,6 +577,7 @@ fn lower_prefix_expr(
     origin: IrOrigin,
 ) -> IrExprKind {
     match op {
+        HirPrefixOp::Comptime => lower_comptime_prefix_expr(ctx, expr_id, expr, origin),
         HirPrefixOp::Mut => lower_expr_with_origin(ctx, expr, origin).kind,
         HirPrefixOp::Not => IrExprKind::Not {
             expr: lower_boxed_expr(ctx, expr),
@@ -580,11 +588,21 @@ fn lower_prefix_expr(
                 .try_expr_ty(expr_id)
                 .unwrap_or_else(|| invalid_lowering_path("expr type missing for prefix op"));
             let (zero, op) = match &ctx.sema.ty(ty).kind {
-                HirTyKind::Float => (
+                HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64 => (
                     IrExpr::new(origin, IrExprKind::Lit(IrLit::Float { raw: "0.0".into() })),
                     IrBinaryOp::FSub,
                 ),
-                HirTyKind::Int | HirTyKind::Nat | HirTyKind::NatLit(_) => (
+                HirTyKind::Int
+                | HirTyKind::Nat
+                | HirTyKind::Int8
+                | HirTyKind::Int16
+                | HirTyKind::Int32
+                | HirTyKind::Int64
+                | HirTyKind::Nat8
+                | HirTyKind::Nat16
+                | HirTyKind::Nat32
+                | HirTyKind::Nat64
+                | HirTyKind::NatLit(_) => (
                     IrExpr::new(origin, IrExprKind::Lit(IrLit::Int { raw: "0".into() })),
                     IrBinaryOp::ISub,
                 ),
@@ -598,6 +616,26 @@ fn lower_prefix_expr(
             }
         }
     }
+}
+
+fn lower_comptime_prefix_expr(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    expr: HirExprId,
+    origin: IrOrigin,
+) -> IrExprKind {
+    if let Some(value) = ctx.sema.expr_comptime_value(expr_id) {
+        if let ComptimeValue::Syntax(term) = value
+            && matches!(term.shape(), music_term::SyntaxShape::Expr)
+            && let HirExprKind::Quote {
+                kind: HirQuoteKind::Expr { expr, .. },
+            } = ctx.sema.module().store.exprs.get(expr).kind
+        {
+            return lower_expr_with_origin(ctx, expr, origin).kind;
+        }
+        return lower_comptime_value(ctx, value);
+    }
+    lower_expr_with_origin(ctx, expr, origin).kind
 }
 
 fn lower_expr_with_origin(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, origin: IrOrigin) -> IrExpr {
@@ -665,15 +703,16 @@ fn lower_template_expr(
     acc.kind
 }
 
-fn lower_name_expr(
-    sema: &SemaModule,
-    expr_id: HirExprId,
-    ident: Ident,
-    interner: &Interner,
-) -> IrExprKind {
+fn lower_name_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, ident: Ident) -> IrExprKind {
+    let sema = ctx.sema;
+    if let Some(binding) = use_binding_id(sema, ident)
+        && let Some(value) = ctx.comptime_bindings.get(&binding).cloned()
+    {
+        return lower_comptime_value(ctx, &value);
+    }
     IrExprKind::Name {
         binding: use_binding_id(sema, ident),
-        name: interner.resolve(ident.name).into(),
+        name: ctx.interner.resolve(ident.name).into(),
         module_target: sema.expr_module_target(expr_id).cloned(),
     }
 }
@@ -823,6 +862,7 @@ fn lower_variant_expr(
     IrExprKind::VariantNew {
         data_key: data.key().clone(),
         tag_index,
+        tag_value: variant.tag(),
         field_count,
         args: lowered_args,
     }
@@ -1076,8 +1116,13 @@ fn lower_binary_op(
     let right_ty = sema.ty(sema
         .try_expr_ty(right)
         .unwrap_or_else(|| invalid_lowering_path("expr type missing for binary right")));
-    let wants_float =
-        matches!(left_ty.kind, HirTyKind::Float) || matches!(right_ty.kind, HirTyKind::Float);
+    let wants_float = matches!(
+        left_ty.kind,
+        HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64
+    ) || matches!(
+        right_ty.kind,
+        HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64
+    );
     let wants_string =
         matches!(left_ty.kind, HirTyKind::String) || matches!(right_ty.kind, HirTyKind::String);
     match op {

@@ -6,6 +6,7 @@ use music_hir::{HirExprId, HirModule, HirOrigin, HirPatId, HirTy, HirTyId};
 use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
+use music_term::{SyntaxTerm, TypeTerm};
 
 use crate::BindingScheme;
 use crate::SemaModuleBuild;
@@ -19,6 +20,7 @@ pub type AttrList = Box<[Attr]>;
 pub type ConstraintSurfaceList = Box<[ConstraintSurface]>;
 pub type HirTyIdList = Box<[HirTyId]>;
 pub type SurfaceTyIdList = Box<[SurfaceTyId]>;
+pub type ComptimeParamList = Box<[bool]>;
 
 #[must_use]
 pub fn sema_diag_kind(diag: &Diag) -> Option<SemaDiagKind> {
@@ -61,11 +63,26 @@ impl ForeignLinkInfo {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TargetInfo {
+    pub triple: Option<Box<str>>,
     pub os: Option<Box<str>>,
     pub arch: Option<Box<str>>,
+    pub arch_family: Option<Box<str>>,
     pub env: Option<Box<str>>,
     pub abi: Option<Box<str>>,
     pub vendor: Option<Box<str>>,
+    pub family: BTreeSet<Box<str>>,
+    pub features: BTreeSet<Box<str>>,
+    pub pointer_width: Option<u16>,
+    pub endian: Option<Box<str>>,
+    pub jit: JitTargetInfo,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JitTargetInfo {
+    pub supported: bool,
+    pub backend: Option<Box<str>>,
+    pub isa: Option<Box<str>>,
+    pub call_conv: Option<Box<str>>,
     pub features: BTreeSet<Box<str>>,
 }
 
@@ -73,13 +90,34 @@ impl TargetInfo {
     #[must_use]
     pub const fn new() -> Self {
         Self {
+            triple: None,
             os: None,
             arch: None,
+            arch_family: None,
             env: None,
             abi: None,
             vendor: None,
+            family: BTreeSet::new(),
             features: BTreeSet::new(),
+            pointer_width: None,
+            endian: None,
+            jit: JitTargetInfo {
+                supported: false,
+                backend: None,
+                isa: None,
+                call_conv: None,
+                features: BTreeSet::new(),
+            },
         }
+    }
+
+    #[must_use]
+    pub fn with_triple<Triple>(mut self, triple: Triple) -> Self
+    where
+        Triple: Into<Box<str>>,
+    {
+        self.triple = Some(normalize_target_text(&triple.into()).into_boxed_str());
+        self
     }
 
     #[must_use]
@@ -87,7 +125,7 @@ impl TargetInfo {
     where
         Os: Into<Box<str>>,
     {
-        self.os = Some(os.into());
+        self.os = Some(normalize_target_text(&os.into()).into_boxed_str());
         self
     }
 
@@ -96,7 +134,19 @@ impl TargetInfo {
     where
         Arch: Into<Box<str>>,
     {
-        self.arch = Some(arch.into());
+        let arch = normalize_arch_text(&arch.into());
+        self.arch_family = arch_family(&arch).map(Into::into);
+        self.arch = Some(arch.into_boxed_str());
+        self.jit = jit_target_for_arch(self.arch.as_deref());
+        self
+    }
+
+    #[must_use]
+    pub fn with_arch_family<ArchFamily>(mut self, arch_family: ArchFamily) -> Self
+    where
+        ArchFamily: Into<Box<str>>,
+    {
+        self.arch_family = Some(normalize_target_text(&arch_family.into()).into_boxed_str());
         self
     }
 
@@ -105,7 +155,7 @@ impl TargetInfo {
     where
         Env: Into<Box<str>>,
     {
-        self.env = Some(env.into());
+        self.env = Some(normalize_target_text(&env.into()).into_boxed_str());
         self
     }
 
@@ -114,7 +164,7 @@ impl TargetInfo {
     where
         Abi: Into<Box<str>>,
     {
-        self.abi = Some(abi.into());
+        self.abi = Some(normalize_target_text(&abi.into()).into_boxed_str());
         self
     }
 
@@ -123,14 +173,94 @@ impl TargetInfo {
     where
         Vendor: Into<Box<str>>,
     {
-        self.vendor = Some(vendor.into());
+        self.vendor = Some(normalize_target_text(&vendor.into()).into_boxed_str());
         self
     }
 
     #[must_use]
     pub fn with_features(mut self, features: BTreeSet<Box<str>>) -> Self {
-        self.features = features;
+        self.features = features
+            .into_iter()
+            .map(|feature| normalize_target_text(&feature).into_boxed_str())
+            .collect();
         self
+    }
+
+    #[must_use]
+    pub fn with_family<Family>(mut self, family: Family) -> Self
+    where
+        Family: Into<Box<str>>,
+    {
+        let _ = self
+            .family
+            .insert(normalize_target_text(&family.into()).into_boxed_str());
+        self
+    }
+
+    #[must_use]
+    pub const fn with_pointer_width(mut self, pointer_width: u16) -> Self {
+        self.pointer_width = Some(pointer_width);
+        self
+    }
+
+    #[must_use]
+    pub fn with_endian<Endian>(mut self, endian: Endian) -> Self
+    where
+        Endian: Into<Box<str>>,
+    {
+        self.endian = Some(normalize_target_text(&endian.into()).into_boxed_str());
+        self
+    }
+}
+
+#[must_use]
+pub fn normalize_target_text(text: &str) -> String {
+    text.trim().to_ascii_lowercase().replace('_', "-")
+}
+
+#[must_use]
+pub fn normalize_arch_text(text: &str) -> String {
+    match normalize_target_text(text).as_str() {
+        "x86-64" => "x86-64".into(),
+        "aarch64" => "aarch64".into(),
+        "arm" => "aarch32".into(),
+        other => other.into(),
+    }
+}
+
+#[must_use]
+pub fn arch_family(arch: &str) -> Option<&'static str> {
+    match normalize_arch_text(arch).as_str() {
+        "x86" | "x86-64" => Some("x86"),
+        "aarch32" | "aarch64" => Some("arm"),
+        "rv32" | "rv64" | "riscv32" | "riscv64" => Some("risc-v"),
+        "wasm32" | "wasm64" => Some("webassembly"),
+        "powerpc" | "powerpc64" => Some("powerpc"),
+        "mips" | "mips64" => Some("mips"),
+        "loongarch32" | "loongarch64" => Some("loongarch"),
+        "s390x" => Some("ibm-z"),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn jit_target_for_arch(arch: Option<&str>) -> JitTargetInfo {
+    let Some(arch) = arch else {
+        return JitTargetInfo::default();
+    };
+    let isa = match normalize_arch_text(arch).as_str() {
+        "x86-64" => "x64",
+        "aarch64" => "aarch64",
+        "rv64" | "riscv64" => "riscv64",
+        "s390x" => "s390x",
+        _ => return JitTargetInfo::default(),
+    };
+    JitTargetInfo {
+        supported: true,
+        backend: Some("cranelift".into()),
+        isa: Some(isa.into()),
+        call_conv: None,
+        features: BTreeSet::new(),
     }
 }
 
@@ -231,8 +361,19 @@ pub enum SurfaceTyKind {
     Bool,
     Nat,
     Int,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Nat8,
+    Nat16,
+    Nat32,
+    Nat64,
     Float,
+    Float32,
+    Float64,
     String,
+    Rune,
     CString,
     CPtr,
     Module,
@@ -329,6 +470,7 @@ pub struct ExportedValue {
     pub type_params: NameList,
     pub type_param_kinds: SurfaceTyIdList,
     pub param_names: NameList,
+    pub comptime_params: ComptimeParamList,
     pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
     pub opaque: bool,
@@ -336,6 +478,8 @@ pub struct ExportedValue {
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
+    pub const_int: Option<i64>,
+    pub comptime_value: Option<ComptimeValue>,
     pub inert_attrs: AttrList,
     pub musi_attrs: AttrList,
 }
@@ -354,6 +498,7 @@ impl ExportedValue {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             param_names: Box::default(),
+            comptime_params: Box::default(),
             constraints: Box::default(),
             effects: SurfaceEffectRow::default(),
             opaque: false,
@@ -361,6 +506,8 @@ impl ExportedValue {
             class_key: None,
             effect_key: None,
             data_key: None,
+            const_int: None,
+            comptime_value: None,
             inert_attrs: Box::default(),
             musi_attrs: Box::default(),
         }
@@ -384,6 +531,12 @@ impl ExportedValue {
     #[must_use]
     pub fn with_param_names(mut self, param_names: impl Into<NameList>) -> Self {
         self.param_names = param_names.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_comptime_params(mut self, params: impl Into<ComptimeParamList>) -> Self {
+        self.comptime_params = params.into();
         self
     }
 
@@ -437,6 +590,21 @@ impl ExportedValue {
     }
 
     #[must_use]
+    pub const fn with_const_int(mut self, value: i64) -> Self {
+        self.const_int = Some(value);
+        self
+    }
+
+    #[must_use]
+    pub fn with_comptime_value(mut self, value: ComptimeValue) -> Self {
+        if let ComptimeValue::Int(int) = &value {
+            self.const_int = Some(*int);
+        }
+        self.comptime_value = Some(value);
+        self
+    }
+
+    #[must_use]
     pub fn with_inert_attrs(mut self, inert_attrs: impl Into<AttrList>) -> Self {
         self.inert_attrs = inert_attrs.into();
         self
@@ -449,9 +617,88 @@ impl ExportedValue {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ComptimeValue {
+    Unit,
+    Int(i64),
+    Nat(u64),
+    Float(Box<str>),
+    String(Box<str>),
+    Rune(u32),
+    CPtr(usize),
+    Syntax(SyntaxTerm),
+    Seq(ComptimeSeqValue),
+    Data(ComptimeDataValue),
+    Closure(ComptimeClosureValue),
+    Continuation(ComptimeContinuationValue),
+    Type(ComptimeTypeValue),
+    Module(ComptimeModuleValue),
+    Foreign(ComptimeForeignValue),
+    Effect(ComptimeEffectValue),
+    Class(ComptimeClassValue),
+}
+
+pub type ComptimeValueList = Box<[ComptimeValue]>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeSeqValue {
+    pub ty: TypeTerm,
+    pub items: ComptimeValueList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeDataValue {
+    pub ty: TypeTerm,
+    pub tag: i64,
+    pub variant: Box<str>,
+    pub fields: ComptimeValueList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeClosureValue {
+    pub module: ModuleKey,
+    pub name: Box<str>,
+    pub captures: ComptimeValueList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeContinuationValue {
+    pub frames: ComptimeValueList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeTypeValue {
+    pub term: TypeTerm,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeModuleValue {
+    pub key: ModuleKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeForeignValue {
+    pub module: ModuleKey,
+    pub name: Box<str>,
+    pub type_args: Box<[TypeTerm]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeEffectValue {
+    pub module: ModuleKey,
+    pub name: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeClassValue {
+    pub module: ModuleKey,
+    pub name: Box<str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataVariantSurface {
     pub name: Box<str>,
+    pub tag: i64,
     pub payload: Option<SurfaceTyId>,
     pub result: Option<SurfaceTyId>,
     pub field_tys: SurfaceTyIdList,
@@ -467,11 +714,18 @@ impl DataVariantSurface {
     {
         Self {
             name: name.into(),
+            tag: 0,
             payload: None,
             result: None,
             field_tys: field_tys.into(),
             field_names: Box::default(),
         }
+    }
+
+    #[must_use]
+    pub const fn with_tag(mut self, tag: i64) -> Self {
+        self.tag = tag;
+        self
     }
 
     #[must_use]
@@ -784,6 +1038,7 @@ pub struct EffectOpSurface {
     pub params: Box<[SurfaceTyId]>,
     pub param_names: NameList,
     pub result: SurfaceTyId,
+    pub is_comptime_safe: bool,
 }
 
 impl EffectOpSurface {
@@ -804,7 +1059,14 @@ impl EffectOpSurface {
             params: params.into(),
             param_names: param_names.into(),
             result,
+            is_comptime_safe: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
+        self.is_comptime_safe = is_comptime_safe;
+        self
     }
 }
 
@@ -1042,6 +1304,7 @@ pub struct SemaEffectOpDef {
     params: HirTyIdList,
     param_names: Box<[Symbol]>,
     result: HirTyId,
+    is_comptime_safe: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1053,6 +1316,7 @@ pub struct SemaEffectDef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
+    tag: i64,
     payload: Option<HirTyId>,
     result: Option<HirTyId>,
     field_tys: HirTyIdList,
@@ -1082,7 +1346,14 @@ impl SemaEffectOpDef {
             params: params.into(),
             param_names: param_names.into(),
             result,
+            is_comptime_safe: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
+        self.is_comptime_safe = is_comptime_safe;
+        self
     }
 
     #[must_use]
@@ -1098,6 +1369,11 @@ impl SemaEffectOpDef {
     #[must_use]
     pub const fn result(&self) -> HirTyId {
         self.result
+    }
+
+    #[must_use]
+    pub const fn is_comptime_safe(&self) -> bool {
+        self.is_comptime_safe
     }
 }
 
@@ -1151,6 +1427,7 @@ impl SemaEffectDef {
 impl SemaDataVariantDef {
     #[must_use]
     pub(crate) fn new<FieldTys>(
+        tag: i64,
         payload: Option<HirTyId>,
         result: Option<HirTyId>,
         field_tys: FieldTys,
@@ -1160,11 +1437,17 @@ impl SemaDataVariantDef {
         FieldTys: Into<HirTyIdList>,
     {
         Self {
+            tag,
             payload,
             result,
             field_tys: field_tys.into(),
             field_names: field_names.into(),
         }
+    }
+
+    #[must_use]
+    pub const fn tag(&self) -> i64 {
+        self.tag
     }
 
     #[must_use]
@@ -1543,12 +1826,14 @@ pub struct SemaModule {
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    binding_comptime_values: HashMap<NameBindingId, ComptimeValue>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     class_facts: HashMap<HirExprId, ClassFacts>,
@@ -1565,6 +1850,7 @@ struct SemaContextTables {
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
     binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
     binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    binding_comptime_values: HashMap<NameBindingId, ComptimeValue>,
 }
 
 struct SemaFactTables {
@@ -1574,6 +1860,7 @@ struct SemaFactTables {
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 
 struct SemaDeclTables {
@@ -1600,6 +1887,7 @@ impl From<SemaModuleBuild> for SemaModule {
             type_test_targets,
             expr_evidence,
             expr_attached_bindings,
+            expr_comptime_values,
         } = build_facts;
         let context = SemaContextTables {
             target: build_context.target,
@@ -1609,6 +1897,7 @@ impl From<SemaModuleBuild> for SemaModule {
             binding_schemes: build_context.binding_schemes,
             binding_evidence_keys: build_context.binding_evidence_keys,
             binding_module_targets: build_context.binding_module_targets,
+            binding_comptime_values: build_context.binding_comptime_values,
         };
         let facts = SemaFactTables {
             expr_facts,
@@ -1617,6 +1906,7 @@ impl From<SemaModuleBuild> for SemaModule {
             type_test_targets,
             expr_evidence,
             expr_attached_bindings,
+            expr_comptime_values,
         };
         let decls = SemaDeclTables {
             effect_defs: build_decls.effect_defs,
@@ -1682,6 +1972,17 @@ impl SemaModule {
     }
 
     #[must_use]
+    pub fn expr_comptime_value(&self, id: HirExprId) -> Option<&ComptimeValue> {
+        self.expr_comptime_values.get(&id)
+    }
+
+    pub fn set_expr_comptime_value(&mut self, id: HirExprId, value: ComptimeValue) {
+        let _prev = self.expr_comptime_values.insert(id, value);
+    }
+}
+
+impl SemaModule {
+    #[must_use]
     pub fn is_gated_binding(&self, binding: NameBindingId) -> bool {
         self.gated_bindings.contains(&binding)
     }
@@ -1711,6 +2012,13 @@ impl SemaModule {
         self.binding_evidence_keys.get(&binding).map(Box::as_ref)
     }
 
+    #[must_use]
+    pub fn binding_comptime_value(&self, binding: NameBindingId) -> Option<&ComptimeValue> {
+        self.binding_comptime_values.get(&binding)
+    }
+}
+
+impl SemaModule {
     #[must_use]
     pub fn try_pat_ty(&self, id: HirPatId) -> Option<HirTyId> {
         self.pat_facts.get(idx_to_usize(id)).map(|facts| facts.ty)
@@ -1773,12 +2081,14 @@ impl SemaModule {
             binding_schemes: context.binding_schemes,
             binding_evidence_keys: context.binding_evidence_keys,
             binding_module_targets: context.binding_module_targets,
+            binding_comptime_values: context.binding_comptime_values,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
             expr_attached_bindings: facts.expr_attached_bindings,
+            expr_comptime_values: facts.expr_comptime_values,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             class_facts: decls.class_facts,

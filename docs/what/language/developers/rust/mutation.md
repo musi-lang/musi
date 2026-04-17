@@ -1,6 +1,6 @@
 ---
 title: "Mutation"
-description: "Translate Rust 1.87.0 mutation habits into Musi's value-based mutation model."
+description: "Translate Rust 2024 edition (1.85+) mutation habits into Musi's value-based mutation model."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 3

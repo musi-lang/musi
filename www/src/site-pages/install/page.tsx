@@ -16,6 +16,28 @@ export function InstallPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.install;
 	const scriptInstallGroup = installCommandGroup("script");
 	const cargoInstallGroup = installCommandGroup("cargo");
+	const installSteps = [
+		{
+			label: "1",
+			title: "Check prerequisites",
+			copy: "Rust, Cargo, and native library pieces come first.",
+		},
+		{
+			label: "2",
+			title: "Choose command lane",
+			copy: "Script bootstrap is quickest; Cargo path keeps source visible.",
+		},
+		{
+			label: "3",
+			title: "Verify PATH",
+			copy: "Both music and musi land in Cargo's bin directory.",
+		},
+		{
+			label: "4",
+			title: "Use current commands",
+			copy: "Package commands cover normal work; direct commands handle files.",
+		},
+	];
 	return (
 		<div className="page-stack">
 			<PageHeader
@@ -34,9 +56,25 @@ export function InstallPage(_props: { route: AppRoute }) {
 				}
 			/>
 
+			<section className="process-grid" aria-label="Install process">
+				{installSteps.map((step) => (
+					<Surface key={step.label} tone="raised" className="process-card">
+						<div className="process-step">{step.label}</div>
+						<div>
+							<h2>{step.title}</h2>
+							<p>{step.copy}</p>
+						</div>
+					</Surface>
+				))}
+			</section>
+
 			<section className="portal-grid" aria-label={copy.prerequisitesLabel}>
 				{installPrerequisites().map((item) => (
-					<Surface key={item.title} tone="panel" className="portal-card">
+					<Surface
+						key={item.title}
+						tone="panel"
+						className="portal-card portal-card-task"
+					>
 						<div className="eyebrow">{item.title}</div>
 						<h2>{item.value}</h2>
 						<p>{item.copy}</p>

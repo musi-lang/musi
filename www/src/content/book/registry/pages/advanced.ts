@@ -57,6 +57,17 @@ export const advancedPages = [
 		questions: [],
 	},
 	{
+		id: "comptime",
+		partId: "advanced",
+		path: "/docs/book/advanced/comptime",
+		aliases: [
+			"/docs/language/advanced/comptime",
+			"/learn/language/advanced/comptime",
+		],
+		sourcePath: "docs/what/language/advanced/comptime.md",
+		questions: [],
+	},
+	{
 		id: "templates-and-splices",
 		partId: "advanced",
 		path: "/docs/book/advanced/templates-and-splices",

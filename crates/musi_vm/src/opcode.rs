@@ -54,6 +54,7 @@ pub const fn classify_opcode(opcode: Opcode) -> VmOpcodeFamily {
         | Opcode::SeqSet
         | Opcode::SeqSetN
         | Opcode::SeqCat
+        | Opcode::SeqLen
         | Opcode::RangeNew
         | Opcode::RangeContains
         | Opcode::RangeMaterialize

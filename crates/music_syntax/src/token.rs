@@ -28,6 +28,7 @@ pub enum TokenKind {
     KwAs,
     KwMatch,
     KwClass,
+    KwComptime,
     KwData,
     KwEffect,
     KwExport,
@@ -154,11 +155,12 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 34] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 35] = [
     ("and", TokenKind::KwAnd, "`and`"),
     ("as", TokenKind::KwAs, "`as`"),
     ("match", TokenKind::KwMatch, "`match`"),
     ("class", TokenKind::KwClass, "`class`"),
+    ("comptime", TokenKind::KwComptime, "`comptime`"),
     ("data", TokenKind::KwData, "`data`"),
     ("effect", TokenKind::KwEffect, "`effect`"),
     ("export", TokenKind::KwExport, "`export`"),

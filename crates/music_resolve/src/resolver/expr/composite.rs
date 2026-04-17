@@ -12,27 +12,22 @@ where
     }
 
     pub(super) fn lower_array_expr_or_ty(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        if node
-            .child_nodes()
-            .any(|n| n.kind() == SyntaxNodeKind::ArrayItem)
-        {
-            return self.lower_array_expr(node);
-        }
-        self.lower_array_ty_expr(node)
+        self.lower_array_expr(node)
     }
 
     pub(super) fn lower_array_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut items = Vec::<HirArrayItem>::new();
-        for item in node
-            .child_nodes()
-            .filter(|n| n.kind() == SyntaxNodeKind::ArrayItem)
-        {
-            let spread = item
-                .child_tokens()
-                .any(|t| t.kind() == TokenKind::DotDotDot);
-            let expr = self.lower_opt_expr(origin, item.child_nodes().next());
-            items.push(HirArrayItem::new(spread, expr));
+        for item in node.child_nodes() {
+            if item.kind() == SyntaxNodeKind::ArrayItem {
+                let spread = item
+                    .child_tokens()
+                    .any(|t| t.kind() == TokenKind::DotDotDot);
+                let expr = self.lower_opt_expr(origin, item.child_nodes().next());
+                items.push(HirArrayItem::new(spread, expr));
+            } else if item.kind().is_expr() {
+                items.push(HirArrayItem::new(false, self.lower_expr(item)));
+            }
         }
         let items = self.store.array_items.alloc_from_iter(items);
         self.alloc_expr(origin, HirExprKind::Array { items })

@@ -1,16 +1,52 @@
-let Option := import "@std/option";
-let Runtime := import "musi:runtime";
+let option := import "@std/option";
+let Option := option.Option;
+let path := import "@std/path";
+let Path := path.Path;
+let runtime := import "musi:runtime";
 
-export let argsCount () : Int := Runtime.processArgCount();
+/// Process command text.
+export opaque let Command := data {
+  | Command(value : String)
+};
 
-export let argAt (index : Int) :=
-  match Runtime.processArgAt(index) (
-  | value if value = "" => Option.none[String]()
-  | value => Option.some[String](value)
+/// Process exit code.
+export opaque let ExitCode := data {
+  | ExitCode(value : Int)
+};
+
+/// Build a shell command.
+export let command (value : String) : Command := .Command(value := value);
+
+/// Build an exit code.
+export let exitCode (value : Int) : ExitCode := .ExitCode(value := value);
+
+/// Command as raw string.
+export let (self : Command).toString () : String :=
+  match self (
+  | .Command(value := value) => value
   );
 
-export let cwd () : String := Runtime.processCwd();
+/// Exit code as raw int.
+export let (self : ExitCode).toInt () : Int :=
+  match self (
+  | .ExitCode(value := value) => value
+  );
 
-export let run (command : String) : Int := Runtime.processRun(command);
+/// Number of process args.
+export let argsCount () : Int := runtime.processArgCount();
 
-export let exit (code : Int) : Unit := Runtime.processExit(code);
+/// Process arg by index.
+export let argAt (index : Int) : Option[String] :=
+  match runtime.processArgAt(index) (
+  | value if value = "" => option.none[String]()
+  | value => option.some[String](value)
+  );
+
+/// Current working directory.
+export let cwd () : Path := path.fromString(runtime.processCwd());
+
+/// Run a shell command.
+export let run (target : Command) : ExitCode := exitCode(runtime.processRun(toString(target)));
+
+/// Exit current process.
+export let exit (code : ExitCode) : Unit := runtime.processExit(toInt(code));

@@ -16,6 +16,10 @@ An effect describes operations code may request from an outside capability. A re
 
 Read the `effect` block as a menu of operations. Read `request Clock.tick();` as code asking for one operation from that menu. Something else must eventually provide the answer.
 
+Compile-time evaluation follows the same boundary.
+Handled effects can run inside `comptime`.
+Unhandled host effects need `@comptimeSafe` on the effect operation and a compile-time host supplied by the session.
+
 ## Service Boundary
 
 A request is like a service bell at a counter: code asks, handler or host answers.

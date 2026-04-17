@@ -42,9 +42,9 @@ where
         let Some(binding) = self.lookup(ident.name) else {
             let name = self.interner.resolve(ident.name);
             self.diags.push(
-                Diag::error(ResolveDiagKind::UnboundName.message())
+                Diag::error(format!("unbound name `{name}`"))
                     .with_code(ResolveDiagKind::UnboundName.code())
-                    .with_label(ident.span, self.source_id, format!("unknown name `{name}`")),
+                    .with_label(ident.span, self.source_id, format!("unbound name `{name}`")),
             );
             return;
         };

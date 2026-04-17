@@ -1,9 +1,14 @@
 mod cache;
 mod compile;
+mod ctfe;
 mod graph;
 mod laws;
 mod store;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use musi_vm::VmHost;
 #[cfg(test)]
 use music_base::Diag;
 use music_base::{Source, SourceId, SourceMap};
@@ -20,6 +25,7 @@ pub struct Session {
     store: SessionStore,
     graph: SessionGraph,
     stats: SessionStats,
+    ctfe_host: Option<Rc<RefCell<Box<dyn VmHost>>>>,
     #[cfg(test)]
     test_hooks: SessionTestHooks,
 }
@@ -40,9 +46,14 @@ impl Session {
             store: SessionStore::new(),
             graph: SessionGraph::default(),
             stats: SessionStats::default(),
+            ctfe_host: None,
             #[cfg(test)]
             test_hooks: SessionTestHooks::default(),
         }
+    }
+
+    pub fn set_ctfe_host(&mut self, host: impl VmHost + 'static) {
+        self.ctfe_host = Some(Rc::new(RefCell::new(Box::new(host))));
     }
 
     #[must_use]

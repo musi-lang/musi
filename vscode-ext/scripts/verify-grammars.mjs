@@ -210,6 +210,12 @@ for (const fixture of fixtures.tokenFixtures ?? []) {
 			token.scopes.includes(check.scope),
 			`${fixture.name}: lexeme \`${check.lexeme}\` missing scope \`${check.scope}\`; got [${token.scopes.join(", ")}]`,
 		);
+		for (const forbiddenScope of check.forbiddenScopes ?? []) {
+			assert(
+				!token.scopes.includes(forbiddenScope),
+				`${fixture.name}: lexeme \`${check.lexeme}\` unexpectedly had scope \`${forbiddenScope}\`; got [${token.scopes.join(", ")}]`,
+			);
+		}
 	}
 }
 

@@ -1,7 +1,8 @@
 use std::env::temp_dir;
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::mem::drop;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,6 +51,18 @@ fn write_file(root: &Path, relative: &str, text: &str) {
         fs::create_dir_all(parent).expect("parent dirs should exist");
     }
     fs::write(path, text).expect("file should be written");
+}
+
+fn run_git(root: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .expect("git should run");
+    assert!(
+        output.status.success(),
+        "git command should succeed: {args:?}"
+    );
 }
 
 #[test]
@@ -124,7 +137,7 @@ fn loads_project_from_nearest_manifest_ancestor() {
 fn resolves_registry_dependency_and_caches_it_locally() {
     let temp = TempDir::new();
     let registry_root = temp.path().join("registry");
-    let cache_root = temp.path().join("cache");
+    let global_cache_root = temp.path().join("global-cache");
 
     write_file(
         temp.path(),
@@ -159,18 +172,174 @@ fn resolves_registry_dependency_and_caches_it_locally() {
         temp.path(),
         ProjectOptions::new()
             .with_registry_root(registry_root)
-            .with_cache_root(cache_root.clone()),
+            .with_global_cache_root(global_cache_root),
     )
     .expect("project loads");
     let output = project.compile_root_entry().expect("project compiles");
 
     assert!(output.artifact.validate().is_ok());
-    assert!(cache_root.join("ext/1.2.0/musi.json").is_file());
+    assert!(project.global_cache_dir().join("registry").is_dir());
+    assert!(
+        project
+            .modules_dir()
+            .expect("modules dir should be enabled")
+            .join("ext/1.2.0/musi.json")
+            .is_file()
+    );
     assert!(project.lockfile_needs_write());
     let ext = project
         .package("ext")
         .expect("registry package should resolve");
     assert!(matches!(ext.source, PackageSource::Registry { .. }));
+}
+
+#[test]
+fn manifest_configures_musi_modules_dir() {
+    let default_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    )
+    .expect("default manifest should parse");
+    assert_eq!(default_manifest.modules_dir(), Some("musi_modules"));
+
+    let custom_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": "vendor/musi"
+}"#,
+    )
+    .expect("custom manifest should parse");
+    assert_eq!(custom_manifest.modules_dir(), Some("vendor/musi"));
+
+    let disabled_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": false
+}"#,
+    )
+    .expect("disabled manifest should parse");
+    assert_eq!(disabled_manifest.modules_dir(), None);
+}
+
+#[test]
+fn modules_dir_false_resolves_from_global_cache_only() {
+    let temp = TempDir::new();
+    let registry_root = temp.path().join("registry");
+    let global_cache_root = temp.path().join("global-cache");
+
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": false,
+  "dependencies": { "ext": "1.0.0" }
+}"#,
+    );
+    write_file(temp.path(), "index.ms", r#"import "ext";"#);
+    write_file(
+        &registry_root,
+        "ext/1.0.0/musi.json",
+        r#"{
+  "name": "ext",
+  "version": "1.0.0",
+  "exports": "./index.ms"
+}"#,
+    );
+    write_file(&registry_root, "ext/1.0.0/index.ms", "");
+
+    let project = Project::load(
+        temp.path(),
+        ProjectOptions::new()
+            .with_registry_root(registry_root)
+            .with_global_cache_root(global_cache_root),
+    )
+    .expect("project loads");
+
+    assert_eq!(project.modules_dir(), None);
+    assert!(!temp.path().join("musi_modules").exists());
+    let ext = project.package("ext").expect("dependency should resolve");
+    assert!(ext.root_dir.starts_with(project.global_cache_dir()));
+}
+
+#[test]
+fn resolves_git_dependency_through_global_cache_and_modules_dir() {
+    let temp = TempDir::new();
+    let git_root = temp.path().join("git-ext");
+    let global_cache_root = temp.path().join("global-cache");
+    fs::create_dir_all(&git_root).expect("git package dir should exist");
+    write_file(
+        &git_root,
+        "musi.json",
+        r#"{
+  "name": "ext",
+  "version": "1.0.0",
+  "exports": "./index.ms"
+}"#,
+    );
+    write_file(&git_root, "index.ms", r"export let ext_answer : Int := 7;");
+    run_git(&git_root, &["init", "--initial-branch=main"]);
+    run_git(&git_root, &["add", "."]);
+    run_git(
+        &git_root,
+        &[
+            "-c",
+            "user.name=Musi Test",
+            "-c",
+            "user.email=musi@example.invalid",
+            "commit",
+            "-m",
+            "initial",
+        ],
+    );
+
+    let git_url = format!("git+file://{}#main", git_root.display());
+    write_file(
+        temp.path(),
+        "musi.json",
+        &format!(
+            r#"{{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {{ "ext": "{git_url}" }}
+}}"#
+        ),
+    );
+    write_file(temp.path(), "index.ms", r#"import "ext";"#);
+
+    let project = Project::load(
+        temp.path(),
+        ProjectOptions::new().with_global_cache_root(global_cache_root),
+    )
+    .expect("project loads");
+    let ext = project.package("ext").expect("git package should resolve");
+
+    assert!(matches!(ext.source, PackageSource::Git { .. }));
+    assert!(project.global_cache_dir().join("git").is_dir());
+    assert!(
+        ext.root_dir.starts_with(
+            project
+                .modules_dir()
+                .expect("modules dir should be enabled")
+        )
+    );
+    assert!(project.lockfile().packages.iter().any(|package| {
+        matches!(
+            &package.source,
+            crate::LockedPackageSource::Git {
+                url,
+                reference,
+                commit
+            } if url == &format!("file://{}", git_root.display())
+                && reference == "main"
+                && !commit.is_empty()
+        )
+    }));
 }
 
 #[test]
@@ -248,6 +417,66 @@ fn manifest_rejects_legacy_private_field() {
     assert!(error.to_string().contains("unknown field `private`"));
 }
 
+fn assert_manifest_validation_error(manifest: &str, load_note: &str, message: &str) {
+    let temp = TempDir::new();
+    write_file(temp.path(), "musi.json", manifest);
+    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+
+    let error = Project::load(temp.path(), ProjectOptions::default()).expect_err(load_note);
+
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
+    assert_eq!(error.diag_message().as_deref(), Some(message));
+}
+
+fn write_option_prelude_entry(root: &Path) {
+    write_file(
+        root,
+        "index.ms",
+        r"
+export let answer () : Option[Int] := some[Int](1);
+",
+    );
+}
+
+fn check_root_entry(temp: &TempDir) -> Result<(), String> {
+    let project = Project::load(temp.path(), ProjectOptions::default())
+        .map_err(|error| format!("{error:?}"))?;
+    let entry = project.root_entry().map_err(|error| format!("{error:?}"))?;
+    let mut session = project
+        .build_session()
+        .map_err(|error| format!("{error:?}"))?;
+    session
+        .check_module(&entry.module_key)
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+}
+
+fn assert_builtin_std_root_compiles(manifest: &str, suite_name: &str) {
+    let temp = TempDir::new();
+    write_file(temp.path(), "musi.json", manifest);
+    write_file(
+        temp.path(),
+        "index.ms",
+        &format!(
+            r#"
+let Testing := import "@std/testing";
+export let test () :=
+  (
+    Testing.describe("{suite_name}");
+    Testing.it("adds values", Testing.toBe(1 + 2, 3));
+    Testing.endDescribe()
+  );
+"#
+        ),
+    );
+
+    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    assert!(project.package("@std").is_some());
+    let output = project.compile_root_entry().expect("root entry compiles");
+
+    assert!(output.artifact.validate().is_ok());
+}
+
 #[test]
 fn manifest_accepts_publish_false_and_object() {
     let disabled: PackageManifest = serde_json::from_str(
@@ -282,24 +511,14 @@ fn manifest_accepts_publish_false_and_object() {
 
 #[test]
 fn publish_true_is_invalid() {
-    let temp = TempDir::new();
-    write_file(
-        temp.path(),
-        "musi.json",
+    assert_manifest_validation_error(
         r#"{
   "name": "app",
   "version": "1.0.0",
   "publish": true
 }"#,
-    );
-    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
-
-    let error =
-        Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
-    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
-    assert_eq!(
-        error.diag_message().as_deref(),
-        Some("publish value invalid")
+        "load should fail",
+        "publish value invalid",
     );
 }
 
@@ -525,20 +744,27 @@ export let test () := 0;
     let targets = project
         .test_targets()
         .expect("test targets should synthesize");
+    let app_targets = targets
+        .iter()
+        .filter(|target| target.package.name == "app")
+        .collect::<Vec<_>>();
 
-    assert_eq!(targets.len(), 2);
-    assert_eq!(targets[0].kind, ProjectTestTargetKind::Module);
-    assert_eq!(targets[1].kind, ProjectTestTargetKind::SyntheticLawSuite);
+    assert_eq!(app_targets.len(), 2);
+    assert_eq!(app_targets[0].kind, ProjectTestTargetKind::Module);
     assert_eq!(
-        targets[1].module_key,
+        app_targets[1].kind,
+        ProjectTestTargetKind::SyntheticLawSuite
+    );
+    assert_eq!(
+        app_targets[1].module_key,
         ModuleKey::new("@app@1.0.0/index.ms::__laws")
     );
     assert_eq!(
-        targets[1].source_module_key,
+        app_targets[1].source_module_key,
         ModuleKey::new("@app@1.0.0/index.ms")
     );
-    assert_eq!(targets[1].export_name.as_ref(), "__laws_test");
-    let ProjectTestTargetSource::SyntheticModule = &targets[1].source else {
+    assert_eq!(app_targets[1].export_name.as_ref(), "musiLawsTest");
+    let ProjectTestTargetSource::SyntheticModule = &app_targets[1].source else {
         panic!("synthetic suite source expected");
     };
 }
@@ -564,6 +790,67 @@ fn compiles_workspace_std_package_and_test_modules() {
             .compile_module(&test.module_key)
             .expect("package test module compiles");
         assert!(output.artifact.validate().is_ok());
+    }
+}
+
+#[test]
+fn std_public_exports_have_doc_comments() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root should resolve");
+    let std_root = repo_root.join("packages/std");
+    let mut missing = Vec::<String>::new();
+    collect_missing_std_export_docs(&std_root, &std_root, &mut missing);
+
+    assert!(
+        missing.is_empty(),
+        "std exports missing doc comments:\n{}",
+        missing.join("\n")
+    );
+}
+
+fn collect_missing_std_export_docs(root: &Path, dir: &Path, missing: &mut Vec<String>) {
+    let mut entries = fs::read_dir(dir)
+        .expect("std dir should be readable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("std dir entries should be readable");
+    entries.sort_by_key(DirEntry::path);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_missing_std_export_docs(root, &path, missing);
+            continue;
+        }
+        if path.extension().is_none_or(|ext| ext != "ms")
+            || path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".test.ms"))
+        {
+            continue;
+        }
+        collect_missing_std_export_docs_in_file(root, &path, missing);
+    }
+}
+
+fn collect_missing_std_export_docs_in_file(root: &Path, path: &Path, missing: &mut Vec<String>) {
+    let text = fs::read_to_string(path).expect("std module should be readable");
+    let lines = text.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.trim_start().starts_with("export ") {
+            continue;
+        }
+        let has_doc = lines[..index]
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|line| line.trim_start().starts_with("///"));
+        if !has_doc {
+            let relative = path
+                .strip_prefix(root)
+                .expect("std path should be under root");
+            missing.push(format!("{}:{}", relative.display(), index + 1));
+        }
     }
 }
 
@@ -776,13 +1063,7 @@ fn root_package_gets_auto_std_prelude() {
   "workspace": ["packages/std"]
 }"#,
     );
-    write_file(
-        temp.path(),
-        "index.ms",
-        r"
-export let answer () : Option[Int] := some[Int](1);
-",
-    );
+    write_option_prelude_entry(temp.path());
     write_file(
         temp.path(),
         "packages/std/musi.json",
@@ -829,10 +1110,90 @@ export let none[T] () : Option[T] := .None;
 ",
     );
 
-    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
-    let entry = project.root_entry().expect("root entry resolves");
-    let mut session = project.build_session().expect("project session builds");
-    let _sema = session
-        .check_module(&entry.module_key)
-        .expect("root module should typecheck with auto prelude");
+    check_root_entry(&temp).expect("root module should typecheck with auto prelude");
+}
+
+#[test]
+fn missing_lib_defaults_to_builtin_std() {
+    assert_builtin_std_root_compiles(
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+        "default std",
+    );
+}
+
+#[test]
+fn explicit_std_dependency_uses_builtin_std() {
+    assert_builtin_std_root_compiles(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@std": "*"
+  }
+}"#,
+        "explicit std",
+    );
+}
+
+#[test]
+fn empty_lib_disables_builtin_std() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": []
+}"#,
+    );
+    write_file(
+        temp.path(),
+        "index.ms",
+        r#"let Testing := import "@std/testing";
+export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
+"#,
+    );
+
+    let error =
+        Project::load(temp.path(), ProjectOptions::default()).expect_err("std should be disabled");
+
+    assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some("unresolved import `@std/testing`")
+    );
+}
+
+#[test]
+fn empty_lib_disables_auto_std_prelude() {
+    let temp = TempDir::new();
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": []
+}"#,
+    );
+    write_option_prelude_entry(temp.path());
+
+    let _error = check_root_entry(&temp).expect_err("std prelude should be disabled");
+}
+
+#[test]
+fn unknown_lib_fails_manifest_validation() {
+    assert_manifest_validation_error(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "lib": ["!std"]
+}"#,
+        "lib should be invalid",
+        "unknown lib `!std`",
+    );
 }

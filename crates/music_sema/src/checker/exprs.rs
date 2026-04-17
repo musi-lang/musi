@@ -6,11 +6,12 @@ use music_hir::{
 };
 use music_names::Ident;
 
-use crate::api::ExprFacts;
+use crate::api::{ComptimeValue, ExprFacts};
 
 use super::decls::{LetExprInput, check_let_expr};
 use super::expr_calls::{check_apply_expr, check_call_expr};
-use super::patterns::bind_pat;
+use super::pats::bind_pat;
+use super::state::Builtins;
 use super::{CheckPass, DiagKind};
 use crate::effects::EffectRow;
 
@@ -189,7 +190,7 @@ impl CheckPass<'_, '_, '_> {
                 self.check_type_test_expr(id, base, ty, as_name)
             }
             HirExprKind::TypeCast { base, ty } => self.check_type_cast_expr(base, ty),
-            HirExprKind::Prefix { op, expr } => self.check_prefix_expr(origin, &op, expr),
+            HirExprKind::Prefix { op, expr } => self.check_prefix_expr(id, origin, &op, expr),
             HirExprKind::PartialRange { kind, expr } => {
                 self.check_partial_range_expr(id, origin, kind, expr)
             }
@@ -314,7 +315,8 @@ impl CheckPass<'_, '_, '_> {
         let ctx = self;
         let builtins = ctx.builtins();
         let ty = match ctx.lit_kind(lit) {
-            HirLitKind::Int { .. } | HirLitKind::Rune { .. } => builtins.int_,
+            HirLitKind::Int { .. } => builtins.int_,
+            HirLitKind::Rune { .. } => builtins.rune,
             HirLitKind::Float { .. } => builtins.float_,
             HirLitKind::String { .. } => builtins.string_,
         };
@@ -468,11 +470,27 @@ impl CheckPass<'_, '_, '_> {
 
     fn check_prefix_expr(
         &mut self,
+        expr_id: HirExprId,
         origin: HirOrigin,
         op: &HirPrefixOp,
         inner: HirExprId,
     ) -> ExprFacts {
         let ctx = self;
+        if matches!(op, HirPrefixOp::Comptime) {
+            if let Some(value) = super::const_eval::try_comptime_value(ctx, inner) {
+                let ty = if let Some(expanded) = ctx.comptime_expr_expansion(inner, &value) {
+                    check_expr(ctx, expanded).ty
+                } else {
+                    comptime_value_ty(ctx.builtins(), &value)
+                };
+                ctx.set_expr_comptime_value(inner, value.clone());
+                ctx.set_expr_comptime_value(expr_id, value);
+                return ExprFacts::new(ty, EffectRow::empty());
+            }
+            let inner_facts = check_expr(ctx, inner);
+            let _ = origin;
+            return ExprFacts::new(inner_facts.ty, EffectRow::empty());
+        }
         let inner_facts = check_expr(ctx, inner);
         let ty = match op {
             HirPrefixOp::Neg => ctx.numeric_unary_type(origin, inner_facts.ty),
@@ -484,6 +502,7 @@ impl CheckPass<'_, '_, '_> {
             HirPrefixOp::Mut => ctx.alloc_ty(HirTyKind::Mut {
                 inner: inner_facts.ty,
             }),
+            HirPrefixOp::Comptime => inner_facts.ty,
         };
         ExprFacts::new(ty, inner_facts.effects)
     }
@@ -519,6 +538,28 @@ impl CheckPass<'_, '_, '_> {
     }
 }
 
+const fn comptime_value_ty(builtins: Builtins, value: &ComptimeValue) -> HirTyId {
+    match value {
+        ComptimeValue::Int(_) => builtins.int_,
+        ComptimeValue::Nat(_) => builtins.nat,
+        ComptimeValue::Float(_) => builtins.float_,
+        ComptimeValue::String(_) => builtins.string_,
+        ComptimeValue::Rune(_) => builtins.rune,
+        ComptimeValue::CPtr(_) => builtins.cptr,
+        ComptimeValue::Syntax(_) => builtins.syntax,
+        ComptimeValue::Unit => builtins.unit,
+        ComptimeValue::Seq(_)
+        | ComptimeValue::Data(_)
+        | ComptimeValue::Closure(_)
+        | ComptimeValue::Continuation(_)
+        | ComptimeValue::Type(_)
+        | ComptimeValue::Module(_)
+        | ComptimeValue::Foreign(_)
+        | ComptimeValue::Effect(_)
+        | ComptimeValue::Class(_) => builtins.any,
+    }
+}
+
 impl CheckPass<'_, '_, '_> {
     fn check_quote_expr(&self, _kind: HirQuoteKind) -> ExprFacts {
         let ctx = self;
@@ -528,6 +569,27 @@ impl CheckPass<'_, '_, '_> {
     fn check_splice_expr(&self, _kind: HirSpliceKind) -> ExprFacts {
         let ctx = self;
         ExprFacts::new(ctx.builtins().syntax, EffectRow::empty())
+    }
+
+    fn comptime_expr_expansion(&self, expr: HirExprId, value: &ComptimeValue) -> Option<HirExprId> {
+        let ComptimeValue::Syntax(term) = value else {
+            return None;
+        };
+        if !matches!(term.shape(), music_term::SyntaxShape::Expr) {
+            return None;
+        }
+        if self
+            .expected_ty()
+            .is_some_and(|expected| self.ty_matches(expected, self.builtins().syntax))
+        {
+            return None;
+        }
+        match self.expr(expr).kind {
+            HirExprKind::Quote {
+                kind: HirQuoteKind::Expr { expr, .. },
+            } => Some(expr),
+            _ => None,
+        }
     }
 
     fn peel_mut_ty(&self, mut ty: HirTyId) -> HirTyId {
@@ -592,8 +654,19 @@ impl CheckPass<'_, '_, '_> {
             | HirTyKind::Bool
             | HirTyKind::Nat
             | HirTyKind::Int
+            | HirTyKind::Int8
+            | HirTyKind::Int16
+            | HirTyKind::Int32
+            | HirTyKind::Int64
+            | HirTyKind::Nat8
+            | HirTyKind::Nat16
+            | HirTyKind::Nat32
+            | HirTyKind::Nat64
             | HirTyKind::Float
+            | HirTyKind::Float32
+            | HirTyKind::Float64
             | HirTyKind::String
+            | HirTyKind::Rune
             | HirTyKind::CString
             | HirTyKind::CPtr
             | HirTyKind::Module
@@ -607,13 +680,11 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn numeric_unary_type(&mut self, origin: HirOrigin, ty: HirTyId) -> HirTyId {
-        let ctx = self;
-        let builtins = ctx.builtins();
-        if ty == builtins.int_ || ty == builtins.float_ {
+        if self.is_numeric_ty(ty) {
             ty
         } else {
-            ctx.diag(origin.span, DiagKind::NumericOperandRequired, "");
-            builtins.unknown
+            self.diag(origin.span, DiagKind::NumericOperandRequired, "");
+            self.builtins().unknown
         }
     }
 
@@ -623,16 +694,52 @@ impl CheckPass<'_, '_, '_> {
         left: HirTyId,
         right: HirTyId,
     ) -> HirTyId {
-        let ctx = self;
-        let builtins = ctx.builtins();
-        if left == builtins.float_ || right == builtins.float_ {
-            ctx.type_mismatch(origin, builtins.float_, left);
-            ctx.type_mismatch(origin, builtins.float_, right);
-            builtins.float_
+        if self.is_float_ty(left) || self.is_float_ty(right) {
+            let ty = if left == right {
+                left
+            } else {
+                self.builtins().float_
+            };
+            self.type_mismatch(origin, ty, left);
+            self.type_mismatch(origin, ty, right);
+            ty
         } else {
-            ctx.type_mismatch(origin, builtins.int_, left);
-            ctx.type_mismatch(origin, builtins.int_, right);
-            builtins.int_
+            let ty = if left == right {
+                left
+            } else {
+                self.builtins().int_
+            };
+            self.type_mismatch(origin, ty, left);
+            self.type_mismatch(origin, ty, right);
+            ty
         }
+    }
+
+    fn is_numeric_ty(&self, ty: HirTyId) -> bool {
+        self.is_integer_ty(ty) || self.is_float_ty(ty)
+    }
+
+    fn is_integer_ty(&self, ty: HirTyId) -> bool {
+        matches!(
+            self.ty(ty).kind,
+            HirTyKind::Int
+                | HirTyKind::Nat
+                | HirTyKind::Int8
+                | HirTyKind::Int16
+                | HirTyKind::Int32
+                | HirTyKind::Int64
+                | HirTyKind::Nat8
+                | HirTyKind::Nat16
+                | HirTyKind::Nat32
+                | HirTyKind::Nat64
+                | HirTyKind::NatLit(_)
+        )
+    }
+
+    fn is_float_ty(&self, ty: HirTyId) -> bool {
+        matches!(
+            self.ty(ty).kind,
+            HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64
+        )
     }
 }

@@ -846,6 +846,7 @@ dependencies = [
 name = "music_session"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "musi_vm",
  "music_base",
  "music_emit",
  "music_hir",
@@ -856,6 +857,7 @@ dependencies = [
  "music_seam",
  "music_sema",
  "music_syntax",
+ "music_term",
  "thiserror",
 ]
 

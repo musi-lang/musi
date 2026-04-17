@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{
@@ -11,14 +11,22 @@ use music_names::Ident;
 use crate::api::ClassFacts;
 
 use super::attrs::extract_data_layout_hints;
+use super::const_eval::{data_variant_tag, record_data_variant_tag};
 use super::decls::{member_law_facts, member_signature};
-use super::patterns::bound_name_from_pat;
+use super::pats::bound_name_from_pat;
 use super::surface::surface_key;
 use super::variant_payload::lower_variant_payload;
 use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     ctx.collect_module();
+}
+
+fn member_has_attr(ctx: &CollectPass<'_, '_, '_>, member: &HirMemberDef, name: &str) -> bool {
+    ctx.attrs(member.attrs.clone()).iter().any(|attr| {
+        let parts = ctx.idents(attr.path);
+        parts.len() == 1 && ctx.resolve_symbol(parts[0].name) == name
+    })
 }
 
 impl CollectPass<'_, '_, '_> {
@@ -283,8 +291,22 @@ impl CollectPass<'_, '_, '_> {
         );
         self.push_type_param_kinds(&type_param_kinds);
         let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
-        for variant in self.variants(variants) {
+        let mut seen_variants = HashMap::<Box<str>, HirOrigin>::new();
+        let mut seen_tags = HashSet::<i64>::new();
+        for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
             let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+            let tag_value = data_variant_tag(
+                self,
+                variant.value,
+                i64::try_from(variant_index).unwrap_or(i64::MAX),
+            );
+            if !record_data_variant_tag(&mut seen_tags, tag_value) {
+                self.diag(
+                    variant.origin.span,
+                    DiagKind::DuplicateDataVariantDiscriminant,
+                    "",
+                );
+            }
             let variant_fields = self.variant_fields(variant.fields);
             if variant_payload_style_is_mixed(&variant_fields) {
                 self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
@@ -293,17 +315,19 @@ impl CollectPass<'_, '_, '_> {
             let result = variant
                 .result
                 .map(|expr| self.lower_type_expr(expr, variant.origin));
-            let prev = variant_map.insert(
-                tag,
-                DataVariantDef::new(payload, result, field_tys, field_names),
-            );
-            if prev.is_some() {
-                self.diag(
+            if let Some(previous_origin) = seen_variants.insert(tag.clone(), variant.origin) {
+                self.diag_message_with_previous(
                     variant.origin.span,
+                    previous_origin.span,
                     DiagKind::CollectDuplicateDataVariant,
-                    "",
+                    format!("duplicate data variant `{tag}`"),
+                    format!("data variant `{tag}` first declared here"),
                 );
             }
+            let _previous_variant = variant_map.insert(
+                tag,
+                DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
+            );
         }
         if variant_map.is_empty() {
             let field_tys = self
@@ -318,7 +342,7 @@ impl CollectPass<'_, '_, '_> {
             if !field_tys.is_empty() {
                 let _ = variant_map.insert(
                     data_name.clone(),
-                    DataVariantDef::new(None, None, field_tys, Box::default()),
+                    DataVariantDef::new(0, None, None, field_tys, Box::default()),
                 );
             }
         }
@@ -350,13 +374,27 @@ impl CollectPass<'_, '_, '_> {
             match member.kind {
                 HirMemberKind::Let => {
                     let op_name: Box<str> = self.resolve_symbol(member.name.name).into();
-                    if seen_ops.insert(op_name, member.origin).is_some() {
-                        self.diag(member.origin.span, DiagKind::CollectDuplicateEffectOp, "");
+                    if let Some(previous_origin) = seen_ops.insert(op_name.clone(), member.origin) {
+                        self.diag_message_with_previous(
+                            member.origin.span,
+                            previous_origin.span,
+                            DiagKind::CollectDuplicateEffectOp,
+                            format!("duplicate effect operation `{op_name}`"),
+                            format!("effect operation `{op_name}` first declared here"),
+                        );
                     }
                 }
                 HirMemberKind::Law => {
-                    if seen_laws.insert(member.name.name, member.origin).is_some() {
-                        self.diag(member.origin.span, DiagKind::CollectDuplicateEffectLaw, "");
+                    let law_name = self.resolve_symbol(member.name.name).to_owned();
+                    if let Some(previous_origin) = seen_laws.insert(member.name.name, member.origin)
+                    {
+                        self.diag_message_with_previous(
+                            member.origin.span,
+                            previous_origin.span,
+                            DiagKind::CollectDuplicateEffectLaw,
+                            format!("duplicate effect law `{law_name}`"),
+                            format!("effect law `{law_name}` first declared here"),
+                        );
                     }
                 }
             }
@@ -376,7 +414,12 @@ impl CollectPass<'_, '_, '_> {
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                         facts.result,
-                    ),
+                    )
+                    .with_comptime_safe(member_has_attr(
+                        self,
+                        member,
+                        "comptimeSafe",
+                    )),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -411,16 +454,24 @@ impl CollectPass<'_, '_, '_> {
                         .insert(member.name.name, member.origin)
                         .is_some() =>
                 {
-                    self.diag(
+                    let member_name = self.resolve_symbol(member.name.name).to_owned();
+                    self.diag_message(
                         member.origin.span,
                         DiagKind::CollectDuplicateClassMember,
-                        "",
+                        format!("duplicate class member `{member_name}`"),
+                        format!("duplicate class member `{member_name}`"),
                     );
                 }
                 HirMemberKind::Law
                     if seen_laws.insert(member.name.name, member.origin).is_some() =>
                 {
-                    self.diag(member.origin.span, DiagKind::CollectDuplicateClassLaw, "");
+                    let law_name = self.resolve_symbol(member.name.name).to_owned();
+                    self.diag_message(
+                        member.origin.span,
+                        DiagKind::CollectDuplicateClassLaw,
+                        format!("duplicate class law `{law_name}`"),
+                        format!("duplicate class law `{law_name}`"),
+                    );
                 }
                 _ => {}
             }

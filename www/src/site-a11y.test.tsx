@@ -88,11 +88,42 @@ describe("site accessibility scaffolding", () => {
 		expect(html).toContain("Open community links");
 	});
 
+	it("renders docs search on portal and docs pages", () => {
+		for (const path of ["/", "/learn", "/learn/book/start/getting-started"]) {
+			const html = render(path);
+			expect(html).toContain('data-docs-search="true"');
+			expect(html).toContain("Search docs");
+		}
+	});
+
+	it("keeps portal docs search expanded and doc page docs search collapsed", () => {
+		expect(render("/")).toContain("docs-search docs-search-panel");
+		expect(render("/learn")).toContain("docs-search docs-search-panel");
+		const html = render("/learn/book/start/getting-started");
+		expect(html).toContain("docs-search docs-search-disclosure");
+		expect(html).toContain('data-docs-search-details="true"');
+		expect(html).not.toContain('docs-search-disclosure" open');
+	});
+
+	it("renders portal directory status and task paths", () => {
+		const html = render("/");
+		expect(html).toContain("Book-first");
+		expect(html).toContain("First file path");
+		expect(html).toContain("Unusual cases");
+	});
+
 	it("renders install command table headers", () => {
 		const html = render("/install");
 		expect(html).toContain('<th scope="col">Lane</th>');
 		expect(html).toContain('<th scope="col">Command</th>');
 		expect(html).toContain('<th scope="col">Description</th>');
+	});
+
+	it("renders install process steps", () => {
+		const html = render("/install");
+		expect(html).toContain("Check prerequisites");
+		expect(html).toContain("Choose command lane");
+		expect(html).toContain("Verify PATH");
 	});
 
 	it("renders only one visible install script tab panel by default", () => {
@@ -102,7 +133,10 @@ describe("site accessibility scaffolding", () => {
 	});
 
 	it("keeps hidden tab panels hidden against component display rules", () => {
-		const css = readFileSync(new URL("./app.css", import.meta.url), "utf8");
+		const css = readFileSync(
+			new URL("./styles/_base.scss", import.meta.url),
+			"utf8",
+		);
 		expect(css).toMatch(hiddenDisplayPattern);
 	});
 });

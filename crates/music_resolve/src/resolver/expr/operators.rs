@@ -27,6 +27,7 @@ where
         }
         let op = match kind {
             TokenKind::Minus => HirPrefixOp::Neg,
+            TokenKind::KwComptime => HirPrefixOp::Comptime,
             TokenKind::KwMut => HirPrefixOp::Mut,
             _ => HirPrefixOp::Not,
         };
@@ -50,7 +51,10 @@ where
         let origin = self.origin_node(node);
         let mut nodes = node.child_nodes();
         let left = self.lower_opt_expr(origin, nodes.next());
-        let right = self.lower_opt_expr(origin, nodes.next());
+        let Some(right_node) = nodes.next() else {
+            return left;
+        };
+        let right = self.lower_opt_expr(origin, Some(right_node));
 
         let op_tok = node.child_tokens().find(|t| t.kind() != TokenKind::Eof);
         if matches!(op_tok.map(SyntaxToken::kind), Some(TokenKind::PipeGt)) {

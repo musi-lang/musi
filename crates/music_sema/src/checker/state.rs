@@ -21,9 +21,9 @@ use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts, ForeignLinkInfo,
-    InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef,
-    SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
+    ClassFacts, ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts,
+    ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList,
+    SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -38,6 +38,8 @@ type TypeParamKindScope = HashMap<Symbol, HirTyId>;
 type TypeParamKindScopeList = Vec<TypeParamKindScope>;
 type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
 type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
+type BindingConstIntMap = HashMap<NameBindingId, i64>;
+type BindingComptimeValueMap = HashMap<NameBindingId, ComptimeValue>;
 type BindingAttachedReceiverMap = HashMap<NameBindingId, AttachedReceiverInfo>;
 type SealedClassSet = HashSet<DefinitionKey>;
 type GatedBindingSet = HashSet<NameBindingId>;
@@ -57,6 +59,7 @@ type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
 type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
 type ExprEvidenceMap = HashMap<HirExprId, Box<[ConstraintEvidence]>>;
 type ExprAttachedBindingMap = HashMap<HirExprId, NameBindingId>;
+type ExprComptimeValueMap = HashMap<HirExprId, ComptimeValue>;
 type ResumeCtxList = Vec<ResumeCtx>;
 type ExpectedTyList = Vec<HirTyId>;
 type EvidenceScope = HashMap<ConstraintKey, ConstraintEvidence>;
@@ -101,8 +104,19 @@ pub struct Builtins {
     pub bool_: HirTyId,
     pub nat: HirTyId,
     pub int_: HirTyId,
+    pub int8: HirTyId,
+    pub int16: HirTyId,
+    pub int32: HirTyId,
+    pub int64: HirTyId,
+    pub nat8: HirTyId,
+    pub nat16: HirTyId,
+    pub nat32: HirTyId,
+    pub nat64: HirTyId,
     pub float_: HirTyId,
+    pub float32: HirTyId,
+    pub float64: HirTyId,
     pub string_: HirTyId,
+    pub rune: HirTyId,
     pub cstring: HirTyId,
     pub cptr: HirTyId,
 }
@@ -121,8 +135,19 @@ impl Builtins {
             bool_: alloc_builtin(resolved, HirTyKind::Bool),
             nat: alloc_builtin(resolved, HirTyKind::Nat),
             int_: alloc_builtin(resolved, HirTyKind::Int),
+            int8: alloc_builtin(resolved, HirTyKind::Int8),
+            int16: alloc_builtin(resolved, HirTyKind::Int16),
+            int32: alloc_builtin(resolved, HirTyKind::Int32),
+            int64: alloc_builtin(resolved, HirTyKind::Int64),
+            nat8: alloc_builtin(resolved, HirTyKind::Nat8),
+            nat16: alloc_builtin(resolved, HirTyKind::Nat16),
+            nat32: alloc_builtin(resolved, HirTyKind::Nat32),
+            nat64: alloc_builtin(resolved, HirTyKind::Nat64),
             float_: alloc_builtin(resolved, HirTyKind::Float),
+            float32: alloc_builtin(resolved, HirTyKind::Float32),
+            float64: alloc_builtin(resolved, HirTyKind::Float64),
             string_: alloc_builtin(resolved, HirTyKind::String),
+            rune: alloc_builtin(resolved, HirTyKind::Rune),
             cstring: alloc_builtin(resolved, HirTyKind::CString),
             cptr: alloc_builtin(resolved, HirTyKind::CPtr),
         }
@@ -229,6 +254,8 @@ pub struct TypingState {
     type_param_kind_scopes: TypeParamKindScopeList,
     binding_evidence_keys: BindingEvidenceKeyMap,
     binding_module_targets: BindingModuleTargetMap,
+    binding_const_ints: BindingConstIntMap,
+    binding_comptime_values: BindingComptimeValueMap,
     binding_attached_receivers: BindingAttachedReceiverMap,
     sealed_classes: SealedClassSet,
     gated_bindings: GatedBindingSet,
@@ -271,6 +298,7 @@ pub struct FactState {
     type_test_targets: TypeTestTargetMap,
     expr_evidence: ExprEvidenceMap,
     expr_attached_bindings: ExprAttachedBindingMap,
+    expr_comptime_values: ExprComptimeValueMap,
 }
 
 impl FactState {
@@ -285,6 +313,7 @@ impl FactState {
             type_test_targets: HashMap::new(),
             expr_evidence: HashMap::new(),
             expr_attached_bindings: HashMap::new(),
+            expr_comptime_values: HashMap::new(),
         }
     }
 }
@@ -381,11 +410,11 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
     let bool_variants = BTreeMap::from([
         (
             "False".into(),
-            SemaDataVariantDef::new(None, None, Box::default(), Box::default()),
+            SemaDataVariantDef::new(0, None, None, Box::default(), Box::default()),
         ),
         (
             "True".into(),
-            SemaDataVariantDef::new(None, None, Box::default(), Box::default()),
+            SemaDataVariantDef::new(1, None, None, Box::default(), Box::default()),
         ),
     ]);
     let _ = decls.data_defs.insert(
@@ -404,11 +433,33 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
 fn host_target_info() -> TargetInfo {
     use std::env::consts::{ARCH, OS};
 
-    let os = match OS {
-        "macos" => "mac",
-        other => other,
+    let pointer_width = u16::try_from(usize::BITS).unwrap_or(64);
+    let endian = if cfg!(target_endian = "big") {
+        "big"
+    } else {
+        "little"
     };
-    TargetInfo::new().with_os(os).with_arch(ARCH)
+    let mut target = TargetInfo::new()
+        .with_os(OS)
+        .with_arch(ARCH)
+        .with_pointer_width(pointer_width)
+        .with_endian(endian);
+    if cfg!(unix) {
+        target = target.with_family("unix").with_family("posix");
+    }
+    if cfg!(windows) {
+        target = target.with_family("windows");
+    }
+    if cfg!(target_vendor = "apple") {
+        target = target.with_family("darwin");
+    }
+    if cfg!(target_os = "linux") {
+        target = target.with_family("linux");
+    }
+    if cfg!(target_family = "wasm") || ARCH.starts_with("wasm") {
+        target = target.with_family("webassembly");
+    }
+    target
 }
 
 pub fn finish_module(
@@ -429,6 +480,7 @@ pub fn finish_module(
             binding_schemes: typing.binding_schemes().clone(),
             binding_evidence_keys: typing.binding_evidence_keys().clone(),
             binding_module_targets: typing.binding_module_targets().clone(),
+            binding_comptime_values: typing.binding_comptime_values().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,
@@ -437,6 +489,7 @@ pub fn finish_module(
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
             expr_attached_bindings: facts.expr_attached_bindings,
+            expr_comptime_values: facts.expr_comptime_values,
         },
         decls: crate::SemaDeclsBuild {
             effect_defs: decls.effect_defs,
@@ -853,6 +906,10 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.facts.expr_attached_bindings.insert(id, binding);
     }
 
+    pub fn set_expr_comptime_value(&mut self, id: HirExprId, value: ComptimeValue) {
+        let _prev = self.facts.expr_comptime_values.insert(id, value);
+    }
+
     pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
         self.facts.expr_attached_bindings.get(&id).copied()
     }
@@ -977,6 +1034,27 @@ impl PassBase<'_, '_, '_> {
         self.typing.binding_module_targets.get(&id)
     }
 
+    pub fn binding_comptime_value(&self, id: NameBindingId) -> Option<&ComptimeValue> {
+        self.typing.binding_comptime_values.get(&id)
+    }
+
+    pub fn insert_binding_const_int(&mut self, id: NameBindingId, value: i64) {
+        let _prev = self.typing.binding_const_ints.insert(id, value);
+        let _prev = self
+            .typing
+            .binding_comptime_values
+            .insert(id, ComptimeValue::Int(value));
+    }
+
+    pub fn insert_binding_comptime_value(&mut self, id: NameBindingId, value: ComptimeValue) {
+        match value {
+            ComptimeValue::Int(int) => self.insert_binding_const_int(id, int),
+            other => {
+                let _prev = self.typing.binding_comptime_values.insert(id, other);
+            }
+        }
+    }
+
     pub fn insert_binding_module_target(&mut self, id: NameBindingId, target: ModuleKey) {
         let _prev = self.typing.binding_module_targets.insert(id, target);
     }
@@ -1067,6 +1145,7 @@ impl PassBase<'_, '_, '_> {
             (
                 "Left".into(),
                 SemaDataVariantDef::new(
+                    0,
                     Some(left),
                     None,
                     vec![left].into_boxed_slice(),
@@ -1076,6 +1155,7 @@ impl PassBase<'_, '_, '_> {
             (
                 "Right".into(),
                 SemaDataVariantDef::new(
+                    1,
                     Some(right),
                     None,
                     vec![right].into_boxed_slice(),
@@ -1156,12 +1236,61 @@ impl PassBase<'_, '_, '_> {
         diag
     }
 
+    pub fn diag_message_builder(
+        &self,
+        span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        label: impl Into<String>,
+    ) -> Diag {
+        let mut diag =
+            Diag::error(message)
+                .with_code(kind.code())
+                .with_label(span, self.source_id(), label);
+        if let Some(hint) = kind.hint() {
+            diag = diag.with_hint(hint);
+        }
+        diag
+    }
+
     pub fn push_diag(&mut self, diag: Diag) {
         self.facts.diags.push(diag);
     }
 
     pub fn diag(&mut self, span: Span, kind: DiagKind, label: &str) {
         self.push_diag(self.diag_builder(span, kind, label));
+    }
+
+    pub fn diag_message(
+        &mut self,
+        span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        label: impl Into<String>,
+    ) {
+        self.push_diag(self.diag_message_builder(span, kind, message, label));
+    }
+
+    pub fn diag_named(&mut self, span: Span, kind: DiagKind, message: impl Into<String>) {
+        let message = message.into();
+        self.push_diag(self.diag_message_builder(span, kind, message.clone(), message));
+    }
+
+    pub fn diag_message_with_previous(
+        &mut self,
+        span: Span,
+        previous_span: Span,
+        kind: DiagKind,
+        message: impl Into<String>,
+        previous_label: impl Into<String>,
+    ) {
+        let message = message.into();
+        self.push_diag(
+            Diag::error(message.clone())
+                .with_code(kind.code())
+                .with_label(span, self.source_id(), message)
+                .with_label(previous_span, self.source_id(), previous_label),
+        );
     }
 
     pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {
@@ -1192,6 +1321,14 @@ impl TypingState {
 
     pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
         &self.binding_module_targets
+    }
+
+    pub const fn binding_const_ints(&self) -> &HashMap<NameBindingId, i64> {
+        &self.binding_const_ints
+    }
+
+    pub const fn binding_comptime_values(&self) -> &HashMap<NameBindingId, ComptimeValue> {
+        &self.binding_comptime_values
     }
 
     pub fn binding_attached_receiver(&self, id: NameBindingId) -> Option<AttachedReceiverInfo> {

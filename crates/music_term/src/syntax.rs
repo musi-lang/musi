@@ -4,13 +4,13 @@ use thiserror::Error;
 
 pub type SyntaxTermResult<T = ()> = Result<T, SyntaxTermError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SyntaxShape {
     Expr,
     Module,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SyntaxTerm {
     shape: SyntaxShape,
     text: Box<str>,

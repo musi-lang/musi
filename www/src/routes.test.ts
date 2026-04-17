@@ -38,11 +38,15 @@ describe("routes", () => {
 				"/learn/book/developers/guides/javascript-typescript/overview",
 			).kind,
 		).toBe("doc");
-		expect(routeForPath("/learn/book/developers/guides/c-cpp").kind).toBe(
+		expect(routeForPath("/learn/book/developers/guides/c99").kind).toBe("doc");
+		expect(
+			routeForPath("/learn/book/developers/guides/c99/overview").kind,
+		).toBe("doc");
+		expect(routeForPath("/learn/book/developers/guides/cpp17").kind).toBe(
 			"doc",
 		);
 		expect(
-			routeForPath("/learn/book/developers/guides/c-cpp/overview").kind,
+			routeForPath("/learn/book/developers/guides/cpp17/overview").kind,
 		).toBe("doc");
 		expect(routeForPath("/learn/book/developers/guides/csharp").kind).toBe(
 			"doc",
@@ -108,16 +112,16 @@ describe("routes", () => {
 			routeForPath("/learn/book/developers/typescript").canonicalPath,
 		).toBe("/learn/book/developers/guides/javascript-typescript");
 		expect(routeForPath("/learn/book/developers/c").canonicalPath).toBe(
-			"/learn/book/developers/guides/c-cpp",
+			"/learn/book/developers/guides/c99",
 		);
 		expect(routeForPath("/learn/book/developers/cpp").canonicalPath).toBe(
-			"/learn/book/developers/guides/c-cpp",
+			"/learn/book/developers/guides/cpp17",
 		);
 		expect(
 			routeForPath("/learn/book/developers/c-plus-plus").canonicalPath,
-		).toBe("/learn/book/developers/guides/c-cpp");
+		).toBe("/learn/book/developers/guides/cpp17");
 		expect(routeForPath("/learn/book/developers/c-and-cpp").canonicalPath).toBe(
-			"/learn/book/developers/guides/c-cpp",
+			"/learn/book/developers/guides/cpp17",
 		);
 		expect(routeForPath("/learn/book/developers/csharp").canonicalPath).toBe(
 			"/learn/book/developers/guides/csharp",

@@ -3,7 +3,8 @@ import { abstractionsPages } from "./abstractions";
 import { advancedPages } from "./advanced";
 import { corePages } from "./core";
 import { dataPages } from "./data";
-import { cCppDeveloperPages } from "./developers/c-cpp";
+import { c99DeveloperPages } from "./developers/c99";
+import { cpp17DeveloperPages } from "./developers/cpp17";
 import { csharpDeveloperPages } from "./developers/csharp";
 import { goDeveloperPages } from "./developers/go";
 import { javaDeveloperPages } from "./developers/java";
@@ -25,7 +26,8 @@ export const rawBookPages = [
 	...abstractionsPages,
 	...effectsRuntimePages,
 	...advancedPages,
-	...cCppDeveloperPages,
+	...c99DeveloperPages,
+	...cpp17DeveloperPages,
 	...csharpDeveloperPages,
 	...goDeveloperPages,
 	...javaDeveloperPages,

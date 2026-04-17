@@ -5,12 +5,12 @@ use thiserror::Error;
 
 pub type TypeTermResult<T = ()> = Result<T, TypeTermError>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TypeTerm {
     pub kind: TypeTermKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeTermKind {
     Error,
     Unknown,
@@ -22,8 +22,19 @@ pub enum TypeTermKind {
     Bool,
     Nat,
     Int,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Nat8,
+    Nat16,
+    Nat32,
+    Nat64,
     Float,
+    Float32,
+    Float64,
     String,
+    Rune,
     CString,
     CPtr,
     Module,
@@ -86,19 +97,162 @@ pub enum TypeTermKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct SimpleTypeTermInfo {
+    kind: TypeTermKind,
+    parse_name: &'static str,
+    display_name: &'static str,
+}
+
+const SIMPLE_TYPE_TERMS: &[SimpleTypeTermInfo] = &[
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Error,
+        parse_name: "Error",
+        display_name: "<error>",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Unknown,
+        parse_name: "Unknown",
+        display_name: "Unknown",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Type,
+        parse_name: "Type",
+        display_name: "Type",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Syntax,
+        parse_name: "Syntax",
+        display_name: "Syntax",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Any,
+        parse_name: "Any",
+        display_name: "Any",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Empty,
+        parse_name: "Empty",
+        display_name: "Empty",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Unit,
+        parse_name: "Unit",
+        display_name: "Unit",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Bool,
+        parse_name: "Bool",
+        display_name: "Bool",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Nat,
+        parse_name: "Nat",
+        display_name: "Nat",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Int,
+        parse_name: "Int",
+        display_name: "Int",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Int8,
+        parse_name: "Int8",
+        display_name: "Int8",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Int16,
+        parse_name: "Int16",
+        display_name: "Int16",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Int32,
+        parse_name: "Int32",
+        display_name: "Int32",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Int64,
+        parse_name: "Int64",
+        display_name: "Int64",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Nat8,
+        parse_name: "Nat8",
+        display_name: "Nat8",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Nat16,
+        parse_name: "Nat16",
+        display_name: "Nat16",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Nat32,
+        parse_name: "Nat32",
+        display_name: "Nat32",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Nat64,
+        parse_name: "Nat64",
+        display_name: "Nat64",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Float,
+        parse_name: "Float",
+        display_name: "Float",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Float32,
+        parse_name: "Float32",
+        display_name: "Float32",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Float64,
+        parse_name: "Float64",
+        display_name: "Float64",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::String,
+        parse_name: "String",
+        display_name: "String",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Rune,
+        parse_name: "Rune",
+        display_name: "Rune",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::CString,
+        parse_name: "CString",
+        display_name: "CString",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::CPtr,
+        parse_name: "CPtr",
+        display_name: "CPtr",
+    },
+    SimpleTypeTermInfo {
+        kind: TypeTermKind::Module,
+        parse_name: "Module",
+        display_name: "Module",
+    },
+];
+
+fn simple_type_term_info(kind: &TypeTermKind) -> Option<&'static SimpleTypeTermInfo> {
+    SIMPLE_TYPE_TERMS.iter().find(|term| &term.kind == kind)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TypeModuleRef {
     pub spec: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeDim {
     Unknown,
     Name(Box<str>),
     Int(u32),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TypeField {
     pub name: Box<str>,
     pub ty: TypeTerm,
@@ -182,8 +336,19 @@ impl Display for TypeTerm {
             | TypeTermKind::Bool
             | TypeTermKind::Nat
             | TypeTermKind::Int
+            | TypeTermKind::Int8
+            | TypeTermKind::Int16
+            | TypeTermKind::Int32
+            | TypeTermKind::Int64
+            | TypeTermKind::Nat8
+            | TypeTermKind::Nat16
+            | TypeTermKind::Nat32
+            | TypeTermKind::Nat64
             | TypeTermKind::Float
+            | TypeTermKind::Float32
+            | TypeTermKind::Float64
             | TypeTermKind::String
+            | TypeTermKind::Rune
             | TypeTermKind::CString
             | TypeTermKind::CPtr
             | TypeTermKind::Module
@@ -195,39 +360,10 @@ impl Display for TypeTerm {
 }
 
 fn fmt_atomic_type_term_kind(f: &mut Formatter<'_>, kind: &TypeTermKind) -> Option<fmt::Result> {
-    match kind {
-        TypeTermKind::Error => Some(f.write_str("<error>")),
-        TypeTermKind::Unknown => Some(f.write_str("Unknown")),
-        TypeTermKind::Type => Some(f.write_str("Type")),
-        TypeTermKind::Syntax => Some(f.write_str("Syntax")),
-        TypeTermKind::Any => Some(f.write_str("Any")),
-        TypeTermKind::Empty => Some(f.write_str("Empty")),
-        TypeTermKind::Unit => Some(f.write_str("Unit")),
-        TypeTermKind::Bool => Some(f.write_str("Bool")),
-        TypeTermKind::Nat => Some(f.write_str("Nat")),
-        TypeTermKind::Int => Some(f.write_str("Int")),
-        TypeTermKind::Float => Some(f.write_str("Float")),
-        TypeTermKind::String => Some(f.write_str("String")),
-        TypeTermKind::CString => Some(f.write_str("CString")),
-        TypeTermKind::CPtr => Some(f.write_str("CPtr")),
-        TypeTermKind::Module => Some(f.write_str("Module")),
-        TypeTermKind::NatLit(value) => Some(write!(f, "{value}")),
-        TypeTermKind::Named { .. }
-        | TypeTermKind::Pi { .. }
-        | TypeTermKind::Arrow { .. }
-        | TypeTermKind::Sum { .. }
-        | TypeTermKind::Tuple { .. }
-        | TypeTermKind::Seq { .. }
-        | TypeTermKind::Array { .. }
-        | TypeTermKind::Range { .. }
-        | TypeTermKind::ClosedRange { .. }
-        | TypeTermKind::PartialRangeFrom { .. }
-        | TypeTermKind::PartialRangeUpTo { .. }
-        | TypeTermKind::PartialRangeThru { .. }
-        | TypeTermKind::Handler { .. }
-        | TypeTermKind::Mut { .. }
-        | TypeTermKind::Record { .. } => None,
+    if let TypeTermKind::NatLit(value) = kind {
+        return Some(write!(f, "{value}"));
     }
+    simple_type_term_info(kind).map(|term| f.write_str(term.display_name))
 }
 
 fn fmt_named_type_term(f: &mut Formatter<'_>, name: &str, args: &[TypeTerm]) -> fmt::Result {
@@ -670,22 +806,7 @@ impl<'a> Parser<'a> {
 }
 
 fn simple_type_kind(name: &str) -> Option<TypeTermKind> {
-    match name {
-        "Error" => Some(TypeTermKind::Error),
-        "Unknown" => Some(TypeTermKind::Unknown),
-        "Type" => Some(TypeTermKind::Type),
-        "Syntax" => Some(TypeTermKind::Syntax),
-        "Any" => Some(TypeTermKind::Any),
-        "Empty" => Some(TypeTermKind::Empty),
-        "Unit" => Some(TypeTermKind::Unit),
-        "Bool" => Some(TypeTermKind::Bool),
-        "Nat" => Some(TypeTermKind::Nat),
-        "Int" => Some(TypeTermKind::Int),
-        "Float" => Some(TypeTermKind::Float),
-        "String" => Some(TypeTermKind::String),
-        "CString" => Some(TypeTermKind::CString),
-        "CPtr" => Some(TypeTermKind::CPtr),
-        "Module" => Some(TypeTermKind::Module),
-        _ => None,
-    }
+    SIMPLE_TYPE_TERMS
+        .iter()
+        .find_map(|term| (term.parse_name == name).then(|| term.kind.clone()))
 }

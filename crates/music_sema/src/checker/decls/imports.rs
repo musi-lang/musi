@@ -4,7 +4,7 @@ use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind};
 use music_module::ModuleKey;
 use music_names::{Ident, NameBindingId, Symbol};
 
-use super::super::patterns::{bind_pat, bound_name_from_pat};
+use super::super::pats::{bind_pat, bound_name_from_pat};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
@@ -176,7 +176,13 @@ impl CheckPass<'_, '_, '_> {
                 .exported_value(self.resolve_symbol(field.name.name))
                 .cloned()
             else {
-                self.diag(field.name.span, DiagKind::UnknownExport, "");
+                let export_name = self.resolve_symbol(field.name.name).to_owned();
+                self.diag_message(
+                    field.name.span,
+                    DiagKind::UnknownExport,
+                    format!("unknown export `{export_name}`"),
+                    format!("unknown export `{export_name}`"),
+                );
                 continue;
             };
             let field_ty = import_surface_ty(self, &surface, export.ty);
@@ -385,7 +391,8 @@ impl CheckPass<'_, '_, '_> {
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                         import_surface_ty(self, module_surface, op.result),
-                    ),
+                    )
+                    .with_comptime_safe(op.is_comptime_safe),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -440,6 +447,7 @@ impl CheckPass<'_, '_, '_> {
                 (
                     variant.name.clone(),
                     DataVariantDef::new(
+                        variant.tag,
                         variant
                             .payload
                             .map(|ty| import_surface_ty(self, module_surface, ty)),
@@ -525,6 +533,12 @@ impl CheckPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
+        if let Some(const_int) = export.const_int {
+            self.insert_binding_const_int(binding, const_int);
+        }
+        if let Some(comptime_value) = export.comptime_value.clone() {
+            self.insert_binding_comptime_value(binding, comptime_value);
+        }
         self.set_binding_evidence_keys(binding, evidence_keys);
         if let Some(receiver_ty) = export.receiver_ty {
             let imported_receiver = import_surface_ty(self, surface, receiver_ty);

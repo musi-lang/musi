@@ -1,9 +1,9 @@
-let Testing := import "@std/testing";
+let testing := import "@std/testing";
 
 export let test () :=
   (
-    Testing.describe("testing");
-    Testing.it("'pass' returns outcome", Testing.toBe(1, 1));
-    Testing.it("'fail' returns false", Testing.fail("boom"));
-    Testing.endDescribe()
+    testing.describe("testing");
+    testing.it("'pass' returns outcome", testing.toBe(1, 1));
+    testing.it("'fail' returns false", testing.toBeFalsy(testing.fail("boom")));
+    testing.endDescribe()
   );

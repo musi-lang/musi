@@ -72,11 +72,11 @@ secure.port;`,
 	{
 		id: "js-ts-arrays-pipelines",
 		language: "musi",
-		sourceText: `let Iter := import "@std/iter";
+		sourceText: `let iter := import "@std/iter";
 
 let ports := [3000, 8080, 9000];
 let visible := ports
-  |> Iter.map[Int, Int](\\(port : Int) : Int => port + 1);
+  |> iter.map[Int, Int](\\(port : Int) : Int => port + 1);
 visible;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/arrays-pipelines.md",
@@ -86,12 +86,12 @@ visible;`,
 	{
 		id: "js-ts-null-option",
 		language: "musi",
-		sourceText: `let Option := import "@std/option";
+		sourceText: `let option := import "@std/option";
 
-let findPort (name : String) : Option.Option[Int] := Option.some[Int](8080);
+let findPort (name : String) : option.Option[Int] := option.some[Int](8080);
 
 let port := findPort("local")
-  |> Option.unwrapOr[Int](3000);
+  |> option.unwrapOr[Int](3000);
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/null-result.md",
@@ -101,12 +101,12 @@ port;`,
 	{
 		id: "js-ts-result-data",
 		language: "musi",
-		sourceText: `let Result := import "@std/result";
+		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : Result.Result[Int, String] := Result.ok[Int, String](8080);
+let parsePort (text : String) : result.Result[Int, String] := result.ok[Int, String](8080);
 
 let port := parsePort("8080")
-  |> Result.unwrapOr[Int, String](3000);
+  |> result.unwrapOr[Int, String](3000);
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/null-result.md",
@@ -164,10 +164,10 @@ match boxed (
 	{
 		id: "js-ts-promise-effect",
 		language: "musi",
-		sourceText: `let Io := import "@std/io";
+		sourceText: `let io := import "@std/io";
 
-let name := Io.promptTrimmed("name> ");
-Io.writeLine(name);`,
+let name := io.promptTrimmed("name> ");
+io.writeLine(name);`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/promises-effects.md",
 			line: 1,
@@ -216,15 +216,15 @@ let carVehicle := instance Vehicle[Car] {
 	{
 		id: "js-ts-testing-tooling",
 		language: "musi",
-		sourceText: `let Testing := import "@std/testing";
+		sourceText: `let testing := import "@std/testing";
 
 let defaultPort () : Int := 8080;
 
 export let test () :=
   (
-    Testing.describe("ports");
-    Testing.it("default port is http alt", Testing.toBe(defaultPort(), 8080));
-    Testing.endDescribe()
+    testing.describe("ports");
+    testing.it("default port is http alt", testing.toBe(defaultPort(), 8080));
+    testing.endDescribe()
   );`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/testing-tooling.md",

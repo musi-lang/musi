@@ -1,9 +1,14 @@
+use std::cmp::Ordering::{Equal, Greater, Less};
 use std::mem::size_of;
 
 use music_seam::{ForeignId, Instruction, Opcode, Operand, TypeId};
 
 use crate::VmValueKind;
 
+use super::target::{
+    jit_backend, jit_isa, jit_supported, normalize_arch_text, normalize_target_text, target_arch,
+    target_arch_family, target_endian, target_family, target_os,
+};
 use super::{ForeignCall, StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
@@ -136,7 +141,12 @@ impl Vm {
         if foreign.abi() != "musi" {
             return None;
         }
+        if let Some(result) = self.call_sys_intrinsic(module_slot, foreign, args) {
+            return Some(result);
+        }
         let result = match foreign.symbol() {
+            "data.tag" => Self::data_tag(foreign, args),
+            "cmp.float.total_compare" => Self::float_total_compare(foreign, args),
             "ffi.ptr.null" => Ok(Value::CPtr(0)),
             "ffi.ptr.is_null" => self.ptr_is_null(module_slot, foreign, args),
             "ffi.ptr.offset.i8" | "ffi.ptr.offset.u8" => Self::ptr_offset(foreign, args, 1),
@@ -160,6 +170,73 @@ impl Vm {
             _ => return None,
         };
         Some(result)
+    }
+
+    fn call_sys_intrinsic(
+        &self,
+        module_slot: usize,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> Option<VmResult<Value>> {
+        let result = match foreign.symbol() {
+            "sys.target.os" => Ok(Value::string(target_os())),
+            "sys.target.arch" => Ok(Value::string(target_arch())),
+            "sys.target.arch_family" => Ok(Value::string(target_arch_family())),
+            "sys.target.family" => Ok(Value::string(target_family())),
+            "sys.target.pointer_width" => Ok(Value::Int(i64::from(usize::BITS))),
+            "sys.target.endian" => Ok(Value::string(target_endian())),
+            "sys.jit.supported" => Ok(Value::Int(i64::from(jit_supported()))),
+            "sys.jit.backend" => Ok(Value::string(jit_backend())),
+            "sys.jit.isa" => Ok(Value::string(jit_isa())),
+            "sys.matches.os" => {
+                self.sys_match(module_slot, foreign, args, target_os, normalize_target_text)
+            }
+            "sys.matches.arch" => {
+                self.sys_match(module_slot, foreign, args, target_arch, normalize_arch_text)
+            }
+            "sys.matches.family" => self.sys_match(
+                module_slot,
+                foreign,
+                args,
+                target_family,
+                normalize_target_text,
+            ),
+            _ => return None,
+        };
+        Some(result)
+    }
+
+    fn data_tag(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
+        match args.first() {
+            Some(Value::Data(data)) => Ok(Value::Int(data.borrow().tag)),
+            Some(found) => Err(Self::invalid_value_kind(VmValueKind::Data, found)),
+            None => Err(Self::ptr_error(foreign, "data tag argument missing")),
+        }
+    }
+
+    fn float_total_compare(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
+        let left = Self::float_arg(foreign, args, 0)?;
+        let right = Self::float_arg(foreign, args, 1)?;
+        let ordering = match left.total_cmp(&right) {
+            Less => -1,
+            Equal => 0,
+            Greater => 1,
+        };
+        Ok(Value::Int(ordering))
+    }
+
+    fn sys_match(
+        &self,
+        module_slot: usize,
+        foreign: &ForeignCall,
+        args: &[Value],
+        target: fn() -> &'static str,
+        normalize: fn(&str) -> String,
+    ) -> VmResult<Value> {
+        let [Value::String(value)] = args else {
+            return Err(Self::ptr_error(foreign, "target match argument invalid"));
+        };
+        self.bool_value(module_slot, normalize(value.as_ref()) == target())
     }
 
     fn ptr_is_null(
@@ -224,6 +301,14 @@ impl Vm {
         }
     }
 
+    fn float_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<f64> {
+        match args.get(index) {
+            Some(Value::Float(value)) => Ok(*value),
+            Some(found) => Err(Self::invalid_value_kind(VmValueKind::Float, found)),
+            None => Err(Self::ptr_error(foreign, "float intrinsic argument missing")),
+        }
+    }
+
     fn ptr_error(foreign: &ForeignCall, detail: &'static str) -> VmError {
         VmError::new(VmErrorKind::PointerIntrinsicFailed {
             intrinsic: foreign.symbol().into(),
@@ -241,15 +326,26 @@ fn pointer_storage_suffix(type_name: &str) -> Option<&'static str> {
         ("CUShort", "u16"),
         ("CInt", "i32"),
         ("CUInt", "u32"),
+        ("Int8", "i8"),
+        ("Nat8", "u8"),
+        ("Int16", "i16"),
+        ("Nat16", "u16"),
+        ("Int32", "i32"),
+        ("Nat32", "u32"),
+        ("Int64", "i64"),
+        ("Nat64", "u64"),
         ("CLong", "i64"),
         ("CLongLong", "i64"),
         ("CSizeDiff", "i64"),
         ("Int", "i64"),
+        ("Nat", "u64"),
         ("CULong", "u64"),
         ("CULongLong", "u64"),
         ("CSize", "u64"),
         ("CFloat", "f32"),
+        ("Float32", "f32"),
         ("CDouble", "f64"),
+        ("Float64", "f64"),
         ("Float", "f64"),
         ("CPtr", "ptr"),
     ];

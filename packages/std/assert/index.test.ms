@@ -1,15 +1,15 @@
-let Testing := import "@std/testing";
-let Assert := import "@std/assert";
+let testing := import "@std/testing";
+let assert := import "@std/assert";
 
 export let test () :=
   (
-    Testing.describe("assert/matchers");
-    Testing.it("'equal' passes on equal ints", Assert.equal[Int](4, 4));
-    Testing.it("'notEqual' passes on different ints", Assert.notEqual[Int](4, 3));
-    Testing.it("'isTrue' passes on comparison", Assert.isTrue(1 = 1));
-    Testing.it("'isFalse' passes on comparison", Assert.isFalse(1 = 2));
-    Testing.it("'greaterThan' matcher passes", Assert.greaterThan(5, 2));
-    Testing.it("'lessThan' matcher passes", Assert.lessThan(2, 5));
-    Testing.it("'betweenInclusive' matcher passes", Assert.betweenInclusive(3, 0, 4));
-    Testing.endDescribe()
+    testing.describe("assert/matchers");
+    testing.it("'equal' passes on equal ints", assert.equal[Int](4, 4));
+    testing.it("'notEqual' passes on different ints", assert.notEqual[Int](4, 3));
+    testing.it("'isTrue' passes on comparison", assert.isTrue(1 = 1));
+    testing.it("'isFalse' passes on comparison", assert.isFalse(1 = 2));
+    testing.it("'greaterThan' matcher passes", assert.greaterThan(5, 2));
+    testing.it("'lessThan' matcher passes", assert.lessThan(2, 5));
+    testing.it("'betweenInclusive' matcher passes", assert.betweenInclusive(3, 0, 4));
+    testing.endDescribe()
   );

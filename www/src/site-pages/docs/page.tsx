@@ -4,17 +4,19 @@ import {
 	docForPath,
 	docGroups,
 	docNeighbors,
+	docSearchEntries,
 } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
-import { InlineAction, PrimaryAction, SecondaryAction } from "../../ui/actions";
+import { InlineAction, SecondaryAction } from "../../ui/actions";
 import { DocListGroup } from "../../ui/doc-list";
+import { DocsSearch } from "../../ui/docs-search";
 import { HtmlSnippet } from "../../ui/html-snippet";
 import { PageHeader } from "../../ui/page-header";
 import { Surface } from "../../ui/surface";
 import { OnThisPage } from "../../ui/toc";
 
-export function DocsIndexPage(props: { route: AppRoute }) {
+export function DocsIndexPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.learn;
 	return (
 		<div className="page-stack">
@@ -24,9 +26,6 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 				description={copy.description}
 				actions={
 					<div className="action-strip">
-						<PrimaryAction href={props.route.path}>
-							{siteCopy.nav.learn}
-						</PrimaryAction>
 						<SecondaryAction href="/install">
 							{siteCopy.nav.install}
 						</SecondaryAction>
@@ -37,7 +36,7 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 				}
 			/>
 			<section className="portal-grid" aria-label={siteCopy.ui.docsEntryPoints}>
-				<Surface tone="accent" className="portal-card">
+				<Surface tone="accent" className="portal-card portal-card-task">
 					<div className="eyebrow">{copy.eyebrow}</div>
 					<h2>{copy.startTitle}</h2>
 					<p>{copy.description}</p>
@@ -45,7 +44,7 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 						{siteCopy.ui.openFirstChapter}
 					</InlineAction>
 				</Surface>
-				<Surface tone="panel" className="portal-card">
+				<Surface tone="panel" className="portal-card portal-card-task">
 					<div className="eyebrow">{siteCopy.ui.learnSection}</div>
 					<h2>{copy.partsTitle}</h2>
 					<p>
@@ -54,6 +53,13 @@ export function DocsIndexPage(props: { route: AppRoute }) {
 					</p>
 				</Surface>
 			</section>
+			<Surface tone="well" className="section-panel section-panel-structured">
+				<DocsSearch
+					entries={docSearchEntries}
+					heading={siteCopy.ui.findDocs}
+					lede="Type a topic, command, source language, or question."
+				/>
+			</Surface>
 			<Surface tone="panel" className="section-panel">
 				<div className="section-heading-row">
 					<div>
@@ -104,14 +110,20 @@ function SectionNav(props: {
 			<div>
 				{props.previous ? (
 					<InlineAction href={props.previous.path}>
-						{labels.previousChapter}: {props.previous.title}
+						<span aria-hidden="true">&lt;&lt;</span>
+						<span>
+							{labels.previousChapter}: {props.previous.title}
+						</span>
 					</InlineAction>
 				) : null}
 			</div>
 			<div>
 				{props.next ? (
 					<InlineAction href={props.next.path}>
-						{labels.nextChapter}: {props.next.title}
+						<span>
+							{labels.nextChapter}: {props.next.title}
+						</span>
+						<span aria-hidden="true">&gt;&gt;</span>
 					</InlineAction>
 				) : null}
 			</div>
@@ -154,6 +166,14 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 				className="toc-panel-mobile"
 				label={siteCopy.ui.onThisPage}
 			/>
+			<Surface tone="well" className="section-panel docs-page-tools">
+				<DocsSearch
+					entries={docSearchEntries}
+					heading={siteCopy.ui.findDocs}
+					lede="Jump to another chapter without losing the current reading path."
+					variant="disclosure"
+				/>
+			</Surface>
 			<div className="docs-body-grid">
 				<Surface tone="base" className="doc-article-surface">
 					<article className="docs-article">

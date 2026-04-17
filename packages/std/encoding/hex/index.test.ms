@@ -1,13 +1,13 @@
-let Testing := import "@std/testing";
-let Option := import "@std/option";
-let Hex := import "./index.ms";
+let testing := import "@std/testing";
+let option := import "@std/option";
+let hex := import "./index.ms";
 
 export let test () :=
   (
-    Testing.describe("encoding/hex");
-    Testing.it("'encode' converts utf8 bytes to hex", Testing.toBeTruthy(Hex.encode("hi") = "6869"));
-    Testing.it("'isValid' accepts hex string", Testing.toBeTruthy(Hex.isValid("6869")));
-    Testing.it("'decode' returns some for valid input", Testing.toBeTruthy(Option.isSome[String](Hex.decode("6869"))));
-    Testing.it("'decode' returns none for invalid input", Testing.toBeTruthy(Option.isNone[String](Hex.decode("zz"))));
-    Testing.endDescribe()
+    testing.describe("encoding/hex");
+    testing.it("'encode' converts utf8 bytes to hex", testing.toBeTruthy(hex.encode("hi") = "6869"));
+    testing.it("'isValid' accepts hex string", testing.toBeTruthy(hex.isValid("6869")));
+    testing.it("'decode' returns some for valid input", testing.toBeTruthy(option.isSome[String](hex.decode("6869"))));
+    testing.it("'decode' returns none for invalid input", testing.toBeTruthy(option.isNone[String](hex.decode("zz"))));
+    testing.endDescribe()
   );

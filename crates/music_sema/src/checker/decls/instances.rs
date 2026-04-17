@@ -76,10 +76,11 @@ impl CheckPass<'_, '_, '_> {
             self.type_mismatch(member.origin, expected.result, signature.result);
         } else {
             let member_name = self.resolve_symbol(member.name.name).to_owned();
-            self.diag(
+            self.diag_message(
                 member.origin.span,
                 DiagKind::UnknownInstanceMember,
-                &format!("unknown instance member `{member_name}`"),
+                format!("unknown instance member `{member_name}`"),
+                format!("unknown instance member `{member_name}`"),
             );
         }
         if let Some(value) = member.value {
@@ -112,13 +113,25 @@ impl CheckPass<'_, '_, '_> {
                 continue;
             }
             if !seen_members.insert(member.name.name) {
-                self.diag(member.origin.span, DiagKind::DuplicateInstanceMember, "");
+                let member_name = self.resolve_symbol(member.name.name).to_owned();
+                self.diag_message(
+                    member.origin.span,
+                    DiagKind::DuplicateInstanceMember,
+                    format!("duplicate instance member `{member_name}`"),
+                    format!("duplicate instance member `{member_name}`"),
+                );
             }
             self.check_instance_member(member, expected_members);
         }
         for expected in expected_members.keys() {
             if !seen_members.contains(expected) {
-                self.diag(origin.span, DiagKind::MissingInstanceMember, "");
+                let member_name = self.resolve_symbol(*expected).to_owned();
+                self.diag_message(
+                    origin.span,
+                    DiagKind::MissingInstanceMember,
+                    format!("missing instance member `{member_name}`"),
+                    format!("missing instance member `{member_name}`"),
+                );
             }
         }
         member_names.into_boxed_slice()
@@ -156,10 +169,11 @@ impl CheckPass<'_, '_, '_> {
 
         if self.class_id(class_name).is_none() && self.class_facts_by_name(class_name).is_none() {
             let class_name = self.resolve_symbol(class_name).to_owned();
-            self.diag(
+            self.diag_message(
                 origin.span,
                 DiagKind::UnknownClass,
-                &format!("unknown class `{class_name}`"),
+                format!("unknown class `{class_name}`"),
+                format!("unknown class `{class_name}`"),
             );
         }
 

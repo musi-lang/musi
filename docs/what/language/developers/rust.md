@@ -1,6 +1,6 @@
 ---
 title: "Overview"
-description: "Translate Rust 1.87.0 habits into Musi code with side-by-side examples."
+description: "Translate Rust 2024 edition (1.85+) habits into Musi code with side-by-side examples."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 1
@@ -8,7 +8,7 @@ slug: "overview"
 summary: "Start from Rust habits, then read the equivalent Musi expression, data, abstraction, effect, and FFI shapes."
 ---
 
-Rust 1.87.0 is the comparison point for this guide. Each page starts with Rust code, then shows the Musi equivalent with the same names and the same job.
+Rust 2024 edition (1.85+) is the comparison point for this guide. Each page starts with Rust code, then shows the Musi equivalent with the same names and the same job.
 
 A Rust reader should not have to skim a generic Musi example and guess the translation. The Musi block below each Rust block is the translation.
 

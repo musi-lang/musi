@@ -57,6 +57,7 @@ pub enum Opcode {
     SeqSet,
     SeqSetN,
     SeqCat,
+    SeqLen,
     RangeNew,
     RangeContains,
     RangeMaterialize,
@@ -429,6 +430,13 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         mnemonic: "seq.cat",
         operand_shape: OperandShape::None,
         wire_code: 0x0506,
+    },
+    OpcodeInfo {
+        opcode: Opcode::SeqLen,
+        family: OpcodeFamily::Sequence,
+        mnemonic: "seq.len",
+        operand_shape: OperandShape::None,
+        wire_code: 0x050B,
     },
     OpcodeInfo {
         opcode: Opcode::RangeNew,

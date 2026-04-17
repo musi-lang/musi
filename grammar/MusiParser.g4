@@ -51,7 +51,7 @@ infix_op:
 	| PERCENT
 	| SYMBOLIC_OP;
 
-prefix_expr: (MINUS | KW_NOT | KW_MUT) prefix_expr
+prefix_expr: (MINUS | KW_COMPTIME | KW_NOT | KW_MUT) prefix_expr
 	| postfix_expr;
 
 postfix_expr: atom postfix_op*;
@@ -369,7 +369,7 @@ params: LPAREN param_list? RPAREN;
 
 param_list: param (COMMA param)*;
 
-param: ident type_annot? (COLON_EQ expr)?;
+param: KW_COMPTIME? ident type_annot? (COLON_EQ expr)?;
 
 ident_list: comma_pad ident (COMMA ident)* comma_pad;
 

@@ -10,9 +10,9 @@ use thiserror::Error;
 pub enum ToolingError {
     #[error("entry source not found at `{path}`")]
     MissingEntrySource { path: PathBuf },
-    #[error("import `{spec}` uses package context and must run through `musi`")]
+    #[error("import specifier `{spec}` uses package context and must run through `musi`")]
     PackageImportRequiresMusi { spec: String },
-    #[error("import `{spec}` not found from `{path}`")]
+    #[error("import specifier `{spec}` not found from `{path}`")]
     MissingImport { path: PathBuf, spec: String },
     #[error("tooling I/O failed at `{path}`")]
     ToolingIoFailed {
@@ -42,10 +42,12 @@ impl ToolingError {
     pub fn diag_message(&self) -> Option<Cow<'static, str>> {
         Some(match self {
             Self::MissingEntrySource { .. } => Cow::Borrowed("entry source not found"),
-            Self::PackageImportRequiresMusi { spec } => {
-                Cow::Owned(format!("import `{spec}` requires `musi` package context"))
+            Self::PackageImportRequiresMusi { spec } => Cow::Owned(format!(
+                "import specifier `{spec}` requires `musi` package context"
+            )),
+            Self::MissingImport { spec, .. } => {
+                Cow::Owned(format!("import specifier `{spec}` not found"))
             }
-            Self::MissingImport { spec, .. } => Cow::Owned(format!("import `{spec}` not found")),
             Self::ToolingIoFailed { .. } => Cow::Borrowed("tooling I/O failed"),
             Self::SessionCompilationFailed(_) => return None,
         })

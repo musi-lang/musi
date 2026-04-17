@@ -4,9 +4,7 @@ use music_seam::TypeId;
 use music_seam::descriptor::ConstantValue;
 use music_term::SyntaxTerm;
 
-use super::{
-    ClosureValuePtr, DataValuePtr, SeqValuePtr, Value, VmError, VmErrorKind, VmResult, VmValueKind,
-};
+use super::{DataValuePtr, SeqValuePtr, Value, VmError, VmErrorKind, VmResult, VmValueKind};
 
 use super::Vm;
 
@@ -38,9 +36,11 @@ impl Vm {
         })
     }
 
-    pub(crate) const fn expect_int(value: &Value) -> VmResult<i64> {
+    pub(crate) fn expect_int(value: &Value) -> VmResult<i64> {
         match value {
             Value::Int(value) => Ok(*value),
+            Value::Nat(number) => i64::try_from(*number)
+                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, value)),
             _ => Err(Self::invalid_value_kind(VmValueKind::Int, value)),
         }
     }
@@ -70,13 +70,6 @@ impl Vm {
         match value {
             Value::Data(data) => Ok(data),
             other => Err(Self::invalid_value_kind(VmValueKind::Data, &other)),
-        }
-    }
-
-    pub(crate) fn expect_closure(value: Value) -> VmResult<ClosureValuePtr> {
-        match value {
-            Value::Closure(closure) => Ok(closure),
-            other => Err(Self::invalid_value_kind(VmValueKind::Closure, &other)),
         }
     }
 

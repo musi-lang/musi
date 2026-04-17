@@ -1,13 +1,21 @@
-let Runtime := import "musi:runtime";
+let path := import "@std/path";
+let Path := path.Path;
+let runtime := import "musi:runtime";
 
-export let exists (path : String) : Bool := Runtime.fsExists(path) > 0;
+/// Returns true when a path exists.
+export let exists (target : Path) : Bool := runtime.fsExists(path.toString(target)) > 0;
 
-export let readText (path : String) : String := Runtime.fsReadText(path);
+/// Read a UTF-8 text file.
+export let readText (target : Path) : String := runtime.fsReadText(path.toString(target));
 
-export let writeText (path : String, value : String) : Unit := Runtime.fsWriteText(path, value);
+/// Write a UTF-8 text file.
+export let writeText (target : Path, value : String) : Unit := runtime.fsWriteText(path.toString(target), value);
 
-export let appendText (path : String, value : String) : Bool := Runtime.fsAppendText(path, value) > 0;
+/// Append UTF-8 text to a file.
+export let appendText (target : Path, value : String) : Bool := runtime.fsAppendText(path.toString(target), value) > 0;
 
-export let remove (path : String) : Bool := Runtime.fsRemove(path) > 0;
+/// Remove a file or directory entry.
+export let remove (target : Path) : Bool := runtime.fsRemove(path.toString(target)) > 0;
 
-export let createDirAll (path : String) : Bool := Runtime.fsCreateDirAll(path) > 0;
+/// Create a directory and missing parents.
+export let createDirAll (target : Path) : Bool := runtime.fsCreateDirAll(path.toString(target)) > 0;

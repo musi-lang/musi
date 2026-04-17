@@ -554,10 +554,11 @@ impl CheckPass<'_, '_, '_> {
         let tag_name = self.resolve_symbol(tag.name).to_owned();
         let Some(variant) = data_def.variant(&tag_name) else {
             self.check_variant_arg_effects(args, &mut effects);
-            self.diag(
+            self.diag_message(
                 tag.span,
                 DiagKind::UnknownDataVariant,
-                &format!("unknown data variant `{tag_name}`"),
+                format!("unknown data variant `{tag_name}`"),
+                format!("unknown data variant `{tag_name}`"),
             );
             return ExprFacts::new(expected_ty, effects);
         };
@@ -697,7 +698,13 @@ impl CheckPass<'_, '_, '_> {
                     continue;
                 };
                 if !seen.insert(name.name) {
-                    self.diag(name.span, DiagKind::DuplicateVariantField, "");
+                    let field_name = self.resolve_symbol(name.name).to_owned();
+                    self.diag_message(
+                        name.span,
+                        DiagKind::DuplicateVariantField,
+                        format!("duplicate variant field `{field_name}`"),
+                        format!("duplicate variant field `{field_name}`"),
+                    );
                 }
                 let field_index = field_names
                     .iter()
@@ -705,7 +712,13 @@ impl CheckPass<'_, '_, '_> {
                 let expected = field_index
                     .and_then(|index| expected_args.get(index).copied())
                     .unwrap_or_else(|| {
-                        self.diag(name.span, DiagKind::UnknownVariantField, "");
+                        let field_name = self.resolve_symbol(name.name).to_owned();
+                        self.diag_message(
+                            name.span,
+                            DiagKind::UnknownVariantField,
+                            format!("unknown variant field `{field_name}`"),
+                            format!("unknown variant field `{field_name}`"),
+                        );
                         self.builtins().unknown
                     });
                 self.push_expected_ty(expected);
@@ -718,7 +731,12 @@ impl CheckPass<'_, '_, '_> {
             for field_name in field_names.iter().flatten() {
                 let expected_symbol = self.intern(field_name);
                 if !seen.contains(&expected_symbol) {
-                    self.diag(diag_span, DiagKind::MissingVariantField, "");
+                    self.diag_message(
+                        diag_span,
+                        DiagKind::MissingVariantField,
+                        format!("missing variant field `{field_name}`"),
+                        format!("missing variant field `{field_name}`"),
+                    );
                 }
             }
             return;
@@ -790,10 +808,11 @@ impl CheckPass<'_, '_, '_> {
 
         match matches.len() {
             0 => {
-                self.diag(
+                self.diag_message(
                     tag.span,
                     DiagKind::UnknownDataVariant,
-                    &format!("unknown data variant `{tag_name}`"),
+                    format!("unknown data variant `{tag_name}`"),
+                    format!("unknown data variant `{tag_name}`"),
                 );
                 None
             }
@@ -881,10 +900,11 @@ impl CheckPass<'_, '_, '_> {
             || self.range_item_type(base_ty).is_some()
         {
             let field_name = self.resolve_symbol(name.name).to_owned();
-            self.diag(
+            self.diag_message(
                 origin.span,
                 DiagKind::UnknownField,
-                &format!("unknown field `{field_name}`"),
+                format!("unknown field `{field_name}`"),
+                format!("unknown field `{field_name}`"),
             );
             return builtins.unknown;
         }
@@ -975,7 +995,7 @@ impl CheckPass<'_, '_, '_> {
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         Some(
             self.strip_attached_receiver_param(scheme.ty)
-                .unwrap_or(builtins.unknown),
+                .unwrap_or(scheme.ty),
         )
     }
 
@@ -1173,10 +1193,11 @@ impl CheckPass<'_, '_, '_> {
                 .map_or_else(
                     || {
                         let field_name = self.resolve_symbol(name.name).to_owned();
-                        self.diag(
+                        self.diag_message(
                             origin.span,
                             DiagKind::UnknownField,
-                            &format!("unknown field `{field_name}`"),
+                            format!("unknown field `{field_name}`"),
+                            format!("unknown field `{field_name}`"),
                         );
                         builtins.unknown
                     },

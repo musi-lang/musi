@@ -13,7 +13,7 @@ Each guide starts from habits you already have, then shows how Musi writes the s
 
 Rust and JavaScript/TypeScript get deeper comparisons because their common habits hide different questions.
 Rust needs a slower translation for value-based mutation and type-driven boundaries.
-JavaScript and TypeScript need a slower translation for objects, nullable values, promises, discriminated unions, modules, and TypeScript 6.0.2 type habits.
+JavaScript and TypeScript need a slower translation for objects, nullable values, promises, discriminated unions, modules, and TypeScript 5.9 type habits.
 
 ## Choose Your Starting Point
 

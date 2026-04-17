@@ -20,6 +20,27 @@ describe("docs", () => {
 		expect(neighbors.next?.slug).toBe("records-structs");
 	});
 
+	it("keeps language guide neighbors inside the selected guide", () => {
+		expect(docNeighbors("musi-for-rust-developers").previous).toBeUndefined();
+		expect(docNeighbors("musi-for-rust-developers").next?.id).toBe(
+			"rust-values-functions",
+		);
+		expect(docNeighbors("rust-mutation").previous?.id).toBe(
+			"rust-values-functions",
+		);
+		expect(docNeighbors("rust-mutation").next?.id).toBe("rust-records-structs");
+		expect(docNeighbors("python-native-unsafe-ffi").previous?.id).toBe(
+			"python-testing-tooling",
+		);
+		expect(docNeighbors("python-native-unsafe-ffi").next).toBeUndefined();
+	});
+
+	it("keeps non-guide chapter neighbors in book order", () => {
+		const neighbors = docNeighbors("values-and-let");
+		expect(neighbors.previous?.id).toBe("first-program");
+		expect(neighbors.next?.id).toBe("blocks-and-expressions");
+	});
+
 	it("finds docs by current route path", () => {
 		expect(docForPath("/learn/book/types/foundations")?.kind).toBe("section");
 		expect(
@@ -52,11 +73,17 @@ describe("docs", () => {
 			docForPath("/learn/book/developers/guides/javascript-typescript/overview")
 				?.kind,
 		).toBe("chapter");
-		expect(docForPath("/learn/book/developers/guides/c-cpp")?.kind).toBe(
+		expect(docForPath("/learn/book/developers/guides/c99")?.kind).toBe(
+			"section",
+		);
+		expect(docForPath("/learn/book/developers/guides/c99/overview")?.kind).toBe(
+			"chapter",
+		);
+		expect(docForPath("/learn/book/developers/guides/cpp17")?.kind).toBe(
 			"section",
 		);
 		expect(
-			docForPath("/learn/book/developers/guides/c-cpp/overview")?.kind,
+			docForPath("/learn/book/developers/guides/cpp17/overview")?.kind,
 		).toBe("chapter");
 		expect(
 			docForPath("/learn/book/developers/c/null-option-result")?.title,
@@ -126,7 +153,8 @@ describe("docs", () => {
 	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
 		const titles = docChildren("developers-guides").map((page) => page.title);
 		expect(titles).toEqual([
-			"Musi for C/C++ Developers",
+			"Musi for C Developers",
+			"Musi for C++ Developers",
 			"Musi for C# Developers",
 			"Musi for Go Developers",
 			"Musi for Java Developers",

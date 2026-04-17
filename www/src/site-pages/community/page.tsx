@@ -6,6 +6,18 @@ import { Surface } from "../../ui/surface";
 
 export function CommunityPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.community;
+	const communityNotes = [
+		{
+			label: "Source",
+			value: "Repository-first project",
+			copy: "Code, issues, and contribution notes stay visible rather than hidden behind a signup flow.",
+		},
+		{
+			label: "Support",
+			value: "Use public tracking",
+			copy: "Open issues are the safest place to follow bugs, language work, and missing docs.",
+		},
+	];
 	return (
 		<div className="page-stack">
 			<PageHeader
@@ -21,7 +33,7 @@ export function CommunityPage(_props: { route: AppRoute }) {
 					</div>
 				</div>
 				<section
-					className="portal-grid portal-grid-compact"
+					className="portal-grid"
 					aria-label={siteCopy.ui.communityLinks}
 				>
 					{copy.sections.map((section) => (
@@ -37,6 +49,15 @@ export function CommunityPage(_props: { route: AppRoute }) {
 					))}
 				</section>
 			</Surface>
+			<section className="status-strip" aria-label="Community notes">
+				{communityNotes.map((item) => (
+					<Surface key={item.label} tone="panel" className="status-card">
+						<div className="doc-row-meta">{item.label}</div>
+						<strong>{item.value}</strong>
+						<span>{item.copy}</span>
+					</Surface>
+				))}
+			</section>
 		</div>
 	);
 }

@@ -64,6 +64,8 @@ fn format_data(out: &mut String, artifact: &Artifact) {
         for variant in &descriptor.variants {
             out.push_str(" variant ");
             push_symbol_ref(out, artifact.string_text(variant.name));
+            out.push_str(" tag ");
+            out.push_str(&variant.tag.to_string());
             for ty in &variant.field_tys {
                 out.push_str(" field ");
                 push_symbol_ref(out, artifact.type_name(*ty));
@@ -135,6 +137,9 @@ fn format_effects(out: &mut String, artifact: &Artifact) {
             }
             out.push_str(" result ");
             push_symbol_ref(out, artifact.type_name(op.result_ty));
+            if op.is_comptime_safe {
+                out.push_str(" comptime-safe");
+            }
         }
         out.push('\n');
     }

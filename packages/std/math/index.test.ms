@@ -1,21 +1,21 @@
-let Testing := import "@std/testing";
-let Math := import "@std/math";
+let testing := import "@std/testing";
+let math := import "@std/math";
 
 export let test () :=
   (
-    Testing.describe("math");
-    Testing.it("'abs' keeps positive ints", Testing.toBe(Math.abs(3), 3));
-    Testing.it("'abs' flips negative ints", Testing.toBe(Math.abs(-3), 3));
-    Testing.it("'signInt' returns -1 for negatives", Testing.toBe(Math.signInt(-7), -1));
-    Testing.it("'signInt' returns 0 for zero", Testing.toBe(Math.signInt(0), 0));
-    Testing.it("'signInt' returns 1 for positives", Testing.toBe(Math.signInt(7), 1));
-    Testing.it("'max' picks larger value", Testing.toBe(Math.max(2, 5), 5));
-    Testing.it("'min' picks smaller value", Testing.toBe(Math.min(2, 5), 2));
-    Testing.it("'clamp' keeps in-range value", Testing.toBe(Math.clamp(5, 0, 10), 5));
-    Testing.it("'clamp' clamps below low", Testing.toBe(Math.clamp(-1, 0, 10), 0));
-    Testing.it("'clamp' clamps above high", Testing.toBe(Math.clamp(11, 0, 10), 10));
-    Testing.it("'clampFloat' keeps in-range value", Testing.toBeTruthy(Math.clampFloat(3.5, 1.0, 5.0) = 3.5));
-    Testing.it("'clampFloat' clamps below low", Testing.toBeTruthy(Math.clampFloat(-1.0, 0.0, 1.0) = 0.0));
-    Testing.it("'clampFloat' clamps above high", Testing.toBeTruthy(Math.clampFloat(2.0, 0.0, 1.0) = 1.0));
-    Testing.endDescribe()
+    testing.describe("math");
+    testing.it("'abs' keeps positive ints", testing.toBe(math.abs(3), 3));
+    testing.it("'abs' flips negative ints", testing.toBe(math.abs(-3), 3));
+    testing.it("'signInt' returns -1 for negatives", testing.toBe(math.signInt(-7), -1));
+    testing.it("'signInt' returns 0 for zero", testing.toBe(math.signInt(0), 0));
+    testing.it("'signInt' returns 1 for positives", testing.toBe(math.signInt(7), 1));
+    testing.it("'max' picks larger value", testing.toBe(math.max(2, 5), 5));
+    testing.it("'min' picks smaller value", testing.toBe(math.min(2, 5), 2));
+    testing.it("'clamp' keeps in-range value", testing.toBe(math.clamp(5, 0, 10), 5));
+    testing.it("'clamp' clamps below low", testing.toBe(math.clamp(-1, 0, 10), 0));
+    testing.it("'clamp' clamps above high", testing.toBe(math.clamp(11, 0, 10), 10));
+    testing.it("'clampFloat' keeps in-range value", testing.toBeTruthy(math.clampFloat(3.5, 1.0, 5.0) = 3.5));
+    testing.it("'clampFloat' clamps below low", testing.toBeTruthy(math.clampFloat(-1.0, 0.0, 1.0) = 0.0));
+    testing.it("'clampFloat' clamps above high", testing.toBeTruthy(math.clampFloat(2.0, 0.0, 1.0) = 1.0));
+    testing.endDescribe()
   );
