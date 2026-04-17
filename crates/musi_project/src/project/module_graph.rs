@@ -344,9 +344,17 @@ pub(super) fn build_lockfile(package_records: &BTreeMap<PackageId, PackageRecord
     let packages = package_records
         .values()
         .filter_map(|record| {
-            let source = match record.package.source {
-                PackageSource::Workspace => LockedPackageSource::Workspace,
-                PackageSource::Registry { .. } => LockedPackageSource::Registry,
+            let source = match &record.package.source {
+                PackageSource::Workspace => LockedPackageSource::workspace(),
+                PackageSource::Registry { registry_dir, .. } => {
+                    LockedPackageSource::registry(registry_dir.display().to_string())
+                }
+                PackageSource::Git {
+                    url,
+                    reference,
+                    commit,
+                    ..
+                } => LockedPackageSource::git(url.clone(), reference.clone(), commit.clone()),
                 PackageSource::Builtin => return None,
             };
             Some(LockedPackage {

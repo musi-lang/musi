@@ -8,23 +8,23 @@ use crate::errors::ProjectError;
 pub struct RegistryPackage {
     pub version: String,
     pub registry_dir: PathBuf,
-    pub cache_dir: PathBuf,
+    pub global_cache_dir: PathBuf,
 }
 
 impl RegistryPackage {
     #[must_use]
-    pub const fn new(version: String, registry_dir: PathBuf, cache_dir: PathBuf) -> Self {
+    pub const fn new(version: String, registry_dir: PathBuf, global_cache_dir: PathBuf) -> Self {
         Self {
             version,
             registry_dir,
-            cache_dir,
+            global_cache_dir,
         }
     }
 }
 
 pub fn resolve_registry_package(
     registry_root: &Path,
-    cache_root: &Path,
+    global_cache_root: &Path,
     name: &str,
     requirement: &str,
 ) -> ProjectResult<RegistryPackage> {
@@ -67,12 +67,20 @@ pub fn resolve_registry_package(
         });
     };
 
-    let cache_dir = cache_root.join(name).join(version.raw.clone());
-    if !cache_dir.exists() {
-        copy_dir_recursive(&registry_dir, &cache_dir)?;
+    let global_cache_dir = global_cache_root
+        .join("registry")
+        .join(path_cache_key(registry_root))
+        .join(name)
+        .join(version.raw.clone());
+    if !global_cache_dir.exists() {
+        copy_dir_recursive(&registry_dir, &global_cache_dir)?;
     }
 
-    Ok(RegistryPackage::new(version.raw, registry_dir, cache_dir))
+    Ok(RegistryPackage::new(
+        version.raw,
+        registry_dir,
+        global_cache_dir,
+    ))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -118,7 +126,7 @@ fn version_matches(requirement: &str, version: &VersionKey) -> bool {
     VersionKey::parse(requirement).is_some_and(|required| version == &required)
 }
 
-fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
+pub fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
     fs::create_dir_all(to).map_err(|source| ProjectError::ProjectIoFailed {
         path: to.to_path_buf(),
         source,
@@ -145,4 +153,19 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> ProjectResult {
         }
     }
     Ok(())
+}
+
+pub fn path_cache_key(path: &Path) -> String {
+    stable_cache_key(path.to_string_lossy().as_ref())
+}
+
+pub fn stable_cache_key(text: &str) -> String {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(PRIME);
+    }
+    format!("{hash:016x}")
 }

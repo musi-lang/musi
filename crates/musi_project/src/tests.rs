@@ -2,6 +2,7 @@ use std::env::temp_dir;
 use std::fs::{self, DirEntry};
 use std::mem::drop;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,6 +51,18 @@ fn write_file(root: &Path, relative: &str, text: &str) {
         fs::create_dir_all(parent).expect("parent dirs should exist");
     }
     fs::write(path, text).expect("file should be written");
+}
+
+fn run_git(root: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .expect("git should run");
+    assert!(
+        output.status.success(),
+        "git command should succeed: {args:?}"
+    );
 }
 
 #[test]
@@ -124,7 +137,7 @@ fn loads_project_from_nearest_manifest_ancestor() {
 fn resolves_registry_dependency_and_caches_it_locally() {
     let temp = TempDir::new();
     let registry_root = temp.path().join("registry");
-    let cache_root = temp.path().join("cache");
+    let global_cache_root = temp.path().join("global-cache");
 
     write_file(
         temp.path(),
@@ -159,18 +172,174 @@ fn resolves_registry_dependency_and_caches_it_locally() {
         temp.path(),
         ProjectOptions::new()
             .with_registry_root(registry_root)
-            .with_cache_root(cache_root.clone()),
+            .with_global_cache_root(global_cache_root),
     )
     .expect("project loads");
     let output = project.compile_root_entry().expect("project compiles");
 
     assert!(output.artifact.validate().is_ok());
-    assert!(cache_root.join("ext/1.2.0/musi.json").is_file());
+    assert!(project.global_cache_dir().join("registry").is_dir());
+    assert!(
+        project
+            .modules_dir()
+            .expect("modules dir should be enabled")
+            .join("ext/1.2.0/musi.json")
+            .is_file()
+    );
     assert!(project.lockfile_needs_write());
     let ext = project
         .package("ext")
         .expect("registry package should resolve");
     assert!(matches!(ext.source, PackageSource::Registry { .. }));
+}
+
+#[test]
+fn manifest_configures_musi_modules_dir() {
+    let default_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0"
+}"#,
+    )
+    .expect("default manifest should parse");
+    assert_eq!(default_manifest.modules_dir(), Some("musi_modules"));
+
+    let custom_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": "vendor/musi"
+}"#,
+    )
+    .expect("custom manifest should parse");
+    assert_eq!(custom_manifest.modules_dir(), Some("vendor/musi"));
+
+    let disabled_manifest: PackageManifest = serde_json::from_str(
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": false
+}"#,
+    )
+    .expect("disabled manifest should parse");
+    assert_eq!(disabled_manifest.modules_dir(), None);
+}
+
+#[test]
+fn modules_dir_false_resolves_from_global_cache_only() {
+    let temp = TempDir::new();
+    let registry_root = temp.path().join("registry");
+    let global_cache_root = temp.path().join("global-cache");
+
+    write_file(
+        temp.path(),
+        "musi.json",
+        r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "musiModulesDir": false,
+  "dependencies": { "ext": "1.0.0" }
+}"#,
+    );
+    write_file(temp.path(), "index.ms", r#"import "ext";"#);
+    write_file(
+        &registry_root,
+        "ext/1.0.0/musi.json",
+        r#"{
+  "name": "ext",
+  "version": "1.0.0",
+  "exports": "./index.ms"
+}"#,
+    );
+    write_file(&registry_root, "ext/1.0.0/index.ms", "");
+
+    let project = Project::load(
+        temp.path(),
+        ProjectOptions::new()
+            .with_registry_root(registry_root)
+            .with_global_cache_root(global_cache_root),
+    )
+    .expect("project loads");
+
+    assert_eq!(project.modules_dir(), None);
+    assert!(!temp.path().join("musi_modules").exists());
+    let ext = project.package("ext").expect("dependency should resolve");
+    assert!(ext.root_dir.starts_with(project.global_cache_dir()));
+}
+
+#[test]
+fn resolves_git_dependency_through_global_cache_and_modules_dir() {
+    let temp = TempDir::new();
+    let git_root = temp.path().join("git-ext");
+    let global_cache_root = temp.path().join("global-cache");
+    fs::create_dir_all(&git_root).expect("git package dir should exist");
+    write_file(
+        &git_root,
+        "musi.json",
+        r#"{
+  "name": "ext",
+  "version": "1.0.0",
+  "exports": "./index.ms"
+}"#,
+    );
+    write_file(&git_root, "index.ms", r"export let ext_answer : Int := 7;");
+    run_git(&git_root, &["init", "--initial-branch=main"]);
+    run_git(&git_root, &["add", "."]);
+    run_git(
+        &git_root,
+        &[
+            "-c",
+            "user.name=Musi Test",
+            "-c",
+            "user.email=musi@example.invalid",
+            "commit",
+            "-m",
+            "initial",
+        ],
+    );
+
+    let git_url = format!("git+file://{}#main", git_root.display());
+    write_file(
+        temp.path(),
+        "musi.json",
+        &format!(
+            r#"{{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {{ "ext": "{git_url}" }}
+}}"#
+        ),
+    );
+    write_file(temp.path(), "index.ms", r#"import "ext";"#);
+
+    let project = Project::load(
+        temp.path(),
+        ProjectOptions::new().with_global_cache_root(global_cache_root),
+    )
+    .expect("project loads");
+    let ext = project.package("ext").expect("git package should resolve");
+
+    assert!(matches!(ext.source, PackageSource::Git { .. }));
+    assert!(project.global_cache_dir().join("git").is_dir());
+    assert!(
+        ext.root_dir.starts_with(
+            project
+                .modules_dir()
+                .expect("modules dir should be enabled")
+        )
+    );
+    assert!(project.lockfile().packages.iter().any(|package| {
+        matches!(
+            &package.source,
+            crate::LockedPackageSource::Git {
+                url,
+                reference,
+                commit
+            } if url == &format!("file://{}", git_root.display())
+                && reference == "main"
+                && !commit.is_empty()
+        )
+    }));
 }
 
 #[test]

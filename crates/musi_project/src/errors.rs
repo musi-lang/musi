@@ -56,12 +56,18 @@ pub enum ProjectError {
     PackageGraphEntryMissing { name: String },
     #[error("registry root is required to resolve `{name}`")]
     MissingRegistryRoot { name: String },
-    #[error("package cache root is required to resolve `{name}`")]
-    MissingCacheRoot { name: String },
+    #[error("global cache directory unavailable")]
+    MissingGlobalCacheRoot,
     #[error("no registry versions found for `{name}` matching `{requirement}`")]
     RegistryVersionNotFound { name: String, requirement: String },
     #[error("invalid semver requirement `{requirement}` for `{name}`")]
     InvalidVersionRequirement { name: String, requirement: String },
+    #[error("git dependency `{requirement}` for `{name}` invalid")]
+    InvalidGitDependency { name: String, requirement: String },
+    #[error("git command `{command}` failed at `{path}`")]
+    GitCommandFailed { command: String, path: PathBuf },
+    #[error("git reference `{reference}` for `{name}` not found")]
+    GitReferenceNotFound { name: String, reference: String },
     #[error("lockfile at `{path}` is required because frozen mode is enabled")]
     MissingFrozenLockfile { path: PathBuf },
     #[error("lockfile at `{path}` is out of date")]
@@ -113,9 +119,12 @@ impl ProjectError {
     const fn registry_diag_code(&self) -> Option<DiagCode> {
         let code = match self {
             Self::MissingRegistryRoot { .. } => 3616,
-            Self::MissingCacheRoot { .. } => 3617,
+            Self::MissingGlobalCacheRoot => 3617,
             Self::RegistryVersionNotFound { .. } => 3618,
             Self::InvalidVersionRequirement { .. } => 3619,
+            Self::InvalidGitDependency { .. } => 3624,
+            Self::GitCommandFailed { .. } => 3625,
+            Self::GitReferenceNotFound { .. } => 3626,
             _ => return None,
         };
         Some(DiagCode::new(code))
@@ -208,14 +217,22 @@ impl ProjectError {
             Self::MissingRegistryRoot { name } => {
                 Cow::Owned(format!("registry root is required for `{name}`"))
             }
-            Self::MissingCacheRoot { name } => {
-                Cow::Owned(format!("package cache root is required for `{name}`"))
-            }
+            Self::MissingGlobalCacheRoot => Cow::Borrowed("global cache directory unavailable"),
             Self::RegistryVersionNotFound { name, requirement } => Cow::Owned(format!(
                 "registry version for `{name}` matching `{requirement}` not found"
             )),
             Self::InvalidVersionRequirement { name, requirement } => Cow::Owned(format!(
                 "semver requirement `{requirement}` for `{name}` is invalid"
+            )),
+            Self::InvalidGitDependency { name, requirement } => Cow::Owned(format!(
+                "git dependency `{requirement}` for `{name}` invalid"
+            )),
+            Self::GitCommandFailed { command, path } => Cow::Owned(format!(
+                "git command `{command}` failed at `{}`",
+                path.display()
+            )),
+            Self::GitReferenceNotFound { name, reference } => Cow::Owned(format!(
+                "git reference `{reference}` for `{name}` not found"
             )),
             _ => return None,
         })

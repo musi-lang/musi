@@ -150,8 +150,8 @@ fn session_error_report_carries_resolve_label() {
     assert_session_error_report(
         "missing;",
         "resolve",
-        "unbound name",
-        "unknown name `missing`",
+        "unbound name `missing`",
+        "unbound name `missing`",
         None,
     );
 }

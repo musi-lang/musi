@@ -11,6 +11,8 @@ use crate::api::PatFacts;
 use super::exprs::check_expr;
 use super::{CheckPass, DiagKind, PassBase};
 
+type VariantFieldNames = [Option<Box<str>>];
+
 pub fn bound_name_from_pat(ctx: &PassBase<'_, '_, '_>, pat: HirPatId) -> Option<Ident> {
     match ctx.pat(pat).kind {
         HirPatKind::Bind { name } => Some(name),
@@ -231,7 +233,7 @@ impl CheckPass<'_, '_, '_> {
         span: Span,
         args_vec: Vec<HirVariantPatArg>,
         expected_args: &[HirTyId],
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         named_args: bool,
         fallback: HirTyId,
     ) {
@@ -271,7 +273,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         name: Ident,
         expected_args: &[HirTyId],
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         fallback: HirTyId,
     ) -> HirTyId {
         let field_name = self.resolve_symbol(name.name).to_owned();
@@ -292,7 +294,7 @@ impl CheckPass<'_, '_, '_> {
     fn variant_pat_arg_name(
         &self,
         arg: &HirVariantPatArg,
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
     ) -> Option<Ident> {
         if let Some(name) = arg.name {
             return Some(name);

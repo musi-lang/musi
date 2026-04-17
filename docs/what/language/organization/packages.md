@@ -20,6 +20,14 @@ Read the example from top to bottom. The generated package starts with a hello-w
 
 Packages use the standard library by default. That default makes imports such as `@std/testing` available without dependency boilerplate. Add `"lib": []` to `musi.json` only when a package needs to opt out of bundled libraries.
 
+## Installed Modules
+
+Package dependencies are materialized under `musi_modules/` by default. The directory is project-local, so Musi packages can live beside Rust, JavaScript, or other language projects without colliding with `target/` or `node_modules/`.
+
+Use `"musiModulesDir": "vendor/musi"` to choose a different local module directory. Use `"musiModulesDir": false` to disable local materialization and load packages directly from the global Musi cache.
+
+Registry and Git dependencies also use a global cache. Set `MUSI_CACHE_DIR` when a machine needs a fixed cache location, such as CI. `musi install` resolves dependencies, hydrates `musi_modules/` when enabled, and writes `musi.lock`.
+
 ## Practical Rule
 
 Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.

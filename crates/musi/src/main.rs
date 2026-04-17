@@ -103,6 +103,7 @@ fn run() -> MusiResult {
         Command::Test { target } => test_project(target.as_deref()),
         Command::Task { name, target } => run_task(&name, target.as_deref()),
         Command::Info { target } => print_project_metadata(target.as_deref()),
+        Command::Install { target } => install_project(target.as_deref()),
         Command::Lsp => run_stdio_server().map_err(|source| MusiError::LspServerFailed {
             message: source.to_string(),
         }),
@@ -115,7 +116,6 @@ fn run() -> MusiResult {
         | Command::Serve(_)
         | Command::Repl(_)
         | Command::Eval(_)
-        | Command::Install(_)
         | Command::Add(_)
         | Command::Remove(_)
         | Command::Update(_)
@@ -162,7 +162,7 @@ fn init_package(target: Option<&Path>) -> MusiResult {
         }
     })?;
     if !root.join(".gitignore").exists() {
-        fs::write(root.join(".gitignore"), "target/\n").map_err(|source| {
+        fs::write(root.join(".gitignore"), "musi_modules/\n").map_err(|source| {
             ToolingError::ToolingIoFailed {
                 path: root.join(".gitignore"),
                 source,
@@ -327,6 +327,21 @@ fn run_task(name: &str, target: Option<&Path>) -> MusiResult {
     Ok(())
 }
 
+fn install_project(target: Option<&Path>) -> MusiResult {
+    let anchor = project_anchor(target)?;
+    let project = load_project_ancestor(anchor, ProjectOptions::default())?;
+    if project.lockfile_needs_write() {
+        project.write_lockfile()?;
+    }
+    match project.modules_dir() {
+        Some(path) => println!("musiModules: {}", path.display()),
+        None => println!("musiModules: disabled"),
+    }
+    println!("globalCache: {}", project.global_cache_dir().display());
+    println!("lockfile: {}", project.lockfile_path().display());
+    Ok(())
+}
+
 fn print_project_metadata(target: Option<&Path>) -> MusiResult {
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
@@ -339,6 +354,11 @@ fn print_project_metadata(target: Option<&Path>) -> MusiResult {
     println!("workspacePackages: {}", workspace.packages.len());
     println!("workspaceMembers: {}", workspace.members.len());
     println!("modules: {}", project.module_texts().count());
+    match project.modules_dir() {
+        Some(path) => println!("musiModules: {}", path.display()),
+        None => println!("musiModules: disabled"),
+    }
+    println!("globalCache: {}", project.global_cache_dir().display());
     println!("lockfile: {}", project.lockfile_path().display());
     Ok(())
 }
@@ -354,7 +374,6 @@ fn reserved_command_for(command: Command) -> MusiResult {
         Command::Serve(args) => ("serve", "HTTP server runtime", args.args),
         Command::Repl(args) => ("repl", "interactive runtime", args.args),
         Command::Eval(args) => ("eval", "inline evaluator", args.args),
-        Command::Install(args) => ("install", "package installer", args.args),
         Command::Add(args) => ("add", "package dependency writer", args.args),
         Command::Remove(args) => ("remove", "package dependency remover", args.args),
         Command::Update(args) => ("update", "package updater", args.args),
