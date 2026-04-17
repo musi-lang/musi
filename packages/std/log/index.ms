@@ -1,5 +1,6 @@
 let runtime := import "musi:runtime";
 
+/// Log severity level.
 export opaque let Level := data {
   | Debug := 10
   | Info := 20
@@ -10,25 +11,41 @@ export opaque let Level := data {
 @link(symbol := "data.tag")
 foreign "musi" let levelTagIntrinsic (level : Level) : Int;
 
-export let debugLevel () : Level := .Debug;
-export let infoLevel () : Level := .Info;
-export let warnLevel () : Level := .Warn;
-export let errorLevel () : Level := .Error;
+/// Debug log level.
+export let debugLevel : Level := .Debug;
 
-export let levelValue (level : Level) : Int :=
-  unsafe { levelTagIntrinsic(level); };
+/// Informational log level.
+export let infoLevel : Level := .Info;
 
-export let levelName (level : Level) : String :=
-  match level (
+/// Warning log level.
+export let warnLevel : Level := .Warn;
+
+/// Error log level.
+export let errorLevel : Level := .Error;
+
+/// Numeric level value.
+export let (self : Level).value () : Int := unsafe { levelTagIntrinsic(self); };
+
+/// Lower-case level name.
+export let (self : Level).name () : String :=
+  match self (
   | .Debug => "debug"
   | .Info => "info"
   | .Warn => "warn"
   | .Error => "error"
   );
 
-export let write (level : Level, message : String) : Unit := runtime.logWrite(levelValue(level), message);
+/// Write a log message.
+export let write (level : Level, message : String) : Unit := runtime.logWrite(value(level), message);
 
-export let debug (message : String) : Unit := write(.Debug, message);
-export let info (message : String) : Unit := write(.Info, message);
-export let warn (message : String) : Unit := write(.Warn, message);
-export let error (message : String) : Unit := write(.Error, message);
+/// Write a debug message.
+export let debug (message : String) : Unit := write(debugLevel, message);
+
+/// Write an informational message.
+export let info (message : String) : Unit := write(infoLevel, message);
+
+/// Write a warning message.
+export let warn (message : String) : Unit := write(warnLevel, message);
+
+/// Write an error message.
+export let error (message : String) : Unit := write(errorLevel, message);

@@ -1,16 +1,17 @@
-let Testing := import "@std/testing";
-let Option := import "@std/option";
-let Env := import "./index.ms";
+let testing := import "@std/testing";
+let option := import "@std/option";
+let env := import "./index.ms";
+let Var := env.Var;
 
-let tempKey := "__MUSI_STD_ENV_TEST__";
+let tempKey := env.key("__MUSI_STD_ENV_TEST__");
 
 export let test () :=
   (
-    Testing.describe("env/index");
-    Testing.it("missing key returns none", Testing.toBeTruthy(Option.isNone[String](Env.get(tempKey))));
-    Testing.it("set stores value", Testing.toBeTruthy(Env.set(tempKey, "1")));
-    Testing.it("set value can be read", Testing.toBeTruthy(Option.isSome[String](Env.get(tempKey))));
-    Testing.it("remove deletes value", Testing.toBeTruthy(Env.remove(tempKey)));
-    Testing.it("removed key returns none", Testing.toBeTruthy(Option.isNone[String](Env.get(tempKey))));
-    Testing.endDescribe()
+    testing.describe("env/index");
+    testing.it("missing key returns none", testing.toBeTruthy(option.isNone[Var](env.get(tempKey))));
+    testing.it("'set' stores value", testing.toBeTruthy(env.set(tempKey, env.var("1"))));
+    testing.it("'set' value can be read", testing.toBeTruthy(option.isSome[Var](env.get(tempKey))));
+    testing.it("'remove' deletes value", testing.toBeTruthy(env.remove(tempKey)));
+    testing.it("removed key returns none", testing.toBeTruthy(option.isNone[Var](env.get(tempKey))));
+    testing.endDescribe()
   );

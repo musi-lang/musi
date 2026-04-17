@@ -1,14 +1,48 @@
-let build := import "./_build.ms";
-let compare := import "./_compare.ms";
+/// Byte buffer backed by integer byte values.
+export opaque let Bytes := data {
+  | Bytes(values : []Int)
+};
 
-export let empty := build.empty;
-export let single := build.single;
-export let copy := build.copy;
-export let concat := build.concat;
-export let append := build.append;
-export let prepend := build.prepend;
+/// Empty byte buffer.
+export let empty () : Bytes := .Bytes(values := []);
 
-export let equals := compare.equals;
-export let notEquals := compare.notEquals;
-export let isEmpty := compare.isEmpty;
-export let nonEmpty := compare.nonEmpty;
+/// Build bytes from raw byte values.
+export let fromArray (values : []Int) : Bytes := .Bytes(values := [...values]);
+
+/// Return a copy of raw byte values.
+export let (self : Bytes).toArray () : []Int :=
+  match self (
+  | .Bytes(values := values) => [...values]
+  );
+
+/// Copy bytes.
+export let (self : Bytes).copy () : Bytes := fromArray(toArray(self));
+
+/// Concatenate two byte buffers.
+export let (self : Bytes).concat (other : Bytes) : Bytes := fromArray([...toArray(self), ...toArray(other)]);
+
+/// Append one byte.
+export let (self : Bytes).append (value : Int) : Bytes := fromArray([...toArray(self), value]);
+
+/// Prepend one byte.
+export let (self : Bytes).prepend (value : Int) : Bytes := fromArray([value, ...toArray(self)]);
+
+/// Compare byte buffers.
+export let (self : Bytes).equals (other : Bytes) : Bool := toArray(self) = toArray(other);
+
+/// Compare byte buffers for inequality.
+export let (self : Bytes).notEquals (other : Bytes) : Bool := toArray(self) /= toArray(other);
+
+/// Returns true when byte buffer is empty.
+export let (self : Bytes).isEmpty () : Bool :=
+  match toArray(self) (
+  | [] => 0 = 0
+  | _ => 0 = 1
+  );
+
+/// Returns true when byte buffer has values.
+export let (self : Bytes).nonEmpty () : Bool :=
+  match toArray(self) (
+  | [] => 0 = 1
+  | _ => 0 = 0
+  );

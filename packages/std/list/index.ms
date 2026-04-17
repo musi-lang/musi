@@ -1,27 +1,51 @@
-export let empty[T] () : []T := [];
+/// Ordered list backed by an array.
+export opaque let List[T] := data {
+  | List(values : []T)
+};
 
-export let of[T] (value : T) : []T := [value];
+/// Empty list.
+export let empty[T] () : List[T] := .List(values := []);
 
-export let pair[T] (first : T, second : T) : []T := [first, second];
+/// Single-value list.
+export let of[T] (value : T) : List[T] := .List(values := [value]);
 
-export let copy[T] (values : []T) : []T := [...values];
+/// Two-value list.
+export let pair[T] (first : T, second : T) : List[T] := .List(values := [first, second]);
 
-export let concat[T] (left : []T, right : []T) : []T := [...left, ...right];
+/// Build a list from an array copy.
+export let fromArray[T] (values : []T) : List[T] := .List(values := [...values]);
 
-export let append[T] (values : []T, value : T) : []T := [...values, value];
+/// Return a copy of list values.
+export let (self : List[T]).toArray[T] () : []T :=
+  match self (
+  | .List(values := values) => [...values]
+  );
 
-export let prepend[T] (value : T, values : []T) : []T := [value, ...values];
+/// Copy a list.
+export let (self : List[T]).copy[T] () : List[T] := fromArray[T](toArray[T](self));
 
-export let equalsInt (left : []Int, right : []Int) : Bool := left = right;
+/// Concatenate two lists.
+export let (self : List[T]).concat[T] (other : List[T]) : List[T] := fromArray[T]([...toArray[T](self), ...toArray[T](other)]);
 
-export let isEmpty[T] (values : []T) : Bool :=
-  match values (
+/// Append one value.
+export let (self : List[T]).append[T] (value : T) : List[T] := fromArray[T]([...toArray[T](self), value]);
+
+/// Prepend one value.
+export let (self : List[T]).prepend[T] (value : T) : List[T] := fromArray[T]([value, ...toArray[T](self)]);
+
+/// Compare integer lists.
+export let (self : List[Int]).equalsInt (other : List[Int]) : Bool := toArray[Int](self) = toArray[Int](other);
+
+/// Returns true when list is empty.
+export let (self : List[T]).isEmpty[T] () : Bool :=
+  match toArray[T](self) (
   | [] => 0 = 0
   | _ => 0 = 1
   );
 
-export let nonEmpty[T] (values : []T) : Bool :=
-  match values (
+/// Returns true when list has values.
+export let (self : List[T]).nonEmpty[T] () : Bool :=
+  match toArray[T](self) (
   | [] => 0 = 1
   | _ => 0 = 0
   );

@@ -1,17 +1,25 @@
 let runtime := import "musi:runtime";
 
-export let length (value : String) : Int := runtime.textLength(value);
+/// Count Unicode scalar values in a string.
+export let (self : String).length () : Int := runtime.textLength(self);
 
-export let isEmpty (value : String) : Bool := length(value) = 0;
+/// Returns true when string is empty.
+export let (self : String).isEmpty () : Bool := length(self) = 0;
 
-export let trim (value : String) : String := runtime.textTrim(value);
+/// Trim surrounding whitespace.
+export let (self : String).trim () : String := runtime.textTrim(self);
 
-export let toLowerCase (value : String) : String := runtime.textToLowerCase(value);
+/// Convert to lower case.
+export let (self : String).toLowerCase () : String := runtime.textToLowerCase(self);
 
-export let toUpperCase (value : String) : String := runtime.textToUpperCase(value);
+/// Convert to upper case.
+export let (self : String).toUpperCase () : String := runtime.textToUpperCase(self);
 
-export let contains (value : String, needle : String) : Bool := runtime.textContains(value, needle) > 0;
+/// Returns true when string contains substring.
+export let (self : String).contains (needle : String) : Bool := runtime.textContains(self, needle) > 0;
 
-export let startsWith (value : String, prefix : String) : Bool := runtime.textStartsWith(value, prefix) > 0;
+/// Returns true when string starts with prefix.
+export let (self : String).startsWith (prefix : String) : Bool := runtime.textStartsWith(self, prefix) > 0;
 
-export let endsWith (value : String, suffix : String) : Bool := runtime.textEndsWith(value, suffix) > 0;
+/// Returns true when string ends with suffix.
+export let (self : String).endsWith (suffix : String) : Bool := runtime.textEndsWith(self, suffix) > 0;

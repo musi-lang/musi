@@ -4,10 +4,10 @@ let time := import "./index.ms";
 export let test () :=
   (
     testing.describe("time/index");
-    testing.it("'nowUnixMillis' returns current epoch millis", testing.toBeTruthy(time.nowUnixMillis() >= 0));
-    testing.it("'nowUnixSeconds' derives seconds", testing.toBeTruthy(time.nowUnixSeconds() >= 0));
-    testing.it("'monotonicMillis' returns non-negative value", testing.toBeTruthy(time.monotonicMillis() >= 0));
-    testing.it("'seconds' converts to millis", testing.toBe(time.toMillis(time.seconds(2)), 2000));
-    testing.it("'toSeconds' converts millis", testing.toBe(time.toSeconds(time.millis(3000)), 3));
+    testing.it("'nowUnix' returns current epoch millis", testing.toBeTruthy(time.unixTimeMillis(time.nowUnix()) >= 0));
+    testing.it("'nowUnix' derives seconds", testing.toBeTruthy(time.unixTimeSeconds(time.nowUnix()) >= 0));
+    testing.it("'monotonic' returns non-negative value", testing.toBeTruthy(time.instantMillis(time.monotonic()) >= 0));
+    testing.it("'seconds' converts to millis", testing.toBe(time.durationMillis(time.seconds(2)), 2000));
+    testing.it("'minutes' converts to seconds", testing.toBe(time.durationSeconds(time.minutes(2)), 120));
     testing.endDescribe()
   );

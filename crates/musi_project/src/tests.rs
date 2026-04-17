@@ -1,5 +1,5 @@
 use std::env::temp_dir;
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::mem::drop;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -575,20 +575,27 @@ export let test () := 0;
     let targets = project
         .test_targets()
         .expect("test targets should synthesize");
+    let app_targets = targets
+        .iter()
+        .filter(|target| target.package.name == "app")
+        .collect::<Vec<_>>();
 
-    assert_eq!(targets.len(), 2);
-    assert_eq!(targets[0].kind, ProjectTestTargetKind::Module);
-    assert_eq!(targets[1].kind, ProjectTestTargetKind::SyntheticLawSuite);
+    assert_eq!(app_targets.len(), 2);
+    assert_eq!(app_targets[0].kind, ProjectTestTargetKind::Module);
     assert_eq!(
-        targets[1].module_key,
+        app_targets[1].kind,
+        ProjectTestTargetKind::SyntheticLawSuite
+    );
+    assert_eq!(
+        app_targets[1].module_key,
         ModuleKey::new("@app@1.0.0/index.ms::__laws")
     );
     assert_eq!(
-        targets[1].source_module_key,
+        app_targets[1].source_module_key,
         ModuleKey::new("@app@1.0.0/index.ms")
     );
-    assert_eq!(targets[1].export_name.as_ref(), "__laws_test");
-    let ProjectTestTargetSource::SyntheticModule = &targets[1].source else {
+    assert_eq!(app_targets[1].export_name.as_ref(), "musiLawsTest");
+    let ProjectTestTargetSource::SyntheticModule = &app_targets[1].source else {
         panic!("synthetic suite source expected");
     };
 }
@@ -614,6 +621,67 @@ fn compiles_workspace_std_package_and_test_modules() {
             .compile_module(&test.module_key)
             .expect("package test module compiles");
         assert!(output.artifact.validate().is_ok());
+    }
+}
+
+#[test]
+fn std_public_exports_have_doc_comments() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root should resolve");
+    let std_root = repo_root.join("packages/std");
+    let mut missing = Vec::<String>::new();
+    collect_missing_std_export_docs(&std_root, &std_root, &mut missing);
+
+    assert!(
+        missing.is_empty(),
+        "std exports missing doc comments:\n{}",
+        missing.join("\n")
+    );
+}
+
+fn collect_missing_std_export_docs(root: &Path, dir: &Path, missing: &mut Vec<String>) {
+    let mut entries = fs::read_dir(dir)
+        .expect("std dir should be readable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("std dir entries should be readable");
+    entries.sort_by_key(DirEntry::path);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_missing_std_export_docs(root, &path, missing);
+            continue;
+        }
+        if path.extension().is_none_or(|ext| ext != "ms")
+            || path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".test.ms"))
+        {
+            continue;
+        }
+        collect_missing_std_export_docs_in_file(root, &path, missing);
+    }
+}
+
+fn collect_missing_std_export_docs_in_file(root: &Path, path: &Path, missing: &mut Vec<String>) {
+    let text = fs::read_to_string(path).expect("std module should be readable");
+    let lines = text.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.trim_start().starts_with("export ") {
+            continue;
+        }
+        let has_doc = lines[..index]
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|line| line.trim_start().starts_with("///"));
+        if !has_doc {
+            let relative = path
+                .strip_prefix(root)
+                .expect("std path should be under root");
+            missing.push(format!("{}:{}", relative.display(), index + 1));
+        }
     }
 }
 

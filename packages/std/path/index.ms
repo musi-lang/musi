@@ -1,13 +1,36 @@
 let runtime := import "musi:runtime";
 
-export let join (left : String, right : String) : String := runtime.pathJoin(left, right);
+/// Platform path value.
+export opaque let Path := data {
+  | Path(value : String)
+};
 
-export let normalize (value : String) : String := runtime.pathNormalize(value);
+/// Build a path from raw text.
+export let fromString (value : String) : Path := .Path(value := value);
 
-export let dirName (value : String) : String := runtime.pathDirname(value);
+/// Return raw path text.
+export let (self : Path).toString () : String :=
+  match self (
+  | .Path(value := value) => value
+  );
 
-export let baseName (value : String) : String := runtime.pathBasename(value);
+/// Join two paths.
+export let (self : Path).join (other : Path) : Path :=
+  fromString(runtime.pathJoin(toString(self), toString(other)));
 
-export let extName (value : String) : String := runtime.pathExtname(value);
+/// Normalize a path.
+export let (self : Path).normalize () : Path :=
+  fromString(runtime.pathNormalize(toString(self)));
 
-export let isAbsolute (value : String) : Bool := runtime.pathIsAbsolute(value) > 0;
+/// Parent directory name.
+export let (self : Path).dirName () : Path :=
+  fromString(runtime.pathDirname(toString(self)));
+
+/// Base file name.
+export let (self : Path).baseName () : String := runtime.pathBasename(toString(self));
+
+/// Extension name, including leading dot when present.
+export let (self : Path).extName () : String := runtime.pathExtname(toString(self));
+
+/// Returns true for absolute paths.
+export let (self : Path).isAbsolute () : Bool := runtime.pathIsAbsolute(toString(self)) > 0;

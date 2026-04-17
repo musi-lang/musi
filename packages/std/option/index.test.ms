@@ -1,13 +1,16 @@
-let Testing := import "@std/testing";
-let Option := import "@std/option";
+let testing := import "@std/testing";
+let option := import "@std/option";
 
 export let test () :=
   (
-    Testing.describe("option");
-    Testing.it("'isSome' detects present value", Testing.toBeTruthy(Option.isSome[Int](Option.some[Int](1))));
-    Testing.it("'isNone' detects missing value", Testing.toBeTruthy(Option.isNone[Int](Option.none[Int]())));
-    Testing.it("'unwrapOr' returns fallback for none", Testing.toBe(Option.unwrapOr[Int](Option.none[Int](), 7), 7));
-    Testing.it("'unwrapOrElse' returns fallback for none", Testing.toBe(Option.none[Int]() |> Option.unwrapOrElse[Int](9), 9));
-    Testing.it("'fold' maps present values", Testing.toBe(Option.some[Int](2) |> Option.fold[Int, Int](0, \(x) => x + 1), 3));
-    Testing.endDescribe()
+    testing.describe("option");
+    let someOne := option.some[Int](1);
+    let noneInt := option.none[Int]();
+    testing.it("'isSome' detects present value", testing.toBeTruthy(option.isSome[Int](someOne)));
+    testing.it("'isNone' detects missing value", testing.toBeTruthy(option.isNone[Int](noneInt)));
+    testing.it("'unwrapOr' returns fallback for none", testing.toBe(option.unwrapOr[Int](noneInt, 7), 7));
+    testing.it("'unwrapOrElse' computes fallback for none", testing.toBe(option.unwrapOrElse[Int](noneInt, 9), 9));
+    testing.it("'map' transforms present values", testing.toBe(option.unwrapOr[Int](option.map[Int, Int](someOne, \(x) => x + 1), 0), 2));
+    testing.it("'fold' maps present values", testing.toBe(option.fold[Int, Int](someOne, 0, \(x) => x + 2), 3));
+    testing.endDescribe()
   );

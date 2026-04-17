@@ -1,16 +1,16 @@
-let Testing := import "@std/testing";
-let Text := import "./index.ms";
+let testing := import "@std/testing";
+let text := import "./index.ms";
 
 export let test () :=
   (
-    Testing.describe("text/index");
-    Testing.it("'length' returns character count", Testing.toBe(Text.length("trim"), 4));
-    Testing.it("'isEmpty' detects empty string", Testing.toBeTruthy(Text.isEmpty("")));
-    Testing.it("'trim' strips surrounding spaces", Testing.toBeTruthy(Text.trim("  trim  ") = "trim"));
-    Testing.it("'toLowerCase' lowers letters", Testing.toBeTruthy(Text.toLowerCase("ABC") = "abc"));
-    Testing.it("'toUpperCase' raises letters", Testing.toBeTruthy(Text.toUpperCase("abc") = "ABC"));
-    Testing.it("'contains' finds substring", Testing.toBeTruthy(Text.contains("abcd", "bc")));
-    Testing.it("'startsWith' finds prefix", Testing.toBeTruthy(Text.startsWith("abcd", "ab")));
-    Testing.it("'endsWith' finds suffix", Testing.toBeTruthy(Text.endsWith("abcd", "cd")));
-    Testing.endDescribe()
+    testing.describe("text/index");
+    testing.it("'length' returns character count", testing.toBe(text.length("trim"), 4));
+    testing.it("'isEmpty' detects empty string", testing.toBeTruthy(text.isEmpty("")));
+    testing.it("'trim' strips surrounding spaces", testing.toBeTruthy(text.trim("  trim  ") = "trim"));
+    testing.it("'toLowerCase' lowers letters", testing.toBeTruthy(text.toLowerCase("ABC") = "abc"));
+    testing.it("'toUpperCase' raises letters", testing.toBeTruthy(text.toUpperCase("abc") = "ABC"));
+    testing.it("'contains' finds substring", testing.toBeTruthy(text.contains("abcd", "bc")));
+    testing.it("'startsWith' finds prefix", testing.toBeTruthy(text.startsWith("abcd", "ab")));
+    testing.it("'endsWith' finds suffix", testing.toBeTruthy(text.endsWith("abcd", "cd")));
+    testing.endDescribe()
   );

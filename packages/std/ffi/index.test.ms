@@ -1,15 +1,15 @@
-let Testing := import "@std/testing";
-let Ffi := import "@std/ffi";
+let testing := import "@std/testing";
+let ffi := import "@std/ffi";
 
 export let test () :=
   (
-    Testing.describe("ffi");
-    let pointer := Ffi.ptr.null[Int]();
-    let samePointer := unsafe { Ffi.ptr.offset[Int](pointer, 0); };
-    let offset := Ffi.ptr.offset;
+    testing.describe("ffi");
+    let pointer := ffi.ptr.null[Int]();
+    let samePointer := unsafe { ffi.ptr.offset[Int](pointer, 0); };
+    let offset := ffi.ptr.offset;
     let aliasedPointer := unsafe { offset[Int](pointer, 0); };
-    Testing.it("'ptr.null' creates null pointer", Testing.toBeTruthy(Ffi.ptr.isNull[Int](pointer)));
-    Testing.it("'ptr.offset' preserves null pointer at zero offset", Testing.toBeTruthy(Ffi.ptr.isNull[Int](samePointer)));
-    Testing.it("'ptr.offset' works as first-class field", Testing.toBeTruthy(Ffi.ptr.isNull[Int](aliasedPointer)));
-    Testing.endDescribe()
+    testing.it("'ptr.null' creates null pointer", testing.toBeTruthy(ffi.ptr.isNull[Int](pointer)));
+    testing.it("'ptr.offset' preserves null pointer at zero offset", testing.toBeTruthy(ffi.ptr.isNull[Int](samePointer)));
+    testing.it("'ptr.offset' works as first-class field", testing.toBeTruthy(ffi.ptr.isNull[Int](aliasedPointer)));
+    testing.endDescribe()
   );

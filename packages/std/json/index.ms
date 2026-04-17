@@ -1,14 +1,18 @@
 let runtime := import "musi:runtime";
 
+/// Normalized JSON text.
 export opaque let Json := data {
-  | Json(String)
+  | Json(source : String)
 };
 
-export let parse (source : String) : Json := .Json(runtime.jsonNormalize(source));
+/// Parse and normalize JSON text.
+export let parse (source : String) : Json := .Json(source := runtime.jsonNormalize(source));
 
-export let stringify (value : Json) : String :=
-  match value (
-  | .Json(source) => source
+/// Render JSON text.
+export let (self : Json).stringify () : String :=
+  match self (
+  | .Json(source := source) => source
   );
 
+/// Returns true when source is valid JSON.
 export let isValid (source : String) : Bool := runtime.jsonIsValid(source) > 0;

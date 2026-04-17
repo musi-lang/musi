@@ -12,14 +12,6 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/assert/index.ms"),
     ),
     (
-        "bytes/_build.ms",
-        include_str!("../../../packages/std/bytes/_build.ms"),
-    ),
-    (
-        "bytes/_compare.ms",
-        include_str!("../../../packages/std/bytes/_compare.ms"),
-    ),
-    (
         "bytes/index.ms",
         include_str!("../../../packages/std/bytes/index.ms"),
     ),
@@ -93,6 +85,10 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/option/index.ms"),
     ),
     (
+        "os/index.ms",
+        include_str!("../../../packages/std/os/index.ms"),
+    ),
+    (
         "path/index.ms",
         include_str!("../../../packages/std/path/index.ms"),
     ),
@@ -115,6 +111,10 @@ pub const STD_FILES: &[(&str, &str)] = &[
     (
         "slice/index.ms",
         include_str!("../../../packages/std/slice/index.ms"),
+    ),
+    (
+        "sys/index.ms",
+        include_str!("../../../packages/std/sys/index.ms"),
     ),
     (
         "testing/index.ms",
