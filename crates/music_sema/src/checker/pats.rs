@@ -152,10 +152,44 @@ impl CheckPass<'_, '_, '_> {
         args: SliceRange<HirVariantPatArg>,
     ) {
         let builtins = self.builtins();
-        let (expected_args, field_names): (Vec<HirTyId>, Vec<Option<Box<str>>>) = match self
-            .ty(ty)
-            .kind
-        {
+        let (expected_args, field_names) = self.variant_pat_expected_args(ty, tag);
+        let args_vec = self.variant_pat_args(args);
+        let named_variant = field_names.iter().any(Option::is_some);
+        let named_args = args_vec
+            .iter()
+            .any(|arg| self.variant_pat_arg_name(arg, &field_names).is_some());
+        if named_variant {
+            self.bind_named_variant_pat(
+                span,
+                args_vec,
+                &expected_args,
+                &field_names,
+                named_args,
+                builtins.unknown,
+            );
+            return;
+        }
+        if named_args {
+            self.diag(span, DiagKind::VariantNamedFieldsUnexpected, "");
+        }
+        if expected_args.len() != args_vec.len() {
+            self.diag(span, DiagKind::VariantPatternArityMismatch, "");
+        }
+        for (index, arg) in args_vec.into_iter().enumerate() {
+            let expected = expected_args
+                .get(index)
+                .copied()
+                .unwrap_or(builtins.unknown);
+            self.bind_pat_inner(arg.pat, expected);
+        }
+    }
+
+    fn variant_pat_expected_args(
+        &mut self,
+        ty: HirTyId,
+        tag: Ident,
+    ) -> (Vec<HirTyId>, Vec<Option<Box<str>>>) {
+        match self.ty(ty).kind {
             HirTyKind::Sum { left, right } => {
                 let tag_name = self.resolve_symbol(tag.name);
                 let chosen = match tag_name {
@@ -166,13 +200,12 @@ impl CheckPass<'_, '_, '_> {
                 if chosen.is_some() {
                     let _sum_def = self.ensure_sum_data_def(left, right);
                 }
-                (
+                let expected_args =
                     chosen.map_or_else(Vec::new, |payload_ty| match &self.ty(payload_ty).kind {
                         HirTyKind::Tuple { items } => self.ty_ids(*items),
                         _ => vec![payload_ty],
-                    }),
-                    Vec::new(),
-                )
+                    });
+                (expected_args, Vec::new())
             }
             HirTyKind::Named { name, .. } => {
                 let data_name = self.resolve_symbol(name);
@@ -190,69 +223,70 @@ impl CheckPass<'_, '_, '_> {
                     .unwrap_or_default()
             }
             _ => (Vec::new(), Vec::new()),
-        };
-        let args_vec = self.variant_pat_args(args);
-        let named_variant = field_names.iter().any(Option::is_some);
-        let named_args = args_vec
-            .iter()
-            .any(|arg| self.variant_pat_arg_name(arg, &field_names).is_some());
-        if named_variant {
-            if !named_args {
-                self.diag(span, DiagKind::VariantNamedFieldsRequired, "");
-            }
-            let mut seen = BTreeSet::new();
-            for arg in args_vec {
-                let Some(name) = self.variant_pat_arg_name(&arg, &field_names) else {
-                    self.bind_pat_inner(arg.pat, builtins.unknown);
-                    continue;
-                };
-                if !seen.insert(name.name) {
-                    let field_name = self.resolve_symbol(name.name).to_owned();
-                    self.diag_named(
-                        name.span,
-                        DiagKind::DuplicateVariantField,
-                        format!("duplicate variant field `{field_name}`"),
-                    );
-                }
-                let expected = field_names
-                    .iter()
-                    .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)))
-                    .and_then(|index| expected_args.get(index).copied())
-                    .unwrap_or_else(|| {
-                        let field_name = self.resolve_symbol(name.name).to_owned();
-                        self.diag_named(
-                            name.span,
-                            DiagKind::UnknownVariantField,
-                            format!("unknown variant field `{field_name}`"),
-                        );
-                        builtins.unknown
-                    });
-                self.bind_pat_inner(arg.pat, expected);
-            }
-            for field_name in field_names.iter().flatten() {
-                if !seen.contains(&self.intern(field_name)) {
-                    self.diag_named(
-                        span,
-                        DiagKind::MissingVariantField,
-                        format!("missing variant field `{field_name}`"),
-                    );
-                }
-            }
-            return;
         }
-        if named_args {
-            self.diag(span, DiagKind::VariantNamedFieldsUnexpected, "");
+    }
+
+    fn bind_named_variant_pat(
+        &mut self,
+        span: Span,
+        args_vec: Vec<HirVariantPatArg>,
+        expected_args: &[HirTyId],
+        field_names: &[Option<Box<str>>],
+        named_args: bool,
+        fallback: HirTyId,
+    ) {
+        if !named_args {
+            self.diag(span, DiagKind::VariantNamedFieldsRequired, "");
         }
-        if expected_args.len() != args_vec.len() {
-            self.diag(span, DiagKind::VariantPatternArityMismatch, "");
-        }
-        for (index, arg) in args_vec.into_iter().enumerate() {
-            let expected = expected_args
-                .get(index)
-                .copied()
-                .unwrap_or(builtins.unknown);
+        let mut seen = BTreeSet::new();
+        for arg in args_vec {
+            let Some(name) = self.variant_pat_arg_name(&arg, field_names) else {
+                self.bind_pat_inner(arg.pat, fallback);
+                continue;
+            };
+            if !seen.insert(name.name) {
+                let field_name = self.resolve_symbol(name.name).to_owned();
+                self.diag_named(
+                    name.span,
+                    DiagKind::DuplicateVariantField,
+                    format!("duplicate variant field `{field_name}`"),
+                );
+            }
+            let expected =
+                self.variant_field_expected_ty(name, expected_args, field_names, fallback);
             self.bind_pat_inner(arg.pat, expected);
         }
+        for field_name in field_names.iter().flatten() {
+            if !seen.contains(&self.intern(field_name)) {
+                self.diag_named(
+                    span,
+                    DiagKind::MissingVariantField,
+                    format!("missing variant field `{field_name}`"),
+                );
+            }
+        }
+    }
+
+    fn variant_field_expected_ty(
+        &mut self,
+        name: Ident,
+        expected_args: &[HirTyId],
+        field_names: &[Option<Box<str>>],
+        fallback: HirTyId,
+    ) -> HirTyId {
+        let field_name = self.resolve_symbol(name.name).to_owned();
+        field_names
+            .iter()
+            .position(|field| field.as_deref() == Some(field_name.as_str()))
+            .and_then(|index| expected_args.get(index).copied())
+            .unwrap_or_else(|| {
+                self.diag_named(
+                    name.span,
+                    DiagKind::UnknownVariantField,
+                    format!("unknown variant field `{field_name}`"),
+                );
+                fallback
+            })
     }
 
     fn variant_pat_arg_name(
