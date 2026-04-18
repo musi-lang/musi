@@ -4,49 +4,46 @@ let path := import "@std/path";
 let Path := path.Path;
 let runtime := import "musi:runtime";
 
-/// Process command text.
+--- Process command text.
 export opaque let Command := data {
   | Command(value : String)
 };
 
-/// Process exit code.
+--- Process exit code.
 export opaque let ExitCode := data {
   | ExitCode(value : Int)
 };
 
-/// Build a shell command.
+--- Build a shell command.
 export let command (value : String) : Command := .Command(value := value);
 
-/// Build an exit code.
+--- Build an exit code.
 export let exitCode (value : Int) : ExitCode := .ExitCode(value := value);
 
-/// Command as raw string.
-export let (self : Command).toString () : String :=
-  match self (
+--- Command as raw string.
+export let(self : Command).toString () : String := match self (
   | .Command(value := value) => value
-  );
+);
 
-/// Exit code as raw int.
-export let (self : ExitCode).toInt () : Int :=
-  match self (
+--- Exit code as raw int.
+export let(self : ExitCode).toInt () : Int := match self (
   | .ExitCode(value := value) => value
-  );
+);
 
-/// Number of process args.
+--- Number of process args.
 export let argsCount () : Int := runtime.processArgCount();
 
-/// Process arg by index.
-export let argAt (index : Int) : Option[String] :=
-  match runtime.processArgAt(index) (
+--- Process arg by index.
+export let argAt (index : Int) : Option[String] := match runtime.processArgAt(index) (
   | value if value = "" => option.none[String]()
   | value => option.some[String](value)
-  );
+);
 
-/// Current working directory.
+--- Current working directory.
 export let cwd () : Path := path.fromString(runtime.processCwd());
 
-/// Run a shell command.
-export let run (target : Command) : ExitCode := exitCode(runtime.processRun(toString(target)));
+--- Run a shell command.
+export let run (target : Command) : ExitCode := exitCode(runtime.processRun(target.toString()));
 
-/// Exit current process.
-export let exit (code : ExitCode) : Unit := runtime.processExit(toInt(code));
+--- Exit current process.
+export let exit (code : ExitCode) : Unit := runtime.processExit(code.toInt());

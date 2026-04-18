@@ -1,176 +1,109 @@
-let sys := import "@std/sys";
+let core := import "./_core.ms";
 
-/// Operating system name.
-export opaque let Os := data {
-  | Os(value : String)
-};
+--- Operating system name.
+export let Os := core.Os;
 
-/// CPU architecture name.
-export opaque let Arch := data {
-  | Arch(value : String)
-};
+--- CPU architecture name.
+export let Arch := core.Arch;
 
-/// Platform family name.
-export opaque let Family := data {
-  | Family(value : String)
-};
+--- Platform family name.
+export let Family := core.Family;
 
-/// Byte order.
-export opaque let Endian := data {
-  | Little
-  | Big
-};
+--- Byte order.
+export let Endian := core.Endian;
 
-/// JIT backend availability.
-export opaque let Jit := data {
-  | Supported(backend : String, isa : String)
-  | Unsupported
-};
+--- JIT backend availability.
+export let Jit := core.Jit;
 
-/// Current compilation/runtime target facts.
-export opaque let Target := data {
-  | Target(
-    os : Os,
-    arch : Arch,
-    family : Family,
-    pointerWidth : Int,
-    endian : Endian,
-    jit : Jit
-  )
-};
+--- Current compilation/runtime target facts.
+export let Target := core.Target;
 
-/// Build an OS name.
-export let os (value : String) : Os := .Os(value := value);
+--- Build an OS name.
+export let os := core.os;
 
-/// Build an architecture name.
-export let arch (value : String) : Arch := .Arch(value := value);
+--- Build an architecture name.
+export let arch := core.arch;
 
-/// Build a platform family name.
-export let family (value : String) : Family := .Family(value := value);
+--- Build a platform family name.
+export let family := core.family;
 
-/// Return OS name text.
-let osText (target : Os) : String :=
-  match target (
-  | .Os(value := value) => value
-  );
+--- Current JIT support facts.
+export let currentJit := core.currentJit;
 
-/// Convert value to string.
-export let (self : Os).toString () : String := osText(self);
+--- Current target facts.
+export let current := core.current;
 
-/// Return OS name text.
-export let osName (value : Os) : String := osText(value);
+--- Convert raw endian text to typed endian value.
+export let endianFromString := core.endianFromString;
 
-/// Return architecture name text.
-let archText (target : Arch) : String :=
-  match target (
-  | .Arch(value := value) => value
-  );
+--- Match current OS.
+export let matchesOs := core.matchesOs;
 
-/// Convert value to string.
-export let (self : Arch).toString () : String := archText(self);
+--- Match current architecture.
+export let matchesArch := core.matchesArch;
 
-/// Return architecture name text.
-export let archName (value : Arch) : String := archText(value);
+--- Match current platform family.
+export let matchesFamily := core.matchesFamily;
 
-/// Return family name text.
-let familyText (target : Family) : String :=
-  match target (
-  | .Family(value := value) => value
-  );
+--- Returns true on Unix-family platforms.
+export let isUnix := core.isUnix;
 
-/// Convert value to string.
-export let (self : Family).toString () : String := familyText(self);
+--- Returns true on Darwin-family platforms.
+export let isDarwin := core.isDarwin;
 
-/// Return family name text.
-export let familyName (value : Family) : String := familyText(value);
+--- Returns true on Windows.
+export let isWindows := core.isWindows;
 
-/// Convert raw endian text to typed endian value.
-export let endianFromString (value : String) : Endian :=
-  match value (
-  | "big" => .Big
-  | _ => .Little
-  );
+--- Returns true on WebAssembly.
+export let isWebAssembly := core.isWebAssembly;
 
-/// Return true when JIT support exists.
-export let (self : Jit).isSupported () : Bool :=
-  match self (
-  | .Supported(backend := _, isa := _) => 0 = 0
-  | .Unsupported => 0 = 1
-  );
+--- Returns true when current target can use the planned JIT backend.
+export let supportsJit := core.supportsJit;
 
-/// Current JIT support facts.
-export let currentJit : Jit :=
-  match sys.jit.supported (
-  | supported if supported => .Supported(backend := sys.jit.backend, isa := sys.jit.isa)
-  | _ => .Unsupported
-  );
+--- Convert value to string.
+export let(self : Os).toString () : String := core.osText(self);
 
-/// Current target facts.
-export let current : Target := .Target(
-  os := os(sys.os),
-  arch := arch(sys.arch),
-  family := family(sys.family),
-  pointerWidth := sys.pointerWidth,
-  endian := endianFromString(sys.endian),
-  jit := currentJit
-);
+--- Convert value to string.
+export let(self : Arch).toString () : String := core.archText(self);
 
-/// Target OS.
-export let targetOs (target : Target) : Os :=
-  match target (
-  | .Target(os := value, arch := _, family := _, pointerWidth := _, endian := _, jit := _) => value
-  );
+--- Convert value to string.
+export let(self : Family).toString () : String := core.familyText(self);
 
-/// Target architecture.
-export let targetArch (target : Target) : Arch :=
-  match target (
-  | .Target(os := _, arch := value, family := _, pointerWidth := _, endian := _, jit := _) => value
-  );
+--- Returns true when JIT support exists.
+export let(self : Jit).isSupported () : Bool := core.isSupported(self);
 
-/// Target family.
-export let targetFamily (target : Target) : Family :=
-  match target (
-  | .Target(os := _, arch := _, family := value, pointerWidth := _, endian := _, jit := _) => value
-  );
+--- Target OS.
+export let(self : Target).os () : Os := core.targetOs(self);
 
-/// Target pointer width.
-export let targetPointerWidth (target : Target) : Int :=
-  match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := value, endian := _, jit := _) => value
-  );
+--- Target architecture.
+export let(self : Target).arch () : Arch := core.targetArch(self);
 
-/// Target endian value.
-export let targetEndian (target : Target) : Endian :=
-  match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := _, endian := value, jit := _) => value
-  );
+--- Target family.
+export let(self : Target).family () : Family := core.targetFamily(self);
 
-/// Target JIT facts.
-export let targetJit (target : Target) : Jit :=
-  match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := _, endian := _, jit := value) => value
-  );
+--- Target pointer width.
+export let(self : Target).pointerWidth () : Int := core.targetPointerWidth(self);
 
-/// Match current OS.
-export let matchesOs (value : Os) : Bool := sys.matchesOs(osText(value));
+--- Target endian value.
+export let(self : Target).endian () : Endian := core.targetEndian(self);
 
-/// Match current architecture.
-export let matchesArch (value : Arch) : Bool := sys.matchesArch(archText(value));
+--- Target JIT facts.
+export let(self : Target).jit () : Jit := core.targetJit(self);
 
-/// Match current platform family.
-export let matchesFamily (value : Family) : Bool := sys.matchesFamily(familyText(value));
+--- Target OS.
+export let targetOs := core.targetOs;
 
-/// Returns true on Unix-family platforms.
-export let isUnix () : Bool := matchesFamily(family("unix"));
+--- Target architecture.
+export let targetArch := core.targetArch;
 
-/// Returns true on Darwin-family platforms.
-export let isDarwin () : Bool := matchesFamily(family("darwin"));
+--- Target family.
+export let targetFamily := core.targetFamily;
 
-/// Returns true on Windows.
-export let isWindows () : Bool := matchesFamily(family("windows"));
+--- Target pointer width.
+export let targetPointerWidth := core.targetPointerWidth;
 
-/// Returns true on WebAssembly.
-export let isWebAssembly () : Bool := matchesFamily(family("webassembly"));
+--- Target endian value.
+export let targetEndian := core.targetEndian;
 
-/// Returns true when current target can use the planned JIT backend.
-export let supportsJit () : Bool := isSupported(currentJit);
+--- Target JIT facts.
+export let targetJit := core.targetJit;

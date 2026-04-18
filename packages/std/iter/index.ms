@@ -1,37 +1,28 @@
-/// Build an empty sequence.
-export let empty[T] () : []T := [];
+let core := import "./_core.ms";
 
-/// Build a one-value iterator.
-export let once[T] (value : T) : []T := [value];
+--- Build an empty sequence.
+export let empty := core.empty;
 
-/// Concatenate two sequences.
-export let concat[T] (left : []T, right : []T) : []T := [...left, ...right];
+--- Build a one-value iterator.
+export let once := core.once;
 
-/// Append a trailing value.
-export let append[T] (iter : []T, value : T) : []T := [...iter, value];
+--- Concatenate two sequences.
+export let concat := core.concat;
 
-/// Prepend a leading value.
-export let prepend[T] (value : T, iter : []T) : []T := [value, ...iter];
+--- Append a trailing value.
+export let append := core.append;
 
-/// Collect iterator values into an array.
-export let collect[T] (iter : []T) : []T := [...iter];
+--- Prepend a leading value.
+export let prepend := core.prepend;
 
-/// Compare integer sequences for equality.
-export let equalsInt (left : []Int, right : []Int) : Bool := left = right;
+--- Collect iterator values into an array.
+export let collect := core.collect;
 
-/// Returns true when sequence is empty.
-export let isEmpty[T] (iter : []T) : Bool :=
-  match iter (
-  | [] => 0 = 0
-  | _ => 0 = 1
-  );
+--- Compare integer sequences for equality.
+export let equalsInt := core.equalsInt;
 
-/// Invert a boolean value.
-export let invert (value : Bool) : Bool :=
-  match value (
-  | _ if value => 0 = 1
-  | _ => 0 = 0
-  );
+--- Returns true when sequence is empty.
+export let isEmpty := core.isEmpty;
 
-/// Returns true when sequence has values.
-export let nonEmpty[T] (iter : []T) : Bool := invert(isEmpty[T](iter));
+--- Returns true when sequence has values.
+export let nonEmpty := core.nonEmpty;

@@ -1,48 +1,47 @@
-/// Byte buffer backed by integer byte values.
-export opaque let Bytes := data {
-  | Bytes(values : []Int)
-};
+let core := import "./_core.ms";
 
-/// Empty byte buffer.
-export let empty () : Bytes := .Bytes(values := []);
+--- Byte buffer backed by integer byte values.
+export let Bytes := core.Bytes;
 
-/// Build bytes from raw byte values.
-export let fromArray (values : []Int) : Bytes := .Bytes(values := [...values]);
+--- Empty byte buffer.
+export let empty := core.empty;
 
-/// Return a copy of raw byte values.
-export let (self : Bytes).toArray () : []Int :=
-  match self (
-  | .Bytes(values := values) => [...values]
-  );
+--- Build bytes from raw byte values.
+export let fromArray := core.fromArray;
 
-/// Copy bytes.
-export let (self : Bytes).copy () : Bytes := fromArray(toArray(self));
+--- Return a copy of raw byte values.
+export let(self : Bytes).toArray () : []Int := core.toArray(self);
 
-/// Concatenate two byte buffers.
-export let (self : Bytes).concat (other : Bytes) : Bytes := fromArray([...toArray(self), ...toArray(other)]);
+--- Copy bytes.
+export let(self : Bytes).copy () : Bytes := core.copy(self);
 
-/// Append one byte.
-export let (self : Bytes).append (value : Int) : Bytes := fromArray([...toArray(self), value]);
+--- Concatenate two byte buffers.
+export let(self : Bytes).concat (other : Bytes) : Bytes := core.concat(self,
+    other
+);
 
-/// Prepend one byte.
-export let (self : Bytes).prepend (value : Int) : Bytes := fromArray([value, ...toArray(self)]);
+--- Append one byte.
+export let(self : Bytes).append (value : Int) : Bytes := core.append(self,
+    value
+);
 
-/// Compare byte buffers.
-export let (self : Bytes).equals (other : Bytes) : Bool := toArray(self) = toArray(other);
+--- Prepend one byte.
+export let(self : Bytes).prepend (value : Int) : Bytes := core.prepend(self,
+    value
+);
 
-/// Compare byte buffers for inequality.
-export let (self : Bytes).notEquals (other : Bytes) : Bool := toArray(self) /= toArray(other);
+--- Compare byte buffers.
+export let(self : Bytes).equals (other : Bytes) : Bool := core.equals(self,
+    other
+);
 
-/// Returns true when byte buffer is empty.
-export let (self : Bytes).isEmpty () : Bool :=
-  match toArray(self) (
-  | [] => 0 = 0
-  | _ => 0 = 1
-  );
+--- Compare byte buffers for inequality.
+export let(self : Bytes).notEquals (other : Bytes) : Bool := core.notEquals(self,
+    other
+);
 
-/// Returns true when byte buffer has values.
-export let (self : Bytes).nonEmpty () : Bool :=
-  match toArray(self) (
-  | [] => 0 = 1
-  | _ => 0 = 0
-  );
+--- Returns true when byte buffer is empty.
+export let(self : Bytes).isEmpty () : Bool := core.isEmpty(self);
+
+--- Returns true when byte buffer has values.
+export let(self : Bytes).nonEmpty () : Bool := core.nonEmpty(self);

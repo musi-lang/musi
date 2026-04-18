@@ -1,40 +1,36 @@
-/// Build an empty sequence.
-export let empty[T] () : []T := [];
+let core := import "./_core.ms";
 
-/// Build a one-value array.
-export let single[T] (value : T) : []T := [value];
+--- Build an empty sequence.
+export let empty := core.empty;
 
-/// Build a two-value array.
-export let pair[T] (first : T, second : T) : []T := [first, second];
+--- Build a one-value array.
+export let single := core.single;
 
-/// Copy sequence values.
-export let copy[T] (values : []T) : []T := [...values];
+--- Build a two-value array.
+export let pair := core.pair;
 
-/// Concatenate two sequences.
-export let concat[T] (left : []T, right : []T) : []T := [...left, ...right];
+--- Copy sequence values.
+export let copy := core.copy;
 
-/// Append a trailing value.
-export let append[T] (values : []T, value : T) : []T := [...values, value];
+--- Concatenate two sequences.
+export let concat := core.concat;
 
-/// Prepend a leading value.
-export let prepend[T] (value : T, values : []T) : []T := [value, ...values];
+--- Append a trailing value.
+export let append := core.append;
 
-/// Compare integer sequences for equality.
-export let equalsInt (left : []Int, right : []Int) : Bool := left = right;
+--- Prepend a leading value.
+export let prepend [T] (value : T, values : []T) : []T := core.prepend[T](values,
+    value
+);
 
-/// Compare integer arrays for inequality.
-export let notEqualsInt (left : []Int, right : []Int) : Bool := left /= right;
+--- Compare integer sequences for equality.
+export let equalsInt := core.equalsInt;
 
-/// Returns true when sequence is empty.
-export let isEmpty[T] (values : []T) : Bool :=
-  match values (
-  | [] => 0 = 0
-  | _ => 0 = 1
-  );
+--- Compare integer arrays for inequality.
+export let notEqualsInt := core.notEqualsInt;
 
-/// Returns true when sequence has values.
-export let nonEmpty[T] (values : []T) : Bool :=
-  match values (
-  | [] => 0 = 1
-  | _ => 0 = 0
-  );
+--- Returns true when sequence is empty.
+export let isEmpty := core.isEmpty;
+
+--- Returns true when sequence has values.
+export let nonEmpty := core.nonEmpty;

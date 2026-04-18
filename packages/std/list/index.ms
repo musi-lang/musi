@@ -1,51 +1,48 @@
-/// Ordered list backed by an array.
-export opaque let List[T] := data {
-  | List(values : []T)
-};
+let core := import "./_core.ms";
 
-/// Empty list.
-export let empty[T] () : List[T] := .List(values := []);
+--- Ordered list backed by an array.
+export let List := core.List;
 
-/// Single-value list.
-export let of[T] (value : T) : List[T] := .List(values := [value]);
+--- Empty list.
+export let empty := core.empty;
 
-/// Two-value list.
-export let pair[T] (first : T, second : T) : List[T] := .List(values := [first, second]);
+--- Single-value list.
+export let of := core.of;
 
-/// Build a list from an array copy.
-export let fromArray[T] (values : []T) : List[T] := .List(values := [...values]);
+--- Two-value list.
+export let pair := core.pair;
 
-/// Return a copy of list values.
-export let (self : List[T]).toArray[T] () : []T :=
-  match self (
-  | .List(values := values) => [...values]
-  );
+--- Build a list from an array copy.
+export let fromArray := core.fromArray;
 
-/// Copy a list.
-export let (self : List[T]).copy[T] () : List[T] := fromArray[T](toArray[T](self));
+--- Return a copy of list values.
+export let(self : List[T]).toArray [T] () : []T := core.toArray[T](self);
 
-/// Concatenate two lists.
-export let (self : List[T]).concat[T] (other : List[T]) : List[T] := fromArray[T]([...toArray[T](self), ...toArray[T](other)]);
+--- Copy a list.
+export let(self : List[T]).copy [T] () : List[T] := core.copy[T](self);
 
-/// Append one value.
-export let (self : List[T]).append[T] (value : T) : List[T] := fromArray[T]([...toArray[T](self), value]);
+--- Concatenate two lists.
+export let(self : List[T]).concat [T] (other : List[T]) : List[T] := core.concat[T](self,
+    other
+);
 
-/// Prepend one value.
-export let (self : List[T]).prepend[T] (value : T) : List[T] := fromArray[T]([value, ...toArray[T](self)]);
+--- Append one value.
+export let(self : List[T]).append [T] (value : T) : List[T] := core.append[T](self,
+    value
+);
 
-/// Compare integer lists.
-export let (self : List[Int]).equalsInt (other : List[Int]) : Bool := toArray[Int](self) = toArray[Int](other);
+--- Prepend one value.
+export let(self : List[T]).prepend [T] (value : T) : List[T] := core.prepend[T](self,
+    value
+);
 
-/// Returns true when list is empty.
-export let (self : List[T]).isEmpty[T] () : Bool :=
-  match toArray[T](self) (
-  | [] => 0 = 0
-  | _ => 0 = 1
-  );
+--- Compare integer lists.
+export let(self : List[Int]).equalsInt (other : List[Int]) : Bool := core.equalsInt(self,
+    other
+);
 
-/// Returns true when list has values.
-export let (self : List[T]).nonEmpty[T] () : Bool :=
-  match toArray[T](self) (
-  | [] => 0 = 1
-  | _ => 0 = 0
-  );
+--- Returns true when list is empty.
+export let(self : List[T]).isEmpty [T] () : Bool := core.isEmpty[T](self);
+
+--- Returns true when list has values.
+export let(self : List[T]).nonEmpty [T] () : Bool := core.nonEmpty[T](self);

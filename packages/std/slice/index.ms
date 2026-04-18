@@ -1,25 +1,19 @@
-/// Build an empty sequence.
-export let empty[T] () : []T := [];
+let core := import "./_core.ms";
 
-/// Copy sequence values.
-export let copy[T] (values : []T) : []T := [...values];
+--- Build an empty sequence.
+export let empty := core.empty;
 
-/// Concatenate two sequences.
-export let concat[T] (left : []T, right : []T) : []T := [...left, ...right];
+--- Copy sequence values.
+export let copy := core.copy;
 
-/// Compare integer sequences for equality.
-export let equalsInt (left : []Int, right : []Int) : Bool := left = right;
+--- Concatenate two sequences.
+export let concat := core.concat;
 
-/// Returns true when sequence is empty.
-export let isEmpty[T] (values : []T) : Bool :=
-  match values (
-  | [] => 0 = 0
-  | _ => 0 = 1
-  );
+--- Compare integer sequences for equality.
+export let equalsInt := core.equalsInt;
 
-/// Returns true when sequence has values.
-export let nonEmpty[T] (values : []T) : Bool :=
-  match values (
-  | [] => 0 = 1
-  | _ => 0 = 0
-  );
+--- Returns true when sequence is empty.
+export let isEmpty := core.isEmpty;
+
+--- Returns true when sequence has values.
+export let nonEmpty := core.nonEmpty;
