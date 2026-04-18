@@ -107,9 +107,7 @@ export let isNone [T] (value : Option[T]) : Bool := match value (
   | .None => 0 = 0
 );
 
-export let unwrapOr [T] (value : Option[T],
-  fallback : T
-) : T := match value (
+export let unwrapOr [T] (value : Option[T], fallback : T) : T := match value (
   | .Some(item) => item
   | .None => fallback
 );

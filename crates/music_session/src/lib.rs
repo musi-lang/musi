@@ -1,9 +1,11 @@
 mod api;
+pub use diag::SessionDiagKind;
+mod diag;
 mod session;
 
 pub use api::{
     CompiledOutput, LawSuiteModule, ParsedModule, SessionDiagList, SessionError, SessionOptions,
-    SessionStats, SessionSyntaxErrors,
+    SessionSourceMapError, SessionStats, SessionSyntaxErrors,
 };
 pub use session::Session;
 
