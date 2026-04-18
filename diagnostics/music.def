@@ -1,0 +1,19 @@
+catalog music music MusicCliDiagKind crates/music/src/diag_catalog_gen.rs
+
+diag UnsupportedRunArgs 5500
+  message "unsupported music `run` argument `{argument}`"
+  primary "unsupported music `run` argument `{argument}`"
+
+diag CheckCommandFailed 5501
+  message "music `check` command failed"
+  primary "music `check` command failed"
+
+map music_cli_error_kind crate::MusicError option
+  case "DirectToolingFailed(_)" none
+  case "SessionCompilationFailed(_)" none
+  case "ArtifactTransportFailed(_)" none
+  case "VmExecutionFailed(_)" none
+  case "JsonSerializationFailed(_)" none
+  case "UnsupportedRunArgs { .. }" UnsupportedRunArgs
+  case "CheckCommandFailed" CheckCommandFailed
+end

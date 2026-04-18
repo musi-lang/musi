@@ -10,7 +10,10 @@ pub mod int_literal;
 pub mod source;
 pub mod span;
 
-pub use diag::{Diag, DiagCode, DiagLabel, DiagLevel, OwnedSourceDiag};
+pub use diag::{
+    CatalogDiagnostic, Diag, DiagCode, DiagContext, DiagFix, DiagLabel, DiagLabelKind, DiagLevel,
+    DiagnosticError, DiagnosticKind, OwnedSourceDiag,
+};
 pub use int_literal::parse_i64_literal;
 pub use source::{Source, SourceId, SourceMap, SourceMapError};
 pub use span::{Span, Spanned};

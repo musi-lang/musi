@@ -1,4 +1,7 @@
-use music_base::diag::{Diag, DiagCode};
+use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+
+#[path = "diag_catalog_gen.rs"]
+mod diag_catalog_gen;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IrDiagKind {
@@ -9,39 +12,58 @@ pub enum IrDiagKind {
 
 impl IrDiagKind {
     #[must_use]
-    pub const fn code(self) -> DiagCode {
-        DiagCode::new(match self {
-            Self::InvalidSurfaceTypeId => 3400,
-            Self::LoweringRequiresSemaCleanModule => 3401,
-            Self::LoweringInvariantViolated => 3402,
-        })
+    pub fn code(self) -> DiagCode {
+        DiagCode::new(diag_catalog_gen::code(self))
     }
 
     #[must_use]
-    pub const fn message(self) -> &'static str {
-        match self {
-            Self::InvalidSurfaceTypeId => "invalid surface type identifier",
-            Self::LoweringRequiresSemaCleanModule => {
-                "intermediate representation lowering requires semantic-clean module"
-            }
-            Self::LoweringInvariantViolated => {
-                "intermediate representation lowering invariant violated"
-            }
-        }
+    pub fn message(self) -> &'static str {
+        diag_catalog_gen::message(self)
     }
 
     #[must_use]
-    pub const fn label(self) -> &'static str {
-        self.message()
+    pub fn label(self) -> &'static str {
+        diag_catalog_gen::primary(self)
+    }
+
+    #[must_use]
+    pub fn hint(self) -> Option<&'static str> {
+        diag_catalog_gen::help(self)
+    }
+
+    #[must_use]
+    pub fn from_code(code: DiagCode) -> Option<Self> {
+        diag_catalog_gen::from_code(code.raw())
     }
 
     #[must_use]
     pub fn from_diag(diag: &Diag) -> Option<Self> {
-        match diag.code()?.raw() {
-            3400 => Some(Self::InvalidSurfaceTypeId),
-            3401 => Some(Self::LoweringRequiresSemaCleanModule),
-            3402 => Some(Self::LoweringInvariantViolated),
-            _ => None,
-        }
+        diag.code().and_then(Self::from_code)
+    }
+}
+
+impl DiagnosticKind for IrDiagKind {
+    fn code(self) -> DiagCode {
+        self.code()
+    }
+
+    fn phase(self) -> &'static str {
+        "ir"
+    }
+
+    fn level(self) -> DiagLevel {
+        DiagLevel::Error
+    }
+
+    fn message(self) -> &'static str {
+        self.message()
+    }
+
+    fn primary(self) -> &'static str {
+        self.label()
+    }
+
+    fn help(self) -> Option<&'static str> {
+        self.hint()
     }
 }

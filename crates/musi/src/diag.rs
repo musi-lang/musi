@@ -1,21 +1,30 @@
-use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+use music_base::diag::{DiagCode, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
 mod diag_catalog_gen;
 
+pub use diag_catalog_gen::cli_error_kind;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ResolveDiagKind {
-    ExpectedName,
-    InvalidStmt,
-    UnboundName,
-    ImportResolveFailed,
-    InvalidImportSpec,
+pub enum CliDiagKind {
+    MissingCurrentDirectory,
+    TaskFailed,
+    UnsupportedRunArgs,
+    PackageAlreadyInitialized,
+    MissingPackageName,
+    UnknownTarget,
+    CheckCommandFailed,
+    CommandUnavailable,
+    LspServerFailed,
+    IncompatibleCommandArgs,
 }
 
-impl ResolveDiagKind {
+impl CliDiagKind {
     #[must_use]
     pub fn code(self) -> DiagCode {
-        DiagCode::new(diag_catalog_gen::code(self))
+        let code = DiagCode::new(diag_catalog_gen::code(self));
+        debug_assert_eq!(Self::from_code(code), Some(self));
+        code
     }
 
     #[must_use]
@@ -37,34 +46,24 @@ impl ResolveDiagKind {
     pub fn from_code(code: DiagCode) -> Option<Self> {
         diag_catalog_gen::from_code(code.raw())
     }
-
-    #[must_use]
-    pub fn from_diag(diag: &Diag) -> Option<Self> {
-        diag.code().and_then(Self::from_code)
-    }
 }
 
-impl DiagnosticKind for ResolveDiagKind {
+impl DiagnosticKind for CliDiagKind {
     fn code(self) -> DiagCode {
         self.code()
     }
-
     fn phase(self) -> &'static str {
-        "resolve"
+        "cli"
     }
-
     fn level(self) -> DiagLevel {
         DiagLevel::Error
     }
-
     fn message(self) -> &'static str {
         self.message()
     }
-
     fn primary(self) -> &'static str {
         self.label()
     }
-
     fn help(self) -> Option<&'static str> {
         self.hint()
     }

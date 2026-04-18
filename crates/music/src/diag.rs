@@ -1,21 +1,22 @@
-use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+use music_base::diag::{DiagCode, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
 mod diag_catalog_gen;
 
+pub use diag_catalog_gen::music_cli_error_kind;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ResolveDiagKind {
-    ExpectedName,
-    InvalidStmt,
-    UnboundName,
-    ImportResolveFailed,
-    InvalidImportSpec,
+pub enum MusicCliDiagKind {
+    UnsupportedRunArgs,
+    CheckCommandFailed,
 }
 
-impl ResolveDiagKind {
+impl MusicCliDiagKind {
     #[must_use]
     pub fn code(self) -> DiagCode {
-        DiagCode::new(diag_catalog_gen::code(self))
+        let code = DiagCode::new(diag_catalog_gen::code(self));
+        debug_assert_eq!(Self::from_code(code), Some(self));
+        code
     }
 
     #[must_use]
@@ -37,20 +38,15 @@ impl ResolveDiagKind {
     pub fn from_code(code: DiagCode) -> Option<Self> {
         diag_catalog_gen::from_code(code.raw())
     }
-
-    #[must_use]
-    pub fn from_diag(diag: &Diag) -> Option<Self> {
-        diag.code().and_then(Self::from_code)
-    }
 }
 
-impl DiagnosticKind for ResolveDiagKind {
+impl DiagnosticKind for MusicCliDiagKind {
     fn code(self) -> DiagCode {
         self.code()
     }
 
     fn phase(self) -> &'static str {
-        "resolve"
+        "music-cli"
     }
 
     fn level(self) -> DiagLevel {

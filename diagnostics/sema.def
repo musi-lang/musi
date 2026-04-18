@@ -1,0 +1,495 @@
+catalog sema music_sema SemaDiagKind crates/music_sema/src/diag_catalog_gen.rs
+
+diag AttrDuplicateRepr 3000
+  message "duplicate `@repr`"
+  primary "duplicate `@repr`"
+
+diag AttrReprRequiresKindString 3001
+  message "`@repr` requires string `kind` argument"
+  primary "`@repr` requires string `kind` argument"
+
+diag AttrLayoutArgRequiresName 3002
+  message "`@layout` argument requires name"
+  primary "`@layout` argument requires name"
+
+diag AttrDuplicateLayoutAlign 3003
+  message "duplicate `@layout align`"
+  primary "duplicate `@layout align`"
+
+diag AttrLayoutAlignRequiresU32 3004
+  message "`@layout align` requires u32 value"
+  primary "`@layout align` requires u32 value"
+
+diag AttrDuplicateLayoutPack 3005
+  message "duplicate `@layout pack`"
+  primary "duplicate `@layout pack`"
+
+diag AttrLayoutPackRequiresU32 3006
+  message "`@layout pack` requires u32 value"
+  primary "`@layout pack` requires u32 value"
+
+diag AttrUnknownArg 3007
+  message "unknown attribute argument"
+  primary "unknown attribute argument"
+
+diag AttrKnownRequiresPlainBindLet 3008
+  message "`@known` requires plain bind `let` target"
+  primary "`@known` requires plain bind `let` target"
+
+diag AttrKnownRequiresNameString 3009
+  message "`@known` requires string `name` argument"
+  primary "`@known` requires string `name` argument"
+
+diag AttrKnownRequiresFoundationModule 3010
+  message "`@known` requires `musi:*` module"
+  primary "`@known` requires `musi:*` module"
+
+diag AttrKnownRequiresExport 3011
+  message "`@known` requires exported binding"
+  primary "`@known` requires exported binding"
+
+diag AttrKnownUnknownName 3012
+  message "unknown `@known` name"
+  primary "unknown `@known` name"
+
+diag AttrIntrinsicRequiresNameString 3013
+  message "`@intrinsic` requires string `name` argument"
+  primary "`@intrinsic` requires string `name` argument"
+
+diag AttrIntrinsicRequiresIntrinsicsModule 3014
+  message "`@intrinsic` requires `musi:intrinsics` module"
+  primary "`@intrinsic` requires `musi:intrinsics` module"
+
+diag AttrIntrinsicRequiresForeignLet 3300
+  message "`@intrinsic` requires foreign `let` target"
+  primary "`@intrinsic` requires foreign `let` target"
+
+diag AttrLinkRequiresForeignLet 3015
+  message "`@link` requires foreign `let` target"
+  primary "`@link` requires foreign `let` target"
+
+diag AttrDataLayoutRequiresDataTarget 3016
+  message "data layout attribute target must be `data`"
+  primary "data layout attribute target must be `data`"
+
+diag AttrFrozenRequiresExportedNonOpaqueData 3301
+  message "`@frozen` requires exported non-opaque `data` target"
+  primary "`@frozen` requires exported non-opaque `data` target"
+
+diag AttrHotColdRequiresCallable 3302
+  message "`@hot` and `@cold` require callable target"
+  primary "`@hot` and `@cold` require callable target"
+
+diag AttrHotColdConflict 3303
+  message "`@hot` conflicts with `@cold`"
+  primary "`@hot` conflicts with `@cold`"
+
+diag AttrDeprecatedRequiresStringValue 3304
+  message "`@deprecated` requires string values"
+  primary "`@deprecated` requires string values"
+
+diag AttrSinceRequiresVersionString 3305
+  message "`@since` requires string `version` argument"
+  primary "`@since` requires string `version` argument"
+
+diag AttrOpaqueRequiresStructuralExport 3306
+  message "`opaque` requires exported structural target"
+  primary "`opaque` requires exported structural target"
+
+diag AttrForeignRequiresForeignLet 3017
+  message "`foreign` attribute requires foreign `let` target"
+  primary "`foreign` attribute requires foreign `let` target"
+
+diag AttrLinkRequiresStringValue 3018
+  message "`@link` requires string values"
+  primary "`@link` requires string values"
+
+diag AttrWhenRequiresStringValue 3019
+  message "`@when` requires string values"
+  primary "`@when` requires string values"
+
+diag AttrWhenRequiresStringList 3020
+  message "`@when` requires string list for `feature`"
+  primary "`@when` requires string list for `feature`"
+
+diag ForeignSignatureRequired 3021
+  message "foreign signature required"
+  primary "foreign signature required"
+
+diag InvalidPartialModifier 3120
+  message "invalid `partial` target"
+  primary "invalid `partial` target"
+
+diag PartialForeignConflict 3121
+  message "`partial` conflicts with foreign binding"
+  primary "`partial` conflicts with foreign binding"
+
+diag InvalidFfiType 3022
+  message "invalid foreign function interface type"
+  primary "invalid foreign function interface type"
+
+diag LawMustBePure 3023
+  message "law must be pure"
+  primary "law must be pure"
+
+diag CollectDuplicateDataVariant 3024
+  message "duplicate data variant"
+  primary "duplicate data variant"
+
+diag DuplicateDataVariantDiscriminant 3025
+  message "duplicate data variant discriminant"
+  primary "duplicate data variant discriminant"
+
+diag InvalidDataVariantDiscriminant 3026
+  message "invalid data variant discriminant"
+  primary "invalid data variant discriminant"
+
+diag CyclicDataVariantDiscriminant 3027
+  message "cyclic data variant discriminant"
+  primary "cyclic data variant discriminant"
+
+diag CollectDuplicateEffectOp 3028
+  message "duplicate effect operation"
+  primary "duplicate effect operation"
+
+diag CollectDuplicateEffectLaw 3029
+  message "duplicate effect law"
+  primary "duplicate effect law"
+
+diag CollectDuplicateClassMember 3030
+  message "duplicate class member"
+  primary "duplicate class member"
+
+diag CollectDuplicateClassLaw 3031
+  message "duplicate class law"
+  primary "duplicate class law"
+
+diag UnknownExport 3032
+  message "unknown export binding"
+  primary "unknown export binding"
+
+diag InvalidRequestTarget 3033
+  message "request target expected effect operation call"
+  primary "request target must be effect operation call"
+  help "write `request Effect.op(...)`"
+
+diag UnknownEffect 3034
+  message "unknown effect name"
+  primary "unknown effect name"
+
+diag DuplicateHandlerClause 3035
+  message "duplicate handler clause"
+  primary "duplicate handler clause here"
+
+diag UnknownEffectOp 3036
+  message "unknown effect operation name"
+  primary "unknown effect operation name"
+
+diag HandlerClauseArityMismatch 3037
+  message "handler clause parameter count differs from operation"
+  primary "handler clause parameters do not match operation"
+
+diag HandleRequiresSingleValueClause 3038
+  message "handle requires exactly one value clause"
+  primary "handler literal requires exactly one `value` clause"
+  help "add exactly one `value => ...` clause"
+
+diag HandlerMissingOperationClause 3039
+  message "missing handler operation clause"
+  primary "missing handled operation clause in handler literal"
+  help "add clause for each handled operation"
+
+diag ResumeOutsideHandlerClause 3040
+  message "resume outside handler clause"
+  primary "`resume` only valid inside handler operation clause"
+  help "move `resume` into handler operation clause"
+
+diag EffectNotDeclared 3041
+  message "effect not declared"
+  primary "effect must appear in surrounding `using` set"
+  help "declare effect in `using` clause or remove request"
+
+diag InstanceMemberArityMismatch 3042
+  message "instance member parameter count differs from class member"
+  primary "instance member parameter count differs from class member"
+
+diag UnknownInstanceMember 3043
+  message "unknown instance member binding"
+  primary "unknown instance member binding"
+
+diag InstanceMemberValueRequired 3044
+  message "missing required instance member value"
+  primary "missing required instance member value"
+
+diag DuplicateInstanceMember 3045
+  message "duplicate provided instance member"
+  primary "duplicate provided instance member"
+
+diag MissingInstanceMember 3046
+  message "missing required instance member"
+  primary "missing required instance member"
+
+diag InvalidInstanceTarget 3047
+  message "invalid instance target type"
+  primary "invalid instance target type"
+
+diag SealedClass 3048
+  message "sealed class"
+  primary "sealed class"
+
+diag UnknownClass 3049
+  message "unknown class name"
+  primary "unknown class name"
+
+diag DuplicateInstance 3050
+  message "duplicate instance"
+  primary "duplicate instance"
+
+diag PlainLetRequiresIrrefutablePattern 3051
+  message "plain `let` requires irrefutable pattern"
+  primary "plain `let` requires irrefutable pattern"
+
+diag ModuleDestructuringRequiresStaticModule 3052
+  message "module destructuring requires static module value"
+  primary "module destructuring requires static module value"
+
+diag RecordDestructuringRequiresRecordOrModule 3053
+  message "record destructuring requires record or module value"
+  primary "record destructuring requires record or module value"
+
+diag CallableLetRequiresSimpleBindingPattern 3054
+  message "callable `let` requires simple binding pattern"
+  primary "callable `let` requires simple binding pattern"
+
+diag ArraySpreadRequiresOneDimensionalArray 3055
+  message "array spread requires one-dimensional array"
+  primary "array spread requires one-dimensional array"
+
+diag InvalidSpreadSource 3056
+  message "invalid spread source"
+  primary "spread source not valid here"
+
+diag DuplicateRecordField 3058
+  message "duplicate record field"
+  primary "duplicate record field"
+
+diag VariantMissingDataContext 3059
+  message "variant constructor requires data type context"
+  primary "variant constructor requires data type context"
+
+diag VariantConstructorArityMismatch 3060
+  message "variant constructor payload count differs from declaration"
+  primary "variant constructor payload count differs from declaration"
+
+diag VariantNamedFieldsRequired 3105
+  message "variant named fields required"
+  primary "variant requires named payload fields"
+
+diag VariantNamedFieldsUnexpected 3106
+  message "variant named fields not allowed"
+  primary "variant does not accept named payload fields"
+
+diag DuplicateVariantField 3107
+  message "duplicate variant field"
+  primary "variant field appears more than once"
+
+diag MissingVariantField 3108
+  message "missing variant field"
+  primary "missing variant field"
+
+diag UnknownVariantField 3109
+  message "unknown variant payload field"
+  primary "variant field not declared"
+
+diag MixedVariantPayloadStyle 3110
+  message "mixed variant payload style"
+  primary "variant payload fields must be all named or all positional"
+
+diag InvalidVariantArity 3061
+  message "invalid variant payload count"
+  primary "invalid variant payload count"
+
+diag UnknownDataVariant 3062
+  message "unknown data variant name"
+  primary "unknown data variant name"
+
+diag RecordLiteralRequiresNamedFields 3063
+  message "record literal requires named fields"
+  primary "record literal requires named fields"
+
+diag ArrayLiteralLengthUnknownFromRuntimeSpread 3064
+  message "unknown array literal length from runtime spread"
+  primary "unknown array literal length from runtime spread"
+
+diag ArrayLiteralLengthMismatch 3065
+  message "array literal length differs from expected type"
+  primary "array literal length differs from expected type"
+
+diag SumConstructorArityMismatch 3066
+  message "sum constructor payload count differs from sum arm"
+  primary "sum constructor payload count differs from sum arm"
+
+diag InvalidIndexArgCount 3067
+  message "invalid index argument count"
+  primary "invalid index expression argument count"
+
+diag InvalidCallTarget 3068
+  message "callee expression lacks callable type"
+  primary "callee must be callable"
+
+diag CallArityMismatch 3069
+  message "call argument count differs from callee"
+  primary "call argument count does not match callee"
+
+diag CallPositionalAfterNamedArgument 3111
+  message "positional call argument after named argument"
+  primary "positional call argument cannot follow named argument"
+  help "move positional arguments before named arguments"
+
+diag CallSpreadAfterNamedArgument 3112
+  message "call spread after named argument"
+  primary "call spread cannot follow named argument"
+  help "move spread arguments before named arguments"
+
+diag CallNamedArgumentUnknown 3113
+  message "unknown named call argument label"
+  primary "named call argument not declared here"
+
+diag CallNamedArgumentDuplicate 3114
+  message "duplicate named call argument"
+  primary "duplicate named call argument"
+
+diag CallNamedArgumentAlreadyProvided 3115
+  message "named call argument already provided"
+  primary "named call argument already provided"
+
+diag CallNamedArgumentsAfterRuntimeSpread 3116
+  message "named call arguments after runtime spread"
+  primary "named call arguments cannot follow runtime spread"
+
+diag CallNamedSpreadArgument 3117
+  message "named spread call argument"
+  primary "call spread cannot be named"
+
+diag UnsafeCallRequiresUnsafeBlock 3118
+  message "unsafe block required for call"
+  primary "call must appear inside `unsafe` block"
+
+diag InvalidTypeApplication 3070
+  message "invalid type application target"
+  primary "invalid type application target"
+
+diag CallRuntimeSpreadRequiresArrayAny 3072
+  message "call runtime spread requires `[]Any`"
+  primary "runtime call spread requires `[]Any`"
+  help "use `[]Any` for runtime-sized spread"
+
+diag CallSpreadRequiresTupleOrArray 3073
+  message "call spread requires tuple or array"
+  primary "call spread requires tuple or one-dimensional array"
+  help "spread tuple or one-dimensional array instead"
+
+diag DeclarationUsedAsValue 3074
+  message "declaration form used as value"
+  primary "declaration form used as value"
+
+diag TargetGateRejected 3075
+  message "target gate rejected item"
+  primary "target gate rejected item"
+
+diag InvalidIndexTarget 3076
+  message "invalid index target"
+  primary "index target must support indexing"
+
+diag UnknownField 3078
+  message "unknown record field"
+  primary "unknown record field"
+
+diag AmbiguousDotCallable 3102
+  message "ambiguous dot callable match"
+  primary "ambiguous dot callable match"
+
+diag DotCallableRequiresMutableReceiver 3103
+  message "dot callable requires mutable receiver"
+  primary "dot callable requires mutable receiver"
+
+diag InvalidFieldTarget 3079
+  message "invalid field target"
+  primary "field target not valid here"
+
+diag InvalidRecordUpdateTarget 3081
+  message "invalid record update target"
+  primary "record update target must be record value"
+
+diag MutForbiddenInTypeTestTarget 3082
+  message "`mut` not allowed in type test target"
+  primary "`mut` not allowed in type test target"
+
+diag MutForbiddenInTypeCastTarget 3083
+  message "`mut` not allowed in type cast target"
+  primary "`mut` not allowed in type cast target"
+
+diag WriteTargetRequiresMut 3084
+  message "write target requires `mut`"
+  primary "assignment target must be mutable"
+
+diag UnsupportedAssignmentTarget 3088
+  message "unsupported assignment target"
+  primary "assignment target not writable"
+
+diag NumericOperandRequired 3089
+  message "numeric operand required"
+  primary "numeric operand required"
+
+diag BinaryOperatorHasNoExecutableLowering 3090
+  message "binary operator has no executable lowering"
+  primary "binary operator has no executable lowering"
+
+diag TypeMismatch 3091
+  message "value expected type, found different type"
+  primary "value expected type, found different type"
+
+diag InvalidTypeExpression 3092
+  message "invalid type expression"
+  primary "invalid type expression"
+
+diag TypeApplicationArityMismatch 3093
+  message "type application argument count differs from type parameters"
+  primary "type application argument count differs from type parameters"
+
+diag ArrayTypeRequiresItem 3094
+  message "array type requires item type"
+  primary "array type requires item type"
+
+diag AmbiguousVariantTag 3095
+  message "ambiguous variant tag; add type annotation"
+  primary "variant tag needs type context"
+  help "add type annotation"
+
+diag VariantPatternArityMismatch 3096
+  message "variant pattern payload count differs from declaration"
+  primary "variant pattern payload count differs from declaration"
+
+diag OrPatternBindersMismatch 3097
+  message "or-pattern binders must match"
+  primary "or-pattern binders must match"
+
+diag UnsatisfiedConstraint 3098
+  message "unsatisfied constraint"
+  primary "unsatisfied constraint"
+
+diag AmbiguousInstanceMatch 3099
+  message "ambiguous instance match"
+  primary "ambiguous instance match"
+
+diag ConstrainedNonCallableBinding 3100
+  message "non-callable `let` cannot have `where` constraints"
+  primary "non-callable `let` cannot have `where` constraints"
+
+diag ExportedCallableRequiresConcreteConstraints 3101
+  message "exported callable requires fully resolved constraints"
+  primary "exported callable requires fully resolved constraints"
+
+diag RuntimeValueInComptimeContext 3122
+  message "runtime value in `comptime` context"
+  primary "runtime value in `comptime` context"

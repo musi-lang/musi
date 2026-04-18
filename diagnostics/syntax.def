@@ -1,0 +1,168 @@
+catalog syntax music_syntax SyntaxDiagKind crates/music_syntax/src/diag_catalog_gen.rs
+
+diag InvalidChar 1200
+  message "invalid character `{ch}`"
+  primary "character `{ch}` not valid here"
+
+diag UnterminatedStringLiteral 1201
+  message "unterminated string literal"
+  primary "string starts here"
+
+diag UnterminatedRuneLiteral 1202
+  message "unterminated rune literal"
+  primary "rune starts here"
+
+diag EmptyRuneLiteral 1203
+  message "empty rune literal"
+  primary "rune literal needs unicode scalar"
+
+diag RuneLiteralTooLong 1204
+  message "rune literal contains multiple unicode scalars"
+  primary "rune literal payload too long"
+
+diag UnterminatedBlockComment 1205
+  message "unterminated block comment"
+  primary "comment starts here"
+
+diag UnterminatedTemplateLiteral 1206
+  message "unterminated template literal"
+  primary "template starts here"
+
+diag MissingDigitsAfterBasePrefix 1207
+  message "base `{base}` literal requires digits"
+  primary "missing digits after base prefix"
+
+diag InvalidDigitForBase 1208
+  message "invalid digit `{ch}` in base `{base}` literal"
+  primary "digit `{ch}` not valid for base `{base}`"
+
+diag UnexpectedUnderscoreInNumberLiteral 1209
+  message "unexpected `_` in number literal"
+  primary "underscore cannot appear here"
+
+diag MissingDigitAfterUnderscoreInNumberLiteral 1210
+  message "number literal requires digit after `_`"
+  primary "missing digit after `_`"
+
+diag MissingExponentDigits 1211
+  message "exponent requires digits"
+  primary "missing exponent digits"
+
+diag MissingEscapeCode 1212
+  message "escape requires code"
+  primary "missing escape code after `\\`"
+
+diag UnexpectedEscape 1213
+  message "unsupported escape `\\{ch}`"
+  primary "unsupported escape `\\{ch}`"
+
+diag MissingHexDigitsInByteEscape 1214
+  message "`\\x` escape requires hex digits"
+  primary "missing hex digits after `\\x`"
+
+diag InvalidHexDigitInByteEscape 1215
+  message "invalid hex digit `{ch}` in `\\x` escape"
+  primary "hex digit `{ch}` not valid here"
+
+diag MissingHexDigitsInUnicodeEscape 1216
+  message "`\\u` escape requires hex digits"
+  primary "missing hex digits after `\\u`"
+
+diag InvalidHexDigitInUnicodeEscape 1217
+  message "invalid hex digit `{ch}` in `\\u` escape"
+  primary "hex digit `{ch}` not valid here"
+
+diag ExpectedFourOrSixHexDigitsInUnicodeEscape 1218
+  message "`\\u` escape requires 4 or 6 hex digits"
+  primary "invalid unicode escape length"
+
+diag InvalidUnicodeScalar 1219
+  message "invalid unicode scalar `U+{value}`"
+  primary "unicode scalar `U+{value}` not valid"
+
+diag ExpectedToken 1300
+  message "expected {expected}, found {found}"
+  primary "found {found} here"
+
+diag ExpectedExpression 1301
+  message "expected expression, found {found}"
+  primary "found {found} here"
+
+diag ExpectedPattern 1302
+  message "expected pattern, found {found}"
+  primary "found {found} here"
+
+diag ExpectedMember 1303
+  message "expected member, found {found}"
+  primary "found {found} here"
+
+diag ExpectedIdentifier 1304
+  message "expected identifier, found {found}"
+  primary "found {found} here"
+
+diag ExpectedSpliceTarget 1305
+  message "expected splice target, found {found}"
+  primary "found {found} here"
+
+diag ExpectedOperatorMemberName 1306
+  message "expected operator member name, found {found}"
+  primary "found {found} here"
+
+diag ExpectedFieldTarget 1307
+  message "expected field name or tuple index, found {found}"
+  primary "found {found} here"
+
+diag ExpectedConstraintOperator 1308
+  message "expected constraint operator `<:` or `:`, found {found}"
+  primary "found {found} here"
+
+diag ExpectedAttrValue 1309
+  message "expected attribute value, found {found}"
+  primary "found {found} here"
+
+diag SpliceOutsideQuote 1310
+  message "splice only valid inside quote"
+  primary "splice appears outside quote"
+
+diag NonAssociativeChain 1311
+  message "comparison chain requires grouping"
+  primary "chain continues here"
+  help "parenthesize comparison"
+
+map lex_error_kind copy:super::LexErrorKind required
+  case "InvalidChar { .. }" InvalidChar
+  case "UnterminatedStringLiteral" UnterminatedStringLiteral
+  case "UnterminatedRuneLiteral" UnterminatedRuneLiteral
+  case "EmptyRuneLiteral" EmptyRuneLiteral
+  case "RuneLiteralTooLong" RuneLiteralTooLong
+  case "UnterminatedBlockComment" UnterminatedBlockComment
+  case "UnterminatedTemplateLiteral" UnterminatedTemplateLiteral
+  case "MissingDigitsAfterBasePrefix { .. }" MissingDigitsAfterBasePrefix
+  case "InvalidDigitForBase { .. }" InvalidDigitForBase
+  case "UnexpectedUnderscoreInNumberLiteral" UnexpectedUnderscoreInNumberLiteral
+  case "MissingDigitAfterUnderscoreInNumberLiteral" MissingDigitAfterUnderscoreInNumberLiteral
+  case "MissingExponentDigits" MissingExponentDigits
+  case "MissingEscapeCode" MissingEscapeCode
+  case "UnexpectedEscape { .. }" UnexpectedEscape
+  case "MissingHexDigitsInByteEscape" MissingHexDigitsInByteEscape
+  case "InvalidHexDigitInByteEscape { .. }" InvalidHexDigitInByteEscape
+  case "MissingHexDigitsInUnicodeEscape" MissingHexDigitsInUnicodeEscape
+  case "InvalidHexDigitInUnicodeEscape { .. }" InvalidHexDigitInUnicodeEscape
+  case "ExpectedFourOrSixHexDigitsInUnicodeEscape" ExpectedFourOrSixHexDigitsInUnicodeEscape
+  case "InvalidUnicodeScalar { .. }" InvalidUnicodeScalar
+end
+
+map parse_error_kind copy:super::ParseErrorKind required
+  case "ExpectedToken { .. }" ExpectedToken
+  case "ExpectedExpression { .. }" ExpectedExpression
+  case "ExpectedPattern { .. }" ExpectedPattern
+  case "ExpectedMember { .. }" ExpectedMember
+  case "ExpectedIdentifier { .. }" ExpectedIdentifier
+  case "ExpectedSpliceTarget { .. }" ExpectedSpliceTarget
+  case "ExpectedOperatorMemberName { .. }" ExpectedOperatorMemberName
+  case "ExpectedFieldTarget { .. }" ExpectedFieldTarget
+  case "ExpectedConstraintOperator { .. }" ExpectedConstraintOperator
+  case "ExpectedAttrValue { .. }" ExpectedAttrValue
+  case "SpliceOutsideQuote" SpliceOutsideQuote
+  case "NonAssociativeChain" NonAssociativeChain
+end

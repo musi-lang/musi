@@ -1,0 +1,11 @@
+[package]
+name = "musi_diaggen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Diagnostics catalog validator and Rust generator"
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

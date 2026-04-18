@@ -1,0 +1,29 @@
+catalog tooling musi_tooling ToolingDiagKind crates/musi_tooling/src/diag_catalog_gen.rs
+
+diag MissingEntrySource 5100
+  message "missing entry source `{path}`"
+  primary "missing entry source `{path}`"
+
+diag PackageImportRequiresMusi 5101
+  message "import specifier `{spec}` requires `musi` package context"
+  primary "import specifier `{spec}` requires package context"
+
+diag MissingImport 5102
+  message "missing import specifier `{spec}` from `{path}`"
+  primary "missing import specifier `{spec}`"
+
+diag ToolingIoFailed 5103
+  message "tooling path `{path}` I/O failed (`{source}`)"
+  primary "tooling path `{path}` I/O failed"
+
+diag SessionCompilationFailed 5104
+  message "tooling session compilation failed (`{source}`)"
+  primary "tooling session compilation failed"
+
+map tooling_error_kind crate::ToolingError required
+  case "MissingEntrySource { .. }" MissingEntrySource
+  case "PackageImportRequiresMusi { .. }" PackageImportRequiresMusi
+  case "MissingImport { .. }" MissingImport
+  case "ToolingIoFailed { .. }" ToolingIoFailed
+  case "SessionCompilationFailed(_)" SessionCompilationFailed
+end
