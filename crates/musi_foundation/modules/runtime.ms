@@ -17,9 +17,7 @@ export opaque let Runtime := effect {
   let timeMonotonicMs () : Int;
   let timeSleepMs (ms : Int) : Unit;
   let randomInt () : Int;
-  let randomIntInRange (lowerBound : Int,
-    upperBound : Int
-  ) : Int;
+  let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
   let randomBool () : Int;
   let randomFloat01 () : Float;
   let logInfo (message : String) : Unit;
@@ -89,9 +87,7 @@ export let timeSleepMs (ms : Int) : Unit := request Runtime.timeSleepMs(ms);
 
 export let randomInt () : Int := request Runtime.randomInt();
 
-export let randomIntInRange (lowerBound : Int,
-  upperBound : Int
-) : Int := request Runtime.randomIntInRange(lowerBound,
+export let randomIntInRange (lowerBound : Int, upperBound : Int) : Int := request Runtime.randomIntInRange(lowerBound,
   upperBound
 );
 
@@ -143,9 +139,7 @@ export let textContains (value : String, needle : String) : Int := request Runti
   needle
 );
 
-export let textStartsWith (value : String,
-  prefix : String
-) : Int := request Runtime.textStartsWith(value,
+export let textStartsWith (value : String, prefix : String) : Int := request Runtime.textStartsWith(value,
   prefix
 );
 
