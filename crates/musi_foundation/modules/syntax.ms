@@ -14,8 +14,6 @@ export let eval (body : Syntax, result : Type) : Any := request SyntaxOps.eval(b
   result
 );
 
-export let registerModule (spec : String,
-  body : Syntax
-) : Unit := request SyntaxOps.registerModule(spec,
+export let registerModule (spec : String, body : Syntax) : Unit := request SyntaxOps.registerModule(spec,
   body
 );
