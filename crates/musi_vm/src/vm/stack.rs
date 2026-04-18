@@ -1,7 +1,7 @@
 use std::iter::repeat_n;
 
 use crate::{VmIndexSpace, VmStackKind};
-use music_seam::{Instruction, MethodId};
+use music_seam::{Instruction, ProcedureId};
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult};
 
@@ -10,23 +10,31 @@ use super::state::{CallFrame, StepOutcome};
 
 impl Vm {
     pub(crate) fn next_instruction(&mut self) -> VmResult<Instruction> {
-        let (module_slot, method, ip) = {
+        self.before_instruction()?;
+        let (module_slot, procedure, ip) = {
             let frame = self.frames.last().ok_or_else(|| {
                 VmError::new(VmErrorKind::StackEmpty {
                     stack: VmStackKind::CallFrame,
                 })
             })?;
-            (frame.module_slot, frame.method, frame.ip)
+            (frame.module_slot, frame.procedure, frame.ip)
         };
-        let loaded_method = self.module(module_slot)?.program.loaded_method(method)?;
-        let instruction = loaded_method.instructions.get(ip).cloned().ok_or_else(|| {
-            VmError::new(VmErrorKind::BranchTargetInvalid {
-                method: loaded_method.name.clone(),
-                label: Some(u16::MAX),
-                index: None,
-                len: None,
-            })
-        })?;
+        let loaded_procedure = self
+            .module(module_slot)?
+            .program
+            .loaded_procedure(procedure)?;
+        let instruction = loaded_procedure
+            .instructions
+            .get(ip)
+            .cloned()
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::InvalidBranchTarget {
+                    procedure: loaded_procedure.name.clone(),
+                    label: Some(u16::MAX),
+                    index: None,
+                    len: None,
+                })
+            })?;
         let frame = self.frames.last_mut().ok_or_else(|| {
             VmError::new(VmErrorKind::StackEmpty {
                 stack: VmStackKind::CallFrame,
@@ -39,13 +47,23 @@ impl Vm {
     pub(crate) fn push_frame(
         &mut self,
         module_slot: usize,
-        method: MethodId,
+        procedure: ProcedureId,
         args: ValueList,
     ) -> VmResult {
+        if self
+            .options
+            .stack_frame_limit
+            .is_some_and(|limit| self.frames.len() >= limit)
+        {
+            return Err(VmError::new(VmErrorKind::StackFrameLimitExceeded {
+                frames: self.frames.len().saturating_add(1),
+                limit: self.options.stack_frame_limit.unwrap_or_default(),
+            }));
+        }
         let loaded = self
             .module(module_slot)?
             .program
-            .loaded_method(method)?
+            .loaded_procedure(procedure)?
             .clone();
         let param_count = usize::from(loaded.params);
         if args.len() != param_count {
@@ -65,10 +83,11 @@ impl Vm {
         }
         self.frames.push(CallFrame::new(
             module_slot,
-            method,
+            procedure,
             locals,
             ValueList::new(),
         ));
+        self.after_value_mutation()?;
         Ok(())
     }
 
@@ -92,12 +111,14 @@ impl Vm {
     }
 
     pub(crate) fn push_value(&mut self, value: Value) -> VmResult {
+        self.observe_heap_value(&value)?;
         let frame = self.frames.last_mut().ok_or_else(|| {
             VmError::new(VmErrorKind::StackEmpty {
                 stack: VmStackKind::CallFrame,
             })
         })?;
         frame.stack.push(value);
+        self.after_value_mutation()?;
         Ok(())
     }
 
@@ -138,7 +159,7 @@ impl Vm {
 
     pub(crate) fn pop_index_list(&mut self, len: i16) -> VmResult<smallvec::SmallVec<[i64; 4]>> {
         let len = usize::try_from(len).map_err(|_| {
-            VmError::new(VmErrorKind::ProgramShapeInvalid {
+            VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "index count is negative".into(),
             })
         })?;
@@ -178,18 +199,21 @@ impl Vm {
     }
 
     pub(crate) fn jump_to(&mut self, label: u16) -> VmResult {
-        let (module_slot, method) = {
+        let (module_slot, procedure) = {
             let frame = self.frames.last().ok_or_else(|| {
                 VmError::new(VmErrorKind::StackEmpty {
                     stack: VmStackKind::CallFrame,
                 })
             })?;
-            (frame.module_slot, frame.method)
+            (frame.module_slot, frame.procedure)
         };
-        let loaded_method = self.module(module_slot)?.program.loaded_method(method)?;
-        let ip = *loaded_method.labels.get(&label).ok_or_else(|| {
-            VmError::new(VmErrorKind::BranchTargetInvalid {
-                method: loaded_method.name.clone(),
+        let loaded_procedure = self
+            .module(module_slot)?
+            .program
+            .loaded_procedure(procedure)?;
+        let ip = *loaded_procedure.labels.get(&label).ok_or_else(|| {
+            VmError::new(VmErrorKind::InvalidBranchTarget {
+                procedure: loaded_procedure.name.clone(),
                 label: Some(label),
                 index: None,
                 len: None,

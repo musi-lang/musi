@@ -1,7 +1,7 @@
 use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
-use music_seam::{ClassId, EffectId, ForeignId, MethodId, TypeId};
+use music_seam::{ClassId, EffectId, ForeignId, ProcedureId, TypeId};
 use music_term::SyntaxTerm;
 use smallvec::SmallVec;
 
@@ -62,16 +62,16 @@ impl DataValue {
 #[derive(Debug, Clone)]
 pub struct ClosureValue {
     pub(crate) module_slot: usize,
-    pub(crate) method: MethodId,
+    pub(crate) procedure: ProcedureId,
     pub(crate) captures: ValueList,
 }
 
 impl ClosureValue {
     #[must_use]
-    pub const fn new(module_slot: usize, method: MethodId, captures: ValueList) -> Self {
+    pub const fn new(module_slot: usize, procedure: ProcedureId, captures: ValueList) -> Self {
         Self {
             module_slot,
-            method,
+            procedure,
             captures,
         }
     }
@@ -120,7 +120,7 @@ impl ForeignValue {
 #[derive(Debug, Clone)]
 pub struct ContinuationFrame {
     pub(crate) module_slot: usize,
-    pub(crate) method: MethodId,
+    pub(crate) procedure: ProcedureId,
     pub(crate) ip: usize,
     pub(crate) locals: ValueList,
     pub(crate) stack: ValueList,
@@ -130,13 +130,13 @@ impl ContinuationFrame {
     #[must_use]
     pub const fn new(
         module_slot: usize,
-        method: MethodId,
+        procedure: ProcedureId,
         locals: ValueList,
         stack: ValueList,
     ) -> Self {
         Self {
             module_slot,
-            method,
+            procedure,
             ip: 0,
             locals,
             stack,
@@ -358,13 +358,13 @@ impl Value {
     }
 
     #[must_use]
-    pub fn closure<Captures>(module_slot: usize, method: MethodId, captures: Captures) -> Self
+    pub fn closure<Captures>(module_slot: usize, procedure: ProcedureId, captures: Captures) -> Self
     where
         Captures: IntoIterator<Item = Self>,
     {
         Self::Closure(Rc::new(RefCell::new(ClosureValue::new(
             module_slot,
-            method,
+            procedure,
             captures.into_iter().collect(),
         ))))
     }
@@ -485,8 +485,8 @@ impl<'a> ClosureView<'a> {
     }
 
     #[must_use]
-    pub fn method(&self) -> MethodId {
-        self.inner.method
+    pub fn procedure(&self) -> ProcedureId {
+        self.inner.procedure
     }
 
     #[must_use]
@@ -609,7 +609,7 @@ impl PartialEq for Value {
                 let left = left.borrow();
                 let right = right.borrow();
                 left.module_slot == right.module_slot
-                    && left.method == right.method
+                    && left.procedure == right.procedure
                     && left.captures == right.captures
             }
             (Self::Continuation(left), Self::Continuation(right)) => Rc::ptr_eq(left, right),

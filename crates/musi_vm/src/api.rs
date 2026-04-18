@@ -1,3 +1,4 @@
+pub use super::gc::HeapCollectionStats;
 pub use super::host::{RejectingHost, VmHost};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{

@@ -5,7 +5,7 @@ use music_seam::decode_binary;
 use music_seam::descriptor::ExportTarget;
 use music_seam::{
     Artifact, ClassId, CodeEntry, DataId, EffectId, ExportId, ForeignId, Instruction, LabelId,
-    MethodId, StringId, TypeId,
+    ProcedureId, StringId, TypeId,
 };
 use music_term::{TypeTerm, TypeTermKind};
 
@@ -19,7 +19,7 @@ type DataLayoutMap = HashMap<TypeId, ProgramDataLayout>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgramExportKind {
-    Method,
+    Procedure,
     Global,
     Foreign,
     Type,
@@ -234,17 +234,17 @@ pub struct Program {
 #[derive(Debug)]
 pub struct ProgramInner {
     artifact: Artifact,
-    methods: Box<[LoadedMethod]>,
+    procedures: Box<[LoadedProcedure]>,
     exports: ExportMap,
     export_list: Box<[ProgramExport]>,
     data_layouts: DataLayoutMap,
     data_layout_list: Box<[ProgramDataLayout]>,
-    entry_method: Option<MethodId>,
-    module_init_method: Option<MethodId>,
+    entry_procedure: Option<ProcedureId>,
+    module_init_procedure: Option<ProcedureId>,
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadedMethod {
+pub struct LoadedProcedure {
     pub name: Box<str>,
     pub params: u16,
     pub locals: u16,
@@ -252,7 +252,7 @@ pub struct LoadedMethod {
     pub labels: LabelIndexMap,
 }
 
-impl LoadedMethod {
+impl LoadedProcedure {
     #[must_use]
     pub fn new(
         name: impl Into<Box<str>>,
@@ -288,21 +288,21 @@ impl Program {
     }
 
     pub(crate) fn from_artifact(artifact: Artifact) -> VmResult<Self> {
-        let methods = build_methods(&artifact)?;
+        let procedures = build_procedures(&artifact)?;
         let (exports, export_list) = build_exports(&artifact);
         let (data_layouts, data_layout_list) = build_data_layouts(&artifact);
-        let entry_method = find_suffix_method(&artifact, "::__entry");
-        let module_init_method = find_suffix_method(&artifact, "::__module_init");
+        let entry_procedure = find_suffix_procedure(&artifact, "::__entry");
+        let module_init_procedure = find_suffix_procedure(&artifact, "::__module_init");
         Ok(Self {
             inner: Arc::new(ProgramInner {
                 artifact,
-                methods,
+                procedures,
                 exports,
                 export_list,
                 data_layouts,
                 data_layout_list,
-                entry_method,
-                module_init_method,
+                entry_procedure,
+                module_init_procedure,
             }),
         })
     }
@@ -319,14 +319,14 @@ impl Program {
     }
 
     #[must_use]
-    pub fn method_name(&self, id: MethodId) -> &str {
-        let descriptor = self.inner.artifact.methods.get(id);
+    pub fn procedure_name(&self, id: ProcedureId) -> &str {
+        let descriptor = self.inner.artifact.procedures.get(id);
         self.string_text(descriptor.name)
     }
 
     #[must_use]
-    pub fn method_source_name(&self, id: MethodId) -> &str {
-        source_export_name(self.method_name(id))
+    pub fn procedure_source_name(&self, id: ProcedureId) -> &str {
+        source_export_name(self.procedure_name(id))
     }
 
     #[must_use]
@@ -364,10 +364,10 @@ impl Program {
 
     /// # Errors
     ///
-    /// Returns [`VmErrorKind::TypeTermInvalid`] when the stored type-term JSON cannot be decoded.
+    /// Returns [`VmErrorKind::InvalidTypeTerm`] when the stored type-term JSON cannot be decoded.
     pub fn try_type_term(&self, id: TypeId) -> VmResult<TypeTerm> {
         TypeTerm::from_json(self.inner.artifact.type_term_json(id)).map_err(|detail| {
-            VmError::new(VmErrorKind::TypeTermInvalid {
+            VmError::new(VmErrorKind::InvalidTypeTerm {
                 ty: self.type_name(id).into(),
                 detail: detail.to_string().into(),
             })
@@ -463,14 +463,14 @@ impl Program {
         &self.inner.artifact
     }
 
-    pub(crate) fn loaded_method(&self, id: MethodId) -> VmResult<&LoadedMethod> {
-        let len = self.inner.methods.len();
+    pub(crate) fn loaded_procedure(&self, id: ProcedureId) -> VmResult<&LoadedProcedure> {
+        let len = self.inner.procedures.len();
         self.inner
-            .methods
+            .procedures
             .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
             .ok_or_else(|| {
                 VmError::new(VmErrorKind::IndexOutOfBounds {
-                    space: VmIndexSpace::Method,
+                    space: VmIndexSpace::Procedure,
                     owner: None,
                     index: i64::from(id.raw()),
                     len,
@@ -491,35 +491,37 @@ impl Program {
     }
 
     #[must_use]
-    pub(crate) fn entry_method(&self) -> Option<MethodId> {
-        self.inner.entry_method.or(self.inner.module_init_method)
+    pub(crate) fn entry_procedure(&self) -> Option<ProcedureId> {
+        self.inner
+            .entry_procedure
+            .or(self.inner.module_init_procedure)
     }
 }
 
-fn build_methods(artifact: &Artifact) -> VmResult<Box<[LoadedMethod]>> {
+fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
     artifact
-        .methods
+        .procedures
         .iter()
-        .map(|(_, method)| {
-            let method_name: Box<str> = artifact.string_text(method.name).into();
+        .map(|(_, procedure)| {
+            let procedure_name: Box<str> = artifact.string_text(procedure.name).into();
             let mut labels = LabelIndexMap::new();
             let mut instructions = Vec::new();
-            for entry in &method.code {
+            for entry in &procedure.code {
                 match entry {
                     CodeEntry::Label(label) => {
                         let _ = labels.insert(label.id, instructions.len());
                     }
                     CodeEntry::Instruction(instruction) => {
                         let _family = classify_opcode(instruction.opcode);
-                        let _ = &method_name;
+                        let _ = &procedure_name;
                         instructions.push(instruction.clone());
                     }
                 }
             }
-            Ok(LoadedMethod::new(
-                method_name,
-                method.params,
-                method.locals,
+            Ok(LoadedProcedure::new(
+                procedure_name,
+                procedure.params,
+                procedure.locals,
                 instructions.into_boxed_slice(),
             )
             .with_labels(labels))
@@ -603,7 +605,7 @@ fn build_data_layouts(artifact: &Artifact) -> (DataLayoutMap, Box<[ProgramDataLa
 
 const fn export_kind(target: ExportTarget) -> ProgramExportKind {
     match target {
-        ExportTarget::Method(_) => ProgramExportKind::Method,
+        ExportTarget::Procedure(_) => ProgramExportKind::Procedure,
         ExportTarget::Global(_) => ProgramExportKind::Global,
         ExportTarget::Foreign(_) => ProgramExportKind::Foreign,
         ExportTarget::Type(_) => ProgramExportKind::Type,
@@ -612,10 +614,10 @@ const fn export_kind(target: ExportTarget) -> ProgramExportKind {
     }
 }
 
-fn find_suffix_method(artifact: &Artifact, suffix: &str) -> Option<MethodId> {
-    artifact.methods.iter().find_map(|(id, method)| {
+fn find_suffix_procedure(artifact: &Artifact, suffix: &str) -> Option<ProcedureId> {
+    artifact.procedures.iter().find_map(|(id, procedure)| {
         artifact
-            .string_text(method.name)
+            .string_text(procedure.name)
             .ends_with(suffix)
             .then_some(id)
     })

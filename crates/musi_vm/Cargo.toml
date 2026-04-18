@@ -13,15 +13,20 @@ categories.workspace = true
 publish.workspace = true
 
 [dependencies]
+music_base = { path = "../music_base" }
 music_seam = { path = "../music_seam" }
 music_term = { path = "../music_term" }
 smallvec = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 musi_foundation = { path = "../musi_foundation" }
 music_module = { path = "../music_module" }
 music_session = { path = "../music_session" }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "bench_vm"
+harness = false

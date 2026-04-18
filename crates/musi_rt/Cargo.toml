@@ -15,13 +15,13 @@ publish.workspace = true
 [dependencies]
 musi_foundation = { path = "../musi_foundation" }
 musi_native = { path = "../musi_native" }
+music_base = { path = "../music_base" }
 music_module = { path = "../music_module" }
 music_session = { path = "../music_session" }
 music_term = { path = "../music_term" }
 musi_vm = { path = "../musi_vm" }
 base64 = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

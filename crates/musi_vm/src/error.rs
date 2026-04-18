@@ -1,8 +1,11 @@
+use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+use music_base::diag::{CatalogDiagnostic, DiagContext};
 use music_seam::AssemblyError;
 use music_seam::{Opcode, Operand};
-use thiserror::Error;
+
+use crate::{VmDiagKind, diag::vm_error_kind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperandShape {
@@ -14,8 +17,8 @@ pub enum OperandShape {
     String,
     Label,
     BranchTable,
-    Method,
-    WideMethodCaptures,
+    Procedure,
+    WideProcedureCaptures,
     TypeLen,
     Type,
     EffectId,
@@ -55,7 +58,7 @@ pub enum VmStackKind {
 pub enum VmIndexSpace {
     Local,
     Global,
-    Method,
+    Procedure,
     ModuleSlot,
     EffectOp,
 }
@@ -74,14 +77,14 @@ pub enum VmErrorKind {
     SeamDecodeFailed {
         detail: Box<str>,
     },
-    ProgramShapeInvalid {
+    InvalidProgramShape {
         detail: Box<str>,
     },
-    TypeTermInvalid {
+    InvalidTypeTerm {
         ty: Box<str>,
         detail: Box<str>,
     },
-    SyntaxConstantInvalid {
+    InvalidSyntaxConstant {
         detail: Box<str>,
     },
     VmInitializationRequired,
@@ -99,7 +102,7 @@ pub enum VmErrorKind {
     NonCallableValue {
         found: VmValueKind,
     },
-    MissingEntryMethod {
+    MissingEntryProcedure {
         module: Box<str>,
     },
     StackEmpty {
@@ -115,8 +118,8 @@ pub enum VmErrorKind {
         index: i64,
         len: usize,
     },
-    BranchTargetInvalid {
-        method: Box<str>,
+    InvalidBranchTarget {
+        procedure: Box<str>,
         label: Option<u16>,
         index: Option<i64>,
         len: Option<usize>,
@@ -182,7 +185,7 @@ pub enum VmErrorKind {
         reason: Box<str>,
     },
     RootModuleRequired,
-    ModuleSourceMissing {
+    MissingModuleSource {
         spec: Box<str>,
     },
     CallArityMismatch {
@@ -194,13 +197,27 @@ pub enum VmErrorKind {
         handler_id: u64,
         frame_depth: usize,
     },
-    MatchingHandlerPopMissing {
-        method: Box<str>,
+    MissingMatchingHandlerPop {
+        procedure: Box<str>,
+    },
+    HeapLimitExceeded {
+        allocated: usize,
+        limit: usize,
+    },
+    HeapObjectTooLarge {
+        bytes: usize,
+        limit: usize,
+    },
+    StackFrameLimitExceeded {
+        frames: usize,
+        limit: usize,
+    },
+    InstructionBudgetExhausted {
+        budget: u64,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[error("{kind}")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmError {
     kind: VmErrorKind,
 }
@@ -220,7 +237,20 @@ impl VmError {
     pub fn message(&self) -> String {
         self.kind.to_string()
     }
+
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<VmDiagKind> {
+        self.kind.diagnostic()
+    }
 }
+
+impl Display for VmError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Error for VmError {}
 
 impl From<AssemblyError> for VmError {
     fn from(value: AssemblyError) -> Self {
@@ -231,250 +261,195 @@ impl From<AssemblyError> for VmError {
 }
 
 impl VmErrorKind {
-    fn fmt_decode(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SeamDecodeFailed { detail } => {
-                write!(f, "SEAM decode failed (`{detail}`)")
-            }
-            Self::ProgramShapeInvalid { detail } => {
-                write!(f, "program shape invalid (`{detail}`)")
-            }
-            Self::TypeTermInvalid { ty, detail } => {
-                write!(f, "type term invalid for `{ty}` (`{detail}`)")
-            }
-            Self::SyntaxConstantInvalid { detail } => {
-                write!(f, "syntax constant invalid (`{detail}`)")
-            }
-            Self::VmInitializationRequired => {
-                f.write_str("virtual machine initialization required")
-            }
-            Self::ModuleInitCycle { spec } => {
-                write!(f, "module initialization cycle detected for `{spec}`")
-            }
-            Self::ExportNotFound { module, export } => {
-                write!(f, "export `{export}` not found in `{module}`")
-            }
-            Self::OpaqueExport { module, export } => {
-                write!(
-                    f,
-                    "opaque export `{export}` is not accessible from `{module}`"
-                )
-            }
-            Self::NonCallableValue { found } => {
-                write!(f, "call requires callable value, found `{found}`")
-            }
-            Self::MissingEntryMethod { module } => {
-                write!(f, "entry method missing in `{module}`")
-            }
-            _ => self.fmt_stack_and_bounds(f),
-        }
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<VmDiagKind> {
+        CatalogDiagnostic::new(self.diag_kind(), self.diag_context())
     }
 
-    fn fmt_stack_and_bounds(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::StackEmpty { stack } => write!(f, "empty {stack} stack"),
-            Self::OperandCountMismatch { needed, available } => {
-                write!(
-                    f,
-                    "operand stack needs `{needed}` values, only `{available}` are available"
-                )
+    const fn diag_kind(&self) -> VmDiagKind {
+        vm_error_kind(self)
+    }
+
+    fn diag_context(&self) -> DiagContext {
+        self.decode_diag_context()
+            .or_else(|| self.stack_diag_context())
+            .or_else(|| self.value_diag_context())
+            .or_else(|| self.runtime_diag_context())
+            .unwrap_or_default()
+    }
+
+    fn decode_diag_context(&self) -> Option<DiagContext> {
+        Some(match self {
+            Self::SeamDecodeFailed { detail }
+            | Self::InvalidProgramShape { detail }
+            | Self::InvalidSyntaxConstant { detail } => DiagContext::new().with("detail", detail),
+            Self::InvalidTypeTerm { ty, detail } => {
+                DiagContext::new().with("ty", ty).with("detail", detail)
             }
+            Self::ModuleInitCycle { spec } => DiagContext::new().with("spec", spec),
+            Self::ExportNotFound { module, export } | Self::OpaqueExport { module, export } => {
+                DiagContext::new()
+                    .with("module", module)
+                    .with("export", export)
+            }
+            Self::NonCallableValue { found } => DiagContext::new().with("found", found),
+            Self::MissingEntryProcedure { module } => DiagContext::new().with("module", module),
+            Self::VmInitializationRequired => DiagContext::new(),
+            _ => return None,
+        })
+    }
+
+    fn stack_diag_context(&self) -> Option<DiagContext> {
+        Some(match self {
+            Self::StackEmpty { stack } => DiagContext::new().with("stack", stack),
+            Self::OperandCountMismatch { needed, available } => DiagContext::new()
+                .with("needed", needed)
+                .with("available", available),
             Self::IndexOutOfBounds {
                 space,
                 owner,
                 index,
                 len,
-            } => match owner {
-                Some(owner) => {
-                    write!(
-                        f,
-                        "{space} `{index}` out of bounds for `{owner}` with `{len}` entries"
-                    )
-                }
-                None => write!(f, "{space} `{index}` out of bounds for `{len}` entries"),
-            },
-            Self::BranchTargetInvalid {
-                method,
-                label: Some(label),
+            } => DiagContext::new()
+                .with("space", space)
+                .with("owner", owner.as_deref().unwrap_or("<unknown>"))
+                .with("index", index)
+                .with("len", len),
+            Self::InvalidBranchTarget {
+                procedure,
+                label,
+                index,
                 ..
-            } => write!(f, "branch label `{label}` missing in `{method}`"),
-            Self::BranchTargetInvalid {
-                method,
-                index: Some(index),
-                len: Some(len),
-                ..
-            } => {
-                write!(
-                    f,
-                    "branch index `{index}` invalid for `{method}` with `{len}` labels"
-                )
-            }
-            Self::BranchTargetInvalid { method, .. } => {
-                write!(f, "branch target invalid in `{method}`")
-            }
-            Self::InvalidOperandForOpcode { opcode, found } => {
-                write!(
-                    f,
-                    "opcode `{}` does not accept operand shape `{found}`",
-                    opcode.mnemonic()
-                )
-            }
-            _ => self.fmt_value_and_types(f),
-        }
+            } => DiagContext::new()
+                .with("procedure", procedure)
+                .with("target", branch_target_name(*label, *index)),
+            Self::InvalidOperandForOpcode { opcode, found } => DiagContext::new()
+                .with("opcode", opcode.mnemonic())
+                .with("found", found),
+            _ => return None,
+        })
     }
 
-    fn fmt_value_and_types(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidValueKind { expected, found } => {
-                write!(
-                    f,
-                    "value kind `{found}` does not match expected `{expected}`"
-                )
+    fn value_diag_context(&self) -> Option<DiagContext> {
+        Some(match self {
+            Self::InvalidValueKind { expected, found } => DiagContext::new()
+                .with("expected", expected)
+                .with("found", found),
+            Self::InvalidTypeCast { expected, found } => DiagContext::new()
+                .with("expected", expected)
+                .with("found", found),
+            Self::InvalidSequenceIndex { index, len } | Self::InvalidDataIndex { index, len } => {
+                DiagContext::new().with("index", index).with("len", len)
             }
-            Self::InvalidSequenceIndex { index, len } => {
-                write!(f, "sequence index `{index}` invalid for length `{len}`")
-            }
-            Self::EmptySequenceIndexList => f.write_str("empty sequence index list"),
             Self::InvalidRangeBounds { start, end } => {
-                write!(
-                    f,
-                    "range bounds `{start}` and `{end}` must both be integer values"
-                )
+                DiagContext::new().with("start", start).with("end", end)
             }
-            Self::InvalidRangeEvidence { found } => {
-                write!(f, "range evidence invalid for value kind `{found}`")
-            }
-            Self::InvalidRangeStep { detail } => {
-                write!(f, "range stepping failed (`{detail}`)")
+            Self::InvalidRangeEvidence { found } => DiagContext::new().with("found", found),
+            Self::InvalidRangeStep { detail } | Self::ArithmeticFailed { detail } => {
+                DiagContext::new().with("detail", detail)
             }
             Self::RangeMaterializeTooLarge { len, limit } => {
-                write!(
-                    f,
-                    "range materialize length `{len}` exceeds limit `{limit}`"
-                )
+                DiagContext::new().with("len", len).with("limit", limit)
             }
-            Self::InvalidDataIndex { index, len } => {
-                write!(f, "data field index `{index}` invalid for length `{len}`")
+            Self::ModuleLoadRejected { spec } | Self::MissingModuleSource { spec } => {
+                DiagContext::new().with("spec", spec)
             }
-            Self::InvalidTypeCast { expected, found } => {
-                write!(
-                    f,
-                    "type cast to `{expected}` failed for value kind `{found}`"
-                )
-            }
-            Self::ArithmeticFailed { detail } => {
-                write!(f, "arithmetic failed (`{detail}`)")
-            }
-            _ => self.fmt_module_and_call(f),
-        }
+            Self::ForeignCallRejected { foreign } => DiagContext::new().with("foreign", foreign),
+            Self::PointerIntrinsicFailed { intrinsic, detail } => DiagContext::new()
+                .with("intrinsic", intrinsic)
+                .with("detail", detail),
+            Self::EmptySequenceIndexList => DiagContext::new(),
+            _ => return None,
+        })
     }
 
-    fn fmt_module_and_call(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ModuleLoadRejected { spec } => {
-                write!(f, "module load rejected for `{spec}`")
-            }
-            Self::ForeignCallRejected { foreign } => {
-                write!(f, "foreign call rejected for `{foreign}`")
-            }
-            Self::PointerIntrinsicFailed { intrinsic, detail } => {
-                write!(f, "pointer intrinsic `{intrinsic}` failed (`{detail}`)")
-            }
-            Self::CallArityMismatch {
-                callee,
-                expected,
-                found,
-            } => {
-                write!(
-                    f,
-                    "call arity mismatch for `{callee}` expects `{expected}`, found `{found}`"
-                )
-            }
-            _ => self.fmt_native_and_effects(f),
-        }
-    }
-
-    fn fmt_native_and_effects(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
+    fn runtime_diag_context(&self) -> Option<DiagContext> {
+        Some(match self {
             Self::NativeCallFailed {
                 foreign,
                 stage,
                 subject,
                 index,
                 detail,
-            } => match stage {
-                NativeFailureStage::LibraryLoad => {
-                    let library = subject.as_deref().unwrap_or("<unknown>");
-                    write!(
-                        f,
-                        "native library load failed for `{foreign}` from `{library}` (`{detail}`)"
-                    )
-                }
-                NativeFailureStage::SymbolLoad => {
-                    let symbol = subject.as_deref().unwrap_or("<unknown>");
-                    write!(
-                        f,
-                        "native symbol load failed for `{foreign}` symbol `{symbol}` (`{detail}`)"
-                    )
-                }
-                NativeFailureStage::AbiUnsupported => {
-                    write!(
-                        f,
-                        "native application binary interface unsupported for `{foreign}` (`{detail}`)"
-                    )
-                }
-                NativeFailureStage::ArgInvalid => {
-                    let index = index.unwrap_or(usize::MAX);
-                    write!(
-                        f,
-                        "native argument `{index}` invalid for `{foreign}` (`{detail}`)"
-                    )
-                }
-                NativeFailureStage::ResultInvalid => {
-                    write!(f, "native result invalid for `{foreign}` (`{detail}`)")
-                }
-            },
-            Self::EffectRejected { effect, op, reason } => {
-                if let Some(op) = op {
-                    write!(
-                        f,
-                        "rejected effect `{effect}` operation `{op}` (`{reason}`)"
-                    )
-                } else {
-                    write!(f, "rejected effect `{effect}` (`{reason}`)")
-                }
-            }
-            Self::RootModuleRequired => f.write_str("root module required"),
-            Self::ModuleSourceMissing { spec } => {
-                write!(f, "module source missing for `{spec}`")
-            }
-            _ => self.fmt_runtime_state(f),
-        }
-    }
-
-    fn fmt_runtime_state(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
+            } => DiagContext::new()
+                .with("foreign", foreign)
+                .with("stage", stage)
+                .with("subject", native_subject(subject.as_deref(), *index))
+                .with("detail", detail),
+            Self::EffectRejected { effect, op, reason } => DiagContext::new()
+                .with("effect", effect)
+                .with("op", op.as_deref().unwrap_or("<any>"))
+                .with("reason", reason),
+            Self::CallArityMismatch {
+                callee,
+                expected,
+                found,
+            } => DiagContext::new()
+                .with("callee", callee)
+                .with("expected", expected)
+                .with("found", found),
             Self::HandlerFrameMissing {
                 handler_id,
                 frame_depth,
-            } => {
-                write!(
-                    f,
-                    "handler `{handler_id}` frame depth `{frame_depth}` missing"
-                )
+            } => DiagContext::new()
+                .with("handler_id", handler_id)
+                .with("frame_depth", frame_depth),
+            Self::MissingMatchingHandlerPop { procedure } => {
+                DiagContext::new().with("procedure", procedure)
             }
-            Self::MatchingHandlerPopMissing { method } => {
-                write!(f, "matching `hdl.pop` missing in `{method}`")
+            Self::HeapLimitExceeded { allocated, limit } => DiagContext::new()
+                .with("allocated", allocated)
+                .with("limit", limit),
+            Self::HeapObjectTooLarge { bytes, limit } => {
+                DiagContext::new().with("bytes", bytes).with("limit", limit)
             }
-            _ => self.fmt_decode(f),
+            Self::StackFrameLimitExceeded { frames, limit } => DiagContext::new()
+                .with("frames", frames)
+                .with("limit", limit),
+            Self::InstructionBudgetExhausted { budget } => {
+                DiagContext::new().with("budget", budget)
+            }
+            Self::RootModuleRequired => DiagContext::new(),
+            _ => return None,
+        })
+    }
+}
+impl Display for VmErrorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Display for NativeFailureStage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LibraryLoad => f.write_str("library load"),
+            Self::SymbolLoad => f.write_str("symbol load"),
+            Self::AbiUnsupported => f.write_str("application binary interface validation"),
+            Self::ArgInvalid => f.write_str("argument validation"),
+            Self::ResultInvalid => f.write_str("result validation"),
         }
     }
 }
 
-impl Display for VmErrorKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.fmt_decode(f)
+fn branch_target_name(label: Option<u16>, index: Option<i64>) -> String {
+    match (label, index) {
+        (Some(label), _) => format!("label {label}"),
+        (_, Some(index)) => format!("index {index}"),
+        _ => "<unknown>".to_owned(),
     }
+}
+
+fn native_subject(subject: Option<&str>, index: Option<usize>) -> String {
+    subject.map_or_else(
+        || {
+            index.map_or_else(
+                || "<unknown>".to_owned(),
+                |index| format!("argument {index}"),
+            )
+        },
+        str::to_owned,
+    )
 }
 
 impl Display for OperandShape {
@@ -504,7 +479,7 @@ impl Display for VmIndexSpace {
         match self {
             Self::Local => f.write_str("local slot"),
             Self::Global => f.write_str("global slot"),
-            Self::Method => f.write_str("method identifier"),
+            Self::Procedure => f.write_str("procedure identifier"),
             Self::ModuleSlot => f.write_str("module slot"),
             Self::EffectOp => f.write_str("effect operation index"),
         }
@@ -522,8 +497,8 @@ impl From<&Operand> for OperandShape {
             Operand::String(_) => Self::String,
             Operand::Label(_) => Self::Label,
             Operand::BranchTable(_) => Self::BranchTable,
-            Operand::Method(_) => Self::Method,
-            Operand::WideMethodCaptures { .. } => Self::WideMethodCaptures,
+            Operand::Procedure(_) => Self::Procedure,
+            Operand::WideProcedureCaptures { .. } => Self::WideProcedureCaptures,
             Operand::TypeLen { .. } => Self::TypeLen,
             Operand::Type(_) => Self::Type,
             Operand::EffectId(_) => Self::EffectId,

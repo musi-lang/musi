@@ -3,6 +3,7 @@ use self::intrinsics::{MODULE as INTRINSICS_SOURCE, SPEC as INTRINSICS_SPEC};
 use self::runtime::{MODULE as RUNTIME_SOURCE, SPEC as RUNTIME_SPEC};
 use self::syntax::{MODULE as SYNTAX_SOURCE, SPEC as SYNTAX_SPEC};
 use self::test::{MODULE as TEST_SOURCE, SPEC as TEST_SPEC};
+use music_builtin::foundation_module_by_spec;
 use music_module::{ImportMap, ModuleKey};
 use music_session::{Session, SessionError};
 
@@ -110,12 +111,18 @@ const FOUNDATION_MODULES: [FoundationModule; 5] = [
 
 pub fn extend_import_map(import_map: &mut ImportMap) {
     for (spec, _) in FOUNDATION_MODULES {
+        if foundation_module_by_spec(spec).is_some_and(|module| module.hidden) {
+            continue;
+        }
         let _ = import_map.imports.insert(spec.into(), spec.into());
     }
 }
 
 #[must_use]
 pub fn resolve_spec(spec: &str) -> Option<ModuleKey> {
+    if foundation_module_by_spec(spec).is_some_and(|module| module.hidden) {
+        return None;
+    }
     module_source(spec).map(|_| ModuleKey::new(spec))
 }
 
