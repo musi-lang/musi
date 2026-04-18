@@ -56,7 +56,7 @@ function sectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 				page.id === "functions" ||
 				page.id === "lambdas" ||
 				page.id === "calls" ||
-				page.id === "methods"
+				page.id === "dot-calls"
 			) {
 				return "core-functions";
 			}

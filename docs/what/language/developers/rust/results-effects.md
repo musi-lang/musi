@@ -28,7 +28,7 @@ That keeps recoverable failure in the value, with helpers for fallback or mappin
 Rust also uses `Result` for outside work such as reading from standard input:
 
 ```rust
-fn read_line() -> std::result::Result<String, std::io::Error> {
+fn read_line() -> Result<String, std::io::Error> {
     let mut line = String::new();
     std::io::stdin().read_line(&mut line)?;
     Ok(line)

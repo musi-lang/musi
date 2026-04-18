@@ -49,7 +49,7 @@ describe("docs", () => {
 		expect(docForPath("/learn/book/types/type-annotations")?.title).toBe(
 			"Type Annotations",
 		);
-		expect(docForPath("/learn/language/core/methods")?.title).toBe("Methods");
+		expect(docForPath("/learn/language/core/methods")?.title).toBe("Dot Calls");
 		expect(docForPath("/learn/book/developers/rust")?.kind).toBe("section");
 		expect(docForPath("/learn/book/developers/guides/rust")?.kind).toBe(
 			"section",

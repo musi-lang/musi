@@ -1,14 +1,23 @@
 ---
-title: "Methods"
-description: "Learn Musi's attached-method model after plain functions and calls."
+title: "Dot Calls"
+description: "Learn Musi dot-callable model after plain functions and calls."
 group: "Core Syntax"
 section: "Core Syntax"
 order: 11
-slug: "methods"
-summary: "Use receiver-prefixed methods and dot calls without needing an impl block."
+slug: "dot-calls"
+summary: "Use dot-callable functions through dot notation without needing an impl block."
 ---
 
-Methods are functions attached to a receiver shape. The receiver comes before the dot, which makes the main subject visible first.
+Dot calls use receiver-pattern methods or explicitly visible receiver-first functions. Receiver-pattern methods attach callable lookup to a receiver type without reserving a `self` keyword.
+
+```musi
+let (point : Point).move(dx : Int) : Point := ...;
+
+point.move(1);
+Point.move(point, 1);
+```
+
+`point.move(1)` resolves through UDNS and inserts `point` as the first argument. `Point.move(point, 1)` uses the receiver type namespace explicitly. Attached methods do not pollute bare function lookup, so `move(point, 1)` only works when a callable named `move` is explicitly bound or imported.
 
 {{snippet:chapter-methods}}
 

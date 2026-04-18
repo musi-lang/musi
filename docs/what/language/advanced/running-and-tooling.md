@@ -24,8 +24,11 @@ A workflow chapter turns scattered command knowledge into repeatable practice.
 
 ## Read the Boundary
 
-Read `musi run`, `musi check`, `musi build`, and `musi test` as package-root commands for project lifecycle.
+Read `musi run`, `musi check`, `musi build`, `musi fmt`, and `musi test` as package-root commands for project lifecycle.
 Read `music check index.ms`, `music build index.ms`, and `music run index.seam` as direct lane for single-file or lower-level work.
+Read `music disasm index.ms` as the SEAM HIL view and `music disasm --level seam index.ms` as the lowered `.seam` IL view.
+Read `musi fmt` as the Deno-style formatter for `.ms` files and Musi code fences in Markdown.
+Read hover and semantic highlighting in editors as sema-backed: record members stay properties, dot-callable UDNS heads (`value.name(...)`) stay dot callables.
 When in doubt, ask first whether you are inside a package or handling one file directly; that decision usually picks the right command family immediately.
 
 ## Small Exercise

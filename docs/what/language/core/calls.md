@@ -22,4 +22,4 @@ Read the example from top to bottom. The first visible name gives the reader a h
 
 Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
 
-Continue to [Methods](/learn/book/core/functions-and-calls/methods).
+Continue to [Dot Calls](/learn/book/core/functions-and-calls/dot-calls).
