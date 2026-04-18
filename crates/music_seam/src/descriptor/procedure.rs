@@ -2,7 +2,7 @@ use crate::artifact::StringId;
 use crate::instruction::CodeEntry;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MethodDescriptor {
+pub struct ProcedureDescriptor {
     pub name: StringId,
     pub params: u16,
     pub locals: u16,
@@ -13,7 +13,7 @@ pub struct MethodDescriptor {
     pub code: Box<[CodeEntry]>,
 }
 
-impl MethodDescriptor {
+impl ProcedureDescriptor {
     #[must_use]
     pub fn new(name: StringId, params: u16, locals: u16, code: Box<[CodeEntry]>) -> Self {
         Self {

@@ -25,16 +25,16 @@ impl TextBuilder {
         id
     }
 
-    pub(crate) fn ensure_method_symbol(&mut self, name: &str) -> MethodId {
-        if let Some(id) = self.methods.get(name).copied() {
+    pub(crate) fn ensure_procedure_symbol(&mut self, name: &str) -> ProcedureId {
+        if let Some(id) = self.procedures.get(name).copied() {
             return id;
         }
         let name_id = self.intern_string(name);
-        let id = self
-            .artifact
-            .methods
-            .alloc(MethodDescriptor::new(name_id, 0, 0, Box::new([])));
-        let _ = self.methods.insert(name.into(), id);
+        let id =
+            self.artifact
+                .procedures
+                .alloc(ProcedureDescriptor::new(name_id, 0, 0, Box::new([])));
+        let _ = self.procedures.insert(name.into(), id);
         id
     }
 

@@ -6,7 +6,7 @@ mod export;
 mod foreign;
 mod global;
 mod meta;
-mod method;
+mod procedure;
 mod type_desc;
 
 pub use class::ClassDescriptor;
@@ -17,5 +17,5 @@ pub use export::{ExportDescriptor, ExportTarget};
 pub use foreign::ForeignDescriptor;
 pub use global::GlobalDescriptor;
 pub use meta::MetaDescriptor;
-pub use method::MethodDescriptor;
+pub use procedure::ProcedureDescriptor;
 pub use type_desc::TypeDescriptor;

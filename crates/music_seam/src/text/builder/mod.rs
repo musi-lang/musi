@@ -2,8 +2,8 @@ use self::symbols::tokenize;
 use super::*;
 
 mod directives;
-mod methods;
 mod operands;
+mod procedures;
 mod symbols;
 
 impl TextBuilder {

@@ -1,13 +1,13 @@
 use music_arena::Idx;
 
 use crate::artifact::StringId;
-use crate::descriptor::MethodDescriptor;
+use crate::descriptor::ProcedureDescriptor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalDescriptor {
     pub name: StringId,
     pub export: bool,
-    pub initializer: Option<Idx<MethodDescriptor>>,
+    pub initializer: Option<Idx<ProcedureDescriptor>>,
 }
 
 impl GlobalDescriptor {
@@ -27,7 +27,7 @@ impl GlobalDescriptor {
     }
 
     #[must_use]
-    pub const fn with_initializer(mut self, initializer: Idx<MethodDescriptor>) -> Self {
+    pub const fn with_initializer(mut self, initializer: Idx<ProcedureDescriptor>) -> Self {
         self.initializer = Some(initializer);
         self
     }

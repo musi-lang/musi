@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_perform(
         &mut self,
         effect_key: &DefinitionKey,

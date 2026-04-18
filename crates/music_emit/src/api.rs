@@ -1,6 +1,6 @@
 use music_base::diag::Diag;
 use music_module::ModuleKey;
-use music_seam::{Artifact, GlobalId, MethodId};
+use music_seam::{Artifact, GlobalId, ProcedureId};
 
 use crate::EmitDiagKind;
 
@@ -21,23 +21,27 @@ pub struct EmitOptions;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmittedBinding {
     pub name: Box<str>,
-    pub method: Option<MethodId>,
+    pub procedure: Option<ProcedureId>,
     pub global: Option<GlobalId>,
 }
 
 impl EmittedBinding {
     #[must_use]
-    pub const fn new(name: Box<str>, method: Option<MethodId>, global: Option<GlobalId>) -> Self {
+    pub const fn new(
+        name: Box<str>,
+        procedure: Option<ProcedureId>,
+        global: Option<GlobalId>,
+    ) -> Self {
         Self {
             name,
-            method,
+            procedure,
             global,
         }
     }
 
     #[must_use]
-    pub const fn method(name: Box<str>, method: MethodId) -> Self {
-        Self::new(name, Some(method), None)
+    pub const fn procedure(name: Box<str>, procedure: ProcedureId) -> Self {
+        Self::new(name, Some(procedure), None)
     }
 
     #[must_use]
@@ -50,7 +54,7 @@ impl EmittedBinding {
 pub struct EmittedModule {
     pub module_key: ModuleKey,
     pub artifact: Artifact,
-    pub entry_method: Option<MethodId>,
+    pub entry_procedure: Option<ProcedureId>,
     pub exports: Box<[EmittedBinding]>,
     pub static_imports: Box<[ModuleKey]>,
 }
@@ -60,14 +64,14 @@ impl EmittedModule {
     pub const fn new(
         module_key: ModuleKey,
         artifact: Artifact,
-        entry_method: Option<MethodId>,
+        entry_procedure: Option<ProcedureId>,
         exports: Box<[EmittedBinding]>,
         static_imports: Box<[ModuleKey]>,
     ) -> Self {
         Self {
             module_key,
             artifact,
-            entry_method,
+            entry_procedure,
             exports,
             static_imports,
         }
@@ -78,7 +82,7 @@ impl EmittedModule {
 pub struct EmittedProgram {
     pub entry_module: ModuleKey,
     pub artifact: Artifact,
-    pub entry_method: MethodId,
+    pub entry_procedure: ProcedureId,
     pub modules: Box<[ModuleKey]>,
 }
 
@@ -87,13 +91,13 @@ impl EmittedProgram {
     pub const fn new(
         entry_module: ModuleKey,
         artifact: Artifact,
-        entry_method: MethodId,
+        entry_procedure: ProcedureId,
         modules: Box<[ModuleKey]>,
     ) -> Self {
         Self {
             entry_module,
             artifact,
-            entry_method,
+            entry_procedure,
             modules,
         }
     }

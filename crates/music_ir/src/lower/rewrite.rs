@@ -131,7 +131,7 @@ impl RecursiveBindingInput<'_, '_> {
                 self.callable_name,
                 self.captures,
             ),
-            IrExprKind::DynamicImport { spec } => rewrite_dynamic_import_kind(
+            IrExprKind::ModuleLoad { spec } => rewrite_module_load_kind(
                 self.ctx,
                 self.origin,
                 *spec,
@@ -789,7 +789,7 @@ fn rewrite_index_kind(
     }
 }
 
-fn rewrite_dynamic_import_kind(
+fn rewrite_module_load_kind(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
     spec: IrExpr,
@@ -797,7 +797,7 @@ fn rewrite_dynamic_import_kind(
     callable_name: &str,
     captures: &[NameBindingId],
 ) -> IrExprKind {
-    IrExprKind::DynamicImport {
+    IrExprKind::ModuleLoad {
         spec: Box::new(rewrite_recursive_binding_refs(
             ctx,
             origin,

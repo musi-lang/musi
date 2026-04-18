@@ -13,7 +13,7 @@ use music_hir::{
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 use music_sema::{
-    ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue,
+    ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, ExprMemberKind,
     SemaDataVariantDef, SemaModule,
 };
 
@@ -22,8 +22,8 @@ use crate::api::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrClassDef,
     IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind,
     IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrIntrinsicKind, IrLit,
-    IrMatchArm as IrLoweredMatchArm, IrModule, IrNameRef, IrOrigin, IrParam, IrRangeKind,
-    IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
+    IrMatchArm as IrLoweredMatchArm, IrModule, IrModuleInitPart, IrNameRef, IrOrigin, IrParam,
+    IrRangeKind, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 
 mod array;
@@ -38,7 +38,7 @@ mod effects;
 mod evidence;
 mod foreign;
 mod meta;
-mod patterns;
+mod pats;
 mod range;
 mod record;
 mod rewrite;
@@ -57,7 +57,7 @@ use evidence::{
     lower_evidence_expr, pop_evidence_bindings, push_evidence_bindings,
 };
 use foreign::lower_foreign_let;
-use patterns::{collect_pattern_bindings, lower_match_expr};
+use pats::{collect_pattern_bindings, lower_match_expr};
 use range::{lower_in_expr, lower_partial_range_expr, lower_range_expr};
 use rewrite::rewrite_recursive_binding_refs;
 use types::{
@@ -69,6 +69,7 @@ struct TopLevelItems {
     exports: Vec<ExportedValue>,
     callables: Vec<IrCallable>,
     globals: Vec<IrGlobal>,
+    init_parts: Vec<IrModuleInitPart>,
     data_defs: Vec<IrDataDef>,
     foreigns: Vec<IrForeignDef>,
 }
@@ -193,6 +194,7 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
                 .into_boxed_slice(),
             items.callables.into_boxed_slice(),
             items.globals.into_boxed_slice(),
+            items.init_parts.into_boxed_slice(),
             items.data_defs.into_boxed_slice(),
             items.foreigns.into_boxed_slice(),
             build_effect_defs(sema, ctx.interner),
@@ -472,7 +474,7 @@ fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKin
             if sema.expr_module_target(expr_id).is_some() {
                 IrExprKind::Unit
             } else {
-                IrExprKind::DynamicImport {
+                IrExprKind::ModuleLoad {
                     spec: lower_boxed_expr(ctx, *arg),
                 }
             }
@@ -538,7 +540,7 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
                 && is_type_value_expr(sema, *right, interner)
         }
         HirExprKind::Prefix {
-            op: HirPrefixOp::Mut | HirPrefixOp::Comptime,
+            op: HirPrefixOp::Mut | HirPrefixOp::Comptime | HirPrefixOp::Any | HirPrefixOp::Some,
             expr,
         } => is_type_value_expr(sema, *expr, interner),
         HirExprKind::Record { items } => sema
@@ -578,7 +580,9 @@ fn lower_prefix_expr(
 ) -> IrExprKind {
     match op {
         HirPrefixOp::Comptime => lower_comptime_prefix_expr(ctx, expr_id, expr, origin),
-        HirPrefixOp::Mut => lower_expr_with_origin(ctx, expr, origin).kind,
+        HirPrefixOp::Mut | HirPrefixOp::Any | HirPrefixOp::Some => {
+            lower_expr_with_origin(ctx, expr, origin).kind
+        }
         HirPrefixOp::Not => IrExprKind::Not {
             expr: lower_boxed_expr(ctx, expr),
         },
@@ -980,6 +984,23 @@ fn lower_field_expr(
     let sema = ctx.sema;
     let interner = ctx.interner;
 
+    if let Some(fact) = sema.expr_member_fact(expr_id)
+        && fact.kind == ExprMemberKind::ClassMember
+        && let Some(evidence) = sema.expr_evidence(expr_id).and_then(|items| items.first())
+    {
+        return IrExprKind::RecordGet {
+            base: Box::new(lower_evidence_expr(
+                ctx,
+                IrOrigin::new(
+                    sema.module().store.exprs.get(expr_id).origin.source_id,
+                    sema.module().store.exprs.get(expr_id).origin.span,
+                ),
+                evidence,
+            )),
+            index: fact.index.unwrap_or_default(),
+        };
+    }
+
     let base_ty = sema
         .try_expr_ty(base)
         .unwrap_or_else(|| invalid_lowering_path("expr type missing for field base"));
@@ -1024,22 +1045,14 @@ fn lower_field_expr(
         };
     }
 
-    if let Some(binding) = sema.expr_attached_binding(expr_id) {
-        let binding_name = sema.resolved().names.bindings.get(binding).name;
-        return IrExprKind::ClosureNew {
-            callee: IrNameRef {
-                binding: Some(binding),
-                name: interner.resolve(binding_name).into(),
-                module_target: sema.expr_module_target(expr_id).cloned(),
-            },
-            captures: vec![lower_expr(ctx, base)].into_boxed_slice(),
-        };
+    if let Some(closure) = lower_attached_method_field(ctx, expr_id, base) {
+        return closure;
     }
 
     if let Some(module_target) = sema.expr_module_target(expr_id).cloned() {
-        let expr_ty = sema
-            .try_expr_ty(expr_id)
-            .unwrap_or_else(|| invalid_lowering_path("expr type missing for attached field ref"));
+        let expr_ty = sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+            invalid_lowering_path("expr type missing for dot callable field ref")
+        });
         if matches!(sema.ty(expr_ty).kind, HirTyKind::Arrow { .. }) {
             return IrExprKind::ClosureNew {
                 callee: IrNameRef::new(interner.resolve(symbol)).with_module_target(module_target),
@@ -1049,6 +1062,32 @@ fn lower_field_expr(
     }
 
     invalid_lowering_path(format!("{kind:?}"))
+}
+
+fn lower_attached_method_field(
+    ctx: &mut LowerCtx<'_>,
+    expr_id: HirExprId,
+    base: HirExprId,
+) -> Option<IrExprKind> {
+    let fact = ctx.sema.expr_member_fact(expr_id)?;
+    let captures = match fact.kind {
+        ExprMemberKind::AttachedMethodNamespace => Box::new([]),
+        ExprMemberKind::DotCallable | ExprMemberKind::AttachedMethod => {
+            vec![lower_expr(ctx, base)].into_boxed_slice()
+        }
+        _ => return None,
+    };
+    Some(IrExprKind::ClosureNew {
+        callee: IrNameRef {
+            binding: fact.binding,
+            name: ctx.interner.resolve(fact.name).into(),
+            module_target: fact
+                .module_target
+                .clone()
+                .or_else(|| ctx.sema.expr_module_target(expr_id).cloned()),
+        },
+        captures,
+    })
 }
 
 fn lower_record_update_expr(

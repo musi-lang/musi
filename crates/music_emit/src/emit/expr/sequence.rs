@@ -4,7 +4,7 @@ use music_ir::IrRangeKind;
 
 use super::support::push_expr_diag;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_range(
         &mut self,
         ty_name: &str,

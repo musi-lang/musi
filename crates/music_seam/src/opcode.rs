@@ -344,14 +344,14 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         opcode: Opcode::Call,
         family: OpcodeFamily::CallClosure,
         mnemonic: "call",
-        operand_shape: OperandShape::Method,
+        operand_shape: OperandShape::Procedure,
         wire_code: 0x0401,
     },
     OpcodeInfo {
         opcode: Opcode::CallSeq,
         family: OpcodeFamily::CallClosure,
         mnemonic: "call.seq",
-        operand_shape: OperandShape::Method,
+        operand_shape: OperandShape::Procedure,
         wire_code: 0x0406,
     },
     OpcodeInfo {
@@ -372,7 +372,7 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         opcode: Opcode::CallTail,
         family: OpcodeFamily::CallClosure,
         mnemonic: "call.tail",
-        operand_shape: OperandShape::Method,
+        operand_shape: OperandShape::Procedure,
         wire_code: 0x0403,
     },
     OpcodeInfo {
@@ -386,7 +386,7 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
         opcode: Opcode::ClsNew,
         family: OpcodeFamily::CallClosure,
         mnemonic: "cls.new",
-        operand_shape: OperandShape::WideMethodCaptures,
+        operand_shape: OperandShape::WideProcedureCaptures,
         wire_code: 0x0405,
     },
     OpcodeInfo {

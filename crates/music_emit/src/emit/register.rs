@@ -1,5 +1,5 @@
 use super::*;
-use music_ir::lower_surface_type_term;
+use music_ir::{IrModuleInitPart, lower_surface_type_term};
 use music_seam::descriptor::DataVariantDescriptor;
 use music_term::{TypeModuleRef, TypeTerm, TypeTermKind, parse_type_term};
 
@@ -114,8 +114,8 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
 
         let Some(target) = target else {
             state.diags.push(
-                Diag::error(EmitDiagKind::ExportTargetMissing.message())
-                    .with_code(EmitDiagKind::ExportTargetMissing.code())
+                Diag::error(EmitDiagKind::MissingExportTarget.message())
+                    .with_code(EmitDiagKind::MissingExportTarget.code())
                     .with_note(format!("export `{}`", export.name)),
             );
             continue;
@@ -138,8 +138,8 @@ fn export_target(
     class_key: Option<&DefinitionKey>,
 ) -> Option<ExportTarget> {
     if let Some(binding) = export_binding(module, export_name) {
-        if let Some(method) = layout.callables.get(&binding).copied() {
-            return Some(ExportTarget::Method(method));
+        if let Some(procedure) = layout.callables.get(&binding).copied() {
+            return Some(ExportTarget::Procedure(procedure));
         }
         if let Some(global) = layout.globals.get(&binding).copied() {
             return Some(ExportTarget::Global(global));
@@ -148,8 +148,8 @@ fn export_target(
             return Some(ExportTarget::Foreign(foreign));
         }
     }
-    if let Some(method) = layout.callables_by_name.get(export_name).copied() {
-        return Some(ExportTarget::Method(method));
+    if let Some(procedure) = layout.callables_by_name.get(export_name).copied() {
+        return Some(ExportTarget::Procedure(procedure));
     }
 
     if let Some(key) = data_key {
@@ -245,7 +245,7 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
     for callable in module.callables() {
         let name = qualified_name(module.module_key(), &callable.name);
         let params = u16::try_from(callable.params.len()).unwrap_or(u16::MAX);
-        let method_id = alloc_method(
+        let procedure_id = alloc_procedure(
             &mut state.artifact,
             name.as_ref(),
             callable.exported,
@@ -255,9 +255,9 @@ fn register_callables(state: &mut ProgramState, module: &IrModule, layout: &mut 
         );
         let _ = layout
             .callables_by_name
-            .insert(callable.name.clone(), method_id);
+            .insert(callable.name.clone(), procedure_id);
         if let Some(binding) = callable.binding {
-            let _ = layout.callables.insert(binding, method_id);
+            let _ = layout.callables.insert(binding, procedure_id);
         }
     }
 }
@@ -266,14 +266,17 @@ fn register_globals(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     for global in module.globals() {
         let name = qualified_name(module.module_key(), &global.name);
         let init_name = format!("{name}::init");
-        let init_method = alloc_method(&mut state.artifact, &init_name, false, false, false, 0);
+        let init_procedure =
+            alloc_procedure(&mut state.artifact, &init_name, false, false, false, 0);
         let name_id = state.artifact.intern_string(name.as_ref());
         let global_id = state.artifact.globals.alloc(
             GlobalDescriptor::new(name_id)
                 .with_export(global.exported)
-                .with_initializer(init_method),
+                .with_initializer(init_procedure),
         );
-        layout.init_methods.push(init_method);
+        let _ = layout
+            .global_init_procedures
+            .insert(global.name.clone(), init_procedure);
         if let Some(binding) = global.binding {
             let _ = layout.globals.insert(binding, global_id);
         }
@@ -286,6 +289,11 @@ fn register_expr_types(state: &mut ProgramState, module: &IrModule, layout: &mut
     }
     for global in module.globals() {
         collect_expr_types(state, layout, &global.body);
+    }
+    for init_part in module.init_parts() {
+        if let IrModuleInitPart::Expr(expr) = init_part {
+            collect_expr_types(state, layout, expr);
+        }
     }
 }
 
@@ -381,7 +389,7 @@ fn collect_expr_types_aggregate(
             collect_expr_types(state, layout, evidence);
             true
         }
-        IrExprKind::DynamicImport { spec } => {
+        IrExprKind::ModuleLoad { spec } => {
             collect_expr_types(state, layout, spec);
             true
         }

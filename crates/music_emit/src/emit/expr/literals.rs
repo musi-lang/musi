@@ -3,7 +3,7 @@ use crate::EmitDiagKind;
 use music_base::parse_i64_literal;
 use music_term::SyntaxTerm;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_lit(&mut self, lit: &IrLit, origin: &IrOrigin, diags: &mut EmitDiagList) {
         match lit {
             IrLit::Int { raw } => self.compile_int_literal(raw, origin, diags),

@@ -248,6 +248,12 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
             format_surface_ty(surface, *output)
         ),
         SurfaceTyKind::Mut { inner } => format!("mut {}", format_surface_ty(surface, *inner)),
+        SurfaceTyKind::AnyClass { class } => {
+            format!("any {}", format_surface_ty(surface, *class))
+        }
+        SurfaceTyKind::SomeClass { class } => {
+            format!("some {}", format_surface_ty(surface, *class))
+        }
         SurfaceTyKind::Record { fields } => format_record_surface_ty(surface, fields),
         SurfaceTyKind::Error
         | SurfaceTyKind::Unknown

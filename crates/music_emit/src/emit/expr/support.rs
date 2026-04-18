@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn ensure_local_slot(&mut self, binding: NameBindingId) -> u16 {
         if let Some(slot) = self.locals.get(&binding).copied() {
             return slot;

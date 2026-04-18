@@ -1,7 +1,7 @@
 use super::*;
 
-struct AttachedCallTarget {
-    base: HirExprId,
+struct DotCallableCallTarget {
+    receiver: HirExprId,
     binding: Option<NameBindingId>,
     name: Symbol,
     module_target: Option<ModuleKey>,
@@ -28,8 +28,8 @@ pub(super) fn lower_call_expr(
     if let Some(intrinsic) = lower_ffi_pointer_intrinsic(ctx, callee, &arg_nodes) {
         return intrinsic;
     }
-    if let Some(attached) = resolve_attached_call_target(sema, callee) {
-        return lower_attached_call_expr(ctx, callee, &arg_nodes, &attached, interner);
+    if let Some(dot_callable) = resolve_dot_callable_call_target(sema, callee) {
+        return lower_dot_callable_call_expr(ctx, callee, &arg_nodes, &dot_callable, interner);
     }
 
     if !arg_nodes.iter().any(|arg| arg.spread) {
@@ -614,7 +614,11 @@ fn is_std_ffi_module(module_key: &ModuleKey) -> bool {
 
 fn is_std_cmp_module(module_key: &ModuleKey) -> bool {
     let key = module_key.as_str();
-    key == "@std/cmp" || key.ends_with("cmp/index.ms") || key.contains("cmp/index.ms::__laws")
+    key == "@std/cmp"
+        || key.ends_with("cmp/index.ms")
+        || key.ends_with("cmp/_core.ms")
+        || key.contains("cmp/index.ms::__laws")
+        || key.contains("cmp/_core.ms::__laws")
 }
 
 fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bool {
@@ -643,26 +647,26 @@ fn is_std_ffi_public_pointer_base(ctx: &LowerCtx<'_>, base: HirExprId) -> bool {
     }
 }
 
-fn lower_attached_call_expr(
+fn lower_dot_callable_call_expr(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
     arg_nodes: &[HirArg],
-    attached: &AttachedCallTarget,
+    dot_callable: &DotCallableCallTarget,
     interner: &Interner,
 ) -> Result<IrExprKind, Box<str>> {
     let origin = lower_origin(ctx.sema, callee);
     let callee_expr = IrExpr::new(
         origin,
         IrExprKind::Name {
-            binding: attached.binding,
-            name: interner.resolve(attached.name).into(),
-            module_target: attached.module_target.clone(),
+            binding: dot_callable.binding,
+            name: interner.resolve(dot_callable.name).into(),
+            module_target: dot_callable.module_target.clone(),
         },
     );
 
     if !arg_nodes.iter().any(|arg| arg.spread) {
         let mut lowered_args = Vec::with_capacity(arg_nodes.len().saturating_add(1));
-        lowered_args.push(IrArg::new(false, lower_expr(ctx, attached.base)));
+        lowered_args.push(IrArg::new(false, lower_expr(ctx, dot_callable.receiver)));
         lowered_args.extend(
             arg_nodes
                 .iter()
@@ -680,7 +684,7 @@ fn lower_attached_call_expr(
         origin,
         IrExprKind::TempLet {
             temp: receiver_temp,
-            value: Box::new(lower_expr(ctx, attached.base)),
+            value: Box::new(lower_expr(ctx, dot_callable.receiver)),
         },
     ));
 
@@ -714,7 +718,7 @@ fn lower_attached_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("attached call spread lowering invariant".into());
+                return Err("dot callable spread lowering invariant".into());
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -728,34 +732,34 @@ fn lower_attached_call_expr(
     })
 }
 
-fn resolve_attached_call_target(
+fn resolve_dot_callable_call_target(
     sema: &SemaModule,
     callee: HirExprId,
-) -> Option<AttachedCallTarget> {
-    let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
+) -> Option<DotCallableCallTarget> {
+    let HirExprKind::Field { base, .. } = sema.module().store.exprs.get(callee).kind else {
         return None;
     };
-    let binding = sema.expr_attached_binding(callee);
-    let base_ty = sema.try_expr_ty(base)?;
-    let base_ty = match sema.ty(base_ty).kind {
-        HirTyKind::Mut { inner } => inner,
-        _ => base_ty,
-    };
-    let callee_ty = sema.try_expr_ty(callee)?;
-    if !is_attached_call_candidate(&sema.ty(base_ty).kind, &sema.ty(callee_ty).kind) {
+    let fact = sema.expr_member_fact(callee)?;
+    if !is_dot_callable_member(fact.kind) {
         return None;
     }
 
-    Some(AttachedCallTarget {
-        base,
-        binding,
-        name: name.name,
-        module_target: sema.expr_module_target(callee).cloned(),
+    Some(DotCallableCallTarget {
+        receiver: base,
+        binding: fact.binding,
+        name: fact.name,
+        module_target: fact
+            .module_target
+            .clone()
+            .or_else(|| sema.expr_module_target(callee).cloned()),
     })
 }
 
-const fn is_attached_call_candidate(base_kind: &HirTyKind, callee_kind: &HirTyKind) -> bool {
-    !matches!(base_kind, HirTyKind::Module) && matches!(callee_kind, HirTyKind::Arrow { .. })
+const fn is_dot_callable_member(kind: ExprMemberKind) -> bool {
+    matches!(
+        kind,
+        ExprMemberKind::DotCallable | ExprMemberKind::AttachedMethod
+    )
 }
 
 fn ordered_call_args(
@@ -840,7 +844,8 @@ fn named_prefix_advance(sema: &SemaModule, arg: &HirArg, index: usize) -> Option
 }
 
 fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -> Box<[Symbol]> {
-    if let Some(binding) = sema.expr_attached_binding(callee)
+    if let Some(target) = resolve_dot_callable_call_target(sema, callee)
+        && let Some(binding) = target.binding
         && let Some(scheme) = sema.binding_scheme(binding)
     {
         return scheme.param_names.iter().copied().skip(1).collect();
@@ -867,42 +872,6 @@ fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -
             Box::default()
         }
         _ => Box::default(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use music_arena::SliceRange;
-    use music_hir::HirTyKind;
-
-    use super::is_attached_call_candidate;
-
-    #[test]
-    fn attached_call_candidate_requires_non_module_base() {
-        assert!(!is_attached_call_candidate(
-            &HirTyKind::Module,
-            &HirTyKind::Arrow {
-                params: SliceRange::EMPTY,
-                ret: music_hir::HirTyId::from_raw(0),
-                is_effectful: false,
-            },
-        ));
-    }
-
-    #[test]
-    fn attached_call_candidate_requires_arrow_callee() {
-        assert!(!is_attached_call_candidate(
-            &HirTyKind::Int,
-            &HirTyKind::Int,
-        ));
-        assert!(is_attached_call_candidate(
-            &HirTyKind::Int,
-            &HirTyKind::Arrow {
-                params: SliceRange::EMPTY,
-                ret: music_hir::HirTyId::from_raw(0),
-                is_effectful: false,
-            },
-        ));
     }
 }
 
@@ -1165,3 +1134,6 @@ fn index_expr(origin: IrOrigin, base: IrExpr, index_u32: u32) -> IrExpr {
         },
     )
 }
+
+#[cfg(test)]
+mod tests;

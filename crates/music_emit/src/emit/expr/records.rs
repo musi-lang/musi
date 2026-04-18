@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_record_literal(
         &mut self,
         ty_name: &str,
