@@ -14,12 +14,12 @@ publish.workspace = true
 
 [dependencies]
 clap = { workspace = true }
+music_base = { path = "../music_base" }
 music_seam = { path = "../music_seam" }
 music_session = { path = "../music_session" }
 musi_tooling = { path = "../musi_tooling" }
 musi_vm = { path = "../musi_vm" }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

@@ -4,6 +4,10 @@ pub const STD_ROOT_DIR: &str = "builtin:/@std";
 pub const STD_MANIFEST: &str = include_str!("../../../packages/std/musi.json");
 pub const STD_FILES: &[(&str, &str)] = &[
     (
+        "array/_core.ms",
+        include_str!("../../../packages/std/array/_core.ms"),
+    ),
+    (
         "array/index.ms",
         include_str!("../../../packages/std/array/index.ms"),
     ),
@@ -12,8 +16,16 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/assert/index.ms"),
     ),
     (
+        "bytes/_core.ms",
+        include_str!("../../../packages/std/bytes/_core.ms"),
+    ),
+    (
         "bytes/index.ms",
         include_str!("../../../packages/std/bytes/index.ms"),
+    ),
+    (
+        "cmp/_core.ms",
+        include_str!("../../../packages/std/cmp/_core.ms"),
     ),
     (
         "cmp/index.ms",
@@ -53,12 +65,24 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/io/index.ms"),
     ),
     (
+        "io/prompt.ms",
+        include_str!("../../../packages/std/io/prompt.ms"),
+    ),
+    (
+        "iter/_core.ms",
+        include_str!("../../../packages/std/iter/_core.ms"),
+    ),
+    (
         "iter/index.ms",
         include_str!("../../../packages/std/iter/index.ms"),
     ),
     (
         "json/index.ms",
         include_str!("../../../packages/std/json/index.ms"),
+    ),
+    (
+        "list/_core.ms",
+        include_str!("../../../packages/std/list/_core.ms"),
     ),
     (
         "list/index.ms",
@@ -81,12 +105,24 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/math/index.ms"),
     ),
     (
+        "option/_core.ms",
+        include_str!("../../../packages/std/option/_core.ms"),
+    ),
+    (
         "option/index.ms",
         include_str!("../../../packages/std/option/index.ms"),
     ),
     (
+        "os/_core.ms",
+        include_str!("../../../packages/std/os/_core.ms"),
+    ),
+    (
         "os/index.ms",
         include_str!("../../../packages/std/os/index.ms"),
+    ),
+    (
+        "path/_core.ms",
+        include_str!("../../../packages/std/path/_core.ms"),
     ),
     (
         "path/index.ms",
@@ -105,8 +141,16 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/random/index.ms"),
     ),
     (
+        "result/_core.ms",
+        include_str!("../../../packages/std/result/_core.ms"),
+    ),
+    (
         "result/index.ms",
         include_str!("../../../packages/std/result/index.ms"),
+    ),
+    (
+        "slice/_core.ms",
+        include_str!("../../../packages/std/slice/_core.ms"),
     ),
     (
         "slice/index.ms",
@@ -121,8 +165,16 @@ pub const STD_FILES: &[(&str, &str)] = &[
         include_str!("../../../packages/std/testing/index.ms"),
     ),
     (
+        "text/_string.ms",
+        include_str!("../../../packages/std/text/_string.ms"),
+    ),
+    (
         "text/index.ms",
         include_str!("../../../packages/std/text/index.ms"),
+    ),
+    (
+        "time/_core.ms",
+        include_str!("../../../packages/std/time/_core.ms"),
     ),
     (
         "time/index.ms",

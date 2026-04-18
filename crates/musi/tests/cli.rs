@@ -1,9 +1,10 @@
 use std::env::temp_dir;
 use std::fs;
+use std::io::Write;
 use std::mem::drop;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::process::Output;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -54,8 +55,38 @@ fn run_musi(args: &[&str], cwd: &Path) -> Output {
         .expect("musi command should run")
 }
 
+fn run_musi_with_input(args: &[&str], cwd: &Path, input: &str) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_musi"))
+        .args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("musi command should spawn");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be piped")
+        .write_all(input.as_bytes())
+        .expect("stdin should be written");
+    child
+        .wait_with_output()
+        .expect("musi command should finish")
+}
+
 fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
+}
+
+fn golden_json(text: &str) -> Value {
+    serde_json::from_str(text).expect("golden JSON should parse")
+}
+
+fn normalize_project_paths(mut payload: Value) -> Value {
+    payload["package_root"] = Value::String("<package-root>".into());
+    payload["manifest"] = Value::String("<manifest>".into());
+    payload
 }
 
 fn assert_success(output: &Output) {
@@ -68,7 +99,7 @@ fn assert_success(output: &Output) {
 }
 
 #[cfg(test)]
-mod tests {
+mod success {
     use super::*;
 
     #[test]
@@ -106,7 +137,10 @@ mod tests {
         assert!(manifest.contains("sample"));
         assert!(manifest.contains("\"entry\""));
         assert!(!manifest.contains("\"main\""));
-        assert!(index.contains("\"Hello, world!\""));
+        assert_eq!(
+            index,
+            "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLine(message);\n"
+        );
         assert!(!index.contains("export let main"));
         assert!(test.contains("import \"@std/testing\""));
         assert!(test.contains("let add"));
@@ -126,21 +160,6 @@ mod tests {
     }
 
     #[test]
-    fn init_creates_package_that_checks_and_tests() {
-        let temp = TempDir::new();
-
-        let output = run_musi(&["init", "sample"], temp.path());
-
-        assert_success(&output);
-        assert_success(&run_musi(&["check"], &temp.path().join("sample")));
-        let test_output = run_musi(&["test"], &temp.path().join("sample"));
-        assert_success(&test_output);
-        let stdout = String::from_utf8_lossy(&test_output.stdout);
-        assert!(stdout.contains("pass"));
-        assert!(stdout.contains("adds values"));
-    }
-
-    #[test]
     fn init_dot_uses_current_directory_name() {
         let temp = TempDir::new();
 
@@ -156,6 +175,541 @@ mod tests {
             .expect("temp dir should have utf-8 name");
         assert!(manifest.contains(expected_name));
     }
+
+    #[test]
+    fn project_info_prints_manifest_metadata() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
+
+        let output = run_musi(&["info"], temp.path());
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("package: app"));
+        assert!(stdout.contains("manifest:"));
+        assert!(stdout.contains("modules:"));
+    }
+
+    #[test]
+    fn check_accepts_explicit_relative_entry_file() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let message := \"Hello\";\nmessage;\n",
+        );
+
+        let output = run_musi(&["check", "index.ms"], temp.path());
+
+        assert_success(&output);
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+    }
+
+    #[test]
+    fn run_evaluates_module_without_main_export() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let message := \"Hello\";\nmessage;\n",
+        );
+
+        let output = run_musi(&["run", "index.ms"], temp.path());
+
+        assert_success(&output);
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+    }
+
+    #[test]
+    fn run_executes_top_level_write_line_without_main_export() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let io := import \"@std/io\";\nio.writeLine(\"Hello\");\n",
+        );
+
+        let output = run_musi(&["run", "index.ms"], temp.path());
+
+        assert_success(&output);
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "Hello\n");
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+    }
+
+    #[test]
+    fn test_uses_vitest_style_output_without_std_dependency_suites() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let message := \"Hello\";\nmessage;\n",
+        );
+        write_file(
+            temp.path(),
+            "add.test.ms",
+            r#"let Testing := import "@std/testing";
+
+let add (left : Int, right : Int) : Int := left + right;
+
+export let test () :=
+  (
+    Testing.describe("add");
+    Testing.it("adds values", Testing.toBe(add(2, 3), 5));
+    Testing.endDescribe()
+  );
+"#,
+        );
+
+        let output = run_musi(&["test"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ add.test.ms (1)"));
+        assert!(stdout.contains("✓ add > adds values"));
+        assert!(stdout.contains("Test Files  1 passed (1)"));
+        assert!(stdout.contains("Tests  1 passed (1)"));
+        assert!(!stdout.contains("@@std"));
+        assert!(!stdout.contains("pass "));
+    }
+
+    #[test]
+    fn test_captures_passing_module_output() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            "let message := \"Hello\";\nmessage;\n",
+        );
+        write_file(
+            temp.path(),
+            "io.test.ms",
+            r#"let Testing := import "@std/testing";
+let Runtime := import "musi:runtime";
+
+export let test () :=
+  (
+    Testing.describe("io");
+    Runtime.ioPrintLine("hidden stdout");
+    Runtime.ioPrintErrorLine("hidden stderr");
+    Runtime.logWrite(40, "hidden log");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+        );
+
+        let output = run_musi(&["test", "io.test.ms"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stdout.contains("✓ io.test.ms (1)"));
+        assert!(!stdout.contains("hidden stdout"));
+        assert!(!stdout.contains("hidden stderr"));
+        assert!(!stdout.contains("hidden log"));
+        assert!(!stderr.contains("hidden stdout"));
+        assert!(!stderr.contains("hidden stderr"));
+        assert!(!stderr.contains("hidden log"));
+    }
+
+    #[test]
+    fn fmt_rewrites_project_file() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let x:=1;");
+
+        let output = run_musi(&["fmt"], temp.path());
+
+        assert_success(&output);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("index.ms")).expect("file should be readable"),
+            "let x := 1;\n"
+        );
+    }
+
+    #[test]
+    fn fmt_stdin_writes_formatted_stdout() {
+        let temp = TempDir::new();
+
+        let output = run_musi_with_input(&["fmt", "-"], temp.path(), "let x:=1;");
+
+        assert_success(&output);
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "let x := 1;\n");
+    }
+
+    #[test]
+    fn fmt_markdown_formats_musi_fences_only() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "README.md",
+            "```musi\nlet x:=1;\n```\n\n```ts\nlet x=1\n```\n",
+        );
+
+        let output = run_musi(&["fmt", "README.md"], temp.path());
+
+        assert_success(&output);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("README.md")).expect("file should be readable"),
+            "```musi\nlet x := 1;\n```\n\n```ts\nlet x=1\n```\n"
+        );
+    }
+
+    #[test]
+    fn fmt_explicit_relative_file_uses_invocation_directory() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"pkg\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "pkg/musi.json",
+            "{\n  \"name\": \"pkg\",\n  \"entry\": \"./index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "pkg/index.ms", "let x:=1;");
+
+        let output = run_musi(&["fmt", "pkg/index.ms"], temp.path());
+
+        assert_success(&output);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("pkg/index.ms")).expect("file should be readable"),
+            "let x := 1;\n"
+        );
+    }
+
+    #[test]
+    fn fmt_all_formats_workspace_members() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"app\", \"util\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "app/musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "app/index.ms", "let app:=1;");
+        write_file(
+            temp.path(),
+            "util/musi.json",
+            "{\n  \"name\": \"util\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "util/index.ms", "let util:=2;");
+
+        let output = run_musi(&["fmt", "--all"], temp.path());
+
+        assert_success(&output);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("app/index.ms")).expect("file should be readable"),
+            "let app := 1;\n"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join("util/index.ms")).expect("file should be readable"),
+            "let util := 2;\n"
+        );
+    }
+
+    #[test]
+    fn fmt_all_rejects_explicit_path() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let x:=1;");
+
+        let output = run_musi(&["fmt", "--all", "index.ms"], temp.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("incompatible command arguments `--all` and `PATH`"));
+    }
+
+    #[test]
+    fn check_workspace_checks_member_entries() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"app\", \"util\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "app/musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "app/index.ms", "let app := 1;\n");
+        write_file(
+            temp.path(),
+            "util/musi.json",
+            "{\n  \"name\": \"util\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "util/index.ms", "let util := 2;\n");
+
+        let output = run_musi(&["check", "--workspace"], temp.path());
+
+        assert_success(&output);
+    }
+
+    #[test]
+    fn check_virtual_workspace_defaults_to_workspace_members() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"app\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "app/musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "app/index.ms", "let app := 1;\n");
+
+        let output = run_musi(&["check"], temp.path());
+
+        assert_success(&output);
+    }
+
+    #[test]
+    fn check_explicit_workspace_root_checks_root_and_members_by_default() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"root\",\n  \"version\": \"0.1.0\",\n  \"workspace\": { \"members\": [\"member\"] }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let root := 1;\n");
+        write_file(
+            temp.path(),
+            "member/musi.json",
+            "{\n  \"name\": \"member\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "member/index.ms", "let member := 2;\n");
+
+        let output = run_musi(&["check"], temp.path());
+
+        assert_success(&output);
+    }
+
+    #[test]
+    fn test_workspace_runs_member_tests() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"app\", \"util\"] }\n}\n",
+        );
+        for package in ["app", "util"] {
+            write_file(
+                temp.path(),
+                &format!("{package}/musi.json"),
+                &format!("{{\n  \"name\": \"{package}\",\n  \"version\": \"0.1.0\"\n}}\n"),
+            );
+            write_file(
+                temp.path(),
+                &format!("{package}/index.ms"),
+                "let value := 1;\n",
+            );
+            write_file(
+                temp.path(),
+                &format!("{package}/add.test.ms"),
+                r#"let Testing := import "@std/testing";
+
+export let test () :=
+  (
+    Testing.describe("workspace");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+            );
+        }
+
+        let output = run_musi(&["test", "--workspace"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ app/add.test.ms (1)"));
+        assert!(stdout.contains("✓ util/add.test.ms (1)"));
+    }
+
+    #[test]
+    fn test_explicit_workspace_root_runs_root_and_member_tests_by_default() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"root\",\n  \"version\": \"0.1.0\",\n  \"workspace\": { \"members\": [\"member\"] }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let root := 1;\n");
+        write_file(
+            temp.path(),
+            "root.test.ms",
+            r#"let Testing := import "@std/testing";
+
+export let test () :=
+  (
+    Testing.describe("root");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+        );
+        write_file(
+            temp.path(),
+            "member/musi.json",
+            "{\n  \"name\": \"member\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "member/index.ms", "let member := 2;\n");
+        write_file(
+            temp.path(),
+            "member/member.test.ms",
+            r#"let Testing := import "@std/testing";
+
+export let test () :=
+  (
+    Testing.describe("member");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+        );
+
+        let output = run_musi(&["test"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ root.test.ms (1)"));
+        assert!(stdout.contains("✓ member/member.test.ms (1)"));
+    }
+
+    #[test]
+    fn build_workspace_writes_member_artifacts() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"app\", \"util\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "app/musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "app/index.ms", "let app := 1;\n");
+        write_file(
+            temp.path(),
+            "util/musi.json",
+            "{\n  \"name\": \"util\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "util/index.ms", "let util := 2;\n");
+
+        let output = run_musi(&["build", "--workspace"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("app/index.seam"));
+        assert!(stdout.contains("util/index.seam"));
+        assert!(temp.path().join("app/index.seam").exists());
+        assert!(temp.path().join("util/index.seam").exists());
+    }
+
+    #[test]
+    fn build_explicit_workspace_root_writes_root_and_member_artifacts_by_default() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"root\",\n  \"version\": \"0.1.0\",\n  \"workspace\": { \"members\": [\"member\"] }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let root := 1;\n");
+        write_file(
+            temp.path(),
+            "member/musi.json",
+            "{\n  \"name\": \"member\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "member/index.ms", "let member := 2;\n");
+
+        let output = run_musi(&["build"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("index.seam"));
+        assert!(stdout.contains("member/index.seam"));
+        assert!(temp.path().join("index.seam").exists());
+        assert!(temp.path().join("member/index.seam").exists());
+    }
+
+    #[test]
+    fn json_check_success_writes_only_json_to_stdout() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
+
+        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
+
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let payload = parse_json(&output.stdout);
+        assert_eq!(
+            normalize_project_paths(payload),
+            golden_json(include_str!("success/check-ok.json"))
+        );
+    }
+}
+
+#[cfg(test)]
+mod failure {
+    use super::*;
 
     #[test]
     fn init_refuses_existing_package_markers() {
@@ -182,53 +736,45 @@ mod tests {
     }
 
     #[test]
-    fn reserved_command_reports_unavailable_feature() {
+    fn fmt_check_reports_unformatted_file_without_writing() {
         let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let x:=1;");
 
         let output = run_musi(&["fmt", "--check"], temp.path());
 
         assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("command `fmt` unavailable"));
-        assert!(stderr.contains("formatter not implemented"));
+        assert_eq!(
+            fs::read_to_string(temp.path().join("index.ms")).expect("file should be readable"),
+            "let x:=1;"
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("index.ms"));
     }
 
     #[test]
-    fn project_info_prints_manifest_metadata() {
+    fn fmt_check_stdin_reports_unformatted_without_stdout() {
         let temp = TempDir::new();
-        write_file(
-            temp.path(),
-            "musi.json",
-            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
-        );
-        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
 
-        let output = run_musi(&["info"], temp.path());
+        let output = run_musi_with_input(&["fmt", "--check", "-"], temp.path(), "let x:=1;");
 
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("package: app"));
-        assert!(stdout.contains("manifest:"));
-        assert!(stdout.contains("modules:"));
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).is_empty());
     }
 
     #[test]
-    fn json_check_success_writes_only_json_to_stdout() {
+    fn fmt_rejects_unknown_extension_override() {
         let temp = TempDir::new();
-        write_file(
-            temp.path(),
-            "musi.json",
-            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\"\n}\n",
+
+        let output = run_musi_with_input(&["fmt", "--ext", "txt", "-"], temp.path(), "let x:=1;");
+
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("unsupported formatter extension")
         );
-        write_file(temp.path(), "index.ms", "export let main () : Int := 42;\n");
-
-        let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
-
-        assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
-        let payload = parse_json(&output.stdout);
-        assert_eq!(payload["status"], "ok");
-        assert_eq!(payload["tool"], "musi");
     }
 
     #[test]
@@ -282,7 +828,7 @@ mod tests {
         assert_eq!(payload["diagnostics"][0]["code"], "MS3610");
         assert_eq!(
             payload["diagnostics"][0]["message"],
-            "root package entry missing"
+            "missing root package entry"
         );
         assert!(
             !payload["diagnostics"][0]["message"]
@@ -320,5 +866,32 @@ mod tests {
         );
         assert!(payload["diagnostics"][0]["file"].as_str().is_some());
         assert!(payload["diagnostics"][0]["range"].is_object());
+    }
+}
+
+#[cfg(test)]
+mod e2e {
+    use super::*;
+
+    #[test]
+    fn init_creates_package_that_checks_and_tests() {
+        let temp = TempDir::new();
+
+        let output = run_musi(&["init", "sample"], temp.path());
+
+        assert_success(&output);
+        assert_success(&run_musi(&["check"], &temp.path().join("sample")));
+        let run_output = run_musi(&["run", "index.ms"], &temp.path().join("sample"));
+        assert_success(&run_output);
+        assert_eq!(
+            String::from_utf8_lossy(&run_output.stdout),
+            "Hello, world!\n"
+        );
+        let test_output = run_musi(&["test"], &temp.path().join("sample"));
+        assert_success(&test_output);
+        let stdout = String::from_utf8_lossy(&test_output.stdout);
+        assert!(stdout.contains("✓ add.test.ms (1)"));
+        assert!(stdout.contains("adds values"));
+        assert!(!stdout.contains("@@std"));
     }
 }

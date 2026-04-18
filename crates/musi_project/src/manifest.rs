@@ -206,7 +206,6 @@ pub struct FmtConfig {
     pub use_tabs: Option<bool>,
     pub line_width: Option<u32>,
     pub indent_width: Option<u32>,
-    pub semi_colons: Option<bool>,
     pub trailing_commas: Option<String>,
     pub brace_position: Option<String>,
 }

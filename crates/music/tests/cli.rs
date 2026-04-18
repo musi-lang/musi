@@ -57,6 +57,10 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
+fn golden_json(text: &str) -> Value {
+    serde_json::from_str(text).expect("golden JSON should parse")
+}
+
 fn assert_success(output: &Output) {
     assert!(
         output.status.success(),
@@ -67,7 +71,7 @@ fn assert_success(output: &Output) {
 }
 
 #[cfg(test)]
-mod tests {
+mod success {
     use super::*;
 
     #[test]
@@ -141,7 +145,8 @@ mod tests {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains(".method"));
+        assert!(stdout.contains("module @seam.projection"));
+        assert!(stdout.contains("fn @"));
         assert!(stdout.contains("::main"));
     }
 
@@ -166,7 +171,27 @@ mod tests {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains(".method"));
+        assert!(stdout.contains("module @seam.projection"));
+        assert!(stdout.contains("fn @"));
+        assert!(stdout.contains("::main"));
+    }
+
+    #[test]
+    fn disasm_seam_level_prints_lowered_seam_il() {
+        let temp = TempDir::new();
+        let source_path = temp.path().join("main.ms");
+        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+
+        let output = run_music(&[
+            "disasm",
+            source_path.to_str().expect("utf-8 source path"),
+            "--level",
+            "seam",
+        ]);
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(".procedure"));
         assert!(stdout.contains("::main"));
     }
 
@@ -185,9 +210,13 @@ mod tests {
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).is_empty());
         let payload = parse_json(&output.stdout);
-        assert_eq!(payload["status"], "ok");
-        assert_eq!(payload["tool"], "music");
+        assert_eq!(payload, golden_json(include_str!("success/check-ok.json")));
     }
+}
+
+#[cfg(test)]
+mod failure {
+    use super::*;
 
     #[test]
     fn json_check_tooling_failure_writes_only_json_to_stdout() {
@@ -210,7 +239,7 @@ mod tests {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "tooling");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3631");
+        assert_eq!(payload["diagnostics"][0]["code"], "MS5101");
     }
 
     #[test]

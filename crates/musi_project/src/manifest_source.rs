@@ -66,7 +66,7 @@ impl ManifestSource {
         let span = span_at_offset(&self.text, offset);
         self.error(
             DiagCode::new(3604),
-            "manifest JSON invalid",
+            "invalid manifest JSON",
             span,
             "JSON parse error",
         )

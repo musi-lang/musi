@@ -1,32 +1,44 @@
 mod cli;
+mod diag;
+mod workspace;
 
 use std::env::current_dir;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::{self, Display, Formatter};
 use std::fs;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 use clap::Parser;
-use cli::{Cli, Command, DiagnosticsFormatArg};
-use musi_lsp::run_stdio_server;
-use musi_native::NativeHost;
-use musi_project::{
-    Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
-    ProjectTestTargetSource, TaskSpec, load_project_ancestor,
+use cli::{Cli, Command, DiagnosticsFormatArg, FmtArgs};
+use diag::{CliDiagKind, cli_error_kind};
+use musi_fmt::{
+    FormatError, FormatInputKind, FormatOptions, format_markdown, format_paths, format_source,
 };
-use musi_rt::{Runtime, RuntimeError, RuntimeOptions};
+use musi_lsp::run_stdio_server;
+use musi_native::{NativeHost, NativeTestReport};
+use musi_project::{
+    PackageId, Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
+    ProjectTestTargetSource, TaskSpec, load_project, load_project_ancestor,
+};
+use musi_rt::{Runtime, RuntimeError, RuntimeOptions, RuntimeOutputMode};
 use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, project_error_report,
     render_project_error, render_session_error, session_error_report, write_artifact_bytes,
 };
-use musi_vm::{Value, render_value_view};
+use music_base::diag::{CatalogDiagnostic, DiagContext, display_catalog_or_source};
 use music_sema::TargetInfo;
 use music_session::{Session, SessionError};
-use thiserror::Error;
+use workspace::{selected_package_entries, selected_package_roots, uses_workspace_scope};
 
 type MusiResult<T = ()> = Result<T, MusiError>;
 
-const STARTER_INDEX: &str = "let message := \"Hello, world!\";\nmessage;\n";
+const STARTER_INDEX: &str =
+    "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLine(message);\n";
 const STARTER_TEST: &str = r#"let Testing := import "@std/testing";
 
 let add (left : Int, right : Int) : Int := left + right;
@@ -39,39 +51,135 @@ export let test () :=
   );
 "#;
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 enum MusiError {
-    #[error(transparent)]
-    ProjectModelFailed(#[from] ProjectError),
-    #[error(transparent)]
-    SessionCompilationFailed(#[from] SessionError),
-    #[error(transparent)]
-    RuntimeExecutionFailed(#[from] RuntimeError),
-    #[error(transparent)]
-    ToolingIoFailed(#[from] ToolingError),
-    #[error(transparent)]
-    JsonSerializationFailed(#[from] serde_json::Error),
-    #[error("current directory unavailable")]
+    ProjectModelFailed(ProjectError),
+    SessionCompilationFailed(SessionError),
+    RuntimeExecutionFailed(RuntimeError),
+    ToolingIoFailed(ToolingError),
+    FormattingFailed(FormatError),
+    JsonSerializationFailed(serde_json::Error),
     MissingCurrentDirectory,
-    #[error("task `{name}` failed")]
-    TaskFailed { name: String },
-    #[error("run arguments unsupported")]
-    RunArgsUnsupported,
-    #[error("package path `{path}` already initialized")]
-    PackageAlreadyInitialized { path: PathBuf },
-    #[error("package name unavailable for `{path}`")]
-    MissingPackageName { path: PathBuf },
-    #[error("target `{target}` not found in project")]
-    UnknownTarget { target: PathBuf },
-    #[error("check command failed")]
+    TaskFailed {
+        name: String,
+    },
+    UnsupportedRunArgs {
+        argument: String,
+    },
+    PackageAlreadyInitialized {
+        path: PathBuf,
+    },
+    MissingPackageName {
+        path: PathBuf,
+    },
+    UnknownTarget {
+        target: PathBuf,
+    },
     CheckCommandFailed,
-    #[error("command `{command}` unavailable: {feature} not implemented")]
     CommandUnavailable {
         command: &'static str,
         feature: &'static str,
     },
-    #[error("lsp server failed: {message}")]
-    LspServerFailed { message: String },
+    LspServerFailed {
+        message: String,
+    },
+    IncompatibleCommandArgs {
+        left: String,
+        right: String,
+    },
+}
+
+impl MusiError {
+    fn diagnostic(&self) -> Option<CatalogDiagnostic<CliDiagKind>> {
+        Some(CatalogDiagnostic::new(
+            self.diag_kind()?,
+            self.diag_context(),
+        ))
+    }
+
+    const fn diag_kind(&self) -> Option<CliDiagKind> {
+        cli_error_kind(self)
+    }
+
+    fn diag_context(&self) -> DiagContext {
+        match self {
+            Self::TaskFailed { name } => DiagContext::new().with("name", name),
+            Self::UnsupportedRunArgs { argument } => DiagContext::new().with("argument", argument),
+            Self::PackageAlreadyInitialized { path } | Self::MissingPackageName { path } => {
+                DiagContext::new().with("path", path.display())
+            }
+            Self::UnknownTarget { target } => DiagContext::new().with("target", target.display()),
+            Self::CommandUnavailable { command, feature } => DiagContext::new()
+                .with("command", command)
+                .with("feature", feature),
+            Self::LspServerFailed { message } => DiagContext::new().with("message", message),
+            Self::IncompatibleCommandArgs { left, right } => {
+                DiagContext::new().with("left", left).with("right", right)
+            }
+            _ => DiagContext::new(),
+        }
+    }
+}
+
+impl From<ProjectError> for MusiError {
+    fn from(source: ProjectError) -> Self {
+        Self::ProjectModelFailed(source)
+    }
+}
+
+impl From<SessionError> for MusiError {
+    fn from(source: SessionError) -> Self {
+        Self::SessionCompilationFailed(source)
+    }
+}
+
+impl From<RuntimeError> for MusiError {
+    fn from(source: RuntimeError) -> Self {
+        Self::RuntimeExecutionFailed(source)
+    }
+}
+
+impl From<ToolingError> for MusiError {
+    fn from(source: ToolingError) -> Self {
+        Self::ToolingIoFailed(source)
+    }
+}
+
+impl From<FormatError> for MusiError {
+    fn from(source: FormatError) -> Self {
+        Self::FormattingFailed(source)
+    }
+}
+
+impl From<serde_json::Error> for MusiError {
+    fn from(source: serde_json::Error) -> Self {
+        Self::JsonSerializationFailed(source)
+    }
+}
+
+impl Display for MusiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        display_catalog_or_source(
+            self.diagnostic(),
+            Error::source(self),
+            "CLI diagnostic missing",
+            f,
+        )
+    }
+}
+
+impl Error for MusiError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::ProjectModelFailed(source) => Some(source),
+            Self::SessionCompilationFailed(source) => Some(source),
+            Self::RuntimeExecutionFailed(source) => Some(source),
+            Self::ToolingIoFailed(source) => Some(source),
+            Self::FormattingFailed(source) => Some(source),
+            Self::JsonSerializationFailed(source) => Some(source),
+            _ => None,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -92,23 +200,30 @@ fn run() -> MusiResult {
         Command::Init { path } => init_package(path.as_deref()),
         Command::Check {
             target,
+            workspace,
             diagnostics_format,
-        } => check(target.as_deref(), diagnostics_format.into()),
+        } => check(target.as_deref(), workspace, diagnostics_format.into()),
         Command::Build {
             target,
+            workspace,
             out,
             target_name,
-        } => build(target.as_deref(), out.as_deref(), target_name.as_deref()),
+        } => build(
+            target.as_deref(),
+            workspace,
+            out.as_deref(),
+            target_name.as_deref(),
+        ),
         Command::Run { target, args } => run_project(target.as_deref(), &args),
-        Command::Test { target } => test_project(target.as_deref()),
+        Command::Test { target, workspace } => test_project(target.as_deref(), workspace),
         Command::Task { name, target } => run_task(&name, target.as_deref()),
         Command::Info { target } => print_project_metadata(target.as_deref()),
         Command::Install { target } => install_project(target.as_deref()),
         Command::Lsp => run_stdio_server().map_err(|source| MusiError::LspServerFailed {
             message: source.to_string(),
         }),
+        Command::Fmt(args) => fmt_project(&args),
         Command::Compile(_)
-        | Command::Fmt(_)
         | Command::Lint(_)
         | Command::Bench(_)
         | Command::Doc(_)
@@ -198,9 +313,14 @@ fn package_marker_exists(root: &Path) -> bool {
         || root.join("add.test.ms").exists()
 }
 
-fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiResult {
-    match check_project(target) {
-        Ok((project, _entry)) => {
+fn check(
+    target: Option<&Path>,
+    workspace: u8,
+    diagnostics_format: DiagnosticsFormat,
+) -> MusiResult {
+    reject_workspace_target(workspace, target)?;
+    match check_project(target, workspace) {
+        Ok((project, _entries)) => {
             if diagnostics_format == DiagnosticsFormat::Json {
                 let report = ok_report(
                     "musi",
@@ -256,59 +376,66 @@ fn check(target: Option<&Path>, diagnostics_format: DiagnosticsFormat) -> MusiRe
     }
 }
 
-fn build(target: Option<&Path>, out: Option<&Path>, target_name: Option<&str>) -> MusiResult {
+fn build(
+    target: Option<&Path>,
+    workspace: u8,
+    out: Option<&Path>,
+    target_name: Option<&str>,
+) -> MusiResult {
+    reject_workspace_target(workspace, target)?;
+    if workspace > 0 && out.is_some() {
+        return Err(MusiError::IncompatibleCommandArgs {
+            left: "--workspace".to_owned(),
+            right: "--out".to_owned(),
+        });
+    }
     let mut options = ProjectOptions::default();
     if let Some(target_name) = target_name {
         options.target = Some(target_info(target_name));
     }
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, options)?;
-    let entry = resolve_project_entry(&project, target)?;
     let mut session = project.build_session()?;
-    let output = session.compile_entry(&entry.module_key)?;
-    let out_path = out
-        .map(Path::to_path_buf)
-        .or_else(|| manifest_output_path(&project, &entry))
-        .unwrap_or_else(|| entry.path.with_extension("seam"));
-    write_artifact_bytes(&out_path, &output.bytes)?;
-    println!("{}", out_path.display());
+    for entry in resolve_project_entries(&project, target, workspace)? {
+        let output = session.compile_entry(&entry.module_key)?;
+        let out_path = out
+            .map(Path::to_path_buf)
+            .or_else(|| manifest_output_path(&project, &entry))
+            .unwrap_or_else(|| entry.path.with_extension("seam"));
+        write_artifact_bytes(&out_path, &output.bytes)?;
+        println!("{}", out_path.display());
+    }
     Ok(())
 }
 
 fn run_project(target: Option<&Path>, args: &[String]) -> MusiResult {
-    if !args.is_empty() {
-        return Err(MusiError::RunArgsUnsupported);
+    if let Some(argument) = args.first() {
+        return Err(MusiError::UnsupportedRunArgs {
+            argument: argument.clone(),
+        });
     }
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
     let entry = resolve_project_entry(&project, target)?;
     let mut runtime = project_runtime(&project);
     runtime.load_root(entry.module_key.as_str())?;
-    let value = runtime.call_export("main", &[])?;
-    print_runtime_value(&runtime, &value);
     Ok(())
 }
 
-fn test_project(target: Option<&Path>) -> MusiResult {
+fn test_project(target: Option<&Path>, workspace: u8) -> MusiResult {
+    reject_workspace_target(workspace, target)?;
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
-    let tests = resolve_test_targets(&project, target)?;
-    let mut runtime = project_runtime(&project);
+    let tests = resolve_test_targets(&project, target, workspace)?;
+    let mut runtime = project_runtime_with_output(&project, RuntimeOutputMode::Capture);
     register_synthetic_test_modules(&project, &tests, &mut runtime)?;
-    let mut failed = 0usize;
-    for test in tests {
+    let mut reports = Vec::new();
+    for test in &tests {
         let report = runtime.run_test_export(test.module_key.as_str(), &test.export_name)?;
-        for test_case in &report.cases {
-            let status = if test_case.passed { "pass" } else { "fail" };
-            println!(
-                "{status} {} :: {} :: {}",
-                report.module, test_case.suite, test_case.name
-            );
-            if !test_case.passed {
-                failed += 1;
-            }
-        }
+        let label = test_target_label(&project, test);
+        reports.push(TestModuleReport { label, report });
     }
+    let failed = print_test_reports(&reports);
     if failed > 0 {
         return Err(MusiError::TaskFailed {
             name: format!("{failed} test case(s) failed"),
@@ -363,10 +490,228 @@ fn print_project_metadata(target: Option<&Path>) -> MusiResult {
     Ok(())
 }
 
+fn fmt_project(args: &FmtArgs) -> MusiResult {
+    if args.all > 0 && !args.paths.is_empty() {
+        return Err(MusiError::IncompatibleCommandArgs {
+            left: "--all".to_owned(),
+            right: "PATH".to_owned(),
+        });
+    }
+    if args.paths.iter().any(|path| path == Path::new("-")) {
+        return fmt_stdin(args);
+    }
+
+    if args.watch > 0 {
+        return watch_fmt_project(args);
+    }
+
+    let session = fmt_session(args)?;
+    run_fmt_once(args, &session)
+}
+
+fn run_fmt_once(args: &FmtArgs, session: &FmtSession) -> MusiResult {
+    let mut options = session.options.clone();
+    options.exclude.extend(args.watch_exclude.iter().cloned());
+
+    let roots = if args.all > 0 {
+        fmt_all_roots(session)
+    } else if args.paths.is_empty() {
+        vec![session.base_dir.clone()]
+    } else {
+        args.paths
+            .iter()
+            .map(|path| {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    session.invocation_dir.join(path)
+                }
+            })
+            .collect()
+    };
+    let summary = format_paths(&roots, &session.base_dir, &options, args.check > 0)?;
+    if summary.is_empty() && args.permit_no_files == 0 {
+        return Err(FormatError::NoFiles.into());
+    }
+    let changed = summary.changed_paths();
+    for path in &changed {
+        println!("{}", path.display());
+    }
+    if args.check > 0 && !changed.is_empty() {
+        return Err(MusiError::CheckCommandFailed);
+    }
+    Ok(())
+}
+
+fn fmt_all_roots(session: &FmtSession) -> Vec<PathBuf> {
+    let project = load_project_ancestor(&session.base_dir, ProjectOptions::default()).ok();
+    let Some(project) = project else {
+        return vec![session.base_dir.clone()];
+    };
+    let roots = selected_package_roots(&project);
+    if roots.is_empty() {
+        vec![project.root_dir().to_path_buf()]
+    } else {
+        roots
+    }
+}
+
+fn fmt_stdin(args: &FmtArgs) -> MusiResult {
+    let mut source = String::new();
+    let _bytes_read = io::stdin().read_to_string(&mut source).map_err(|source| {
+        ToolingError::ToolingIoFailed {
+            path: PathBuf::from("-"),
+            source,
+        }
+    })?;
+    let options = fmt_session(args)?.options;
+    let kind = stdin_format_kind(args)?;
+    let formatted = match kind {
+        FormatInputKind::Musi => format_source(&source, &options)?,
+        FormatInputKind::Markdown => format_markdown(&source, &options)?,
+    };
+    if args.check > 0 && formatted.changed {
+        return Err(MusiError::CheckCommandFailed);
+    }
+    if args.check == 0 {
+        print!("{}", formatted.text);
+    }
+    Ok(())
+}
+
+fn apply_fmt_args(options: &mut FormatOptions, args: &FmtArgs) {
+    if let Some(line_width) = args.line_width {
+        options.line_width = line_width;
+    }
+    if let Some(indent_width) = args.indent_width {
+        options.indent_width = indent_width;
+    }
+    if args.use_tabs > 0 {
+        options.use_tabs = true;
+    }
+    if let Some(ext) = &args.ext {
+        options.assume_extension = FormatInputKind::from_extension(ext);
+    }
+    options.exclude.extend(args.ignore.iter().cloned());
+}
+
+#[derive(Debug, Clone)]
+struct FmtSession {
+    base_dir: PathBuf,
+    invocation_dir: PathBuf,
+    options: FormatOptions,
+}
+
+fn fmt_session(args: &FmtArgs) -> MusiResult<FmtSession> {
+    validate_fmt_extension(args)?;
+    let current = current_dir().map_err(|_| MusiError::MissingCurrentDirectory)?;
+    if args.no_config > 0 {
+        let mut options = FormatOptions::default();
+        apply_fmt_args(&mut options, args);
+        return Ok(FmtSession {
+            base_dir: current.clone(),
+            invocation_dir: current,
+            options,
+        });
+    }
+    if let Some(config) = &args.config {
+        let project = load_project(config, ProjectOptions::default())?;
+        let mut options = FormatOptions::from_manifest(project.manifest().fmt.as_ref());
+        apply_fmt_args(&mut options, args);
+        return Ok(FmtSession {
+            base_dir: project.root_dir().to_path_buf(),
+            invocation_dir: current,
+            options,
+        });
+    }
+    let anchor = args
+        .paths
+        .first()
+        .cloned()
+        .unwrap_or_else(|| current.clone());
+    let project = load_project_ancestor(&anchor, ProjectOptions::default()).ok();
+    let base_dir = project.as_ref().map_or_else(
+        || current.clone(),
+        |project| project.root_dir().to_path_buf(),
+    );
+    let mut options = project
+        .as_ref()
+        .map_or_else(FormatOptions::default, |project| {
+            FormatOptions::from_manifest(project.manifest().fmt.as_ref())
+        });
+    apply_fmt_args(&mut options, args);
+    Ok(FmtSession {
+        base_dir,
+        invocation_dir: current,
+        options,
+    })
+}
+
+fn stdin_format_kind(args: &FmtArgs) -> MusiResult<FormatInputKind> {
+    args.ext
+        .as_deref()
+        .map_or(Ok(FormatInputKind::Musi), |ext| {
+            FormatInputKind::from_extension(ext).ok_or_else(|| {
+                FormatError::UnsupportedExtension {
+                    extension: ext.to_owned(),
+                }
+                .into()
+            })
+        })
+}
+
+fn validate_fmt_extension(args: &FmtArgs) -> MusiResult {
+    if let Some(ext) = &args.ext
+        && FormatInputKind::from_extension(ext).is_none()
+    {
+        return Err(FormatError::UnsupportedExtension {
+            extension: ext.to_owned(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+fn watch_fmt_project(args: &FmtArgs) -> MusiResult {
+    let mut session = fmt_session(args)?;
+    session
+        .options
+        .exclude
+        .extend(args.watch_exclude.iter().cloned());
+    let mut last = watch_snapshot(&session.base_dir, &session.options)?;
+    run_fmt_once(args, &session)?;
+    loop {
+        thread::sleep(Duration::from_millis(500));
+        let next = watch_snapshot(&session.base_dir, &session.options)?;
+        if next != last {
+            if args.no_clear_screen == 0 {
+                print!("\x1b[2J\x1b[H");
+            }
+            run_fmt_once(args, &session)?;
+            last = watch_snapshot(&session.base_dir, &session.options)?;
+        }
+    }
+}
+
+fn watch_snapshot(
+    root: &Path,
+    options: &FormatOptions,
+) -> MusiResult<Vec<(PathBuf, Option<SystemTime>)>> {
+    let summary = format_paths(&[root.to_path_buf()], root, options, true)?;
+    let mut snapshot = Vec::new();
+    for file in summary.files {
+        let modified = fs::metadata(&file.path)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        snapshot.push((file.path, modified));
+    }
+    snapshot.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(snapshot)
+}
+
 fn reserved_command_for(command: Command) -> MusiResult {
     let (command, feature, args) = match command {
         Command::Compile(args) => ("compile", "native executable output", args.args),
-        Command::Fmt(args) => ("fmt", "formatter", args.args),
         Command::Lint(args) => ("lint", "linter", args.args),
         Command::Bench(args) => ("bench", "benchmark runner", args.args),
         Command::Doc(args) => ("doc", "documentation generator", args.args),
@@ -418,15 +763,27 @@ const fn windows_shell_run_arg() -> &'static str {
 }
 
 fn project_anchor(target: Option<&Path>) -> MusiResult<PathBuf> {
-    target.map_or_else(
-        || current_dir().map_err(|_| MusiError::MissingCurrentDirectory),
-        |path| Ok(path.to_path_buf()),
-    )
+    let current = current_dir().map_err(|_| MusiError::MissingCurrentDirectory)?;
+    Ok(target.map_or_else(
+        || current.clone(),
+        |path| {
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                current.join(path)
+            }
+        },
+    ))
 }
 
 fn project_runtime(project: &Project) -> Runtime {
+    project_runtime_with_output(project, RuntimeOutputMode::Inherit)
+}
+
+fn project_runtime_with_output(project: &Project, output: RuntimeOutputMode) -> Runtime {
     let mut options = RuntimeOptions::default();
     options.session.import_map = project.import_map().clone();
+    options.output = output;
     let mut runtime = Runtime::new(NativeHost::new(), options);
     for (key, text) in project.module_texts() {
         runtime
@@ -451,6 +808,28 @@ fn resolve_project_entry(project: &Project, target: Option<&Path>) -> MusiResult
         return Ok(entry.clone());
     }
     resolve_project_path_entry(project, target)
+}
+
+fn resolve_project_entries(
+    project: &Project,
+    target: Option<&Path>,
+    workspace: u8,
+) -> MusiResult<Vec<ProjectEntry>> {
+    reject_workspace_target(workspace, target)?;
+    if uses_workspace_scope(project, target, workspace) {
+        return Ok(selected_package_entries(project));
+    }
+    Ok(vec![resolve_project_entry(project, target)?])
+}
+
+fn reject_workspace_target(workspace: u8, target: Option<&Path>) -> MusiResult {
+    if workspace > 0 && target.is_some() {
+        return Err(MusiError::IncompatibleCommandArgs {
+            left: "--workspace".to_owned(),
+            right: "target".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<ProjectEntry> {
@@ -481,9 +860,15 @@ fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<Pr
 fn resolve_test_targets(
     project: &Project,
     target: Option<&Path>,
+    workspace: u8,
 ) -> MusiResult<Vec<ProjectTestTarget>> {
+    reject_workspace_target(workspace, target)?;
+    if uses_workspace_scope(project, target, workspace) {
+        return Ok(project.test_targets()?);
+    }
     let Some(target) = target else {
-        return project.test_targets().map_err(Into::into);
+        let package = project.root_package()?;
+        return package_test_targets(project, &package.id);
     };
     if target.extension().is_some_and(|ext| ext == "ms") || target.components().count() > 1 {
         let entry = resolve_project_path_entry(project, target)?;
@@ -506,6 +891,17 @@ fn resolve_test_targets(
         .test_targets()?
         .into_iter()
         .filter(|test| test.package == package.id)
+        .collect())
+}
+
+fn package_test_targets(
+    project: &Project,
+    package: &PackageId,
+) -> MusiResult<Vec<ProjectTestTarget>> {
+    Ok(project
+        .test_targets()?
+        .into_iter()
+        .filter(|test| &test.package == package)
         .collect())
 }
 
@@ -543,24 +939,101 @@ fn manifest_output_path(project: &Project, entry: &ProjectEntry) -> Option<PathB
         .workspace()
         .packages
         .get(&entry.package)
-        .and_then(|package| package.manifest.compile.as_ref())
-        .and_then(|compile| compile.output.as_deref())
-        .map(|output| project.root_dir().join(output))
+        .and_then(|package| {
+            package
+                .manifest
+                .compile
+                .as_ref()
+                .and_then(|compile| compile.output.as_deref())
+                .map(|output| package.root_dir.join(output))
+        })
 }
 
 fn target_info(target_name: &str) -> TargetInfo {
     TargetInfo::new().with_os(target_name)
 }
 
-fn print_runtime_value(runtime: &Runtime, value: &Value) {
-    let rendered = render_value_view(
-        runtime
-            .inspect(value)
-            .expect("runtime should inspect loaded value"),
-    );
-    if let Some(rendered) = rendered {
-        println!("{rendered}");
+struct TestModuleReport {
+    label: String,
+    report: NativeTestReport,
+}
+
+fn print_test_reports(reports: &[TestModuleReport]) -> usize {
+    let mut passed_files = 0usize;
+    let mut failed_files = 0usize;
+    let mut passed_cases = 0usize;
+    let mut failed_cases = 0usize;
+    for module in reports {
+        let module_failed = module
+            .report
+            .cases
+            .iter()
+            .any(|test_case| !test_case.passed);
+        if module_failed {
+            failed_files += 1;
+        } else {
+            passed_files += 1;
+        }
+        let status = if module_failed { "×" } else { "✓" };
+        println!(" {status} {} ({})", module.label, module.report.cases.len());
+        for test_case in &module.report.cases {
+            let status = if test_case.passed {
+                passed_cases += 1;
+                "✓"
+            } else {
+                failed_cases += 1;
+                "×"
+            };
+            println!(
+                "   {status} {} > {}",
+                test_case.suite.as_ref(),
+                test_case.name.as_ref()
+            );
+        }
+        if module_failed {
+            print_captured_output(&module.label, "stdout", module.report.stdout.as_ref());
+            print_captured_output(&module.label, "stderr", module.report.stderr.as_ref());
+        }
     }
+    println!();
+    println!(
+        " Test Files  {} passed{} ({})",
+        passed_files,
+        failed_summary_suffix(failed_files),
+        reports.len()
+    );
+    println!(
+        "      Tests  {} passed{} ({})",
+        passed_cases,
+        failed_summary_suffix(failed_cases),
+        passed_cases + failed_cases
+    );
+    failed_cases
+}
+
+fn print_captured_output(module: &str, stream: &str, output: &str) {
+    if output.is_empty() {
+        return;
+    }
+    println!("   --- {module} {stream} ---");
+    for line in output.lines() {
+        println!("   {line}");
+    }
+}
+
+fn failed_summary_suffix(failed: usize) -> String {
+    if failed == 0 {
+        String::new()
+    } else {
+        format!(", {failed} failed")
+    }
+}
+
+fn test_target_label(project: &Project, test: &ProjectTestTarget) -> String {
+    test.path.strip_prefix(project.root_dir()).map_or_else(
+        |_| test.module_key.as_str().to_owned(),
+        |path| path.display().to_string(),
+    )
 }
 
 fn ok_report(
@@ -585,7 +1058,10 @@ enum CheckProjectFailure {
     },
 }
 
-fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), CheckProjectFailure> {
+fn check_project(
+    target: Option<&Path>,
+    workspace: u8,
+) -> Result<(Project, Vec<ProjectEntry>), CheckProjectFailure> {
     let anchor =
         project_anchor(target).map_err(|error| CheckProjectFailure::ProjectModelFailure {
             package_root: None,
@@ -609,7 +1085,7 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
             error: Box::new(error),
         }
     })?;
-    let entry = resolve_project_entry(&project, target).map_err(|error| {
+    let entries = resolve_project_entries(&project, target, workspace).map_err(|error| {
         CheckProjectFailure::ProjectModelFailure {
             package_root: Some(project.root_dir().to_path_buf()),
             manifest: Some(project.root_manifest_path().to_path_buf()),
@@ -630,14 +1106,16 @@ fn check_project(target: Option<&Path>) -> Result<(Project, ProjectEntry), Check
                 manifest: Some(project.root_manifest_path().to_path_buf()),
                 error: Box::new(error),
             })?;
-    match session.check_module(&entry.module_key) {
-        Ok(_) => Ok((project, entry)),
-        Err(error) => Err(CheckProjectFailure::SessionCompilationFailure {
-            project: Box::new(project),
-            session: Box::new(session),
-            error: Box::new(error),
-        }),
+    for entry in &entries {
+        if let Err(error) = session.check_module(&entry.module_key) {
+            return Err(CheckProjectFailure::SessionCompilationFailure {
+                project: Box::new(project),
+                session: Box::new(session),
+                error: Box::new(error),
+            });
+        }
     }
+    Ok((project, entries))
 }
 
 impl From<DiagnosticsFormatArg> for DiagnosticsFormat {
