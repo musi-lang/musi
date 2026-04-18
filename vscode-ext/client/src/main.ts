@@ -4,12 +4,14 @@ import { MsPackageCodeLensProvider } from "./codelens.ts";
 import { clearCliCache, registerCommands } from "./commands.ts";
 import { onConfigChange } from "./config.ts";
 import { DiagnosticsController } from "./diagnostics.ts";
+import { FormatterController } from "./formatter/formatter.ts";
 import { LspController } from "./lsp.ts";
 import { StatusBar } from "./status.ts";
 
 let statusBar: StatusBar | undefined;
 let diagnostics: DiagnosticsController | undefined;
 let lsp: LspController | undefined;
+let formatter: FormatterController | undefined;
 
 function reportBackgroundError(action: string, error: unknown) {
 	console.error(`[musi-vscode] ${action}:`, error);
@@ -62,11 +64,15 @@ function setupConfigChangeHandler(context: vscode.ExtensionContext) {
 export async function activate(context: vscode.ExtensionContext) {
 	statusBar = new StatusBar();
 	diagnostics = new DiagnosticsController(statusBar);
-	lsp = new LspController(statusBar, diagnostics);
+	formatter = new FormatterController(context);
+	lsp = new LspController(statusBar, diagnostics, (isRunning) => {
+		formatter?.setLspRunning(isRunning);
+	});
 
 	context.subscriptions.push(
 		statusBar,
 		diagnostics,
+		formatter,
 		lsp,
 		vscode.languages.registerCodeLensProvider(
 			{ scheme: "file", pattern: "**/musi.json" },
@@ -74,16 +80,18 @@ export async function activate(context: vscode.ExtensionContext) {
 		),
 	);
 
-	registerCommands(context, diagnostics);
+	registerCommands(context, diagnostics, lsp);
 	registerEditorListeners(context);
 	setupConfigChangeHandler(context);
 
 	await lsp.start(context);
+	formatter.setLspRunning(lsp.isRunning());
 	await refreshCliAndStatus();
 }
 
 export async function deactivate() {
 	await lsp?.stop();
 	diagnostics?.dispose();
+	formatter?.dispose();
 	statusBar?.dispose();
 }

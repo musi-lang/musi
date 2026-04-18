@@ -6,10 +6,10 @@ import type {
 	MsTaskDefinition,
 	MsTaskSpec,
 	PackageRoot,
-} from "./types.ts";
+} from "../types.ts";
+import { packageEntry } from "./manifest-core.ts";
 
 const MANIFEST_FILE = "musi.json";
-const DEFAULT_ENTRY = "index.ms";
 
 function toTaskSpec(name: string, task: MsTaskDefinition): MsTaskSpec {
 	if (typeof task === "string") {
@@ -52,7 +52,7 @@ function toPackageRoot(
 		manifestUri: vscode.Uri.file(manifestPath).toString(),
 		manifestPath,
 		rootDir: path.dirname(manifestPath),
-		mainEntry: manifest.main ?? DEFAULT_ENTRY,
+		mainEntry: packageEntry(manifest),
 		manifest,
 	};
 }
@@ -97,6 +97,37 @@ export function findOwningManifestPathForUri(
 		return uri.fsPath;
 	}
 	return findOwningManifestPath(uri.fsPath);
+}
+
+export function findWorkspaceManifestPathForUri(
+	uri: vscode.Uri | undefined,
+): string | undefined {
+	if (!uri || uri.scheme !== "file") {
+		return undefined;
+	}
+	let cursor = fs.statSync(uri.fsPath, { throwIfNoEntry: false })?.isDirectory()
+		? uri.fsPath
+		: path.dirname(uri.fsPath);
+	let fallback: string | undefined;
+	let workspace: string | undefined;
+	while (true) {
+		const manifestPath = path.join(cursor, MANIFEST_FILE);
+		if (fs.existsSync(manifestPath)) {
+			fallback ??= manifestPath;
+			try {
+				if (loadManifestSync(manifestPath).workspace !== undefined) {
+					workspace = manifestPath;
+				}
+			} catch {
+				// Invalid JSON is reported by normal manifest diagnostics.
+			}
+		}
+		const parent = path.dirname(cursor);
+		if (parent === cursor) {
+			return workspace ?? fallback;
+		}
+		cursor = parent;
+	}
 }
 
 export function activeDocumentUri(): vscode.Uri | undefined {

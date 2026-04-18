@@ -35,7 +35,8 @@
 		"vscode": "^1.75.0"
 	},
 	"activationEvents": [
-		"workspaceContains:**/musi.json"
+		"workspaceContains:**/musi.json",
+		"onLanguage:markdown"
 	],
 	"contributes": {
 		"languages": [
@@ -130,11 +131,92 @@
 				"command": "musi.editRunConfigurations",
 				"title": "Edit Run Configurations",
 				"category": "Musi"
+			},
+			{
+				"command": "musi.fmt",
+				"title": "Format Document",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.showActions",
+				"title": "Show Actions",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.restartLsp",
+				"title": "Restart LSP",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.startLsp",
+				"title": "Start LSP",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.stopLsp",
+				"title": "Stop LSP",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.showLspOutput",
+				"title": "Show LSP Output",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.checkWorkspace",
+				"title": "Check Workspace",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.buildWorkspace",
+				"title": "Build Workspace",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runWorkspaceTests",
+				"title": "Run Workspace Tests",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.fmtWorkspace",
+				"title": "Format Workspace",
+				"category": "Musi"
 			}
 		],
 		"keybindings": [],
 		"menus": {
-			"commandPalette": [],
+			"commandPalette": [
+				{
+					"command": "musi.fmt"
+				},
+				{
+					"command": "musi.showActions"
+				},
+				{
+					"command": "musi.restartLsp"
+				},
+				{
+					"command": "musi.startLsp"
+				},
+				{
+					"command": "musi.stopLsp"
+				},
+				{
+					"command": "musi.showLspOutput"
+				},
+				{
+					"command": "musi.checkWorkspace"
+				},
+				{
+					"command": "musi.buildWorkspace"
+				},
+				{
+					"command": "musi.runWorkspaceTests"
+				},
+				{
+					"command": "musi.fmtWorkspace"
+				}
+			],
 			"view/item/context": []
 		},
 		"configuration": {
@@ -150,10 +232,55 @@
 					"default": "musi_lsp",
 					"markdownDescription": "Path to the `musi_lsp` binary. If not set, the extension searches workspace build outputs, Cargo bin, and PATH."
 				},
+				"musi.lsp.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Start the Musi language server for hover, diagnostics, semantic highlighting, formatting, and inlay hints."
+				},
 				"musi.checkOnSave": {
 					"type": "boolean",
 					"default": true,
 					"description": "Run fallback CLI checks when LSP diagnostics are unavailable, and keep manifest checks active on save."
+				},
+				"musi.hover.maximumLength": {
+					"type": "number",
+					"default": 500,
+					"description": "Maximum hover content length before Musi truncates editor hover text."
+				},
+				"musi.inlayHints.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable Musi inlay hints when supported by the language server."
+				},
+				"musi.inlayHints.parameterNames.enabled": {
+					"type": "string",
+					"enum": [
+						"none",
+						"literals",
+						"all"
+					],
+					"markdownEnumDescriptions": [
+						"Disable parameter-name inlay hints.",
+						"Show parameter-name hints for literal-like arguments.",
+						"Show parameter-name hints for all positional arguments."
+					],
+					"default": "none",
+					"description": "Controls Musi call-site parameter-name inlay hints."
+				},
+				"musi.inlayHints.parameterNames.suppressWhenArgumentMatchesName": {
+					"type": "boolean",
+					"default": true,
+					"description": "Suppress parameter-name inlay hints when the argument already matches the parameter name."
+				},
+				"musi.inlayHints.variableTypes.enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Show inferred-type inlay hints for bindings without explicit type annotations."
+				},
+				"musi.inlayHints.variableTypes.suppressWhenTypeMatchesName": {
+					"type": "boolean",
+					"default": true,
+					"description": "Suppress inferred-type hints when the binding name already carries the same type information."
 				},
 				"musi.runtime.args": {
 					"type": "array",
@@ -261,10 +388,10 @@
 	},
 	"scripts": {
 		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs --minify",
-		"grammar:check": "node ./scripts/verify-grammars.mjs",
+		"grammar:check": "bun test ./scripts/verify-grammars.test.ts",
 		"test": "bun test ./client/src",
 		"package": "bun run build && vsce package --no-dependencies",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "bunx tsc --noEmit",
 		"biome:check": "bunx biome check . --write --unsafe --max-diagnostics 16384",
 		"biome:format": "bunx biome format . --write --max-diagnostics 16384",
 		"biome:lint": "bunx biome lint . --write --max-diagnostics 16384",
@@ -277,12 +404,12 @@
 		"vscode": "npm:@types/vscode@1.75.0"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.11",
+		"@biomejs/biome": "2.4.12",
 		"@types/bun": "1.3.12",
 		"@types/node": "25.6.0",
 		"@types/vscode": "1.75.0",
-		"@vscode/vsce": "3.7.1",
-		"typescript": "6.0.2",
+		"@vscode/vsce": "3.9.0",
+		"typescript": "6.0.3",
 		"vscode-oniguruma": "^2.0.1",
 		"vscode-textmate": "^9.3.2"
 	},

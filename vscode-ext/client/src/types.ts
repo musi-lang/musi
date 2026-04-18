@@ -13,6 +13,7 @@ export interface MsWorkspaceDefinition {
 export interface MsPackageManifest {
 	name?: string;
 	version?: string;
+	entry?: string;
 	main?: string;
 	imports?: Record<string, string>;
 	workspace?: MsWorkspaceDefinition | string[];

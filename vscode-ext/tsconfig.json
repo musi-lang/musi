@@ -28,8 +28,8 @@
 		"strict": true,
 		"target": "ES2022",
 		"typeRoots": ["./node_modules/@types"],
-		"types": ["node"]
+		"types": ["bun", "node"]
 	},
-	"include": ["client/src/**/*.ts", "scripts/**/*.mjs"],
+	"include": ["client/src/**/*.ts", "scripts/**/*.ts"],
 	"exclude": ["node_modules", ".vscode-test", "dist"]
 }

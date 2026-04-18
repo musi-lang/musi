@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { taskNameLineMap } from "./manifest.ts";
+import { taskNameLineMap } from "./manifest/manifest.ts";
 
 export class MsPackageCodeLensProvider {
 	provideCodeLenses(

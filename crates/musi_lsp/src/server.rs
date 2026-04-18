@@ -5,17 +5,33 @@ use std::path::Path;
 use std::pin::Pin;
 
 use async_lsp::lsp_types::{
-    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverContents, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, LanguageString,
-    Location, MarkedString, NumberOrString, Position, PublishDiagnosticsParams, Range,
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, DocumentFormattingParams, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, InlayHint,
+    InlayHintOptions, InlayHintParams, InlayHintServerCapabilities, MarkupContent, MarkupKind,
+    OneOf, PublishDiagnosticsParams, Range, SemanticTokens, SemanticTokensFullOptions,
+    SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
     ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, notification::PublishDiagnostics,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, WorkDoneProgressOptions,
+    notification::PublishDiagnostics,
 };
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
+use musi_fmt::{FormatOptions, format_source};
+use musi_project::{ProjectOptions, load_project_ancestor};
 use musi_tooling::{
-    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange,
     collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
+    inlay_hints_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+};
+
+mod config;
+mod convert;
+
+use config::LspConfig;
+use convert::{
+    diagnostic_matches_path, encode_semantic_tokens, full_document_range, position_in_range,
+    semantic_tokens_legend, to_lsp_diagnostic, to_lsp_inlay_hint, to_tool_range,
+    truncate_hover_contents,
 };
 
 type ServerFuture<T> = Pin<Box<dyn Future<Output = Result<T, ResponseError>> + Send + 'static>>;
@@ -25,6 +41,7 @@ type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 pub struct MusiLanguageServer {
     client: ClientSocket,
     open_documents: HashMap<Url, String>,
+    config: LspConfig,
 }
 
 impl MusiLanguageServer {
@@ -33,6 +50,7 @@ impl MusiLanguageServer {
         Self {
             client,
             open_documents: HashMap::new(),
+            config: LspConfig::default(),
         }
     }
 
@@ -43,6 +61,27 @@ impl MusiLanguageServer {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                document_formatting_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
+                    InlayHintOptions {
+                        work_done_progress_options: WorkDoneProgressOptions {
+                            work_done_progress: None,
+                        },
+                        resolve_provider: Some(false),
+                    },
+                ))),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: WorkDoneProgressOptions {
+                                work_done_progress: None,
+                            },
+                            legend: semantic_tokens_legend(),
+                            range: Some(true),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
@@ -50,6 +89,10 @@ impl MusiLanguageServer {
                 version: None,
             }),
         }
+    }
+
+    fn configure(&mut self, params: &InitializeParams) {
+        self.config = LspConfig::from_initialize_params(params);
     }
 
     fn did_open_document(&mut self, item: TextDocumentItem) {
@@ -84,6 +127,12 @@ impl MusiLanguageServer {
         );
     }
 
+    fn did_save_document(&self, uri: &Url) {
+        if let Ok(path) = uri.to_file_path() {
+            self.publish_document_diagnostics(uri, &path);
+        }
+    }
+
     fn hover_at(&self, params: HoverParams) -> Option<Hover> {
         let text_document = params.text_document_position_params.text_document;
         let position = params.text_document_position_params.position;
@@ -101,13 +150,78 @@ impl MusiLanguageServer {
             usize::try_from(position.line).ok()?.saturating_add(1),
             usize::try_from(position.character).ok()?.saturating_add(1),
         )?;
+        let contents = truncate_hover_contents(&hover.contents, self.config.hover_maximum_length);
         Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
-                language: "musi".to_owned(),
-                value: hover.contents,
-            })),
-            range: None,
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: contents,
+            }),
+            range: Some(to_tool_range(&hover.range)),
         })
+    }
+
+    fn semantic_tokens(&self, params: &SemanticTokensParams) -> Option<SemanticTokens> {
+        self.semantic_tokens_for_uri(&params.text_document.uri, None)
+    }
+
+    fn semantic_range_tokens(&self, params: &SemanticTokensRangeParams) -> Option<SemanticTokens> {
+        self.semantic_tokens_for_uri(&params.text_document.uri, Some(params.range))
+    }
+
+    fn inlay_hints(&self, params: &InlayHintParams) -> Option<Vec<InlayHint>> {
+        if !self.config.inlay_hints.enabled {
+            return Some(Vec::new());
+        }
+        let uri = &params.text_document.uri;
+        let path = uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self.open_documents.get(uri).map(String::as_str);
+        let hints = inlay_hints_for_project_file_with_overlay(&path, overlay)
+            .into_iter()
+            .filter(|hint| self.config.inlay_hints.allows(hint))
+            .filter(|hint| position_in_range(hint.position, params.range))
+            .map(to_lsp_inlay_hint)
+            .collect();
+        Some(hints)
+    }
+
+    fn semantic_tokens_for_uri(&self, uri: &Url, range: Option<Range>) -> Option<SemanticTokens> {
+        let path = uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self.open_documents.get(uri).map(String::as_str);
+        let tokens = semantic_tokens_for_project_file_with_overlay(&path, overlay);
+        Some(SemanticTokens {
+            result_id: None,
+            data: encode_semantic_tokens(&tokens, range.as_ref()),
+        })
+    }
+
+    fn document_formatting(&self, params: DocumentFormattingParams) -> Option<Vec<TextEdit>> {
+        let uri = params.text_document.uri;
+        let text = self.open_documents.get(&uri)?;
+        let path = uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let mut options = load_project_ancestor(&path, ProjectOptions::default())
+            .ok()
+            .map_or_else(FormatOptions::default, |project| {
+                FormatOptions::from_manifest(project.manifest().fmt.as_ref())
+            });
+        options.indent_width = usize::try_from(params.options.tab_size).unwrap_or(2);
+        options.use_tabs = !params.options.insert_spaces;
+        let formatted = format_source(text, &options).ok()?;
+        if !formatted.changed {
+            return Some(Vec::new());
+        }
+        Some(vec![TextEdit::new(
+            full_document_range(text),
+            formatted.text,
+        )])
     }
 
     fn publish_document_diagnostics(&self, uri: &Url, path: &Path) {
@@ -135,7 +249,8 @@ impl LanguageServer for MusiLanguageServer {
     type Error = ResponseError;
     type NotifyResult = NotifyResult;
 
-    fn initialize(&mut self, _: InitializeParams) -> ServerFuture<InitializeResult> {
+    fn initialize(&mut self, params: InitializeParams) -> ServerFuture<InitializeResult> {
+        self.configure(&params);
         Box::pin(async { Ok(Self::initialize_result()) })
     }
 
@@ -162,84 +277,49 @@ impl LanguageServer for MusiLanguageServer {
         ControlFlow::Continue(())
     }
 
+    fn did_save(&mut self, params: DidSaveTextDocumentParams) -> NotifyResult {
+        self.did_save_document(&params.text_document.uri);
+        ControlFlow::Continue(())
+    }
+
     fn hover(&mut self, params: HoverParams) -> ServerFuture<Option<Hover>> {
         let result = self.hover_at(params);
         Box::pin(async move { Ok(result) })
     }
-}
 
-fn diagnostic_matches_path(path: &Path, diagnostic: &CliDiagnostic) -> bool {
-    let Some(file) = &diagnostic.file else {
-        return false;
-    };
-    Path::new(file) == path
-}
+    fn formatting(
+        &mut self,
+        params: DocumentFormattingParams,
+    ) -> ServerFuture<Option<Vec<TextEdit>>> {
+        let result = self.document_formatting(params);
+        Box::pin(async move { Ok(result) })
+    }
 
-fn to_lsp_diagnostic(diagnostic: CliDiagnostic) -> Diagnostic {
-    Diagnostic {
-        range: diagnostic
-            .range
-            .as_ref()
-            .map_or_else(default_range, to_cli_range),
-        severity: Some(to_severity(diagnostic.severity)),
-        code: diagnostic.code.map(NumberOrString::String),
-        code_description: None,
-        source: Some("musi".to_owned()),
-        message: diagnostic.message,
-        related_information: related_information(&diagnostic.labels),
-        tags: None,
-        data: None,
+    fn semantic_tokens_full(
+        &mut self,
+        params: SemanticTokensParams,
+    ) -> ServerFuture<Option<SemanticTokensResult>> {
+        let result = self
+            .semantic_tokens(&params)
+            .map(SemanticTokensResult::Tokens);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn semantic_tokens_range(
+        &mut self,
+        params: SemanticTokensRangeParams,
+    ) -> ServerFuture<Option<SemanticTokensRangeResult>> {
+        let result = self
+            .semantic_range_tokens(&params)
+            .map(SemanticTokensRangeResult::Tokens);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn inlay_hint(&mut self, params: InlayHintParams) -> ServerFuture<Option<Vec<InlayHint>>> {
+        let result = self.inlay_hints(&params);
+        Box::pin(async move { Ok(result) })
     }
 }
 
-fn related_information(labels: &[CliDiagnosticLabel]) -> Option<Vec<DiagnosticRelatedInformation>> {
-    let items = labels
-        .iter()
-        .filter_map(|label| {
-            let file = label.file.as_ref()?;
-            let uri = Url::from_file_path(file).ok()?;
-            let range = label
-                .range
-                .as_ref()
-                .map_or_else(default_range, to_cli_range);
-            Some(DiagnosticRelatedInformation {
-                location: Location { uri, range },
-                message: label.message.clone(),
-            })
-        })
-        .collect::<Vec<_>>();
-    (!items.is_empty()).then_some(items)
-}
-
-fn to_severity(value: &str) -> DiagnosticSeverity {
-    match value {
-        "warning" => DiagnosticSeverity::WARNING,
-        "info" => DiagnosticSeverity::INFORMATION,
-        "hint" => DiagnosticSeverity::HINT,
-        _ => DiagnosticSeverity::ERROR,
-    }
-}
-
-fn to_cli_range(range: &CliDiagnosticRange) -> Range {
-    Range {
-        start: Position {
-            line: usize_to_u32(range.start_line.saturating_sub(1)),
-            character: usize_to_u32(range.start_col.saturating_sub(1)),
-        },
-        end: Position {
-            line: usize_to_u32(range.end_line.saturating_sub(1)),
-            character: usize_to_u32(range.end_col.saturating_sub(1)),
-        },
-    }
-}
-
-fn default_range() -> Range {
-    Range {
-        start: Position::new(0, 0),
-        end: Position::new(0, 1),
-    }
-}
-
-fn usize_to_u32(value: usize) -> u32 {
-    u32::try_from(value).unwrap_or(u32::MAX)
-}
+#[cfg(test)]
+mod tests;

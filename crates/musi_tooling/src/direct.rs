@@ -120,7 +120,7 @@ fn collect_static_imports(text: &str) -> Vec<String> {
         .into_iter()
         .filter_map(|site| match site.kind {
             ImportSiteKind::Static { spec } => Some(spec.as_str().to_owned()),
-            ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
+            ImportSiteKind::NonLiteral | ImportSiteKind::InvalidStringLit => None,
         })
         .collect()
 }

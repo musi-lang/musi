@@ -19,7 +19,7 @@ const STATE_STYLE: Record<
 export class StatusBar {
 	#item: vscode.StatusBarItem;
 
-	constructor(command = "musi.checkPackage") {
+	constructor(command = "musi.showActions") {
 		this.#item = vscode.window.createStatusBarItem(
 			vscode.StatusBarAlignment.Right,
 			100,

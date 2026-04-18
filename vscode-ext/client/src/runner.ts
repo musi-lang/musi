@@ -241,7 +241,7 @@ export function buildPackageExecutionRequest(
 
 export async function executePackageCommandInTerminal(
 	request: PackageExecutionRequest,
-	subcommand: "run" | "build" | "test",
+	subcommand: "run" | "build" | "test" | "check" | "fmt",
 	taskPlan: readonly MsTaskSpec[] = [],
 ): Promise<void> {
 	const cliPath = findCliPath();
