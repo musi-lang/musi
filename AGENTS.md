@@ -46,12 +46,15 @@ Source of truth:
 
 ## Diagnostics
 
+- Use `.agents/skills/musi-diagnostics` for diagnostic wording, labels, renderer, or test work.
+- Canonical guide: `docs/reference/diagnostics.md`.
 - Every diagnostic must come from typed diagnostic enums in its owning crate or phase. Do not construct freeform user-facing diagnostics ad hoc.
 - Diagnostic tests outside diagnostic-focused modules must assert enum kind or code, not full message text.
 - Diagnostic wording uses **subject-first diagnostic style**:
   - lead with offending item or condition
   - prefer noun-first or adjective-first phrasing such as `unsupported opcode \`foo\`` or `missing export \`bar\``
   - avoid predicate-heavy wording such as `item \`x\` is not supported`
+- Diagnostic headlines must identify exact offending source text, symbol, operator, field, variant, import specifier, type, or expected/found pair when known.
 - Diagnostic headlines must not use articles: `a`, `an`, `the`.
 - Diagnostic headlines should avoid weak linking verbs where practical: `is`, `was`, `but`.
 - Diagnostic headlines must not use chained `message1: message2` formatting.
